@@ -1,0 +1,4 @@
+# PDF to Markdown 转换器依赖包
+markitdown>=0.0.1a2
+pymupdf>=1.23.0
+pdfplumber>=0.10.0
