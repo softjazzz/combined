@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑功能测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .warning { color: orange; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        .edit-btn { background: #1890ff; color: white; border: none; border-radius: 4px; }
+        .test-btn { background: #52c41a; color: white; border: none; border-radius: 4px; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .record-card { border: 1px solid #d9d9d9; border-radius: 6px; padding: 12px; margin: 8px 0; }
+        .record-title { font-weight: bold; color: #1890ff; }
+        .record-info { font-size: 14px; color: #666; margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <h1>医疗记录编辑功能测试</h1>
+    
+    <div class="test-section">
+        <h3>🎯 测试目标</h3>
+        <p>验证医疗记录编辑功能是否正常工作，包括数据加载、表单验证、保存和列表刷新。</p>
+    </div>
+
+    <div class="test-section">
+        <h3>📋 测试记录</h3>
+        <p>以下是可用于测试的医疗记录：</p>
+        
+        <div class="record-card">
+            <div class="record-title">TEST20250828001 - 张伟病历</div>
+            <div class="record-info">患者: 张伟 | 科室: 外二科 | 主诊断: 肛瘘</div>
+            <div class="record-info">ID: b3dee0d4-0b34-4f42-a044-09e249fea1c2</div>
+            <button class="edit-btn" onclick="openEdit('b3dee0d4-0b34-4f42-a044-09e249fea1c2')">编辑此记录</button>
+        </div>
+        
+        <div class="record-card">
+            <div class="record-title">TEST20250828002 - 张伟病历</div>
+            <div class="record-info">患者: 张伟 | 科室: 外二科 | 主诊断: 肛瘘并肛周脓肿</div>
+            <div class="record-info">ID: f78e3954-ef1d-4629-b7d7-b29400bc1674</div>
+            <button class="edit-btn" onclick="openEdit('f78e3954-ef1d-4629-b7d7-b29400bc1674')">编辑此记录</button>
+        </div>
+        
+        <div class="record-card">
+            <div class="record-title">TEST20250828003 - 智能导入病历</div>
+            <div class="record-info">患者: (空) | 科室: (空) | 主诊断: (空)</div>
+            <div class="record-info">ID: dc343400-8225-4696-b4f0-c2a17b471466</div>
+            <button class="edit-btn" onclick="openEdit('dc343400-8225-4696-b4f0-c2a17b471466')">编辑此记录</button>
+            <div class="warning">⚠️ 此记录数据不完整，适合测试表单验证</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>🧪 测试步骤</h3>
+        <ol>
+            <li><strong>数据加载测试</strong>
+                <ul>
+                    <li>点击上方任意"编辑此记录"按钮</li>
+                    <li>观察页面是否正确加载现有数据</li>
+                    <li>检查所有字段是否正确填充</li>
+                </ul>
+            </li>
+            <li><strong>表单验证测试</strong>
+                <ul>
+                    <li>清空必填字段（如病历名称、患者姓名）</li>
+                    <li>点击保存，观察是否显示验证错误</li>
+                    <li>输入无效数据（如年龄-1），测试验证规则</li>
+                </ul>
+            </li>
+            <li><strong>数据修改测试</strong>
+                <ul>
+                    <li>修改患者姓名（如改为"李四"）</li>
+                    <li>修改年龄（如改为35）</li>
+                    <li>修改科室（如改为"内科"）</li>
+                    <li>修改主诊断</li>
+                    <li>添加次要诊断</li>
+                </ul>
+            </li>
+            <li><strong>保存和刷新测试</strong>
+                <ul>
+                    <li>点击保存按钮</li>
+                    <li>观察是否显示成功消息</li>
+                    <li>等待自动跳转到列表页面</li>
+                    <li>检查列表中的记录是否已更新</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>✅ 预期结果</h3>
+        <ul>
+            <li class="success">✓ 编辑页面正确加载现有数据</li>
+            <li class="success">✓ 表单验证正常工作</li>
+            <li class="success">✓ 数据修改后能成功保存</li>
+            <li class="success">✓ 保存成功后显示成功消息</li>
+            <li class="success">✓ 自动跳转回列表页面</li>
+            <li class="success">✓ 列表页面显示更新后的数据</li>
+            <li class="success">✓ 并发编辑检测正常工作</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>🔧 快速操作</h3>
+        <button class="test-btn" onclick="openRecordsList()">打开病历列表</button>
+        <button class="test-btn" onclick="openDevTools()">打开开发者工具</button>
+        <div id="test-output" style="margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        function openEdit(recordId) {
+            const url = `http://localhost:3000/dashboard/medical-records/edit/${recordId}`;
+            window.open(url, '_blank');
+            
+            const output = document.getElementById('test-output');
+            output.innerHTML = `<p class="info">已打开编辑页面: ${recordId}</p>`;
+        }
+
+        function openRecordsList() {
+            const url = 'http://localhost:3000/medical-records';
+            window.open(url, '_blank');
+            
+            const output = document.getElementById('test-output');
+            output.innerHTML = '<p class="info">已打开病历列表页面</p>';
+        }
+
+        function openDevTools() {
+            alert('请按 F12 打开浏览器开发者工具，查看 Console 和 Network 标签页');
+        }
+    </script>
+</body>
+</html>

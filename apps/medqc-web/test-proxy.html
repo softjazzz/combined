@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代理测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #40a9ff;
+        }
+        .result {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #52c41a;
+            background-color: #f6ffed;
+        }
+        .error {
+            border-color: #ff4d4f;
+            background-color: #fff2f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Vite代理测试</h1>
+        <p>测试Vite开发服务器的API代理功能</p>
+        
+        <div>
+            <button class="btn" onclick="testDirectAPI()">测试直接API</button>
+            <button class="btn" onclick="testProxyAPI()">测试代理API</button>
+            <button class="btn" onclick="testBothAPIs()">对比测试</button>
+            <button class="btn" onclick="clearResults()">清空结果</button>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function addResult(content, isError = false) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${isError ? 'error' : 'success'}`;
+            resultDiv.textContent = content;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // 测试直接API调用
+        async function testDirectAPI() {
+            addResult('🔄 测试直接API调用 (http://localhost:8001)...');
+            
+            try {
+                const response = await fetch('http://localhost:8001/api/semantic-rules');
+                const data = await response.json();
+                
+                addResult(`✅ 直接API调用成功
+URL: http://localhost:8001/api/semantic-rules
+状态: ${response.status}
+规则数量: ${data.count || data.rules?.length || 0}`);
+                
+            } catch (error) {
+                addResult(`❌ 直接API调用失败: ${error.message}`, true);
+            }
+        }
+
+        // 测试代理API调用
+        async function testProxyAPI() {
+            addResult('🔄 测试代理API调用 (/api/semantic-rules)...');
+            
+            try {
+                const response = await fetch('/api/semantic-rules');
+                const data = await response.json();
+                
+                addResult(`✅ 代理API调用成功
+URL: /api/semantic-rules (通过Vite代理)
+状态: ${response.status}
+规则数量: ${data.count || data.rules?.length || 0}`);
+                
+            } catch (error) {
+                addResult(`❌ 代理API调用失败: ${error.message}`, true);
+            }
+        }
+
+        // 对比测试两种方式
+        async function testBothAPIs() {
+            addResult('🔄 开始对比测试...');
+            
+            const tests = [
+                { name: '直接API', url: 'http://localhost:8001/api/semantic-rules' },
+                { name: '代理API', url: '/api/semantic-rules' }
+            ];
+            
+            for (const test of tests) {
+                try {
+                    const startTime = Date.now();
+                    const response = await fetch(test.url);
+                    const endTime = Date.now();
+                    const data = await response.json();
+                    
+                    addResult(`✅ ${test.name} 成功
+URL: ${test.url}
+响应时间: ${endTime - startTime}ms
+状态: ${response.status}
+规则数量: ${data.count || data.rules?.length || 0}
+CORS头: ${response.headers.get('Access-Control-Allow-Origin') || '无'}`);
+                    
+                } catch (error) {
+                    addResult(`❌ ${test.name} 失败: ${error.message}`, true);
+                }
+            }
+        }
+
+        // 页面加载时显示环境信息
+        window.addEventListener('load', function() {
+            addResult(`🌐 环境信息:
+当前URL: ${window.location.href}
+主机名: ${window.location.hostname}
+端口: ${window.location.port}
+协议: ${window.location.protocol}
+
+如果当前页面通过Vite开发服务器访问，代理应该可以工作。
+如果直接打开HTML文件，只有直接API调用会工作。`);
+        });
+    </script>
+</body>
+</html>

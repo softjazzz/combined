@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>组件直接测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+        }
+        .btn {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #40a9ff;
+        }
+        .result {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            border-color: #52c41a;
+            background-color: #f6ffed;
+        }
+        .error {
+            border-color: #ff4d4f;
+            background-color: #fff2f0;
+        }
+        .warning {
+            border-color: #faad14;
+            background-color: #fffbe6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 组件直接测试</h1>
+        <p>测试语义规则管理组件的各个环节</p>
+        
+        <div class="test-section">
+            <h3>1. 后端API连接测试</h3>
+            <button class="btn" onclick="testBackendAPI()">测试后端API</button>
+            <div id="backend-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. 前端服务测试</h3>
+            <button class="btn" onclick="testFrontendService()">测试前端服务</button>
+            <div id="frontend-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. 数据流测试</h3>
+            <button class="btn" onclick="testDataFlow()">测试完整数据流</button>
+            <div id="dataflow-result" class="result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>4. 浏览器控制台检查</h3>
+            <button class="btn" onclick="checkConsoleErrors()">检查控制台错误</button>
+            <div id="console-result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // 存储控制台错误
+        const consoleErrors = [];
+        const originalConsoleError = console.error;
+        console.error = function(...args) {
+            consoleErrors.push({
+                timestamp: new Date().toISOString(),
+                message: args.join(' ')
+            });
+            originalConsoleError.apply(console, args);
+        };
+
+        // 测试后端API
+        async function testBackendAPI() {
+            const resultDiv = document.getElementById('backend-result');
+            resultDiv.className = 'result';
+            resultDiv.textContent = '🔄 正在测试后端API...';
+            
+            try {
+                // 测试基本连接
+                const response = await fetch('http://localhost:8001/api/semantic-rules');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ 后端API测试成功
+响应状态: ${response.status}
+规则数量: ${data.count || data.rules?.length || 0}
+数据结构: ${JSON.stringify(data, null, 2)}`;
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ 后端API测试失败
+错误信息: ${error.message}
+可能原因:
+1. 后端服务未启动 (检查端口8001)
+2. CORS配置问题
+3. 网络连接问题`;
+            }
+        }
+
+        // 测试前端服务
+        async function testFrontendService() {
+            const resultDiv = document.getElementById('frontend-result');
+            resultDiv.className = 'result';
+            resultDiv.textContent = '🔄 正在测试前端服务...';
+            
+            try {
+                // 模拟SemanticRulesService
+                const baseURL = 'http://localhost:8001';
+                
+                // 测试getAllSemanticRules
+                const rulesResponse = await fetch(`${baseURL}/api/semantic-rules`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!rulesResponse.ok) {
+                    const errorData = await rulesResponse.json();
+                    throw new Error(errorData.detail || '获取语义规则失败');
+                }
+                
+                const rulesData = await rulesResponse.json();
+                const processedData = {
+                    success: true,
+                    data: rulesData.rules || []
+                };
+                
+                // 测试getEngineStats
+                const statsResponse = await fetch(`${baseURL}/api/semantic-rules/stats`);
+                const statsData = await statsResponse.json();
+                
+                // 测试validateLLMConnection
+                const llmResponse = await fetch(`${baseURL}/api/semantic-rules/validate-llm`);
+                const llmData = await llmResponse.json();
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ 前端服务测试成功
+规则数据: ${JSON.stringify(processedData, null, 2)}
+
+统计数据: ${JSON.stringify(statsData, null, 2)}
+
+LLM状态: ${JSON.stringify(llmData, null, 2)}`;
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ 前端服务测试失败
+错误信息: ${error.message}`;
+            }
+        }
+
+        // 测试完整数据流
+        async function testDataFlow() {
+            const resultDiv = document.getElementById('dataflow-result');
+            resultDiv.className = 'result';
+            resultDiv.textContent = '🔄 正在测试完整数据流...';
+            
+            try {
+                // 模拟Vue组件的完整生命周期
+                let componentState = {
+                    loading: false,
+                    rules: [],
+                    engineStats: null,
+                    llmStatus: {}
+                };
+                
+                // 模拟refreshRules方法
+                componentState.loading = true;
+                
+                // 1. 加载规则列表
+                const rulesResponse = await fetch('http://localhost:8001/api/semantic-rules');
+                const rulesData = await rulesResponse.json();
+                
+                if (rulesData.success !== false && rulesData.rules) {
+                    componentState.rules = rulesData.rules;
+                } else {
+                    throw new Error('规则数据格式不正确');
+                }
+                
+                // 2. 加载统计信息
+                const statsResponse = await fetch('http://localhost:8001/api/semantic-rules/stats');
+                const statsData = await statsResponse.json();
+                
+                if (statsData.success !== false && statsData.stats) {
+                    componentState.engineStats = statsData.stats;
+                }
+                
+                // 3. 验证LLM连接
+                const llmResponse = await fetch('http://localhost:8001/api/semantic-rules/validate-llm');
+                const llmData = await llmResponse.json();
+                
+                if (llmData.success !== false && llmData.status) {
+                    componentState.llmStatus = llmData.status;
+                }
+                
+                componentState.loading = false;
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ 完整数据流测试成功
+组件状态:
+- 加载状态: ${componentState.loading}
+- 规则数量: ${componentState.rules.length}
+- 统计信息: ${componentState.engineStats ? '已加载' : '未加载'}
+- LLM状态: ${componentState.llmStatus ? '已验证' : '未验证'}
+
+详细数据:
+${JSON.stringify(componentState, null, 2)}`;
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ 完整数据流测试失败
+错误信息: ${error.message}`;
+            }
+        }
+
+        // 检查控制台错误
+        function checkConsoleErrors() {
+            const resultDiv = document.getElementById('console-result');
+            
+            if (consoleErrors.length === 0) {
+                resultDiv.className = 'result success';
+                resultDiv.textContent = '✅ 没有发现控制台错误';
+            } else {
+                resultDiv.className = 'result warning';
+                resultDiv.textContent = `⚠️ 发现 ${consoleErrors.length} 个控制台错误:
+${consoleErrors.map(error => `[${error.timestamp}] ${error.message}`).join('\n')}`;
+            }
+        }
+
+        // 页面加载时自动运行基础检查
+        window.addEventListener('load', function() {
+            console.log('🧪 组件直接测试页面已加载');
+            
+            // 自动运行后端API测试
+            setTimeout(() => {
+                testBackendAPI();
+            }, 1000);
+        });
+
+        // 监听未捕获的错误
+        window.addEventListener('error', function(event) {
+            consoleErrors.push({
+                timestamp: new Date().toISOString(),
+                message: `JavaScript Error: ${event.message} at ${event.filename}:${event.lineno}`
+            });
+        });
+
+        // 监听未处理的Promise拒绝
+        window.addEventListener('unhandledrejection', function(event) {
+            consoleErrors.push({
+                timestamp: new Date().toISOString(),
+                message: `Unhandled Promise Rejection: ${event.reason}`
+            });
+        });
+    </script>
+</body>
+</html>

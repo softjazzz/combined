@@ -1,0 +1,340 @@
+/**
+ * 语义质控规则服务
+ * 连接前端与Python语义规则引擎
+ */
+
+export interface SemanticRuleDefinition {
+  rule_id: string
+  rule_name: string
+  description: string
+  category: string
+  defect_level: string // 支持中文和英文值
+  deduction_score?: number
+  is_veto_defect: boolean
+  complexity: string // 支持中文和英文值
+  system_role: string
+  task_description: string
+  input_format: Record<string, string>
+  evaluation_criteria: string[]
+  output_format: Record<string, string>
+  prompt_template: string
+}
+
+export interface SemanticRuleResult {
+  rule_id: string
+  rule_name: string
+  compliant: boolean
+  confidence: number
+  evidence: string
+  reasoning: string
+  defect_details?: Record<string, any>
+  execution_time: number
+  token_usage?: {
+    prompt: number
+    completion: number
+    total: number
+  }
+}
+
+export interface SemanticRuleExecutionStats {
+  total_executions: number
+  successful_executions: number
+  failed_executions: number
+  total_tokens: number
+  total_time: number
+  success_rate: number
+  avg_execution_time: number
+}
+
+export interface CustomRuleRequest {
+  rule_name: string
+  description: string
+  natural_language_rule: string
+  category: string
+  severity: 'critical' | 'major' | 'minor'
+  examples?: string[]
+}
+
+export class SemanticRulesService {
+  private baseURL: string
+
+  constructor() {
+    // 使用Vite代理配置，开发环境下直接使用相对路径
+    this.baseURL = import.meta.env.DEV
+      ? '' // 开发环境使用Vite代理
+      : (window.location.hostname === 'localhost'
+          ? 'http://localhost:8001'
+          : 'http://124.220.6.136:8001')
+  }
+
+  /**
+   * 获取所有语义规则
+   */
+  async getAllSemanticRules(): Promise<{
+    success: boolean
+    data?: SemanticRuleDefinition[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '获取语义规则失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.rules || []
+      }
+    } catch (error) {
+      console.error('获取语义规则失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取语义规则失败'
+      }
+    }
+  }
+
+  /**
+   * 获取单个语义规则详情
+   */
+  async getSemanticRule(ruleId: string): Promise<{
+    success: boolean
+    data?: SemanticRuleDefinition
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '获取规则详情失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.rule
+      }
+    } catch (error) {
+      console.error('获取规则详情失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取规则详情失败'
+      }
+    }
+  }
+
+  /**
+   * 执行语义规则测试
+   */
+  async executeSemanticRule(
+    ruleId: string, 
+    inputData: Record<string, any>,
+    useMockLLM: boolean = false
+  ): Promise<{
+    success: boolean
+    data?: SemanticRuleResult
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input_data: inputData,
+          use_mock_llm: useMockLLM
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '规则执行失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.result
+      }
+    } catch (error) {
+      console.error('规则执行失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '规则执行失败'
+      }
+    }
+  }
+
+  /**
+   * 批量执行语义规则
+   */
+  async executeBatchSemanticRules(
+    ruleIds: string[],
+    inputData: Record<string, any>,
+    useMockLLM: boolean = false
+  ): Promise<{
+    success: boolean
+    data?: SemanticRuleResult[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules/batch-execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rule_ids: ruleIds,
+          input_data: inputData,
+          use_mock_llm: useMockLLM
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '批量执行失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.results || []
+      }
+    } catch (error) {
+      console.error('批量执行失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '批量执行失败'
+      }
+    }
+  }
+
+  /**
+   * 创建自定义语义规则
+   */
+  async createCustomRule(request: CustomRuleRequest): Promise<{
+    success: boolean
+    data?: SemanticRuleDefinition
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules/custom`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '创建自定义规则失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.rule
+      }
+    } catch (error) {
+      console.error('创建自定义规则失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '创建自定义规则失败'
+      }
+    }
+  }
+
+  /**
+   * 获取语义规则引擎统计信息
+   */
+  async getEngineStats(): Promise<{
+    success: boolean
+    data?: SemanticRuleExecutionStats
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules/stats`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || '获取统计信息失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.stats
+      }
+    } catch (error) {
+      console.error('获取统计信息失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取统计信息失败'
+      }
+    }
+  }
+
+  /**
+   * 验证LLM连接状态
+   */
+  async validateLLMConnection(): Promise<{
+    success: boolean
+    data?: {
+      real_llm_available: boolean
+      mock_mode: boolean
+      provider: string
+      model: string
+    }
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/semantic-rules/validate-llm`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'LLM连接验证失败')
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data: data.connection_info
+      }
+    } catch (error) {
+      console.error('LLM连接验证失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'LLM连接验证失败'
+      }
+    }
+  }
+}
+
+// 导出单例实例
+export const semanticRulesService = new SemanticRulesService()

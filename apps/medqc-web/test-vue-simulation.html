@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vue组件模拟测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #40a9ff;
+        }
+        .result {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #52c41a;
+            background-color: #f6ffed;
+        }
+        .error {
+            border-color: #ff4d4f;
+            background-color: #fff2f0;
+        }
+        .rule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .rule-table th,
+        .rule-table td {
+            border: 1px solid #e8e8e8;
+            padding: 12px;
+            text-align: left;
+        }
+        .rule-table th {
+            background-color: #fafafa;
+            font-weight: bold;
+        }
+        .rule-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: white;
+            margin: 2px;
+        }
+        .tag.blue { background-color: #1890ff; }
+        .tag.green { background-color: #52c41a; }
+        .tag.orange { background-color: #faad14; }
+        .tag.red { background-color: #ff4d4f; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Vue组件模拟测试</h1>
+        <p>模拟SemanticRulesManager组件的完整行为</p>
+        
+        <div>
+            <button class="btn" onclick="simulateComponentMount()">模拟组件挂载</button>
+            <button class="btn" onclick="simulateRefreshRules()">模拟刷新规则</button>
+            <button class="btn" onclick="simulateLoadPredefined()">模拟加载预定义规则</button>
+            <button class="btn" onclick="clearResults()">清空结果</button>
+        </div>
+        
+        <div id="results"></div>
+        <div id="rules-display"></div>
+    </div>
+
+    <script>
+        // 模拟Vue的响应式数据
+        let componentState = {
+            loading: false,
+            loadingPredefined: false,
+            rules: [],
+            engineStats: null,
+            llmStatus: {
+                real_llm_available: false,
+                mock_mode: true,
+                provider: '',
+                model: ''
+            }
+        };
+
+        // 模拟SemanticRulesService
+        class MockSemanticRulesService {
+            constructor() {
+                // 使用相对路径（模拟Vite代理）
+                this.baseURL = '';
+            }
+
+            async getAllSemanticRules() {
+                try {
+                    console.log('🔄 调用API:', `${this.baseURL}/api/semantic-rules`);
+                    
+                    const response = await fetch(`${this.baseURL}/api/semantic-rules`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    console.log('📥 响应状态:', response.status);
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || '获取语义规则失败');
+                    }
+
+                    const data = await response.json();
+                    console.log('📥 响应数据:', data);
+                    
+                    return {
+                        success: true,
+                        data: data.rules || []
+                    };
+                } catch (error) {
+                    console.error('❌ 获取语义规则失败:', error);
+                    return {
+                        success: false,
+                        error: error instanceof Error ? error.message : '获取语义规则失败'
+                    };
+                }
+            }
+
+            async getEngineStats() {
+                try {
+                    const response = await fetch(`${this.baseURL}/api/semantic-rules/stats`);
+                    if (!response.ok) {
+                        throw new Error('获取统计信息失败');
+                    }
+                    const data = await response.json();
+                    return {
+                        success: true,
+                        data: data.stats || data
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
+            }
+
+            async validateLLMConnection() {
+                try {
+                    const response = await fetch(`${this.baseURL}/api/semantic-rules/validate-llm`);
+                    if (!response.ok) {
+                        throw new Error('验证LLM连接失败');
+                    }
+                    const data = await response.json();
+                    return {
+                        success: true,
+                        data: data.status || data
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
+            }
+        }
+
+        const semanticRulesService = new MockSemanticRulesService();
+
+        function addResult(content, isError = false) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${isError ? 'error' : 'success'}`;
+            resultDiv.textContent = content;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('rules-display').innerHTML = '';
+        }
+
+        // 模拟组件挂载
+        async function simulateComponentMount() {
+            addResult('🚀 模拟组件挂载...');
+            console.log('🚀 SemanticRulesManager 组件已挂载，开始初始化...');
+            
+            await simulateRefreshRules();
+        }
+
+        // 模拟refreshRules方法
+        async function simulateRefreshRules() {
+            componentState.loading = true;
+            addResult('🔄 开始刷新规则...');
+            
+            try {
+                console.log('🔄 开始加载语义规则...');
+                
+                // 加载规则列表
+                const rulesResponse = await semanticRulesService.getAllSemanticRules();
+                console.log('📥 规则响应:', rulesResponse);
+                
+                if (rulesResponse.success && rulesResponse.data) {
+                    componentState.rules = rulesResponse.data;
+                    console.log('✅ 规则加载成功:', componentState.rules.length, '条规则');
+                    console.log('📋 规则详情:', componentState.rules);
+                    addResult(`✅ 成功加载 ${componentState.rules.length} 条语义规则`);
+                } else {
+                    console.error('❌ 规则加载失败:', rulesResponse.error);
+                    addResult(`❌ 规则加载失败: ${rulesResponse.error}`, true);
+                }
+
+                // 加载统计信息
+                console.log('📊 开始加载统计信息...');
+                const statsResponse = await semanticRulesService.getEngineStats();
+                console.log('📊 统计响应:', statsResponse);
+                if (statsResponse.success && statsResponse.data) {
+                    componentState.engineStats = statsResponse.data;
+                    console.log('✅ 统计信息加载成功:', componentState.engineStats);
+                }
+
+                // 验证LLM连接
+                console.log('🔗 开始验证LLM连接...');
+                const llmResponse = await semanticRulesService.validateLLMConnection();
+                console.log('🔗 LLM响应:', llmResponse);
+                if (llmResponse.success && llmResponse.data) {
+                    componentState.llmStatus = llmResponse.data;
+                    console.log('✅ LLM状态验证成功:', componentState.llmStatus);
+                }
+
+                console.log('🎉 所有数据加载完成');
+                addResult('🎉 数据刷新成功');
+                
+                // 显示规则表格
+                displayRulesTable();
+                
+            } catch (error) {
+                console.error('❌ 刷新数据失败:', error);
+                addResult(`❌ 刷新数据失败: ${error.message}`, true);
+            } finally {
+                componentState.loading = false;
+                console.log('🏁 规则刷新完成，当前规则数量:', componentState.rules.length);
+            }
+        }
+
+        // 模拟加载预定义规则
+        async function simulateLoadPredefined() {
+            componentState.loadingPredefined = true;
+            addResult('🔄 开始加载预定义规则...');
+            
+            try {
+                // 模拟预定义规则数据
+                const PREDEFINED_RULES = [
+                    {
+                        rule_id: "POC_001",
+                        rule_name: "缺少主诉",
+                        description: "检查文档中是否包含主诉内容",
+                        category: "completeness",
+                        defect_level: "严重",
+                        deduction_score: 5,
+                        is_veto_defect: false,
+                        complexity: "低"
+                    },
+                    {
+                        rule_id: "POC_002", 
+                        rule_name: "缺少现病史",
+                        description: "检查文档中是否包含现病史内容",
+                        category: "completeness",
+                        defect_level: "严重",
+                        deduction_score: 5,
+                        is_veto_defect: false,
+                        complexity: "低"
+                    }
+                ];
+
+                const predefinedCount = PREDEFINED_RULES.length;
+                addResult(`发现 ${predefinedCount} 条预定义规则，正在加载...`);
+                
+                const existingRuleIds = new Set(componentState.rules.map(r => r.rule_id));
+                const newRules = PREDEFINED_RULES.filter(rule => !existingRuleIds.has(rule.rule_id));
+                
+                if (newRules.length > 0) {
+                    componentState.rules = [...componentState.rules, ...newRules];
+                    addResult(`✅ 成功加载 ${newRules.length} 条预定义规则`);
+                    displayRulesTable();
+                } else {
+                    addResult('ℹ️ 所有预定义规则已存在');
+                }
+                
+            } catch (error) {
+                console.error('加载预定义规则失败:', error);
+                addResult(`❌ 加载预定义规则失败: ${error.message}`, true);
+            } finally {
+                componentState.loadingPredefined = false;
+            }
+        }
+
+        // 显示规则表格
+        function displayRulesTable() {
+            const rulesDisplayDiv = document.getElementById('rules-display');
+            
+            if (componentState.rules.length === 0) {
+                rulesDisplayDiv.innerHTML = '<div class="result error">❌ 没有找到任何规则</div>';
+                return;
+            }
+
+            let tableHTML = `
+                <h3>📋 规则列表 (${componentState.rules.length} 条)</h3>
+                <table class="rule-table">
+                    <thead>
+                        <tr>
+                            <th>规则ID</th>
+                            <th>规则名称</th>
+                            <th>描述</th>
+                            <th>分类</th>
+                            <th>缺陷级别</th>
+                            <th>扣分</th>
+                            <th>复杂度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            componentState.rules.forEach(rule => {
+                tableHTML += `
+                    <tr>
+                        <td><span class="tag blue">${rule.rule_id}</span></td>
+                        <td>${rule.rule_name}</td>
+                        <td>${rule.description}</td>
+                        <td><span class="tag green">${rule.category}</span></td>
+                        <td><span class="tag orange">${rule.defect_level}</span></td>
+                        <td>${rule.deduction_score || 0}</td>
+                        <td><span class="tag blue">${rule.complexity}</span></td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+
+            rulesDisplayDiv.innerHTML = tableHTML;
+        }
+
+        // 页面加载时自动运行
+        window.addEventListener('load', function() {
+            addResult(`🌐 环境信息:
+当前URL: ${window.location.href}
+模拟Vue组件行为，测试语义规则管理功能`);
+            
+            // 自动模拟组件挂载
+            setTimeout(() => {
+                simulateComponentMount();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

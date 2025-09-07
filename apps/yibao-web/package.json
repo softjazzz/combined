@@ -1,0 +1,29 @@
+{
+  "name": "@health-qc/yibao-web",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@health-qc/web-utils": "workspace:*",
+    "@supabase/supabase-js": "^2.48.0",
+    "ant-design-vue": "^4.2.5",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.29",
+    "vue-router": "^4.3.2"
+  },
+  "devDependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "less": "^4.2.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.8",
+    "vue-tsc": "^2.1.10"
+  }
+}
+

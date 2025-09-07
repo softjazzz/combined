@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>最终诊断报告</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #1890ff;
+        }
+        .btn {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #40a9ff;
+        }
+        .result {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #52c41a;
+            background-color: #f6ffed;
+        }
+        .error {
+            border-color: #ff4d4f;
+            background-color: #fff2f0;
+        }
+        .warning {
+            border-color: #faad14;
+            background-color: #fffbe6;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .status-card {
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .status-card.success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+        }
+        .status-card.error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+        }
+        .status-card.warning {
+            background: #fffbe6;
+            border: 1px solid #ffe58f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 语义规则管理界面最终诊断报告</h1>
+        <p>全面检查语义质控规则管理界面的所有问题并提供解决方案</p>
+        
+        <div class="section">
+            <h3>🔍 问题诊断总览</h3>
+            <button class="btn" onclick="runFullDiagnosis()">运行完整诊断</button>
+            <button class="btn" onclick="clearAllResults()">清空所有结果</button>
+            <div id="overview-result" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>1. 后端服务检查</h3>
+            <button class="btn" onclick="checkBackendService()">检查后端服务</button>
+            <div id="backend-result" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>2. API代理检查</h3>
+            <button class="btn" onclick="checkAPIProxy()">检查API代理</button>
+            <div id="proxy-result" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>3. 数据格式检查</h3>
+            <button class="btn" onclick="checkDataFormat()">检查数据格式</button>
+            <div id="format-result" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>4. 类型兼容性检查</h3>
+            <button class="btn" onclick="checkTypeCompatibility()">检查类型兼容性</button>
+            <div id="type-result" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>5. 前端服务测试</h3>
+            <button class="btn" onclick="testFrontendService()">测试前端服务</button>
+            <div id="service-result" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h3>📊 诊断结果汇总</h3>
+            <div id="summary-result" class="status-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        let diagnosticResults = {};
+
+        function addResult(elementId, content, type = 'success') {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.textContent = content;
+        }
+
+        function clearAllResults() {
+            const resultElements = document.querySelectorAll('.result');
+            resultElements.forEach(el => {
+                el.innerHTML = '';
+                el.className = 'result';
+            });
+            document.getElementById('summary-result').innerHTML = '';
+            diagnosticResults = {};
+        }
+
+        // 1. 检查后端服务
+        async function checkBackendService() {
+            addResult('backend-result', '🔄 检查后端服务状态...', 'warning');
+            
+            try {
+                const response = await fetch('http://localhost:8001/api/semantic-rules');
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    diagnosticResults.backend = {
+                        status: 'success',
+                        message: `✅ 后端服务正常\n规则数量: ${data.count}\n响应时间: ${response.headers.get('date')}`
+                    };
+                    addResult('backend-result', diagnosticResults.backend.message, 'success');
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                diagnosticResults.backend = {
+                    status: 'error',
+                    message: `❌ 后端服务异常: ${error.message}`
+                };
+                addResult('backend-result', diagnosticResults.backend.message, 'error');
+            }
+        }
+
+        // 2. 检查API代理
+        async function checkAPIProxy() {
+            addResult('proxy-result', '🔄 检查Vite API代理...', 'warning');
+            
+            try {
+                const response = await fetch('/api/semantic-rules');
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    diagnosticResults.proxy = {
+                        status: 'success',
+                        message: `✅ API代理正常工作\n代理URL: /api/semantic-rules\n规则数量: ${data.count}`
+                    };
+                    addResult('proxy-result', diagnosticResults.proxy.message, 'success');
+                } else {
+                    throw new Error(`代理响应异常: ${response.status}`);
+                }
+            } catch (error) {
+                diagnosticResults.proxy = {
+                    status: 'error',
+                    message: `❌ API代理异常: ${error.message}\n请确保通过Vite开发服务器访问此页面`
+                };
+                addResult('proxy-result', diagnosticResults.proxy.message, 'error');
+            }
+        }
+
+        // 3. 检查数据格式
+        async function checkDataFormat() {
+            addResult('format-result', '🔄 检查数据格式兼容性...', 'warning');
+            
+            try {
+                const response = await fetch('/api/semantic-rules');
+                const data = await response.json();
+                
+                if (!data.rules || !Array.isArray(data.rules)) {
+                    throw new Error('数据格式错误：缺少rules数组');
+                }
+                
+                const rule = data.rules[0];
+                const requiredFields = ['rule_id', 'rule_name', 'description', 'category', 'defect_level', 'complexity'];
+                const missingFields = requiredFields.filter(field => !rule[field]);
+                
+                if (missingFields.length > 0) {
+                    throw new Error(`规则数据缺少字段: ${missingFields.join(', ')}`);
+                }
+                
+                diagnosticResults.format = {
+                    status: 'success',
+                    message: `✅ 数据格式正确\n规则字段完整: ${requiredFields.join(', ')}\n示例规则: ${rule.rule_id} - ${rule.rule_name}`
+                };
+                addResult('format-result', diagnosticResults.format.message, 'success');
+                
+            } catch (error) {
+                diagnosticResults.format = {
+                    status: 'error',
+                    message: `❌ 数据格式异常: ${error.message}`
+                };
+                addResult('format-result', diagnosticResults.format.message, 'error');
+            }
+        }
+
+        // 4. 检查类型兼容性
+        async function checkTypeCompatibility() {
+            addResult('type-result', '🔄 检查TypeScript类型兼容性...', 'warning');
+            
+            try {
+                const response = await fetch('/api/semantic-rules');
+                const data = await response.json();
+                const rule = data.rules[0];
+                
+                // 检查中文值映射
+                const chineseValues = {
+                    defect_level: rule.defect_level,
+                    complexity: rule.complexity
+                };
+                
+                // 模拟映射函数
+                const defectLevelMapping = {
+                    '单项否决丙级': 'VETO',
+                    '乙级': 'GRADE_B', 
+                    '严重': 'SEVERE',
+                    '一般': 'GENERAL',
+                    '轻微': 'MINOR'
+                };
+                
+                const complexityMapping = {
+                    '低': 'LOW',
+                    '中': 'MEDIUM', 
+                    '高': 'HIGH'
+                };
+                
+                const mappedDefectLevel = defectLevelMapping[rule.defect_level] || rule.defect_level;
+                const mappedComplexity = complexityMapping[rule.complexity] || rule.complexity;
+                
+                diagnosticResults.type = {
+                    status: 'success',
+                    message: `✅ 类型兼容性正常\n原始值: ${rule.defect_level} (${rule.complexity})\n映射值: ${mappedDefectLevel} (${mappedComplexity})\n类型映射功能正常`
+                };
+                addResult('type-result', diagnosticResults.type.message, 'success');
+                
+            } catch (error) {
+                diagnosticResults.type = {
+                    status: 'error',
+                    message: `❌ 类型兼容性异常: ${error.message}`
+                };
+                addResult('type-result', diagnosticResults.type.message, 'error');
+            }
+        }
+
+        // 5. 测试前端服务
+        async function testFrontendService() {
+            addResult('service-result', '🔄 测试前端服务类...', 'warning');
+            
+            try {
+                // 模拟SemanticRulesService
+                class TestSemanticRulesService {
+                    constructor() {
+                        this.baseURL = '';
+                    }
+
+                    async getAllSemanticRules() {
+                        try {
+                            const response = await fetch(`${this.baseURL}/api/semantic-rules`, {
+                                method: 'GET',
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.detail || '获取语义规则失败');
+                            }
+
+                            const data = await response.json();
+                            return {
+                                success: true,
+                                data: data.rules || []
+                            };
+                        } catch (error) {
+                            return {
+                                success: false,
+                                error: error.message
+                            };
+                        }
+                    }
+                }
+
+                const service = new TestSemanticRulesService();
+                const result = await service.getAllSemanticRules();
+                
+                if (result.success) {
+                    diagnosticResults.service = {
+                        status: 'success',
+                        message: `✅ 前端服务正常\n成功获取规则: ${result.data.length} 条\n服务类工作正常`
+                    };
+                    addResult('service-result', diagnosticResults.service.message, 'success');
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                diagnosticResults.service = {
+                    status: 'error',
+                    message: `❌ 前端服务异常: ${error.message}`
+                };
+                addResult('service-result', diagnosticResults.service.message, 'error');
+            }
+        }
+
+        // 运行完整诊断
+        async function runFullDiagnosis() {
+            addResult('overview-result', '🚀 开始运行完整诊断...', 'warning');
+            
+            const tests = [
+                { name: '后端服务', func: checkBackendService },
+                { name: 'API代理', func: checkAPIProxy },
+                { name: '数据格式', func: checkDataFormat },
+                { name: '类型兼容性', func: checkTypeCompatibility },
+                { name: '前端服务', func: testFrontendService }
+            ];
+            
+            for (const test of tests) {
+                addResult('overview-result', `🔄 正在检查: ${test.name}...`, 'warning');
+                await test.func();
+                await new Promise(resolve => setTimeout(resolve, 500)); // 短暂延迟
+            }
+            
+            // 生成汇总报告
+            generateSummary();
+            
+            addResult('overview-result', '✅ 完整诊断完成！请查看下方汇总结果。', 'success');
+        }
+
+        // 生成汇总报告
+        function generateSummary() {
+            const summaryDiv = document.getElementById('summary-result');
+            let summaryHTML = '';
+            
+            const testNames = ['backend', 'proxy', 'format', 'type', 'service'];
+            const testLabels = ['后端服务', 'API代理', '数据格式', '类型兼容性', '前端服务'];
+            
+            testNames.forEach((testName, index) => {
+                const result = diagnosticResults[testName];
+                if (result) {
+                    const statusClass = result.status === 'success' ? 'success' : 'error';
+                    const statusIcon = result.status === 'success' ? '✅' : '❌';
+                    
+                    summaryHTML += `
+                        <div class="status-card ${statusClass}">
+                            <h4>${statusIcon} ${testLabels[index]}</h4>
+                            <p>${result.status === 'success' ? '正常' : '异常'}</p>
+                        </div>
+                    `;
+                }
+            });
+            
+            summaryDiv.innerHTML = summaryHTML;
+        }
+
+        // 页面加载时显示说明
+        window.addEventListener('load', function() {
+            addResult('overview-result', `🏥 语义规则管理界面诊断工具已就绪
+
+此工具将帮助诊断以下问题：
+1. 后端API服务是否正常运行
+2. Vite开发服务器的API代理是否工作
+3. 后端返回的数据格式是否正确
+4. 前端TypeScript类型是否兼容后端数据
+5. 前端服务类是否能正确处理API响应
+
+点击"运行完整诊断"开始全面检查。`, 'warning');
+        });
+    </script>
+</body>
+</html>

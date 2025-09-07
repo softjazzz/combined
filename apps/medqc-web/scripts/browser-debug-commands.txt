@@ -1,0 +1,69 @@
+# 浏览器控制台调试命令
+
+## 1. 设置token到localStorage (使用最新的有效token)
+localStorage.setItem('medqc_access_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtZWRxYy5jb20iLCJleHAiOjE3MjUyMTYwNzN9.Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8');
+localStorage.setItem('token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtZWRxYy5jb20iLCJleHAiOjE3MjUyMTYwNzN9.Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8');
+localStorage.setItem('access_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtZWRxYy5jb20iLCJleHAiOjE3MjUyMTYwNzN9.Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8');
+
+## 2. 检查localStorage
+console.log('Token检查:', {
+  medqc_access_token: localStorage.getItem('medqc_access_token'),
+  token: localStorage.getItem('token'),
+  access_token: localStorage.getItem('access_token')
+});
+
+## 3. 手动测试API调用
+fetch('http://localhost:8001/api/records?page=1&page_size=10', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('medqc_access_token')}`,
+    'Content-Type': 'application/json'
+  }
+})
+.then(response => {
+  console.log('API响应状态:', response.status, response.statusText);
+  return response.json();
+})
+.then(data => {
+  console.log('API返回数据:', data);
+  console.log('记录数量:', data.data.length);
+})
+.catch(error => {
+  console.error('API调用失败:', error);
+});
+
+## 4. 刷新页面
+location.reload();
+
+## 5. 检查Vue组件状态（如果页面已加载）
+// 这些命令需要在Vue DevTools中执行，或者在组件内部添加window调试接口
+
+## 6. 使用全局调试接口
+// 检查调试接口是否可用
+console.log('调试接口:', window.debugMedicalRecords);
+
+// 手动触发数据加载
+window.debugMedicalRecords && window.debugMedicalRecords.loadRecords();
+
+// 检查当前数据状态
+window.debugMedicalRecords && console.log('当前状态:', {
+  records: window.debugMedicalRecords.records.value,
+  loading: window.debugMedicalRecords.loading.value,
+  pagination: window.debugMedicalRecords.pagination
+});
+
+## 7. 完整的调试流程
+// 1. 设置token
+localStorage.setItem('medqc_access_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtZWRxYy5jb20iLCJleHAiOjE3MjUyMTYwNzN9.Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8Ej8');
+
+// 2. 刷新页面
+location.reload();
+
+// 3. 等待页面加载后，检查调试接口
+setTimeout(() => {
+  console.log('调试接口:', window.debugMedicalRecords);
+  if (window.debugMedicalRecords) {
+    console.log('当前记录数:', window.debugMedicalRecords.records.value.length);
+    console.log('加载状态:', window.debugMedicalRecords.loading.value);
+  }
+}, 2000);

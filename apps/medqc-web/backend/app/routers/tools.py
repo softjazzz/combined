@@ -1,0 +1,127 @@
+import json
+import logging
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
+
+from ..core.security import get_current_user
+
+logger = logging.getLogger(__name__)
+
+
+router = APIRouter(prefix="/api", tags=["tools"])
+
+
+def _import_pdf_parser():
+    try:
+        from backend.services.pdf_parser import parse_pdf_file  # type: ignore
+        return parse_pdf_file
+    except Exception:
+        try:
+            from services.pdf_parser import parse_pdf_file  # type: ignore
+            return parse_pdf_file
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PDF解析服务不可用: {e}")
+
+
+ALLOWED_TYPES = [
+    'application/pdf',
+    'text/plain',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]
+
+
+async def _parse_text_file(file: UploadFile, file_content: bytes):
+    try:
+        text = file_content.decode('utf-8')
+    except UnicodeDecodeError:
+        try:
+            text = file_content.decode('gbk')
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="文本文件编码不支持，请使用UTF-8或GBK编码")
+
+    # 简单的医疗信息提取
+    import re
+    medical_info = {}
+    name_patterns = [r"患者姓名[：:]\s*([^\s\n]+)", r"姓名[：:]\s*([^\s\n]+)", r"病人[：:]\s*([^\s\n]+)"]
+    for p in name_patterns:
+        m = re.search(p, text)
+        if m:
+            medical_info["patientName"] = m.group(1)
+            break
+    dept_patterns = [r"科室[：:]\s*([^\s\n]+)", r"所在科室[：:]\s*([^\s\n]+)"]
+    for p in dept_patterns:
+        m = re.search(p, text)
+        if m:
+            medical_info["department"] = m.group(1)
+            break
+    diag_patterns = [r"诊断[：:]\s*([^\n]+)", r"主要诊断[：:]\s*([^\n]+)", r"入院诊断[：:]\s*([^\n]+)"]
+    for p in diag_patterns:
+        m = re.search(p, text)
+        if m:
+            medical_info["primaryDiagnosis"] = m.group(1).strip()
+            break
+
+    return {
+        "success": True,
+        "data": {
+            "content": text,
+            "method": "文本解析",
+            "medical_info": medical_info,
+            **medical_info,
+        },
+    }
+
+
+async def _parse_file_common(file: UploadFile, options: str):
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file.content_type}")
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小不能超过10MB")
+    try:
+        parse_options = json.loads(options)
+    except json.JSONDecodeError:
+        parse_options = {}
+
+    if file.content_type == 'application/pdf' or (file.filename and file.filename.endswith('.pdf')):
+        parse_pdf_file = _import_pdf_parser()
+        result = parse_pdf_file(content, file.filename)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=f"PDF解析失败: {result.get('error', '未知错误')}")
+        return {
+            "success": True,
+            "data": {
+                "content": result.get("content"),
+                "method": result.get("method"),
+                "pages": result.get("pages"),
+                "medical_info": result.get("medical_info"),
+                "file_info": {
+                    "filename": file.filename,
+                    "size": len(content),
+                    "type": file.content_type,
+                },
+            },
+            "tokensUsed": 0,
+        }
+    elif file.content_type == 'text/plain' or (file.filename and file.filename.endswith('.txt')):
+        return await _parse_text_file(file, content)
+    else:
+        raise HTTPException(status_code=400, detail=f"暂不支持解析 {file.content_type} 格式的文件")
+
+
+@router.post("/parse-medical-file-public")
+async def parse_medical_file_public(file: UploadFile = File(...), options: str = Form("{}")):
+    return await _parse_file_common(file, options)
+
+
+@router.post("/parse-medical-file")
+async def parse_medical_file(file: UploadFile = File(...), options: str = Form("{}"), current_user: dict = Depends(get_current_user)):
+    return await _parse_file_common(file, options)
+
+
+@router.post("/parse-medical-text")
+async def parse_medical_text(text: str = Form(...)):
+    # Reuse text parsing logic
+    from starlette.datastructures import UploadFile as _UF  # type: ignore
+    fake_file = type("F", (), {"filename": "input.txt", "content_type": "text/plain"})()
+    return await _parse_text_file(fake_file, text.encode("utf-8", errors="ignore"))

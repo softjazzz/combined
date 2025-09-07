@@ -1,0 +1,17 @@
+{
+  "name": "@health-qc/rule-engine",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm run build && node dist/test.js",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.7.2"
+  }
+}
