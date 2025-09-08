@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@health-qc/web-utils": "workspace:*",
+    "@health-qc/ui-qc": "workspace:*",
+    "@health-qc/rule-engine": "workspace:*",
     "@supabase/supabase-js": "^2.48.0",
     "ant-design-vue": "^4.2.5",
     "pinia": "^2.1.7",

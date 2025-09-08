@@ -2,7 +2,7 @@
  * API包装器工具
  * 统一处理API调用、错误处理和响应格式
  */
-import { supabase } from './supabase';
+import { getSupabase } from './supabase-registry';
 import { handleDatabaseError, handleNetworkError, handleBusinessError } from './error-handler';
 // API包装器类
 export class ApiWrapper {
@@ -262,6 +262,10 @@ export class ApiWrapper {
                 };
             }
             // 上传文件
+            const supabase = getSupabase();
+            if (!supabase) {
+                return { success: false, error: { message: '存储未初始化' } };
+            }
             const { data, error } = await supabase.storage
                 .from(bucket)
                 .upload(path, file, {

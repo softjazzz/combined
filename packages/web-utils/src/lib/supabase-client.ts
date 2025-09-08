@@ -15,4 +15,6 @@ export function createSupabase(options?: SupabaseInitOptions): SupabaseClient {
   });
 }
 
-export const supabase = createSupabase();
+// Note: Do NOT create a default client at module load time.
+// Many apps import utilities from this package without configuring Supabase.
+// Creating a client here would throw when env is missing and break unrelated pages.

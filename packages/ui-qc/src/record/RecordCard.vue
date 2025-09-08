@@ -15,14 +15,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   id?: string | number
   title?: string
   status?: 'normal' | 'warning' | 'error' | string
   createdAt?: string
 }>()
-
-const props = defineProps<{ status?: string }>()
 const statusColor = computed(() => {
   switch (props.status) {
     case 'error':

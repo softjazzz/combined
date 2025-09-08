@@ -5,4 +5,3 @@ export interface SupabaseInitOptions {
     clientOptions?: any;
 }
 export declare function createSupabase(options?: SupabaseInitOptions): SupabaseClient;
-export declare const supabase: SupabaseClient<any, "public", "public", any, any>;
