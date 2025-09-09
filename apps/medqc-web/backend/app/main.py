@@ -1,7 +1,10 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+import os
 from fastapi.middleware.cors import CORSMiddleware
 from .core.settings import get_settings
 from .core.logging import configure_logging, request_logger_middleware
+from .core.middleware_errors import UnifiedErrorMiddleware
 from .routers import system as system_router
 from .routers import proxy as proxy_router
 from .routers import auth as auth_router
@@ -18,6 +21,8 @@ from .routers import semantic_rules as semantic_rules_router
 from .routers import tasks as tasks_router
 from .routers import classification as classification_router
 from .routers import llm_configs as llm_configs_router
+from .routers import medical_records_alias as medical_records_alias_router
+from .routers import reports as reports_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -59,6 +64,8 @@ def create_app() -> FastAPI:
 
     # Logging middleware
     app.middleware("http")(request_logger_middleware)
+    # Unified error shape
+    app.add_middleware(UnifiedErrorMiddleware)
 
     # Routers (new ones first so they can override legacy equivalents)
     app.include_router(system_router.router)
@@ -77,10 +84,19 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router.router)
     app.include_router(classification_router.router)
     app.include_router(llm_configs_router.router)
+    # Compatibility alias for /api/medical-records endpoints
+    app.include_router(medical_records_alias_router.router)
+    app.include_router(reports_router.router)
+
+    # Static files: expose /downloads for exported reports
+    downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
+    os.makedirs(downloads_dir, exist_ok=True)
+    app.mount("/downloads", StaticFiles(directory=downloads_dir), name="downloads")
 
     # Include legacy routes afterwards to keep compatibility
-    if legacy_app is not None:
-        app.include_router(legacy_app.router)  # type: ignore[attr-defined]
+    # Temporarily disabled to avoid route conflicts with semantic-rules
+    # if legacy_app is not None:
+    #     app.include_router(legacy_app.router)  # type: ignore[attr-defined]
 
     return app
 

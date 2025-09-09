@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # CORS
-    CORS_ORIGINS: List[AnyHttpUrl] = []
+    # 支持逗号分隔或 JSON 数组两种格式；为避免严格 URL 校验导致环境解析失败，这里使用 List[str]
+    CORS_ORIGINS: List[str] = []
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: List[str] = ["*"]
     CORS_ALLOW_HEADERS: List[str] = ["*"]
@@ -42,7 +43,18 @@ class Settings(BaseSettings):
     @classmethod
     def split_origins(cls, v):
         if isinstance(v, str):
-            return [o.strip() for o in v.split(",") if o.strip()]
+            txt = v.strip()
+            # 如果是 JSON 数组，尝试解析
+            if txt.startswith("[") and txt.endswith("]"):
+                try:
+                    import json
+                    arr = json.loads(txt)
+                    if isinstance(arr, list):
+                        return [str(o).strip() for o in arr if str(o).strip()]
+                except Exception:
+                    pass
+            # 否则按逗号分隔
+            return [o.strip() for o in txt.split(",") if o.strip()]
         return v
 
     class Config:

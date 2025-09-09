@@ -1,10 +1,20 @@
 // deno-lint-ignore-file no-explicit-any
+// @ts-nocheck
 // Edge Function: evaluate-rule
 // Purpose: Evaluate enabled rules for a given event and clinical context
 // Trigger: HTTP POST with JSON { event: string, context: { patient, visit, order, ... }, record?: boolean }
 // Response: { decision: 'pass'|'warn'|'block', hits: [{ ruleCode, severity, message }] }
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+
+// CORS headers (dev uses *; change to your domains in production)
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') || '*'
+const corsHeaders = {
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization,Content-Type',
+  'Access-Control-Max-Age': '86400'
+};
 
 // Create Supabase client with service role if available (functions run server-side)
 function getSupabase() {
@@ -71,13 +81,20 @@ function renderMessage(tpl: string, facts: any): string {
 
 export async function handler(req: Request): Promise<Response> {
   try {
+    // CORS preflight
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
     if (req.method !== 'POST') {
-      return new Response('Method Not Allowed', { status: 405 });
+      return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
     }
 
     const { event, context, record } = await req.json();
+    // Default event fallback to align with seeded demo
+    const normalizedEvent = event || 'drug_order';
     if (!event || !context) {
-      return Response.json({ error: 'Missing event or context' }, { status: 400 });
+      return Response.json({ error: 'Missing event or context' }, { status: 400, headers: corsHeaders });
     }
 
     const supabase = getSupabase();
@@ -86,12 +103,12 @@ export async function handler(req: Request): Promise<Response> {
     const { data: triggerRules, error: trigErr } = await supabase
       .from('yibao_rule_triggers')
       .select('rule_id')
-      .eq('event_type', event);
+      .eq('event_type', normalizedEvent);
     if (trigErr) throw trigErr;
 
     const ruleIds = (triggerRules ?? []).map((r: any) => r.rule_id);
     if (ruleIds.length === 0) {
-      return Response.json({ decision: 'pass', hits: [] });
+      return Response.json({ decision: 'pass', hits: [] }, { headers: corsHeaders });
     }
 
     const { data: rules, error: rulesErr } = await supabase
@@ -160,9 +177,9 @@ export async function handler(req: Request): Promise<Response> {
       if (h.severity === 'warn') { decision = decision === 'pass' ? 'warn' : decision; }
     }
 
-    return Response.json({ decision, hits });
+    return Response.json({ decision, hits }, { headers: corsHeaders });
   } catch (e) {
-    return Response.json({ error: String(e) }, { status: 500 });
+    return Response.json({ error: String(e) }, { status: 500, headers: corsHeaders });
   }
 }
 

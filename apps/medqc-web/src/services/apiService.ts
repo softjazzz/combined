@@ -148,8 +148,10 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
       }
     }
 
-    // 统一错误处理
-    const errorMessage = error.response?.data?.message || error.message || '请求失败'
+    // 统一错误处理（兼容后端统一错误结构）
+    const data = error.response?.data || {}
+    const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'
+    const traceId = data.traceId
     
     // 根据状态码显示不同的错误信息
     switch (error.response?.status) {
@@ -160,7 +162,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
         message.error('认证失败，请重新登录')
         break
       case 403:
-        message.error('权限不足，无法访问该资源')
+        message.error(`权限不足：${errorMessage}`)
         break
       case 404:
         message.error('请求的资源不存在')
@@ -172,7 +174,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
         message.error('请求过于频繁，请稍后再试')
         break
       case 500:
-        message.error('服务器内部错误，请联系管理员')
+        message.error(traceId ? `服务器错误（${traceId}），请联系管理员` : '服务器内部错误，请联系管理员')
         break
       case 502:
       case 503:

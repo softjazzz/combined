@@ -15,7 +15,8 @@ async def request_logger_middleware(request: Request, call_next: Callable):
     start = time.time()
     response = await call_next(request)
     duration = (time.time() - start) * 1000
-    logging.getLogger("uvicorn.access").info(
+    # 使用标准 logger 避免 uvicorn.access 自带格式冲突
+    logging.getLogger("app.access").info(
         "%s %s -> %s in %.2fms", request.method, request.url.path, response.status_code, duration
     )
     return response

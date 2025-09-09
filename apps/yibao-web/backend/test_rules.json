@@ -1,0 +1,82 @@
+[
+  {
+    "code": "TEST_DRUG_GENDER_001",
+    "name": "阿帕他胺片 - 性别限制",
+    "description": "检查阿帕他胺片的性别限制",
+    "rule_type": "drug_gender",
+    "severity": "block",
+    "conditions": [
+      {
+        "fact": "patient.gender",
+        "operator": "!=",
+        "value": "男",
+        "description": "患者性别不符合阿帕他胺片的使用要求"
+      },
+      {
+        "fact": "drug.name",
+        "operator": "==",
+        "value": "阿帕他胺片",
+        "description": "药品为阿帕他胺片"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "intercept",
+        "message_template": "患者性别为{patient.gender}，不能使用阿帕他胺片（该药品限男性使用）",
+        "parameters": {"required_gender": "男"}
+      }
+    ],
+    "triggers": ["prescription_create", "prescription_update"],
+    "drug_info": {
+      "drug_codes": [],
+      "drug_names": ["阿帕他胺片"],
+      "categories": []
+    },
+    "applicable_scenarios": ["处方开立", "医嘱录入"],
+    "source": "2024版国家药品目录",
+    "version": "1.0",
+    "effective_date": null,
+    "expiry_date": null,
+    "enabled": true
+  },
+  {
+    "code": "TEST_DRUG_AGE_001",
+    "name": "儿童清肺口服液 - 年龄限制",
+    "description": "检查儿童清肺口服液的年龄限制",
+    "rule_type": "drug_children_only",
+    "severity": "block",
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "operator": ">=",
+        "value": 18,
+        "description": "患者年龄超出儿童范围"
+      },
+      {
+        "fact": "drug.name",
+        "operator": "==",
+        "value": "儿童清肺口服液",
+        "description": "药品为儿童清肺口服液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "intercept",
+        "message_template": "患者年龄{patient.age}岁，不能使用儿童清肺口服液（该药品限儿童使用）",
+        "parameters": {}
+      }
+    ],
+    "triggers": ["prescription_create", "prescription_update"],
+    "drug_info": {
+      "drug_codes": [],
+      "drug_names": ["儿童清肺口服液"],
+      "categories": []
+    },
+    "applicable_scenarios": ["处方开立", "医嘱录入"],
+    "source": "2024版国家药品目录",
+    "version": "1.0",
+    "effective_date": null,
+    "expiry_date": null,
+    "enabled": true
+  }
+]

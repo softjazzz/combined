@@ -10,6 +10,10 @@
       </template>
       <template #extra>
         <a-space>
+          <a-radio-group v-model:value="currentSource" size="small">
+            <a-radio-button value="platform">平台规则</a-radio-button>
+            <a-radio-button value="sichuan">四川规则</a-radio-button>
+          </a-radio-group>
           <!-- 四川省质控系统状态 -->
           <a-tooltip title="四川省质控系统状态">
             <a-badge
@@ -35,56 +39,27 @@
         </a-space>
       </template>
 
-      <!-- 四川省规则统计信息 -->
-      <a-row :gutter="16" class="stats-cards">
-        <a-col :span="6">
-          <a-card size="small">
-            <a-statistic
-              title="四川省规则总数"
-              :value="sichuanRules.length || 68"
-              :value-style="{ color: '#1890ff' }"
-            >
-              <template #prefix><FileTextOutlined /></template>
-            </a-statistic>
-          </a-card>
-        </a-col>
-        <a-col :span="6">
-          <a-card size="small">
-            <a-statistic
-              title="Token节省率"
-              :value="80"
-              suffix="%"
-              :value-style="{ color: '#52c41a' }"
-            >
-              <template #prefix><CheckCircleOutlined /></template>
-            </a-statistic>
-          </a-card>
-        </a-col>
-        <a-col :span="6">
-          <a-card size="small">
-            <a-statistic
-              title="平均评估时间"
-              :value="47.5"
-              suffix="秒"
-              :value-style="{ color: '#faad14' }"
-            >
-              <template #prefix><ClockCircleOutlined /></template>
-            </a-statistic>
-          </a-card>
-        </a-col>
-        <a-col :span="6">
-          <a-card size="small">
-            <a-statistic
-              title="年节省成本"
-              :value="13651"
-              prefix="¥"
-              :value-style="{ color: '#722ed1' }"
-            >
-              <template #prefix><ThunderboltOutlined /></template>
-            </a-statistic>
-          </a-card>
-        </a-col>
-      </a-row>
+      <!-- 平台规则筛选（仅 platform 显示） -->
+      <div v-if="currentSource === 'platform'" style="margin: 12px 0;">
+        <a-space>
+          <a-input v-model:value="filters.q" allowClear placeholder="搜索名称/描述" style="width: 220px" />
+          <a-select v-model:value="filters.category" allowClear placeholder="分类" style="width: 140px">
+            <a-select-option v-for="c in platformCategories" :key="c" :value="c">{{ c }}</a-select-option>
+          </a-select>
+          <a-select v-model:value="filters.defect_level" allowClear placeholder="缺陷级别" style="width: 140px">
+            <a-select-option value="critical">critical</a-select-option>
+            <a-select-option value="major">major</a-select-option>
+            <a-select-option value="minor">minor</a-select-option>
+          </a-select>
+          <a-select v-model:value="filters.is_enabled" allowClear placeholder="启用状态" style="width: 120px">
+            <a-select-option :value="true">启用</a-select-option>
+            <a-select-option :value="false">停用</a-select-option>
+          </a-select>
+          <a-button type="primary" :loading="loading" @click="refreshPlatformRules">查询</a-button>
+        </a-space>
+      </div>
+
+      <!-- 统计汇总行已按要求移除以获得更紧凑的布局 -->
 
       <!-- 四川省规则分类统计 -->
       <a-row :gutter="16" style="margin-top: 16px;">
@@ -144,16 +119,34 @@
         </a-col>
       </a-row>
 
-      <!-- 四川省规则列表 -->
+      <!-- 规则列表（根据来源切换数据与列） -->
       <a-table
-        :dataSource="sichuanRules"
-        :columns="sichuanColumns"
+        :dataSource="currentSource === 'platform' ? platformRules : sichuanRules"
+        :columns="currentSource === 'platform' ? platformColumns : sichuanColumns"
         :loading="loading"
-        :pagination="{ pageSize: 15, showSizeChanger: true, showQuickJumper: true }"
+        :pagination="tablePagination"
         class="rules-table"
         :scroll="{ x: 1400 }"
       >
         <template #bodyCell="{ column, record }">
+          <!-- 平台规则特有列渲染 -->
+          <template v-if="currentSource === 'platform'">
+            <template v-if="column.key === 'rule_id'">
+              <a-tag color="blue">{{ record.rule_id }}</a-tag>
+            </template>
+            <template v-if="column.key === 'rule_name'">
+              <a-tooltip :title="record.description">
+                <span class="rule-name">{{ record.rule_name }}</span>
+              </a-tooltip>
+            </template>
+            <template v-if="column.key === 'is_enabled'">
+              <a-tag :color="record.is_enabled ? 'green' : 'default'">{{ record.is_enabled ? '启用' : '停用' }}</a-tag>
+            </template>
+            <template v-if="column.key === 'defect_level'">
+              <a-tag :color="getSichuanDefectLevelColor(record.defect_level)">{{ record.defect_level }}</a-tag>
+            </template>
+          </template>
+
           <template v-if="column.key === 'rule_id'">
             <a-tag color="blue">{{ record.rule_id }}</a-tag>
           </template>
@@ -376,6 +369,7 @@ interface TableColumn {
 
 // 四川省规则相关数据
 const loading = ref(false)
+const currentSource = ref<'platform' | 'sichuan'>('platform')
 const sichuanRules = ref<SichuanQCRule[]>([])
 const sichuanStats = ref<SichuanQCStats>({
   total_rules: 68,
@@ -390,6 +384,30 @@ const sichuanQCStatus = ref<SichuanQCStatus>({
 
 // 兼容原有数据结构
 const rules = ref<SichuanQCRule[]>([])
+
+// 平台规则数据模型
+interface PlatformRule {
+  rule_id: string
+  rule_name: string
+  description?: string
+  category?: string
+  defect_level?: string
+  is_enabled?: boolean
+  version?: number | string
+  updated_at?: string
+}
+
+const platformRules = ref<PlatformRule[]>([])
+const platformCategories = ref<string[]>([])
+const filters = ref<{ q?: string; category?: string; defect_level?: string; is_enabled?: boolean | null; page: number; page_size: number }>({
+  q: '',
+  category: undefined,
+  defect_level: undefined,
+  is_enabled: null,
+  page: 1,
+  page_size: 15,
+})
+const tablePagination = ref({ pageSize: 15, showSizeChanger: true, showQuickJumper: true })
 
 // 规则详情
 const showRuleDetail = ref(false)
@@ -454,6 +472,17 @@ const sichuanColumns: TableColumn[] = [
   }
 ]
 
+// 平台规则列
+const platformColumns: TableColumn[] = [
+  { title: '规则ID', key: 'rule_id', dataIndex: 'rule_id', width: 120, fixed: 'left' },
+  { title: '名称', key: 'rule_name', dataIndex: 'rule_name', width: 220, ellipsis: true },
+  { title: '分类', key: 'category', dataIndex: 'category', width: 120 },
+  { title: '缺陷级别', key: 'defect_level', dataIndex: 'defect_level', width: 120 },
+  { title: '启用', key: 'is_enabled', dataIndex: 'is_enabled', width: 100 },
+  { title: '版本', key: 'version', dataIndex: 'version', width: 80 },
+  { title: '更新时间', key: 'updated_at', dataIndex: 'updated_at', width: 180 },
+]
+
 // 四川省规则相关方法
 const refreshSichuanRules = async () => {
   loading.value = true
@@ -463,7 +492,25 @@ const refreshSichuanRules = async () => {
     const response = await fetch('/api/qc/sichuan/rules')
     if (response.ok) {
       const data = await response.json()
-      sichuanRules.value = data.rules || []
+      // 后端返回的字段可能为英文或缺失，这里做一次规范化
+      const normalizeRule = (r: any): SichuanQCRule => {
+        return {
+          rule_id: r.rule_id || r.id || '',
+          name: r.name || r.rule_name || '未命名规则',
+          description: r.description || r.desc || '',
+          category: r.category || r.rule_category || '基础',
+          complexity: r.complexity || r.rule_complexity || '中复杂度',
+          defect_level: r.defect_level || r.severity || '一般缺陷',
+          score_deduction: r.score_deduction ?? r.deduction_score ?? 0,
+          applicable_documents: r.applicable_documents || r.document_types || [],
+          medical_domain: r.medical_domain || r.domain || '通用',
+          requires_rag: Boolean(r.requires_rag ?? r.need_rag ?? false),
+          requires_cot: Boolean(r.requires_cot ?? r.need_cot ?? false)
+        }
+      }
+
+      const rawRules = data.rules || []
+      sichuanRules.value = rawRules.map((r: any) => normalizeRule(r))
       sichuanStats.value = {
         total_rules: data.total_rules || 68,
         rule_categories: data.rule_categories || [],
@@ -484,6 +531,32 @@ const refreshSichuanRules = async () => {
   } catch (error: unknown) {
     console.error('❌ 四川省规则加载异常:', error)
     message.error('加载四川省规则异常: ' + (error instanceof Error ? error.message : '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+// 平台规则：加载与筛选
+const refreshPlatformRules = async () => {
+  loading.value = true
+  try {
+    const params = new URLSearchParams()
+    if (filters.value.q) params.set('q', String(filters.value.q))
+    if (filters.value.category) params.set('category', String(filters.value.category))
+    if (filters.value.defect_level) params.set('defect_level', String(filters.value.defect_level))
+    if (filters.value.is_enabled !== null && filters.value.is_enabled !== undefined) params.set('is_enabled', String(filters.value.is_enabled))
+    params.set('page', String(filters.value.page))
+    params.set('page_size', String(filters.value.page_size))
+
+    const resp = await fetch(`/api/semantic-rules?${params.toString()}`)
+    if (!resp.ok) throw new Error(await resp.text())
+    const data = await resp.json()
+    platformRules.value = (data.rules || [])
+    // 简单推断分类列表
+    platformCategories.value = Array.from(new Set(platformRules.value.map(r => r.category).filter(Boolean) as string[]))
+    tablePagination.value = { ...tablePagination.value, pageSize: filters.value.page_size }
+  } catch (e: any) {
+    message.error('加载平台规则失败: ' + (e?.message || e))
   } finally {
     loading.value = false
   }
@@ -514,10 +587,14 @@ const getSichuanComplexityColor = (complexity: string) => {
   }
 }
 
-const getSichuanDefectLevelColor = (level: string) => {
-  if (level.includes('严重') || level.includes('否决')) return 'red'
-  if (level.includes('一般')) return 'orange'
-  return 'green'
+const getSichuanDefectLevelColor = (level: string | undefined | null) => {
+  if (!level) return 'default'
+  const text = String(level)
+  // 兼容英文 severities
+  if (/(critical|major|严重|否决)/i.test(text)) return 'red'
+  if (/(minor|一般)/i.test(text)) return 'orange'
+  if (/(low|轻微)/i.test(text)) return 'green'
+  return 'default'
 }
 
 const getCategoryColor = (category: string) => {
@@ -542,22 +619,25 @@ const getCategoryCount = (category: string) => {
 
 // 组件挂载时加载四川省规则
 onMounted(() => {
-  console.log('🚀 四川省质控规则管理器组件已挂载，开始加载规则...')
-  refreshSichuanRules()
+  if (currentSource.value === 'platform') {
+    refreshPlatformRules()
+  } else {
+    refreshSichuanRules()
+  }
 })
 </script>
 
 <style scoped>
 .semantic-rules-manager {
-  padding: 24px;
+  padding: 12px;
 }
 
 .stats-cards {
-  margin-bottom: 24px;
+  display: none;
 }
 
 .rules-table {
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .rule-detail {

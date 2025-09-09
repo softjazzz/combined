@@ -138,7 +138,8 @@ async def update_password(
 
 
 @router.post("/logout")
-async def logout(current_user: dict = Depends(get_current_user)):
+async def logout():
+    # 放宽登出：无论是否携带 Authorization，都返回 200，避免前端因 token 过期/缺失导致 401/403
     return {"message": "登出成功"}
 
 

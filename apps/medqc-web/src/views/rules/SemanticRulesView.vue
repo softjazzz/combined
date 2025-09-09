@@ -250,13 +250,14 @@ const refreshData = async () => {
       llmStatus.value = llmResponse.data
     }
 
-    // 获取规则数量（通过统计信息获取，不需要单独设置）
-    const rulesResponse = await semanticRulesService.getAllSemanticRules()
-    if (rulesResponse.success && rulesResponse.data) {
-      // totalRules 现在是计算属性，会自动从 engineStats 中获取
-      // 如果需要，可以将规则数量添加到 engineStats 中
-      if (engineStats.value) {
-        engineStats.value.total_rules = rulesResponse.data.length
+    // 获取规则总数（后端 page_size 最大为 200）
+    // 使用相对路径以兼容 Vite 开发代理和生产环境反向代理
+    const rulesResponse = await fetch(`/api/semantic-rules?page=1&page_size=200`)
+    if (rulesResponse.ok) {
+      const data = await rulesResponse.json()
+      if (data.success && engineStats.value) {
+        // 使用后端返回的 count 字段作为总数
+        engineStats.value.total_rules = data.count || 0
       }
     }
 

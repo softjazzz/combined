@@ -1,9 +1,11 @@
 from typing import List, Dict, Any, Optional
+import uuid
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from datetime import datetime, timezone
 
 from ..services.sichuan_qc_service import SichuanQCService
+from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 
 
@@ -23,6 +25,8 @@ class SichuanEvaluateRequest(BaseModel):
     # Optional LLM overrides for experimentation
     model: Optional[str] = None
     provider: Optional[str] = None
+    # Persistence control (default on)
+    persist: Optional[bool] = True
 
 
 class SichuanBatchDocument(BaseModel):
@@ -80,6 +84,9 @@ async def evaluate(req: SichuanEvaluateRequest):
                 "status": "success",
                 "mode": "multi_document",
             }
+            # Persist (best-effort)
+            if req.persist:
+                _persist_evaluation_to_db(req.document_id, response)
             return response
         else:
             # Use single-prompt mode compatible response shape
@@ -128,6 +135,9 @@ async def evaluate(req: SichuanEvaluateRequest):
                 "status": "success",
                 "mode": "single_prompt",
             }
+            # Persist (best-effort)
+            if req.persist:
+                _persist_evaluation_to_db(req.document_id, response)
             return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"四川省质控评估失败: {e}")
@@ -242,17 +252,146 @@ async def stats():
 
 @router.get("/rules")
 async def rules():
-    data = [
-        {"id": "sc-001", "name": "入院记录完整性", "category": "基础", "severity": "major"},
-        {"id": "sc-002", "name": "诊断一致性", "category": "诊断", "severity": "critical"},
-    ]
+    """
+    返回四川省质控规则。
+    优先从 Supabase 的 `qc_rules` 表读取；如果未配置或查询失败，则回退到内置示例规则。
+    """
+    supabase = get_supabase()
+    records: list[dict[str, Any]] | None = None
+
+    if supabase is not None:
+        try:
+            # 取启用的规则，最多1000条
+            resp = supabase.table("qc_rules").select("*").eq("is_active", True).limit(1000).execute()
+            records = resp.data or []
+        except Exception:
+            records = None
+
+    data: list[dict[str, Any]]
+    source = "fallback"
+    if records is not None and len(records) > 0:
+        def normalize(rec: dict[str, Any]) -> dict[str, Any]:
+            # 统一字段到前端所需格式
+            rule_id = rec.get("id") or rec.get("rule_code") or rec.get("rule_id") or ""
+            name = rec.get("name") or rec.get("rule_name") or "未命名规则"
+            description = rec.get("description") or rec.get("desc") or ""
+            category = rec.get("category") or rec.get("rule_category") or "基础"
+            # 复杂度/缺陷级别可能为英文，保持原样，前端已做兼容
+            complexity = rec.get("complexity") or rec.get("rule_complexity") or "中复杂度"
+            defect_level = rec.get("defect_level") or rec.get("severity") or "一般缺陷"
+            score_deduction = rec.get("score_deduction") or rec.get("deduction_score") or 0
+            docs = rec.get("applicable_documents") or rec.get("document_types") or []
+            if isinstance(docs, str):
+                # 简单拆分字符串形式
+                docs = [d.strip() for d in docs.split(",") if d.strip()]
+            return {
+                "rule_id": rule_id,
+                "name": name,
+                "description": description,
+                "category": category,
+                "complexity": complexity,
+                "defect_level": defect_level,
+                "score_deduction": score_deduction,
+                "applicable_documents": docs,
+                "medical_domain": rec.get("medical_domain") or rec.get("domain") or "通用",
+                "requires_rag": bool(rec.get("requires_rag") or rec.get("need_rag") or False),
+                "requires_cot": bool(rec.get("requires_cot") or rec.get("need_cot") or False),
+            }
+
+        data = [normalize(r) for r in records]
+        source = "supabase"
+    elif records is None:
+        # 回退静态示例
+        data = [
+            {"rule_id": "sc-001", "name": "入院记录完整性", "category": "基础", "defect_level": "major", "complexity": "medium", "applicable_documents": ["入院记录"], "score_deduction": 2, "medical_domain": "通用", "requires_rag": False, "requires_cot": False, "description": "检查入院记录结构是否完整"},
+            {"rule_id": "sc-002", "name": "诊断一致性", "category": "诊断", "defect_level": "critical", "complexity": "high", "applicable_documents": ["出院记录", "病程记录"], "score_deduction": 5, "medical_domain": "通用", "requires_rag": False, "requires_cot": False, "description": "主要诊断前后一致"},
+        ]
+    else:
+        # Supabase 查询成功但无数据：返回空数组，不再回退
+        data = []
+        source = "supabase"
+
     return {
         "rules": data,
         "total_rules": len(data),
         "document_type_filter": None,
-        "rule_categories": list(sorted({d["category"] for d in data})),
+        "rule_categories": list(sorted({d.get("category", "基础") for d in data})),
         "complexity_distribution": {},
         "defect_level_distribution": {},
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "status": "success",
+        "source": source,
     }
+
+
+# ------------------------- Persistence Helpers -------------------------
+
+def _is_uuid_like(s: str) -> bool:
+    try:
+        uuid.UUID(str(s))
+        return True
+    except Exception:
+        return False
+
+
+def _persist_evaluation_to_db(document_id: str, result: Dict[str, Any]) -> None:
+    """Best-effort persistence into medical_documents and document_qc_results.
+    - Skips silently if Supabase not configured or document_id not UUID.
+    - Updates qc_* fields and inserts rule-level rows.
+    """
+    if not _is_uuid_like(document_id):
+        return
+
+    sb = get_supabase()
+    if sb is None:
+        return
+
+    try:
+        summary = (result.get("evaluation_summary") or result.get("overall_summary") or {})
+        compliance_rate = float(summary.get("compliance_rate", 0.0))
+        critical = int(summary.get("critical_violations", 0)) if "critical_violations" in summary else 0
+        qc_status = (
+            "passed" if compliance_rate >= 90 and critical == 0 else
+            ("warning" if compliance_rate >= 60 else "failed")
+        )
+
+        # Update medical_documents
+        sb.table("medical_documents").update({
+            "qc_status": qc_status,
+            "qc_score": round(compliance_rate, 2),
+            "qc_last_analyzed": datetime.now(timezone.utc).isoformat(),
+            "qc_analysis_version": "sichuan-1.0",
+        }).eq("id", document_id).execute()
+
+        # Insert rule-level results (if any)
+        items: List[Dict[str, Any]] = result.get("evaluation_results") or []
+        payloads: List[Dict[str, Any]] = []
+        for it in items[:200]:
+            passed = bool(it.get("is_compliant") is True)
+            payloads.append({
+                "document_id": document_id,
+                "rule_id": it.get("rule_id") or "unknown",
+                "result_status": "passed" if passed else "failed",
+                "score": 0,
+                "max_score": 100,
+                "confidence_score": float(it.get("confidence", 0)) if it.get("confidence") is not None else None,
+                "issue_category": None,
+                "issue_description": it.get("findings") or "",
+                "evidence_text": it.get("evidence") or "",
+                "evidence_location": None,
+                "suggestions": None,
+                "ai_reasoning": None,
+                "ai_model_used": None,
+                "analysis_time_ms": None,
+            })
+
+        if payloads:
+            # Bulk insert; ignore errors per-row by inserting one-by-one to keep simple
+            for row in payloads:
+                try:
+                    sb.table("document_qc_results").insert(row).execute()
+                except Exception:
+                    continue
+    except Exception:
+        # Best-effort: never raise from persistence
+        return

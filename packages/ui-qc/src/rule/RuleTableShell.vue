@@ -3,7 +3,7 @@
     <div class="qc-table__toolbar">
       <slot name="filters" />
     </div>
-    <a-table :dataSource="rows" :columns="columns" :pagination="pagination" :rowKey="rowKey" @change="onChange" />
+    <a-table :dataSource="rows" :columns="columns" :pagination="pagination" :rowKey="rowKey" :rowSelection="rowSelection" @change="onChange" />
   </div>
   </template>
 
@@ -19,6 +19,7 @@ const props = withDefaults(defineProps<{
   page: number
   pageSize: number
   rowKey?: string
+  rowSelection?: any
 }>(), {
   rowKey: 'id'
 })

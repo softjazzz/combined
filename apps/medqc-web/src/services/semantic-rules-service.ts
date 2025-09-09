@@ -67,6 +67,57 @@ export class SemanticRulesService {
           : 'http://124.220.6.136:8001')
   }
 
+  // ------------------- CRUD & Import/Export -------------------
+
+  async create(rule: Partial<SemanticRuleDefinition>) {
+    const res = await fetch(`${this.baseURL}/api/semantic-rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule)
+    })
+    if (!res.ok) throw new Error('创建规则失败')
+    const data = await res.json()
+    return data.rule as SemanticRuleDefinition
+  }
+
+  async update(ruleId: string, patch: Partial<SemanticRuleDefinition>) {
+    const res = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch)
+    })
+    if (!res.ok) throw new Error('更新规则失败')
+    const data = await res.json()
+    return data.rule as SemanticRuleDefinition
+  }
+
+  async remove(ruleId: string) {
+    const res = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}`, {
+      method: 'DELETE'
+    })
+    if (!res.ok) throw new Error('删除规则失败')
+    const data = await res.json()
+    return data.deleted as number
+  }
+
+  async import(rules: Partial<SemanticRuleDefinition>[]) {
+    const res = await fetch(`${this.baseURL}/api/semantic-rules/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules })
+    })
+    if (!res.ok) throw new Error('导入规则失败')
+    const data = await res.json()
+    return data.inserted as number
+  }
+
+  async export() {
+    const res = await fetch(`${this.baseURL}/api/semantic-rules/export`)
+    if (!res.ok) throw new Error('导出规则失败')
+    const data = await res.json()
+    return (data.rules || []) as SemanticRuleDefinition[]
+  }
+
   /**
    * 获取所有语义规则
    */

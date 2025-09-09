@@ -533,7 +533,8 @@ const startEvaluation = async () => {
       body: JSON.stringify({
         document_id: documentId.value,
         document_content: documentContent.value,
-        document_type: documentType.value
+        document_type: documentType.value,
+        persist: true
       }),
       // 统一超时到3分钟（180秒）
       signal: AbortSignal.timeout(180000)
@@ -564,6 +565,7 @@ const startEvaluationWithLinkedRecord = async () => {
   try {
     // 拉取病历正文（若可用）
     let content = documentContent.value
+    let docIdToUse: string | undefined = undefined
     try {
       const token =
         localStorage.getItem('medqc_access_token') ||
@@ -577,6 +579,15 @@ const startEvaluationWithLinkedRecord = async () => {
         const rec = await recResp.json()
         content = String(rec.content || rec.raw_text || content || '')
       }
+      // 进一步查询该病历的文档，优先选用真实的 document_id（UUID）
+      const docsResp = await fetch(`/api/medical-records/${linkedRecordId.value}/documents`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      })
+      if (docsResp.ok) {
+        const dd = await docsResp.json()
+        const first = dd?.categories?.[0]?.documents?.[0]
+        if (first && first.id) docIdToUse = String(first.id)
+      }
     } catch (_) {
       // 忽略读取失败，继续使用占位文本
     }
@@ -585,10 +596,11 @@ const startEvaluationWithLinkedRecord = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        document_id: linkedRecordId.value,
+        document_id: docIdToUse || linkedRecordId.value,
         document_content: content || '（占位文本，仅用于示例）',
         document_type: documentType.value,
-        model: selectedModel.value
+        model: selectedModel.value,
+        persist: true
       })
     })
     if (!resp.ok) {

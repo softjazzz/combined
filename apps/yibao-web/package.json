@@ -7,14 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc -p tsconfig.json --noEmit"
+    "type-check": "vue-tsc -p tsconfig.json --noEmit",
+    "backend": "cd backend && source venv/bin/activate && python3 main.py",
+    "backend:install": "cd backend && pip install -r requirements.txt",
+    "start:full": "concurrently \"npm run backend\" \"npm run dev\""
   },
   "dependencies": {
-    "@health-qc/web-utils": "workspace:*",
-    "@health-qc/ui-qc": "workspace:*",
     "@health-qc/rule-engine": "workspace:*",
+    "@health-qc/ui-qc": "workspace:*",
+    "@health-qc/web-utils": "workspace:*",
+    "echarts": "^5.5.0",
+    "vue-echarts": "^6.7.6",
     "@supabase/supabase-js": "^2.48.0",
     "ant-design-vue": "^4.2.5",
+    "axios": "^1.6",
     "pinia": "^2.1.7",
     "vue": "^3.4.29",
     "vue-router": "^4.3.2"
@@ -22,10 +28,13 @@
   "devDependencies": {
     "@ant-design/icons-vue": "^7.0.1",
     "@vitejs/plugin-vue": "^5.1.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
     "less": "^4.2.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
     "vite": "^5.4.8",
     "vue-tsc": "^2.1.10"
   }
 }
-
