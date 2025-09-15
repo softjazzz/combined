@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 
 router = APIRouter(prefix="/api/llm", tags=["llm-info"])
 
@@ -9,7 +9,7 @@ async def providers():
     supabase = get_supabase()
     if supabase is not None:
         try:
-            resp = supabase.table("llm_api_providers").select("*").eq("is_active", True).execute()
+            resp = await async_execute(supabase.table("llm_api_providers").select("*").eq("is_active", True))
             return {"data": resp.data or []}
         except Exception:
             pass
@@ -31,7 +31,7 @@ async def models(provider_id: str | None = Query(default=None)):
             q = supabase.table("llm_models").select("*").eq("is_active", True)
             if provider_id:
                 q = q.eq("provider_id", provider_id)
-            resp = q.execute()
+            resp = await async_execute(q)
             return {"data": resp.data or []}
         except Exception:
             pass
@@ -43,4 +43,3 @@ async def models(provider_id: str | None = Query(default=None)):
             {"provider": "deepseek", "id": "deepseek-chat", "model_code": "deepseek-chat", "model_name": "DeepSeek-Chat"},
         ]
     }
-

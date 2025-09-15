@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>认证修复测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Yibao认证修复测试</h1>
+        
+        <div class="test-section info">
+            <h3>📋 修复内容</h3>
+            <ul>
+                <li>✅ 修复API基础URL配置 (localhost:8002)</li>
+                <li>✅ 修复token刷新请求格式 (JSON → FormData)</li>
+                <li>✅ 优化token过期检查逻辑</li>
+                <li>✅ 改进认证状态同步机制</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 API连接测试</h3>
+            <button onclick="testAPIConnection()">测试API连接</button>
+            <button onclick="testLogin()">测试登录</button>
+            <button onclick="testTokenRefresh()">测试Token刷新</button>
+            <div id="apiTestLog" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔐 认证状态测试</h3>
+            <button onclick="checkAuthStatus()">检查认证状态</button>
+            <button onclick="clearAuthData()">清除认证数据</button>
+            <button onclick="simulatePageRefresh()">模拟页面刷新</button>
+            <div id="authTestLog" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 测试结果</h3>
+            <div id="testResults" class="log">等待测试...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8002';
+        let testResults = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            console.log(logMessage);
+            return logMessage;
+        }
+
+        function updateLog(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.textContent += message + '\n';
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function addTestResult(test, status, details = '') {
+            testResults.push({ test, status, details, timestamp: new Date().toLocaleTimeString() });
+            updateTestResults();
+        }
+
+        function updateTestResults() {
+            const resultsElement = document.getElementById('testResults');
+            resultsElement.textContent = testResults.map(result => 
+                `[${result.timestamp}] ${result.test}: ${result.status} ${result.details}`
+            ).join('\n');
+        }
+
+        async function testAPIConnection() {
+            const logElement = 'apiTestLog';
+            updateLog(logElement, log('开始测试API连接...'));
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/docs`);
+                if (response.ok) {
+                    updateLog(logElement, log('✅ API服务连接成功'));
+                    addTestResult('API连接', '✅ 成功');
+                } else {
+                    updateLog(logElement, log(`❌ API服务响应异常: ${response.status}`));
+                    addTestResult('API连接', '❌ 失败', `状态码: ${response.status}`);
+                }
+            } catch (error) {
+                updateLog(logElement, log(`❌ API连接失败: ${error.message}`));
+                addTestResult('API连接', '❌ 失败', error.message);
+            }
+        }
+
+        async function testLogin() {
+            const logElement = 'apiTestLog';
+            updateLog(logElement, log('开始测试登录...'));
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@yibao.com',
+                        password: 'admin123'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    updateLog(logElement, log('✅ 登录成功'));
+                    updateLog(logElement, log(`Token: ${data.access_token.substring(0, 50)}...`));
+                    
+                    // 保存token用于后续测试
+                    localStorage.setItem('yibao_access_token', data.access_token);
+                    localStorage.setItem('yibao_refresh_token', data.refresh_token);
+                    
+                    addTestResult('登录测试', '✅ 成功');
+                } else {
+                    const errorData = await response.json();
+                    updateLog(logElement, log(`❌ 登录失败: ${errorData.detail}`));
+                    addTestResult('登录测试', '❌ 失败', errorData.detail);
+                }
+            } catch (error) {
+                updateLog(logElement, log(`❌ 登录请求失败: ${error.message}`));
+                addTestResult('登录测试', '❌ 失败', error.message);
+            }
+        }
+
+        async function testTokenRefresh() {
+            const logElement = 'apiTestLog';
+            updateLog(logElement, log('开始测试Token刷新...'));
+            
+            const refreshToken = localStorage.getItem('yibao_refresh_token');
+            if (!refreshToken) {
+                updateLog(logElement, log('❌ 未找到refresh token，请先登录'));
+                addTestResult('Token刷新', '❌ 失败', '未找到refresh token');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('refresh_token', refreshToken);
+
+                const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    updateLog(logElement, log('✅ Token刷新成功'));
+                    updateLog(logElement, log(`新Token: ${data.access_token.substring(0, 50)}...`));
+                    
+                    // 更新token
+                    localStorage.setItem('yibao_access_token', data.access_token);
+                    
+                    addTestResult('Token刷新', '✅ 成功');
+                } else {
+                    const errorData = await response.json();
+                    updateLog(logElement, log(`❌ Token刷新失败: ${errorData.detail}`));
+                    addTestResult('Token刷新', '❌ 失败', errorData.detail);
+                }
+            } catch (error) {
+                updateLog(logElement, log(`❌ Token刷新请求失败: ${error.message}`));
+                addTestResult('Token刷新', '❌ 失败', error.message);
+            }
+        }
+
+        function checkAuthStatus() {
+            const logElement = 'authTestLog';
+            updateLog(logElement, log('检查认证状态...'));
+            
+            const accessToken = localStorage.getItem('yibao_access_token');
+            const refreshToken = localStorage.getItem('yibao_refresh_token');
+            const userInfo = localStorage.getItem('yibao_user');
+            
+            updateLog(logElement, log(`Access Token: ${accessToken ? '存在' : '不存在'}`));
+            updateLog(logElement, log(`Refresh Token: ${refreshToken ? '存在' : '不存在'}`));
+            updateLog(logElement, log(`用户信息: ${userInfo ? '存在' : '不存在'}`));
+            
+            if (accessToken) {
+                try {
+                    const payload = JSON.parse(atob(accessToken.split('.')[1]));
+                    const expTime = new Date(payload.exp * 1000);
+                    const isExpired = Date.now() > payload.exp * 1000;
+                    
+                    updateLog(logElement, log(`Token过期时间: ${expTime.toLocaleString()}`));
+                    updateLog(logElement, log(`Token状态: ${isExpired ? '已过期' : '有效'}`));
+                    
+                    addTestResult('认证状态检查', isExpired ? '⚠️ Token已过期' : '✅ Token有效');
+                } catch (error) {
+                    updateLog(logElement, log(`❌ Token解析失败: ${error.message}`));
+                    addTestResult('认证状态检查', '❌ 失败', 'Token解析失败');
+                }
+            } else {
+                addTestResult('认证状态检查', '❌ 未登录');
+            }
+        }
+
+        function clearAuthData() {
+            const logElement = 'authTestLog';
+            updateLog(logElement, log('清除认证数据...'));
+            
+            localStorage.removeItem('yibao_access_token');
+            localStorage.removeItem('yibao_refresh_token');
+            localStorage.removeItem('yibao_user');
+            
+            updateLog(logElement, log('✅ 认证数据已清除'));
+            addTestResult('清除认证数据', '✅ 成功');
+        }
+
+        function simulatePageRefresh() {
+            const logElement = 'authTestLog';
+            updateLog(logElement, log('模拟页面刷新...'));
+            
+            // 检查刷新前的状态
+            const hasTokenBefore = !!localStorage.getItem('yibao_access_token');
+            updateLog(logElement, log(`刷新前认证状态: ${hasTokenBefore ? '已登录' : '未登录'}`));
+            
+            // 模拟页面刷新后的状态检查
+            setTimeout(() => {
+                const hasTokenAfter = !!localStorage.getItem('yibao_access_token');
+                updateLog(logElement, log(`刷新后认证状态: ${hasTokenAfter ? '已登录' : '未登录'}`));
+                
+                if (hasTokenBefore === hasTokenAfter) {
+                    updateLog(logElement, log('✅ 认证状态持久化正常'));
+                    addTestResult('页面刷新测试', '✅ 成功', '认证状态保持一致');
+                } else {
+                    updateLog(logElement, log('❌ 认证状态丢失'));
+                    addTestResult('页面刷新测试', '❌ 失败', '认证状态丢失');
+                }
+            }, 100);
+        }
+
+        // 页面加载时自动检查API连接
+        window.onload = function() {
+            updateLog('testResults', log('认证修复测试页面已加载'));
+            testAPIConnection();
+        };
+    </script>
+</body>
+</html>

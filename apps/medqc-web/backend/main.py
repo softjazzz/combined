@@ -1,5 +1,8 @@
-# 主FastAPI应用
-# 集成审核模块到现有的三层质控系统
+"""
+DEPRECATED: Legacy experimental entrypoint kept for reference.
+Please use `app/main.py` (uvicorn app.main:app) for running the backend.
+"""
+# 主FastAPI应用（Legacy）
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

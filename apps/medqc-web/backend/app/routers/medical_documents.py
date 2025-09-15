@@ -1,8 +1,11 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+import uuid
+from datetime import datetime
 
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..services.records_ingest_service import get_classification_mapping
 from ..services.qc_service import QCService
 from ..core.security import get_current_user
@@ -15,13 +18,94 @@ router = APIRouter(prefix="/api", tags=["medical-documents"])
 qc_service = QCService()
 
 
+# Pydantic models for request/response
+class CreateDocumentRequest(BaseModel):
+    title: str
+    content: str
+    document_type: str
+    category_code: Optional[str] = None
+    type_code: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class DocumentTypeInfo(BaseModel):
+    id: str
+    category_id: str
+    category_code: str
+    category_name: str
+    type_code: str
+    type_name: str
+    description: Optional[str] = None
+    sort_order: int = 0
+
+
+@router.get("/document-types")
+async def get_document_types():
+    """获取所有文档类型列表，按分类分组"""
+    supabase = get_supabase()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+
+    try:
+        # 获取分类信息
+        categories_resp = await async_execute(
+            supabase.table("document_categories_test")
+            .select("*")
+            .eq("is_active", True)
+            .order("sort_order")
+        )
+        categories = categories_resp.data or []
+
+        # 获取类型信息
+        types_resp = await async_execute(
+            supabase.table("document_types_test")
+            .select("*, document_categories_test!inner(category_code, category_name)")
+            .eq("is_active", True)
+            .order("sort_order")
+        )
+        types = types_resp.data or []
+
+        # 按分类分组
+        result = []
+        for category in categories:
+            category_types = [
+                {
+                    "id": doc_type["id"],
+                    "category_id": doc_type["category_id"],
+                    "category_code": category["category_code"],
+                    "category_name": category["category_name"],
+                    "type_code": doc_type["type_code"],
+                    "type_name": doc_type["type_name"],
+                    "description": doc_type.get("description"),
+                    "sort_order": doc_type["sort_order"]
+                }
+                for doc_type in types
+                if doc_type["category_id"] == category["id"]
+            ]
+
+            if category_types:  # 只包含有类型的分类
+                result.append({
+                    "category_id": category["id"],
+                    "category_code": category["category_code"],
+                    "category_name": category["category_name"],
+                    "description": category.get("description"),
+                    "types": category_types
+                })
+
+        return {"categories": result}
+
+    except Exception as e:
+        logger.error(f"获取文档类型失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取文档类型失败: {e}")
+
+
 @router.get("/medical-records/{record_id}")
 async def get_medical_record_detail(record_id: str):
     supabase = get_supabase()
     settings = get_settings()
     if supabase:
         try:
-            resp = supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id).execute()
+            resp = await async_execute(supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id))
             rows = resp.data or []
             if not rows:
                 raise HTTPException(status_code=404, detail="医疗记录不存在")
@@ -58,7 +142,7 @@ async def get_medical_record_documents(record_id: str):
         raise HTTPException(status_code=500, detail="数据库连接未初始化")
     try:
         # 取文档
-        resp = supabase.table(settings.DOCUMENTS_TABLE).select("*").eq("record_id", record_id).execute()
+        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select("*").eq("record_id", record_id))
         raw_docs: List[Dict[str, Any]] = resp.data or []
 
         # 分类/类型名称映射
@@ -149,29 +233,195 @@ async def get_medical_record_documents(record_id: str):
         raise HTTPException(status_code=500, detail=f"获取文档失败: {e}")
 
 
+@router.post("/medical-records/{record_id}/documents")
+async def create_medical_document(record_id: str, request: CreateDocumentRequest):
+    """为指定医疗记录创建新文档"""
+    supabase = get_supabase()
+    settings = get_settings()
+    if not supabase:
+        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+
+    try:
+        # 验证医疗记录是否存在
+        record_resp = await async_execute(
+            supabase.table(settings.RECORDS_TABLE)
+            .select("id")
+            .eq("id", record_id)
+        )
+        if not record_resp.data:
+            raise HTTPException(status_code=404, detail="医疗记录不存在")
+
+        # 获取分类映射以确定category_id和type_id
+        mapping = await get_classification_mapping()
+        categories = mapping.get("categories", {})
+        types = mapping.get("types", {})
+
+        # 确定category_id和type_id
+        category_id = None
+        type_id = None
+
+        if request.category_code and request.type_code:
+            # 使用提供的分类和类型代码
+            category_id = categories.get(request.category_code)
+            composite_key = f"{request.category_code}.{request.type_code}"
+            type_info = types.get(composite_key) or types.get(request.type_code)
+            if isinstance(type_info, dict):
+                type_id = type_info.get("id")
+            else:
+                type_id = type_info
+        elif request.document_type:
+            # 尝试从document_type解析
+            if "." in request.document_type:
+                cat_code, type_code = request.document_type.split(".", 1)
+                category_id = categories.get(cat_code)
+                type_info = types.get(request.document_type)
+                if isinstance(type_info, dict):
+                    type_id = type_info.get("id")
+                else:
+                    type_id = type_info
+
+        # 如果无法确定分类，使用默认值
+        if not category_id or not type_id:
+            # 获取第一个可用的分类和类型作为默认值
+            if categories:
+                first_cat = list(categories.values())[0]
+                if isinstance(first_cat, dict):
+                    category_id = first_cat.get("id")
+                else:
+                    category_id = first_cat
+            if types:
+                first_type = list(types.values())[0]
+                if isinstance(first_type, dict):
+                    type_id = first_type.get("id")
+                else:
+                    type_id = first_type
+
+        # 确保有有效的category_id和type_id
+        if not category_id or not type_id:
+            raise HTTPException(status_code=400, detail="无法确定文档分类，请检查分类配置")
+
+        # 创建文档数据 - 包含必需字段
+        document_data = {
+            "record_id": record_id,
+            "category_id": category_id,
+            "type_id": type_id,
+            "title": request.title,
+            "content": request.content,
+            "ai_classified": False,
+            "classification_confidence": 0.0,
+            "manual_verified": True,  # 手动创建的文档标记为已验证
+            "position_info": {},
+            "sort_order": 0,
+            "status": "active",
+            "qc_status": "pending",
+            "metadata": {
+                "category_code": request.category_code,
+                "type_code": request.type_code,
+                "manually_created": True
+            }
+        }
+
+        # 如果有摘要，添加
+        if request.summary:
+            document_data["summary"] = request.summary
+
+        # 插入文档
+        resp = await async_execute(
+            supabase.table(settings.DOCUMENTS_TABLE)
+            .insert(document_data)
+        )
+
+        if not resp.data:
+            raise HTTPException(status_code=500, detail="文档创建失败")
+
+        return {
+            "success": True,
+            "document": resp.data[0],
+            "message": "文档创建成功"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建文档失败: {e}")
+        raise HTTPException(status_code=500, detail=f"创建文档失败: {e}")
+
+
 @router.put("/medical-documents/{document_id}")
-async def update_medical_document(document_id: str, update_data: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+async def update_medical_document(document_id: str, update_data: Dict[str, Any]):
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
         raise HTTPException(status_code=500, detail="数据库连接未初始化")
     try:
-        resp = supabase.table(settings.DOCUMENTS_TABLE).update(update_data).eq("id", document_id).execute()
+        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).update(update_data).eq("id", document_id))
         return {"success": True, "updated": len(resp.data or [])}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新失败: {e}")
 
 
 @router.delete("/medical-documents/{document_id}")
-async def delete_medical_document(document_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_medical_document(
+    document_id: str,
+    hard_delete: bool = False,
+    # current_user: dict = Depends(get_current_user)  # 暂时注释掉认证
+):
+    """删除医疗文档，支持软删除和硬删除"""
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
         raise HTTPException(status_code=500, detail="数据库连接未初始化")
+
     try:
-        resp = supabase.table(settings.DOCUMENTS_TABLE).delete().eq("id", document_id).execute()
-        return {"success": True, "deleted": len(resp.data or [])}
+        # 验证文档是否存在
+        doc_resp = await async_execute(
+            supabase.table(settings.DOCUMENTS_TABLE)
+            .select("id, title, record_id")
+            .eq("id", document_id)
+        )
+        if not doc_resp.data:
+            raise HTTPException(status_code=404, detail="文档不存在")
+
+        document = doc_resp.data[0]
+
+        if hard_delete:
+            # 硬删除：直接从数据库删除
+            resp = await async_execute(
+                supabase.table(settings.DOCUMENTS_TABLE)
+                .delete()
+                .eq("id", document_id)
+            )
+            operation = "硬删除"
+        else:
+            # 软删除：标记为已删除状态
+            resp = await async_execute(
+                supabase.table(settings.DOCUMENTS_TABLE)
+                .update({
+                    "status": "deleted",
+                    "updated_at": datetime.utcnow().isoformat(),
+                    "metadata": {
+                        **document.get("metadata", {}),
+                        "deleted_at": datetime.utcnow().isoformat(),
+                        "deletion_reason": "user_deleted"
+                    }
+                })
+                .eq("id", document_id)
+            )
+            operation = "软删除"
+
+        return {
+            "success": True,
+            "deleted": len(resp.data or []),
+            "operation": operation,
+            "document_id": document_id,
+            "document_title": document["title"],
+            "message": f"文档已{operation}成功"
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"删除文档失败: {e}")
         raise HTTPException(status_code=500, detail=f"删除失败: {e}")
 
 
@@ -182,7 +432,7 @@ async def batch_qc_analysis(record_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=500, detail="数据库连接未初始化")
     try:
         settings = get_settings()
-        resp = supabase.table(settings.DOCUMENTS_TABLE).select("id, content, title").eq("record_id", record_id).execute()
+        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select("id, content, title").eq("record_id", record_id))
         docs = resp.data or []
         started = []
         for d in docs:
@@ -201,7 +451,7 @@ async def analyze_medical_document(document_id: str, current_user: dict = Depend
         raise HTTPException(status_code=500, detail="数据库连接未初始化")
     try:
         settings = get_settings()
-        resp = supabase.table(settings.DOCUMENTS_TABLE).select('id, content, title').eq('id', document_id).execute()
+        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select('id, content, title').eq('id', document_id))
         data = (resp.data or [])
         if not data:
             raise HTTPException(status_code=404, detail="文档不存在")

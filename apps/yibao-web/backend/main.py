@@ -26,7 +26,7 @@ from supabase import create_client, Client
 from auth_utils import (
     get_current_user, authenticate_user, create_access_token,
     verify_password, get_password_hash, DEMO_USERS, pwd_context,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
 )
 
 # 配置日志
@@ -68,11 +68,14 @@ app = FastAPI(
 # CORS 配置
 ALLOWED_ORIGINS = [
     "http://localhost:3008",
-    "http://localhost:3009", 
+    "http://localhost:3009",
     "http://localhost:3010",
     "http://127.0.0.1:3008",
     "http://127.0.0.1:3009",
     "http://127.0.0.1:3010",
+    "http://43.163.116.243:3008",
+    "http://43.163.116.243:3009",
+    "http://43.163.116.243:3010",
 ]
 
 app.add_middleware(
@@ -116,6 +119,25 @@ class UserCreate(BaseModel):
 # ==================== 工具函数 ====================
 # 认证相关函数已移至 auth_utils.py
 
+# ==================== 测试数据文件路径解析 ====================
+
+def _resolve_test_data_file(filename: str = 'test_medical_records.json') -> str | None:
+    """查找测试数据文件，优先使用 backend/test_data，
+    若不存在则回退到 tests/backend/test_data。
+    返回可用路径或 None。
+    """
+    try:
+        base_dir = os.path.dirname(__file__)
+        primary = os.path.join(base_dir, 'test_data', filename)
+        if os.path.exists(primary):
+            return primary
+        fallback = os.path.abspath(os.path.join(base_dir, '..', 'tests', 'backend', 'test_data', filename))
+        if os.path.exists(fallback):
+            return fallback
+    except Exception:
+        pass
+    return None
+
 # ==================== 基础路由 ====================
 
 @app.get("/")
@@ -135,7 +157,7 @@ async def root():
 async def health_check():
     """健康检查"""
     supabase_status = "connected" if supabase else "not_configured"
-    
+
     return {
         "status": "healthy",
         "service": "yibao-backend",
@@ -258,14 +280,238 @@ async def refresh_token(refresh_token: str = Form(...)):
 # 导入并注册规则管理路由
 def register_rules_router():
     try:
-        from rules_api import router as rules_router
-        app.include_router(rules_router)
+        # 延迟导入并注入 Supabase 客户端，避免循环依赖
+        import rules_api
+        try:
+            rules_api.set_supabase(supabase)
+        except Exception:
+            # 注入失败不影响 Mock 模式
+            pass
+        app.include_router(rules_api.router)
         logger.info("规则管理路由注册成功")
     except ImportError as e:
         logger.warning(f"无法导入规则管理路由: {e}")
 
 # 延迟注册路由
 register_rules_router()
+
+# 注册质控引擎路由
+def register_engine_router():
+    try:
+        # 延迟导入并初始化引擎
+        from engine.api import router as engine_router, initialize_engine
+
+        # 初始化引擎（使用 Supabase 客户端）
+        initialize_engine(supabase)
+
+        # 注册路由
+        app.include_router(engine_router)
+        logger.info("质控引擎路由注册成功")
+    except ImportError as e:
+        logger.warning(f"无法导入质控引擎路由: {e}")
+    except Exception as e:
+        logger.error(f"质控引擎初始化失败: {e}")
+
+register_engine_router()
+
+# ==================== 病历管理 API ====================
+
+@app.get("/api/medical-records")
+async def get_medical_records(
+    page: int = 1,
+    page_size: int = 20,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取病历列表"""
+    try:
+        # 加载测试病历数据
+        import json
+        import os
+
+        test_data_file = _resolve_test_data_file()
+
+        if os.path.exists(test_data_file):
+            with open(test_data_file, 'r', encoding='utf-8') as f:
+                test_records = json.load(f)
+
+            # 转换数据格式以匹配前端期望
+            formatted_records = []
+            for i, record in enumerate(test_records):
+                patient = record.get('patient', {})
+                visit = record.get('visit', {})
+                drug_orders = record.get('drug_orders', [])
+                test_scenario = record.get('test_scenario', {})
+
+                formatted_record = {
+                    'id': record.get('record_id', f'MR_{i+1}'),
+                    'name': f"{patient.get('name', '测试患者')}病历",
+                    'patient_name': patient.get('name', '测试患者'),
+                    'patient_id': patient.get('patient_id', f'P{i+1:03d}'),
+                    'department': visit.get('department', '内科'),
+                    'record_type': visit.get('visit_type', '门诊'),
+                    'disease_type': '测试疾病',
+                    'complexity_level': '中等',
+                    'status': 'completed',
+                    'qc_score': 85 + (i % 15),  # 85-99分
+                    'expected_grade': 'A' if (85 + (i % 15)) >= 90 else 'B',
+                    'expected_score': 90,
+                    'content': f"患者{patient.get('name', '测试患者')}，{patient.get('gender', '男')}，{patient.get('age', 30)}岁...",
+                    'created_at': record.get('created_at', '2025-09-11 15:30'),
+                    'updated_at': record.get('created_at', '2025-09-11 15:30'),
+                    'created_by': '测试医生',
+                    'tags': [test_scenario.get('rule_type', '测试'), visit.get('visit_type', '门诊')],
+                    'medical_insurance_type': patient.get('insurance_type', '城镇职工'),
+                    'cost_amount': sum(order.get('total_amount', 0) for order in drug_orders),
+                    'violation_risk': test_scenario.get('expected_result', 'pass'),
+                    'test_scenario': test_scenario.get('name', ''),
+                    'age': patient.get('age', 30),
+                    'gender': patient.get('gender', '男'),
+                    'drug_count': len(drug_orders)
+                }
+                formatted_records.append(formatted_record)
+
+            # 分页处理
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            paginated_records = formatted_records[start_idx:end_idx]
+
+            return {
+                "data": paginated_records,
+                "total": len(formatted_records),
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (len(formatted_records) + page_size - 1) // page_size
+            }
+        else:
+            # 如果测试数据文件不存在，返回空数据
+            return {
+                "data": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": 0
+            }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取病历数据失败: {str(e)}"
+        )
+
+@app.get("/api/medical-records/{record_id}")
+async def get_medical_record(
+    record_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取单个病历详情"""
+    try:
+        # 加载测试病历数据
+        import json
+        import os
+
+        test_data_file = _resolve_test_data_file()
+
+        if os.path.exists(test_data_file):
+            with open(test_data_file, 'r', encoding='utf-8') as f:
+                test_records = json.load(f)
+
+            # 查找对应的病历
+            for record in test_records:
+                if record.get('record_id') == record_id:
+                    return record
+
+            raise HTTPException(
+                status_code=404,
+                detail="病历不存在"
+            )
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="测试数据文件不存在"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取病历详情失败: {str(e)}"
+        )
+
+@app.get("/api/medical-records/statistics/overview")
+async def get_medical_records_statistics(
+    current_user: dict = Depends(get_current_user)
+):
+    """获取病历统计概览"""
+    try:
+        # 加载测试病历数据
+        import json
+        import os
+
+        test_data_file = _resolve_test_data_file()
+
+        if os.path.exists(test_data_file):
+            with open(test_data_file, 'r', encoding='utf-8') as f:
+                test_records = json.load(f)
+
+            # 统计分析
+            total_records = len(test_records)
+
+            # 按测试场景分类统计
+            scenario_stats = {}
+            risk_stats = {'pass': 0, 'info': 0, 'warn': 0, 'block': 0}
+            age_stats = {'儿童': 0, '成年': 0, '老年': 0}
+            gender_stats = {'男': 0, '女': 0}
+
+            for record in test_records:
+                # 测试场景统计
+                scenario = record.get('test_scenario', {})
+                scenario_name = scenario.get('name', '未知场景')
+                scenario_stats[scenario_name] = scenario_stats.get(scenario_name, 0) + 1
+
+                # 风险等级统计
+                expected_result = scenario.get('expected_result', 'pass')
+                if expected_result in risk_stats:
+                    risk_stats[expected_result] += 1
+
+                # 年龄统计
+                patient = record.get('patient', {})
+                age = patient.get('age', 30)
+                if age < 18:
+                    age_stats['儿童'] += 1
+                elif age < 60:
+                    age_stats['成年'] += 1
+                else:
+                    age_stats['老年'] += 1
+
+                # 性别统计
+                gender = patient.get('gender', '男')
+                if gender in gender_stats:
+                    gender_stats[gender] += 1
+
+            return {
+                "total_records": total_records,
+                "scenario_distribution": scenario_stats,
+                "risk_distribution": risk_stats,
+                "age_distribution": age_stats,
+                "gender_distribution": gender_stats,
+                "generated_at": "2025-09-11T15:30:00Z"
+            }
+        else:
+            return {
+                "total_records": 0,
+                "scenario_distribution": {},
+                "risk_distribution": {},
+                "age_distribution": {},
+                "gender_distribution": {},
+                "generated_at": "2025-09-11T15:30:00Z"
+            }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取统计数据失败: {str(e)}"
+        )
 
 if __name__ == "__main__":
     # 启动服务器 - 使用端口 8002

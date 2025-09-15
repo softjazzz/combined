@@ -119,16 +119,6 @@ const routes: RouteRecordRaw[] = [
         }
       },
 
-      // 统计分析路由
-      {
-        path: 'statistics',
-        name: 'Statistics',
-        component: () => import('@/views/dashboard/StatisticsView.vue'),
-        meta: {
-          title: '统计分析',
-          icon: 'BarChartOutlined'
-        }
-      },
 
       // 质控规则管理路由（统一的标签页版本）
       {
@@ -208,6 +198,28 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'llm-qc-demo-enhanced',
+        name: 'LLMQCDemoEnhanced',
+        component: () => import('@/views/demo/LLMQCDemoEnhanced.vue'),
+        meta: {
+          title: 'LLM质控演示增强版',
+          icon: 'ExperimentOutlined',
+          permission: ['admin'],
+          description: '完整的LLM质控演示系统，包含规则应用、通知提醒和申诉功能'
+        }
+      },
+      {
+        path: 'test-demo',
+        name: 'TestDemo',
+        component: () => import('@/views/demo/TestDemo.vue'),
+        meta: {
+          title: '组件测试',
+          icon: 'BugOutlined',
+          permission: ['admin'],
+          description: '测试演示组件功能'
+        }
+      },
+      {
         path: 'test/llm-config',
         name: 'LLMConfigTest',
         component: () => import('@/views/test/LLMConfigTest.vue'),
@@ -224,16 +236,6 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '简化LLM测试',
           icon: 'ExperimentOutlined',
-          hidden: true
-        }
-      },
-      {
-        path: 'test/basic',
-        name: 'BasicTest',
-        component: () => import('@/views/test/BasicTest.vue'),
-        meta: {
-          title: '基础测试',
-          icon: 'BugOutlined',
           hidden: true
         }
       },
@@ -306,6 +308,56 @@ const routes: RouteRecordRaw[] = [
           title: '病历详情',
           hidden: true,
           permission: ['admin', 'qc_manager', 'doctor']
+        }
+      },
+      {
+        path: 'medical-records/:id/legacy',
+        name: 'MedicalRecordDetailLegacy',
+        component: () => import('@/views/medical-records/MedicalRecordDetail.legacy.vue'),
+        meta: {
+          title: '病历详情（经典版）',
+          hidden: true,
+          permission: ['admin', 'qc_manager', 'doctor']
+        }
+      },
+      {
+        path: 'test/three-column',
+        name: 'TestThreeColumn',
+        component: () => import('@/views/test/TestThreeColumn.vue'),
+        meta: {
+          title: '三栏布局测试',
+          hidden: true,
+          requiresAuth: false
+        }
+      },
+      {
+        path: 'test/basic',
+        name: 'BasicTest',
+        component: () => import('@/views/test/ApiTestView.vue'),
+        meta: {
+          title: '基础功能测试',
+          hidden: true,
+          requiresAuth: false
+        }
+      },
+      {
+        path: 'test/validation',
+        name: 'ThreeColumnValidation',
+        component: () => import('@/views/test/ThreeColumnValidation.vue'),
+        meta: {
+          title: '三栏布局验证',
+          hidden: true,
+          requiresAuth: false
+        }
+      },
+      {
+        path: 'medical-records/:id/simple',
+        name: 'MedicalRecordDetailSimple',
+        component: () => import('@/views/medical-records/MedicalRecordDetailSimple.vue'),
+        meta: {
+          title: '病历详情（简化版）',
+          hidden: true,
+          requiresAuth: false
         }
       },
       {

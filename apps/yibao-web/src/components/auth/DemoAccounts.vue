@@ -38,7 +38,14 @@
               v-for="account in demoAccounts"
               :key="account.email"
               @click="selectAccount(account)"
-              class="demo-account-item flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-blue-50 cursor-pointer transition-all duration-200 group border border-transparent hover:border-blue-200"
+              :class="[
+                'demo-account-item flex items-center gap-4 p-4 bg-gray-50 rounded-xl transition-all duration-200 group border border-transparent',
+                {
+                  'hover:bg-blue-50 cursor-pointer hover:border-blue-200': !isLoggingIn,
+                  'opacity-50 cursor-not-allowed': isLoggingIn,
+                  'bg-blue-50 border-blue-200': isLoggingIn && selectedAccount?.email === account.email
+                }
+              ]"
             >
               <!-- 角色图标 -->
               <div
@@ -58,9 +65,12 @@
                 </div>
               </div>
 
-              <!-- 选择图标 -->
-              <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+              <!-- 选择图标/加载状态 -->
+              <div class="flex-shrink-0 transition-opacity duration-200">
+                <div v-if="isLoggingIn && selectedAccount?.email === account.email" class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                  <LoadingOutlined class="text-white text-sm animate-spin" />
+                </div>
+                <div v-else class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center opacity-0 group-hover:opacity-100">
                   <LoginOutlined class="text-white text-sm" />
                 </div>
               </div>
@@ -69,7 +79,7 @@
 
           <!-- 提示信息 -->
           <div class="mt-4 text-center">
-            <span class="text-xs text-gray-500">点击账号可自动填入登录表单</span>
+            <span class="text-xs text-gray-500">点击账号可直接完成登录并跳转</span>
           </div>
         </div>
       </div>
@@ -79,7 +89,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UserOutlined, DownOutlined, LoginOutlined } from '@ant-design/icons-vue'
+import { UserOutlined, DownOutlined, LoginOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 
 interface DemoAccount {
   email: string
@@ -91,11 +101,21 @@ interface DemoAccount {
   bgColor: string
 }
 
+interface Props {
+  loading?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  loading: false
+})
+
 const emit = defineEmits<{
   'select-account': [account: { email: string, password: string, role: string }]
 }>()
 
 const isExpanded = ref(false)
+const isLoggingIn = ref(false)
+const selectedAccount = ref<DemoAccount | null>(null)
 
 // 演示账号数据
 const demoAccounts: DemoAccount[] = [
@@ -133,14 +153,27 @@ const toggleExpanded = () => {
 }
 
 const selectAccount = (account: DemoAccount) => {
+  // 如果正在登录中，忽略点击
+  if (isLoggingIn.value) return
+
+  // 设置加载状态
+  isLoggingIn.value = true
+  selectedAccount.value = account
+
   emit('select-account', {
     email: account.email,
     password: account.password,
     role: account.role
   })
-  
+
   // 选择账号后自动收起
   isExpanded.value = false
+
+  // 重置加载状态（在父组件登录完成后会重置）
+  setTimeout(() => {
+    isLoggingIn.value = false
+    selectedAccount.value = null
+  }, 3000) // 3秒后自动重置，防止卡住
 }
 </script>
 

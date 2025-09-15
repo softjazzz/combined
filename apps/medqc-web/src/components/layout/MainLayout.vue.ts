@@ -96,9 +96,7 @@ const breadcrumbItems = (0, vue_1.computed)(() => {
             case 'permissions':
                 items.push({ title: '数据权限配置', path: null });
                 break;
-            case 'llm-qc-demo':
-                items.push({ title: 'LLM质控演示', path: null });
-                break;
+            // removed legacy 'llm-qc-demo' breadcrumb mapping
             default:
                 items.push({ title: '仪表板', path: null });
         }
@@ -674,37 +672,7 @@ if (__VLS_ctx.authStore.hasRole('admin')) {
     var __VLS_108;
 }
 if (__VLS_ctx.authStore.hasRole('admin')) {
-    const __VLS_113 = {}.AMenuItem;
-    /** @type {[typeof __VLS_components.AMenuItem, typeof __VLS_components.aMenuItem, typeof __VLS_components.AMenuItem, typeof __VLS_components.aMenuItem, ]} */ ;
-    // @ts-ignore
-    const __VLS_114 = __VLS_asFunctionalComponent(__VLS_113, new __VLS_113({
-        key: "/dashboard/llm-qc-demo",
-        ...{ class: "menu-item menu-item-primary mb-3 mx-2" },
-    }));
-    const __VLS_115 = __VLS_114({
-        key: "/dashboard/llm-qc-demo",
-        ...{ class: "menu-item menu-item-primary mb-3 mx-2" },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_114));
-    __VLS_116.slots.default;
-    {
-        const { icon: __VLS_thisSlot } = __VLS_116.slots;
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20" },
-        });
-        const __VLS_117 = {}.ExperimentOutlined;
-        /** @type {[typeof __VLS_components.ExperimentOutlined, ]} */ ;
-        // @ts-ignore
-        const __VLS_118 = __VLS_asFunctionalComponent(__VLS_117, new __VLS_117({
-            ...{ class: "text-white text-lg drop-shadow-sm" },
-        }));
-        const __VLS_119 = __VLS_118({
-            ...{ class: "text-white text-lg drop-shadow-sm" },
-        }, ...__VLS_functionalComponentArgsRest(__VLS_118));
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-white font-semibold ml-3 drop-shadow-sm" },
-    });
-    var __VLS_116;
+    // legacy '/dashboard/llm-qc-demo' menu item removed
 }
 var __VLS_20;
 var __VLS_8;

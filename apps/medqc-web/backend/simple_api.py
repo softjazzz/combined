@@ -17,6 +17,9 @@ import random
 
 # ==================== 应用配置 ====================
 
+"""
+DEPRECATED: Legacy toy API. Use `app/main.py`.
+"""
 app = FastAPI(
     title="医疗质控系统API",
     description="简化版API，数据操作直连Supabase",

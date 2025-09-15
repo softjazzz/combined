@@ -143,9 +143,5 @@ const __VLS_self = (await Promise.resolve().then(() => __importStar(require('vue
         };
     },
 });
-export const default = (await Promise.resolve().then(() => __importStar(require('vue')))).defineComponent({
-    setup() {
-        return {};
-    },
-});
+export default __VLS_self;
 ; /* PartiallyEnd: #4569/main.vue */

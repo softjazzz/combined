@@ -1,7 +1,6 @@
 """
-增强版医疗文书分类API
-基于测试验证成功的层级化分类系统
-提供完整的分类、质控和统计功能
+DEPRECATED: 增强版医疗文书分类（保留用于兼容/测试）。
+请使用模块化后端 `app/routers/*` 中的实现。
 """
 
 from fastapi import APIRouter, HTTPException, Depends

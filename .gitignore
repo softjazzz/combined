@@ -130,3 +130,69 @@ public
 # Temporary folders
 tmp/
 temp/
+
+# Debug and test files
+debug-*.html
+test-*.html
+
+# Backup files
+*.backup
+*.backup.*
+*_backup*
+*.bak
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Supabase local files
+supabase/.temp/
+supabase/.branches/
+supabase/.git/
+
+# Generated files
+generated/
+*/generated/
+**/generated/
+
+# PDF test files
+*.pdf
+!docs/**/*.pdf
+
+# Large binary files
+*.tar.gz
+*.zip
+*.rar
+
+# Debug and test files
+debug-*.html
+test-*.html
+*.debug.js
+
+# Backup files
+*.backup
+*.backup.*
+*_backup_*
+*.bak
+
+# Generated files
+generated/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Supabase local files
+supabase/.temp/
+supabase/logs/
+
+# PDF test files
+*.pdf
+!docs/**/*.pdf
+
+# Large binary files
+*.tar.gz
+*.zip
+*.rar

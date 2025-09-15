@@ -6,7 +6,7 @@ import csv
 import os
 from pydantic import BaseModel
 
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..services.sichuan_qc_service import SichuanQCService
 
@@ -47,7 +47,7 @@ async def qc_summary():
     if sb is not None:
         try:
             # 读取聚合视图
-            view_rows = sb.table("qc_statistics_view").select("*").limit(1000).execute()
+            view_rows = await async_execute(sb.table("qc_statistics_view").select("*").limit(1000))
             rows = view_rows.data or []
             total_records = len(rows)
             if rows:
@@ -65,7 +65,7 @@ async def qc_summary():
             pass
 
         try:
-            rr = sb.table("qc_rules").select("*").eq("is_active", True).limit(1000).execute()
+            rr = await async_execute(sb.table("qc_rules").select("*").eq("is_active", True).limit(1000))
             active_rules = len(rr.data or [])
         except Exception:
             pass
@@ -114,7 +114,7 @@ async def qc_export(payload: ExportRequest):
     if payload.record_ids:
         # 过滤指定 record_id
         q = q.in_("record_id", payload.record_ids)
-    resp = q.execute()
+    resp = await async_execute(q)
     rows: List[Dict[str, Any]] = list(resp.data or [])
 
     export_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
@@ -147,6 +147,5 @@ async def qc_export(payload: ExportRequest):
         "download_url": f"/downloads/{filename}",
         "count": len(rows),
     }
-
 
 

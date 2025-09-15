@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..storage.memory import medical_records_db
 from ..schemas.records import MedicalRecordResponse
@@ -43,7 +43,7 @@ async def get_record_public(record_id: str):
     # Supabase 优先
     if supabase is not None:
         try:
-            resp = supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id).limit(1).execute()  # type: ignore[attr-defined]
+            resp = await async_execute(supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id).limit(1))  # type: ignore[attr-defined]
             rows = resp.data or []
             if rows:
                 data = _normalize_record(rows[0])
@@ -66,6 +66,5 @@ async def delete_record_compat(record_id: str, current_user: dict = Depends(get_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="医疗记录不存在")
     del medical_records_db[record_id]
     return {"message": "医疗记录删除成功"}
-
 
 

@@ -72,6 +72,9 @@ else:
     logger.warning("Supabase 配置缺失，将使用内存存储")
 
 # 创建FastAPI应用
+"""
+DEPRECATED: Legacy combined API. Use `app/main.py` instead.
+"""
 app = FastAPI(
     title="医疗质控系统API - 完整集成版",
     description="包含用户认证、医疗记录管理、质控分析和层级化文书分类的完整API服务",

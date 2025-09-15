@@ -1,33 +1,46 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">质控规则管理</h1>
-      <div class="header-actions">
-        <a-space>
+  <div class="page-container min-h-screen bg-gray-50 p-4 lg:p-6">
+    <!-- 页面头部 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="flex-1">
+          <div class="flex items-center space-x-3 mb-2">
+            <div class="p-2 bg-blue-100 rounded-lg">
+              <SettingOutlined class="text-xl text-blue-600" />
+            </div>
+            <h1 class="text-2xl lg:text-3xl font-bold text-gray-900">
+              质控规则管理
+            </h1>
+          </div>
+          <p class="text-gray-600 text-sm lg:text-base">
+            统一管理传统质控规则和语义质控规则，支持规则创建、编辑、测试和版本管理
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2" v-if="activeTab === 'traditional'">
           <a-button
-            v-if="activeTab === 'traditional'"
             @click="refreshRules"
             :loading="loading"
+            class="flex items-center space-x-2"
           >
             <template #icon><ReloadOutlined /></template>
-            刷新
+            <span>刷新</span>
           </a-button>
           <a-button
-            v-if="activeTab === 'traditional'"
+            @click="importRules"
+            class="flex items-center space-x-2"
+          >
+            <template #icon><ImportOutlined /></template>
+            <span>导入规则</span>
+          </a-button>
+          <a-button
             type="primary"
             @click="showCreateModal"
-            :icon="h(PlusOutlined)"
+            class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700"
           >
-            新增规则
+            <template #icon><PlusOutlined /></template>
+            <span>新增规则</span>
           </a-button>
-          <a-button
-            v-if="activeTab === 'traditional'"
-            @click="importRules"
-            :icon="h(ImportOutlined)"
-          >
-            导入规则
-          </a-button>
-        </a-space>
+        </div>
       </div>
     </div>
 
@@ -38,19 +51,19 @@
       class="rules-tabs"
       @change="handleTabChange"
     >
-      <a-tab-pane key="traditional" tab="传统质控规则">
-        <template #tab>
-          <span>
-            <SettingOutlined />
-            传统质控规则
-          </span>
-        </template>
-      </a-tab-pane>
       <a-tab-pane key="semantic" tab="语义质控规则">
         <template #tab>
           <span>
             <BranchesOutlined />
             语义质控规则
+          </span>
+        </template>
+      </a-tab-pane>
+      <a-tab-pane key="traditional" tab="传统质控规则">
+        <template #tab>
+          <span>
+            <SettingOutlined />
+            传统质控规则
           </span>
         </template>
       </a-tab-pane>
@@ -61,139 +74,311 @@
       <!-- 传统质控规则标签页 -->
       <div v-if="activeTab === 'traditional'">
         <!-- 统计卡片 -->
-        <div class="stats-grid">
-          <a-card class="stat-card">
-            <a-statistic
-              title="总规则数"
-              :value="statistics.total"
-              :value-style="{ color: '#1890ff' }"
-            >
-              <template #prefix><FileTextOutlined /></template>
-            </a-statistic>
-          </a-card>
-          <a-card class="stat-card">
-            <a-statistic
-              title="激活规则"
-              :value="statistics.active"
-              :value-style="{ color: '#52c41a' }"
-            >
-              <template #prefix><CheckCircleOutlined /></template>
-            </a-statistic>
-          </a-card>
-          <a-card class="stat-card">
-            <a-statistic
-              title="严重规则"
-              :value="statistics.critical"
-              :value-style="{ color: '#ff4d4f' }"
-            >
-              <template #prefix><ExclamationCircleOutlined /></template>
-            </a-statistic>
-          </a-card>
-          <a-card class="stat-card">
-            <a-statistic
-              title="规则分类"
-              :value="statistics.categories"
-              :value-style="{ color: '#722ed1' }"
-            >
-              <template #prefix><TagsOutlined /></template>
-            </a-statistic>
-          </a-card>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">规则统计</h2>
+            <a-tag color="blue" class="px-3 py-1">
+              传统规则模式
+            </a-tag>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+              <a-statistic
+                title="总规则数"
+                :value="statistics.total"
+                :value-style="{ color: '#1890ff', fontSize: '18px', fontWeight: '600' }"
+              >
+                <template #prefix>
+                  <div class="p-2 bg-blue-500 rounded-lg inline-block">
+                    <FileTextOutlined class="text-white text-lg" />
+                  </div>
+                </template>
+              </a-statistic>
+            </div>
+            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+              <a-statistic
+                title="激活规则"
+                :value="statistics.active"
+                :value-style="{ color: '#16a34a', fontSize: '18px', fontWeight: '600' }"
+              >
+                <template #prefix>
+                  <div class="p-2 bg-green-500 rounded-lg inline-block">
+                    <CheckCircleOutlined class="text-white text-lg" />
+                  </div>
+                </template>
+              </a-statistic>
+            </div>
+            <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+              <a-statistic
+                title="严重规则"
+                :value="statistics.critical"
+                :value-style="{ color: '#dc2626', fontSize: '18px', fontWeight: '600' }"
+              >
+                <template #prefix>
+                  <div class="p-2 bg-red-500 rounded-lg inline-block">
+                    <ExclamationCircleOutlined class="text-white text-lg" />
+                  </div>
+                </template>
+              </a-statistic>
+            </div>
+            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+              <a-statistic
+                title="规则分类"
+                :value="statistics.categories"
+                :value-style="{ color: '#9333ea', fontSize: '18px', fontWeight: '600' }"
+              >
+                <template #prefix>
+                  <div class="p-2 bg-purple-500 rounded-lg inline-block">
+                    <TagsOutlined class="text-white text-lg" />
+                  </div>
+                </template>
+              </a-statistic>
+            </div>
+          </div>
         </div>
 
         <!-- 筛选和搜索 -->
-        <a-card class="filter-card">
-          <a-row :gutter="16">
-            <a-col :span="6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">筛选条件</h2>
+            <a-button
+              size="small"
+              @click="resetFilters"
+              class="text-gray-500 hover:text-gray-700"
+            >
+              <template #icon><ClearOutlined /></template>
+              清空筛选
+            </a-button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-gray-700">搜索</label>
               <a-input-search
                 v-model:value="searchText"
                 placeholder="搜索规则名称或描述"
                 @search="handleSearch"
                 allow-clear
+                class="w-full"
               />
-            </a-col>
-            <a-col :span="4">
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-gray-700">文书类别</label>
+              <a-select
+                v-model:value="filterDocumentCategory"
+                placeholder="选择文书类别"
+                allowClear
+                @change="handleFilter"
+                class="w-full"
+              >
+                <a-select-option
+                  v-for="option in documentCategoryOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  <div class="flex items-center space-x-2">
+                    <a-tag :color="option.color" class="text-xs">
+                      {{ option.label }}
+                    </a-tag>
+                  </div>
+                </a-select-option>
+              </a-select>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-gray-700">规则分类</label>
               <a-select
                 v-model:value="filterCategory"
                 placeholder="选择分类"
-                allow-clear
-                style="width: 100%"
+                allowClear
                 @change="handleFilter"
+                class="w-full"
               >
                 <a-select-option value="completeness">完整性</a-select-option>
                 <a-select-option value="consistency">一致性</a-select-option>
                 <a-select-option value="rationality">合理性</a-select-option>
                 <a-select-option value="timeliness">及时性</a-select-option>
               </a-select>
-            </a-col>
-            <a-col :span="4">
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-gray-700">严重程度</label>
               <a-select
                 v-model:value="filterSeverity"
-                placeholder="选择严重程度"
-                allow-clear
-                style="width: 100%"
+                placeholder="严重程度"
+                allowClear
                 @change="handleFilter"
+                class="w-full"
               >
                 <a-select-option value="critical">严重</a-select-option>
                 <a-select-option value="major">重要</a-select-option>
                 <a-select-option value="minor">轻微</a-select-option>
               </a-select>
-            </a-col>
-            <a-col :span="4">
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-gray-700">规则类型</label>
               <a-select
                 v-model:value="filterType"
-                placeholder="选择规则类型"
-                allow-clear
-                style="width: 100%"
+                placeholder="选择类型"
+                allowClear
                 @change="handleFilter"
+                class="w-full"
               >
-                <a-select-option value="objective">客观规则</a-select-option>
-                <a-select-option value="subjective">主观规则</a-select-option>
+                <a-select-option value="logical">逻辑规则</a-select-option>
+                <a-select-option value="semantic">语义规则</a-select-option>
                 <a-select-option value="hybrid">混合规则</a-select-option>
               </a-select>
-            </a-col>
-            <a-col :span="4">
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-gray-700">状态</label>
               <a-select
                 v-model:value="filterStatus"
                 placeholder="选择状态"
-                allow-clear
-                style="width: 100%"
+                allowClear
                 @change="handleFilter"
+                class="w-full"
               >
                 <a-select-option value="active">激活</a-select-option>
                 <a-select-option value="inactive">停用</a-select-option>
               </a-select>
-            </a-col>
-            <a-col :span="2">
-              <a-button @click="resetFilters" :icon="h(ClearOutlined)">
+            </div>
+          </div>
+
+          <!-- 快速筛选标签 -->
+          <div class="space-y-3">
+            <!-- 文书类别快速筛选 -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm font-semibold text-gray-800">文书类别：</span>
+              <div
+                :class="['filter-tag', { 'filter-tag-active': !filterDocumentCategory }]"
+                @click="clearDocumentCategoryFilter"
+              >
+                <span class="filter-tag-text">全部文书</span>
+                <span class="filter-tag-count">({{ statistics.total }})</span>
+              </div>
+              <div
+                v-for="option in documentCategoryOptions"
+                :key="option.value"
+                :class="['filter-tag', { 'filter-tag-active': filterDocumentCategory === option.value }]"
+                @click="quickFilterDocumentCategory(option.value)"
+                :style="{ borderColor: option.color }"
+              >
+                <span class="filter-tag-text">{{ option.label }}</span>
+                <span class="filter-tag-count">({{ documentCategoryStats[option.value] || 0 }})</span>
+              </div>
+            </div>
+
+            <!-- 其他快速筛选 -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm font-semibold text-gray-800">其他筛选：</span>
+              <div
+                :class="['filter-tag', { 'filter-tag-active': !filterCategory && !filterSeverity && !filterType && !filterStatus && !filterDocumentCategory }]"
+                @click="clearAllFilters"
+              >
+                <span class="filter-tag-text">全部规则</span>
+                <span class="filter-tag-count">({{ statistics.total }})</span>
+              </div>
+              <div
+                :class="['filter-tag', { 'filter-tag-active': filterCategory === 'completeness' }]"
+                @click="quickFilterCategory('completeness')"
+              >
+                <span class="filter-tag-text">完整性</span>
+              </div>
+              <div
+                :class="['filter-tag', { 'filter-tag-active': filterCategory === 'consistency' }]"
+                @click="quickFilterCategory('consistency')"
+              >
+                <span class="filter-tag-text">一致性</span>
+              </div>
+              <div
+                :class="['filter-tag', { 'filter-tag-active': filterCategory === 'rationality' }]"
+                @click="quickFilterCategory('rationality')"
+              >
+                <span class="filter-tag-text">合理性</span>
+              </div>
+              <div
+                :class="['filter-tag filter-tag-danger', { 'filter-tag-danger-active': filterSeverity === 'critical' }]"
+                @click="quickFilterSeverity('critical')"
+              >
+                <span class="filter-tag-text">严重缺陷</span>
+              </div>
+              <div
+                :class="['filter-tag filter-tag-success', { 'filter-tag-success-active': filterStatus === 'active' }]"
+                @click="quickFilterStatus('active')"
+              >
+                <span class="filter-tag-text">已激活</span>
+              </div>
+            </div>
+          </div>
+
+            <!-- 操作按钮 -->
+            <div class="ml-auto flex items-center gap-2 flex-shrink-0">
+              <a-button type="primary" @click="handleFilter" class="bg-blue-600 hover:bg-blue-700">
+                <template #icon><SearchOutlined /></template>
+                查询
+              </a-button>
+              <a-button @click="resetFilters">
+                <template #icon><ClearOutlined /></template>
                 重置
               </a-button>
-            </a-col>
-          </a-row>
-        </a-card>
+            </div>
+        </div>
+
+        <!-- 批量操作区域 -->
+        <div class="batch-actions" v-if="selectedRowKeys.length > 0">
+          <a-alert
+            :message="`已选择 ${selectedRowKeys.length} 条规则`"
+            type="info"
+            show-icon
+            class="selection-alert mb-4"
+          >
+            <template #action>
+              <a-space>
+                <a-button size="small" @click="batchActivate(true)">
+                  <template #icon><CheckCircleOutlined /></template>
+                  批量激活
+                </a-button>
+                <a-button size="small" @click="batchActivate(false)">
+                  <template #icon><StopOutlined /></template>
+                  批量停用
+                </a-button>
+                <a-button size="small" danger @click="batchDelete">
+                  <template #icon><DeleteOutlined /></template>
+                  批量删除
+                </a-button>
+                <a-button size="small" @click="selectedRowKeys = []">
+                  取消选择
+                </a-button>
+              </a-space>
+            </template>
+          </a-alert>
+        </div>
 
         <!-- 规则列表 -->
-        <a-card title="规则列表" class="rules-table-card">
-          <template #extra>
-            <a-space>
-              <a-button size="small" @click="exportRules" :icon="h(ExportOutlined)">
-                导出规则
-              </a-button>
-              <a-dropdown>
-                <template #overlay>
-                  <a-menu @click="handleBatchAction">
-                    <a-menu-item key="activate">批量激活</a-menu-item>
-                    <a-menu-item key="deactivate">批量停用</a-menu-item>
-                    <a-menu-item key="delete">批量删除</a-menu-item>
-                  </a-menu>
-                </template>
-                <a-button size="small">
-                  批量操作 <DownOutlined />
+        <div class="rules-table-section">
+          <a-card class="table-card">
+            <template #title>
+              <div class="table-header">
+                <span class="table-title">
+                  <FileTextOutlined class="table-icon" />
+                  规则列表
+                </span>
+                <span class="table-count">共 {{ statistics.total }} 条规则</span>
+              </div>
+            </template>
+            <template #extra>
+              <a-space>
+                <a-button size="small" @click="exportRules">
+                  <template #icon><ExportOutlined /></template>
+                  导出规则
                 </a-button>
-              </a-dropdown>
-            </a-space>
-          </template>
+              </a-space>
+            </template>
 
-          <a-table
+            <a-table
             :columns="columns"
             :data-source="filteredRules"
             :loading="loading"
@@ -273,9 +458,10 @@
                 </a-space>
               </template>
             </template>
-          </a-table>
-        </a-card>
-      </div>
+            </a-table>
+          </a-card>
+        </div>
+        </div>
 
       <!-- 语义质控规则标签页 -->
       <div v-else-if="activeTab === 'semantic'">
@@ -406,7 +592,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h } from 'vue'
+import { ref, reactive, computed, onMounted, h, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
@@ -421,9 +607,15 @@ import {
   ExclamationCircleOutlined,
   TagsOutlined,
   SettingOutlined,
-  BranchesOutlined
+  BranchesOutlined,
+  SearchOutlined,
+  StopOutlined,
+  DeleteOutlined
 } from '@ant-design/icons-vue'
 import SemanticRulesView from './SemanticRulesView.vue'
+import { DocumentCategoryService } from '@/services/document-category-service'
+import { DocumentCategory } from '@/types/medical'
+import type { EnhancedQCRule, QCRuleFilterParams } from '@/types/quality-control'
 // import { RulesService } from '@/services/rules-service'
 // import { RulesValidator } from '@/utils/rules-validator'
 // import { RULES_CONFIG } from '@/config/rules-config'
@@ -469,15 +661,48 @@ interface QCRule {
 }
 
 // 响应式数据
-const activeTab = ref('traditional') // 默认显示传统质控规则
+const activeTab = ref('semantic') // 默认显示语义质控规则
 const loading = ref(false)
-const rules = ref<QCRule[]>([])
+const rules = ref<EnhancedQCRule[]>([])
 const selectedRowKeys = ref<string[]>([])
 const searchText = ref('')
 const filterCategory = ref<string>()
+const filterDocumentCategory = ref<DocumentCategory>()
 const filterSeverity = ref<string>()
 const filterType = ref<string>()
 const filterStatus = ref<string>()
+
+// 文书类别相关数据（仅来源于数据库，不再回退到内置配置）
+const documentCategoryOptions = ref<Array<{ value: DocumentCategory; label: string; description?: string; color?: string; icon?: string }>>([])
+const documentCategoryStats = ref<Record<string, number>>({})
+const categoriesLoaded = ref(false)
+
+// 仅从数据库加载文书类别，失败则抛出错误，由调用方处理
+const loadDocumentCategoryOptions = async () => {
+  const categories = await DocumentCategoryService.getDocumentCategories()
+  if (!categories || categories.length === 0) {
+    throw new Error('No document categories found')
+  }
+  documentCategoryOptions.value = categories
+    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((cfg: any) => {
+      const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(cfg.category_code as DocumentCategory)
+      return {
+        value: cfg.category_code as DocumentCategory,
+        label: cfg.category_name,
+        description: cfg.category_description || cfg.description,
+        color: disp.color,
+        icon: disp.icon
+      }
+    })
+  categoriesLoaded.value = true
+  // 调试输出：实际用于下拉框的文书类别选项
+  try {
+    // 仅打印关键信息，避免刷屏
+    console.log('📄 文书类别选项(用于筛选) count=', documentCategoryOptions.value.length,
+      documentCategoryOptions.value.map(o => ({ value: o.value, label: o.label })))
+  } catch {}
+}
 
 // 模态框相关
 const modalVisible = ref(false)
@@ -559,6 +784,19 @@ const columns: TableColumnsType = [
     width: 220
   },
   {
+    title: '文书类别',
+    dataIndex: 'primary_document_category',
+    key: 'primary_document_category',
+    width: 120,
+    filters: documentCategoryOptions.value.map(option => ({
+      text: option.label,
+      value: option.value
+    })),
+    customRender: ({ record }: { record: EnhancedQCRule }) => {
+      return renderDocumentCategory(record.primary_document_category)
+    }
+  },
+  {
     title: '分类',
     dataIndex: 'category',
     key: 'category',
@@ -622,11 +860,19 @@ const columns: TableColumnsType = [
 
 // 行选择配置
 const rowSelection: TableProps['rowSelection'] = {
-  selectedRowKeys: selectedRowKeys,
+  selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   }
 }
+// 让表头“文书类别”筛选项跟随选项变化而更新
+watch(documentCategoryOptions, (opts) => {
+  const col = (columns as any[]).find(c => c.key === 'primary_document_category')
+  if (col) {
+    col.filters = (opts || []).map((o: any) => ({ text: o.label, value: o.value }))
+  }
+}, { immediate: true })
+
 
 // 计算属性
 const statistics = computed(() => {
@@ -648,6 +894,14 @@ const filteredRules = computed(() => {
       rule.name.toLowerCase().includes(search) ||
       rule.description.toLowerCase().includes(search) ||
       rule.rule_code.toLowerCase().includes(search)
+    )
+  }
+
+  // 文书类别过滤
+  if (filterDocumentCategory.value) {
+    filtered = filtered.filter(rule =>
+      rule.primary_document_category === filterDocumentCategory.value ||
+      (rule.document_categories && rule.document_categories.includes(filterDocumentCategory.value))
     )
   }
 
@@ -698,6 +952,23 @@ const getTypeColor = (type: string) => {
 
 const getTypeLabel = (type: string) => {
   return RULES_CONFIG.types[type as keyof typeof RULES_CONFIG.types]?.label || type
+}
+
+// 文书类别相关工具函数
+const getDocumentCategoryLabel = (category: DocumentCategory) => {
+  const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
+  return config.label
+}
+
+const getDocumentCategoryColor = (category: DocumentCategory) => {
+  const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
+  return config.color
+}
+
+const renderDocumentCategory = (category: DocumentCategory) => {
+  if (!category) return '-'
+  const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
+  return h('a-tag', { color: config.color }, config.label)
 }
 
 // 模拟数据
@@ -915,16 +1186,26 @@ const mockRulesValidator = {
   }
 }
 
-// 数据加载
+// 数据加载（严格依赖数据库的文书类别和规则数据，不再回退到本地/模拟数据）
 const loadRules = async () => {
+  loading.value = true
   try {
-    loading.value = true
-    const data = await mockRulesService.getAllRules()
-    rules.value = data
-    pagination.total = data.length
-  } catch (error) {
-    console.error('加载规则失败:', error)
-    message.error('加载规则失败')
+    if (!categoriesLoaded.value) {
+      throw new Error('Document categories not loaded')
+    }
+    const filters: QCRuleFilterParams = {
+      keyword: searchText.value,
+      category: filterCategory.value,
+      document_category: filterDocumentCategory.value,
+      rule_type: filterType.value as any,
+      severity: filterSeverity.value as any,
+      is_active: filterStatus.value === 'active' ? true : filterStatus.value === 'inactive' ? false : undefined,
+      page: pagination.current,
+      pageSize: pagination.pageSize
+    }
+    const result = await DocumentCategoryService.getEnhancedQCRules(filters)
+    rules.value = result.data
+    pagination.total = result.total
   } finally {
     loading.value = false
   }
@@ -937,8 +1218,15 @@ const handleTabChange = (key: string) => {
   console.log('切换到标签页:', key)
 }
 
-const refreshRules = () => {
-  loadRules()
+const refreshRules = async () => {
+  try {
+    await loadDocumentCategoryOptions()
+    await loadRules()
+    await loadDocumentCategoryStats()
+  } catch (e) {
+    console.error('刷新失败:', e)
+    message.error('无法加载文书类别或规则数据，请检查数据库连接')
+  }
 }
 
 const handleSearch = () => {
@@ -952,9 +1240,104 @@ const handleFilter = () => {
 const resetFilters = () => {
   searchText.value = ''
   filterCategory.value = undefined
+  filterDocumentCategory.value = undefined
   filterSeverity.value = undefined
   filterType.value = undefined
   filterStatus.value = undefined
+}
+
+const clearAllFilters = () => {
+  resetFilters()
+}
+
+// 文书类别相关方法
+const clearDocumentCategoryFilter = () => {
+  filterDocumentCategory.value = undefined
+}
+
+const quickFilterDocumentCategory = (category: DocumentCategory) => {
+  if (filterDocumentCategory.value === category) {
+    filterDocumentCategory.value = undefined
+  } else {
+    filterDocumentCategory.value = category
+  }
+}
+
+// 加载文书类别统计
+const loadDocumentCategoryStats = async () => {
+  try {
+    const stats = await DocumentCategoryService.getDocumentCategoryStats()
+    documentCategoryStats.value = stats
+  } catch (error) {
+    console.error('加载文书类别统计失败:', error)
+  }
+}
+
+const quickFilterCategory = (category) => {
+  if (filterCategory.value === category) {
+    filterCategory.value = undefined
+  } else {
+    filterCategory.value = category
+  }
+  handleFilter()
+}
+
+const quickFilterSeverity = (severity) => {
+  if (filterSeverity.value === severity) {
+    filterSeverity.value = undefined
+  } else {
+    filterSeverity.value = severity
+  }
+  handleFilter()
+}
+
+const quickFilterStatus = (status) => {
+  if (filterStatus.value === status) {
+    filterStatus.value = undefined
+  } else {
+    filterStatus.value = status
+  }
+  handleFilter()
+}
+
+const batchActivate = async (isActive) => {
+  if (selectedRowKeys.value.length === 0) {
+    message.warning('请先选择要操作的规则')
+    return
+  }
+
+  try {
+    loading.value = true
+    await mockRulesService.batchUpdateRuleStatus(selectedRowKeys.value, isActive)
+    message.success(`批量${isActive ? '激活' : '停用'}成功`)
+    selectedRowKeys.value = []
+    loadRules()
+  } catch (error) {
+    console.error('批量操作失败:', error)
+    message.error(error instanceof Error ? error.message : '批量操作失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const batchDelete = async () => {
+  if (selectedRowKeys.value.length === 0) {
+    message.warning('请先选择要删除的规则')
+    return
+  }
+
+  try {
+    loading.value = true
+    await mockRulesService.deleteRules(selectedRowKeys.value)
+    message.success(`批量删除 ${selectedRowKeys.value.length} 条规则成功`)
+    selectedRowKeys.value = []
+    loadRules()
+  } catch (error) {
+    console.error('批量删除失败:', error)
+    message.error(error instanceof Error ? error.message : '批量删除失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleTableChange: TableProps['onChange'] = (pag: any,  filters: any, sorter: any) => {
@@ -1170,28 +1553,24 @@ const exportRules = async () => {
 }
 
 // 生命周期
-onMounted(() => {
-  loadRules()
+onMounted(async () => {
+  try {
+    await loadDocumentCategoryOptions()
+    await loadRules()
+    await loadDocumentCategoryStats()
+  } catch (e) {
+    console.error('初始化数据失败:', e)
+    message.error('无法加载文书类别或规则数据，请检查数据库连接')
+  }
 })
 </script>
 
 <style scoped>
-/* 整体布局优化 - 减少空白提高信息密度 */
+/* 主容器样式 */
 .page-container {
-  @apply p-3;  /* 从 p-4 减少到 p-3，减少页面边距 */
-}
-
-.page-header {
-  @apply flex items-center justify-between mb-3;  /* 从 mb-4 减少到 mb-3 */
-}
-
-.page-title {
-  @apply text-lg font-bold text-gray-900;
-  font-size: 16px;
-}
-
-.header-actions {
-  @apply flex items-center gap-2;
+  padding: 0;
+  background: transparent;
+  min-height: auto;
 }
 
 /* 标签页样式 */
@@ -1221,35 +1600,231 @@ onMounted(() => {
   @apply min-h-96;
 }
 
-.stats-grid {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-3;  /* gap从3减少到2，mb从4减少到3 */
+/* 统计卡片内部样式优化 */
+:deep(.ant-statistic-title) {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
 }
 
-.stat-card {
-  @apply shadow-sm hover:shadow-md transition-shadow;
+:deep(.ant-statistic-content) {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
-/* 统计卡片内部间距优化 - 减少垂直空间 */
-:deep(.stat-card .ant-card-body) {
-  padding: 12px 16px !important;  /* 从 16px 20px 减少到 12px 16px */
+/* 表格相关样式 */
+.rules-table-section {
+  background: white;
+  border-radius: 12px;
+  margin: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
 }
 
-.filter-card {
-  @apply mb-3;  /* 从 mb-4 减少到 mb-3 */
+.table-card {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* 筛选卡片内部间距优化 */
-:deep(.filter-card .ant-card-body) {
-  padding: 10px 14px !important;  /* 从 12px 16px 减少到 10px 14px */
+.table-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.rules-table-card {
-  @apply shadow-sm;
+.table-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #1e293b;
 }
 
-/* 表格卡片内部间距优化 */
-:deep(.rules-table-card .ant-card-body) {
-  padding: 8px !important;  /* 从 12px 减少到 8px */
+.table-icon {
+  color: #3b82f6;
+}
+
+.table-count {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 批量操作样式 */
+.batch-actions {
+  margin-bottom: 16px;
+}
+
+.selection-alert {
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+/* 快速筛选标签样式 */
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  border: 2px solid transparent;
+
+  /* 未选中状态 */
+  background: rgba(248, 250, 252, 0.8);
+  color: #64748b;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.filter-tag:hover {
+  background: rgba(241, 245, 249, 1);
+  color: #475569;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 选中状态 - 主要筛选 */
+.filter-tag-active {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border-color: #2563eb;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.filter-tag-active:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+/* 危险类型筛选 */
+.filter-tag-danger {
+  background: rgba(254, 242, 242, 0.8);
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.filter-tag-danger:hover {
+  background: rgba(254, 226, 226, 1);
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.filter-tag-danger-active {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border-color: #dc2626;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+}
+
+.filter-tag-danger-active:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+/* 成功类型筛选 */
+.filter-tag-success {
+  background: rgba(240, 253, 244, 0.8);
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.filter-tag-success:hover {
+  background: rgba(220, 252, 231, 1);
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.filter-tag-success-active {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  border-color: #16a34a;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+}
+
+.filter-tag-success-active:hover {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+}
+
+/* 筛选标签文本 */
+.filter-tag-text {
+  font-weight: 500;
+  letter-spacing: 0.025em;
+}
+
+/* 筛选标签计数 */
+.filter-tag-count {
+  font-size: 11px;
+  opacity: 0.8;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.filter-tag-active .filter-tag-count {
+  opacity: 0.9;
+}
+
+/* 按钮样式优化 */
+:deep(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+:deep(.ant-btn-primary) {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: none;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+:deep(.ant-btn-primary:hover) {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+/* 卡片样式优化 */
+:deep(.ant-card) {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.ant-card-head) {
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* 标签样式优化 */
+:deep(.ant-tag) {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 4px 12px;
+  font-size: 12px;
+  border: none;
+}
+
+/* 焦点状态（键盘导航） */
+.filter-tag:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* 活跃状态增强 */
+.filter-tag:active {
+  transform: translateY(0);
+  transition-duration: 0.1s;
 }
 
 .rule-source {

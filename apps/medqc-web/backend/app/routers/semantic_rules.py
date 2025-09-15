@@ -30,7 +30,66 @@ async def get_all(
     if supabase is None:
         return {"success": True, "rules": [], "count": 0, "page": page, "page_size": page_size}
 
+    def _infer_docs_from_name(rule_name: str) -> list[str]:
+        name = (rule_name or "").lower()
+        # 粗略基于名称关键词推断细粒度文书类型
+        if any(k in name for k in ["入院", "admission"]):
+            return ["入院记录"]
+        if any(k in name for k in ["首次病程", "first course", "首次记录"]):
+            return ["首次病程记录"]
+        if any(k in name for k in ["病程", "progress note", "诊疗经过"]):
+            return ["病程记录"]
+        if any(k in name for k in ["查房", "ward round"]):
+            return ["查房记录"]
+        if any(k in name for k in ["检验", "检查", "lab", "exam", "影像", "放射"]):
+            return ["检验检查"]
+        if any(k in name for k in ["手术", "operation", "surgery"]):
+            return ["手术记录"]
+        if any(k in name for k in ["术前小结", "preop summary"]):
+            return ["术前小结"]
+        if any(k in name for k in ["术前讨论", "preop discussion"]):
+            return ["术前讨论记录"]
+        if any(k in name for k in ["出院", "discharge"]):
+            return ["出院记录"]
+        return []
+
+    def _to_chinese_docs(docs: list[Any], fallback_name: str) -> list[str]:
+        # 若已经是中文或细粒度则直接返回
+        if any(isinstance(d, str) and ("记录" in d or d in {"术前小结", "术前讨论记录"}) for d in docs):
+            return [str(d) for d in docs]
+        # 英文就诊类型到中文（粗粒度）
+        mapping = {"inpatient": "住院", "outpatient": "门诊", "emergency": "急诊"}
+        lowered = [str(d).lower() for d in docs if isinstance(d, (str, bytes))]
+        only_coarse = all(d in mapping for d in lowered) and len(lowered) > 0
+        if only_coarse:
+            # 尝试通过规则名称推断细粒度；如无法推断，回退为中文就诊类型标签
+            inferred = _infer_docs_from_name(fallback_name)
+            return inferred or [mapping[d] for d in lowered]
+        # 其他情况保持原样
+        return [str(d) for d in docs]
+
+    async def _exec(q):
+        # 优先使用异步以避免阻塞
+        try:
+            exec_async = getattr(q, "execute_async", None)
+            if callable(exec_async):
+                return await exec_async()
+        except Exception:
+            pass
+        return q.execute()
+
     def normalize(r: Dict[str, Any]) -> Dict[str, Any]:
+        # 读取文书类型：优先顶层字段，其次 check_logic.applicable_documents，兼容别名
+        check_logic = r.get("check_logic") if isinstance(r.get("check_logic"), dict) else {}
+        # 文书类型优先从 check_logic.applicable_documents 读取（通常为细粒度中文文书类型）
+        docs = (
+            (check_logic or {}).get("applicable_documents")
+            or r.get("applicable_documents")
+            or r.get("document_types")
+            or r.get("applicable_record_types")
+            or []
+        )
+
         return {
             "rule_id": r.get("id") or r.get("rule_code") or r.get("rule_id") or "",
             "rule_name": r.get("name") or r.get("rule_name") or "未命名规则",
@@ -45,11 +104,15 @@ async def get_all(
             "prompt_template": r.get("prompt_template") or "请检查以下内容：\n{{content}}",
             "metadata": r.get("metadata") or {},
             "updated_at": r.get("updated_at") or r.get("modified_at") or r.get("created_at"),
+            # 输出尽量细粒度（中文）文书类型
+            "applicable_documents": _to_chinese_docs(docs, r.get("name") or r.get("rule_name") or ""),
+            # 兼容提供原始 rule_code，便于前端或后续迁移使用
+            "rule_code": r.get("rule_code") or "",
         }
 
     try:
         # 简化实现：拉取较大窗口数据到内存，再在应用层做筛选/排序/分页（数据量小场景可接受）
-        resp = supabase.table("qc_rules").select("*").limit(2000).execute()
+        resp = await _exec(supabase.table("qc_rules").select("*").limit(2000))
         rows: List[Dict[str, Any]] = list(resp.data or [])
 
         # 兼容筛选
@@ -102,7 +165,6 @@ async def get_all(
 
 @router.get("/stats")
 async def stats():
-    print("DEBUG: stats endpoint called")  # Debug log
     try:
         result = {
             "success": True,
@@ -116,10 +178,8 @@ async def stats():
                 "avg_execution_time": 0.0,
             },
         }
-        print(f"DEBUG: returning result: {result}")  # Debug log
         return result
     except Exception as e:
-        print(f"DEBUG: exception in stats: {e}")  # Debug log
         raise
 
 
@@ -136,8 +196,8 @@ async def validate_llm():
 
     if supabase is not None:
         try:
-            p = supabase.table("llm_api_providers").select("*").eq("is_active", True).limit(1).execute()
-            m = supabase.table("llm_models").select("*").eq("is_active", True).limit(1).execute()
+            p = await _exec(supabase.table("llm_api_providers").select("*").eq("is_active", True).limit(1))
+            m = await _exec(supabase.table("llm_models").select("*").eq("is_active", True).limit(1))
             if p.data:
                 provider = p.data[0]
                 provider_name = provider.get("name") or provider.get("provider_code") or provider.get("id") or "unknown"
@@ -257,15 +317,33 @@ async def update_rule(rule_id: str, payload: Dict[str, Any]):
     if sb is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
     try:
-        resp = sb.table("qc_rules").update(payload).eq("id", rule_id).execute()
-        rows = resp.data or []
-        if not rows:
-            # 兼容按 rule_code 更新
-            resp = sb.table("qc_rules").update(payload).eq("rule_code", rule_id).execute()
-            rows = resp.data or []
-        if not rows:
+        body = dict(payload)
+        # 兼容前端 is_enabled 字段，落库为 is_active
+        if "is_enabled" in body:
+            try:
+                body["is_active"] = bool(body.pop("is_enabled"))
+            except Exception:
+                body["is_active"] = True if body.pop("is_enabled", None) in (True, "true", 1, "1") else False
+
+        updated_rows: list[dict[str, Any]] = []
+        # 优先按 id（UUID）更新；如果 Supabase 返回错误，则忽略并继续回退策略
+        try:
+            resp = sb.table("qc_rules").update(body).eq("id", rule_id).execute()
+            updated_rows = resp.data or []
+        except Exception:
+            updated_rows = []
+
+        # 回退：按 rule_code == 路径参数 更新
+        if not updated_rows:
+            try:
+                resp2 = sb.table("qc_rules").update(body).eq("rule_code", rule_id).execute()
+                updated_rows = resp2.data or []
+            except Exception:
+                updated_rows = []
+
+        if not updated_rows:
             raise HTTPException(status_code=404, detail="规则不存在")
-        return {"success": True, "rule": _normalize_from_db(rows[0])}
+        return {"success": True, "rule": _normalize_from_db(updated_rows[0])}
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001
@@ -510,3 +588,124 @@ async def export_rules():
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"导出规则失败: {e}")
 
+
+# ------------------------- Utilities: 文书类型细粒度映射/推断 -------------------------
+
+_RULE_DOCUMENT_MAPPING: dict[str, list[str]] = {
+    # 病程记录相关规则 (示例)
+    "SC-001": ["病程记录", "入院记录"],
+    "SC-002": ["病程记录", "入院记录"],
+    "SC-003": ["入院记录", "出院记录"],
+    "SC-004": ["病程记录", "入院记录", "出院记录"],
+    "SC-005": ["手术记录", "病程记录"],
+    "SC-006": ["病程记录", "入院记录"],
+    "SC-007": ["病程记录", "入院记录"],
+    "SC-008": ["病程记录"],
+    "SC-009": ["入院记录", "病程记录"],
+    "SC-010": ["入院记录"],
+    "SC-011": ["病程记录", "医嘱记录"],
+    "SC-012": ["病程记录", "检查记录"],
+    "SC-013": ["病程记录", "治疗记录"],
+    "SC-014": ["病程记录"],
+    "SC-015": ["病程记录", "医嘱记录"],
+    "SC-016": ["入院记录", "病程记录"],
+    "SC-017": ["病程记录", "检查记录"],
+    "SC-018": ["病程记录", "急诊记录"],
+    "SC-019": ["手术记录"],
+    "SC-020": ["手术记录"],
+    # 入院记录（示例）
+    "SC-036": ["入院记录"],
+    "SC-037": ["入院记录"],
+    "SC-038": ["入院记录"],
+    # 出院记录（示例）
+    "SC-051": ["出院记录"],
+    "SC-052": ["出院记录"],
+    "SC-053": ["出院记录"],
+    "SC-057": ["出院记录"],
+}
+
+def _is_fine_grained_docs(docs: list[str]) -> bool:
+    for d in docs:
+        s = str(d)
+        if ("记录" in s) or (s in {"术前小结", "术前讨论记录"}):
+            return True
+    return False
+
+def _infer_docs_from_rule_name(rule_name: str) -> list[str]:
+    name = (rule_name or "").lower()
+    if any(k in name for k in ["入院", "admission"]):
+        return ["入院记录"]
+    if any(k in name for k in ["首次病程", "first course", "首次记录"]):
+        return ["首次病程记录"]
+    if any(k in name for k in ["病程", "progress note", "诊疗经过"]):
+        return ["病程记录"]
+    if any(k in name for k in ["查房", "ward round"]):
+        return ["查房记录"]
+    if any(k in name for k in ["检验", "检查", "lab", "exam", "影像", "放射"]):
+        return ["检验检查"]
+    if any(k in name for k in ["手术", "operation", "surgery"]):
+        return ["手术记录"]
+    if any(k in name for k in ["术前小结", "preop summary"]):
+        return ["术前小结"]
+    if any(k in name for k in ["术前讨论", "preop discussion"]):
+        return ["术前讨论记录"]
+    if any(k in name for k in ["出院", "discharge"]):
+        return ["出院记录"]
+    return []
+
+
+@router.post("/ops/normalize-docs")
+async def normalize_documents(dry_run: bool = Query(default=True)):
+    """将规则的文书类型从粗粒度(inpatient/outpatient/emergency)批量归一为细粒度中文。
+    - 优先保留已存在的细粒度中文 `check_logic.applicable_documents`
+    - 否则：按 `rule_code` 精确映射；若无，基于名称关键词推断
+    - 结果写回 `check_logic.applicable_documents`
+    """
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+
+    # 拉取必要字段
+    # 仅选择存在的安全字段，避免未知列导致 400
+    resp = sb.table("qc_rules").select("id, rule_code, name, check_logic").limit(2000).execute()
+    records = list(getattr(resp, "data", None) or [])
+
+    updates: list[dict[str, str]] = []
+    updated = 0
+
+    for r in records:
+        rid = r.get("id")
+        rcode = r.get("rule_code") or ""
+        rname = r.get("name") or ""
+        logic = r.get("check_logic") or {}
+        if not isinstance(logic, dict):
+            logic = {}
+
+        # 当前文书类型（细粒度优先）
+        existing_docs = logic.get("applicable_documents") or r.get("applicable_documents") or r.get("document_types") or []
+        if not isinstance(existing_docs, list):
+            existing_docs = []
+
+        # 已是细粒度则跳过
+        if _is_fine_grained_docs([str(x) for x in existing_docs]):
+            continue
+
+        # 先用精确映射
+        target_docs: list[str] = []
+        if rcode in _RULE_DOCUMENT_MAPPING:
+            target_docs = _RULE_DOCUMENT_MAPPING[rcode]
+        else:
+            target_docs = _infer_docs_from_rule_name(rname)
+
+        if not target_docs:
+            continue
+
+        updates.append({"rule_code": rcode, "name": rname, "to": ",".join(target_docs)})
+
+        if not dry_run:
+            new_logic = dict(logic)
+            new_logic["applicable_documents"] = target_docs
+            sb.table("qc_rules").update({"check_logic": new_logic}).eq("id", rid).execute()
+            updated += 1
+
+    return {"success": True, "total": len(records), "would_update": len(updates), "updated": updated, "sample": updates[:10]}

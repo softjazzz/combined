@@ -12,6 +12,10 @@
           <a-button size="small" @click="toggleViewMode">
             {{ viewMode === 'card' ? '切换表格视图' : '切换卡片视图' }}
           </a-button>
+          <a-button @click="handleCreateRecord">
+            <template #icon><PlusOutlined /></template>
+            新建病历
+          </a-button>
           <a-button type="primary" @click="handleSmartImport">
             <template #icon><RobotOutlined /></template>
             智能导入
@@ -312,7 +316,8 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   ReloadOutlined,
-  RobotOutlined
+  RobotOutlined,
+  PlusOutlined
 } from '@ant-design/icons-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import dayjs from 'dayjs'
@@ -703,6 +708,10 @@ const getSeverityColor = (severity: string) => {
 }
 
 // 事件处理
+const handleCreateRecord = () => {
+  router.push('/dashboard/medical-records/create')
+}
+
 const handleSmartImport = () => {
   router.push('/dashboard/medical-records/smart-import')
 }

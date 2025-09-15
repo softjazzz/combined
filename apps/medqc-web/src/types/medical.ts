@@ -50,16 +50,61 @@ export interface IndexEntry {
   confidence?: number
 }
 
-// 一级文书分类（更新为新的分类体系）
+// 六个标准医疗文书类别（与数据库枚举对应）
 export enum DocumentCategory {
-  ADMISSION_RECORD = 'admission_record',      // 入院记录
   PROGRESS_NOTE = 'progress_note',            // 病程记录
-  OPERATION_RECORD = 'operation_record',      // 手术记录
-  NURSING_DOCUMENT = 'nursing_document',      // 护理文书
+  ADMISSION_RECORD = 'admission_record',      // 入院记录
   DISCHARGE_RECORD = 'discharge_record',      // 出院记录
-  EXAMINATION_REPORT = 'examination_report',  // 检查报告
-  MEDICAL_ORDER = 'medical_order'             // 医嘱记录
+  OPERATION_RECORD = 'operation_record',      // 手术相关记录
+  EXAMINATION_REPORT = 'examination_report',  // 辅助检查
+  CONSENT_FORM = 'consent_form'               // 知情同意书
 }
+
+// 文书类别显示配置
+export const DOCUMENT_CATEGORY_CONFIG = {
+  [DocumentCategory.PROGRESS_NOTE]: {
+    label: '病程记录',
+    description: '住院期间的病情变化、治疗过程、医嘱执行等动态记录',
+    color: '#1890ff',
+    icon: 'FileTextOutlined',
+    sortOrder: 2
+  },
+  [DocumentCategory.ADMISSION_RECORD]: {
+    label: '入院记录',
+    description: '患者入院时的基本信息、主诉、现病史、既往史、体格检查等记录',
+    color: '#52c41a',
+    icon: 'LoginOutlined',
+    sortOrder: 1
+  },
+  [DocumentCategory.DISCHARGE_RECORD]: {
+    label: '出院记录',
+    description: '患者出院时的诊疗总结、出院诊断、治疗效果等记录',
+    color: '#faad14',
+    icon: 'LogoutOutlined',
+    sortOrder: 3
+  },
+  [DocumentCategory.OPERATION_RECORD]: {
+    label: '手术相关记录',
+    description: '手术记录、麻醉记录、术前讨论、术后总结等手术相关文书',
+    color: '#f5222d',
+    icon: 'MedicineBoxOutlined',
+    sortOrder: 4
+  },
+  [DocumentCategory.EXAMINATION_REPORT]: {
+    label: '辅助检查',
+    description: '影像学检查、实验室检查、病理检查等辅助检查报告',
+    color: '#722ed1',
+    icon: 'ExperimentOutlined',
+    sortOrder: 5
+  },
+  [DocumentCategory.CONSENT_FORM]: {
+    label: '知情同意书',
+    description: '各类医疗操作的知情同意书、风险告知书等',
+    color: '#13c2c2',
+    icon: 'SafetyCertificateOutlined',
+    sortOrder: 6
+  }
+} as const
 
 // 二级文书类型（更新为新的分类体系）
 export enum DocumentType {

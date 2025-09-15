@@ -1,0 +1,125 @@
+{
+  "validation_time": "2025-09-11T15:29:43.611659",
+  "results": {
+    "medical_records": {
+      "total_records": 50,
+      "valid_records": 50,
+      "invalid_records": 0,
+      "validation_errors": [],
+      "statistics": {
+        "age_distribution": {
+          "儿童青少年": 15,
+          "老年人": 9,
+          "成年人": 26
+        },
+        "gender_distribution": {
+          "女": 20,
+          "男": 30
+        },
+        "insurance_type_distribution": {
+          "新农合": 10,
+          "城镇职工": 10,
+          "城镇居民": 6,
+          "其他": 11,
+          "自费": 13
+        },
+        "visit_type_distribution": {
+          "急诊": 4,
+          "住院": 19,
+          "门诊": 20,
+          "体检": 7
+        },
+        "scenario_distribution": {
+          "药品性别限制测试": 7,
+          "药品年龄限制测试": 7,
+          "儿童专用药品测试": 7,
+          "医保类型限制测试": 7,
+          "就诊方式限制测试": 7,
+          "住院天数超限测试": 7,
+          "正常通过测试": 7
+        }
+      },
+      "validity_rate": 100.0
+    },
+    "test_cases": {
+      "total_cases": 100,
+      "valid_cases": 100,
+      "invalid_cases": 0,
+      "validation_errors": [],
+      "statistics": {
+        "test_type_distribution": {
+          "trigger": 50,
+          "pass": 50
+        },
+        "rule_type_distribution": {
+          "INSURANCE": 18,
+          "AGE": 60,
+          "HOSPITAL": 22
+        },
+        "expected_result_distribution": {
+          "info": 50,
+          "pass": 50
+        },
+        "rule_coverage": [
+          "DRUG_AGE_028",
+          "DRUG_HOSPITAL_LEVEL_002",
+          "DRUG_AGE_021",
+          "DRUG_AGE_006",
+          "DRUG_AGE_023",
+          "DRUG_INSURANCE_TYPE_004",
+          "DRUG_AGE_013",
+          "DRUG_AGE_019",
+          "DRUG_AGE_029",
+          "DRUG_AGE_012",
+          "DRUG_AGE_009",
+          "DRUG_AGE_010",
+          "DRUG_AGE_024",
+          "DRUG_AGE_027",
+          "DRUG_HOSPITAL_LEVEL_008",
+          "DRUG_AGE_026",
+          "DRUG_HOSPITAL_LEVEL_011",
+          "DRUG_INSURANCE_TYPE_007",
+          "DRUG_INSURANCE_TYPE_001",
+          "DRUG_AGE_030",
+          "DRUG_INSURANCE_TYPE_006",
+          "DRUG_AGE_025",
+          "DRUG_AGE_016",
+          "DRUG_AGE_003",
+          "DRUG_AGE_011",
+          "DRUG_AGE_018",
+          "DRUG_AGE_005",
+          "DRUG_AGE_007",
+          "DRUG_HOSPITAL_LEVEL_007",
+          "DRUG_AGE_015",
+          "DRUG_HOSPITAL_LEVEL_003",
+          "DRUG_INSURANCE_TYPE_005",
+          "DRUG_INSURANCE_TYPE_008",
+          "DRUG_AGE_020",
+          "DRUG_HOSPITAL_LEVEL_009",
+          "DRUG_AGE_002",
+          "DRUG_HOSPITAL_LEVEL_005",
+          "DRUG_HOSPITAL_LEVEL_010",
+          "DRUG_AGE_017",
+          "DRUG_AGE_022",
+          "DRUG_INSURANCE_TYPE_002",
+          "DRUG_HOSPITAL_LEVEL_006",
+          "DRUG_AGE_001",
+          "DRUG_AGE_014",
+          "DRUG_AGE_008",
+          "DRUG_HOSPITAL_LEVEL_001",
+          "DRUG_HOSPITAL_LEVEL_004",
+          "DRUG_AGE_004",
+          "DRUG_INSURANCE_TYPE_003",
+          "DRUG_INSURANCE_TYPE_009"
+        ]
+      },
+      "validity_rate": 100.0,
+      "rule_coverage_count": 50
+    },
+    "overall": {}
+  },
+  "summary": {
+    "total_files_validated": 2,
+    "overall_quality": "良好"
+  }
+}

@@ -19,6 +19,7 @@ export default defineConfig({
     port: 3008,
     host: '0.0.0.0',
     cors: true,
+    strictPort: true, // 固定端口为 3008，若被占用则启动失败而不是换端口
     proxy: {
       '/api': { target: 'http://localhost:8002', changeOrigin: true, secure: false },
       // Supabase REST (开发期仅用于本地调试；通过服务端代理注入 Service Role Header）

@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from pydantic import BaseModel
 
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
@@ -29,8 +30,8 @@ async def get_medical_records(
     settings = get_settings()
     try:
         if supabase:
-            # Use our custom REST client which returns _RestResponse with .data
-            response = supabase.table(settings.RECORDS_TABLE).select('*').execute()  # type: ignore[attr-defined]
+            # Use our custom REST client or supabase-py, executed异步以避免阻塞
+            response = await async_execute(supabase.table(settings.RECORDS_TABLE).select('*'))  # type: ignore[attr-defined]
             records = list(response.data or [])
         else:
             # Fallback to in-memory records when Supabase is not configured

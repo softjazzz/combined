@@ -1,54 +1,38 @@
 <template>
   <BasicLayout>
-    <div class="min-h-screen bg-gray-50 p-4 lg:p-6">
+    <div class="min-h-screen bg-gray-50 p-8">
       <!-- 页面头部 -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div class="flex-1">
-            <div class="flex items-center space-x-3 mb-2">
-              <div class="p-2 bg-blue-100 rounded-lg">
-                <SettingOutlined class="text-xl text-blue-600" />
+      <div class="mb-8">
+        <div class="bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-600 text-white p-8 rounded-2xl shadow-lg">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="flex items-center gap-4 mb-4">
+                <div class="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+                  <SettingOutlined class="text-2xl text-white" />
+                </div>
+                <div>
+                  <h1 class="text-4xl font-bold mb-2">智慧医保规则管理</h1>
+                  <div class="flex items-center mt-2 text-blue-200">
+                    <ClockCircleOutlined class="mr-2" />
+                    <span>{{ currentDate }}</span>
+                  </div>
+                </div>
               </div>
-              <h1 class="text-2xl lg:text-3xl font-bold text-gray-900">
-                智慧医保规则管理
-              </h1>
             </div>
-            <p class="text-gray-600 text-sm lg:text-base">
-              管理医保临床实时质控规则，支持规则的创建、编辑、版本管理和生命周期控制
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <a-button
-              @click="load"
-              :loading="loading"
-              class="flex items-center space-x-2"
-            >
-              <template #icon><ReloadOutlined /></template>
-              <span>刷新</span>
-            </a-button>
-            <a-button
-              @click="openImport"
-              class="flex items-center space-x-2"
-            >
-              <template #icon><ImportOutlined /></template>
-              <span>导入规则</span>
-            </a-button>
-            <a-button
-              @click="openExport"
-              :disabled="!rows.length"
-              class="flex items-center space-x-2"
-            >
-              <template #icon><ExportOutlined /></template>
-              <span>导出规则</span>
-            </a-button>
-            <a-button
-              type="primary"
-              @click="openCreate"
-              class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700"
-            >
-              <template #icon><PlusOutlined /></template>
-              <span>新建规则</span>
-            </a-button>
+            <div class="flex space-x-4">
+              <a-button @click="load" :loading="loading" size="large" class="h-12 px-6 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:border-white/50 backdrop-blur-sm">
+                <ReloadOutlined /> 刷新数据
+              </a-button>
+              <a-button @click="openImport" size="large" class="h-12 px-6 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:border-white/50 backdrop-blur-sm">
+                <ImportOutlined /> 导入规则
+              </a-button>
+              <a-button @click="openExport" :disabled="!rows.length" size="large" class="h-12 px-6 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:border-white/50 backdrop-blur-sm">
+                <ExportOutlined /> 导出规则
+              </a-button>
+              <a-button type="primary" @click="openCreate" size="large" class="h-12 px-6 bg-white/20 border-white/30 text-white hover:bg-white/30 hover:border-white/50 backdrop-blur-sm">
+                <PlusOutlined /> 新建规则
+              </a-button>
+            </div>
           </div>
         </div>
       </div>
@@ -130,13 +114,9 @@
             >
               <a-select-option value="drug_gender">性别限制</a-select-option>
               <a-select-option value="drug_age">年龄限制</a-select-option>
-              <a-select-option value="drug_children_only">儿童专用</a-select-option>
-              <a-select-option value="drug_payment_course">支付疗程限制</a-select-option>
+              <a-select-option value="visit_type">就诊方式限制</a-select-option>
+              <a-select-option value="drug_hospital_level">医疗机构级别限制</a-select-option>
               <a-select-option value="drug_insurance_type">保险类型限制</a-select-option>
-              <a-select-option value="drug_diagnosis">诊断限制</a-select-option>
-              <a-select-option value="drug_dosage_form">剂型限制</a-select-option>
-              <a-select-option value="drug_route">给药途径</a-select-option>
-              <a-select-option value="drug_indication">适应症限制</a-select-option>
             </a-select>
           </div>
         </div>
@@ -167,10 +147,16 @@
             <span class="filter-tag-text">年龄限制</span>
           </div>
           <div
-            :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'drug_children_only' }]"
-            @click="quickFilter('drug_children_only')"
+            :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'visit_type' }]"
+            @click="quickFilter('visit_type')"
           >
-            <span class="filter-tag-text">儿童专用</span>
+            <span class="filter-tag-text">就诊方式限制</span>
+          </div>
+          <div
+            :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'drug_hospital_level' }]"
+            @click="quickFilter('drug_hospital_level')"
+          >
+            <span class="filter-tag-text">医疗机构级别限制</span>
           </div>
           <div
             :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'drug_insurance_type' }]"
@@ -764,7 +750,7 @@ const enhancedColumns = [
       const cleanName = record.name ? record.name.split(' - ')[0] : '未命名规则'
       return h('div', { class: 'space-y-1' }, [
         h('div', { class: 'text-sm text-gray-900 font-medium' }, cleanName),
-        h('div', { class: 'text-xs text-gray-500 line-clamp-2' }, record.description || '暂无描述')
+        h('div', { class: 'text-xs text-gray-500 line-clamp-2' }, generateDetailedDescription(record) || record.description || '暂无描述')
       ])
     }
   },
@@ -777,13 +763,9 @@ const enhancedColumns = [
       const colorMap = {
         'drug_gender': 'pink',
         'drug_age': 'orange',
-        'drug_children_only': 'green',
-        'drug_payment_course': 'purple',
-        'drug_insurance_type': 'blue',
-        'drug_diagnosis': 'red',
-        'drug_dosage_form': 'cyan',
-        'drug_route': 'geekblue',
-        'drug_indication': 'magenta'
+        'visit_type': 'cyan',
+        'drug_hospital_level': 'purple',
+        'drug_insurance_type': 'blue'
       }
       const color = colorMap[record.rule_type] || 'default'
       return h('a-tag', { color }, typeName)
@@ -791,14 +773,9 @@ const enhancedColumns = [
     filters: [
       { text: '性别限制', value: 'drug_gender' },
       { text: '年龄限制', value: 'drug_age' },
-      { text: '儿童专用', value: 'drug_children_only' },
-      { text: '儿童限制', value: 'drug_children_limit' },
-      { text: '支付疗程限制', value: 'drug_payment_course' },
-      { text: '保险类型限制', value: 'drug_insurance_type' },
-      { text: '诊断限制', value: 'drug_diagnosis' },
-      { text: '剂型限制', value: 'drug_dosage_form' },
-      { text: '给药途径', value: 'drug_route' },
-      { text: '适应症限制', value: 'drug_indication' }
+      { text: '就诊方式限制', value: 'visit_type' },
+      { text: '医疗机构级别限制', value: 'drug_hospital_level' },
+      { text: '保险类型限制', value: 'drug_insurance_type' }
     ]
   },
   {
@@ -880,6 +857,16 @@ const paginationConfig = computed(() => ({
   position: ['bottomCenter']
 }))
 
+// 当前日期
+const currentDate = computed(() => {
+  return new Date().toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  })
+})
+
 // 行选择配置
 const rowSelection = {
   selectedRowKeys: selectedRowKeys.value,
@@ -913,20 +900,14 @@ const getRelativeTime = (timeStr: string) => {
 
 const getRuleTypeColor = (type: string) => {
   const colorMap: Record<string, string> = {
-    // 药品相关
+    // 药品相关 - 基于实际数据中的rule_type
     'drug_gender': 'pink',
     'drug_age': 'orange',
-    'drug_children_only': 'green',
-    'drug_children_limit': 'green',
-    'drug_payment_course': 'purple',
+    'drug_hospital_level': 'purple',
     'drug_insurance_type': 'blue',
-    'drug_diagnosis': 'red',
-    'drug_dosage_form': 'cyan',
-    'drug_route': 'geekblue',
-    'drug_indication': 'magenta',
 
-    // 其他（保留原有）
-    'visit_type': 'orange',
+    // 其他类型
+    'visit_type': 'cyan',
     'hospital_level': 'purple',
     'duration': 'cyan',
     'surgery_pricing': 'red'
@@ -936,19 +917,13 @@ const getRuleTypeColor = (type: string) => {
 
 const getRuleTypeLabel = (type: string) => {
   const labelMap: Record<string, string> = {
-    // 药品相关
+    // 药品相关 - 基于实际数据中的rule_type
     'drug_gender': '性别限制',
     'drug_age': '年龄限制',
-    'drug_children_only': '儿童专用',
-    'drug_children_limit': '儿童限制',
-    'drug_payment_course': '支付疗程限制',
+    'drug_hospital_level': '医疗机构级别限制',
     'drug_insurance_type': '保险类型限制',
-    'drug_diagnosis': '诊断限制',
-    'drug_dosage_form': '剂型限制',
-    'drug_route': '给药途径',
-    'drug_indication': '适应症限制',
 
-    // 其他（保留原有）
+    // 其他类型
     'visit_type': '就诊方式限制',
     'hospital_level': '机构级别限制',
     'duration': '疗程限制',
@@ -1019,13 +994,9 @@ const getActionTypeLabel = (actionType: string) => {
 const ruleTypeMap = {
   'drug_gender': '性别限制',
   'drug_age': '年龄限制',
-  'drug_children_only': '儿童专用',
-  'drug_payment_course': '支付疗程限制',
-  'drug_insurance_type': '保险类型限制',
-  'drug_diagnosis': '诊断限制',
-  'drug_dosage_form': '剂型限制',
-  'drug_route': '给药途径',
-  'drug_indication': '适应症限制'
+  'visit_type': '就诊方式限制',
+  'drug_hospital_level': '医疗机构级别限制',
+  'drug_insurance_type': '保险类型限制'
 }
 
 
@@ -1040,6 +1011,150 @@ const severityMap = {
 // 获取规则类型中文名称
 function getRuleTypeName(type: string) {
   return ruleTypeMap[type] || type
+}
+
+// 生成详细的规则描述
+function generateDetailedDescription(rule: any): string {
+  if (!rule) return ''
+
+  const { rule_type, conditions = [], actions = [], severity } = rule
+
+  // 解析条件
+  let conditionText = ''
+  let actionText = ''
+
+  try {
+    // 根据规则类型生成特定的描述
+    switch (rule_type) {
+      case 'drug_gender':
+        conditionText = parseGenderConditions(conditions)
+        break
+      case 'drug_age':
+        conditionText = parseAgeConditions(conditions)
+        break
+      case 'drug_insurance_type':
+        conditionText = parseInsuranceConditions(conditions)
+        break
+      case 'drug_hospital_level':
+        conditionText = parseHospitalLevelConditions(conditions)
+        break
+      case 'visit_type':
+        conditionText = parseVisitTypeConditions(conditions)
+        break
+      default:
+        conditionText = '特定使用条件'
+    }
+
+    // 解析动作
+    if (actions.length > 0) {
+      const action = actions[0]
+      const actionType = action.action_type || severity
+
+      switch (actionType) {
+        case 'warn':
+          actionText = '系统将提醒医生注意'
+          break
+        case 'block':
+          actionText = '系统将拦截此处方'
+          break
+        case 'intercept':
+          actionText = '系统将拦截此处方'
+          break
+        default:
+          actionText = '系统将进行相应处理'
+      }
+    } else {
+      // 根据严重级别确定动作
+      switch (severity) {
+        case 'warn':
+          actionText = '系统将提醒医生注意'
+          break
+        case 'block':
+          actionText = '系统将拦截此处方'
+          break
+        case 'info':
+          actionText = '系统将记录此信息'
+          break
+        default:
+          actionText = '系统将进行相应处理'
+      }
+    }
+
+    return `${conditionText}时，${actionText}`
+  } catch (error) {
+    console.warn('生成规则描述时出错:', error)
+    return rule.description || '规则描述暂不可用'
+  }
+}
+
+// 解析性别限制条件
+function parseGenderConditions(conditions: any[]): string {
+  const genderCondition = conditions.find(c => c.fact === 'patient.gender')
+  if (genderCondition) {
+    const gender = genderCondition.value === 'M' ? '男性' : '女性'
+    const operator = genderCondition.op === '==' ? '为' : '非'
+    return `当患者${operator}${gender}`
+  }
+  return '当患者性别不符合要求'
+}
+
+// 解析年龄限制条件
+function parseAgeConditions(conditions: any[]): string {
+  const ageCondition = conditions.find(c => c.fact === 'patient.age')
+  if (ageCondition) {
+    const age = ageCondition.value
+    const operator = ageCondition.op
+
+    switch (operator) {
+      case '>':
+        return `当患者年龄超过${age}岁`
+      case '>=':
+        return `当患者年龄大于等于${age}岁`
+      case '<':
+        return `当患者年龄小于${age}岁`
+      case '<=':
+        return `当患者年龄小于等于${age}岁`
+      case '==':
+        return `当患者年龄为${age}岁`
+      default:
+        return `当患者年龄不符合${age}岁的限制`
+    }
+  }
+  return '当患者年龄不符合要求'
+}
+
+// 解析保险类型限制条件
+function parseInsuranceConditions(conditions: any[]): string {
+  const insuranceCondition = conditions.find(c => c.fact === 'patient.insurance_type')
+  if (insuranceCondition) {
+    const insuranceType = insuranceCondition.value
+    const operator = insuranceCondition.op
+
+    if (operator === '!=') {
+      return `当患者非${insuranceType}患者`
+    } else if (operator === '==') {
+      return `当患者为${insuranceType}患者`
+    }
+  }
+  return '当患者保险类型不符合要求'
+}
+
+// 解析医疗机构级别限制条件
+function parseHospitalLevelConditions(conditions: any[]): string {
+  const hospitalCondition = conditions.find(c => c.fact?.includes('hospital'))
+  if (hospitalCondition) {
+    return '当医疗机构级别不符合要求'
+  }
+  return '当医疗机构级别不符合要求'
+}
+
+// 解析就诊方式限制条件
+function parseVisitTypeConditions(conditions: any[]): string {
+  const visitCondition = conditions.find(c => c.fact?.includes('visit'))
+  if (visitCondition) {
+    return '当就诊方式不符合要求'
+  }
+  return '当就诊方式不符合要求'
 }
 
 // 获取严重级别信息
@@ -1096,18 +1211,34 @@ async function load() {
   } catch (error: any) {
     console.error('加载规则失败:', error)
 
-    // 检查是否是认证/权限错误
+    // 超时或网络不可达 -> 使用本地mock兜底，避免阻塞页面
+    const isTimeout = error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')
+    const noResponse = !error?.response
+    if (isTimeout || noResponse) {
+      try {
+        const resp = await fetch('/mock_rules.json')
+        if (resp.ok) {
+          const json = await resp.json()
+          const list = Array.isArray(json) ? json : (json?.data || [])
+          rows.value = list
+          total.value = Array.isArray(list) ? list.length : (json?.total || 0)
+          message.warning('后端未运行或网络超时，已使用本地规则数据')
+          return
+        }
+      } catch (e) { /* 忽略，走默认错误处理 */ }
+    }
+
+    // 认证/权限错误
     if (error.response?.status === 401) {
       message.error('登录已过期，请重新登录')
       authStore.signOut()
       window.location.href = '/login'
     } else if (error.response?.status === 403) {
-      message.error('没有权限访问该资源，请使用有权限的账号或联系管理员')
+      message.error('没有权限访问该资源，请联系管理员')
     } else {
-      message.error('加载规则失败，请检查网络连接')
+      message.error('加载规则失败，请检查后端是否已启动（端口 8002）')
     }
 
-    // 如果API调用失败，尝试使用空数据
     rows.value = []
     total.value = 0
   } finally {

@@ -1,0 +1,205 @@
+{
+  "test_cases": [
+    {
+      "name": "正常成年患者门诊处方",
+      "event_type": "prescription_create",
+      "expected_decision": "pass",
+      "context": {
+        "patient": {
+          "id": "P2024001",
+          "name": "张三",
+          "age": 34,
+          "gender": "male",
+          "insurance_type": "职工医保"
+        },
+        "visit": {
+          "id": "V20240301001",
+          "type": "outpatient",
+          "department": {
+            "code": "0101",
+            "name": "内科"
+          }
+        },
+        "drug": {
+          "code": "86979474000208",
+          "name": "阿莫西林胶囊",
+          "category": "antibiotic",
+          "quantity": 42,
+          "duration": 7
+        }
+      }
+    },
+    {
+      "name": "儿童使用成人药品-应拦截",
+      "event_type": "prescription_create",
+      "expected_decision": "block",
+      "context": {
+        "patient": {
+          "id": "P2024002",
+          "name": "小明",
+          "age": 8,
+          "gender": "male"
+        },
+        "drug": {
+          "code": "86979474000209",
+          "name": "氯雷他定片",
+          "category": "adult_only",
+          "quantity": 10
+        }
+      }
+    },
+    {
+      "name": "住院天数超限-应警告",
+      "event_type": "settlement",
+      "expected_decision": "warn",
+      "context": {
+        "patient": {
+          "id": "P2024003",
+          "name": "李四",
+          "age": 65
+        },
+        "admission": {
+          "days": 35,
+          "date": "2024-02-01"
+        },
+        "diagnosis": {
+          "main": {
+            "code": "J18.900",
+            "name": "肺炎"
+          }
+        },
+        "department": {
+          "name": "内科"
+        }
+      }
+    },
+    {
+      "name": "重复检查项目-应提醒",
+      "event_type": "order_create",
+      "expected_decision": "warn",
+      "context": {
+        "patient": {
+          "id": "P2024004",
+          "name": "王五"
+        },
+        "service": {
+          "code": "310100001",
+          "name": "血常规",
+          "performed_date": "2024-03-01"
+        },
+        "history": {
+          "recent_services": [
+            {
+              "code": "310100001",
+              "name": "血常规",
+              "performed_date": "2024-02-28"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "药品超量开具-应拦截",
+      "event_type": "prescription_update",
+      "expected_decision": "block",
+      "context": {
+        "patient": {
+          "id": "P2024005",
+          "name": "赵六",
+          "age": 45
+        },
+        "visit": {
+          "type": "outpatient"
+        },
+        "drug": {
+          "code": "86979474000210",
+          "name": "二甲双胍片",
+          "category": "chronic_disease",
+          "quantity": 300,
+          "duration": 30
+        }
+      }
+    },
+    {
+      "name": "费用异常-应警告",
+      "event_type": "payment_calculate",
+      "expected_decision": "warn",
+      "context": {
+        "patient": {
+          "id": "P2024006"
+        },
+        "settlement": {
+          "total_cost": 50000,
+          "categories": {
+            "drug_cost": 45000,
+            "service_cost": 5000
+          }
+        },
+        "visit": {
+          "type": "outpatient"
+        }
+      }
+    }
+  ],
+  "batch_test_contexts": [
+    {
+      "patient": {"age": 5},
+      "drug": {"category": "adult_only"}
+    },
+    {
+      "patient": {"age": 25},
+      "drug": {"category": "antibiotic"}
+    },
+    {
+      "patient": {"age": 70},
+      "drug": {"category": "narcotic"}
+    }
+  ],
+  "edge_cases": [
+    {
+      "name": "空值处理",
+      "context": {
+        "patient": {
+          "age": null
+        },
+        "drug": {
+          "category": "adult_only"
+        }
+      }
+    },
+    {
+      "name": "类型错误",
+      "context": {
+        "patient": {
+          "age": "unknown"
+        },
+        "admission": {
+          "days": "many"
+        }
+      }
+    },
+    {
+      "name": "缺失字段",
+      "context": {
+        "patient": {
+          "name": "测试患者"
+        }
+      }
+    },
+    {
+      "name": "深层嵌套路径",
+      "context": {
+        "diagnosis": {
+          "main": {
+            "icd": {
+              "version": "10",
+              "code": {
+                "primary": "J18.900"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

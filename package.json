@@ -5,10 +5,19 @@
   "scripts": {
     "build": "pnpm -r --filter ./apps/* run build",
     "dev": "pnpm --filter ./apps/medqc-web dev",
-    "dev:yibao": "pnpm --filter ./apps/yibao-web dev",
-    "dev:all": "concurrently -k -n medqc,yibao -c blue,green \"pnpm --filter ./apps/medqc-web dev -- --host 0.0.0.0 --port 3000\" \"pnpm --filter ./apps/yibao-web dev -- --host 0.0.0.0 --port 3001\"",
+    "dev:medqc": "pnpm --filter ./apps/medqc-web dev -- --host 0.0.0.0 --port 3000",
+    "dev:yibao": "pnpm --filter ./apps/yibao-web dev -- --host 0.0.0.0 --port 3008",
+    "dev:all": "concurrently -k -n medqc,yibao -c blue,green \"pnpm --filter ./apps/medqc-web dev -- --host 0.0.0.0 --port 3000\" \"pnpm --filter ./apps/yibao-web dev -- --host 0.0.0.0 --port 3008\"",
     "lint": "pnpm -r lint",
-    "type-check": "pnpm -r type-check"
+    "type-check": "pnpm -r type-check",
+    "clean": "./dev-env.sh clean",
+    "status": "./dev-env.sh status",
+    "init": "./dev-env.sh init",
+    "install:deps": "pnpm install",
+    "test": "pnpm -r test",
+    "test:medqc": "pnpm --filter ./apps/medqc-web test",
+    "test:yibao": "pnpm --filter ./apps/yibao-web test:all",
+    "gen:precise": "pnpm --filter ./apps/yibao-web exec tsc -p scripts/tsconfig.json && node scripts/dist/generate-precise-rule-pack.js"
   },
   "devDependencies": {
     "concurrently": "8"

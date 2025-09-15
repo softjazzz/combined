@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import base64
 
 from ..storage.memory import llm_configs
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 
 
@@ -107,7 +107,7 @@ async def list_configs(user_id: Optional[str] = Query(default=None)):
         q = q.eq("user_id", user_id)
     else:
         q = q.is_("user_id", None)  # type: ignore[attr-defined]
-    resp = q.execute()
+    resp = await async_execute(q)
     data = resp.data or []
     return {"data": data, "total": len(data)}
 
@@ -125,7 +125,7 @@ async def get_config_by_name(config_name: str, user_id: Optional[str] = Query(de
         q = q.eq("user_id", user_id)
     else:
         q = q.is_("user_id", None)  # type: ignore[attr-defined]
-    resp = q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1).execute()
+    resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
     if resp.data:
         return {"data": resp.data[0]}
     return {"data": None}
@@ -199,14 +199,14 @@ async def save_config(payload: Dict[str, Any]):
         q = q.eq("user_id", row["user_id"])
     else:
         q = q.is_("user_id", None)  # type: ignore[attr-defined]
-    existing = q.limit(1).execute()
+    existing = await async_execute(q.limit(1))
 
     if existing.data:
         cfg_id = existing.data[0]["id"]
-        resp = supabase.table("user_llm_configs").update(row).eq("id", cfg_id).execute()
+        resp = await async_execute(supabase.table("user_llm_configs").update(row).eq("id", cfg_id))
     else:
         row["created_at"] = now
-        resp = supabase.table("user_llm_configs").insert(row).execute()
+        resp = await async_execute(supabase.table("user_llm_configs").insert(row))
 
     # 读取含关联的完整行返回
     q2 = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("config_name", cfg_name)
@@ -214,6 +214,5 @@ async def save_config(payload: Dict[str, Any]):
         q2 = q2.eq("user_id", row["user_id"])
     else:
         q2 = q2.is_("user_id", None)  # type: ignore[attr-defined]
-    full = q2.order("updated_at", {"ascending": False}).limit(1).execute()
+    full = await async_execute(q2.order("updated_at", {"ascending": False}).limit(1))
     return {"data": (full.data[0] if full.data else None)}
-

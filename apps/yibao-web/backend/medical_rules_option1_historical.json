@@ -1,0 +1,1536 @@
+[
+  {
+    "code": "DRUG_INSURANCE_TYPE_001",
+    "name": "疤痕止痒软化膏 - 保险类型限制",
+    "description": "从历史版本恢复的规则: 疤痕止痒软化膏 - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "疤痕止痒软化膏",
+        "description": "药品名称匹配: 疤痕止痒软化膏"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】疤痕止痒软化膏 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_002",
+    "name": "疤痕止痒软化乳膏 - 保险类型限制",
+    "description": "从历史版本恢复的规则: 疤痕止痒软化乳膏 - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "疤痕止痒软化乳膏",
+        "description": "药品名称匹配: 疤痕止痒软化乳膏"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】疤痕止痒软化乳膏 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_003",
+    "name": "冻干人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+    "description": "从历史版本恢复的规则: 冻干人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "冻干人用狂犬病疫苗(Vero细胞)",
+        "description": "药品名称匹配: 冻干人用狂犬病疫苗(Vero细胞)"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】冻干人用狂犬病疫苗(Vero细胞) 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_004",
+    "name": "冻干人用狂犬病疫苗(人二倍体细胞) - 保险类型限制",
+    "description": "从历史版本恢复的规则: 冻干人用狂犬病疫苗(人二倍体细胞) - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "冻干人用狂犬病疫苗(人二倍体细胞)",
+        "description": "药品名称匹配: 冻干人用狂犬病疫苗(人二倍体细胞)"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】冻干人用狂犬病疫苗(人二倍体细胞) 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_005",
+    "name": "氢醌乳膏 - 保险类型限制",
+    "description": "从历史版本恢复的规则: 氢醌乳膏 - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "氢醌乳膏",
+        "description": "药品名称匹配: 氢醌乳膏"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】氢醌乳膏 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_006",
+    "name": "人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+    "description": "从历史版本恢复的规则: 人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "人用狂犬病疫苗(Vero细胞)",
+        "description": "药品名称匹配: 人用狂犬病疫苗(Vero细胞)"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】人用狂犬病疫苗(Vero细胞) 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_007",
+    "name": "人用狂犬病疫苗(地鼠肾细胞) - 保险类型限制",
+    "description": "从历史版本恢复的规则: 人用狂犬病疫苗(地鼠肾细胞) - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "人用狂犬病疫苗(地鼠肾细胞)",
+        "description": "药品名称匹配: 人用狂犬病疫苗(地鼠肾细胞)"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】人用狂犬病疫苗(地鼠肾细胞) 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_008",
+    "name": "注射用A型肉毒毒素 - 保险类型限制",
+    "description": "从历史版本恢复的规则: 注射用A型肉毒毒素 - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "注射用A型肉毒毒素",
+        "description": "药品名称匹配: 注射用A型肉毒毒素"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】注射用A型肉毒毒素 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_INSURANCE_TYPE_009",
+    "name": "注射用胸腺法新 - 保险类型限制",
+    "description": "从历史版本恢复的规则: 注射用胸腺法新 - 保险类型限制",
+    "rule_type": "drug_insurance_type",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.insurance_type",
+        "op": "!=",
+        "value": "工伤保险",
+        "description": "非工伤保险患者"
+      },
+      {
+        "fact": "order.drug_name",
+        "op": "==",
+        "value": "注射用胸腺法新",
+        "description": "药品名称匹配: 注射用胸腺法新"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】注射用胸腺法新 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.drug.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_001",
+    "name": "儿童前牙树脂冠修复 - 年龄限制",
+    "description": "从历史版本恢复的规则: 儿童前牙树脂冠修复 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "儿童前牙树脂冠修复",
+        "description": "医疗服务匹配: 儿童前牙树脂冠修复"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】儿童前牙树脂冠修复 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_002",
+    "name": "儿童龋齿预防保健 - 年龄限制",
+    "description": "从历史版本恢复的规则: 儿童龋齿预防保健 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "儿童龋齿预防保健",
+        "description": "医疗服务匹配: 儿童龋齿预防保健"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】儿童龋齿预防保健 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_003",
+    "name": "儿童听力障碍语言训练 - 年龄限制",
+    "description": "从历史版本恢复的规则: 儿童听力障碍语言训练 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "儿童听力障碍语言训练",
+        "description": "医疗服务匹配: 儿童听力障碍语言训练"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】儿童听力障碍语言训练 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_004",
+    "name": "多普勒小儿血压检测 - 年龄限制",
+    "description": "从历史版本恢复的规则: 多普勒小儿血压检测 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "多普勒小儿血压检测",
+        "description": "医疗服务匹配: 多普勒小儿血压检测"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】多普勒小儿血压检测 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_005",
+    "name": "小儿包茎气囊导管扩张术 - 年龄限制",
+    "description": "从历史版本恢复的规则: 小儿包茎气囊导管扩张术 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "小儿包茎气囊导管扩张术",
+        "description": "医疗服务匹配: 小儿包茎气囊导管扩张术"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】小儿包茎气囊导管扩张术 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_006",
+    "name": "小儿鸡胸矫正术 - 年龄限制",
+    "description": "从历史版本恢复的规则: 小儿鸡胸矫正术 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "小儿鸡胸矫正术",
+        "description": "医疗服务匹配: 小儿鸡胸矫正术"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】小儿鸡胸矫正术 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_007",
+    "name": "小儿捏脊治疗 - 年龄限制",
+    "description": "从历史版本恢复的规则: 小儿捏脊治疗 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "小儿捏脊治疗",
+        "description": "医疗服务匹配: 小儿捏脊治疗"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】小儿捏脊治疗 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_008",
+    "name": "小儿头皮静脉输液 - 年龄限制",
+    "description": "从历史版本恢复的规则: 小儿头皮静脉输液 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "小儿头皮静脉输液",
+        "description": "医疗服务匹配: 小儿头皮静脉输液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】小儿头皮静脉输液 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_009",
+    "name": "小儿斜颈推拿治疗 - 年龄限制",
+    "description": "从历史版本恢复的规则: 小儿斜颈推拿治疗 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "小儿斜颈推拿治疗",
+        "description": "医疗服务匹配: 小儿斜颈推拿治疗"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】小儿斜颈推拿治疗 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_010",
+    "name": "小儿原发性肠套叠手术复位 - 年龄限制",
+    "description": "从历史版本恢复的规则: 小儿原发性肠套叠手术复位 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "小儿原发性肠套叠手术复位",
+        "description": "医疗服务匹配: 小儿原发性肠套叠手术复位"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】小儿原发性肠套叠手术复位 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_011",
+    "name": "新生儿测颅压 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿测颅压 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿测颅压",
+        "description": "医疗服务匹配: 新生儿测颅压"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿测颅压 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_012",
+    "name": "新生儿辐射抢救治疗 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿辐射抢救治疗 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿辐射抢救治疗",
+        "description": "医疗服务匹配: 新生儿辐射抢救治疗"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿辐射抢救治疗 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_013",
+    "name": "新生儿复苏 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿复苏 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿复苏",
+        "description": "医疗服务匹配: 新生儿复苏"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿复苏 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_014",
+    "name": "新生儿护理 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿护理 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿护理",
+        "description": "医疗服务匹配: 新生儿护理"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿护理 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_015",
+    "name": "新生儿换血术 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿换血术 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿换血术",
+        "description": "医疗服务匹配: 新生儿换血术"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿换血术 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_016",
+    "name": "新生儿监护 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿监护 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿监护",
+        "description": "医疗服务匹配: 新生儿监护"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿监护 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_017",
+    "name": "新生儿经皮胆红素测定 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿经皮胆红素测定 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿经皮胆红素测定",
+        "description": "医疗服务匹配: 新生儿经皮胆红素测定"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿经皮胆红素测定 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_018",
+    "name": "新生儿兰光治疗 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿兰光治疗 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿兰光治疗",
+        "description": "医疗服务匹配: 新生儿兰光治疗"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿兰光治疗 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_019",
+    "name": "新生儿量表检查 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿量表检查 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿量表检查",
+        "description": "医疗服务匹配: 新生儿量表检查"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿量表检查 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_020",
+    "name": "新生儿暖箱 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿暖箱 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿暖箱",
+        "description": "医疗服务匹配: 新生儿暖箱"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿暖箱 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_021",
+    "name": "新生儿脐静脉穿刺和注射 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿脐静脉穿刺和注射 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿脐静脉穿刺和注射",
+        "description": "医疗服务匹配: 新生儿脐静脉穿刺和注射"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿脐静脉穿刺和注射 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_022",
+    "name": "新生儿气管插管术 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿气管插管术 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿气管插管术",
+        "description": "医疗服务匹配: 新生儿气管插管术"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿气管插管术 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_023",
+    "name": "新生儿人工呼吸(正压通气) - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿人工呼吸(正压通气) - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿人工呼吸(正压通气)",
+        "description": "医疗服务匹配: 新生儿人工呼吸(正压通气)"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿人工呼吸(正压通气) 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_024",
+    "name": "新生儿溶血症筛查 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿溶血症筛查 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿溶血症筛查",
+        "description": "医疗服务匹配: 新生儿溶血症筛查"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿溶血症筛查 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_025",
+    "name": "新生儿特殊护理 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿特殊护理 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿特殊护理",
+        "description": "医疗服务匹配: 新生儿特殊护理"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿特殊护理 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_026",
+    "name": "新生儿洗胃 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿洗胃 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿洗胃",
+        "description": "医疗服务匹配: 新生儿洗胃"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿洗胃 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_027",
+    "name": "新生儿囟门穿刺术 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿囟门穿刺术 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿囟门穿刺术",
+        "description": "医疗服务匹配: 新生儿囟门穿刺术"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿囟门穿刺术 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_028",
+    "name": "新生儿行为测定 - 年龄限制",
+    "description": "从历史版本恢复的规则: 新生儿行为测定 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "新生儿行为测定",
+        "description": "医疗服务匹配: 新生儿行为测定"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】新生儿行为测定 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_029",
+    "name": "婴儿氧舱治疗 - 年龄限制",
+    "description": "从历史版本恢复的规则: 婴儿氧舱治疗 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "婴儿氧舱治疗",
+        "description": "医疗服务匹配: 婴儿氧舱治疗"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】婴儿氧舱治疗 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_AGE_030",
+    "name": "婴幼儿健康体检 - 年龄限制",
+    "description": "从历史版本恢复的规则: 婴幼儿健康体检 - 年龄限制",
+    "rule_type": "drug_age",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "patient.age",
+        "op": ">",
+        "value": 18,
+        "description": "年龄超过儿童范围"
+      },
+      {
+        "fact": "order.service_name",
+        "op": "==",
+        "value": "婴幼儿健康体检",
+        "description": "医疗服务匹配: 婴幼儿健康体检"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】婴幼儿健康体检 限儿童使用，当前患者年龄{patient.age}岁，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.service.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_001",
+    "name": "艾迪注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 艾迪注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "艾迪注射液",
+        "description": "项目匹配: 艾迪注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】艾迪注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_002",
+    "name": "参附注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 参附注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "参附注射液",
+        "description": "项目匹配: 参附注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】参附注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_003",
+    "name": "参麦注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 参麦注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "参麦注射液",
+        "description": "项目匹配: 参麦注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】参麦注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_004",
+    "name": "参芪扶正注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 参芪扶正注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "参芪扶正注射液",
+        "description": "项目匹配: 参芪扶正注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】参芪扶正注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_005",
+    "name": "喘可治注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 喘可治注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "喘可治注射液",
+        "description": "项目匹配: 喘可治注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】喘可治注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_006",
+    "name": "刺五加注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 刺五加注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "刺五加注射液",
+        "description": "项目匹配: 刺五加注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】刺五加注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_007",
+    "name": "丹参注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 丹参注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "丹参注射液",
+        "description": "项目匹配: 丹参注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】丹参注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_008",
+    "name": "丹红注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 丹红注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "丹红注射液",
+        "description": "项目匹配: 丹红注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】丹红注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_009",
+    "name": "灯盏花素注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 灯盏花素注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "灯盏花素注射液",
+        "description": "项目匹配: 灯盏花素注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】灯盏花素注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_010",
+    "name": "灯盏细辛注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 灯盏细辛注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "灯盏细辛注射液",
+        "description": "项目匹配: 灯盏细辛注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】灯盏细辛注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  },
+  {
+    "code": "DRUG_HOSPITAL_LEVEL_011",
+    "name": "复方苦参注射液 - 医疗机构级别限制",
+    "description": "从历史版本恢复的规则: 复方苦参注射液 - 医疗机构级别限制",
+    "rule_type": "drug_hospital_level",
+    "severity": "warn",
+    "enabled": true,
+    "conditions": [
+      {
+        "fact": "order.item_name",
+        "op": "==",
+        "value": "复方苦参注射液",
+        "description": "项目匹配: 复方苦参注射液"
+      }
+    ],
+    "actions": [
+      {
+        "action_type": "warn",
+        "message_template": "【提醒】复方苦参注射液 需要特殊审核，请确认。",
+        "parameters": {}
+      }
+    ],
+    "triggers": [
+      "order.submit"
+    ]
+  }
+]

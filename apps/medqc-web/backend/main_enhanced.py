@@ -18,6 +18,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用
+"""
+DEPRECATED: Legacy enhanced API entrypoint. Use `app/main.py`.
+"""
 app = FastAPI(
     title="医疗文书分类系统 - 增强版",
     description="基于层级化分类的医疗文书智能识别和质控系统",

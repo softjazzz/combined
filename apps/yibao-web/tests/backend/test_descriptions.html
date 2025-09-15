@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>规则描述测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .rule-card {
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: #fff;
+        }
+        .rule-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        .rule-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .type-gender { background: #fef3c7; color: #92400e; }
+        .type-age { background: #dbeafe; color: #1e40af; }
+        .type-insurance { background: #d1fae5; color: #065f46; }
+        .type-hospital { background: #fce7f3; color: #be185d; }
+        .type-visit { background: #e0e7ff; color: #3730a3; }
+        .old-description {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .new-description {
+            color: #1f2937;
+            font-size: 14px;
+            font-weight: 500;
+            background: #f3f4f6;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 12px;
+        }
+        .comparison-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>规则描述优化测试</h1>
+    <p>以下展示了原始描述与优化后描述的对比：</p>
+    
+    <div id="rules-container">
+        <!-- 规则将通过JavaScript动态生成 -->
+    </div>
+
+    <script>
+        // 模拟规则数据
+        const sampleRules = [
+            {
+                name: "百草妇炎清栓",
+                rule_type: "drug_gender",
+                description: "检查百草妇炎清栓的使用性别限制",
+                conditions: [
+                    { fact: "patient.gender", op: "==", value: "M", description: "当前为男性" },
+                    { fact: "order.drug_name", op: "==", value: "百草妇炎清栓" }
+                ],
+                actions: [
+                    { action_type: "warn", message_template: "【提醒】{order.drug_name} 限女性使用，当前患者为男性，请确认是否继续。" }
+                ],
+                severity: "warn"
+            },
+            {
+                name: "儿童清肺口服液",
+                rule_type: "drug_age",
+                description: "检查儿童清肺口服液的使用年龄限制",
+                conditions: [
+                    { fact: "patient.age", op: ">", value: 14, description: "大于儿童年龄限制" },
+                    { fact: "order.drug_name", op: "==", value: "儿童清肺口服液" }
+                ],
+                actions: [
+                    { action_type: "warn", message_template: "【提醒】{order.drug_name} 为儿童专用/限儿童使用，当前患者年龄 {patient.age} 岁，请确认是否继续。" }
+                ],
+                severity: "warn"
+            },
+            {
+                name: "疤痕止痒软化膏",
+                rule_type: "drug_insurance_type",
+                description: "检查疤痕止痒软化膏的保险类型限制",
+                conditions: [
+                    { fact: "patient.insurance_type", op: "!=", value: "工伤保险", description: "非工伤保险患者" },
+                    { fact: "order.drug_name", op: "==", value: "疤痕止痒软化膏" }
+                ],
+                actions: [
+                    { action_type: "warn", message_template: "【提醒】疤痕止痒软化膏 限工伤保险使用，当前患者保险类型为{patient.insurance_type}，请确认。" }
+                ],
+                severity: "warn"
+            },
+            {
+                name: "艾迪注射液",
+                rule_type: "drug_hospital_level",
+                description: "检查艾迪注射液的医疗机构级别限制",
+                conditions: [
+                    { fact: "order.item_name", op: "==", value: "艾迪注射液" }
+                ],
+                actions: [
+                    { action_type: "warn", message_template: "【提醒】艾迪注射液 需要特殊审核，请确认。" }
+                ],
+                severity: "warn"
+            },
+            {
+                name: "住院限制药品(编码4)",
+                rule_type: "visit_type",
+                description: "检查编码为4的药品的就诊方式限制（限住院使用）",
+                conditions: [
+                    { fact: "visit.type", op: "==", value: "OUTPATIENT", description: "当前为门诊" },
+                    { fact: "order.drug_name", op: "in", value: "4" }
+                ],
+                actions: [
+                    { action_type: "intercept", message_template: "【拦截】{order.drug_name} 限住院患者使用，门诊不可开具。" }
+                ],
+                severity: "block"
+            }
+        ];
+
+        // 生成详细描述的函数（复制自Vue组件）
+        function generateDetailedDescription(rule) {
+            if (!rule) return '';
+            
+            const { rule_type, conditions = [], actions = [], severity } = rule;
+            
+            let conditionText = '';
+            let actionText = '';
+            
+            try {
+                switch (rule_type) {
+                    case 'drug_gender':
+                        conditionText = parseGenderConditions(conditions);
+                        break;
+                    case 'drug_age':
+                        conditionText = parseAgeConditions(conditions);
+                        break;
+                    case 'drug_insurance_type':
+                        conditionText = parseInsuranceConditions(conditions);
+                        break;
+                    case 'drug_hospital_level':
+                        conditionText = parseHospitalLevelConditions(conditions);
+                        break;
+                    case 'visit_type':
+                        conditionText = parseVisitTypeConditions(conditions);
+                        break;
+                    default:
+                        conditionText = '特定使用条件';
+                }
+                
+                if (actions.length > 0) {
+                    const action = actions[0];
+                    const actionType = action.action_type || severity;
+                    
+                    switch (actionType) {
+                        case 'warn':
+                            actionText = '系统将提醒医生注意';
+                            break;
+                        case 'block':
+                        case 'intercept':
+                            actionText = '系统将拦截此处方';
+                            break;
+                        default:
+                            actionText = '系统将进行相应处理';
+                    }
+                } else {
+                    switch (severity) {
+                        case 'warn':
+                            actionText = '系统将提醒医生注意';
+                            break;
+                        case 'block':
+                            actionText = '系统将拦截此处方';
+                            break;
+                        case 'info':
+                            actionText = '系统将记录此信息';
+                            break;
+                        default:
+                            actionText = '系统将进行相应处理';
+                    }
+                }
+                
+                return `${conditionText}时，${actionText}`;
+            } catch (error) {
+                console.warn('生成规则描述时出错:', error);
+                return rule.description || '规则描述暂不可用';
+            }
+        }
+
+        function parseGenderConditions(conditions) {
+            const genderCondition = conditions.find(c => c.fact === 'patient.gender');
+            if (genderCondition) {
+                const gender = genderCondition.value === 'M' ? '男性' : '女性';
+                const restrictedGender = genderCondition.value === 'M' ? '女性' : '男性';
+                return `限${restrictedGender}使用，当患者为${gender}`;
+            }
+            return '当患者性别不符合要求';
+        }
+
+        function parseAgeConditions(conditions) {
+            const ageCondition = conditions.find(c => c.fact === 'patient.age');
+            if (ageCondition) {
+                const age = ageCondition.value;
+                const operator = ageCondition.op;
+                
+                switch (operator) {
+                    case '>':
+                        return `限${age}岁以下儿童使用，当患者年龄超过${age}岁`;
+                    case '>=':
+                        return `限${age}岁以下使用，当患者年龄大于等于${age}岁`;
+                    case '<':
+                        return `限${age}岁以上使用，当患者年龄小于${age}岁`;
+                    case '<=':
+                        return `限${age}岁以上使用，当患者年龄小于等于${age}岁`;
+                    case '==':
+                        return `限${age}岁使用，当患者年龄不符`;
+                    default:
+                        return `年龄限制为${age}岁，当患者年龄不符合要求`;
+                }
+            }
+            return '当患者年龄不符合要求';
+        }
+
+        function parseInsuranceConditions(conditions) {
+            const insuranceCondition = conditions.find(c => c.fact === 'patient.insurance_type');
+            if (insuranceCondition) {
+                const insuranceType = insuranceCondition.value;
+                const operator = insuranceCondition.op;
+                
+                if (operator === '!=') {
+                    return `限${insuranceType}患者使用，当患者为非${insuranceType}`;
+                } else if (operator === '==') {
+                    return `限${insuranceType}患者使用，当患者保险类型不符`;
+                }
+            }
+            return '当患者保险类型不符合要求';
+        }
+
+        function parseHospitalLevelConditions(conditions) {
+            return '需要特殊审核或医疗机构级别限制';
+        }
+
+        function parseVisitTypeConditions(conditions) {
+            const visitCondition = conditions.find(c => c.fact && c.fact.includes('visit'));
+            if (visitCondition) {
+                const visitType = visitCondition.value;
+                if (visitType === 'OUTPATIENT') {
+                    return '限住院患者使用，当前为门诊';
+                } else if (visitType === 'INPATIENT') {
+                    return '限门诊患者使用，当前为住院';
+                }
+            }
+            return '当就诊方式不符合要求';
+        }
+
+        // 渲染规则
+        function renderRules() {
+            const container = document.getElementById('rules-container');
+            
+            sampleRules.forEach(rule => {
+                const ruleCard = document.createElement('div');
+                ruleCard.className = 'rule-card';
+                
+                const newDescription = generateDetailedDescription(rule);
+                
+                ruleCard.innerHTML = `
+                    <div class="rule-name">${rule.name}</div>
+                    <span class="rule-type type-${rule.rule_type.replace('drug_', '')}">${rule.rule_type}</span>
+                    <div class="comparison">
+                        <div>
+                            <div class="comparison-label">原始描述</div>
+                            <div class="old-description">${rule.description}</div>
+                        </div>
+                        <div>
+                            <div class="comparison-label">优化后描述</div>
+                            <div class="new-description">${newDescription}</div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(ruleCard);
+            });
+        }
+
+        // 页面加载完成后渲染规则
+        document.addEventListener('DOMContentLoaded', renderRules);
+    </script>
+</body>
+</html>

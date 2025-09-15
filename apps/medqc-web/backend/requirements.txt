@@ -66,6 +66,3 @@ types-redis==4.6.0.11
 types-requests==2.31.0.10
 supabase==2.4.0
 bcrypt==3.2.2
-supabase==2.4.0
-bcrypt==3.2.2
-supabase==2.4.0

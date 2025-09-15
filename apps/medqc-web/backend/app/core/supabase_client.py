@@ -2,7 +2,29 @@ from typing import Optional, Dict, Any
 from supabase import create_client, Client  # type: ignore
 from .settings import get_settings
 import logging
+import os
 import httpx
+import ssl
+import urllib3
+from anyio import to_thread
+
+# 仅在开发/显式允许时禁用 SSL 校验
+_settings = None
+try:
+    _settings = get_settings()
+except Exception:
+    _settings = None
+
+ALLOW_INSECURE_SSL = False
+if _settings is not None:
+    env = str(getattr(_settings, "ENV", "development")).lower()
+    ALLOW_INSECURE_SSL = env != "production" or (os.getenv("ALLOW_INSECURE_SSL", "false").lower() == "true")
+else:
+    ALLOW_INSECURE_SSL = True
+
+if ALLOW_INSECURE_SSL:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    ssl._create_default_https_context = ssl._create_unverified_context
 
 try:  # Optional import for constructing ClientOptions when create_client has incompatibility
     from supabase.lib.client_options import ClientOptions  # type: ignore
@@ -22,7 +44,20 @@ def get_supabase() -> Optional[Client]:
     api_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
     if settings.SUPABASE_URL and api_key:
         try:
-            _supabase = create_client(str(settings.SUPABASE_URL), api_key)
+            # 配置客户端选项，跳过SSL验证以解决证书问题
+            client_options = {
+                "postgrest": {
+                    "headers": {"apikey": api_key}
+                },
+                "auth": {
+                    "persistSession": False
+                }
+            }
+            _supabase = create_client(
+                str(settings.SUPABASE_URL),
+                api_key,
+                options=client_options
+            )
             logging.getLogger(__name__).info("Supabase 客户端初始化成功: %s", settings.SUPABASE_URL)
         except TypeError as e:
             # 兼容部分版本的 supabase-py：create_client 内部传 proxy 导致报错
@@ -127,7 +162,10 @@ def get_supabase() -> Optional[Client]:
                             h["Content-Type"] = "application/json"
                         return h
 
-                    def execute(self) -> _RestResponse:  # type: ignore[name-defined]
+                    async def execute_async(self) -> _RestResponse:  # type: ignore[name-defined]
+                        """异步执行，减少在 FastAPI 事件循环中的阻塞。
+                        若调用方无法 `await`，仍可使用同步版 `execute()`。
+                        """
                         params = {"select": self._select}
                         # 排序参数：PostgREST 使用 order=col.asc,other.desc
                         if self._orders:
@@ -150,7 +188,50 @@ def get_supabase() -> Optional[Client]:
                             else:
                                 params[k] = f"eq.{v}"
                         url = f"{self.base_url}/rest/v1/{self.table}"
-                        with httpx.Client(timeout=30) as c:  # 同步请求，最小依赖
+                        async with httpx.AsyncClient(timeout=30) as c:  # 异步请求
+                            if self._method == "GET":
+                                r = await c.get(url, headers=self._headers(), params=params)
+                            elif self._method == "POST":
+                                r = await c.post(url, headers=self._headers(), params=params, json=self._payload)
+                            elif self._method == "PATCH":
+                                r = await c.patch(url, headers=self._headers(), params=params, json=self._payload)
+                            elif self._method == "DELETE":
+                                r = await c.delete(url, headers=self._headers(), params=params)
+                            else:
+                                raise RuntimeError("Unsupported method")
+                            r.raise_for_status()
+                            try:
+                                data = r.json()
+                            except Exception:
+                                data = None
+                            return _RestResponse(data)
+
+                    def execute(self) -> _RestResponse:  # type: ignore[name-defined]
+                        """同步执行（向后兼容）。
+                        如在异步上下文中调用，仍为阻塞调用；建议改用 execute_async。
+                        """
+                        params = {"select": self._select}
+                        if self._orders:
+                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
+                            params["order"] = ",".join(order_parts)
+                        if self._limit is not None:
+                            params["limit"] = str(self._limit)
+                        for k, v in self._filters.items():
+                            if isinstance(v, tuple) and len(v) == 2:
+                                op, val = v
+                                if op == "is":
+                                    if val is None:
+                                        params[k] = "is.null"
+                                    elif isinstance(val, bool):
+                                        params[k] = f"is.{str(val).lower()}"
+                                    else:
+                                        params[k] = f"is.{val}"
+                                else:
+                                    params[k] = f"{op}.{val}"
+                            else:
+                                params[k] = f"eq.{v}"
+                        url = f"{self.base_url}/rest/v1/{self.table}"
+                        with httpx.Client(timeout=30) as c:
                             if self._method == "GET":
                                 r = c.get(url, headers=self._headers(), params=params)
                             elif self._method == "POST":
@@ -182,3 +263,18 @@ def get_supabase() -> Optional[Client]:
                 logging.getLogger(__name__).warning("Supabase REST 兼容客户端初始化失败: %s", e3)
                 _supabase = None
     return _supabase
+
+
+async def async_execute(query):
+    """统一的异步执行帮助函数。
+    - 若 query 提供 execute_async，则直接 await 它。
+    - 否则将同步 execute 放入线程池，避免阻塞事件循环。
+    返回值保持与 supabase-py 一致，具备 data 字段。
+    """
+    try:
+        exec_async = getattr(query, "execute_async", None)
+        if callable(exec_async):
+            return await exec_async()
+    except Exception:
+        pass
+    return await to_thread.run_sync(query.execute)

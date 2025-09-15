@@ -24,8 +24,17 @@ async def health():
         # 简化健康检查：若存在任一启用 provider 或 model 即认为可用
         sb = get_supabase()
         if sb:
-            p = sb.table("llm_api_providers").select("id").eq("is_active", True).limit(1).execute()
-            m = sb.table("llm_models").select("id").eq("is_active", True).limit(1).execute()
+            async def _exec(q):
+                try:
+                    exec_async = getattr(q, "execute_async", None)
+                    if callable(exec_async):
+                        return await exec_async()
+                except Exception:
+                    pass
+                return q.execute()
+
+            p = await _exec(sb.table("llm_api_providers").select("id").eq("is_active", True).limit(1))
+            m = await _exec(sb.table("llm_models").select("id").eq("is_active", True).limit(1))
             llm_ok = bool((p.data or []) or (m.data or []))
     except Exception:
         llm_ok = False
@@ -65,4 +74,3 @@ async def metrics():
         },
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
-

@@ -127,12 +127,15 @@
         :pagination="tablePagination"
         class="rules-table"
         :scroll="{ x: 1400 }"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
           <!-- 平台规则特有列渲染 -->
           <template v-if="currentSource === 'platform'">
             <template v-if="column.key === 'rule_id'">
-              <a-tag color="blue">{{ record.rule_id }}</a-tag>
+              <a-tooltip :title="record.rule_code || record.rule_id">
+                <a-tag color="blue">{{ getDisplayId(record) }}</a-tag>
+              </a-tooltip>
             </template>
             <template v-if="column.key === 'rule_name'">
               <a-tooltip :title="record.description">
@@ -140,63 +143,88 @@
               </a-tooltip>
             </template>
             <template v-if="column.key === 'is_enabled'">
-              <a-tag :color="record.is_enabled ? 'green' : 'default'">{{ record.is_enabled ? '启用' : '停用' }}</a-tag>
+              <a-switch
+                :checked="!!record.is_enabled"
+                size="small"
+                checked-children="启用"
+                un-checked-children="停用"
+                @change="(checked: boolean) => onTogglePlatformRule(record, checked)"
+              />
             </template>
             <template v-if="column.key === 'defect_level'">
-              <a-tag :color="getSichuanDefectLevelColor(record.defect_level)">{{ record.defect_level }}</a-tag>
+              <a-tag :color="getSichuanDefectLevelColor(record.defect_level)">{{ getSeverityZh(record.defect_level) }}</a-tag>
+            </template>
+            <template v-if="column.key === 'applicable_documents'">
+              <div class="document-types">
+                <a-tag
+                  v-for="docType in (record.applicable_documents || [])"
+                  :key="docType"
+                  size="small"
+                  color="geekblue"
+                >
+                  {{ getDocTypeZh(docType) }}
+                </a-tag>
+              </div>
+            </template>
+            <template v-if="column.key === 'category'">
+              <a-tag :color="getCategoryColor(getCategoryZh(record.category))">{{ getCategoryZh(record.category) }}</a-tag>
             </template>
           </template>
 
-          <template v-if="column.key === 'rule_id'">
-            <a-tag color="blue">{{ record.rule_id }}</a-tag>
-          </template>
+          <template v-else>
+            <template v-if="column.key === 'rule_id'">
+              <a-tooltip :title="record.rule_code || record.rule_id">
+                <a-tag color="blue">{{ getDisplayId(record) }}</a-tag>
+              </a-tooltip>
+            </template>
 
-          <template v-if="column.key === 'name'">
-            <a-tooltip :title="record.description">
-              <span class="rule-name">{{ record.name }}</span>
-            </a-tooltip>
-          </template>
+            <template v-if="column.key === 'name'">
+              <a-tooltip :title="record.description">
+                <span class="rule-name">{{ record.name }}</span>
+              </a-tooltip>
+            </template>
 
-          <template v-if="column.key === 'complexity'">
-            <a-tag :color="getSichuanComplexityColor(record.complexity)">
-              {{ record.complexity }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'defect_level'">
-            <a-tag :color="getSichuanDefectLevelColor(record.defect_level)">
-              {{ record.defect_level }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'category'">
-            <a-tag :color="getCategoryColor(record.category)">
-              {{ record.category }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'applicable_documents'">
-            <div class="document-types">
-              <a-tag
-                v-for="docType in record.applicable_documents"
-                :key="docType"
-                size="small"
-                color="geekblue"
-              >
-                {{ docType }}
+            <template v-if="column.key === 'complexity'">
+              <a-tag :color="getSichuanComplexityColor(record.complexity)">
+                {{ record.complexity }}
               </a-tag>
-            </div>
-          </template>
+            </template>
 
-          <template v-if="column.key === 'actions'">
-            <a-space>
-              <a-button size="small" @click="viewSichuanRuleDetail(record)">
-                详情
-              </a-button>
-              <a-button size="small" type="primary" @click="startQCWithRule(record)">
-                质控评估
-              </a-button>
-            </a-space>
+            <template v-if="column.key === 'defect_level'">
+              <a-tag :color="getSichuanDefectLevelColor(record.defect_level)">
+                {{ getSeverityZh(record.defect_level) }}
+              </a-tag>
+            </template>
+
+            <template v-if="column.key === 'category'">
+              <a-tag :color="getCategoryColor(record.category)">
+                {{ getCategoryZh(record.category) }}
+              </a-tag>
+            </template>
+
+            <template v-if="column.key === 'applicable_documents'">
+              <div class="document-types">
+                <a-tag
+                  v-for="docType in record.applicable_documents"
+                  :key="docType"
+                  size="small"
+                  color="geekblue"
+                >
+                  {{ docType }}
+                </a-tag>
+              </div>
+            </template>
+
+            <template v-if="column.key === 'actions'">
+              <a-space>
+                <a-button size="small" @click="viewSichuanRuleDetail(record)">
+                  详情
+                </a-button>
+                <a-button size="small" type="primary" @click="startQCWithRule(record)">
+                  质控评估
+                </a-button>
+              </a-space>
+            </template>
           </template>
         </template>
       </a-table>
@@ -319,7 +347,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, h, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ReloadOutlined,
@@ -359,12 +387,16 @@ interface SichuanQCStatus {
 }
 
 interface TableColumn {
-  title: string
+  title: any
   dataIndex?: string
   key: string
   width?: number
   fixed?: string
   ellipsis?: boolean
+  // antd-vue 列筛选可选属性（为简化类型，这里使用 any）
+  filters?: any[]
+  onFilter?: (value: any, record: any) => boolean
+  filteredValue?: any[] | null
 }
 
 // 四川省规则相关数据
@@ -392,6 +424,7 @@ interface PlatformRule {
   description?: string
   category?: string
   defect_level?: string
+  applicable_documents?: string[]
   is_enabled?: boolean
   version?: number | string
   updated_at?: string
@@ -399,7 +432,7 @@ interface PlatformRule {
 
 const platformRules = ref<PlatformRule[]>([])
 const platformCategories = ref<string[]>([])
-const filters = ref<{ q?: string; category?: string; defect_level?: string; is_enabled?: boolean | null; page: number; page_size: number }>({
+const filters = ref<{ q?: string; category?: string; defect_level?: string; is_enabled?: boolean | null; page?: number; page_size?: number }>({
   q: '',
   category: undefined,
   defect_level: undefined,
@@ -407,7 +440,7 @@ const filters = ref<{ q?: string; category?: string; defect_level?: string; is_e
   page: 1,
   page_size: 15,
 })
-const tablePagination = ref({ pageSize: 15, showSizeChanger: true, showQuickJumper: true })
+const tablePagination = ref({ current: 1, total: 0, pageSize: 15, showSizeChanger: true, showQuickJumper: true, pageSizeOptions: ['15', '20', '50', '100'] })
 
 // 规则详情
 const showRuleDetail = ref(false)
@@ -418,70 +451,155 @@ const showQCEvaluation = ref(false)
 const showSystemStats = ref(false)
 
 // 四川省规则表格列定义
-const sichuanColumns: TableColumn[] = [
+// 表头筛选选中项（受控）
+const headerSelected = ref<Record<string, any[] | null>>({})
+
+// 动态列（四川）
+const sichuanColumns = computed<TableColumn[]>(() => [
   {
-    title: '规则ID',
+    title: () => h('span', { class: 'th-enlarge' }, '编号'),
     dataIndex: 'rule_id',
     key: 'rule_id',
     width: 100,
     fixed: 'left'
   },
   {
-    title: '规则名称',
+    title: () => h('span', { class: 'th-enlarge' }, '规则名称'),
     dataIndex: 'name',
     key: 'name',
     width: 200,
     ellipsis: true
   },
   {
-    title: '分类',
+    title: () => h('span', { class: 'th-enlarge' }, '分类'),
     dataIndex: 'category',
     key: 'category',
-    width: 120
+    width: 120,
+    filters: Array.from(new Set(sichuanRules.value.map(r => r.category).filter(Boolean))).map(c => ({ text: c, value: c })),
+    filteredValue: headerSelected.value.category ?? null,
+    onFilter: (value, record) => String(record.category) === String(value)
   },
   {
-    title: '复杂度',
+    title: () => h('span', { class: 'th-enlarge' }, '复杂度'),
     dataIndex: 'complexity',
     key: 'complexity',
     width: 100
   },
   {
-    title: '缺陷级别',
+    title: () => h('span', { class: 'th-enlarge' }, '缺陷级别'),
     dataIndex: 'defect_level',
     key: 'defect_level',
-    width: 120
+    width: 120,
+    filters: Array.from(new Set(sichuanRules.value.map(r => r.defect_level).filter(Boolean))).map(s => ({ text: s, value: s })),
+    filteredValue: headerSelected.value.defect_level ?? null,
+    onFilter: (value, record) => String(record.defect_level) === String(value)
   },
   {
-    title: '适用文档',
+    title: () => h('span', { class: 'th-enlarge' }, '文书类别（标准化）'),
     dataIndex: 'applicable_documents',
     key: 'applicable_documents',
-    width: 150,
-    ellipsis: true
+    width: 180,
+    ellipsis: true,
+    filters: Array.from(new Set(
+      (sichuanRules.value || [])
+        .flatMap(r => r.applicable_documents || [])
+        .map(mapDocTypeToCanonical)
+        .filter((x: any) => !!x)
+    ) as Set<string>).map((code: any) => ({ text: CANONICAL_LABEL_ZH[String(code)], value: String(code) })),
+    filteredValue: headerSelected.value.applicable_documents ?? null,
+    onFilter: (value, record) => {
+      const mapped = (record.applicable_documents || []).map((d: any) => mapDocTypeToCanonical(d)).filter((x: any) => !!x)
+      return mapped.includes(String(value))
+    }
   },
   {
-    title: '医疗领域',
+    title: () => h('span', { class: 'th-enlarge' }, '医疗领域'),
     dataIndex: 'medical_domain',
     key: 'medical_domain',
     width: 120
   },
   {
-    title: '操作',
+    title: () => h('span', { class: 'th-enlarge' }, '操作'),
     key: 'actions',
     width: 180,
     fixed: 'right'
   }
-]
+])
 
 // 平台规则列
-const platformColumns: TableColumn[] = [
-  { title: '规则ID', key: 'rule_id', dataIndex: 'rule_id', width: 120, fixed: 'left' },
-  { title: '名称', key: 'rule_name', dataIndex: 'rule_name', width: 220, ellipsis: true },
-  { title: '分类', key: 'category', dataIndex: 'category', width: 120 },
-  { title: '缺陷级别', key: 'defect_level', dataIndex: 'defect_level', width: 120 },
-  { title: '启用', key: 'is_enabled', dataIndex: 'is_enabled', width: 100 },
-  { title: '版本', key: 'version', dataIndex: 'version', width: 80 },
-  { title: '更新时间', key: 'updated_at', dataIndex: 'updated_at', width: 180 },
-]
+const platformColumns = computed<TableColumn[]>(() => {
+  const categoryFilters = Array.from(new Set(platformRules.value.map(r => r.category).filter(Boolean) as string[]))
+    .map(c => ({ text: getCategoryZh(c), value: c }))
+  const defectFilters = Array.from(new Set(platformRules.value.map(r => String(r.defect_level || '')).filter(Boolean)))
+    .map(d => ({ text: getSeverityZh(d), value: d }))
+  const docFilters = Array.from(new Set((platformRules.value || []).flatMap(r => r.applicable_documents || []).filter(Boolean)))
+    .map(d => ({ text: getDocTypeZh(d), value: d }))
+
+  // Debug: show where non-standard labels may come from (platform)
+  try {
+    const rawPlatformDocs = Array.from(new Set((platformRules.value || [])
+      .flatMap(r => r.applicable_documents || [])
+      .filter(Boolean)))
+    const canonicalPlatformDocs = Array.from(new Set(rawPlatformDocs
+      .map(mapDocTypeToCanonical)
+      .filter((x: any) => !!x)))
+    console.log('🧪 平台规则 applicable_documents 原始值 count=', rawPlatformDocs.length, rawPlatformDocs)
+    console.log('✅ 平台规则 文书类别过滤项(标准6类)=', canonicalPlatformDocs.map((code: any) => ({ code, label: CANONICAL_LABEL_ZH[String(code)] })))
+  } catch {}
+
+  return [
+    { title: () => h('span', { class: 'th-enlarge' }, '编号'), key: 'rule_id', dataIndex: 'rule_id', width: 120, fixed: 'left' },
+    { title: () => h('span', { class: 'th-enlarge' }, '名称'), key: 'rule_name', dataIndex: 'rule_name', width: 220, ellipsis: true },
+    {
+      title: () => h('span', { class: 'th-enlarge' }, '分类'),
+      key: 'category',
+      dataIndex: 'category',
+      width: 120,
+      filters: categoryFilters,
+      filteredValue: headerSelected.value.category ?? null,
+      onFilter: (value, record) => String(record.category) === String(value)
+    },
+    {
+      title: () => h('span', { class: 'th-enlarge' }, '缺陷级别'),
+      key: 'defect_level',
+      dataIndex: 'defect_level',
+      width: 120,
+      filters: defectFilters,
+      filteredValue: headerSelected.value.defect_level ?? null,
+      onFilter: (value, record) => String(record.defect_level) === String(value)
+    },
+    {
+      title: () => h('span', { class: 'th-enlarge' }, '文书类别（标准化）'),
+      key: 'applicable_documents',
+      dataIndex: 'applicable_documents',
+      width: 200,
+      filters: Array.from(new Set((platformRules.value || [])
+        .flatMap(r => r.applicable_documents || [])
+        .map(mapDocTypeToCanonical)
+        .filter((x: any) => !!x)
+      ) as Set<string>).map((code: any) => ({ text: CANONICAL_LABEL_ZH[String(code)], value: String(code) })),
+      filteredValue: headerSelected.value.applicable_documents ?? null,
+      onFilter: (value, record) => {
+        const mapped = (record.applicable_documents || []).map((d: any) => mapDocTypeToCanonical(d)).filter((x: any) => !!x)
+        return mapped.includes(String(value))
+      }
+    },
+    {
+      title: () => h('span', { class: 'th-enlarge' }, '启用'),
+      key: 'is_enabled',
+      dataIndex: 'is_enabled',
+      width: 100,
+      filters: [
+        { text: '启用', value: true },
+        { text: '停用', value: false },
+      ],
+      filteredValue: headerSelected.value.is_enabled ?? null,
+      onFilter: (value, record) => Boolean(record.is_enabled) === Boolean(value)
+    },
+    { title: '版本', key: 'version', dataIndex: 'version', width: 80 },
+    { title: '更新时间', key: 'updated_at', dataIndex: 'updated_at', width: 180 },
+  ]
+})
 
 // 四川省规则相关方法
 const refreshSichuanRules = async () => {
@@ -545,20 +663,42 @@ const refreshPlatformRules = async () => {
     if (filters.value.category) params.set('category', String(filters.value.category))
     if (filters.value.defect_level) params.set('defect_level', String(filters.value.defect_level))
     if (filters.value.is_enabled !== null && filters.value.is_enabled !== undefined) params.set('is_enabled', String(filters.value.is_enabled))
-    params.set('page', String(filters.value.page))
-    params.set('page_size', String(filters.value.page_size))
+    params.set('page', String(tablePagination.value.current || 1))
+    params.set('page_size', String(tablePagination.value.pageSize || 15))
 
     const resp = await fetch(`/api/semantic-rules?${params.toString()}`)
     if (!resp.ok) throw new Error(await resp.text())
     const data = await resp.json()
     platformRules.value = (data.rules || [])
+    tablePagination.value = {
+      ...tablePagination.value,
+      total: Number(data.count || 0),
+    }
     // 简单推断分类列表
     platformCategories.value = Array.from(new Set(platformRules.value.map(r => r.category).filter(Boolean) as string[]))
-    tablePagination.value = { ...tablePagination.value, pageSize: filters.value.page_size }
   } catch (e: any) {
     message.error('加载平台规则失败: ' + (e?.message || e))
   } finally {
     loading.value = false
+  }
+}
+
+// 本地受控筛选：结合分页事件获取 filters
+const handleTableChange = (pagination: any, tableFilters?: Record<string, any[]>) => {
+  tablePagination.value = {
+    ...tablePagination.value,
+    current: pagination?.current || 1,
+    pageSize: pagination?.pageSize || tablePagination.value.pageSize,
+  }
+  if (tableFilters) {
+    headerSelected.value = {
+      ...headerSelected.value,
+      ...tableFilters,
+    }
+  }
+  // 平台规则仍走远端查询（顶部筛选），表头筛选用于前端快速筛选当前页
+  if (currentSource.value === 'platform') {
+    refreshPlatformRules()
   }
 }
 
@@ -599,6 +739,7 @@ const getSichuanDefectLevelColor = (level: string | undefined | null) => {
 
 const getCategoryColor = (category: string) => {
   const colors: Record<string, string> = {
+    // 中文分类名称
     '诊断一致性': 'blue',
     '病史完整性': 'cyan',
     '诊疗合理性': 'purple',
@@ -606,7 +747,21 @@ const getCategoryColor = (category: string) => {
     '内容完整性': 'geekblue',
     '术语规范性': 'gold',
     '知情同意': 'lime',
-    '基础语义检查': 'volcano'
+    '基础语义检查': 'volcano',
+    // 标准分类名称（中文）
+    '一致性': 'blue',
+    '完整性': 'cyan',
+    '合理性': 'purple',
+    '及时性': 'orange',
+    '合规性': 'red',
+    '准确性': 'green',
+    // 英文分类名称
+    'consistency': 'blue',
+    'completeness': 'cyan',
+    'rationality': 'purple',
+    'timeliness': 'orange',
+    'compliance': 'red',
+    'accuracy': 'green'
   }
   return colors[category] || 'default'
 }
@@ -615,9 +770,81 @@ const getCategoryCount = (category: string) => {
   return sichuanRules.value.filter(rule => rule.category === category).length
 }
 
+// 短编号显示：优先使用平台的 rule_code；否则显示 UUID 前 8 位
+const getDisplayId = (record: any): string => {
+  const code = (record.rule_code || '').toString().trim()
+  if (code) return code
+  const id = (record.rule_id || record.id || '').toString()
+  return id ? id.substring(0, 8) : ''
+}
+
+// 英文到中文映射
+const getCategoryZh = (value: string | undefined | null) => {
+  const m: Record<string, string> = {
+    'consistency': '一致性',
+    'completeness': '完整性',
+    'rationality': '合理性',
+    'timeliness': '及时性',
+    'compliance': '合规性',
+    'accuracy': '准确性'
+  }
+  const key = String(value || '').toLowerCase()
+  return m[key] || value || ''
+}
+
+const getSeverityZh = (value: string | undefined | null) => {
+  const m: Record<string, string> = {
+    'critical': '严重',
+    'major': '一般',
+    'minor': '轻微'
+  }
+  const key = String(value || '').toLowerCase()
+  return m[key] || value || ''
+}
+
+// 文书类别标准化（Plan A）：将一切映射到 6 个标准大类，并去除“急诊记录”
+const CANONICAL_LABEL_ZH: Record<string, string> = {
+  admission_record: '入院记录',
+  progress_note: '病程记录',
+  discharge_record: '出院记录',
+  operation_record: '手术相关记录',
+  examination_report: '辅助检查',
+  consent_form: '知情同意书'
+}
+const ALIAS_TO_CANONICAL: Record<string, string> = {
+  '手术记录': 'operation_record',
+  '检查记录': 'examination_report',
+  '输血记录': 'progress_note',
+  '治疗记录': 'progress_note',
+  '医嘱记录': 'progress_note',
+  // ‘急诊记录’不保留，直接剔除
+}
+const mapDocTypeToCanonical = (raw: string | undefined | null): string | null => {
+  const s = String(raw || '').trim()
+  if (!s) return null
+  // 已是标准 code
+  if (s in CANONICAL_LABEL_ZH) return s
+  // 中文别名
+  if (s in ALIAS_TO_CANONICAL) return ALIAS_TO_CANONICAL[s]
+  // 其他英文别名（兼容部分来源）
+  const key = s.toLowerCase()
+  if (key === 'emergency') return null // 去掉急诊
+  if (key === 'operation' || key === 'operation_record') return 'operation_record'
+  if (key === 'examination' || key === 'examination_report') return 'examination_report'
+  if (key === 'admission' || key === 'admission_record') return 'admission_record'
+  if (key === 'progress' || key === 'progress_note') return 'progress_note'
+  if (key === 'discharge' || key === 'discharge_record') return 'discharge_record'
+  if (key === 'consent' || key === 'consent_form') return 'consent_form'
+  return null
+}
+const getDocTypeZh = (value: string | undefined | null) => {
+  const code = mapDocTypeToCanonical(value)
+  return code ? CANONICAL_LABEL_ZH[code] : ''
+}
 
 
-// 组件挂载时加载四川省规则
+
+// 组件挂载时加载数据
 onMounted(() => {
   if (currentSource.value === 'platform') {
     refreshPlatformRules()
@@ -625,6 +852,37 @@ onMounted(() => {
     refreshSichuanRules()
   }
 })
+
+// 切换来源时重置表头筛选选择，避免交叉污染
+watch(currentSource, () => {
+  headerSelected.value = {}
+})
+
+// 启用/停用平台规则（乐观更新，失败回滚）
+const onTogglePlatformRule = async (record: PlatformRule, checked: boolean) => {
+  const old = !!record.is_enabled
+  // 乐观更新
+  record.is_enabled = checked
+  try {
+    const ruleId = String(record.rule_id || record.rule_code || '')
+    if (!ruleId) throw new Error('缺少规则ID')
+    const resp = await fetch(`/api/semantic-rules/${ruleId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_enabled: checked })
+    })
+    if (!resp.ok) throw new Error(await resp.text())
+    const data = await resp.json()
+    // 用后端回传结果刷新该条（保证与后端一致）
+    const updated = data.rule || {}
+    record.is_enabled = !!updated.is_enabled
+    message.success(checked ? '规则已启用' : '规则已停用')
+  } catch (e: any) {
+    // 回滚
+    record.is_enabled = old
+    message.error('更新启用状态失败: ' + (e?.message || e))
+  }
+}
 </script>
 
 <style scoped>
@@ -638,6 +896,53 @@ onMounted(() => {
 
 .rules-table {
   margin-top: 8px;
+}
+
+/* 表格区域整体字体放大一号 */
+:deep(.rules-table .ant-table) {
+  font-size: 13px;
+}
+
+:deep(.rules-table .ant-table-thead > tr > th) {
+  font-size: 13px;
+}
+
+:deep(.rules-table .ant-table-tbody > tr > td) {
+  font-size: 13px;
+}
+
+:deep(.rules-table .ant-tag) {
+  font-size: 13px;
+}
+
+.rule-name {
+  font-size: 13px;
+}
+
+/* 让筛选按钮紧挨标题文本（表头） */
+:deep(.rules-table .ant-table-thead > tr > th .ant-table-filter-column) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px; /* 文本与按钮之间的距离 */
+  width: auto;
+}
+
+/* 收紧筛选图标的外边距，避免靠右 */
+:deep(.rules-table .ant-table-filter-trigger) {
+  margin: 0; /* 覆盖 antd 默认的 margin-left: 8px */
+  padding: 0;
+}
+
+/* 兼容有固定列/滚动时的表头布局 */
+:deep(.rules-table .ant-table-thead > tr > th) {
+  white-space: nowrap;
+}
+
+/* 表头选择性放大两号 */
+:deep(.th-enlarge) {
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .rule-detail {

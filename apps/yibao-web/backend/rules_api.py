@@ -15,6 +15,14 @@ from rule_schema import MedicalRule, RuleBatch
 
 router = APIRouter(prefix="/api/rules", tags=["医保规则管理"])
 
+# 可注入的 Supabase 客户端（默认 None，走 Mock 路径）
+supabase = None
+
+def set_supabase(client):
+    """由主应用在启动时注入 Supabase 客户端，避免循环依赖"""
+    global supabase
+    supabase = client
+
 # ==================== 数据模型 ====================
 
 class RuleBase(BaseModel):

@@ -56,6 +56,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 logger.info(f"Supabase 客户端初始化成功: {SUPABASE_URL}")
 
 # 创建FastAPI应用
+"""
+DEPRECATED: Legacy API with direct Supabase integration. Use `app/main.py`.
+"""
 app = FastAPI(
     title="医疗质控系统API - Supabase版",
     description="集成Supabase的医疗质控系统后端API服务，支持前后端联动",

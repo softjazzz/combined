@@ -36,7 +36,7 @@
               <BarChartOutlined class="text-white text-base drop-shadow-sm" />
             </div>
           </template>
-          <span class="text-white font-semibold ml-2 drop-shadow-sm">仪表板</span>
+          <span class="text-white font-semibold ml-2 drop-shadow-sm">数据分析</span>
         </a-menu-item>
 
         <a-menu-item key="/rules" class="menu-item menu-item-primary mb-3 mx-2">
@@ -46,6 +46,24 @@
             </div>
           </template>
           <span class="text-white font-semibold ml-2 drop-shadow-sm">规则库</span>
+        </a-menu-item>
+
+        <a-menu-item key="/medical-records" class="menu-item menu-item-primary mb-3 mx-2">
+          <template #icon>
+            <div class="w-9 h-9 bg-gradient-to-br from-white/20 to-white/10 rounded-lg flex items-center justify-center shadow border border-white/20">
+              <FolderOpenOutlined class="text-white text-base drop-shadow-sm" />
+            </div>
+          </template>
+          <span class="text-white font-semibold ml-2 drop-shadow-sm">测试病历管理</span>
+        </a-menu-item>
+
+        <a-menu-item key="/sandbox" class="menu-item menu-item-primary mb-3 mx-2">
+          <template #icon>
+            <div class="w-9 h-9 bg-gradient-to-br from-white/20 to-white/10 rounded-lg flex items-center justify-center shadow border border-white/20">
+              <ExperimentOutlined class="text-white text-base drop-shadow-sm" />
+            </div>
+          </template>
+          <span class="text-white font-semibold ml-2 drop-shadow-sm">规则测试沙箱</span>
         </a-menu-item>
 
         <a-menu-item key="/reminder-demo" class="menu-item menu-item-primary mb-3 mx-2">
@@ -88,7 +106,7 @@
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { BarChartOutlined, FileTextOutlined, SafetyCertificateOutlined, MedicineBoxOutlined } from '@ant-design/icons-vue'
+import { BarChartOutlined, FileTextOutlined, SafetyCertificateOutlined, MedicineBoxOutlined, FolderOpenOutlined, ExperimentOutlined } from '@ant-design/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

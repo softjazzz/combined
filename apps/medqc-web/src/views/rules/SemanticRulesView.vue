@@ -1,76 +1,116 @@
 <template>
-  <div class="semantic-rules-view">
-    <!-- 移除页面头部，因为现在是标签页内容 -->
-    <div class="header-actions" style="margin-bottom: 16px;">
-      <a-space>
-        <a-button @click="refreshData" :loading="loading">
-          <template #icon><ReloadOutlined /></template>
-          刷新数据
-        </a-button>
-        <a-button type="primary" @click="showSystemOverview = true">
-          <template #icon><EyeOutlined /></template>
-          系统概览
-        </a-button>
-      </a-space>
+  <div class="semantic-rules-view min-h-screen bg-gray-50 p-3 lg:p-4">
+    <!-- 页面头部 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div class="flex-1">
+          <div class="flex items-center space-x-2 mb-1">
+            <div class="p-1.5 bg-blue-100 rounded-md">
+              <BranchesOutlined class="text-lg text-blue-600" />
+            </div>
+            <h1 class="text-xl lg:text-2xl font-bold text-gray-900">
+              质控规则管理
+            </h1>
+          </div>
+          <p class="text-gray-600 text-xs lg:text-sm">
+            统一管理传统质控规则和语义质控规则，支持规则创建、编辑、测试和版本管理
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <a-button
+            @click="refreshData"
+            :loading="loading"
+            class="flex items-center space-x-2"
+          >
+            <template #icon><ReloadOutlined /></template>
+            <span>刷新</span>
+          </a-button>
+          <a-button
+            @click="showSystemOverview = true"
+            class="flex items-center space-x-2"
+          >
+            <template #icon><EyeOutlined /></template>
+            <span>系统概览</span>
+          </a-button>
+          <a-button
+            type="primary"
+            @click="openImportRules"
+            class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700"
+          >
+            <template #icon><ImportOutlined /></template>
+            <span>导入规则</span>
+          </a-button>
+        </div>
+      </div>
     </div>
 
-    <!-- 系统状态卡片 -->
-    <a-row :gutter="16" class="status-cards">
-      <a-col :span="6">
-        <a-card size="small" :loading="loading">
-          <a-statistic
-            title="LLM连接状态"
-            :value="llmStatus.real_llm_available ? '已连接' : 'Mock模式'"
-            :value-style="{ 
-              color: llmStatus.real_llm_available ? '#52c41a' : '#faad14' 
-            }"
-          >
-            <template #prefix>
-              <a-badge 
-                :status="llmStatus.real_llm_available ? 'processing' : 'warning'" 
-              />
-            </template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card size="small" :loading="loading">
-          <a-statistic
-            title="可用规则数"
-            :value="totalRules"
-            :value-style="{ color: '#1890ff' }"
-          >
-            <template #prefix><FileTextOutlined /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card size="small" :loading="loading">
-          <a-statistic
-            title="执行成功率"
-            :value="engineStats?.success_rate || 0"
-            :precision="1"
-            suffix="%"
-            :value-style="{ color: '#52c41a' }"
-          >
-            <template #prefix><CheckCircleOutlined /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card size="small" :loading="loading">
-          <a-statistic
-            title="平均响应时间"
-            :value="engineStats?.avg_execution_time || 0"
-            :precision="2"
-            suffix="s"
-            :value-style="{ color: '#722ed1' }"
-          >
-            <template #prefix><ClockCircleOutlined /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-    </a-row>
+    <!-- 快速筛选区域 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base font-semibold text-gray-900">快速筛选</h2>
+        <a-button
+          size="small"
+          @click="clearFilters"
+          class="text-gray-500 hover:text-gray-700"
+        >
+          <template #icon><ClearOutlined /></template>
+          清空筛选
+        </a-button>
+      </div>
+      
+      <div class="flex items-center gap-2 flex-wrap mb-3">
+        <span class="text-sm font-semibold text-gray-800">规则类型：</span>
+        <div
+          :class="['filter-tag', { 'filter-tag-active': !ruleTypeFilter }]"
+          @click="quickFilter('all')"
+        >
+          <span class="filter-tag-text">全部类型</span>
+          <span class="filter-tag-count">({{ totalRules }})</span>
+        </div>
+        <div
+          :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'semantic' }]"
+          @click="quickFilter('semantic')"
+        >
+          <span class="filter-tag-text">语义规则</span>
+        </div>
+        <div
+          :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'logical' }]"
+          @click="quickFilter('logical')"
+        >
+          <span class="filter-tag-text">逻辑规则</span>
+        </div>
+        <div
+          :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'hybrid' }]"
+          @click="quickFilter('hybrid')"
+        >
+          <span class="filter-tag-text">混合规则</span>
+        </div>
+        <div
+          :class="['filter-tag filter-tag-danger', { 'filter-tag-danger-active': severityFilter === 'critical' }]"
+          @click="quickFilterSeverity('critical')"
+        >
+          <span class="filter-tag-text">严重缺陷</span>
+        </div>
+        <div
+          :class="['filter-tag filter-tag-success', { 'filter-tag-success-active': statusFilter === 'active' }]"
+          @click="quickFilterStatus('active')"
+        >
+          <span class="filter-tag-text">已启用</span>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="ml-auto flex items-center gap-2 flex-shrink-0">
+          <a-button type="primary" size="small" @click="applyFilters" class="bg-blue-600 hover:bg-blue-700">
+            <template #icon><SearchOutlined /></template>
+            查询
+          </a-button>
+          <a-button size="small" @click="clearFilters">
+            <template #icon><ClearOutlined /></template>
+            重置
+          </a-button>
+        </div>
+      </div>
+    </div>
 
     <!-- 语义规则管理组件 -->
     <div class="rules-manager-container">
@@ -184,7 +224,10 @@ import {
   BranchesOutlined,
   ExperimentOutlined,
   SafetyCertificateOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  ImportOutlined,
+  SearchOutlined,
+  ClearOutlined
 } from '@ant-design/icons-vue'
 
 import SemanticRulesManager from '../../components/SemanticRulesManager.vue'
@@ -200,6 +243,11 @@ const llmStatus = ref({
   provider: '',
   model: ''
 })
+
+// 筛选条件
+const ruleTypeFilter = ref(undefined)
+const severityFilter = ref(undefined)
+const statusFilter = ref(undefined)
 
 // 系统特性列表
 const systemFeatures = [
@@ -235,6 +283,50 @@ const totalRules = computed(() => {
 })
 
 // 方法
+const openImportRules = () => {
+  // 这里可以打开导入规则的模态框或跳转到导入页面
+  message.info('导入规则功能开发中...')
+}
+
+const quickFilter = (type) => {
+  if (type === 'all') {
+    ruleTypeFilter.value = undefined
+  } else {
+    ruleTypeFilter.value = type
+  }
+  applyFilters()
+}
+
+const quickFilterSeverity = (severity) => {
+  if (severityFilter.value === severity) {
+    severityFilter.value = undefined
+  } else {
+    severityFilter.value = severity
+  }
+  applyFilters()
+}
+
+const quickFilterStatus = (status) => {
+  if (statusFilter.value === status) {
+    statusFilter.value = undefined
+  } else {
+    statusFilter.value = status
+  }
+  applyFilters()
+}
+
+const applyFilters = () => {
+  // 这里可以触发 SemanticRulesManager 组件的筛选
+  message.info('筛选功能将与规则管理组件集成')
+}
+
+const clearFilters = () => {
+  ruleTypeFilter.value = undefined
+  severityFilter.value = undefined
+  statusFilter.value = undefined
+  applyFilters()
+}
+
 const refreshData = async () => {
   loading.value = true
   try {
@@ -277,54 +369,213 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 主容器样式 */
 .semantic-rules-view {
   padding: 0;
   background: transparent;
   min-height: auto;
 }
 
-.header-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
-}
 
-.status-cards {
-  margin-bottom: 24px;
-  padding: 0;
-}
-
+/* 规则管理容器 */
 .rules-manager-container {
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
   margin: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
 }
 
+/* 系统概览模态框 */
 .system-overview {
   max-height: 600px;
   overflow-y: auto;
 }
 
-.ant-statistic-content {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.ant-descriptions-title {
+:deep(.ant-descriptions-title) {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 16px;
+  color: #1e293b;
+}
+
+/* 快速筛选标签样式 */
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  border: 2px solid transparent;
+
+  /* 未选中状态 */
+  background: rgba(248, 250, 252, 0.8);
+  color: #64748b;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.filter-tag:hover {
+  background: rgba(241, 245, 249, 1);
+  color: #475569;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 选中状态 - 主要筛选 */
+.filter-tag-active {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border-color: #2563eb;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.filter-tag-active:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+/* 危险类型筛选 */
+.filter-tag-danger {
+  background: rgba(254, 242, 242, 0.8);
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.filter-tag-danger:hover {
+  background: rgba(254, 226, 226, 1);
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.filter-tag-danger-active {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border-color: #dc2626;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+}
+
+.filter-tag-danger-active:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+/* 成功类型筛选 */
+.filter-tag-success {
+  background: rgba(240, 253, 244, 0.8);
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.filter-tag-success:hover {
+  background: rgba(220, 252, 231, 1);
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.filter-tag-success-active {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  border-color: #16a34a;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+}
+
+.filter-tag-success-active:hover {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+}
+
+/* 筛选标签文本 */
+.filter-tag-text {
+  font-weight: 500;
+  letter-spacing: 0.025em;
+}
+
+/* 筛选标签计数 */
+.filter-tag-count {
+  font-size: 11px;
+  opacity: 0.8;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.filter-tag-active .filter-tag-count {
+  opacity: 0.9;
+}
+
+/* 按钮样式优化 */
+:deep(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+:deep(.ant-btn-primary) {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: none;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+:deep(.ant-btn-primary:hover) {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+/* 卡片样式优化 */
+:deep(.ant-card) {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.ant-card-head) {
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* 标签样式优化 */
+:deep(.ant-tag) {
+  border-radius: 6px;
+  font-weight: 500;
+  padding: 4px 12px;
+  font-size: 12px;
+  border: none;
+}
+
+/* 焦点状态（键盘导航） */
+.filter-tag:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* 活跃状态增强 */
+.filter-tag:active {
+  transform: translateY(0);
+  transition-duration: 0.1s;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .status-cards .ant-col {
-    margin-bottom: 12px;
+  .semantic-rules-view {
+    padding: 12px;
+  }
+  
+  .filter-tag {
+    padding: 5px 10px;
+    font-size: 11px;
   }
 
   .rules-manager-container {
     margin: 0;
+    border-radius: 6px;
   }
 }
 </style>

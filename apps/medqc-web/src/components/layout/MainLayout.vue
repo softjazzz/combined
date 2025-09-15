@@ -168,14 +168,14 @@
           <span class="text-white font-semibold ml-3 drop-shadow-sm">系统设置</span>
         </a-menu-item>
 
-        <!-- 保留原有的LLM质控演示功能 - 仅admin可见 -->
-        <a-menu-item key="/dashboard/llm-qc-demo" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+        <!-- 新的LLM质控演示增强版 - 仅admin可见 -->
+        <a-menu-item key="/dashboard/llm-qc-demo-enhanced" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <ExperimentOutlined class="text-white text-lg drop-shadow-sm" />
+            <div class="w-10 h-10 bg-gradient-to-br from-purple-500/30 to-blue-600/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-purple-300/30">
+              <ExperimentOutlined class="text-purple-100 text-lg drop-shadow-sm" />
             </div>
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">LLM质控演示</span>
+          <span class="text-white font-semibold ml-3 drop-shadow-sm">LLM质控演示增强版</span>
         </a-menu-item>
         </a-menu>
       </div>
@@ -349,8 +349,8 @@ const breadcrumbItems = computed(() => {
       case 'permissions':
         items.push({ title: '数据权限配置', path: null })
         break
-      case 'llm-qc-demo':
-        items.push({ title: 'LLM质控演示', path: null })
+      case 'llm-qc-demo-enhanced':
+        items.push({ title: 'LLM质控演示增强版', path: null })
         break
       default:
         items.push({ title: '仪表板', path: null })

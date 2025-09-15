@@ -1,6 +1,6 @@
 """
-医疗文书分类API
-支持层级化的文书分类和质控
+DEPRECATED: 医疗文书分类API（已由模块化版本替代）。
+此文件保留用于参考/兼容，不建议作为运行入口。
 """
 
 from fastapi import APIRouter, HTTPException, Depends

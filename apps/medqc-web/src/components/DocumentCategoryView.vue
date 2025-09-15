@@ -63,7 +63,49 @@
 
             <!-- 分类内容 -->
             <div class="category-content">
-              <div class="documents-grid">
+              <!-- 适用规则展示 -->
+              <div class="applicable-rules-section" v-if="getApplicableRules(category.category_code).length > 0">
+                <h4 class="rules-title">
+                  <ExperimentOutlined />
+                  适用质控规则 ({{ getApplicableRules(category.category_code).length }}条)
+                </h4>
+                <div class="rules-grid">
+                  <a-card
+                    v-for="rule in getApplicableRules(category.category_code)"
+                    :key="rule.rule_id"
+                    size="small"
+                    class="rule-card"
+                    hoverable
+                  >
+                    <div class="rule-header">
+                      <span class="rule-name">{{ rule.name }}</span>
+                      <div class="rule-tags">
+                        <a-tag size="small" :color="getCategoryColor(rule.category)">
+                          {{ getCategoryDisplayName(rule.category) }}
+                        </a-tag>
+                        <a-tag size="small" :color="getSeverityColor(rule.defect_level)">
+                          {{ getSeverityDisplayName(rule.defect_level) }}
+                        </a-tag>
+                      </div>
+                    </div>
+                    <div class="rule-description">
+                      {{ rule.description || '暂无描述' }}
+                    </div>
+                    <div class="rule-footer">
+                      <span class="rule-score">扣分: {{ rule.score_deduction || 0 }}分</span>
+                      <span class="rule-complexity">{{ rule.complexity || '中复杂度' }}</span>
+                    </div>
+                  </a-card>
+                </div>
+              </div>
+              
+              <!-- 文档列表 -->
+              <div class="documents-section">
+                <h4 class="documents-title" v-if="getApplicableRules(category.category_code).length > 0">
+                  <FileTextOutlined />
+                  文档列表 ({{ category.document_count }}个)
+                </h4>
+                <div class="documents-grid">
                 <a-card
                   v-for="document in category.documents"
                   :key="document.id"
@@ -180,6 +222,7 @@
                   </div>
                 </a-card>
               </div>
+              </div>
             </div>
           </a-collapse-panel>
         </a-collapse>
@@ -271,7 +314,8 @@ import {
   ExclamationCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
-  LoadingOutlined
+  LoadingOutlined,
+  FileTextOutlined
 } from '@ant-design/icons-vue'
 import AnalysisProgress from './qc/AnalysisProgress.vue'
 import QCResultDisplay from './qc/QCResultDisplay.vue'
@@ -306,6 +350,10 @@ const showQCResults = ref(false)
 const currentQCDocument = ref(null)
 const qcAnalysisResult = ref(null)
 
+// 质控规则相关数据
+const qcRules = ref([])
+const rulesByDocumentType = ref({})
+
 // 计算属性
 const aiClassifiedCount = computed(() => {
   let count = 0
@@ -318,6 +366,30 @@ const aiClassifiedCount = computed(() => {
 })
 
 // 方法
+const loadQCRules = async () => {
+  try {
+    const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+    const response = await fetch(`${baseURL}/api/qc/sichuan/rules?grouped=true`)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    rulesByDocumentType.value = data.rules_by_document_type || {}
+    
+    // 展平所有规则到 qcRules 数组
+    qcRules.value = []
+    Object.values(rulesByDocumentType.value).forEach(rules => {
+      qcRules.value.push(...rules)
+    })
+    
+  } catch (error) {
+    console.error('加载质控规则失败:', error)
+    // 不显示错误消息，静默失败
+  }
+}
+
 const loadDocuments = async () => {
   if (!props.recordId) return
 
@@ -331,6 +403,9 @@ const loadDocuments = async () => {
       fetch(`${baseURL}/api/medical-records/${props.recordId}/documents`),
       fetch(`${baseURL}/api/medical-records/${props.recordId}`)
     ])
+    
+    // 同时加载质控规则
+    await loadQCRules()
 
     if (!documentsResponse.ok) {
       throw new Error(`HTTP error! status: ${documentsResponse.status}`)
@@ -405,6 +480,67 @@ const getTypeTagColor = (typeCode) => {
     'operation_record': 'red'
   }
   return typeMap[typeCode] || 'default'
+}
+
+// 获取适用于某个文档分类的质控规则
+const getApplicableRules = (categoryCode) => {
+  // 映射文档分类代码到中文名称
+  const categoryMapping = {
+    'progress_note': '病程记录',
+    'operation_record': '手术记录',
+    'examination_report': '检查记录',
+    'admission_record': '入院记录',
+    'discharge_record': '出院记录'
+  }
+  
+  const chineseName = categoryMapping[categoryCode]
+  if (!chineseName) return []
+  
+  return rulesByDocumentType.value[chineseName] || []
+}
+
+// 获取分类颜色
+const getCategoryColor = (category) => {
+  const categoryColors = {
+    'completeness': 'blue',
+    'accuracy': 'green', 
+    'timeliness': 'orange',
+    'consistency': 'purple',
+    'compliance': 'red'
+  }
+  return categoryColors[category] || 'default'
+}
+
+// 获取分类显示名称
+const getCategoryDisplayName = (category) => {
+  const categoryNames = {
+    'completeness': '完整性',
+    'accuracy': '准确性',
+    'timeliness': '时效性', 
+    'consistency': '一致性',
+    'compliance': '合规性'
+  }
+  return categoryNames[category] || category
+}
+
+// 获取严重程度颜色
+const getSeverityColor = (severity) => {
+  const severityColors = {
+    'critical': 'red',
+    'major': 'orange',
+    'minor': 'blue'
+  }
+  return severityColors[severity] || 'default'
+}
+
+// 获取严重程度显示名称
+const getSeverityDisplayName = (severity) => {
+  const severityNames = {
+    'critical': '严重缺陷',
+    'major': '重要缺陷', 
+    'minor': '一般缺陷'
+  }
+  return severityNames[severity] || severity
 }
 
 // 兼容缺失的 type_info 或 type_name 字段
@@ -975,8 +1111,113 @@ watch(() => props.recordId, () => {
   overflow-y: auto;
 }
 
+/* 质控规则相关样式 */
+.applicable-rules-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.rules-title {
+  margin: 0 0 16px 0;
+  color: #495057;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.rule-card {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.rule-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.rule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.rule-name {
+  font-weight: 600;
+  color: #212529;
+  font-size: 14px;
+  line-height: 1.4;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.rule-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rule-description {
+  color: #6c757d;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rule-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #868e96;
+}
+
+.rule-score {
+  font-weight: 500;
+  color: #dc3545;
+}
+
+.rule-complexity {
+  color: #6c757d;
+}
+
+.documents-section {
+  margin-top: 16px;
+}
+
+.documents-title {
+  margin: 0 0 16px 0;
+  color: #495057;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 @media (max-width: 768px) {
   .documents-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .rules-grid {
     grid-template-columns: 1fr;
   }
   
@@ -989,6 +1230,16 @@ watch(() => props.recordId, () => {
   .summary-content {
     flex-direction: column;
     gap: 20px;
+  }
+  
+  .rule-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .rule-tags {
+    flex-direction: row;
   }
 }
 </style>

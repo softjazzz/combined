@@ -207,12 +207,16 @@ export const useAuthStore = defineStore('auth', () => {
 
       // 清除本地状态
       user.value = null
+      localStorage.removeItem('medqc_user')
+      localStorage.removeItem('medqc_authenticated')
 
       return { success: true }
     } catch (error) {
       console.error('登出失败:', error)
       // 即使API调用失败，也要清除本地状态
       user.value = null
+      localStorage.removeItem('medqc_user')
+      localStorage.removeItem('medqc_authenticated')
       return { success: true }
     } finally {
       loading.value = false

@@ -2,12 +2,14 @@
 
 export type RuleSeverity = 'info' | 'warn' | 'block'
 
-export type RuleType = 
-  | 'drug_age' 
-  | 'drug_gender' 
-  | 'visit_type' 
-  | 'hospital_level' 
-  | 'duration' 
+export type RuleType =
+  | 'drug_age'
+  | 'drug_gender'
+  | 'visit_type'
+  | 'drug_hospital_level'
+  | 'drug_insurance_type'
+  | 'hospital_level'
+  | 'duration'
   | 'surgery_pricing'
 
 export type RuleCategory = 

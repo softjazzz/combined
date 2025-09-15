@@ -38,4 +38,45 @@ export async function functionsPost(path: string, body: any): Promise<any> {
   return res.json()
 }
 
+// 创建统一的 functionsClient 对象
+export const functionsClient = {
+  invoke: async (functionName: string, options: {
+    path?: string
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    body?: any
+    query?: Record<string, string>
+  } = {}) => {
+    const { path = '', method = 'GET', body, query } = options
+
+    // 构建完整路径
+    let fullPath = `/${functionName}`
+    if (path) {
+      fullPath += path.startsWith('/') ? path : `/${path}`
+    }
+
+    // 添加查询参数
+    if (query && Object.keys(query).length > 0) {
+      const searchParams = new URLSearchParams(query)
+      fullPath += `?${searchParams.toString()}`
+    }
+
+    try {
+      if (method === 'GET') {
+        const data = await functionsGet(fullPath)
+        return { data, error: null }
+      } else {
+        const data = await functionsPost(fullPath, body)
+        return { data, error: null }
+      }
+    } catch (error) {
+      return {
+        data: null,
+        error: {
+          message: error instanceof Error ? error.message : 'Unknown error'
+        }
+      }
+    }
+  }
+}
+
 

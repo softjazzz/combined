@@ -78,6 +78,10 @@ else:
     logger.warning("Supabase 配置缺失，将使用内存存储")
 
 # 创建FastAPI应用
+"""
+DEPRECATED: This legacy monolithic entry is retained for history.
+Run the modern app via `uvicorn app.main:app`.
+"""
 app = FastAPI(
     title="医疗质控系统API",
     description="完整的医疗质控系统后端API服务，支持用户认证、医疗记录管理和质控分析",

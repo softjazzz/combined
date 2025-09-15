@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { functionsGet, functionsPost } from '@/services/functionsClient'
-import { evalExpression, renderMessage } from '@health-qc/rule-engine'
+import { evalExpression, renderMessage } from '@/utils/ruleEngine'
 
 export interface Pagination {
   page?: number
@@ -11,6 +11,93 @@ export interface DashboardStats {
   totalViolations: number
   bySeverity: Record<string, number>
   byRuleType: Record<string, number>
+}
+
+// 数据分析相关接口
+export interface TrendAnalysis {
+  trend: 'increasing' | 'decreasing' | 'stable'
+  slope: number
+  correlation: number
+  confidence: number
+}
+
+export interface TrendData {
+  date: string
+  block: number
+  warn: number
+  info: number
+  total: number
+  unique_visits: number
+  unique_rules: number
+  severity_rate: {
+    block_rate: number
+    warn_rate: number
+    info_rate: number
+  }
+}
+
+export interface ViolationAnalysis {
+  overview: {
+    total_violations: number
+    unique_visits: number
+    unique_rules: number
+    time_range: {
+      start: string
+      end: string
+      days: number
+    }
+  }
+  by_rule_type?: Array<{
+    rule_type: string
+    total_violations: number
+    severity_breakdown: {
+      block: number
+      warn: number
+      info: number
+    }
+    unique_rules: number
+    violation_rate: number
+  }>
+  severity_distribution: {
+    block: { count: number; rate: number }
+    warn: { count: number; rate: number }
+    info: { count: number; rate: number }
+  }
+  temporal_patterns: {
+    hourly_distribution: Array<{ hour: number; count: number }>
+    peak_hour: string
+  }
+  rule_efficiency: Array<{
+    code: string
+    name: string
+    rule_type: string
+    violations: number
+    unique_visits: number
+    efficiency_score: number
+  }>
+}
+
+export interface AnomalyDetection {
+  time_series: Array<{ date: string; violations: number }>
+  anomalies: Array<{
+    date: string
+    violations: number
+    z_score: number
+    severity: 'high' | 'low'
+  }>
+  statistics: {
+    mean: number
+    std_dev: number
+    min: number
+    max: number
+    total_anomalies: number
+    anomaly_rate: number
+  }
+  parameters: {
+    sensitivity_threshold: number
+    days_analyzed: number
+    detection_method: string
+  }
 }
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
@@ -63,7 +150,7 @@ export interface RuleHit {
 
 export async function evaluateRulesByDbContext(
   context: any,
-  eventType: string = 'drug_order'
+  eventType: string = 'order.drug.submit'
 ): Promise<{ hits: RuleHit[] }> {
   // 优先走 Edge Function
   try {
@@ -245,4 +332,112 @@ export async function fetchRulesOverview(): Promise<{ total: number; enabled: nu
   return { total, enabled, bySeverity }
 }
 
+// 数据分析API函数
+export async function fetchEnhancedTrends(params: {
+  days?: number
+  granularity?: 'day' | 'week' | 'month'
+  analysis?: boolean
+}): Promise<{
+  trends: TrendData[]
+  analysis?: {
+    total_trend: TrendAnalysis
+    block_trend: TrendAnalysis
+    warn_trend: TrendAnalysis
+    moving_averages: {
+      total_7day: number[]
+      block_7day: number[]
+      warn_7day: number[]
+    }
+    anomalies: {
+      total_anomalies: number[]
+      block_anomalies: number[]
+      warn_anomalies: number[]
+    }
+    summary: {
+      total_violations: number
+      avg_daily_violations: number
+      peak_day: string
+      peak_violations: number
+    }
+  }
+  metadata: {
+    granularity: string
+    days_analyzed: number
+    data_points: number
+    date_range: {
+      start: string
+      end: string
+    }
+  }
+}> {
+  const queryParams = new URLSearchParams()
+  if (params.days) queryParams.append('days', params.days.toString())
+  if (params.granularity) queryParams.append('granularity', params.granularity)
+  if (params.analysis) queryParams.append('analysis', 'true')
 
+  return await functionsGet(`/statistics/trends?${queryParams.toString()}`)
+}
+
+export async function fetchViolationAnalysis(params: {
+  range?: string
+  group_by?: 'rule_type' | 'severity'
+}): Promise<ViolationAnalysis> {
+  const queryParams = new URLSearchParams()
+  if (params.range) queryParams.append('range', params.range)
+  if (params.group_by) queryParams.append('group_by', params.group_by)
+
+  return await functionsGet(`/statistics/violations-analysis?${queryParams.toString()}`)
+}
+
+export async function fetchAnomalyDetection(params: {
+  days?: number
+  sensitivity?: number
+}): Promise<AnomalyDetection> {
+  const queryParams = new URLSearchParams()
+  if (params.days) queryParams.append('days', params.days.toString())
+  if (params.sensitivity) queryParams.append('sensitivity', params.sensitivity.toString())
+
+  return await functionsGet(`/statistics/anomaly-detection?${queryParams.toString()}`)
+}
+
+export async function fetchRulePerformanceMetrics(): Promise<{
+  rules: Array<{
+    ruleId: number
+    code: string
+    name: string
+    ruleType: string
+    totalViolations: number
+    blockCount: number
+    warnCount: number
+    infoCount: number
+  }>
+}> {
+  return await functionsGet('/statistics/rules')
+}
+
+// 便捷函数：获取完整的数据分析数据
+export async function fetchCompleteAnalytics(timeRange: string = '30d'): Promise<{
+  dashboard: DashboardStats
+  trends: TrendData[]
+  analysis: ViolationAnalysis
+  anomalies: AnomalyDetection
+  rules: any[]
+}> {
+  const days = parseInt(timeRange)
+
+  const [dashboard, trendsResult, analysis, anomalies, rulesResult] = await Promise.all([
+    fetchDashboardStats(),
+    fetchEnhancedTrends({ days, granularity: 'day', analysis: true }),
+    fetchViolationAnalysis({ range: timeRange, group_by: 'rule_type' }),
+    fetchAnomalyDetection({ days, sensitivity: 2.0 }),
+    fetchRulePerformanceMetrics()
+  ])
+
+  return {
+    dashboard,
+    trends: trendsResult.trends,
+    analysis,
+    anomalies,
+    rules: rulesResult.rules
+  }
+}

@@ -23,16 +23,66 @@ const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
-class TokenManager {
+export class TokenManager {
   private static readonly TOKEN_KEY = 'yibao_access_token'
   private static readonly REFRESH_TOKEN_KEY = 'yibao_refresh_token'
+  private static readonly USER_KEY = 'yibao_user'
+  private static readonly AUTH_FLAG_KEY = 'yibao_authenticated'
+  private static readonly TOKEN_EXP_AT_KEY = 'yibao_token_exp_at'
+  private static readonly RENEW_THRESHOLD_MS = 5 * 60 * 1000 // 5分钟内即将过期则刷新
+
   static getToken(): string | null { return localStorage.getItem(this.TOKEN_KEY) }
   static setToken(token: string): void { localStorage.setItem(this.TOKEN_KEY, token) }
   static getRefreshToken(): string | null { return localStorage.getItem(this.REFRESH_TOKEN_KEY) }
   static setRefreshToken(token: string): void { localStorage.setItem(this.REFRESH_TOKEN_KEY, token) }
   static clearTokens(): void { localStorage.removeItem(this.TOKEN_KEY); localStorage.removeItem(this.REFRESH_TOKEN_KEY) }
+
+  private static decodeExpMs(token: string | null | undefined): number {
+    if (!token) return 0
+    try { const payload = JSON.parse(atob(token.split('.')[1])); const exp = Number(payload.exp) || 0; return exp * 1000 } catch { return 0 }
+  }
+
   static isTokenExpired(token: string): boolean {
-    try { const payload = JSON.parse(atob(token.split('.')[1])); return payload.exp * 1000 < Date.now() } catch { return true }
+    const expMs = this.decodeExpMs(token)
+    return expMs === 0 ? true : expMs < Date.now()
+  }
+
+  static isRefreshTokenExpired(refreshToken: string): boolean {
+    const expMs = this.decodeExpMs(refreshToken)
+    return expMs === 0 ? true : expMs < Date.now()
+  }
+
+  static isAuthenticated(): boolean {
+    const t = this.getToken()
+    return t !== null && !this.isTokenExpired(t)
+  }
+
+  static shouldRefreshToken(token?: string | null): boolean {
+    const t = token ?? this.getToken()
+    const expMs = this.decodeExpMs(t)
+    if (!expMs) return true
+    const timeLeft = expMs - Date.now()
+    return timeLeft > 0 && timeLeft < this.RENEW_THRESHOLD_MS
+  }
+
+  static setTokenExpiration(expiresInSeconds: number): void {
+    const at = Date.now() + Math.max(0, Number(expiresInSeconds) || 0) * 1000
+    localStorage.setItem(this.TOKEN_EXP_AT_KEY, String(at))
+  }
+
+  static needsAutoRenewal(): boolean {
+    const v = localStorage.getItem(this.TOKEN_EXP_AT_KEY)
+    const expAt = v ? Number(v) : 0
+    if (!expAt) return false
+    const left = expAt - Date.now()
+    return left > 0 && left < this.RENEW_THRESHOLD_MS
+  }
+
+  static clearAuth(): void {
+    this.clearTokens()
+    localStorage.removeItem(this.USER_KEY)
+    localStorage.removeItem(this.AUTH_FLAG_KEY)
+    localStorage.removeItem(this.TOKEN_EXP_AT_KEY)
   }
 }
 
@@ -138,6 +188,31 @@ export class ApiService {
   }
 
   static isAuthenticated(): boolean { const token = TokenManager.getToken(); return token !== null && !TokenManager.isTokenExpired(token) }
+
+  // 读取缓存的用户（若存在）
+  static getCachedUser(): User | null {
+    try { const raw = localStorage.getItem('yibao_user'); return raw ? JSON.parse(raw) as User : null } catch { return null }
+  }
+
+  // 是否需要刷新访问令牌
+  static shouldRefreshToken(): boolean {
+    const token = TokenManager.getToken()
+    return TokenManager.shouldRefreshToken(token) || TokenManager.needsAutoRenewal()
+  }
+
+  // 刷新令牌
+  static async refreshToken(): Promise<boolean> {
+    try {
+      const refreshToken = TokenManager.getRefreshToken()
+      if (!refreshToken || TokenManager.isRefreshTokenExpired(refreshToken)) return false
+      const response = await apiClient.post('/api/auth/refresh', { refresh_token: refreshToken })
+      const { access_token, refresh_token: newRefreshToken, expires_in } = response.data || {}
+      if (access_token) TokenManager.setToken(access_token)
+      if (newRefreshToken) TokenManager.setRefreshToken(newRefreshToken)
+      if (expires_in) TokenManager.setTokenExpiration(Number(expires_in))
+      return !!access_token
+    } catch { return false }
+  }
 }
 
 // 创建一个实例供导入使用

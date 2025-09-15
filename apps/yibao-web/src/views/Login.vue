@@ -97,7 +97,7 @@
               <LoginForm ref="loginFormRef" :loading="loading" @login="onLogin" @forgot-password="onForgot" />
 
               <!-- 演示账号模块 -->
-              <DemoAccounts @select-account="onSelectDemoAccount" />
+              <DemoAccounts :loading="loading" @select-account="onSelectDemoAccount" />
             </div>
           </div>
         </section>
@@ -121,22 +121,31 @@ const error = computed(() => auth.error)
 const loginFormRef = ref()
 
 async function onLogin(payload: { email: string, password: string }) {
-  const ok = await auth.signInWithPassword(payload.email, payload.password)
-  if (ok) {
-    const redirect = (router.currentRoute.value.query.redirect as string) || '/dashboard'
+  const result = await auth.signInWithPassword(payload.email, payload.password)
+  if (result && result.success) {
+    let redirect = (router.currentRoute.value.query.redirect as string) || '/dashboard'
+    if (!redirect || redirect === '/' || redirect === '/login') {
+      redirect = '/dashboard'
+    }
     router.push(redirect)
   }
 }
 
 function onForgot() {}
 
-function onSelectDemoAccount(account: { email: string, password: string, role: string }) {
+async function onSelectDemoAccount(account: { email: string, password: string, role: string }) {
   // 使用 LoginForm 的 setFormData 方法填充表单
   if (loginFormRef.value) {
     loginFormRef.value.setFormData({
       email: account.email,
       password: account.password,
       role: account.role
+    })
+
+    // 自动触发登录流程
+    await onLogin({
+      email: account.email,
+      password: account.password
     })
   }
 }

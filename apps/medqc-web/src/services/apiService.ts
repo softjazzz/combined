@@ -17,9 +17,32 @@ import type {
 } from '@/types'
 
 // API基础配置
-// 开发环境建议将 VITE_API_BASE_URL 留空，使用同源相对路径交给 Vite 代理
 const ENV_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined
-const API_BASE_URL = ENV_BASE && ENV_BASE.trim() !== '' ? ENV_BASE : ''
+
+function computeBaseURL(): string {
+  // 优先使用环境变量
+  let base = ENV_BASE && ENV_BASE.trim() !== '' ? ENV_BASE.trim() : ''
+
+  // 开发环境使用vite代理，避免CORS问题
+  if (import.meta.env.DEV) {
+    return '' // 使用相对路径，通过vite代理转发到后端
+  }
+
+  try {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname
+      const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(host)
+      const isPrivateIPv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+      // 本地/内网环境强制指向本机后端，避免误用线上域名导致证书/跨域问题
+      if (isLocalHost || isPrivateIPv4) {
+        base = 'http://127.0.0.1:8001'
+      }
+    }
+  } catch {}
+  return base
+}
+
+const API_BASE_URL = computeBaseURL()
 const API_TIMEOUT = 30000 // 30秒超时
 
 // 调试信息
@@ -35,6 +58,9 @@ const apiClient: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+// 全局刷新控制，避免并发重复刷新与竞态
+let refreshPromise: Promise<string> | null = null
 
 // Token管理
 class TokenManager {
@@ -115,36 +141,51 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
       message: error.message
     })
 
-    // Token过期处理
+    // Token过期处理（带单航刷新，避免并发冲突）
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // 避免对登录/刷新接口自身进行循环处理
+      const url: string = originalRequest?.url || ''
+      if (url.includes('/api/auth/login') || url.includes('/api/auth/refresh')) {
+        return Promise.reject(error)
+      }
+
       originalRequest._retry = true
-      
+
       const refreshToken = TokenManager.getRefreshToken()
-      if (refreshToken) {
-        try {
-          const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
-            refresh_token: refreshToken
-          })
-          
-          const { access_token, refresh_token: newRefreshToken } = response.data
-          TokenManager.setToken(access_token)
-          if (newRefreshToken) {
-            TokenManager.setRefreshToken(newRefreshToken)
-          }
-          
-          // 重试原请求
-          originalRequest.headers.Authorization = `Bearer ${access_token}`
-          return apiClient(originalRequest)
-        } catch (refreshError) {
-          console.error('Token refresh failed:', refreshError)
-          TokenManager.clearTokens()
-          // 重定向到登录页
-          window.location.href = '/auth/login'
-          return Promise.reject(refreshError)
-        }
-      } else {
+      if (!refreshToken) {
+        // 无刷新令牌：清理并抛错，由上层处理登录跳转
         TokenManager.clearTokens()
-        window.location.href = '/auth/login'
+        return Promise.reject(error)
+      }
+
+      // 复用正在进行的刷新请求
+      if (!refreshPromise) {
+        refreshPromise = axios
+          .post(`${API_BASE_URL}/api/auth/refresh`, { refresh_token: refreshToken })
+          .then((response) => {
+            const { access_token, refresh_token: newRefreshToken } = response.data
+            if (access_token) TokenManager.setToken(access_token)
+            if (newRefreshToken) TokenManager.setRefreshToken(newRefreshToken)
+            return access_token as string
+          })
+          .catch((refreshError) => {
+            console.error('Token refresh failed:', refreshError)
+            TokenManager.clearTokens()
+            throw refreshError
+          })
+          .finally(() => {
+            refreshPromise = null
+          })
+      }
+
+      // 等待刷新完成后重试原请求
+      try {
+        const newAccessToken = await refreshPromise
+        originalRequest.headers = originalRequest.headers || {}
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+        return apiClient(originalRequest)
+      } catch (e) {
+        return Promise.reject(e)
       }
     }
 
@@ -879,7 +920,10 @@ export class ApiService {
    */
   static isAuthenticated(): boolean {
     const token = TokenManager.getToken()
-    return token !== null && !TokenManager.isTokenExpired(token)
+    const hasValidAccess = token !== null && !TokenManager.isTokenExpired(token)
+    // 若存在刷新令牌，则视为可恢复的已登录态，避免短暂重定向抖动
+    const hasRefresh = TokenManager.getRefreshToken() !== null
+    return hasValidAccess || hasRefresh
   }
 }
 

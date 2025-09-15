@@ -1,0 +1,4648 @@
+[
+  {
+    "record_id": "MR355906",
+    "created_at": "2025-09-11T15:25:31.388152",
+    "patient": {
+      "patient_id": "P893890",
+      "name": "刘二",
+      "age": 1,
+      "gender": "女",
+      "id_card": "86791632974261",
+      "phone": "13200965215",
+      "insurance_type": "新农合",
+      "insurance_number": "YB777049383"
+    },
+    "visit": {
+      "visit_id": "V694445",
+      "visit_type": "急诊",
+      "visit_date": "2025-05-24",
+      "department": "泌尿外科",
+      "doctor": "医生49",
+      "hospital_level": "三甲",
+      "admission_days": 5
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D175582",
+        "diagnosis_code": "ICD573",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O735350",
+        "drug_code": "DRUG5706",
+        "drug_name": "阿帕他胺片",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "6天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 139.12,
+        "quantity": 26,
+        "total_amount": 3617.12
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 3617.12,
+      "drug_count": 1,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR115008",
+    "created_at": "2025-09-11T15:25:31.388305",
+    "patient": {
+      "patient_id": "P696931",
+      "name": "李四",
+      "age": 63,
+      "gender": "女",
+      "id_card": "70110912484673",
+      "phone": "14225521139",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB399023724"
+    },
+    "visit": {
+      "visit_id": "V969443",
+      "visit_type": "住院",
+      "visit_date": "2025-06-04",
+      "department": "内科",
+      "doctor": "医生3",
+      "hospital_level": "二乙",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D144580",
+        "diagnosis_code": "ICD581",
+        "diagnosis_name": "过敏性鼻炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O700188",
+        "drug_code": "DRUG9265",
+        "drug_name": "阿帕他胺片",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "9天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 199.28,
+        "quantity": 13,
+        "total_amount": 2590.64
+      },
+      {
+        "order_id": "O608125",
+        "drug_code": "DRUG4457",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "10天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 157.3,
+        "quantity": 21,
+        "total_amount": 3303.3
+      },
+      {
+        "order_id": "O979119",
+        "drug_code": "DRUG4559",
+        "drug_name": "抗过敏药",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "8天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 114.59,
+        "quantity": 13,
+        "total_amount": 1489.67
+      },
+      {
+        "order_id": "O401823",
+        "drug_code": "DRUG4673",
+        "drug_name": "心脏病药",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "13天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 45.75,
+        "quantity": 8,
+        "total_amount": 366.0
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 7749.610000000001,
+      "drug_count": 4,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR297642",
+    "created_at": "2025-09-11T15:25:31.388425",
+    "patient": {
+      "patient_id": "P731227",
+      "name": "杨三",
+      "age": 62,
+      "gender": "女",
+      "id_card": "58916491902469",
+      "phone": "15416621845",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB645367298"
+    },
+    "visit": {
+      "visit_id": "V872770",
+      "visit_type": "门诊",
+      "visit_date": "2024-12-21",
+      "department": "神经内科",
+      "doctor": "医生20",
+      "hospital_level": "一级",
+      "admission_days": 46
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D415103",
+        "diagnosis_code": "ICD638",
+        "diagnosis_name": "湿疹",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D496523",
+        "diagnosis_code": "ICD186",
+        "diagnosis_name": "胃溃疡",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O190794",
+        "drug_code": "DRUG9272",
+        "drug_name": "阿帕他胺片",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "7天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 199.18,
+        "quantity": 23,
+        "total_amount": 4581.14
+      },
+      {
+        "order_id": "O684854",
+        "drug_code": "DRUG7766",
+        "drug_name": "降压药",
+        "dosage": "4片",
+        "frequency": "每日2次",
+        "duration": "11天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 34.35,
+        "quantity": 11,
+        "total_amount": 377.85
+      },
+      {
+        "order_id": "O159657",
+        "drug_code": "DRUG8773",
+        "drug_name": "奥美拉唑肠溶胶囊",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "8天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 125.3,
+        "quantity": 16,
+        "total_amount": 2004.8
+      },
+      {
+        "order_id": "O136430",
+        "drug_code": "DRUG6346",
+        "drug_name": "头孢克肟胶囊",
+        "dosage": "2片",
+        "frequency": "每8小时1次",
+        "duration": "13天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 198.58,
+        "quantity": 16,
+        "total_amount": 3177.28
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 10141.07,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR166684",
+    "created_at": "2025-09-11T15:25:31.388496",
+    "patient": {
+      "patient_id": "P677232",
+      "name": "马九",
+      "age": 28,
+      "gender": "女",
+      "id_card": "48086766378788",
+      "phone": "17414425514",
+      "insurance_type": "城镇居民",
+      "insurance_number": "YB788948379"
+    },
+    "visit": {
+      "visit_id": "V800125",
+      "visit_type": "体检",
+      "visit_date": "2024-10-25",
+      "department": "胸外科",
+      "doctor": "医生42",
+      "hospital_level": "一级",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D750672",
+        "diagnosis_code": "ICD620",
+        "diagnosis_name": "结膜炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O606559",
+        "drug_code": "DRUG7348",
+        "drug_name": "阿帕他胺片",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 126.02,
+        "quantity": 12,
+        "total_amount": 1512.24
+      },
+      {
+        "order_id": "O810141",
+        "drug_code": "DRUG2359",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "6天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 107.78,
+        "quantity": 16,
+        "total_amount": 1724.48
+      },
+      {
+        "order_id": "O509339",
+        "drug_code": "DRUG6308",
+        "drug_name": "止痛药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "3天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 185.81,
+        "quantity": 15,
+        "total_amount": 2787.15
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 6023.87,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR871364",
+    "created_at": "2025-09-11T15:25:31.388564",
+    "patient": {
+      "patient_id": "P327112",
+      "name": "罗十",
+      "age": 32,
+      "gender": "女",
+      "id_card": "53068673707647",
+      "phone": "14622810057",
+      "insurance_type": "城镇居民",
+      "insurance_number": "YB700178361"
+    },
+    "visit": {
+      "visit_id": "V615643",
+      "visit_type": "急诊",
+      "visit_date": "2024-09-29",
+      "department": "外科",
+      "doctor": "医生45",
+      "hospital_level": "一级",
+      "admission_days": 8
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D807997",
+        "diagnosis_code": "ICD582",
+        "diagnosis_name": "冠心病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D780480",
+        "diagnosis_code": "ICD523",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O292516",
+        "drug_code": "DRUG3703",
+        "drug_name": "阿帕他胺片",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "10天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 165.07,
+        "quantity": 7,
+        "total_amount": 1155.49
+      },
+      {
+        "order_id": "O516332",
+        "drug_code": "DRUG6500",
+        "drug_name": "胰岛素注射液",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "5天",
+        "route": "口服",
+        "category": "中药",
+        "unit_price": 90.11,
+        "quantity": 11,
+        "total_amount": 991.21
+      },
+      {
+        "order_id": "O992237",
+        "drug_code": "DRUG4721",
+        "drug_name": "甲硝唑片",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "5天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 66.12,
+        "quantity": 1,
+        "total_amount": 66.12
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 2212.82,
+      "drug_count": 3,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR583746",
+    "created_at": "2025-09-11T15:25:31.388622",
+    "patient": {
+      "patient_id": "P521166",
+      "name": "梁二",
+      "age": 62,
+      "gender": "女",
+      "id_card": "34716051333271",
+      "phone": "14160826580",
+      "insurance_type": "新农合",
+      "insurance_number": "YB655381733"
+    },
+    "visit": {
+      "visit_id": "V727108",
+      "visit_type": "体检",
+      "visit_date": "2024-12-13",
+      "department": "普外科",
+      "doctor": "医生32",
+      "hospital_level": "一级",
+      "admission_days": 4
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D460578",
+        "diagnosis_code": "ICD612",
+        "diagnosis_name": "关节炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D255605",
+        "diagnosis_code": "ICD194",
+        "diagnosis_name": "慢性支气管炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D299032",
+        "diagnosis_code": "ICD180",
+        "diagnosis_name": "慢性支气管炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O154348",
+        "drug_code": "DRUG5413",
+        "drug_name": "阿帕他胺片",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "6天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 89.05,
+        "quantity": 10,
+        "total_amount": 890.5
+      },
+      {
+        "order_id": "O881011",
+        "drug_code": "DRUG3457",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "4天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 88.71,
+        "quantity": 18,
+        "total_amount": 1596.78
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 2487.2799999999997,
+      "drug_count": 2,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR662681",
+    "created_at": "2025-09-11T15:25:31.388685",
+    "patient": {
+      "patient_id": "P693139",
+      "name": "孙八",
+      "age": 17,
+      "gender": "女",
+      "id_card": "19938838959429",
+      "phone": "19443199630",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB246311028"
+    },
+    "visit": {
+      "visit_id": "V764944",
+      "visit_type": "门诊",
+      "visit_date": "2025-08-21",
+      "department": "胸外科",
+      "doctor": "医生4",
+      "hospital_level": "二甲",
+      "admission_days": 22
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D494384",
+        "diagnosis_code": "ICD955",
+        "diagnosis_name": "结膜炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O867128",
+        "drug_code": "DRUG3328",
+        "drug_name": "阿帕他胺片",
+        "dosage": "1片",
+        "frequency": "每8小时1次",
+        "duration": "10天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 85.96,
+        "quantity": 7,
+        "total_amount": 601.72
+      },
+      {
+        "order_id": "O670597",
+        "drug_code": "DRUG7500",
+        "drug_name": "止痛药",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "11天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 166.4,
+        "quantity": 13,
+        "total_amount": 2163.2
+      },
+      {
+        "order_id": "O326493",
+        "drug_code": "DRUG7937",
+        "drug_name": "抗过敏药",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "13天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 49.02,
+        "quantity": 30,
+        "total_amount": 1470.6
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 4235.5199999999995,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "药品性别限制测试",
+      "rule_type": "drug_gender",
+      "expected_result": "block",
+      "description": "女性患者使用限男性药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR902247",
+    "created_at": "2025-09-11T15:25:31.388776",
+    "patient": {
+      "patient_id": "P414506",
+      "name": "梁二",
+      "age": 16,
+      "gender": "男",
+      "id_card": "37789738238799",
+      "phone": "18922889556",
+      "insurance_type": "其他",
+      "insurance_number": "YB189102233"
+    },
+    "visit": {
+      "visit_id": "V507215",
+      "visit_type": "住院",
+      "visit_date": "2024-09-24",
+      "department": "神经内科",
+      "doctor": "医生36",
+      "hospital_level": "三甲",
+      "admission_days": 34
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D402997",
+        "diagnosis_code": "ICD568",
+        "diagnosis_name": "肾结石",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D390546",
+        "diagnosis_code": "ICD184",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D461665",
+        "diagnosis_code": "ICD799",
+        "diagnosis_name": "慢性支气管炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O862895",
+        "drug_code": "DRUG5817",
+        "drug_name": "甲硝唑片",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "5天",
+        "route": "肌肉注射",
+        "category": "adult_only",
+        "unit_price": 107.93,
+        "quantity": 11,
+        "total_amount": 1187.23
+      },
+      {
+        "order_id": "O523862",
+        "drug_code": "DRUG2751",
+        "drug_name": "心脏病药",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 12.12,
+        "quantity": 17,
+        "total_amount": 206.04
+      },
+      {
+        "order_id": "O325033",
+        "drug_code": "DRUG4207",
+        "drug_name": "感冒药",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "10天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 111.32,
+        "quantity": 22,
+        "total_amount": 2449.04
+      },
+      {
+        "order_id": "O784976",
+        "drug_code": "DRUG8043",
+        "drug_name": "心脏病药",
+        "dosage": "4片",
+        "frequency": "每日2次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 81.59,
+        "quantity": 13,
+        "total_amount": 1060.67
+      },
+      {
+        "order_id": "O784306",
+        "drug_code": "DRUG7951",
+        "drug_name": "疤痕止痒软化乳膏",
+        "dosage": "2片",
+        "frequency": "每8小时1次",
+        "duration": "3天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 141.07,
+        "quantity": 3,
+        "total_amount": 423.21
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 5326.19,
+      "drug_count": 5,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR856896",
+    "created_at": "2025-09-11T15:25:31.388841",
+    "patient": {
+      "patient_id": "P119733",
+      "name": "王五",
+      "age": 16,
+      "gender": "女",
+      "id_card": "48889275775529",
+      "phone": "17367744374",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB134750983"
+    },
+    "visit": {
+      "visit_id": "V642874",
+      "visit_type": "体检",
+      "visit_date": "2024-10-09",
+      "department": "内分泌科",
+      "doctor": "医生27",
+      "hospital_level": "三乙",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D261055",
+        "diagnosis_code": "ICD205",
+        "diagnosis_name": "急性胃炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D282837",
+        "diagnosis_code": "ICD841",
+        "diagnosis_name": "上呼吸道感染",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D423334",
+        "diagnosis_code": "ICD716",
+        "diagnosis_name": "急性胃炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O480323",
+        "drug_code": "DRUG8041",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "5天",
+        "route": "静脉注射",
+        "category": "adult_only",
+        "unit_price": 56.7,
+        "quantity": 3,
+        "total_amount": 170.1
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 170.1,
+      "drug_count": 1,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR186860",
+    "created_at": "2025-09-11T15:25:31.388894",
+    "patient": {
+      "patient_id": "P650653",
+      "name": "韩五",
+      "age": 16,
+      "gender": "男",
+      "id_card": "38432682174724",
+      "phone": "17134147086",
+      "insurance_type": "自费",
+      "insurance_number": "YB441813837"
+    },
+    "visit": {
+      "visit_id": "V110552",
+      "visit_type": "门诊",
+      "visit_date": "2025-03-24",
+      "department": "肾内科",
+      "doctor": "医生37",
+      "hospital_level": "三甲",
+      "admission_days": 48
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D375117",
+        "diagnosis_code": "ICD366",
+        "diagnosis_name": "胆囊炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D192405",
+        "diagnosis_code": "ICD370",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O915438",
+        "drug_code": "DRUG1490",
+        "drug_name": "头孢克肟胶囊",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "10天",
+        "route": "肌肉注射",
+        "category": "adult_only",
+        "unit_price": 183.74,
+        "quantity": 16,
+        "total_amount": 2939.84
+      },
+      {
+        "order_id": "O429282",
+        "drug_code": "DRUG8793",
+        "drug_name": "消炎药",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "14天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 102.69,
+        "quantity": 20,
+        "total_amount": 2053.8
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 4993.64,
+      "drug_count": 2,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR472074",
+    "created_at": "2025-09-11T15:25:31.388965",
+    "patient": {
+      "patient_id": "P728754",
+      "name": "黄四",
+      "age": 16,
+      "gender": "男",
+      "id_card": "10454711612090",
+      "phone": "19503492120",
+      "insurance_type": "新农合",
+      "insurance_number": "YB749814991"
+    },
+    "visit": {
+      "visit_id": "V228360",
+      "visit_type": "住院",
+      "visit_date": "2025-02-01",
+      "department": "眼科",
+      "doctor": "医生27",
+      "hospital_level": "三甲",
+      "admission_days": 38
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D938285",
+        "diagnosis_code": "ICD580",
+        "diagnosis_name": "关节炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O782092",
+        "drug_code": "DRUG8815",
+        "drug_name": "维生素C片",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "adult_only",
+        "unit_price": 45.0,
+        "quantity": 16,
+        "total_amount": 720.0
+      },
+      {
+        "order_id": "O413772",
+        "drug_code": "DRUG7105",
+        "drug_name": "降压药",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "7天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 126.29,
+        "quantity": 17,
+        "total_amount": 2146.93
+      },
+      {
+        "order_id": "O881866",
+        "drug_code": "DRUG1184",
+        "drug_name": "头孢克肟胶囊",
+        "dosage": "1片",
+        "frequency": "每8小时1次",
+        "duration": "4天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 69.14,
+        "quantity": 14,
+        "total_amount": 967.96
+      },
+      {
+        "order_id": "O872694",
+        "drug_code": "DRUG4410",
+        "drug_name": "钙片",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "11天",
+        "route": "口服",
+        "category": "中药",
+        "unit_price": 186.14,
+        "quantity": 29,
+        "total_amount": 5398.06
+      },
+      {
+        "order_id": "O787218",
+        "drug_code": "DRUG7898",
+        "drug_name": "阿帕他胺片",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "8天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 47.85,
+        "quantity": 10,
+        "total_amount": 478.5
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 9711.45,
+      "drug_count": 5,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR575688",
+    "created_at": "2025-09-11T15:25:31.389030",
+    "patient": {
+      "patient_id": "P941377",
+      "name": "朱五",
+      "age": 16,
+      "gender": "男",
+      "id_card": "65181421689604",
+      "phone": "19671454057",
+      "insurance_type": "自费",
+      "insurance_number": "YB524649186"
+    },
+    "visit": {
+      "visit_id": "V649083",
+      "visit_type": "门诊",
+      "visit_date": "2025-05-09",
+      "department": "胸外科",
+      "doctor": "医生7",
+      "hospital_level": "二乙",
+      "admission_days": 5
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D465929",
+        "diagnosis_code": "ICD404",
+        "diagnosis_name": "关节炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D243305",
+        "diagnosis_code": "ICD788",
+        "diagnosis_name": "湿疹",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O304361",
+        "drug_code": "DRUG8280",
+        "drug_name": "消炎药",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "8天",
+        "route": "静脉注射",
+        "category": "adult_only",
+        "unit_price": 9.15,
+        "quantity": 12,
+        "total_amount": 109.8
+      },
+      {
+        "order_id": "O393510",
+        "drug_code": "DRUG1873",
+        "drug_name": "阿帕他胺片",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "6天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 133.01,
+        "quantity": 2,
+        "total_amount": 266.02
+      },
+      {
+        "order_id": "O118134",
+        "drug_code": "DRUG1586",
+        "drug_name": "抗过敏药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "3天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 31.83,
+        "quantity": 20,
+        "total_amount": 636.6
+      },
+      {
+        "order_id": "O873139",
+        "drug_code": "DRUG4020",
+        "drug_name": "消炎药",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "14天",
+        "route": "肌肉注射",
+        "category": "非处方药",
+        "unit_price": 10.87,
+        "quantity": 6,
+        "total_amount": 65.22
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 1077.64,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR325488",
+    "created_at": "2025-09-11T15:25:31.389080",
+    "patient": {
+      "patient_id": "P789833",
+      "name": "郭八",
+      "age": 16,
+      "gender": "男",
+      "id_card": "69382655497374",
+      "phone": "16678667736",
+      "insurance_type": "城镇居民",
+      "insurance_number": "YB199494456"
+    },
+    "visit": {
+      "visit_id": "V612773",
+      "visit_type": "住院",
+      "visit_date": "2025-02-23",
+      "department": "泌尿外科",
+      "doctor": "医生15",
+      "hospital_level": "三甲",
+      "admission_days": 50
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D134819",
+        "diagnosis_code": "ICD488",
+        "diagnosis_name": "上呼吸道感染",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D284636",
+        "diagnosis_code": "ICD668",
+        "diagnosis_name": "肾结石",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D400819",
+        "diagnosis_code": "ICD555",
+        "diagnosis_name": "腰椎间盘突出",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O965885",
+        "drug_code": "DRUG5839",
+        "drug_name": "奥美拉唑肠溶胶囊",
+        "dosage": "1片",
+        "frequency": "每8小时1次",
+        "duration": "6天",
+        "route": "肌肉注射",
+        "category": "adult_only",
+        "unit_price": 61.9,
+        "quantity": 3,
+        "total_amount": 185.7
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 185.7,
+      "drug_count": 1,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR332077",
+    "created_at": "2025-09-11T15:25:31.389144",
+    "patient": {
+      "patient_id": "P659194",
+      "name": "杨三",
+      "age": 16,
+      "gender": "男",
+      "id_card": "16790721104317",
+      "phone": "16547884297",
+      "insurance_type": "新农合",
+      "insurance_number": "YB502874802"
+    },
+    "visit": {
+      "visit_id": "V276868",
+      "visit_type": "体检",
+      "visit_date": "2025-02-18",
+      "department": "普外科",
+      "doctor": "医生47",
+      "hospital_level": "二甲",
+      "admission_days": 48
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D741066",
+        "diagnosis_code": "ICD921",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D381187",
+        "diagnosis_code": "ICD874",
+        "diagnosis_name": "腰椎间盘突出",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D109007",
+        "diagnosis_code": "ICD875",
+        "diagnosis_name": "颈椎病",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O393162",
+        "drug_code": "DRUG3540",
+        "drug_name": "奥美拉唑肠溶胶囊",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "4天",
+        "route": "静脉注射",
+        "category": "adult_only",
+        "unit_price": 168.29,
+        "quantity": 23,
+        "total_amount": 3870.67
+      },
+      {
+        "order_id": "O257676",
+        "drug_code": "DRUG8711",
+        "drug_name": "奥美拉唑肠溶胶囊",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 198.14,
+        "quantity": 25,
+        "total_amount": 4953.5
+      },
+      {
+        "order_id": "O411889",
+        "drug_code": "DRUG1037",
+        "drug_name": "心脏病药",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "9天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 183.18,
+        "quantity": 27,
+        "total_amount": 4945.86
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 13770.029999999999,
+      "drug_count": 3,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "药品年龄限制测试",
+      "rule_type": "drug_age",
+      "expected_result": "warn",
+      "description": "未成年人使用成人专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR931687",
+    "created_at": "2025-09-11T15:25:31.389210",
+    "patient": {
+      "patient_id": "P733325",
+      "name": "黄四",
+      "age": 25,
+      "gender": "男",
+      "id_card": "37374130076645",
+      "phone": "14344203915",
+      "insurance_type": "其他",
+      "insurance_number": "YB199572185"
+    },
+    "visit": {
+      "visit_id": "V710675",
+      "visit_type": "住院",
+      "visit_date": "2024-09-17",
+      "department": "内科",
+      "doctor": "医生9",
+      "hospital_level": "二甲",
+      "admission_days": 48
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D792609",
+        "diagnosis_code": "ICD658",
+        "diagnosis_name": "中耳炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D181701",
+        "diagnosis_code": "ICD407",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O719577",
+        "drug_code": "DRUG8727",
+        "drug_name": "止痛药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "12天",
+        "route": "外用",
+        "category": "children_only",
+        "unit_price": 129.8,
+        "quantity": 22,
+        "total_amount": 2855.6
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 2855.6,
+      "drug_count": 1,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR810058",
+    "created_at": "2025-09-11T15:25:31.389291",
+    "patient": {
+      "patient_id": "P319683",
+      "name": "郭八",
+      "age": 25,
+      "gender": "女",
+      "id_card": "41175475868100",
+      "phone": "15125412358",
+      "insurance_type": "其他",
+      "insurance_number": "YB551521131"
+    },
+    "visit": {
+      "visit_id": "V138485",
+      "visit_type": "体检",
+      "visit_date": "2024-10-23",
+      "department": "皮肤科",
+      "doctor": "医生31",
+      "hospital_level": "一级",
+      "admission_days": 14
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D648010",
+        "diagnosis_code": "ICD891",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D598288",
+        "diagnosis_code": "ICD986",
+        "diagnosis_name": "冠心病",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O766875",
+        "drug_code": "DRUG1794",
+        "drug_name": "降糖药",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "10天",
+        "route": "外用",
+        "category": "children_only",
+        "unit_price": 175.71,
+        "quantity": 15,
+        "total_amount": 2635.65
+      },
+      {
+        "order_id": "O343984",
+        "drug_code": "DRUG1369",
+        "drug_name": "抗过敏药",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "10天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 41.32,
+        "quantity": 24,
+        "total_amount": 991.68
+      },
+      {
+        "order_id": "O138760",
+        "drug_code": "DRUG2313",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "13天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 77.68,
+        "quantity": 15,
+        "total_amount": 1165.2
+      },
+      {
+        "order_id": "O299657",
+        "drug_code": "DRUG4049",
+        "drug_name": "心脏病药",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "10天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 161.08,
+        "quantity": 21,
+        "total_amount": 3382.68
+      },
+      {
+        "order_id": "O170560",
+        "drug_code": "DRUG8731",
+        "drug_name": "疤痕止痒软化乳膏",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 187.62,
+        "quantity": 12,
+        "total_amount": 2251.44
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 10426.65,
+      "drug_count": 5,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR470416",
+    "created_at": "2025-09-11T15:25:31.389347",
+    "patient": {
+      "patient_id": "P969371",
+      "name": "郭八",
+      "age": 25,
+      "gender": "女",
+      "id_card": "60127962530272",
+      "phone": "15325195366",
+      "insurance_type": "其他",
+      "insurance_number": "YB271938109"
+    },
+    "visit": {
+      "visit_id": "V775042",
+      "visit_type": "住院",
+      "visit_date": "2024-09-16",
+      "department": "内分泌科",
+      "doctor": "医生42",
+      "hospital_level": "二甲",
+      "admission_days": 41
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D731729",
+        "diagnosis_code": "ICD248",
+        "diagnosis_name": "上呼吸道感染",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D483354",
+        "diagnosis_code": "ICD870",
+        "diagnosis_name": "肾结石",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D299760",
+        "diagnosis_code": "ICD616",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O151065",
+        "drug_code": "DRUG5331",
+        "drug_name": "抗生素",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "10天",
+        "route": "外用",
+        "category": "children_only",
+        "unit_price": 16.64,
+        "quantity": 17,
+        "total_amount": 282.88
+      },
+      {
+        "order_id": "O934453",
+        "drug_code": "DRUG9079",
+        "drug_name": "铁剂",
+        "dosage": "2片",
+        "frequency": "每8小时1次",
+        "duration": "9天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 171.89,
+        "quantity": 18,
+        "total_amount": 3094.02
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 3376.9,
+      "drug_count": 2,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR804048",
+    "created_at": "2025-09-11T15:25:31.389402",
+    "patient": {
+      "patient_id": "P288864",
+      "name": "吴十",
+      "age": 25,
+      "gender": "男",
+      "id_card": "63642125669810",
+      "phone": "16350854237",
+      "insurance_type": "新农合",
+      "insurance_number": "YB213793931"
+    },
+    "visit": {
+      "visit_id": "V820564",
+      "visit_type": "体检",
+      "visit_date": "2025-01-16",
+      "department": "儿科",
+      "doctor": "医生17",
+      "hospital_level": "一级",
+      "admission_days": 32
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D508645",
+        "diagnosis_code": "ICD862",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O495397",
+        "drug_code": "DRUG6263",
+        "drug_name": "降压药",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "children_only",
+        "unit_price": 112.81,
+        "quantity": 3,
+        "total_amount": 338.43
+      },
+      {
+        "order_id": "O241875",
+        "drug_code": "DRUG5974",
+        "drug_name": "降糖药",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "3天",
+        "route": "口服",
+        "category": "中药",
+        "unit_price": 99.66,
+        "quantity": 2,
+        "total_amount": 199.32
+      },
+      {
+        "order_id": "O292047",
+        "drug_code": "DRUG5532",
+        "drug_name": "疤痕止痒软化乳膏",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "10天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 39.15,
+        "quantity": 11,
+        "total_amount": 430.65
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 968.4,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR585987",
+    "created_at": "2025-09-11T15:25:31.389471",
+    "patient": {
+      "patient_id": "P556990",
+      "name": "吴十",
+      "age": 25,
+      "gender": "女",
+      "id_card": "34847660342436",
+      "phone": "18740605591",
+      "insurance_type": "其他",
+      "insurance_number": "YB981843110"
+    },
+    "visit": {
+      "visit_id": "V804744",
+      "visit_type": "门诊",
+      "visit_date": "2025-04-27",
+      "department": "泌尿外科",
+      "doctor": "医生30",
+      "hospital_level": "三甲",
+      "admission_days": 45
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D871898",
+        "diagnosis_code": "ICD382",
+        "diagnosis_name": "颈椎病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D263254",
+        "diagnosis_code": "ICD869",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O214842",
+        "drug_code": "DRUG5448",
+        "drug_name": "抗生素",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "6天",
+        "route": "静脉注射",
+        "category": "children_only",
+        "unit_price": 150.95,
+        "quantity": 15,
+        "total_amount": 2264.25
+      },
+      {
+        "order_id": "O274372",
+        "drug_code": "DRUG9663",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "9天",
+        "route": "肌肉注射",
+        "category": "非处方药",
+        "unit_price": 146.43,
+        "quantity": 25,
+        "total_amount": 3660.75
+      },
+      {
+        "order_id": "O897055",
+        "drug_code": "DRUG1648",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "6天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 171.11,
+        "quantity": 29,
+        "total_amount": 4962.19
+      },
+      {
+        "order_id": "O306172",
+        "drug_code": "DRUG6027",
+        "drug_name": "阿帕他胺片",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "8天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 14.2,
+        "quantity": 12,
+        "total_amount": 170.4
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 11057.59,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR291043",
+    "created_at": "2025-09-11T15:25:31.389514",
+    "patient": {
+      "patient_id": "P672577",
+      "name": "黄四",
+      "age": 25,
+      "gender": "女",
+      "id_card": "11969637296954",
+      "phone": "15652695677",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB423332465"
+    },
+    "visit": {
+      "visit_id": "V141384",
+      "visit_type": "体检",
+      "visit_date": "2025-07-28",
+      "department": "胸外科",
+      "doctor": "医生25",
+      "hospital_level": "三甲",
+      "admission_days": 55
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D866710",
+        "diagnosis_code": "ICD932",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O333271",
+        "drug_code": "DRUG7382",
+        "drug_name": "降压药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "8天",
+        "route": "外用",
+        "category": "children_only",
+        "unit_price": 61.24,
+        "quantity": 14,
+        "total_amount": 857.36
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 857.36,
+      "drug_count": 1,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR684396",
+    "created_at": "2025-09-11T15:25:31.389581",
+    "patient": {
+      "patient_id": "P137251",
+      "name": "周九",
+      "age": 25,
+      "gender": "女",
+      "id_card": "86308577009620",
+      "phone": "15942211535",
+      "insurance_type": "其他",
+      "insurance_number": "YB682570959"
+    },
+    "visit": {
+      "visit_id": "V678380",
+      "visit_type": "住院",
+      "visit_date": "2024-10-20",
+      "department": "普外科",
+      "doctor": "医生3",
+      "hospital_level": "二甲",
+      "admission_days": 8
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D537793",
+        "diagnosis_code": "ICD971",
+        "diagnosis_name": "结膜炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D625760",
+        "diagnosis_code": "ICD480",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D579779",
+        "diagnosis_code": "ICD324",
+        "diagnosis_name": "胆囊炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O837670",
+        "drug_code": "DRUG3176",
+        "drug_name": "氯雷他定片",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "9天",
+        "route": "静脉注射",
+        "category": "children_only",
+        "unit_price": 20.27,
+        "quantity": 5,
+        "total_amount": 101.35
+      },
+      {
+        "order_id": "O782296",
+        "drug_code": "DRUG1319",
+        "drug_name": "感冒药",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "12天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 168.9,
+        "quantity": 14,
+        "total_amount": 2364.6
+      },
+      {
+        "order_id": "O944828",
+        "drug_code": "DRUG9084",
+        "drug_name": "奥美拉唑肠溶胶囊",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 196.43,
+        "quantity": 30,
+        "total_amount": 5892.9
+      },
+      {
+        "order_id": "O905895",
+        "drug_code": "DRUG5846",
+        "drug_name": "抗过敏药",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "10天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 130.02,
+        "quantity": 15,
+        "total_amount": 1950.3
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 10309.15,
+      "drug_count": 4,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "儿童专用药品测试",
+      "rule_type": "drug_children",
+      "expected_result": "block",
+      "description": "成人使用儿童专用药品，应触发拦截"
+    }
+  },
+  {
+    "record_id": "MR400216",
+    "created_at": "2025-09-11T15:25:31.389644",
+    "patient": {
+      "patient_id": "P776359",
+      "name": "李四",
+      "age": 42,
+      "gender": "男",
+      "id_card": "73677830691939",
+      "phone": "13317768335",
+      "insurance_type": "自费",
+      "insurance_number": "YB501344787"
+    },
+    "visit": {
+      "visit_id": "V925433",
+      "visit_type": "门诊",
+      "visit_date": "2025-02-07",
+      "department": "外科",
+      "doctor": "医生11",
+      "hospital_level": "一级",
+      "admission_days": 29
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D267107",
+        "diagnosis_code": "ICD809",
+        "diagnosis_name": "冠心病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O678529",
+        "drug_code": "DRUG1501",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 189.88,
+        "quantity": 18,
+        "total_amount": 3417.84
+      },
+      {
+        "order_id": "O427642",
+        "drug_code": "DRUG7302",
+        "drug_name": "氯雷他定片",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "4天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 36.43,
+        "quantity": 30,
+        "total_amount": 1092.9
+      },
+      {
+        "order_id": "O610710",
+        "drug_code": "DRUG5491",
+        "drug_name": "铁剂",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 186.58,
+        "quantity": 20,
+        "total_amount": 3731.6
+      },
+      {
+        "order_id": "O990715",
+        "drug_code": "DRUG4885",
+        "drug_name": "心脏病药",
+        "dosage": "2片",
+        "frequency": "每8小时1次",
+        "duration": "8天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 90.5,
+        "quantity": 17,
+        "total_amount": 1538.5
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 9780.84,
+      "drug_count": 4,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR524746",
+    "created_at": "2025-09-11T15:25:31.389709",
+    "patient": {
+      "patient_id": "P755138",
+      "name": "何七",
+      "age": 32,
+      "gender": "男",
+      "id_card": "46366253208936",
+      "phone": "13799820122",
+      "insurance_type": "自费",
+      "insurance_number": "YB348441140"
+    },
+    "visit": {
+      "visit_id": "V190842",
+      "visit_type": "住院",
+      "visit_date": "2024-11-18",
+      "department": "肾内科",
+      "doctor": "医生24",
+      "hospital_level": "三甲",
+      "admission_days": 31
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D677414",
+        "diagnosis_code": "ICD301",
+        "diagnosis_name": "胆囊炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D871108",
+        "diagnosis_code": "ICD431",
+        "diagnosis_name": "肺炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O445329",
+        "drug_code": "DRUG5705",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "7天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 47.62,
+        "quantity": 5,
+        "total_amount": 238.1
+      },
+      {
+        "order_id": "O876342",
+        "drug_code": "DRUG4514",
+        "drug_name": "阿帕他胺片",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "5天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 121.25,
+        "quantity": 24,
+        "total_amount": 2910.0
+      },
+      {
+        "order_id": "O184765",
+        "drug_code": "DRUG2277",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "4片",
+        "frequency": "每日2次",
+        "duration": "11天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 157.58,
+        "quantity": 5,
+        "total_amount": 787.9
+      },
+      {
+        "order_id": "O703259",
+        "drug_code": "DRUG7314",
+        "drug_name": "心脏病药",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "8天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 6.84,
+        "quantity": 30,
+        "total_amount": 205.2
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 4141.2,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR300223",
+    "created_at": "2025-09-11T15:25:31.389777",
+    "patient": {
+      "patient_id": "P546507",
+      "name": "梁二",
+      "age": 67,
+      "gender": "男",
+      "id_card": "39545168177654",
+      "phone": "15880270944",
+      "insurance_type": "自费",
+      "insurance_number": "YB557594254"
+    },
+    "visit": {
+      "visit_id": "V581320",
+      "visit_type": "住院",
+      "visit_date": "2024-10-26",
+      "department": "内科",
+      "doctor": "医生11",
+      "hospital_level": "一级",
+      "admission_days": 51
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D134452",
+        "diagnosis_code": "ICD179",
+        "diagnosis_name": "胆囊炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D379080",
+        "diagnosis_code": "ICD163",
+        "diagnosis_name": "关节炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O513915",
+        "drug_code": "DRUG9740",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "14天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 80.63,
+        "quantity": 17,
+        "total_amount": 1370.71
+      },
+      {
+        "order_id": "O527399",
+        "drug_code": "DRUG4919",
+        "drug_name": "复合维生素B片",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "11天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 113.89,
+        "quantity": 9,
+        "total_amount": 1025.01
+      },
+      {
+        "order_id": "O432871",
+        "drug_code": "DRUG7042",
+        "drug_name": "降压药",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "5天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 179.56,
+        "quantity": 9,
+        "total_amount": 1616.04
+      },
+      {
+        "order_id": "O433542",
+        "drug_code": "DRUG5971",
+        "drug_name": "心脏病药",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 106.67,
+        "quantity": 13,
+        "total_amount": 1386.71
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 5398.47,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR530923",
+    "created_at": "2025-09-11T15:25:31.389863",
+    "patient": {
+      "patient_id": "P261492",
+      "name": "朱五",
+      "age": 9,
+      "gender": "女",
+      "id_card": "26245690160648",
+      "phone": "17645730616",
+      "insurance_type": "自费",
+      "insurance_number": "YB210448577"
+    },
+    "visit": {
+      "visit_id": "V411216",
+      "visit_type": "住院",
+      "visit_date": "2025-03-21",
+      "department": "皮肤科",
+      "doctor": "医生46",
+      "hospital_level": "三甲",
+      "admission_days": 4
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D657749",
+        "diagnosis_code": "ICD551",
+        "diagnosis_name": "肺炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D527295",
+        "diagnosis_code": "ICD274",
+        "diagnosis_name": "结膜炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D709920",
+        "diagnosis_code": "ICD962",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O790217",
+        "drug_code": "DRUG2828",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "13天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 145.17,
+        "quantity": 29,
+        "total_amount": 4209.93
+      },
+      {
+        "order_id": "O857086",
+        "drug_code": "DRUG4293",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 125.9,
+        "quantity": 6,
+        "total_amount": 755.4
+      },
+      {
+        "order_id": "O835269",
+        "drug_code": "DRUG4217",
+        "drug_name": "消炎药",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "6天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 124.92,
+        "quantity": 20,
+        "total_amount": 2498.4
+      },
+      {
+        "order_id": "O453901",
+        "drug_code": "DRUG8906",
+        "drug_name": "抗生素",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "10天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 47.82,
+        "quantity": 15,
+        "total_amount": 717.3
+      },
+      {
+        "order_id": "O263874",
+        "drug_code": "DRUG8166",
+        "drug_name": "消炎药",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "9天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 84.11,
+        "quantity": 28,
+        "total_amount": 2355.08
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 10536.11,
+      "drug_count": 5,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR897231",
+    "created_at": "2025-09-11T15:25:31.389945",
+    "patient": {
+      "patient_id": "P618378",
+      "name": "陈一",
+      "age": 1,
+      "gender": "女",
+      "id_card": "33347996057564",
+      "phone": "15100180934",
+      "insurance_type": "自费",
+      "insurance_number": "YB276813963"
+    },
+    "visit": {
+      "visit_id": "V843202",
+      "visit_type": "急诊",
+      "visit_date": "2025-03-04",
+      "department": "神经外科",
+      "doctor": "医生26",
+      "hospital_level": "三甲",
+      "admission_days": 7
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D981279",
+        "diagnosis_code": "ICD252",
+        "diagnosis_name": "过敏性鼻炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D295089",
+        "diagnosis_code": "ICD392",
+        "diagnosis_name": "中耳炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D536568",
+        "diagnosis_code": "ICD422",
+        "diagnosis_name": "腰椎间盘突出",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O284654",
+        "drug_code": "DRUG9704",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "4天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 148.2,
+        "quantity": 21,
+        "total_amount": 3112.2
+      },
+      {
+        "order_id": "O225591",
+        "drug_code": "DRUG2984",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "7天",
+        "route": "口服",
+        "category": "生物制品",
+        "unit_price": 138.67,
+        "quantity": 1,
+        "total_amount": 138.67
+      },
+      {
+        "order_id": "O934748",
+        "drug_code": "DRUG5174",
+        "drug_name": "心脏病药",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "4天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 147.94,
+        "quantity": 3,
+        "total_amount": 443.82
+      },
+      {
+        "order_id": "O966086",
+        "drug_code": "DRUG9299",
+        "drug_name": "奥美拉唑肠溶胶囊",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "3天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 71.29,
+        "quantity": 22,
+        "total_amount": 1568.38
+      },
+      {
+        "order_id": "O293447",
+        "drug_code": "DRUG9557",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "11天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 106.04,
+        "quantity": 30,
+        "total_amount": 3181.2
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 8444.27,
+      "drug_count": 5,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR289889",
+    "created_at": "2025-09-11T15:25:31.390015",
+    "patient": {
+      "patient_id": "P709170",
+      "name": "张三",
+      "age": 27,
+      "gender": "男",
+      "id_card": "75039250263671",
+      "phone": "16483990710",
+      "insurance_type": "自费",
+      "insurance_number": "YB444814582"
+    },
+    "visit": {
+      "visit_id": "V473275",
+      "visit_type": "住院",
+      "visit_date": "2024-11-13",
+      "department": "消化内科",
+      "doctor": "医生2",
+      "hospital_level": "三甲",
+      "admission_days": 46
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D168608",
+        "diagnosis_code": "ICD404",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O465661",
+        "drug_code": "DRUG9836",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "12天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 58.71,
+        "quantity": 21,
+        "total_amount": 1232.91
+      },
+      {
+        "order_id": "O426052",
+        "drug_code": "DRUG2141",
+        "drug_name": "抗过敏药",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 129.52,
+        "quantity": 4,
+        "total_amount": 518.08
+      },
+      {
+        "order_id": "O894155",
+        "drug_code": "DRUG1016",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 74.59,
+        "quantity": 19,
+        "total_amount": 1417.21
+      },
+      {
+        "order_id": "O547001",
+        "drug_code": "DRUG3654",
+        "drug_name": "疤痕止痒软化乳膏",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "9天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 153.07,
+        "quantity": 29,
+        "total_amount": 4439.03
+      },
+      {
+        "order_id": "O557992",
+        "drug_code": "DRUG8797",
+        "drug_name": "胰岛素注射液",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 66.4,
+        "quantity": 23,
+        "total_amount": 1527.2
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 9134.43,
+      "drug_count": 5,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR178022",
+    "created_at": "2025-09-11T15:25:31.390067",
+    "patient": {
+      "patient_id": "P236125",
+      "name": "韩五",
+      "age": 79,
+      "gender": "女",
+      "id_card": "73355351411954",
+      "phone": "15920659389",
+      "insurance_type": "自费",
+      "insurance_number": "YB565912373"
+    },
+    "visit": {
+      "visit_id": "V315737",
+      "visit_type": "急诊",
+      "visit_date": "2024-09-15",
+      "department": "眼科",
+      "doctor": "医生45",
+      "hospital_level": "二甲",
+      "admission_days": 44
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D963697",
+        "diagnosis_code": "ICD450",
+        "diagnosis_name": "肾结石",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O399781",
+        "drug_code": "DRUG2336",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "14天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 185.42,
+        "quantity": 30,
+        "total_amount": 5562.6
+      },
+      {
+        "order_id": "O615684",
+        "drug_code": "DRUG1726",
+        "drug_name": "感冒药",
+        "dosage": "4片",
+        "frequency": "每日2次",
+        "duration": "9天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 190.31,
+        "quantity": 17,
+        "total_amount": 3235.27
+      },
+      {
+        "order_id": "O120316",
+        "drug_code": "DRUG3430",
+        "drug_name": "甲硝唑片",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 17.12,
+        "quantity": 4,
+        "total_amount": 68.48
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 8866.35,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "医保类型限制测试",
+      "rule_type": "drug_insurance_type",
+      "expected_result": "info",
+      "description": "自费患者使用特定药品，应触发信息提示"
+    }
+  },
+  {
+    "record_id": "MR286658",
+    "created_at": "2025-09-11T15:25:31.390128",
+    "patient": {
+      "patient_id": "P629309",
+      "name": "刘二",
+      "age": 64,
+      "gender": "男",
+      "id_card": "74594550001580",
+      "phone": "19558143726",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB176416786"
+    },
+    "visit": {
+      "visit_id": "V276700",
+      "visit_type": "门诊",
+      "visit_date": "2024-12-17",
+      "department": "神经外科",
+      "doctor": "医生38",
+      "hospital_level": "二乙",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D317095",
+        "diagnosis_code": "ICD156",
+        "diagnosis_name": "颈椎病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O708144",
+        "drug_code": "DRUG6576",
+        "drug_name": "氯雷他定片",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "肌肉注射",
+        "category": "inpatient_only",
+        "unit_price": 186.55,
+        "quantity": 27,
+        "total_amount": 5036.85
+      },
+      {
+        "order_id": "O170343",
+        "drug_code": "DRUG6216",
+        "drug_name": "心脏病药",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "12天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 38.06,
+        "quantity": 22,
+        "total_amount": 837.32
+      },
+      {
+        "order_id": "O637674",
+        "drug_code": "DRUG7589",
+        "drug_name": "胰岛素注射液",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "5天",
+        "route": "口服",
+        "category": "生物制品",
+        "unit_price": 75.77,
+        "quantity": 20,
+        "total_amount": 1515.4
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 7389.570000000001,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR803466",
+    "created_at": "2025-09-11T15:25:31.390182",
+    "patient": {
+      "patient_id": "P493982",
+      "name": "杨三",
+      "age": 75,
+      "gender": "女",
+      "id_card": "68691968464368",
+      "phone": "15590660882",
+      "insurance_type": "其他",
+      "insurance_number": "YB590515258"
+    },
+    "visit": {
+      "visit_id": "V889096",
+      "visit_type": "门诊",
+      "visit_date": "2024-09-17",
+      "department": "骨科",
+      "doctor": "医生25",
+      "hospital_level": "二甲",
+      "admission_days": 46
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D993711",
+        "diagnosis_code": "ICD204",
+        "diagnosis_name": "颈椎病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D149273",
+        "diagnosis_code": "ICD822",
+        "diagnosis_name": "湿疹",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D504858",
+        "diagnosis_code": "ICD407",
+        "diagnosis_name": "肾结石",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O431021",
+        "drug_code": "DRUG8250",
+        "drug_name": "阿帕他胺片",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "inpatient_only",
+        "unit_price": 146.33,
+        "quantity": 5,
+        "total_amount": 731.65
+      },
+      {
+        "order_id": "O684547",
+        "drug_code": "DRUG6573",
+        "drug_name": "氯雷他定片",
+        "dosage": "2片",
+        "frequency": "每8小时1次",
+        "duration": "7天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 110.49,
+        "quantity": 12,
+        "total_amount": 1325.88
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 2057.53,
+      "drug_count": 2,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR674711",
+    "created_at": "2025-09-11T15:25:31.390258",
+    "patient": {
+      "patient_id": "P624376",
+      "name": "郑三",
+      "age": 58,
+      "gender": "男",
+      "id_card": "35185865259910",
+      "phone": "15143282666",
+      "insurance_type": "新农合",
+      "insurance_number": "YB849181692"
+    },
+    "visit": {
+      "visit_id": "V955226",
+      "visit_type": "门诊",
+      "visit_date": "2025-01-22",
+      "department": "心内科",
+      "doctor": "医生30",
+      "hospital_level": "三甲",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D478380",
+        "diagnosis_code": "ICD959",
+        "diagnosis_name": "糖尿病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O633245",
+        "drug_code": "DRUG6115",
+        "drug_name": "胰岛素注射液",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "inpatient_only",
+        "unit_price": 191.76,
+        "quantity": 29,
+        "total_amount": 5561.04
+      },
+      {
+        "order_id": "O821608",
+        "drug_code": "DRUG3007",
+        "drug_name": "抗生素",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 173.13,
+        "quantity": 23,
+        "total_amount": 3981.99
+      },
+      {
+        "order_id": "O490068",
+        "drug_code": "DRUG8160",
+        "drug_name": "消炎药",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "9天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 54.13,
+        "quantity": 13,
+        "total_amount": 703.69
+      },
+      {
+        "order_id": "O537566",
+        "drug_code": "DRUG6556",
+        "drug_name": "铁剂",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 113.3,
+        "quantity": 29,
+        "total_amount": 3285.7
+      },
+      {
+        "order_id": "O426217",
+        "drug_code": "DRUG8478",
+        "drug_name": "氯雷他定片",
+        "dosage": "1片",
+        "frequency": "每8小时1次",
+        "duration": "5天",
+        "route": "口服",
+        "category": "生物制品",
+        "unit_price": 12.59,
+        "quantity": 20,
+        "total_amount": 251.8
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 13784.22,
+      "drug_count": 5,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR157223",
+    "created_at": "2025-09-11T15:25:31.390332",
+    "patient": {
+      "patient_id": "P637768",
+      "name": "罗十",
+      "age": 3,
+      "gender": "男",
+      "id_card": "55629264783555",
+      "phone": "19110090886",
+      "insurance_type": "新农合",
+      "insurance_number": "YB703091745"
+    },
+    "visit": {
+      "visit_id": "V156904",
+      "visit_type": "门诊",
+      "visit_date": "2025-01-23",
+      "department": "内分泌科",
+      "doctor": "医生5",
+      "hospital_level": "三甲",
+      "admission_days": 29
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D568117",
+        "diagnosis_code": "ICD361",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D770882",
+        "diagnosis_code": "ICD709",
+        "diagnosis_name": "肺炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O273678",
+        "drug_code": "DRUG6266",
+        "drug_name": "钙片",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "11天",
+        "route": "口服",
+        "category": "inpatient_only",
+        "unit_price": 176.42,
+        "quantity": 22,
+        "total_amount": 3881.24
+      },
+      {
+        "order_id": "O505449",
+        "drug_code": "DRUG3048",
+        "drug_name": "感冒药",
+        "dosage": "4片",
+        "frequency": "每日2次",
+        "duration": "10天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 114.23,
+        "quantity": 15,
+        "total_amount": 1713.45
+      },
+      {
+        "order_id": "O972068",
+        "drug_code": "DRUG8911",
+        "drug_name": "钙片",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 125.76,
+        "quantity": 29,
+        "total_amount": 3647.04
+      },
+      {
+        "order_id": "O255034",
+        "drug_code": "DRUG5406",
+        "drug_name": "氯雷他定片",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "4天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 125.9,
+        "quantity": 10,
+        "total_amount": 1259.0
+      },
+      {
+        "order_id": "O688299",
+        "drug_code": "DRUG7049",
+        "drug_name": "抗过敏药",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "9天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 49.15,
+        "quantity": 15,
+        "total_amount": 737.25
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 11237.98,
+      "drug_count": 5,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR667117",
+    "created_at": "2025-09-11T15:25:31.390381",
+    "patient": {
+      "patient_id": "P785885",
+      "name": "周九",
+      "age": 17,
+      "gender": "男",
+      "id_card": "52457346977949",
+      "phone": "13443996196",
+      "insurance_type": "其他",
+      "insurance_number": "YB590040612"
+    },
+    "visit": {
+      "visit_id": "V326389",
+      "visit_type": "门诊",
+      "visit_date": "2025-08-24",
+      "department": "胸外科",
+      "doctor": "医生3",
+      "hospital_level": "二甲",
+      "admission_days": 11
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D541298",
+        "diagnosis_code": "ICD341",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D240031",
+        "diagnosis_code": "ICD673",
+        "diagnosis_name": "胃溃疡",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D249217",
+        "diagnosis_code": "ICD923",
+        "diagnosis_name": "肺炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O434098",
+        "drug_code": "DRUG5314",
+        "drug_name": "抗过敏药",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "静脉注射",
+        "category": "inpatient_only",
+        "unit_price": 28.85,
+        "quantity": 5,
+        "total_amount": 144.25
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 144.25,
+      "drug_count": 1,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR713007",
+    "created_at": "2025-09-11T15:25:31.390449",
+    "patient": {
+      "patient_id": "P858220",
+      "name": "郭八",
+      "age": 21,
+      "gender": "男",
+      "id_card": "13179624486092",
+      "phone": "19667167016",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB581451962"
+    },
+    "visit": {
+      "visit_id": "V534831",
+      "visit_type": "门诊",
+      "visit_date": "2025-03-09",
+      "department": "皮肤科",
+      "doctor": "医生32",
+      "hospital_level": "二乙",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D365763",
+        "diagnosis_code": "ICD582",
+        "diagnosis_name": "肾结石",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O229928",
+        "drug_code": "DRUG9223",
+        "drug_name": "铁剂",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "10天",
+        "route": "外用",
+        "category": "inpatient_only",
+        "unit_price": 145.72,
+        "quantity": 2,
+        "total_amount": 291.44
+      },
+      {
+        "order_id": "O256493",
+        "drug_code": "DRUG4340",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "5天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 10.98,
+        "quantity": 18,
+        "total_amount": 197.64
+      },
+      {
+        "order_id": "O558365",
+        "drug_code": "DRUG5384",
+        "drug_name": "维生素C片",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "7天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 166.66,
+        "quantity": 29,
+        "total_amount": 4833.14
+      },
+      {
+        "order_id": "O895562",
+        "drug_code": "DRUG7108",
+        "drug_name": "抗过敏药",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "14天",
+        "route": "口服",
+        "category": "生物制品",
+        "unit_price": 198.74,
+        "quantity": 25,
+        "total_amount": 4968.5
+      },
+      {
+        "order_id": "O533762",
+        "drug_code": "DRUG2274",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "13天",
+        "route": "口服",
+        "category": "中药",
+        "unit_price": 129.79,
+        "quantity": 7,
+        "total_amount": 908.53
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 11199.25,
+      "drug_count": 5,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR293528",
+    "created_at": "2025-09-11T15:25:31.390520",
+    "patient": {
+      "patient_id": "P760325",
+      "name": "郑三",
+      "age": 36,
+      "gender": "男",
+      "id_card": "82947133590496",
+      "phone": "14663935113",
+      "insurance_type": "其他",
+      "insurance_number": "YB607815009"
+    },
+    "visit": {
+      "visit_id": "V364701",
+      "visit_type": "门诊",
+      "visit_date": "2024-11-06",
+      "department": "骨科",
+      "doctor": "医生30",
+      "hospital_level": "二乙",
+      "admission_days": 27
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D612667",
+        "diagnosis_code": "ICD771",
+        "diagnosis_name": "脂肪肝",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D588370",
+        "diagnosis_code": "ICD134",
+        "diagnosis_name": "胃溃疡",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O439137",
+        "drug_code": "DRUG6214",
+        "drug_name": "复合维生素B片",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "口服",
+        "category": "inpatient_only",
+        "unit_price": 65.39,
+        "quantity": 2,
+        "total_amount": 130.78
+      },
+      {
+        "order_id": "O400396",
+        "drug_code": "DRUG5433",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "13天",
+        "route": "肌肉注射",
+        "category": "非处方药",
+        "unit_price": 84.73,
+        "quantity": 25,
+        "total_amount": 2118.25
+      },
+      {
+        "order_id": "O195501",
+        "drug_code": "DRUG7591",
+        "drug_name": "止痛药",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "8天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 55.61,
+        "quantity": 18,
+        "total_amount": 1000.98
+      },
+      {
+        "order_id": "O980145",
+        "drug_code": "DRUG9940",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "10天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 124.31,
+        "quantity": 14,
+        "total_amount": 1740.34
+      },
+      {
+        "order_id": "O314520",
+        "drug_code": "DRUG7229",
+        "drug_name": "消炎药",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "6天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 185.67,
+        "quantity": 6,
+        "total_amount": 1114.02
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 6104.37,
+      "drug_count": 5,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "就诊方式限制测试",
+      "rule_type": "visit_type",
+      "expected_result": "warn",
+      "description": "门诊患者使用住院专用药品，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR523495",
+    "created_at": "2025-09-11T15:25:31.390573",
+    "patient": {
+      "patient_id": "P173069",
+      "name": "高一",
+      "age": 27,
+      "gender": "男",
+      "id_card": "43582290131329",
+      "phone": "19715566455",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB663977283"
+    },
+    "visit": {
+      "visit_id": "V902370",
+      "visit_type": "住院",
+      "visit_date": "2024-11-11",
+      "department": "急诊科",
+      "doctor": "医生48",
+      "hospital_level": "三乙",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D186032",
+        "diagnosis_code": "ICD587",
+        "diagnosis_name": "高血压",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O910069",
+        "drug_code": "DRUG4313",
+        "drug_name": "头孢克肟胶囊",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 6.1,
+        "quantity": 25,
+        "total_amount": 152.5
+      },
+      {
+        "order_id": "O914130",
+        "drug_code": "DRUG4267",
+        "drug_name": "疤痕止痒软化乳膏",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "4天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 173.62,
+        "quantity": 29,
+        "total_amount": 5034.98
+      },
+      {
+        "order_id": "O394292",
+        "drug_code": "DRUG6780",
+        "drug_name": "阿帕他胺片",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "10天",
+        "route": "肌肉注射",
+        "category": "生物制品",
+        "unit_price": 184.02,
+        "quantity": 3,
+        "total_amount": 552.06
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 5739.539999999999,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR500196",
+    "created_at": "2025-09-11T15:25:31.390700",
+    "patient": {
+      "patient_id": "P135648",
+      "name": "杨三",
+      "age": 54,
+      "gender": "女",
+      "id_card": "81550239935478",
+      "phone": "17526549880",
+      "insurance_type": "城镇居民",
+      "insurance_number": "YB129905046"
+    },
+    "visit": {
+      "visit_id": "V198477",
+      "visit_type": "住院",
+      "visit_date": "2025-03-27",
+      "department": "急诊科",
+      "doctor": "医生33",
+      "hospital_level": "三乙",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D946530",
+        "diagnosis_code": "ICD525",
+        "diagnosis_name": "腰椎间盘突出",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D350688",
+        "diagnosis_code": "ICD673",
+        "diagnosis_name": "中耳炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O211677",
+        "drug_code": "DRUG3757",
+        "drug_name": "铁剂",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "9天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 179.69,
+        "quantity": 25,
+        "total_amount": 4492.25
+      },
+      {
+        "order_id": "O171947",
+        "drug_code": "DRUG1690",
+        "drug_name": "复合维生素B片",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "3天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 104.91,
+        "quantity": 8,
+        "total_amount": 839.28
+      },
+      {
+        "order_id": "O986072",
+        "drug_code": "DRUG5246",
+        "drug_name": "铁剂",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 17.72,
+        "quantity": 10,
+        "total_amount": 177.2
+      },
+      {
+        "order_id": "O364501",
+        "drug_code": "DRUG8485",
+        "drug_name": "钙片",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "9天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 75.2,
+        "quantity": 13,
+        "total_amount": 977.6
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 6486.33,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR957695",
+    "created_at": "2025-09-11T15:25:31.390742",
+    "patient": {
+      "patient_id": "P765934",
+      "name": "马九",
+      "age": 88,
+      "gender": "女",
+      "id_card": "44029993482810",
+      "phone": "14173650849",
+      "insurance_type": "城镇居民",
+      "insurance_number": "YB774915755"
+    },
+    "visit": {
+      "visit_id": "V394289",
+      "visit_type": "住院",
+      "visit_date": "2024-10-13",
+      "department": "内科",
+      "doctor": "医生20",
+      "hospital_level": "二乙",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D694270",
+        "diagnosis_code": "ICD546",
+        "diagnosis_name": "冠心病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O337423",
+        "drug_code": "DRUG4591",
+        "drug_name": "铁剂",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "口服",
+        "category": "生物制品",
+        "unit_price": 83.9,
+        "quantity": 16,
+        "total_amount": 1342.4
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 1342.4,
+      "drug_count": 1,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR614658",
+    "created_at": "2025-09-11T15:25:31.390825",
+    "patient": {
+      "patient_id": "P788271",
+      "name": "何七",
+      "age": 13,
+      "gender": "男",
+      "id_card": "41049183470621",
+      "phone": "19549446659",
+      "insurance_type": "城镇居民",
+      "insurance_number": "YB143301012"
+    },
+    "visit": {
+      "visit_id": "V345771",
+      "visit_type": "住院",
+      "visit_date": "2025-06-12",
+      "department": "肾内科",
+      "doctor": "医生48",
+      "hospital_level": "三乙",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D142617",
+        "diagnosis_code": "ICD576",
+        "diagnosis_name": "关节炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D880984",
+        "diagnosis_code": "ICD372",
+        "diagnosis_name": "胆囊炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O832789",
+        "drug_code": "DRUG9344",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "4片",
+        "frequency": "每日2次",
+        "duration": "5天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 8.76,
+        "quantity": 7,
+        "total_amount": 61.32
+      },
+      {
+        "order_id": "O363399",
+        "drug_code": "DRUG4246",
+        "drug_name": "止痛药",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "6天",
+        "route": "肌肉注射",
+        "category": "中药",
+        "unit_price": 142.44,
+        "quantity": 8,
+        "total_amount": 1139.52
+      },
+      {
+        "order_id": "O644986",
+        "drug_code": "DRUG4856",
+        "drug_name": "抗生素",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 5.26,
+        "quantity": 23,
+        "total_amount": 120.98
+      },
+      {
+        "order_id": "O455572",
+        "drug_code": "DRUG6981",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "3天",
+        "route": "口服",
+        "category": "非处方药",
+        "unit_price": 198.02,
+        "quantity": 11,
+        "total_amount": 2178.22
+      },
+      {
+        "order_id": "O912583",
+        "drug_code": "DRUG9418",
+        "drug_name": "抗生素",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "9天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 192.87,
+        "quantity": 22,
+        "total_amount": 4243.14
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 7743.18,
+      "drug_count": 5,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR765260",
+    "created_at": "2025-09-11T15:25:31.390903",
+    "patient": {
+      "patient_id": "P388928",
+      "name": "朱五",
+      "age": 35,
+      "gender": "男",
+      "id_card": "28695928977656",
+      "phone": "15265948030",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB401660697"
+    },
+    "visit": {
+      "visit_id": "V423940",
+      "visit_type": "住院",
+      "visit_date": "2025-01-10",
+      "department": "消化内科",
+      "doctor": "医生12",
+      "hospital_level": "二乙",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D948166",
+        "diagnosis_code": "ICD272",
+        "diagnosis_name": "颈椎病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D862762",
+        "diagnosis_code": "ICD515",
+        "diagnosis_name": "肺炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D692082",
+        "diagnosis_code": "ICD197",
+        "diagnosis_name": "中耳炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O185528",
+        "drug_code": "DRUG7643",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "9天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 103.69,
+        "quantity": 24,
+        "total_amount": 2488.56
+      },
+      {
+        "order_id": "O684041",
+        "drug_code": "DRUG3452",
+        "drug_name": "感冒药",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "6天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 89.74,
+        "quantity": 15,
+        "total_amount": 1346.1
+      },
+      {
+        "order_id": "O299749",
+        "drug_code": "DRUG4848",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "3天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 122.48,
+        "quantity": 15,
+        "total_amount": 1837.2
+      },
+      {
+        "order_id": "O621736",
+        "drug_code": "DRUG8045",
+        "drug_name": "铁剂",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 56.69,
+        "quantity": 18,
+        "total_amount": 1020.42
+      },
+      {
+        "order_id": "O234497",
+        "drug_code": "DRUG1514",
+        "drug_name": "叶酸片",
+        "dosage": "3片",
+        "frequency": "每日2次",
+        "duration": "14天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 119.23,
+        "quantity": 14,
+        "total_amount": 1669.22
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 8361.5,
+      "drug_count": 5,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR259695",
+    "created_at": "2025-09-11T15:25:31.390963",
+    "patient": {
+      "patient_id": "P207808",
+      "name": "刘二",
+      "age": 3,
+      "gender": "女",
+      "id_card": "65516315916358",
+      "phone": "14561120303",
+      "insurance_type": "新农合",
+      "insurance_number": "YB369981837"
+    },
+    "visit": {
+      "visit_id": "V880732",
+      "visit_type": "住院",
+      "visit_date": "2025-07-01",
+      "department": "外科",
+      "doctor": "医生34",
+      "hospital_level": "一级",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D824736",
+        "diagnosis_code": "ICD602",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D966292",
+        "diagnosis_code": "ICD930",
+        "diagnosis_name": "慢性支气管炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O746368",
+        "drug_code": "DRUG6725",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "4片",
+        "frequency": "每日1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 199.44,
+        "quantity": 9,
+        "total_amount": 1794.96
+      },
+      {
+        "order_id": "O878896",
+        "drug_code": "DRUG8091",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "2片",
+        "frequency": "每日2次",
+        "duration": "7天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 175.06,
+        "quantity": 29,
+        "total_amount": 5076.74
+      },
+      {
+        "order_id": "O142418",
+        "drug_code": "DRUG3166",
+        "drug_name": "降糖药",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "14天",
+        "route": "外用",
+        "category": "生物制品",
+        "unit_price": 41.08,
+        "quantity": 27,
+        "total_amount": 1109.16
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 7980.86,
+      "drug_count": 3,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR482843",
+    "created_at": "2025-09-11T15:25:31.391027",
+    "patient": {
+      "patient_id": "P492096",
+      "name": "唐六",
+      "age": 45,
+      "gender": "男",
+      "id_card": "69057016876875",
+      "phone": "19780572636",
+      "insurance_type": "自费",
+      "insurance_number": "YB456746598"
+    },
+    "visit": {
+      "visit_id": "V774021",
+      "visit_type": "住院",
+      "visit_date": "2024-11-22",
+      "department": "心内科",
+      "doctor": "医生45",
+      "hospital_level": "三甲",
+      "admission_days": 35
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D937314",
+        "diagnosis_code": "ICD238",
+        "diagnosis_name": "关节炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D593431",
+        "diagnosis_code": "ICD478",
+        "diagnosis_name": "脂肪肝",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O338765",
+        "drug_code": "DRUG8295",
+        "drug_name": "铁剂",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "3天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 59.53,
+        "quantity": 28,
+        "total_amount": 1666.84
+      },
+      {
+        "order_id": "O982913",
+        "drug_code": "DRUG2866",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "14天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 12.89,
+        "quantity": 30,
+        "total_amount": 386.7
+      },
+      {
+        "order_id": "O939895",
+        "drug_code": "DRUG1427",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "13天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 143.85,
+        "quantity": 22,
+        "total_amount": 3164.7
+      },
+      {
+        "order_id": "O147664",
+        "drug_code": "DRUG7986",
+        "drug_name": "降压药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "13天",
+        "route": "肌肉注射",
+        "category": "非处方药",
+        "unit_price": 124.98,
+        "quantity": 3,
+        "total_amount": 374.94
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 5593.179999999999,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "住院天数超限测试",
+      "rule_type": "duration",
+      "expected_result": "warn",
+      "description": "住院天数超过30天，应触发警告"
+    }
+  },
+  {
+    "record_id": "MR883833",
+    "created_at": "2025-09-11T15:25:31.391067",
+    "patient": {
+      "patient_id": "P490784",
+      "name": "王五",
+      "age": 35,
+      "gender": "男",
+      "id_card": "29977482165927",
+      "phone": "16918593972",
+      "insurance_type": "其他",
+      "insurance_number": "YB397377573"
+    },
+    "visit": {
+      "visit_id": "V197209",
+      "visit_type": "门诊",
+      "visit_date": "2024-09-13",
+      "department": "整形外科",
+      "doctor": "医生12",
+      "hospital_level": "三甲",
+      "admission_days": 25
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D371897",
+        "diagnosis_code": "ICD181",
+        "diagnosis_name": "上呼吸道感染",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O831759",
+        "drug_code": "DRUG8983",
+        "drug_name": "头孢克肟胶囊",
+        "dosage": "2片",
+        "frequency": "每日1次",
+        "duration": "5天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 142.26,
+        "quantity": 9,
+        "total_amount": 1280.34
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 1280.34,
+      "drug_count": 1,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR598881",
+    "created_at": "2025-09-11T15:25:31.391110",
+    "patient": {
+      "patient_id": "P237283",
+      "name": "杨三",
+      "age": 35,
+      "gender": "男",
+      "id_card": "56958967853879",
+      "phone": "19451053750",
+      "insurance_type": "新农合",
+      "insurance_number": "YB989297766"
+    },
+    "visit": {
+      "visit_id": "V518195",
+      "visit_type": "门诊",
+      "visit_date": "2024-10-22",
+      "department": "呼吸内科",
+      "doctor": "医生31",
+      "hospital_level": "二甲",
+      "admission_days": 36
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D676361",
+        "diagnosis_code": "ICD602",
+        "diagnosis_name": "湿疹",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O703591",
+        "drug_code": "DRUG1963",
+        "drug_name": "胰岛素注射液",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "10天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 148.03,
+        "quantity": 25,
+        "total_amount": 3700.75
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 3700.75,
+      "drug_count": 1,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR661173",
+    "created_at": "2025-09-11T15:25:31.391168",
+    "patient": {
+      "patient_id": "P492408",
+      "name": "何七",
+      "age": 35,
+      "gender": "男",
+      "id_card": "36420696886843",
+      "phone": "17435621055",
+      "insurance_type": "自费",
+      "insurance_number": "YB997250497"
+    },
+    "visit": {
+      "visit_id": "V539141",
+      "visit_type": "门诊",
+      "visit_date": "2024-11-15",
+      "department": "呼吸内科",
+      "doctor": "医生28",
+      "hospital_level": "二甲",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D273304",
+        "diagnosis_code": "ICD621",
+        "diagnosis_name": "胃溃疡",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D587105",
+        "diagnosis_code": "ICD384",
+        "diagnosis_name": "过敏性鼻炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O740234",
+        "drug_code": "DRUG7848",
+        "drug_name": "止痛药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "12天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 97.03,
+        "quantity": 6,
+        "total_amount": 582.18
+      },
+      {
+        "order_id": "O416329",
+        "drug_code": "DRUG1870",
+        "drug_name": "甲硝唑片",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "口服",
+        "category": "处方药",
+        "unit_price": 58.33,
+        "quantity": 16,
+        "total_amount": 933.28
+      },
+      {
+        "order_id": "O996786",
+        "drug_code": "DRUG8041",
+        "drug_name": "抗生素",
+        "dosage": "2片",
+        "frequency": "每日3次",
+        "duration": "3天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 135.59,
+        "quantity": 21,
+        "total_amount": 2847.39
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 4362.849999999999,
+      "drug_count": 3,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR779603",
+    "created_at": "2025-09-11T15:25:31.391248",
+    "patient": {
+      "patient_id": "P362666",
+      "name": "郑三",
+      "age": 35,
+      "gender": "男",
+      "id_card": "42929523542125",
+      "phone": "13908369735",
+      "insurance_type": "自费",
+      "insurance_number": "YB450290864"
+    },
+    "visit": {
+      "visit_id": "V595256",
+      "visit_type": "门诊",
+      "visit_date": "2024-11-21",
+      "department": "胸外科",
+      "doctor": "医生47",
+      "hospital_level": "二乙",
+      "admission_days": 48
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D964015",
+        "diagnosis_code": "ICD827",
+        "diagnosis_name": "冠心病",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D260858",
+        "diagnosis_code": "ICD899",
+        "diagnosis_name": "中耳炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D284939",
+        "diagnosis_code": "ICD871",
+        "diagnosis_name": "慢性支气管炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O416283",
+        "drug_code": "DRUG2382",
+        "drug_name": "疤痕止痒软化膏",
+        "dosage": "2片",
+        "frequency": "每8小时1次",
+        "duration": "11天",
+        "route": "外用",
+        "category": "非处方药",
+        "unit_price": 103.98,
+        "quantity": 9,
+        "total_amount": 935.82
+      },
+      {
+        "order_id": "O869105",
+        "drug_code": "DRUG4906",
+        "drug_name": "布洛芬缓释胶囊",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "静脉注射",
+        "category": "生物制品",
+        "unit_price": 137.44,
+        "quantity": 18,
+        "total_amount": 2473.92
+      },
+      {
+        "order_id": "O545172",
+        "drug_code": "DRUG4524",
+        "drug_name": "钙片",
+        "dosage": "3片",
+        "frequency": "每8小时1次",
+        "duration": "13天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 159.49,
+        "quantity": 12,
+        "total_amount": 1913.88
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 5323.62,
+      "drug_count": 3,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR293695",
+    "created_at": "2025-09-11T15:25:31.391294",
+    "patient": {
+      "patient_id": "P227010",
+      "name": "郭八",
+      "age": 35,
+      "gender": "男",
+      "id_card": "38014756908860",
+      "phone": "15868810450",
+      "insurance_type": "自费",
+      "insurance_number": "YB374945640"
+    },
+    "visit": {
+      "visit_id": "V114995",
+      "visit_type": "门诊",
+      "visit_date": "2025-05-31",
+      "department": "泌尿外科",
+      "doctor": "医生8",
+      "hospital_level": "二甲",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D724632",
+        "diagnosis_code": "ICD504",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D634400",
+        "diagnosis_code": "ICD914",
+        "diagnosis_name": "上呼吸道感染",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D436212",
+        "diagnosis_code": "ICD414",
+        "diagnosis_name": "糖尿病",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O866067",
+        "drug_code": "DRUG4359",
+        "drug_name": "感冒药",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "10天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 47.66,
+        "quantity": 13,
+        "total_amount": 619.58
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 619.58,
+      "drug_count": 1,
+      "diagnosis_count": 3
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR304001",
+    "created_at": "2025-09-11T15:25:31.391347",
+    "patient": {
+      "patient_id": "P503047",
+      "name": "郑三",
+      "age": 35,
+      "gender": "男",
+      "id_card": "59189268223301",
+      "phone": "18535479417",
+      "insurance_type": "城镇职工",
+      "insurance_number": "YB309412698"
+    },
+    "visit": {
+      "visit_id": "V895306",
+      "visit_type": "门诊",
+      "visit_date": "2024-10-04",
+      "department": "心内科",
+      "doctor": "医生18",
+      "hospital_level": "二乙",
+      "admission_days": 58
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D467602",
+        "diagnosis_code": "ICD309",
+        "diagnosis_name": "肺炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D120297",
+        "diagnosis_code": "ICD837",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O522072",
+        "drug_code": "DRUG8595",
+        "drug_name": "抗过敏药",
+        "dosage": "1片",
+        "frequency": "每8小时1次",
+        "duration": "3天",
+        "route": "口服",
+        "category": "生物制品",
+        "unit_price": 180.73,
+        "quantity": 26,
+        "total_amount": 4698.98
+      },
+      {
+        "order_id": "O448904",
+        "drug_code": "DRUG3090",
+        "drug_name": "阿莫西林胶囊",
+        "dosage": "4片",
+        "frequency": "每日3次",
+        "duration": "8天",
+        "route": "肌肉注射",
+        "category": "处方药",
+        "unit_price": 195.08,
+        "quantity": 12,
+        "total_amount": 2340.96
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 7039.94,
+      "drug_count": 2,
+      "diagnosis_count": 2
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR522349",
+    "created_at": "2025-09-11T15:25:31.391400",
+    "patient": {
+      "patient_id": "P576242",
+      "name": "张三",
+      "age": 35,
+      "gender": "男",
+      "id_card": "86410043428940",
+      "phone": "17625893842",
+      "insurance_type": "其他",
+      "insurance_number": "YB788223073"
+    },
+    "visit": {
+      "visit_id": "V118319",
+      "visit_type": "门诊",
+      "visit_date": "2024-10-18",
+      "department": "神经外科",
+      "doctor": "医生49",
+      "hospital_level": "一级",
+      "admission_days": null
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D200344",
+        "diagnosis_code": "ICD828",
+        "diagnosis_name": "上呼吸道感染",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O376967",
+        "drug_code": "DRUG6542",
+        "drug_name": "消炎药",
+        "dosage": "3片",
+        "frequency": "每日1次",
+        "duration": "6天",
+        "route": "外用",
+        "category": "中药",
+        "unit_price": 97.42,
+        "quantity": 5,
+        "total_amount": 487.1
+      },
+      {
+        "order_id": "O591853",
+        "drug_code": "DRUG1132",
+        "drug_name": "对乙酰氨基酚片",
+        "dosage": "1片",
+        "frequency": "每日1次",
+        "duration": "13天",
+        "route": "肌肉注射",
+        "category": "非处方药",
+        "unit_price": 43.27,
+        "quantity": 25,
+        "total_amount": 1081.75
+      },
+      {
+        "order_id": "O377412",
+        "drug_code": "DRUG6243",
+        "drug_name": "胰岛素注射液",
+        "dosage": "4片",
+        "frequency": "每8小时1次",
+        "duration": "5天",
+        "route": "静脉注射",
+        "category": "中药",
+        "unit_price": 199.75,
+        "quantity": 23,
+        "total_amount": 4594.25
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 6163.1,
+      "drug_count": 3,
+      "diagnosis_count": 1
+    },
+    "test_scenario": {
+      "name": "正常通过测试",
+      "rule_type": "normal",
+      "expected_result": "pass",
+      "description": "正常情况，应该通过所有规则检查"
+    }
+  },
+  {
+    "record_id": "MR450104",
+    "created_at": "2025-09-11T15:25:31.391466",
+    "patient": {
+      "patient_id": "P779559",
+      "name": "唐六",
+      "age": 63,
+      "gender": "男",
+      "id_card": "95832897839770",
+      "phone": "14485348820",
+      "insurance_type": "新农合",
+      "insurance_number": "YB667773422"
+    },
+    "visit": {
+      "visit_id": "V234896",
+      "visit_type": "住院",
+      "visit_date": "2025-07-21",
+      "department": "胸外科",
+      "doctor": "医生31",
+      "hospital_level": "三甲",
+      "admission_days": 36
+    },
+    "diagnoses": [
+      {
+        "diagnosis_id": "D240456",
+        "diagnosis_code": "ICD570",
+        "diagnosis_name": "皮炎",
+        "diagnosis_type": "主要诊断",
+        "diagnosis_date": "2025-09-11"
+      },
+      {
+        "diagnosis_id": "D466943",
+        "diagnosis_code": "ICD872",
+        "diagnosis_name": "十二指肠溃疡",
+        "diagnosis_type": "次要诊断",
+        "diagnosis_date": "2025-09-11"
+      }
+    ],
+    "drug_orders": [
+      {
+        "order_id": "O750937",
+        "drug_code": "DRUG4574",
+        "drug_name": "心脏病药",
+        "dosage": "1片",
+        "frequency": "每日2次",
+        "duration": "14天",
+        "route": "外用",
+        "category": "处方药",
+        "unit_price": 41.38,
+        "quantity": 20,
+        "total_amount": 827.6
+      },
+      {
+        "order_id": "O377033",
+        "drug_code": "DRUG8395",
+        "drug_name": "钙片",
+        "dosage": "1片",
+        "frequency": "每日3次",
+        "duration": "9天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 88.15,
+        "quantity": 10,
+        "total_amount": 881.5
+      },
+      {
+        "order_id": "O847707",
+        "drug_code": "DRUG1349",
+        "drug_name": "氯雷他定片",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "8天",
+        "route": "静脉注射",
+        "category": "处方药",
+        "unit_price": 192.32,
+        "quantity": 28,
+        "total_amount": 5384.96
+      },
+      {
+        "order_id": "O417664",
+        "drug_code": "DRUG8665",
+        "drug_name": "感冒药",
+        "dosage": "3片",
+        "frequency": "每日3次",
+        "duration": "7天",
+        "route": "静脉注射",
+        "category": "非处方药",
+        "unit_price": 127.15,
+        "quantity": 9,
+        "total_amount": 1144.35
+      }
+    ],
+    "summary": {
+      "total_drug_cost": 8238.41,
+      "drug_count": 4,
+      "diagnosis_count": 2
+    }
+  }
+]

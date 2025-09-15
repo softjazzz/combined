@@ -1,0 +1,3820 @@
+{
+  "test_suite_id": "TS_20250911_152745",
+  "created_at": "2025-09-11T15:27:45.845339",
+  "description": "基于1173条医保规则生成的测试套件",
+  "rule_types_stats": {
+    "drug_insurance_type": 12,
+    "drug_age": 30,
+    "drug_hospital_level": 61,
+    "service_gender": 390,
+    "drug_visit_type": 27,
+    "drug_children_only": 229,
+    "drug_gender": 384,
+    "drug_payment_course": 29,
+    "drug_children_limit": 11
+  },
+  "test_cases": [
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_001_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_001",
+      "rule_name": "疤痕止痒软化膏 - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发疤痕止痒软化膏 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P927412",
+        "name": "测试患者930",
+        "age": 30,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB955741451"
+      },
+      "visit": {
+        "visit_id": "V349605",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O465585",
+          "drug_code": "DRUG7257",
+          "drug_name": "疤痕止痒软化膏",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_001_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_001",
+      "rule_name": "疤痕止痒软化膏 - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发疤痕止痒软化膏 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P748202",
+        "name": "测试患者432",
+        "age": 54,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB893196414"
+      },
+      "visit": {
+        "visit_id": "V432314",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O180237",
+          "drug_code": "DRUG4412",
+          "drug_name": "疤痕止痒软化膏",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_002_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_002",
+      "rule_name": "疤痕止痒软化乳膏 - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发疤痕止痒软化乳膏 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P650084",
+        "name": "测试患者662",
+        "age": 27,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB298420514"
+      },
+      "visit": {
+        "visit_id": "V294146",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O752927",
+          "drug_code": "DRUG7275",
+          "drug_name": "疤痕止痒软化乳膏",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_002_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_002",
+      "rule_name": "疤痕止痒软化乳膏 - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发疤痕止痒软化乳膏 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P506649",
+        "name": "测试患者855",
+        "age": 24,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB840486246"
+      },
+      "visit": {
+        "visit_id": "V411469",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O277667",
+          "drug_code": "DRUG7475",
+          "drug_name": "疤痕止痒软化乳膏",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_003_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_003",
+      "rule_name": "冻干人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发冻干人用狂犬病疫苗(Vero细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P569282",
+        "name": "测试患者843",
+        "age": 56,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB960677478"
+      },
+      "visit": {
+        "visit_id": "V120097",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O321628",
+          "drug_code": "DRUG5342",
+          "drug_name": "冻干人用狂犬病疫苗(Vero细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_003_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_003",
+      "rule_name": "冻干人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发冻干人用狂犬病疫苗(Vero细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P820725",
+        "name": "测试患者620",
+        "age": 24,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB846010535"
+      },
+      "visit": {
+        "visit_id": "V703515",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O897434",
+          "drug_code": "DRUG1204",
+          "drug_name": "冻干人用狂犬病疫苗(Vero细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_004_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_004",
+      "rule_name": "冻干人用狂犬病疫苗(人二倍体细胞) - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发冻干人用狂犬病疫苗(人二倍体细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P182311",
+        "name": "测试患者353",
+        "age": 30,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB373936894"
+      },
+      "visit": {
+        "visit_id": "V971278",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O318989",
+          "drug_code": "DRUG3841",
+          "drug_name": "冻干人用狂犬病疫苗(人二倍体细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_004_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_004",
+      "rule_name": "冻干人用狂犬病疫苗(人二倍体细胞) - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发冻干人用狂犬病疫苗(人二倍体细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P268823",
+        "name": "测试患者731",
+        "age": 49,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB350676660"
+      },
+      "visit": {
+        "visit_id": "V610797",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O470815",
+          "drug_code": "DRUG8675",
+          "drug_name": "冻干人用狂犬病疫苗(人二倍体细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_005_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_005",
+      "rule_name": "氢醌乳膏 - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发氢醌乳膏 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P321941",
+        "name": "测试患者428",
+        "age": 58,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB303351342"
+      },
+      "visit": {
+        "visit_id": "V174645",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O444211",
+          "drug_code": "DRUG6583",
+          "drug_name": "氢醌乳膏",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_005_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_005",
+      "rule_name": "氢醌乳膏 - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发氢醌乳膏 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P354138",
+        "name": "测试患者343",
+        "age": 55,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB434802016"
+      },
+      "visit": {
+        "visit_id": "V233224",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O574796",
+          "drug_code": "DRUG5209",
+          "drug_name": "氢醌乳膏",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_006_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_006",
+      "rule_name": "人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发人用狂犬病疫苗(Vero细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P981134",
+        "name": "测试患者130",
+        "age": 59,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB554265474"
+      },
+      "visit": {
+        "visit_id": "V878795",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O445945",
+          "drug_code": "DRUG6553",
+          "drug_name": "人用狂犬病疫苗(Vero细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_006_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_006",
+      "rule_name": "人用狂犬病疫苗(Vero细胞) - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发人用狂犬病疫苗(Vero细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P213045",
+        "name": "测试患者754",
+        "age": 52,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB751784809"
+      },
+      "visit": {
+        "visit_id": "V356659",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O453118",
+          "drug_code": "DRUG2871",
+          "drug_name": "人用狂犬病疫苗(Vero细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_007_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_007",
+      "rule_name": "人用狂犬病疫苗(地鼠肾细胞) - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发人用狂犬病疫苗(地鼠肾细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P797542",
+        "name": "测试患者868",
+        "age": 28,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB485745590"
+      },
+      "visit": {
+        "visit_id": "V858244",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O668818",
+          "drug_code": "DRUG1985",
+          "drug_name": "人用狂犬病疫苗(地鼠肾细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_007_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_007",
+      "rule_name": "人用狂犬病疫苗(地鼠肾细胞) - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发人用狂犬病疫苗(地鼠肾细胞) - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P817897",
+        "name": "测试患者237",
+        "age": 49,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB222108993"
+      },
+      "visit": {
+        "visit_id": "V492183",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O636020",
+          "drug_code": "DRUG6764",
+          "drug_name": "人用狂犬病疫苗(地鼠肾细胞)",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_008_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_008",
+      "rule_name": "注射用A型肉毒毒素 - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发注射用A型肉毒毒素 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P484778",
+        "name": "测试患者660",
+        "age": 31,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB486184249"
+      },
+      "visit": {
+        "visit_id": "V427934",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O123265",
+          "drug_code": "DRUG8567",
+          "drug_name": "注射用A型肉毒毒素",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_008_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_008",
+      "rule_name": "注射用A型肉毒毒素 - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发注射用A型肉毒毒素 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P739768",
+        "name": "测试患者108",
+        "age": 55,
+        "gender": "男",
+        "insurance_type": "自费",
+        "insurance_number": "YB693803092"
+      },
+      "visit": {
+        "visit_id": "V471124",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O902771",
+          "drug_code": "DRUG1321",
+          "drug_name": "注射用A型肉毒毒素",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_009_TRIGGER",
+      "rule_code": "DRUG_INSURANCE_TYPE_009",
+      "rule_name": "注射用胸腺法新 - 保险类型限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发注射用胸腺法新 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P849888",
+        "name": "测试患者553",
+        "age": 54,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB769016402"
+      },
+      "visit": {
+        "visit_id": "V545204",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O539438",
+          "drug_code": "DRUG2178",
+          "drug_name": "注射用胸腺法新",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_INSURANCE_TYPE_009_PASS",
+      "rule_code": "DRUG_INSURANCE_TYPE_009",
+      "rule_name": "注射用胸腺法新 - 保险类型限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发注射用胸腺法新 - 保险类型限制规则的测试用例",
+      "patient": {
+        "patient_id": "P807240",
+        "name": "测试患者403",
+        "age": 51,
+        "gender": "女",
+        "insurance_type": "自费",
+        "insurance_number": "YB986663268"
+      },
+      "visit": {
+        "visit_id": "V461108",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O248471",
+          "drug_code": "DRUG1581",
+          "drug_name": "注射用胸腺法新",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_001_TRIGGER",
+      "rule_code": "DRUG_AGE_001",
+      "rule_name": "儿童前牙树脂冠修复 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发儿童前牙树脂冠修复 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P191828",
+        "name": "测试患者878",
+        "age": 50,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB775908041"
+      },
+      "visit": {
+        "visit_id": "V309388",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O653008",
+          "drug_code": "DRUG3036",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_001_PASS",
+      "rule_code": "DRUG_AGE_001",
+      "rule_name": "儿童前牙树脂冠修复 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发儿童前牙树脂冠修复 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P584868",
+        "name": "测试患者884",
+        "age": 26,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB399371869"
+      },
+      "visit": {
+        "visit_id": "V352089",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O335054",
+          "drug_code": "DRUG3905",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_002_TRIGGER",
+      "rule_code": "DRUG_AGE_002",
+      "rule_name": "儿童龋齿预防保健 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发儿童龋齿预防保健 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P287839",
+        "name": "测试患者915",
+        "age": 23,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB883820778"
+      },
+      "visit": {
+        "visit_id": "V435261",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O415942",
+          "drug_code": "DRUG5135",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_002_PASS",
+      "rule_code": "DRUG_AGE_002",
+      "rule_name": "儿童龋齿预防保健 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发儿童龋齿预防保健 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P625329",
+        "name": "测试患者719",
+        "age": 22,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB556923565"
+      },
+      "visit": {
+        "visit_id": "V659709",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O189054",
+          "drug_code": "DRUG8790",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_003_TRIGGER",
+      "rule_code": "DRUG_AGE_003",
+      "rule_name": "儿童听力障碍语言训练 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发儿童听力障碍语言训练 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P786756",
+        "name": "测试患者406",
+        "age": 57,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB197046317"
+      },
+      "visit": {
+        "visit_id": "V358340",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O494208",
+          "drug_code": "DRUG7834",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_003_PASS",
+      "rule_code": "DRUG_AGE_003",
+      "rule_name": "儿童听力障碍语言训练 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发儿童听力障碍语言训练 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P202568",
+        "name": "测试患者163",
+        "age": 48,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB857975205"
+      },
+      "visit": {
+        "visit_id": "V426389",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O658849",
+          "drug_code": "DRUG2153",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_004_TRIGGER",
+      "rule_code": "DRUG_AGE_004",
+      "rule_name": "多普勒小儿血压检测 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发多普勒小儿血压检测 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P900002",
+        "name": "测试患者550",
+        "age": 39,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB833471600"
+      },
+      "visit": {
+        "visit_id": "V675494",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O742683",
+          "drug_code": "DRUG6616",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_004_PASS",
+      "rule_code": "DRUG_AGE_004",
+      "rule_name": "多普勒小儿血压检测 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发多普勒小儿血压检测 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P325401",
+        "name": "测试患者919",
+        "age": 37,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB378497700"
+      },
+      "visit": {
+        "visit_id": "V192145",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O496248",
+          "drug_code": "DRUG9539",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_005_TRIGGER",
+      "rule_code": "DRUG_AGE_005",
+      "rule_name": "小儿包茎气囊导管扩张术 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发小儿包茎气囊导管扩张术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P548477",
+        "name": "测试患者665",
+        "age": 47,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB233245556"
+      },
+      "visit": {
+        "visit_id": "V138560",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O478980",
+          "drug_code": "DRUG4686",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_005_PASS",
+      "rule_code": "DRUG_AGE_005",
+      "rule_name": "小儿包茎气囊导管扩张术 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发小儿包茎气囊导管扩张术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P190632",
+        "name": "测试患者935",
+        "age": 47,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB391630071"
+      },
+      "visit": {
+        "visit_id": "V853394",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O946622",
+          "drug_code": "DRUG8714",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_006_TRIGGER",
+      "rule_code": "DRUG_AGE_006",
+      "rule_name": "小儿鸡胸矫正术 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发小儿鸡胸矫正术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P779330",
+        "name": "测试患者612",
+        "age": 34,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB628329895"
+      },
+      "visit": {
+        "visit_id": "V225331",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O242208",
+          "drug_code": "DRUG6049",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_006_PASS",
+      "rule_code": "DRUG_AGE_006",
+      "rule_name": "小儿鸡胸矫正术 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发小儿鸡胸矫正术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P497297",
+        "name": "测试患者572",
+        "age": 58,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB486613216"
+      },
+      "visit": {
+        "visit_id": "V728335",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O458863",
+          "drug_code": "DRUG9601",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_007_TRIGGER",
+      "rule_code": "DRUG_AGE_007",
+      "rule_name": "小儿捏脊治疗 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发小儿捏脊治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P307559",
+        "name": "测试患者114",
+        "age": 47,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB312769406"
+      },
+      "visit": {
+        "visit_id": "V915617",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O276419",
+          "drug_code": "DRUG4346",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_007_PASS",
+      "rule_code": "DRUG_AGE_007",
+      "rule_name": "小儿捏脊治疗 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发小儿捏脊治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P761951",
+        "name": "测试患者451",
+        "age": 31,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB220330099"
+      },
+      "visit": {
+        "visit_id": "V387045",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O933940",
+          "drug_code": "DRUG4684",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_008_TRIGGER",
+      "rule_code": "DRUG_AGE_008",
+      "rule_name": "小儿头皮静脉输液 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发小儿头皮静脉输液 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P885787",
+        "name": "测试患者324",
+        "age": 34,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB928587096"
+      },
+      "visit": {
+        "visit_id": "V495001",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O548014",
+          "drug_code": "DRUG6665",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_008_PASS",
+      "rule_code": "DRUG_AGE_008",
+      "rule_name": "小儿头皮静脉输液 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发小儿头皮静脉输液 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P470056",
+        "name": "测试患者85",
+        "age": 37,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB789654817"
+      },
+      "visit": {
+        "visit_id": "V815480",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O452738",
+          "drug_code": "DRUG5033",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_009_TRIGGER",
+      "rule_code": "DRUG_AGE_009",
+      "rule_name": "小儿斜颈推拿治疗 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发小儿斜颈推拿治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P419837",
+        "name": "测试患者60",
+        "age": 26,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB578211802"
+      },
+      "visit": {
+        "visit_id": "V983326",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O844638",
+          "drug_code": "DRUG9855",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_009_PASS",
+      "rule_code": "DRUG_AGE_009",
+      "rule_name": "小儿斜颈推拿治疗 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发小儿斜颈推拿治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P993744",
+        "name": "测试患者184",
+        "age": 35,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB257954738"
+      },
+      "visit": {
+        "visit_id": "V471548",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O883163",
+          "drug_code": "DRUG9524",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_010_TRIGGER",
+      "rule_code": "DRUG_AGE_010",
+      "rule_name": "小儿原发性肠套叠手术复位 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发小儿原发性肠套叠手术复位 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P272100",
+        "name": "测试患者133",
+        "age": 59,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB700071982"
+      },
+      "visit": {
+        "visit_id": "V897884",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O540774",
+          "drug_code": "DRUG4238",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_010_PASS",
+      "rule_code": "DRUG_AGE_010",
+      "rule_name": "小儿原发性肠套叠手术复位 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发小儿原发性肠套叠手术复位 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P122858",
+        "name": "测试患者654",
+        "age": 21,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB381439446"
+      },
+      "visit": {
+        "visit_id": "V537665",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O719820",
+          "drug_code": "DRUG4803",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_011_TRIGGER",
+      "rule_code": "DRUG_AGE_011",
+      "rule_name": "新生儿测颅压 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿测颅压 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P876346",
+        "name": "测试患者544",
+        "age": 60,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB771507212"
+      },
+      "visit": {
+        "visit_id": "V399929",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O229508",
+          "drug_code": "DRUG6642",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_011_PASS",
+      "rule_code": "DRUG_AGE_011",
+      "rule_name": "新生儿测颅压 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿测颅压 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P376676",
+        "name": "测试患者821",
+        "age": 50,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB317920366"
+      },
+      "visit": {
+        "visit_id": "V176014",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O799397",
+          "drug_code": "DRUG7188",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_012_TRIGGER",
+      "rule_code": "DRUG_AGE_012",
+      "rule_name": "新生儿辐射抢救治疗 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿辐射抢救治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P562026",
+        "name": "测试患者124",
+        "age": 40,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB936755480"
+      },
+      "visit": {
+        "visit_id": "V526337",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O843901",
+          "drug_code": "DRUG4961",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_012_PASS",
+      "rule_code": "DRUG_AGE_012",
+      "rule_name": "新生儿辐射抢救治疗 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿辐射抢救治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P653385",
+        "name": "测试患者161",
+        "age": 34,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB282950014"
+      },
+      "visit": {
+        "visit_id": "V765715",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O788097",
+          "drug_code": "DRUG7401",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_013_TRIGGER",
+      "rule_code": "DRUG_AGE_013",
+      "rule_name": "新生儿复苏 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿复苏 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P483908",
+        "name": "测试患者117",
+        "age": 20,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB750239946"
+      },
+      "visit": {
+        "visit_id": "V620660",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O784589",
+          "drug_code": "DRUG6436",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_013_PASS",
+      "rule_code": "DRUG_AGE_013",
+      "rule_name": "新生儿复苏 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿复苏 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P400755",
+        "name": "测试患者659",
+        "age": 50,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB114974314"
+      },
+      "visit": {
+        "visit_id": "V976254",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O657868",
+          "drug_code": "DRUG7003",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_014_TRIGGER",
+      "rule_code": "DRUG_AGE_014",
+      "rule_name": "新生儿护理 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿护理 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P180300",
+        "name": "测试患者153",
+        "age": 21,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB147094353"
+      },
+      "visit": {
+        "visit_id": "V252111",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O464725",
+          "drug_code": "DRUG8050",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_014_PASS",
+      "rule_code": "DRUG_AGE_014",
+      "rule_name": "新生儿护理 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿护理 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P390502",
+        "name": "测试患者677",
+        "age": 21,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB433148122"
+      },
+      "visit": {
+        "visit_id": "V588908",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O484152",
+          "drug_code": "DRUG1553",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_015_TRIGGER",
+      "rule_code": "DRUG_AGE_015",
+      "rule_name": "新生儿换血术 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿换血术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P671730",
+        "name": "测试患者138",
+        "age": 36,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB330784051"
+      },
+      "visit": {
+        "visit_id": "V526888",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O597058",
+          "drug_code": "DRUG8529",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_015_PASS",
+      "rule_code": "DRUG_AGE_015",
+      "rule_name": "新生儿换血术 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿换血术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P873113",
+        "name": "测试患者807",
+        "age": 48,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB118630065"
+      },
+      "visit": {
+        "visit_id": "V507186",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O717236",
+          "drug_code": "DRUG6477",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_016_TRIGGER",
+      "rule_code": "DRUG_AGE_016",
+      "rule_name": "新生儿监护 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿监护 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P413816",
+        "name": "测试患者481",
+        "age": 51,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB866422121"
+      },
+      "visit": {
+        "visit_id": "V781303",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O585849",
+          "drug_code": "DRUG1569",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_016_PASS",
+      "rule_code": "DRUG_AGE_016",
+      "rule_name": "新生儿监护 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿监护 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P892866",
+        "name": "测试患者669",
+        "age": 26,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB806695576"
+      },
+      "visit": {
+        "visit_id": "V872254",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O258642",
+          "drug_code": "DRUG1819",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_017_TRIGGER",
+      "rule_code": "DRUG_AGE_017",
+      "rule_name": "新生儿经皮胆红素测定 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿经皮胆红素测定 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P150055",
+        "name": "测试患者956",
+        "age": 55,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB814695644"
+      },
+      "visit": {
+        "visit_id": "V272841",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O702047",
+          "drug_code": "DRUG4726",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_017_PASS",
+      "rule_code": "DRUG_AGE_017",
+      "rule_name": "新生儿经皮胆红素测定 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿经皮胆红素测定 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P861871",
+        "name": "测试患者936",
+        "age": 21,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB613665752"
+      },
+      "visit": {
+        "visit_id": "V292188",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O784512",
+          "drug_code": "DRUG1434",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_018_TRIGGER",
+      "rule_code": "DRUG_AGE_018",
+      "rule_name": "新生儿兰光治疗 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿兰光治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P732219",
+        "name": "测试患者848",
+        "age": 49,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB288980830"
+      },
+      "visit": {
+        "visit_id": "V180548",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O818143",
+          "drug_code": "DRUG4097",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_018_PASS",
+      "rule_code": "DRUG_AGE_018",
+      "rule_name": "新生儿兰光治疗 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿兰光治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P751713",
+        "name": "测试患者820",
+        "age": 25,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB558565931"
+      },
+      "visit": {
+        "visit_id": "V610347",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O313887",
+          "drug_code": "DRUG5290",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_019_TRIGGER",
+      "rule_code": "DRUG_AGE_019",
+      "rule_name": "新生儿量表检查 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿量表检查 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P192196",
+        "name": "测试患者51",
+        "age": 28,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB153273535"
+      },
+      "visit": {
+        "visit_id": "V528767",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O414293",
+          "drug_code": "DRUG5898",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_019_PASS",
+      "rule_code": "DRUG_AGE_019",
+      "rule_name": "新生儿量表检查 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿量表检查 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P450271",
+        "name": "测试患者312",
+        "age": 33,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB239342472"
+      },
+      "visit": {
+        "visit_id": "V650666",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O749629",
+          "drug_code": "DRUG6337",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_020_TRIGGER",
+      "rule_code": "DRUG_AGE_020",
+      "rule_name": "新生儿暖箱 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿暖箱 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P886568",
+        "name": "测试患者328",
+        "age": 32,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB914561703"
+      },
+      "visit": {
+        "visit_id": "V582624",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O847959",
+          "drug_code": "DRUG7346",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_020_PASS",
+      "rule_code": "DRUG_AGE_020",
+      "rule_name": "新生儿暖箱 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿暖箱 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P337955",
+        "name": "测试患者62",
+        "age": 30,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB461836514"
+      },
+      "visit": {
+        "visit_id": "V284619",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O605504",
+          "drug_code": "DRUG1460",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_021_TRIGGER",
+      "rule_code": "DRUG_AGE_021",
+      "rule_name": "新生儿脐静脉穿刺和注射 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿脐静脉穿刺和注射 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P148594",
+        "name": "测试患者550",
+        "age": 43,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB564411223"
+      },
+      "visit": {
+        "visit_id": "V265143",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O544429",
+          "drug_code": "DRUG7365",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_021_PASS",
+      "rule_code": "DRUG_AGE_021",
+      "rule_name": "新生儿脐静脉穿刺和注射 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿脐静脉穿刺和注射 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P320845",
+        "name": "测试患者759",
+        "age": 35,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB717021289"
+      },
+      "visit": {
+        "visit_id": "V322165",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O257870",
+          "drug_code": "DRUG1051",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_022_TRIGGER",
+      "rule_code": "DRUG_AGE_022",
+      "rule_name": "新生儿气管插管术 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿气管插管术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P856969",
+        "name": "测试患者477",
+        "age": 22,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB985172348"
+      },
+      "visit": {
+        "visit_id": "V717025",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O154952",
+          "drug_code": "DRUG6179",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_022_PASS",
+      "rule_code": "DRUG_AGE_022",
+      "rule_name": "新生儿气管插管术 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿气管插管术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P356043",
+        "name": "测试患者817",
+        "age": 58,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB951002415"
+      },
+      "visit": {
+        "visit_id": "V617001",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O805953",
+          "drug_code": "DRUG3243",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_023_TRIGGER",
+      "rule_code": "DRUG_AGE_023",
+      "rule_name": "新生儿人工呼吸(正压通气) - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿人工呼吸(正压通气) - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P708858",
+        "name": "测试患者383",
+        "age": 53,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB900054884"
+      },
+      "visit": {
+        "visit_id": "V326439",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O966640",
+          "drug_code": "DRUG9238",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_023_PASS",
+      "rule_code": "DRUG_AGE_023",
+      "rule_name": "新生儿人工呼吸(正压通气) - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿人工呼吸(正压通气) - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P355979",
+        "name": "测试患者974",
+        "age": 26,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB837994869"
+      },
+      "visit": {
+        "visit_id": "V697019",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O915349",
+          "drug_code": "DRUG2355",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_024_TRIGGER",
+      "rule_code": "DRUG_AGE_024",
+      "rule_name": "新生儿溶血症筛查 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿溶血症筛查 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P208372",
+        "name": "测试患者510",
+        "age": 29,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB533254197"
+      },
+      "visit": {
+        "visit_id": "V375164",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O226300",
+          "drug_code": "DRUG6486",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_024_PASS",
+      "rule_code": "DRUG_AGE_024",
+      "rule_name": "新生儿溶血症筛查 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿溶血症筛查 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P527573",
+        "name": "测试患者855",
+        "age": 34,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB702180615"
+      },
+      "visit": {
+        "visit_id": "V935149",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O283511",
+          "drug_code": "DRUG3742",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_025_TRIGGER",
+      "rule_code": "DRUG_AGE_025",
+      "rule_name": "新生儿特殊护理 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿特殊护理 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P539929",
+        "name": "测试患者853",
+        "age": 55,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB650005839"
+      },
+      "visit": {
+        "visit_id": "V709419",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O130675",
+          "drug_code": "DRUG5204",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_025_PASS",
+      "rule_code": "DRUG_AGE_025",
+      "rule_name": "新生儿特殊护理 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿特殊护理 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P457299",
+        "name": "测试患者316",
+        "age": 59,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB941181131"
+      },
+      "visit": {
+        "visit_id": "V383714",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O471967",
+          "drug_code": "DRUG7089",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_026_TRIGGER",
+      "rule_code": "DRUG_AGE_026",
+      "rule_name": "新生儿洗胃 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿洗胃 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P697264",
+        "name": "测试患者132",
+        "age": 59,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB163846249"
+      },
+      "visit": {
+        "visit_id": "V912864",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O218533",
+          "drug_code": "DRUG1925",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_026_PASS",
+      "rule_code": "DRUG_AGE_026",
+      "rule_name": "新生儿洗胃 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿洗胃 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P521099",
+        "name": "测试患者907",
+        "age": 25,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB489691046"
+      },
+      "visit": {
+        "visit_id": "V838679",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O751709",
+          "drug_code": "DRUG9718",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_027_TRIGGER",
+      "rule_code": "DRUG_AGE_027",
+      "rule_name": "新生儿囟门穿刺术 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿囟门穿刺术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P834396",
+        "name": "测试患者468",
+        "age": 58,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB545948017"
+      },
+      "visit": {
+        "visit_id": "V271011",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O509659",
+          "drug_code": "DRUG7831",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_027_PASS",
+      "rule_code": "DRUG_AGE_027",
+      "rule_name": "新生儿囟门穿刺术 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿囟门穿刺术 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P812898",
+        "name": "测试患者114",
+        "age": 21,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB557315717"
+      },
+      "visit": {
+        "visit_id": "V894906",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O531414",
+          "drug_code": "DRUG6247",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_028_TRIGGER",
+      "rule_code": "DRUG_AGE_028",
+      "rule_name": "新生儿行为测定 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发新生儿行为测定 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P304911",
+        "name": "测试患者508",
+        "age": 25,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB987136702"
+      },
+      "visit": {
+        "visit_id": "V851023",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O261282",
+          "drug_code": "DRUG9464",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_028_PASS",
+      "rule_code": "DRUG_AGE_028",
+      "rule_name": "新生儿行为测定 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发新生儿行为测定 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P907648",
+        "name": "测试患者401",
+        "age": 59,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB995556301"
+      },
+      "visit": {
+        "visit_id": "V116578",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O963461",
+          "drug_code": "DRUG2211",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_029_TRIGGER",
+      "rule_code": "DRUG_AGE_029",
+      "rule_name": "婴儿氧舱治疗 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发婴儿氧舱治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P905893",
+        "name": "测试患者194",
+        "age": 59,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB231729639"
+      },
+      "visit": {
+        "visit_id": "V752631",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O319207",
+          "drug_code": "DRUG2589",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_029_PASS",
+      "rule_code": "DRUG_AGE_029",
+      "rule_name": "婴儿氧舱治疗 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发婴儿氧舱治疗 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P166350",
+        "name": "测试患者628",
+        "age": 50,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB967693805"
+      },
+      "visit": {
+        "visit_id": "V485244",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O897189",
+          "drug_code": "DRUG8115",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_030_TRIGGER",
+      "rule_code": "DRUG_AGE_030",
+      "rule_name": "婴幼儿健康体检 - 年龄限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发婴幼儿健康体检 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P106990",
+        "name": "测试患者873",
+        "age": 37,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB475411717"
+      },
+      "visit": {
+        "visit_id": "V215332",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O422025",
+          "drug_code": "DRUG7192",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_AGE_030_PASS",
+      "rule_code": "DRUG_AGE_030",
+      "rule_name": "婴幼儿健康体检 - 年龄限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发婴幼儿健康体检 - 年龄限制规则的测试用例",
+      "patient": {
+        "patient_id": "P336376",
+        "name": "测试患者204",
+        "age": 22,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB632149179"
+      },
+      "visit": {
+        "visit_id": "V297267",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O712526",
+          "drug_code": "DRUG5062",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_001_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_001",
+      "rule_name": "艾迪注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发艾迪注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P597981",
+        "name": "测试患者640",
+        "age": 56,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB497040306"
+      },
+      "visit": {
+        "visit_id": "V416949",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O605172",
+          "drug_code": "DRUG2269",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_001_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_001",
+      "rule_name": "艾迪注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发艾迪注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P287924",
+        "name": "测试患者814",
+        "age": 56,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB987262179"
+      },
+      "visit": {
+        "visit_id": "V815685",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O834131",
+          "drug_code": "DRUG9226",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_002_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_002",
+      "rule_name": "参附注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发参附注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P745251",
+        "name": "测试患者502",
+        "age": 56,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB169315384"
+      },
+      "visit": {
+        "visit_id": "V819276",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O602559",
+          "drug_code": "DRUG4580",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_002_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_002",
+      "rule_name": "参附注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发参附注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P148682",
+        "name": "测试患者726",
+        "age": 39,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB817804821"
+      },
+      "visit": {
+        "visit_id": "V298349",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O771146",
+          "drug_code": "DRUG2683",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_003_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_003",
+      "rule_name": "参麦注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发参麦注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P502235",
+        "name": "测试患者369",
+        "age": 30,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB303932204"
+      },
+      "visit": {
+        "visit_id": "V328835",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O880223",
+          "drug_code": "DRUG8862",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_003_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_003",
+      "rule_name": "参麦注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发参麦注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P949693",
+        "name": "测试患者399",
+        "age": 27,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB152336678"
+      },
+      "visit": {
+        "visit_id": "V351859",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O778691",
+          "drug_code": "DRUG8032",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_004_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_004",
+      "rule_name": "参芪扶正注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发参芪扶正注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P456117",
+        "name": "测试患者413",
+        "age": 59,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB383453498"
+      },
+      "visit": {
+        "visit_id": "V702022",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O333728",
+          "drug_code": "DRUG4047",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_004_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_004",
+      "rule_name": "参芪扶正注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发参芪扶正注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P871755",
+        "name": "测试患者644",
+        "age": 50,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB292431624"
+      },
+      "visit": {
+        "visit_id": "V806453",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O132669",
+          "drug_code": "DRUG6418",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_005_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_005",
+      "rule_name": "喘可治注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发喘可治注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P943561",
+        "name": "测试患者45",
+        "age": 58,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB886537916"
+      },
+      "visit": {
+        "visit_id": "V955867",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O536707",
+          "drug_code": "DRUG7453",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_005_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_005",
+      "rule_name": "喘可治注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发喘可治注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P965067",
+        "name": "测试患者126",
+        "age": 37,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB684521611"
+      },
+      "visit": {
+        "visit_id": "V874065",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O193345",
+          "drug_code": "DRUG4838",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_006_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_006",
+      "rule_name": "刺五加注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发刺五加注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P417815",
+        "name": "测试患者714",
+        "age": 60,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB267304832"
+      },
+      "visit": {
+        "visit_id": "V161979",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O805702",
+          "drug_code": "DRUG4084",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_006_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_006",
+      "rule_name": "刺五加注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发刺五加注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P667893",
+        "name": "测试患者189",
+        "age": 59,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB885809940"
+      },
+      "visit": {
+        "visit_id": "V350002",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O395303",
+          "drug_code": "DRUG6588",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_007_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_007",
+      "rule_name": "丹参注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发丹参注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P111768",
+        "name": "测试患者781",
+        "age": 44,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB224883295"
+      },
+      "visit": {
+        "visit_id": "V133838",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O595551",
+          "drug_code": "DRUG4702",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_007_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_007",
+      "rule_name": "丹参注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发丹参注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P302166",
+        "name": "测试患者810",
+        "age": 57,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB760215736"
+      },
+      "visit": {
+        "visit_id": "V357650",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O638074",
+          "drug_code": "DRUG8980",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_008_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_008",
+      "rule_name": "丹红注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发丹红注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P949455",
+        "name": "测试患者481",
+        "age": 53,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB779110637"
+      },
+      "visit": {
+        "visit_id": "V981500",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O872752",
+          "drug_code": "DRUG8496",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_008_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_008",
+      "rule_name": "丹红注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发丹红注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P514898",
+        "name": "测试患者948",
+        "age": 45,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB489245417"
+      },
+      "visit": {
+        "visit_id": "V361583",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O528771",
+          "drug_code": "DRUG1343",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_009_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_009",
+      "rule_name": "灯盏花素注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发灯盏花素注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P487361",
+        "name": "测试患者992",
+        "age": 37,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB350535868"
+      },
+      "visit": {
+        "visit_id": "V105353",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O988778",
+          "drug_code": "DRUG1257",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_009_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_009",
+      "rule_name": "灯盏花素注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发灯盏花素注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P933532",
+        "name": "测试患者976",
+        "age": 29,
+        "gender": "男",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB977210332"
+      },
+      "visit": {
+        "visit_id": "V890357",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O955681",
+          "drug_code": "DRUG3008",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_010_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_010",
+      "rule_name": "灯盏细辛注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发灯盏细辛注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P875263",
+        "name": "测试患者143",
+        "age": 33,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB121802540"
+      },
+      "visit": {
+        "visit_id": "V946091",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O450284",
+          "drug_code": "DRUG2076",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_010_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_010",
+      "rule_name": "灯盏细辛注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发灯盏细辛注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P875627",
+        "name": "测试患者755",
+        "age": 40,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB761627507"
+      },
+      "visit": {
+        "visit_id": "V498198",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O939102",
+          "drug_code": "DRUG8159",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_011_TRIGGER",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_011",
+      "rule_name": "复方苦参注射液 - 医疗机构级别限制",
+      "test_type": "trigger",
+      "expected_result": "info",
+      "description": "触发复方苦参注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P167195",
+        "name": "测试患者778",
+        "age": 58,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB630281964"
+      },
+      "visit": {
+        "visit_id": "V707827",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O215478",
+          "drug_code": "DRUG5669",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    },
+    {
+      "test_case_id": "TC_DRUG_HOSPITAL_LEVEL_011_PASS",
+      "rule_code": "DRUG_HOSPITAL_LEVEL_011",
+      "rule_name": "复方苦参注射液 - 医疗机构级别限制",
+      "test_type": "pass",
+      "expected_result": "pass",
+      "description": "不触发复方苦参注射液 - 医疗机构级别限制规则的测试用例",
+      "patient": {
+        "patient_id": "P393677",
+        "name": "测试患者384",
+        "age": 60,
+        "gender": "女",
+        "insurance_type": "城镇职工",
+        "insurance_number": "YB381388787"
+      },
+      "visit": {
+        "visit_id": "V189452",
+        "visit_type": "门诊",
+        "visit_date": "2025-09-11",
+        "department": "内科",
+        "doctor": "测试医生",
+        "hospital_level": "三甲"
+      },
+      "drug_orders": [
+        {
+          "order_id": "O872986",
+          "drug_code": "DRUG8712",
+          "drug_name": "测试药品",
+          "dosage": "1片",
+          "frequency": "每日3次",
+          "duration": "7天",
+          "route": "口服",
+          "category": "处方药",
+          "unit_price": 10.0,
+          "quantity": 21
+        }
+      ]
+    }
+  ],
+  "total_test_cases": 100,
+  "processed_rules": 50
+}

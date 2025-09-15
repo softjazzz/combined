@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..storage.memory import medical_records_db
 
@@ -16,12 +16,14 @@ async def get_classification_mapping() -> Dict[str, Dict[str, str]]:
         if not supabase:
             return {"categories": {}, "types": {}}
 
-        categories_response = supabase.table("document_categories_test").select("id, category_code").execute()
+        categories_response = await async_execute(supabase.table("document_categories_test").select("id, category_code"))
         categories = {cat["category_code"]: cat["id"] for cat in (categories_response.data or [])}
 
-        types_response = supabase.table("document_types_test").select(
-            "id, type_code, category_id, document_categories_test!inner(category_code)"
-        ).execute()
+        types_response = await async_execute(
+            supabase.table("document_types_test").select(
+                "id, type_code, category_id, document_categories_test!inner(category_code)"
+            )
+        )
 
         types: Dict[str, str] = {}
         if types_response.data:
@@ -168,7 +170,7 @@ async def save_medical_documents(medical_record_id: str, documents: list, extrac
 
         if document_records:
             settings = get_settings()
-            delete_response = supabase.table(settings.DOCUMENTS_TABLE).delete().eq("record_id", medical_record_id).execute()
+            delete_response = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).delete().eq("record_id", medical_record_id))
             logger.info(f"清理旧文档记录: {len(delete_response.data) if delete_response.data else 0} 条")
             unique_records: Dict[Any, Dict[str, Any]] = {}
             for dr in document_records:
@@ -181,7 +183,7 @@ async def save_medical_documents(medical_record_id: str, documents: list, extrac
             final_records = list(unique_records.values())
             if final_records:
                 settings = get_settings()
-                response = supabase.table(settings.DOCUMENTS_TABLE).insert(final_records).execute()
+                response = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).insert(final_records))
                 logger.info(f"保存 {len(response.data or [])} 个文档记录到medical_documents_test")
     except Exception as e:
         logger.warning(f"保存文档记录失败: {e}")
@@ -224,7 +226,7 @@ async def ingest_llm_parse_result(data: Dict[str, Any]) -> Dict[str, Any]:
 
         if supabase:
             settings = get_settings()
-            response = supabase.table(settings.RECORDS_TABLE).insert(record_data).execute()
+            response = await async_execute(supabase.table(settings.RECORDS_TABLE).insert(record_data))
             if response.data:
                 saved_record = response.data[0]
                 department_name = "未识别"

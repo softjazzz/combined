@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 import uuid
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timezone
 
 from ..services.sichuan_qc_service import SichuanQCService
@@ -22,6 +22,8 @@ class SichuanEvaluateRequest(BaseModel):
     use_multi_document_mode: Optional[bool] = False
     patient_info: Optional[Dict[str, str]] = None
     documents_by_type: Optional[Dict[str, Any]] = None
+    # Optional preloaded grouped rules from frontend
+    rules_by_document_type: Optional[Dict[str, List[Dict[str, Any]]]] = None
     # Optional LLM overrides for experimentation
     model: Optional[str] = None
     provider: Optional[str] = None
@@ -50,11 +52,56 @@ async def evaluate(req: SichuanEvaluateRequest):
         if req.model:
             service.client.model = req.model
         if req.use_multi_document_mode:
+            # Prefer frontend-provided grouped rules; fallback to fetching from Supabase
+            rules_by_document_type = req.rules_by_document_type
+            if rules_by_document_type is None and req.document_types:
+                try:
+                    # Get rules grouped by document type from Supabase
+                    supabase = get_supabase()
+                    if supabase is not None:
+                        async def _exec(q):
+                            try:
+                                exec_async = getattr(q, "execute_async", None)
+                                if callable(exec_async):
+                                    return await exec_async()
+                            except Exception:
+                                pass
+                            return q.execute()
+
+                        resp = await _exec(supabase.table("qc_rules").select("*").eq("is_active", True).limit(1000))
+                        all_rules = resp.data or []
+
+                        # Group rules by applicable document types
+                        rules_by_document_type = {}
+                        for rule in all_rules:
+                            # Prefer top-level field, then fallback to nested check_logic.applicable_documents
+                            applicable_docs = (
+                                rule.get("applicable_documents")
+                                or (rule.get("check_logic") or {}).get("applicable_documents")
+                                or []
+                            )
+                            if isinstance(applicable_docs, str):
+                                applicable_docs = [d.strip() for d in applicable_docs.split(",") if d.strip()]
+                            try:
+                                normalized_docs = [str(d).strip() for d in (applicable_docs or [])]
+                            except Exception:
+                                normalized_docs = []
+
+                            for doc_type in (req.document_types or []):
+                                if doc_type and any(doc_type.lower() == d.lower() for d in normalized_docs):
+                                    if doc_type not in rules_by_document_type:
+                                        rules_by_document_type[doc_type] = []
+                                    rules_by_document_type[doc_type].append(rule)
+                except Exception as e:
+                    print(f"Warning: Failed to fetch grouped rules: {e}")
+                    rules_by_document_type = None
+            
             md = await service.evaluate_multi_document(
                 document_id=req.document_id,
                 document_content=req.document_content,
                 document_types=req.document_types,
                 preclassified_documents=req.documents_by_type,
+                rules_by_document_type=rules_by_document_type,
             )
 
             # Build legacy-compatible response
@@ -251,7 +298,11 @@ async def stats():
 
 
 @router.get("/rules")
-async def rules():
+async def rules(
+    document_type: Optional[str] = Query(default=None, description="单个文书类型（中文）"),
+    document_types: Optional[str] = Query(default=None, description="逗号分隔的文书类型（中文）"),
+    grouped: Optional[bool] = Query(default=False, description="是否按文书类型分组返回")
+):
     """
     返回四川省质控规则。
     优先从 Supabase 的 `qc_rules` 表读取；如果未配置或查询失败，则回退到内置示例规则。
@@ -262,7 +313,16 @@ async def rules():
     if supabase is not None:
         try:
             # 取启用的规则，最多1000条
-            resp = supabase.table("qc_rules").select("*").eq("is_active", True).limit(1000).execute()
+            async def _exec(q):
+                try:
+                    exec_async = getattr(q, "execute_async", None)
+                    if callable(exec_async):
+                        return await exec_async()
+                except Exception:
+                    pass
+                return q.execute()
+
+            resp = await _exec(supabase.table("qc_rules").select("*").eq("is_active", True).limit(1000))
             records = resp.data or []
         except Exception:
             records = None
@@ -280,7 +340,13 @@ async def rules():
             complexity = rec.get("complexity") or rec.get("rule_complexity") or "中复杂度"
             defect_level = rec.get("defect_level") or rec.get("severity") or "一般缺陷"
             score_deduction = rec.get("score_deduction") or rec.get("deduction_score") or 0
-            docs = rec.get("applicable_documents") or rec.get("document_types") or []
+            # 文书类型来源优先级：top-level applicable_documents -> document_types -> check_logic.applicable_documents
+            docs = (
+                rec.get("applicable_documents")
+                or rec.get("document_types")
+                or (rec.get("check_logic") or {}).get("applicable_documents")
+                or []
+            )
             if isinstance(docs, str):
                 # 简单拆分字符串形式
                 docs = [d.strip() for d in docs.split(",") if d.strip()]
@@ -311,11 +377,47 @@ async def rules():
         data = []
         source = "supabase"
 
+    # 可选过滤/分组
+    def _match_doc(rule_docs: list[str], wanted: set[str]) -> bool:
+        if not wanted:
+            return True
+        rd = {str(x).strip() for x in (rule_docs or [])}
+        # 大小写/空白宽松匹配（中文一般直接等值）
+        return bool(rd.intersection(wanted))
+
+    wanted_docs: set[str] = set()
+    if document_type:
+        wanted_docs.add(document_type.strip())
+    if document_types:
+        for t in document_types.split(","):
+            t = t.strip()
+            if t:
+                wanted_docs.add(t)
+
+    filtered = [d for d in data if _match_doc(d.get("applicable_documents") or [], wanted_docs)]
+
+    if grouped:
+        by_type: dict[str, list[dict[str, Any]]] = {}
+        for r in filtered:
+            docs = r.get("applicable_documents") or []
+            if not docs:
+                docs = ["通用文书"]
+            for dt in docs:
+                by_type.setdefault(str(dt), []).append(r)
+        return {
+            "rules_by_document_type": by_type,
+            "document_types": list(sorted(by_type.keys())),
+            "total_rules": sum(len(v) for v in by_type.values()),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": "success",
+            "source": source,
+        }
+
     return {
-        "rules": data,
-        "total_rules": len(data),
-        "document_type_filter": None,
-        "rule_categories": list(sorted({d.get("category", "基础") for d in data})),
+        "rules": filtered,
+        "total_rules": len(filtered),
+        "document_type_filter": list(wanted_docs) if wanted_docs else None,
+        "rule_categories": list(sorted({d.get("category", "基础") for d in filtered})),
         "complexity_distribution": {},
         "defect_level_distribution": {},
         "timestamp": datetime.now(timezone.utc).isoformat(),
