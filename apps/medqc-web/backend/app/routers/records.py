@@ -32,7 +32,7 @@ async def get_medical_records(
         if supabase:
             # Use our custom REST client or supabase-py, executed异步以避免阻塞
             # 默认按创建时间倒序排列（最新的在前面）
-            response = await async_execute(supabase.table(settings.RECORDS_TABLE).select('*').order('created_at', desc=True))  # type: ignore[attr-defined]
+            response = supabase.table(settings.RECORDS_TABLE).select('*').order('created_at', {'ascending': False}).execute()  # type: ignore[attr-defined]
             records = list(response.data or [])
         else:
             # Fallback to in-memory records when Supabase is not configured
