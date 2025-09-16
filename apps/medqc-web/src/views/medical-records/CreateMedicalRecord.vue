@@ -319,63 +319,75 @@ const DOCUMENT_TYPES = [
   { code: 'critical_illness_notice', label: '病危(重)通知书', group: '同意书' }
 ]
 
-// 构建树形数据结构
+// 构建树形数据结构 - 按照标准六大类文书分类
 const documentTreeData = [
   {
-    key: 'admission',
-    label: '入出院记录',
+    key: 'admission_record',
+    label: '入院记录',
     isLeaf: false,
     children: [
-      { key: 'admission_record', label: '入院记录', code: 'admission_record', isLeaf: true, description: '患者入院时的基本情况记录' },
+      { key: 'admission_record_basic', label: '入院记录', code: 'admission_record', isLeaf: true, description: '患者入院时的基本情况记录' },
       { key: 'admission_record_24h_in', label: '24小时内入院记录', code: 'admission_record_24h_in', isLeaf: true, description: '入院24小时内完成' },
-      { key: 'admission_record_24h_out', label: '24小时内出院记录', code: 'admission_record_24h_out', isLeaf: true, description: '入院24小时内出院' },
-      { key: 'discharge_record', label: '出院记录', code: 'discharge_record', isLeaf: true, description: '患者出院时的总结记录' },
-      { key: 'death_record', label: '死亡记录', code: 'death_record', isLeaf: true, description: '患者死亡情况记录' },
-      { key: 'death_case_discussion', label: '死亡病例讨论', code: 'death_case_discussion', isLeaf: true, description: '死亡病例的讨论记录' }
+      { key: 'admission_diagnosis', label: '入院诊断', code: 'admission_diagnosis', isLeaf: true, description: '入院时的初步诊断' }
     ]
   },
   {
-    key: 'progress',
+    key: 'progress_note',
     label: '病程记录',
     isLeaf: false,
     children: [
       { key: 'first_progress_note', label: '首次病程记录', code: 'first_progress_note', isLeaf: true, description: '入院后第一次病程' },
       { key: 'daily_progress_note', label: '日常病程记录', code: 'daily_progress_note', isLeaf: true, description: '每日病情变化记录' },
-      { key: 'attending_first_progress', label: '主治首次病程', code: 'attending_first_progress', isLeaf: true, description: '主治医师首次查房' },
-      { key: 'attending_progress', label: '主治查房记录', code: 'attending_progress', isLeaf: true, description: '主治医师查房记录' },
-      { key: 'consultation_record', label: '会诊记录', code: 'consultation_record', isLeaf: true, description: '专家会诊意见' },
+      { key: 'attending_progress', label: '上级医师查房记录', code: 'attending_progress', isLeaf: true, description: '上级医师查房记录' },
+      { key: 'consultation_record', label: '疑难病例讨论记录', code: 'consultation_record', isLeaf: true, description: '疑难病例讨论记录' },
       { key: 'handover_record', label: '交接班记录', code: 'handover_record', isLeaf: true, description: '医护人员交接班记录' },
+      { key: 'transfer_record', label: '转科记录', code: 'transfer_record', isLeaf: true, description: '患者转科时的记录' },
       { key: 'stage_summary', label: '阶段小结', code: 'stage_summary', isLeaf: true, description: '治疗阶段性总结' }
     ]
   },
   {
-    key: 'surgery',
-    label: '手术记录',
+    key: 'discharge_record',
+    label: '出院记录',
     isLeaf: false,
     children: [
-      { key: 'operation_record', label: '手术记录', code: 'operation_record', isLeaf: true, description: '手术过程详细记录' },
-      { key: 'preoperative_summary', label: '术前小结', code: 'preoperative_summary', isLeaf: true, description: '手术前准备情况' }
+      { key: 'discharge_record_basic', label: '出院记录', code: 'discharge_record', isLeaf: true, description: '患者出院时的总结记录' },
+      { key: 'admission_record_24h_out', label: '24小时内出院记录', code: 'admission_record_24h_out', isLeaf: true, description: '入院24小时内出院' },
+      { key: 'death_record', label: '死亡记录', code: 'death_record', isLeaf: true, description: '患者死亡情况记录' },
+      { key: 'death_case_discussion', label: '死亡病例讨论', code: 'death_case_discussion', isLeaf: true, description: '死亡病例的讨论记录' }
     ]
   },
   {
-    key: 'examination',
-    label: '检查化验',
+    key: 'operation_record',
+    label: '手术相关记录',
+    isLeaf: false,
+    children: [
+      { key: 'preoperative_summary', label: '术前小结', code: 'preoperative_summary', isLeaf: true, description: '手术前准备情况' },
+      { key: 'preoperative_discussion', label: '术前讨论', code: 'preoperative_discussion', isLeaf: true, description: '术前讨论记录' },
+      { key: 'operation_record_basic', label: '手术记录', code: 'operation_record', isLeaf: true, description: '手术过程详细记录' },
+      { key: 'postoperative_first_note', label: '术后首次病程记录', code: 'postoperative_first_note', isLeaf: true, description: '术后首次病程记录' },
+      { key: 'anesthesia_record', label: '麻醉记录', code: 'anesthesia_record', isLeaf: true, description: '麻醉过程记录' }
+    ]
+  },
+  {
+    key: 'examination_report',
+    label: '辅助检查',
     isLeaf: false,
     children: [
       { key: 'imaging_report', label: '影像检查报告', code: 'imaging_report', isLeaf: true, description: 'CT、MRI、X光等影像报告' },
       { key: 'lab_report', label: '检验报告', code: 'lab_report', isLeaf: true, description: '血液、尿液等化验报告' },
+      { key: 'pathology_report', label: '病理报告', code: 'pathology_report', isLeaf: true, description: '病理检查报告' },
       { key: 'other_examination', label: '其他检查', code: 'other_examination', isLeaf: true, description: '其他特殊检查报告' }
     ]
   },
   {
-    key: 'consent',
+    key: 'consent_form',
     label: '知情同意书',
     isLeaf: false,
     children: [
       { key: 'surgery_consent', label: '手术同意书', code: 'surgery_consent', isLeaf: true, description: '手术知情同意' },
       { key: 'anesthesia_consent', label: '麻醉同意书', code: 'anesthesia_consent', isLeaf: true, description: '麻醉知情同意' },
       { key: 'blood_transfusion_consent', label: '输血同意书', code: 'blood_transfusion_consent', isLeaf: true, description: '输血治疗同意' },
-      { key: 'special_treatment_consent', label: '特殊治疗同意书', code: 'special_treatment_consent', isLeaf: true, description: '特殊治疗方案同意' },
+      { key: 'special_examination_consent', label: '特殊检查同意书', code: 'special_examination_consent', isLeaf: true, description: '特殊检查同意' },
       { key: 'critical_illness_notice', label: '病危(重)通知书', code: 'critical_illness_notice', isLeaf: true, description: '病情危重告知' }
     ]
   }

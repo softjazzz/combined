@@ -823,7 +823,8 @@ async def get_medical_records(
         # 仅从Supabase获取数据
         if supabase:
             try:
-                response = supabase.table('medical_records_test').select('*').execute()
+                # 默认按创建时间倒序排列（最新的在前面）
+                response = supabase.table('medical_records_test').select('*').order('created_at', desc=True).execute()
                 if response.data:
                     # 处理记录，恢复LLM解析记录的正确类型和部门信息
                     records = []
@@ -869,13 +870,16 @@ async def get_medical_records(
         if record_type:
             records = [r for r in records if r.get("record_type") == record_type]
 
-        # 应用排序
+        # 应用排序 - 如果指定了排序字段则使用指定排序，否则保持默认的创建时间倒序
         if sort_field:
             reverse = sort_order == "desc"
             if sort_field in ["created_at", "updated_at"]:
                 records.sort(key=lambda x: x.get(sort_field, ""), reverse=reverse)
             elif sort_field == "patient_name":
                 records.sort(key=lambda x: x.get("patient_name", ""), reverse=reverse)
+        else:
+            # 确保在过滤后重新按创建时间倒序排序
+            records.sort(key=lambda x: x.get('created_at', ''), reverse=True)
 
         # 分页
         total = len(records)

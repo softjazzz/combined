@@ -484,13 +484,14 @@ const getTypeTagColor = (typeCode) => {
 
 // 获取适用于某个文档分类的质控规则
 const getApplicableRules = (categoryCode) => {
-  // 映射文档分类代码到中文名称
+  // 映射文档分类代码到中文名称（6个标准分类）
   const categoryMapping = {
-    'progress_note': '病程记录',
-    'operation_record': '手术记录',
-    'examination_report': '检查记录',
     'admission_record': '入院记录',
-    'discharge_record': '出院记录'
+    'progress_note': '病程记录',
+    'discharge_record': '出院记录',
+    'operation_record': '手术相关记录',
+    'examination_report': '辅助检查',
+    'consent_form': '知情同意书'
   }
   
   const chineseName = categoryMapping[categoryCode]

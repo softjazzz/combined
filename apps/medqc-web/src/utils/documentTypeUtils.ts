@@ -4,6 +4,7 @@
  */
 
 import { DocumentType, DocumentCategory } from '@/services/llmService'
+import { DocumentCategory as StandardDocumentCategory } from '@/types/medical'
 
 // 兼容不同来源的类型代码，做归一化处理
 const KNOWN_TYPES = new Set<string>(Object.values(DocumentType) as unknown as string[])
@@ -89,8 +90,8 @@ export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
   [DocumentCategory.PROGRESS_NOTE]: '病程记录',
   [DocumentCategory.OPERATION_RECORD]: '手术记录',
   [DocumentCategory.DISCHARGE_RECORD]: '出院记录',
-  [DocumentCategory.AUXILIARY_EXAMINATION]: '辅助检查',
-  [DocumentCategory.INFORMED_CONSENT]: '知情同意书'
+  [DocumentCategory.EXAMINATION_REPORT]: '辅助检查',
+  [DocumentCategory.CONSENT_FORM]: '知情同意书'
 }
 
 // 文书类型到分类的映射
@@ -119,16 +120,16 @@ export const DOCUMENT_TYPE_TO_CATEGORY: Record<DocumentType, DocumentCategory> =
   [DocumentType.DEATH_CASE_DISCUSSION]: DocumentCategory.DISCHARGE_RECORD,
 
   // 辅助检查
-  [DocumentType.IMAGING_REPORT]: DocumentCategory.AUXILIARY_EXAMINATION,
-  [DocumentType.LAB_REPORT]: DocumentCategory.AUXILIARY_EXAMINATION,
-  [DocumentType.OTHER_EXAMINATION]: DocumentCategory.AUXILIARY_EXAMINATION,
+  [DocumentType.IMAGING_REPORT]: DocumentCategory.EXAMINATION_REPORT,
+  [DocumentType.LAB_REPORT]: DocumentCategory.EXAMINATION_REPORT,
+  [DocumentType.OTHER_EXAMINATION]: DocumentCategory.EXAMINATION_REPORT,
 
   // 知情同意书
-  [DocumentType.SURGERY_CONSENT]: DocumentCategory.INFORMED_CONSENT,
-  [DocumentType.ANESTHESIA_CONSENT]: DocumentCategory.INFORMED_CONSENT,
-  [DocumentType.BLOOD_TRANSFUSION_CONSENT]: DocumentCategory.INFORMED_CONSENT,
-  [DocumentType.SPECIAL_TREATMENT_CONSENT]: DocumentCategory.INFORMED_CONSENT,
-  [DocumentType.CRITICAL_ILLNESS_NOTICE]: DocumentCategory.INFORMED_CONSENT
+  [DocumentType.SURGERY_CONSENT]: DocumentCategory.CONSENT_FORM,
+  [DocumentType.ANESTHESIA_CONSENT]: DocumentCategory.CONSENT_FORM,
+  [DocumentType.BLOOD_TRANSFUSION_CONSENT]: DocumentCategory.CONSENT_FORM,
+  [DocumentType.SPECIAL_TREATMENT_CONSENT]: DocumentCategory.CONSENT_FORM,
+  [DocumentType.CRITICAL_ILLNESS_NOTICE]: DocumentCategory.CONSENT_FORM
 }
 
 // 按分类组织的文书类型
@@ -156,12 +157,12 @@ export const DOCUMENT_TYPES_BY_CATEGORY: Record<DocumentCategory, DocumentType[]
     DocumentType.DEATH_RECORD,
     DocumentType.DEATH_CASE_DISCUSSION
   ],
-  [DocumentCategory.AUXILIARY_EXAMINATION]: [
+  [DocumentCategory.EXAMINATION_REPORT]: [
     DocumentType.IMAGING_REPORT,
     DocumentType.LAB_REPORT,
     DocumentType.OTHER_EXAMINATION
   ],
-  [DocumentCategory.INFORMED_CONSENT]: [
+  [DocumentCategory.CONSENT_FORM]: [
     DocumentType.SURGERY_CONSENT,
     DocumentType.ANESTHESIA_CONSENT,
     DocumentType.BLOOD_TRANSFUSION_CONSENT,
@@ -355,10 +356,10 @@ export function getDocumentTypeColor(type: DocumentType): string {
       return '#fa8c16' // 橙色
     case DocumentCategory.DISCHARGE_RECORD:
       return '#722ed1' // 紫色
-    case DocumentCategory.AUXILIARY_EXAMINATION:
+    case DocumentCategory.EXAMINATION_REPORT:
+      return '#722ed1' // 紫色
+    case DocumentCategory.CONSENT_FORM:
       return '#13c2c2' // 青色
-    case DocumentCategory.INFORMED_CONSENT:
-      return '#eb2f96' // 粉色
     default:
       return '#666666' // 灰色
   }

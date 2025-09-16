@@ -31,11 +31,14 @@ async def get_medical_records(
     try:
         if supabase:
             # Use our custom REST client or supabase-py, executed异步以避免阻塞
-            response = await async_execute(supabase.table(settings.RECORDS_TABLE).select('*'))  # type: ignore[attr-defined]
+            # 默认按创建时间倒序排列（最新的在前面）
+            response = await async_execute(supabase.table(settings.RECORDS_TABLE).select('*').order('created_at', desc=True))  # type: ignore[attr-defined]
             records = list(response.data or [])
         else:
             # Fallback to in-memory records when Supabase is not configured
             records = list(medical_records_db.values())
+            # 按创建时间倒序排列（最新的在前面）
+            records.sort(key=lambda x: x.get('created_at', ''), reverse=True)
 
         # basic filtering similar to legacy
         if keyword:
@@ -53,10 +56,13 @@ async def get_medical_records(
             # in supabase, we mark LLM parse as a special type via metadata; keep simple
             records = [r for r in records if r.get('record_type') == record_type]
 
-        # sorting
+        # sorting - 如果指定了排序字段则使用指定排序，否则保持默认的创建时间倒序
         if sort_field:
             reverse = sort_order == 'desc'
             records.sort(key=lambda x: x.get(sort_field, ''), reverse=reverse)
+        elif not supabase:
+            # 对于内存数据库，确保在过滤后重新按创建时间排序
+            records.sort(key=lambda x: x.get('created_at', ''), reverse=True)
 
         total = len(records)
         start = (page - 1) * page_size

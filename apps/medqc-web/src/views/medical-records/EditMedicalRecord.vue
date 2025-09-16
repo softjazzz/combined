@@ -195,13 +195,47 @@
                     v-model:value="document.type" 
                     placeholder="请选择文书类型"
                   >
-                    <a-select-option value="入院记录">入院记录</a-select-option>
-                    <a-select-option value="病程记录">病程记录</a-select-option>
-                    <a-select-option value="出院记录">出院记录</a-select-option>
-                    <a-select-option value="手术记录">手术记录</a-select-option>
-                    <a-select-option value="会诊记录">会诊记录</a-select-option>
-                    <a-select-option value="检查报告">检查报告</a-select-option>
-                    <a-select-option value="化验报告">化验报告</a-select-option>
+                    <!-- 标准六大类文书分类 -->
+                    <a-select-optgroup label="入院记录">
+                      <a-select-option value="admission_record">入院记录</a-select-option>
+                      <a-select-option value="admission_record_24h_in">24小时内入院记录</a-select-option>
+                      <a-select-option value="admission_diagnosis">入院诊断</a-select-option>
+                    </a-select-optgroup>
+                    <a-select-optgroup label="病程记录">
+                      <a-select-option value="first_progress_note">首次病程记录</a-select-option>
+                      <a-select-option value="daily_progress_note">日常病程记录</a-select-option>
+                      <a-select-option value="attending_progress">上级医师查房记录</a-select-option>
+                      <a-select-option value="consultation_record">疑难病例讨论记录</a-select-option>
+                      <a-select-option value="handover_record">交接班记录</a-select-option>
+                      <a-select-option value="transfer_record">转科记录</a-select-option>
+                      <a-select-option value="stage_summary">阶段小结</a-select-option>
+                    </a-select-optgroup>
+                    <a-select-optgroup label="出院记录">
+                      <a-select-option value="discharge_record">出院记录</a-select-option>
+                      <a-select-option value="admission_record_24h_out">24小时内出院记录</a-select-option>
+                      <a-select-option value="death_record">死亡记录</a-select-option>
+                      <a-select-option value="death_case_discussion">死亡病例讨论</a-select-option>
+                    </a-select-optgroup>
+                    <a-select-optgroup label="手术相关记录">
+                      <a-select-option value="preoperative_summary">术前小结</a-select-option>
+                      <a-select-option value="preoperative_discussion">术前讨论</a-select-option>
+                      <a-select-option value="operation_record">手术记录</a-select-option>
+                      <a-select-option value="postoperative_first_note">术后首次病程记录</a-select-option>
+                      <a-select-option value="anesthesia_record">麻醉记录</a-select-option>
+                    </a-select-optgroup>
+                    <a-select-optgroup label="辅助检查">
+                      <a-select-option value="imaging_report">影像检查报告</a-select-option>
+                      <a-select-option value="lab_report">检验报告</a-select-option>
+                      <a-select-option value="pathology_report">病理报告</a-select-option>
+                      <a-select-option value="other_examination">其他检查</a-select-option>
+                    </a-select-optgroup>
+                    <a-select-optgroup label="知情同意书">
+                      <a-select-option value="surgery_consent">手术同意书</a-select-option>
+                      <a-select-option value="anesthesia_consent">麻醉同意书</a-select-option>
+                      <a-select-option value="blood_transfusion_consent">输血同意书</a-select-option>
+                      <a-select-option value="special_examination_consent">特殊检查同意书</a-select-option>
+                      <a-select-option value="critical_illness_notice">病危(重)通知书</a-select-option>
+                    </a-select-optgroup>
                   </a-select>
                 </a-form-item>
               </a-col>

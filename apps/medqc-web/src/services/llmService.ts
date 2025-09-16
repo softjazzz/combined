@@ -59,8 +59,8 @@ export enum DocumentCategory {
   PROGRESS_NOTE = 'progress_note',            // 病程记录
   OPERATION_RECORD = 'operation_record',      // 手术记录
   DISCHARGE_RECORD = 'discharge_record',      // 出院记录
-  AUXILIARY_EXAMINATION = 'auxiliary_examination', // 辅助检查
-  INFORMED_CONSENT = 'informed_consent'       // 知情同意书
+  EXAMINATION_REPORT = 'examination_report',  // 辅助检查
+  CONSENT_FORM = 'consent_form'               // 知情同意书
 }
 
 // 二级文书类型

@@ -170,6 +170,7 @@
 import { computed, ref, watch } from 'vue'
 import { useQCDemoStore } from '@/stores/qcDemo'
 import { DemoDataService } from '@/services/demoDataService'
+import { DOCUMENT_TYPE_TO_CATEGORY } from '@/utils/documentTypeUtils'
 
 type DocInfo = { id: string; title?: string; type?: string; created_at?: string }
 
@@ -245,7 +246,29 @@ async function loadSichuanRules() {
   }
 }
 
-// 精确小类匹配：使用用户调整后的文书小类中文名进行匹配
+// 获取选中文书对应的“6大类”标准英文代码（用于规则匹配）
+const selectedDocTypeCodes = computed<string[]>(() => {
+  const docs = isMulti.value ? selectedDocuments.value : (selectedDocument.value ? [selectedDocument.value] : [])
+  const set = new Set<string>()
+  docs.forEach(d => {
+    const typeCode = getDocTypeCode(d)
+    // 将细分类(type)映射到“6大类”分类代码
+    const cat = (DOCUMENT_TYPE_TO_CATEGORY as any)[typeCode]
+    let mapped = cat as string | undefined
+    if (!mapped) {
+      const s = (typeCode || '').toLowerCase()
+      if (s.includes('admission')) mapped = 'admission_record'
+      else if (s.includes('discharge')) mapped = 'discharge_record'
+      else if (s.includes('operation') || s.includes('surgery') || s.includes('preoperative') || s.includes('anesthesia')) mapped = 'operation_record'
+      else if (s.includes('imaging') || s.includes('lab') || s.includes('examination') || s.includes('report')) mapped = 'examination_report'
+      else mapped = 'progress_note'
+    }
+    if (mapped) set.add(mapped)
+  })
+  return Array.from(set)
+})
+
+// 获取选中文书的中文名称（用于显示）
 const selectedDocTypeNames = computed<string[]>(() => {
   const docs = isMulti.value ? selectedDocuments.value : (selectedDocument.value ? [selectedDocument.value] : [])
   const set = new Set<string>()
@@ -258,12 +281,31 @@ const selectedDocTypeNames = computed<string[]>(() => {
 
 // 为规则标注是否适用，并将适用项排在前面
 const rulesWithApplicability = computed<any[]>(() => {
-  const names = selectedDocTypeNames.value
+  const codes = new Set(selectedDocTypeCodes.value)
   const all = sichuanRules.value
-  if (names.length === 0) return all.map(r => ({ ...r, _applicable: true, _disabled: false }))
+  if (codes.size === 0) return all.map(r => ({ ...r, _applicable: true, _disabled: false }))
+
+  const labelToCode: Record<string, string> = {
+    '入院记录': 'admission_record',
+    '病程记录': 'progress_note',
+    '出院记录': 'discharge_record',
+    '手术相关记录': 'operation_record',
+    '手术记录': 'operation_record',
+    '辅助检查': 'examination_report',
+    '检查记录': 'examination_report',
+    '知情同意书': 'consent_form'
+  }
+  const normalize = (d: string): string | undefined => {
+    if (!d) return undefined
+    const s = String(d).trim()
+    if (['admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'].includes(s)) return s
+    return labelToCode[s]
+  }
+
   const arr = all.map((r: any) => {
-    const docs: string[] = r.applicable_documents || []
-    const applicable = docs.some(d => names.includes(d))
+    const raw: string[] = r.applicable_documents || []
+    const norm = raw.map(normalize).filter((x): x is string => !!x)
+    const applicable = norm.some(d => codes.has(d))
     return { ...r, _applicable: applicable, _disabled: !applicable }
   })
   return arr.sort((a: any, b: any) => Number(b._applicable) - Number(a._applicable))
@@ -364,6 +406,15 @@ const documents = ref<Array<DocInfo>>([])
 
 // 文书类型中文标签映射（未知类型不显示）——使用更精细的小类命名
 const DOC_TYPE_LABELS: Record<string, string> = {
+  // 6个标准文书分类（大类）
+  admission_record: '入院记录',
+  progress_note: '病程记录',
+  discharge_record: '出院记录',
+  operation_record: '手术相关记录',
+  examination_report: '辅助检查',
+  consent_form: '知情同意书',
+
+  // 细分小类
   first_progress_note: '首次病程记录',
   daily_progress_note: '日常病程记录',
   attending_first_progress: '查房记录',
@@ -375,10 +426,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   preoperative_discussion: '术前讨论',
   preoperative_checklist: '术前核查',
   admission_note: '入院记录',
-  admission_record: '入院记录',
   discharge_summary: '出院小结',
-  discharge_record: '出院记录',
-  operation_record: '手术记录',
   anesthesia_record: '麻醉记录',
   nursing_record: '护理记录'
 }
