@@ -2,11 +2,12 @@ import uuid
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from pydantic import BaseModel
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
+from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/records", tags=["records"])
 
 @router.get("")
 async def get_medical_records(
+    request: Request,
     keyword: Optional[str] = None,
     department: Optional[str] = None,
     status: Optional[str] = None,
@@ -26,6 +28,7 @@ async def get_medical_records(
     page: int = 1,
     page_size: int = 10,
 ):
+    """获取病案记录列表（支持分页、筛选、排序）"""
     supabase = get_supabase()
     settings = get_settings()
     try:
@@ -69,15 +72,19 @@ async def get_medical_records(
         end = start + page_size
         page_data = records[start:end]
 
-        return {
-            "data": page_data,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
-        }
+        return paginated_response(
+            items=page_data,
+            total=total,
+            page=page,
+            page_size=page_size,
+            message="获取病案列表成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取记录列表失败: {e}")
+        raise HTTPException(
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
+            detail=f"获取记录列表失败: {e}"
+        )
 
 
 @router.get("/{record_id}", response_model=MedicalRecordResponse)
@@ -160,32 +167,66 @@ async def update_medical_record(
 
 
 @router.delete("/{record_id}")
-async def delete_medical_record(record_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_medical_record(
+    request: Request,
+    record_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """删除病案记录"""
     if record_id not in medical_records_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="医疗记录不存在")
+        raise HTTPException(
+            status_code=StatusCode.NOT_FOUND,
+            detail="医疗记录不存在"
+        )
     del medical_records_db[record_id]
-    return {"message": "医疗记录删除成功"}
+    return success_response(
+        data={"record_id": record_id},
+        message="医疗记录删除成功",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.delete("/batch")
-async def batch_delete_records(record_ids: List[str], current_user: dict = Depends(get_current_user)):
+async def batch_delete_records(
+    request: Request,
+    record_ids: List[str],
+    current_user: dict = Depends(get_current_user)
+):
+    """批量删除病案记录"""
     deleted = 0
     for rid in record_ids:
         if rid in medical_records_db:
             del medical_records_db[rid]
             deleted += 1
-    return {"message": f"成功删除 {deleted} 条记录"}
+    return success_response(
+        data={"deleted_count": deleted, "record_ids": record_ids},
+        message=f"成功删除 {deleted} 条记录",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.post("/export")
-async def export_records(record_ids: List[str], current_user: dict = Depends(get_current_user)):
+async def export_records(
+    request: Request,
+    record_ids: List[str],
+    current_user: dict = Depends(get_current_user)
+):
+    """导出病案记录"""
     export_id = f"export-{uuid.uuid4().hex[:8]}"
     download_url = f"/downloads/{export_id}.xlsx"
-    return {"download_url": download_url}
+    return success_response(
+        data={"download_url": download_url, "export_id": export_id},
+        message="导出任务创建成功",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/statistics")
-async def get_medical_records_statistics(current_user: dict = Depends(get_current_user)):
+async def get_medical_records_statistics(
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取病案统计信息"""
     records = list(medical_records_db.values())
     total_records = len(records)
     pending_records = len([r for r in records if r.get("status") == "pending"])
@@ -209,15 +250,20 @@ async def get_medical_records_statistics(current_user: dict = Depends(get_curren
         "this_week": len(records),
         "this_month": len(records),
     }
-    return {
-        "total_records": total_records,
-        "pending_records": pending_records,
-        "completed_records": completed_records,
-        "analyzing_records": analyzing_records,
-        "department_statistics": department_stats,
-        "type_statistics": type_stats,
-        "recent_activity": recent,
-    }
+
+    return success_response(
+        data={
+            "total_records": total_records,
+            "pending_records": pending_records,
+            "completed_records": completed_records,
+            "analyzing_records": analyzing_records,
+            "department_statistics": department_stats,
+            "type_statistics": type_stats,
+            "recent_activity": recent,
+        },
+        message="获取统计信息成功",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.post("/upload")

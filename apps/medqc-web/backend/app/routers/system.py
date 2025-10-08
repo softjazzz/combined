@@ -1,16 +1,18 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from datetime import datetime
 import subprocess
 import os
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
+from ..core.response import success_response, get_trace_id
 from ..services.sichuan_qc_service import SichuanQCService
 
 router = APIRouter(prefix="/api", tags=["system"])
 
 
 @router.get("/health")
-async def health():
+async def health(request: Request):
+    """健康检查接口"""
     git_rev = ""
     try:
         git_rev = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=os.path.dirname(os.path.dirname(__file__))).decode().strip()
@@ -39,38 +41,44 @@ async def health():
     except Exception:
         llm_ok = False
 
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "version": "1.0.0",
-        "git": git_rev,
-        "dependencies": {
-            "supabase": supabase_ok,
-            "llm": llm_ok,
+    return success_response(
+        data={
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "version": "1.0.0",
+            "git": git_rev,
+            "dependencies": {
+                "supabase": supabase_ok,
+                "llm": llm_ok,
+            },
+            "env": settings.ENV,
         },
-        "env": settings.ENV,
-    }
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/metrics")
-async def metrics():
+async def metrics(request: Request):
     """聚合简单运行指标，便于前端看板与运维脚本采集。"""
     sb = get_supabase()
     qc_stats = SichuanQCService().stats()
 
-    return {
-        "success": True,
-        "system": {
-            "env": get_settings().ENV,
+    return success_response(
+        data={
+            "system": {
+                "env": get_settings().ENV,
+            },
+            "dependencies": {
+                "supabase": sb is not None,
+            },
+            "qc": {
+                "total_calls": qc_stats.get("total_calls", 0),
+                "success_rate": qc_stats.get("success_rate", 0.0),
+                "avg_api_time": qc_stats.get("avg_api_time", 0.0),
+                "total_tokens": qc_stats.get("total_tokens", 0),
+            },
+            "timestamp": datetime.utcnow().isoformat() + "Z",
         },
-        "dependencies": {
-            "supabase": sb is not None,
-        },
-        "qc": {
-            "total_calls": qc_stats.get("total_calls", 0),
-            "success_rate": qc_stats.get("success_rate", 0.0),
-            "avg_api_time": qc_stats.get("avg_api_time", 0.0),
-            "total_tokens": qc_stats.get("total_tokens", 0),
-        },
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-    }
+        message="系统指标获取成功",
+        trace_id=get_trace_id(request)
+    )
