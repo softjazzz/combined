@@ -172,12 +172,12 @@ const handleContentHighlight = (texts: string[]) => {
   highlightTexts.value = texts
 }
 
-const handleDocumentSelect = (document: any) => {
+const handleDocumentSelect = (document: unknown) => {
   // 处理文档选择
   console.log('Selected document:', document)
 }
 
-const handleClassificationFilter = (filter: any) => {
+const handleClassificationFilter = (filter: unknown) => {
   // 处理分类筛选
   console.log('Classification filter:', filter)
 }

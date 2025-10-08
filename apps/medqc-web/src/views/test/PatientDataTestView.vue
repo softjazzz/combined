@@ -105,7 +105,7 @@ const testResults = ref<Array<{
   data?: any
 }>>([])
 
-const addResult = (type: 'success' | 'error' | 'info', message: string, data?: any) => {
+const addResult = (type: 'success' | 'error' | 'info', message: string, data?: unknown) => {
   testResults.value.push({
     type,
     message: `[${new Date().toLocaleTimeString()}] ${message}`,
@@ -138,7 +138,7 @@ const testDatabaseData = async () => {
     } else {
       addResult('error', `加载失败: ${response.error || '未知错误'}`)
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addResult('error', `异常: ${error.message}`)
   } finally {
     loading.value = false

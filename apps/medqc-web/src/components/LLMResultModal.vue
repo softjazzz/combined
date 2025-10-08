@@ -376,7 +376,7 @@ const handleClose = () => {
   emit('update:visible', false)
 }
 
-const onDocumentSelect = (keys: string[], info: any) => {
+const onDocumentSelect = (keys: string[], info: unknown) => {
   if (keys.length > 0) {
     const selectedNode = info.node
     // 只有文书节点（叶子节点）才能被选中

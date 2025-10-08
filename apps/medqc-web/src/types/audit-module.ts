@@ -102,7 +102,7 @@ export interface SamplingConfig {
 
 export interface StratificationRule {
   stratum_name: string
-  criteria: Record<string, any>
+  criteria: Record<string, unknown>
   sample_ratio: number
   min_sample_size?: number
   max_sample_size?: number
@@ -298,7 +298,7 @@ export interface MessageAction {
     api_endpoint?: string
     modal_component?: string
     confirm_message?: string
-    params?: Record<string, any>
+    params?: Record<string, unknown>
   }
 }
 

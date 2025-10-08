@@ -14,7 +14,7 @@ vi.mock('@/components/charts/QCTrendChart.vue', () => ({
 }))
 
 describe('DashboardView', () => {
-  let wrapper: VueWrapper<any>
+  let wrapper: VueWrapper<unknown>
 
   const mockStats: DashboardStats = {
     totalRecords: 1247,

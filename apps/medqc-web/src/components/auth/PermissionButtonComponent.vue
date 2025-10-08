@@ -4,7 +4,7 @@ import { Button } from 'ant-design-vue'
 // import { usePermissions } from '@/composables/usePermissions'
 
 // 临时权限检查函数
-const checkPermission = (resource: string, action: string, context?: any) => {
+const checkPermission = (resource: string, action: string, context?: unknown) => {
   // 临时实现，始终返回允许
   return { allowed: true, reason: '' }
 }
@@ -15,7 +15,7 @@ interface Props {
   // 权限操作
   action?: string
   // 权限上下文
-  context?: Record<string, any>
+  context?: Record<string, unknown>
   // 用户角色（可选，用于简单的角色检查）
   roles?: string[]
   // 按钮类型

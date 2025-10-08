@@ -50,8 +50,8 @@ const route = useRoute()
 // 响应式状态
 const loading = ref(false)
 const error = ref('')
-const patient = ref<any>(null)
-const documentsResponse = ref<any>(null)
+const patient = ref<unknown>(null)
+const documentsResponse = ref<unknown>(null)
 
 // 计算属性
 const recordId = computed(() => route.params.id as string)

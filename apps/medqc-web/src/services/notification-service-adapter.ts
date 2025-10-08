@@ -129,7 +129,7 @@ class WebSocketManager {
     }
   }
 
-  send(message: any): void {
+  send(message: unknown): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message))
     } else {
@@ -139,7 +139,7 @@ class WebSocketManager {
 
   on(event: string, handler: Function): void {
     if (!this.messageHandlers.has(event)) {
-      this.messageHandlers.set(event, : any[])
+      this.messageHandlers.set(event, : unknown[])
     }
     this.messageHandlers.get(event)!.push(handler)
   }
@@ -154,7 +154,7 @@ class WebSocketManager {
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     const handlers = this.messageHandlers.get(event)
     if (handlers) {
       handlers.forEach(handler => {
@@ -200,7 +200,7 @@ export class NotificationServiceAdapter {
         this.emit('disconnected', data)
       })
       
-      this.wsManager.on('notification',  (notification: any) => {
+      this.wsManager.on('notification',  (notification: unknown) => {
         this.emit('new-notification', notification)
         
         // 根据优先级显示不同的通知
@@ -209,11 +209,11 @@ export class NotificationServiceAdapter {
         }
       })
       
-      this.wsManager.on('read_confirmed',  (data: any) => {
+      this.wsManager.on('read_confirmed',  (data: unknown) => {
         this.emit('notification-read', data)
       })
       
-      this.wsManager.on('unread_count',  (data: any) => {
+      this.wsManager.on('unread_count',  (data: unknown) => {
         this.emit('unread-count-updated', data)
       })
       
@@ -234,7 +234,7 @@ export class NotificationServiceAdapter {
     recipientId: string,
     recipientType: 'clinician' | 'reviewer' | 'admin',
     type: MessageType,
-    relatedData: Record<string, any>,
+    relatedData: Record<string, unknown>,
     customContent?: {
       title?: string
       content?: string
@@ -261,7 +261,7 @@ export class NotificationServiceAdapter {
       console.log('通知发送成功:', notification.title)
       return notification
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('发送通知失败:', error)
       throw new Error(`发送通知失败: ${error.message}`)
     }
@@ -275,7 +275,7 @@ export class NotificationServiceAdapter {
       recipientId: string
       recipientType: 'clinician' | 'reviewer' | 'admin'
       type: MessageType
-      relatedData: Record<string, any>
+      relatedData: Record<string, unknown>
       customContent?: {
         title?: string
         content?: string
@@ -340,7 +340,7 @@ export class NotificationServiceAdapter {
         total: response.total
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取用户通知失败:', error)
       throw new Error(`获取用户通知失败: ${error.message}`)
     }
@@ -363,7 +363,7 @@ export class NotificationServiceAdapter {
       
       console.log('消息已标记为已读')
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('标记已读失败:', error)
       throw new Error(`标记已读失败: ${error.message}`)
     }
@@ -376,7 +376,7 @@ export class NotificationServiceAdapter {
     try {
       await unifiedAPIClient.markNotificationAsProcessed(notificationId)
       console.log('消息已标记为已处理')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('标记已处理失败:', error)
       throw new Error(`标记已处理失败: ${error.message}`)
     }
@@ -389,7 +389,7 @@ export class NotificationServiceAdapter {
     try {
       await unifiedAPIClient.batchMarkAsRead(notificationIds)
       console.log(`批量标记 ${notificationIds.length} 条消息为已读`)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('批量标记已读失败:', error)
       throw new Error(`批量标记已读失败: ${error.message}`)
     }
@@ -398,10 +398,10 @@ export class NotificationServiceAdapter {
   /**
    * 获取通知统计信息
    */
-  async getNotificationStats(): Promise<any> {
+  async getNotificationStats(): Promise<unknown> {
     try {
       return await unifiedAPIClient.getNotificationStats()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取通知统计失败:', error)
       return {
         connection_stats: { connected_users: 0, total_connections: 0 },
@@ -420,7 +420,7 @@ export class NotificationServiceAdapter {
   ): Promise<QCNotification> {
     try {
       return await unifiedAPIClient.sendTestNotification(recipientId, messageType, priority)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('发送测试通知失败:', error)
       throw new Error(`发送测试通知失败: ${error.message}`)
     }
@@ -431,7 +431,7 @@ export class NotificationServiceAdapter {
    */
   on(event: string, handler: Function): void {
     if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, : any[])
+      this.eventHandlers.set(event, : unknown[])
     }
     this.eventHandlers.get(event)!.push(handler)
   }
@@ -446,7 +446,7 @@ export class NotificationServiceAdapter {
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     const handlers = this.eventHandlers.get(event)
     if (handlers) {
       handlers.forEach(handler => {

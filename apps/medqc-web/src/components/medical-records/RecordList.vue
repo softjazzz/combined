@@ -453,7 +453,7 @@ const handleRefresh = () => {
 }
 
 // 处理表格变化
-const handleTableChange = (pag, filters: any,  sorter: any) => {
+const handleTableChange = (pag, filters: unknown,  sorter: unknown) => {
   // 更新分页
   if (pag) {
     searchParams.pagination!.page = pag.current

@@ -56,7 +56,7 @@ const handleLogin = async (loginData) => {
       console.error('❌ 登录失败:', result.error)
       message.error(result.error || '登录失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Login error:', error)
     message.error('登录过程中发生错误')
   } finally {

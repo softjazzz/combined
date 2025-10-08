@@ -461,7 +461,7 @@ const initCharts = () => {
     riskChart.setOption({
       tooltip: { trigger: 'item' }, series: [{
         type: 'pie', radius: '60%', data: riskData, itemStyle: {
-          color: (params: any) => {
+          color: (params: unknown) => {
             const colors = ['#52c41a', '#faad14', '#ff7875', '#ff4d4f']
             return colors[params.dataIndex]
           }

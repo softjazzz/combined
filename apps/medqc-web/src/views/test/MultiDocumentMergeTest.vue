@@ -82,7 +82,7 @@ const store = useLLMParseStore()
 
 // 响应式数据
 const testing = ref(false)
-const mergedResult = ref<any>(null)
+const mergedResult = ref<unknown>(null)
 const showModal = ref(false)
 
 // 模拟的多文档解析结果
@@ -147,7 +147,7 @@ const mapDocumentType = (docType: string) => {
 }
 
 // 合并多个解析结果
-const mergeMultipleResults = (results: any[]) => {
+const mergeMultipleResults = (results: unknown[]) => {
   if (results.length === 0) return null
   if (results.length === 1) return results[0]
 
@@ -158,7 +158,7 @@ const mergeMultipleResults = (results: any[]) => {
 
   // 按文档类型分组
   const documentsByType: Record<string, any[]> = {}
-  const allDocuments: any[] = []
+  const allDocuments: unknown[] = []
 
   results.forEach((result, index) => {
     const docType = result.documentType

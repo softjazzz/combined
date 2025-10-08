@@ -139,7 +139,7 @@ export async function getTrendData(period: 'week' | 'month' | 'quarter' = 'month
     if (error) throw error
 
     // 按时间段分组数据
-    const groupedData = new Map<string, { records: any[], scores: number[] }>()
+    const groupedData = new Map<string, { records: unknown[], scores: number[] }>()
     
     records?.forEach(record => {
       const date = new Date(record.created_at)
@@ -230,7 +230,7 @@ export async function getDepartmentStats(): Promise<DepartmentStats[]> {
     const departmentStats: DepartmentStats[] = []
     let colorIndex = 0
     
-    departmentMap.forEach((data: any,  department: any) => {
+    departmentMap.forEach((data: unknown,  department: unknown) => {
       const averageScore = data.scores.length > 0 
         ? data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length
         : 0

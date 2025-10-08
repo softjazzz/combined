@@ -63,7 +63,7 @@ export interface ValidationCriteria {
 export interface RuleTemplateConfig {
   template_id: string
   template_name: string
-  default_parameters: Record<string, any>
+  default_parameters: Record<string, unknown>
   customizable_fields: string[]
 }
 

@@ -240,9 +240,9 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'change', pagination: any,  filters: any, sorter: any): void
+  (e: 'change', pagination: unknown,  filters: unknown, sorter: unknown): void
   (e: 'search', value: string): void
-  (e: 'filter-change', filters: Record<string, any>): void
+  (e: 'filter-change', filters: Record<string, unknown>): void
   (e: 'batch-action', action: BatchAction, selectedKeys: string[]): void
   (e: 'refresh'): void
   (e: 'export'): void
@@ -274,7 +274,7 @@ const searchLoading = ref(false)
 const refreshing = ref(false)
 const exporting = ref(false)
 const selectedRowKeys = ref<string[]>([])
-const filterValues = ref<Record<string, any>>({})
+const filterValues = ref<Record<string, unknown>>({})
 const visibleColumns = ref<string[]>([])
 
 // 初始化可见列
@@ -415,7 +415,7 @@ const handleExport = () => {
   }, 1000)
 }
 
-const handleTableChange = (pagination, filters: any,  sorter: any) => {
+const handleTableChange = (pagination, filters: unknown,  sorter: unknown) => {
   emit('change', pagination, filters, sorter)
 }
 

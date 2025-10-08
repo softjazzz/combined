@@ -63,7 +63,7 @@ apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
     
     return config
   },
-  (error: any) => {
+  (error: unknown) => {
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
   }
@@ -77,7 +77,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
     })
     return response
   },
-  (error: any) => {
+  (error: unknown) => {
     console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
       status: error.response?.status,
       message: error.response?.data?.detail || error.message
@@ -120,7 +120,7 @@ export class SimplifiedApiService {
         data: response.data,
         message: '登录成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: {
@@ -140,7 +140,7 @@ export class SimplifiedApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: {
@@ -161,7 +161,7 @@ export class SimplifiedApiService {
         success: true,
         message: '登出成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 即使后端登出失败，也清除本地token
       TokenManager.clearTokens()
       return {
@@ -176,14 +176,14 @@ export class SimplifiedApiService {
   /**
    * 健康检查
    */
-  static async healthCheck(): Promise<ApiResponse<any>> {
+  static async healthCheck(): Promise<ApiResponse<unknown>> {
     try {
       const response = await apiClient.get('/api/health')
       return {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: {
@@ -196,7 +196,7 @@ export class SimplifiedApiService {
   /**
    * 演示质控分析
    */
-  static async analyzeDemoRecord(content: string): Promise<ApiResponse<any>> {
+  static async analyzeDemoRecord(content: string): Promise<ApiResponse<unknown>> {
     try {
       const formData = new FormData()
       formData.append('content', content)
@@ -212,7 +212,7 @@ export class SimplifiedApiService {
         data: response.data.data,
         message: response.data.message
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: {
@@ -225,7 +225,7 @@ export class SimplifiedApiService {
   /**
    * 文件上传
    */
-  static async uploadFile(file: File): Promise<ApiResponse<any>> {
+  static async uploadFile(file: File): Promise<ApiResponse<unknown>> {
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -241,7 +241,7 @@ export class SimplifiedApiService {
         data: response.data.data,
         message: response.data.message
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: {
@@ -262,7 +262,7 @@ export class SimplifiedApiService {
         data: response.data.data,
         message: response.data.message
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: {

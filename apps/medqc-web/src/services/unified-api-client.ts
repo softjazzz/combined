@@ -143,14 +143,14 @@ class UnifiedAPIClient {
   async batchAssignReviewers(
     taskId: string,
     assignments: Record<string, string>
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request(`/api/audit-tasks/${taskId}/batch-assign`, {
       method: 'POST',
       body: JSON.stringify(assignments)
     })
   }
   
-  async getTaskStatistics(taskId: string): Promise<any> {
+  async getTaskStatistics(taskId: string): Promise<unknown> {
     return this.request(`/api/audit-tasks/${taskId}/statistics`)
   }
   
@@ -195,7 +195,7 @@ class UnifiedAPIClient {
     defectsData[],
     medicalRecordId: string,
     context?: any
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request('/api/ai-assistance/rectification-plan', {
       method: 'POST',
       body: JSON.stringify({
@@ -209,7 +209,7 @@ class UnifiedAPIClient {
   async smartMedicalRecordAnalysis(
     medicalRecordId: string,
     analysisConfig: any
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request(`/api/ai-assistance/smart-analysis/${medicalRecordId}`, {
       method: 'POST',
       body: JSON.stringify(analysisConfig)
@@ -219,7 +219,7 @@ class UnifiedAPIClient {
   async predictQualityScore(
     medicalRecordId: string,
     predictionConfig: any
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.request('/api/ai-assistance/quality-score-prediction', {
       method: 'POST',
       body: JSON.stringify({
@@ -236,7 +236,7 @@ class UnifiedAPIClient {
     return this.request(`/api/ai-assistance/analysis-history/${taskItemId}?limit=${limit}`)
   }
   
-  async submitAIFeedback(feedbackData: any): Promise<any> {
+  async submitAIFeedback(feedbackData: unknown): Promise<unknown> {
     return this.request('/api/ai-assistance/feedback', {
       method: 'POST',
       body: JSON.stringify(feedbackData)
@@ -246,7 +246,7 @@ class UnifiedAPIClient {
   // ==================== 消息通知API ====================
   
   async sendNotification(
-    notificationData: any,
+    notificationData: unknown,
     immediate: boolean = true
   ): Promise<QCNotification> {
     return this.request<QCNotification>(`/api/notifications?immediate=${immediate}`, {
@@ -255,7 +255,7 @@ class UnifiedAPIClient {
     })
   }
   
-  async batchSendNotifications(notificationsData: any[]): Promise<QCNotification[]> {
+  async batchSendNotifications(notificationsData: unknown[]): Promise<QCNotification[]> {
     return this.request<QCNotification[]>('/api/notifications/batch', {
       method: 'POST',
       body: JSON.stringify(notificationsData)
@@ -305,7 +305,7 @@ class UnifiedAPIClient {
     })
   }
   
-  async getNotificationStats(): Promise<any> {
+  async getNotificationStats(): Promise<unknown> {
     return this.request('/api/notifications/stats')
   }
   
@@ -326,15 +326,15 @@ class UnifiedAPIClient {
   
   // ==================== 系统信息API ====================
   
-  async getSystemHealth(): Promise<any> {
+  async getSystemHealth(): Promise<unknown> {
     return this.request('/health')
   }
   
-  async getSystemInfo(): Promise<any> {
+  async getSystemInfo(): Promise<unknown> {
     return this.request('/api/system/info')
   }
   
-  async getSystemStats(): Promise<any> {
+  async getSystemStats(): Promise<unknown> {
     return this.request('/api/system/stats')
   }
 }

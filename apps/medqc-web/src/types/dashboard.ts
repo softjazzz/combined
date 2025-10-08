@@ -54,7 +54,7 @@ export interface ActivityRecord {
   icon: Component
   color: string
   user?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 }
 
 // 图表数据接口

@@ -52,7 +52,7 @@ export class AuditTaskServiceAdapter {
 
       return task
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('创建审核任务失败:', error)
       throw new Error(`创建审核任务失败: ${error.message}`)
     }
@@ -212,7 +212,7 @@ export class AuditTaskServiceAdapter {
   async getAuditTaskById(taskId: string): Promise<QCAuditTask | null> {
     try {
       return await unifiedAPIClient.getAuditTask(taskId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error.message.includes('404')) {
         return null
       }
@@ -248,7 +248,7 @@ export class AuditTaskServiceAdapter {
         total: response.total
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取任务明细失败:', error)
       throw new Error(`获取任务明细失败: ${error.message}`)
     }
@@ -266,7 +266,7 @@ export class AuditTaskServiceAdapter {
       console.log('审核任务已启动:', task.task_code)
       return task
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('启动审核任务失败:', error)
       throw new Error(`启动审核任务失败: ${error.message}`)
     }
@@ -284,7 +284,7 @@ export class AuditTaskServiceAdapter {
       console.log('审核任务已完成:', task.task_code)
       return task
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('完成审核任务失败:', error)
       throw new Error(`完成审核任务失败: ${error.message}`)
     }
@@ -315,7 +315,7 @@ export class AuditTaskServiceAdapter {
   async batchAssignReviewers(
     taskId: string,
     assignments: Record<string, string>
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       console.log('批量分配审核员:', taskId, Object.keys(assignments).length)
       
@@ -333,10 +333,10 @@ export class AuditTaskServiceAdapter {
   /**
    * 获取任务统计信息
    */
-  async getTaskStatistics(taskId: string): Promise<any> {
+  async getTaskStatistics(taskId: string): Promise<unknown> {
     try {
       return await unifiedAPIClient.getTaskStatistics(taskId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取任务统计失败:', error)
       throw new Error(`获取任务统计失败: ${error.message}`)
     }
@@ -353,7 +353,7 @@ export class AuditTaskServiceAdapter {
       
       console.log('审核任务已删除')
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('删除审核任务失败:', error)
       throw new Error(`删除审核任务失败: ${error.message}`)
     }
@@ -384,7 +384,7 @@ export class AuditTaskServiceAdapter {
       console.log('批量处理完成')
       return result
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('批量处理失败:', error)
       throw new Error(`批量处理失败: ${error.message}`)
     }

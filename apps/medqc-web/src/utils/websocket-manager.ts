@@ -57,7 +57,7 @@ export class WebSocketManager {
   async createConnection(
     channelName: string,
     config?: Partial<ConnectionConfig>
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       console.log(`🔌 创建WebSocket连接: ${channelName}`)
 
@@ -80,7 +80,7 @@ export class WebSocketManager {
       })
 
       // 初始化消息队列
-      this.messageQueue.set(channelName, : any[])
+      this.messageQueue.set(channelName, : unknown[])
 
       // 创建Supabase实时连接
       const channel = supabase.channel(channelName, {
@@ -119,12 +119,12 @@ export class WebSocketManager {
    * 设置连接事件监听
    */
   private setupConnectionEvents(
-    channel: any,
+    channel: unknown,
     channelName: string,
     config: ConnectionConfig
   ) {
     // 监听数据库变化
-    channel.on('postgres_changes',  { event: '*', schema: 'public' }, (payload: any) => {
+    channel.on('postgres_changes',  { event: '*', schema: 'public' }, (payload: unknown) => {
       this.handleMessage(channelName, {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'postgres_changes',
@@ -135,7 +135,7 @@ export class WebSocketManager {
     })
 
     // 监听自定义事件
-    channel.on('realtime_qc_event',  (payload: any) => {
+    channel.on('realtime_qc_event',  (payload: unknown) => {
       this.handleMessage(channelName, {
         id: `qc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'realtime_qc_event',
@@ -146,7 +146,7 @@ export class WebSocketManager {
     })
 
     // 监听心跳响应
-    channel.on('heartbeat_response',  (payload: any) => {
+    channel.on('heartbeat_response',  (payload: unknown) => {
       this.updateHeartbeat(channelName, payload.timestamp)
     })
   }
@@ -421,7 +421,7 @@ export class WebSocketManager {
   /**
    * 发送消息
    */
-  sendMessage(channelName: string, type: string, payload: any): boolean {
+  sendMessage(channelName: string, type: string, payload: unknown): boolean {
     const channel = this.connections.get(channelName)
     if (!channel) {
       console.error(`❌ 连接不存在: ${channelName}`)

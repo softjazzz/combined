@@ -26,7 +26,7 @@ export interface DatabaseMedicalRecord {
   raw_text?: string
   ai_extraction_result: any
   ai_confidence_score: number
-  documents: any[]
+  documents: unknown[]
   status: 'draft' | 'active' | 'archived'
   import_method: 'manual' | 'smart_import' | 'batch_import'
   created_at: string
@@ -87,7 +87,7 @@ export class DemoDataService {
 
     // 重试机制：最多尝试2次
     const maxRetries = 2
-    let lastError: any = null
+    let lastError: unknown = null
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       console.log(`[DemoDataService] 连接尝试 ${attempt}/${maxRetries}...`)
@@ -320,7 +320,7 @@ export class DemoDataService {
         this.departmentsCache = { data: fallback, ts: Date.now() }
         return fallback
       }
-      const departments = [...new Set((data || []).map((item: any) => item.department).filter(Boolean))].sort()
+      const departments = [...new Set((data || []).map((item: unknown) => item.department).filter(Boolean))].sort()
       this.departmentsCache = { data: departments, ts: Date.now() }
       return departments
     } catch (error) {
@@ -352,7 +352,7 @@ export class DemoDataService {
       }
       const docs = (data as any)?.documents
       if (Array.isArray(docs) && docs.length > 0) {
-        return docs.map((d: any, i: number) => {
+        return docs.map((d: unknown, i: number) => {
           const typeCode = (d.type || d.type_code || '').toString()
           const chineseLabel = (DOCUMENT_TYPE_LABELS as any)[typeCode] || ''
           return {

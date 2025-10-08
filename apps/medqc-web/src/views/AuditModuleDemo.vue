@@ -481,11 +481,11 @@ const handleTaskItemChange = (itemId: string) => {
   selectedTaskItem.value = itemId
 }
 
-const handleAuditResultUpdated = (level: string, result: any) => {
+const handleAuditResultUpdated = (level: string, result: unknown) => {
   message.success(`${level}级审核结果已更新`)
 }
 
-const handleAuditResultSubmitted = (level: string, result: any) => {
+const handleAuditResultSubmitted = (level: string, result: unknown) => {
   message.success(`${level}级审核结果已提交`)
 }
 
@@ -494,7 +494,7 @@ const handleNotificationSent = (notification: QCNotification) => {
   message.success('演示通知已发送')
 }
 
-const handleDefectsDetected = (defects: any[]) => {
+const handleDefectsDetected = (defects: unknown[]) => {
   aiAnalysisCount.value++
   message.success(`AI检测到 ${defects.length} 个潜在缺陷`)
 }

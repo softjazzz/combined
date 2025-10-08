@@ -137,7 +137,7 @@ const emit = defineEmits<{
 }>()
 
 // 编辑器引用
-const editorRef = ref<any>(null)
+const editorRef = ref<unknown>(null)
 
 // 编辑器状态
 const editorContent = ref('')

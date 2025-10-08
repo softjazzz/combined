@@ -27,7 +27,7 @@ export interface SemanticRuleResult {
   confidence: number
   evidence: string
   reasoning: string
-  defect_details?: Record<string, any>
+  defect_details?: Record<string, unknown>
   execution_time: number
   token_usage?: {
     prompt: number
@@ -193,7 +193,7 @@ export class SemanticRulesService {
    */
   async executeSemanticRule(
     ruleId: string, 
-    inputData: Record<string, any>,
+    inputData: Record<string, unknown>,
     useMockLLM: boolean = false
   ): Promise<{
     success: boolean
@@ -236,7 +236,7 @@ export class SemanticRulesService {
    */
   async executeBatchSemanticRules(
     ruleIds: string[],
-    inputData: Record<string, any>,
+    inputData: Record<string, unknown>,
     useMockLLM: boolean = false
   ): Promise<{
     success: boolean

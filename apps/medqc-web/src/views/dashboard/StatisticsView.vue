@@ -307,7 +307,7 @@ const tableColumns = [
     dataIndex: 'totalRecords',
     key: 'totalRecords',
     width: 120,
-    sorter: (a: any,  b: any) => a.totalRecords - b.totalRecords
+    sorter: (a: unknown,  b: unknown) => a.totalRecords - b.totalRecords
   },
   {
     title: '通过数',
@@ -320,14 +320,14 @@ const tableColumns = [
     dataIndex: 'passRate',
     key: 'passRate',
     width: 200,
-    sorter: (a: any,  b: any) => a.passRate - b.passRate
+    sorter: (a: unknown,  b: unknown) => a.passRate - b.passRate
   },
   {
     title: '平均处理时间(h)',
     dataIndex: 'avgTime',
     key: 'avgTime',
     width: 150,
-    sorter: (a: any,  b: any) => a.avgTime - b.avgTime
+    sorter: (a: unknown,  b: unknown) => a.avgTime - b.avgTime
   },
   {
     title: '趋势',

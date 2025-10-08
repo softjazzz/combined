@@ -415,7 +415,7 @@ const documentContent = ref('')
 const documentId = ref('')
 const documentType = ref('病程记录')
 const evaluating = ref(false)
-const evaluationResult = ref<any>(null)
+const evaluationResult = ref<unknown>(null)
 
 // 从路由读取病历ID
 const linkedRecordId = ref<string>((route.params.id as string) || '')
@@ -427,10 +427,10 @@ const selectedProvider = ref<string | undefined>(undefined)
 const selectedModel = ref<string | undefined>(undefined)
 
 // 友好标签生成
-const getProviderLabel = (p: any) => {
+const getProviderLabel = (p: unknown) => {
   return p.name || p.provider_name || p.display_name || p.provider_code || (p.id ? String(p.id).slice(0, 8) : '未知提供商')
 }
-const getModelLabel = (m: any) => {
+const getModelLabel = (m: unknown) => {
   return m.model_name || m.name || m.model_code || (m.id ? String(m.id).slice(0, 12) : '未知模型')
 }
 
@@ -441,7 +441,7 @@ const applyModelFilter = () => {
     filteredModels.value = models.value
     return
   }
-  const normalize = (v: any): string | undefined => {
+  const normalize = (v: unknown): string | undefined => {
     if (!v) return undefined
     const s = String(v).toLowerCase()
     if (/(openai)/.test(s)) return 'openai'
@@ -451,7 +451,7 @@ const applyModelFilter = () => {
   }
 
   const code = String(selectedProvider.value)
-  const rec = providers.value.find((p: any) => String(p.provider_code || p.id || p.code) === code)
+  const rec = providers.value.find((p: unknown) => String(p.provider_code || p.id || p.code) === code)
   const keys = new Set<string>([code])
   if (rec?.provider_code) keys.add(String(rec.provider_code))
   if (rec?.id) keys.add(String(rec.id))
@@ -459,7 +459,7 @@ const applyModelFilter = () => {
   const nameKey = normalize(rec?.name || rec?.provider_name || rec?.display_name)
   if (nameKey) keys.add(nameKey)
 
-  filteredModels.value = models.value.filter((m: any) => {
+  filteredModels.value = models.value.filter((m: unknown) => {
     const providerRaw = m.provider || m.provider_code || m.providerId || m.provider_id
     const norm = normalize(providerRaw)
     return (
@@ -478,10 +478,10 @@ watch(selectedProvider, () => {
 })
 
 const rules = ref<any[]>([])
-const rulesStats = ref<any>({})
+const rulesStats = ref<unknown>({})
 const loadingRules = ref(false)
 
-const systemStats = ref<any>(null)
+const systemStats = ref<unknown>(null)
 const loadingStats = ref(false)
 
 // 表格列定义
@@ -608,7 +608,7 @@ const startEvaluationWithLinkedRecord = async () => {
     }
     evaluationResult.value = await resp.json()
     message.success('质控评估完成！')
-  } catch (e: any) {
+  } catch (e: unknown) {
     message.error(`评估失败: ${e.message || e}`)
   } finally {
     evaluating.value = false

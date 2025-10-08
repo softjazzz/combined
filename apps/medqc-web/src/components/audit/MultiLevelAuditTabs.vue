@@ -239,7 +239,7 @@ const loadAuditResults = async () => {
       review_duration: result.review_duration
     })).sort((a, b) => new Date(a.submitted_at || '').getTime() - new Date(b.submitted_at || '').getTime())
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(`加载审核结果失败: ${error.message}`)
   } finally {
     loading.value = false
@@ -314,7 +314,7 @@ const handleSubmitResult = async (level: AuditLevel, auditResultId: string) => {
     emit('result-submitted', level, auditResults.value[level]!)
     message.success(`${level}级审核结果已提交`)
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(`提交失败: ${error.message}`)
   }
 }

@@ -258,8 +258,8 @@ import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
 
 // Props
 const props = defineProps<{
-  selectedRules: any[]
-  availableRules: any[]
+  selectedRules: unknown[]
+  availableRules: unknown[]
   testRecord: any
   selectedDocuments?: Array<{ id: string; title?: string; type?: string; created_at?: string }>
 }>()
@@ -364,7 +364,7 @@ const rulesWithApplicability = computed<any[]>(() => {
     return labelToCode[s]
   }
 
-  const arr = all.map((r: any) => {
+  const arr = all.map((r: unknown) => {
     // 1) 先尝试从映射表/后端字段取得标准类别集合
     const mapped = lookupRuleCategories(r)
     const raw: string[] = mapped.length > 0 ? mapped : (r.applicable_documents || [])
@@ -386,7 +386,7 @@ const rulesWithApplicability = computed<any[]>(() => {
     }
     return { ...r, _applicable: applicable, _disabled: !applicable }
   })
-  return arr.sort((a: any, b: any) => Number(b._applicable) - Number(a._applicable))
+  return arr.sort((a: unknown, b: unknown) => Number(b._applicable) - Number(a._applicable))
 })
 
 // 计算属性：过滤后的规则
@@ -447,7 +447,7 @@ const handleConfigRules = () => {
   message.info('规则配置功能开发中...')
 }
 
-const addRule = (rule: any) => {
+const addRule = (rule: unknown) => {
   // 检查是否已经选择
   if (isRuleSelected(rule)) {
     message.warning(`规则 "${rule.name || rule.id}" 已经选择`)
@@ -459,13 +459,13 @@ const addRule = (rule: any) => {
   message.success(`已添加规则: ${rule.name || rule.id}`)
 }
 
-const removeRule = (rule: any) => {
+const removeRule = (rule: unknown) => {
   const updatedRules = props.selectedRules.filter(r => r.id !== rule.id)
   emit('rulesUpdated', updatedRules)
   message.success(`已移除规则: ${rule.name || rule.id}`)
 }
 
-const isRuleSelected = (rule: any) => {
+const isRuleSelected = (rule: unknown) => {
   return props.selectedRules.some(r => r.id === rule.id)
 }
 

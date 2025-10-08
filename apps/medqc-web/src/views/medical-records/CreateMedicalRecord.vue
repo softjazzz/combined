@@ -290,7 +290,7 @@ const documentSelectorVisible = ref(false)
 const searchKeyword = ref('')
 const expandedKeys = ref<string[]>(['admission', 'progress', 'surgery', 'examination', 'consent'])
 const selectedKeys = ref<string[]>([])
-const selectedDocument = ref<any>(null)
+const selectedDocument = ref<unknown>(null)
 
 // 与后端保持一致的文书类型（完整枚举）
 const DOCUMENT_TYPES = [
@@ -398,7 +398,7 @@ const getTypeLabel = (code: string) => {
   return t ? t.label : code
 }
 
-const filterDocType = (input: string, option: any) => {
+const filterDocType = (input: string, option: unknown) => {
   const text = (option?.children as string) || ''
   return text.toLowerCase().includes((input || '').toLowerCase())
 }
@@ -462,7 +462,7 @@ const filteredTreeData = computed(() => {
   }
   
   const keyword = searchKeyword.value.toLowerCase()
-  const filterTree = (nodes: any[]): any[] => {
+  const filterTree = (nodes: unknown[]): unknown[] => {
     return nodes.reduce((acc, node) => {
       if (node.children) {
         const filteredChildren = filterTree(node.children)
@@ -492,7 +492,7 @@ const onSearch = () => {
 }
 
 // 选择文书类型
-const onSelectDocument = (keys: string[], info: any) => {
+const onSelectDocument = (keys: string[], info: unknown) => {
   if (info.node.isLeaf) {
     selectedKeys.value = keys
     selectedDocument.value = info.node

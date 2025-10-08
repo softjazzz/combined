@@ -280,9 +280,9 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'files-processed', results: any[]): void
-  (e: 'single-file-processed', result: any): void
-  (e: 'batch-completed', results: any[]): void
+  (e: 'files-processed', results: unknown[]): void
+  (e: 'single-file-processed', result: unknown): void
+  (e: 'batch-completed', results: unknown[]): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -355,7 +355,7 @@ const beforeUpload = (file: File) => {
   return false // 阻止自动上传
 }
 
-const handleFileUpload = (options: any) => {
+const handleFileUpload = (options: unknown) => {
   const { file } = options
   
   const processingFile: ProcessingFile = {
@@ -460,7 +460,7 @@ const processSingleFile = async (index: number) => {
     emit('single-file-processed', result)
     message.success(`文件 ${file.name} 解析完成`)
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     file.processing = false
     file.status = FileStatus.FAILED
     file.error = error.message
@@ -508,7 +508,7 @@ const startBatchProcessing = async () => {
     message.success('批量解析完成!')
     emit('batch-completed', batchResults.value)
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(`批量处理失败: ${error.message}`)
   } finally {
     batchProcessing.value = false
@@ -550,18 +550,18 @@ const saveBatchToDatabase = async () => {
     // 这里实现批量保存逻辑
     await new Promise(resolve => setTimeout(resolve, 2000)) // 模拟保存
     message.success('批量保存成功!')
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(`批量保存失败: ${error.message}`)
   } finally {
     saving.value = false
   }
 }
 
-const handleSingleSave = (result: any) => {
+const handleSingleSave = (result: unknown) => {
   message.success(`保存文件 ${result.fileName} 成功`)
 }
 
-const handleSingleExport = (result: any) => {
+const handleSingleExport = (result: unknown) => {
   const dataStr = JSON.stringify(result, null, 2)
   const blob = new Blob([dataStr], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -572,12 +572,12 @@ const handleSingleExport = (result: any) => {
   URL.revokeObjectURL(url)
 }
 
-const handleSingleExportPDF = (result: any) => {
+const handleSingleExportPDF = (result: unknown) => {
   message.info('PDF导出功能开发中...')
 }
 
 // 模拟LLM解析API调用
-const callLLMParseAPI = async (file: File): Promise<any> => {
+const callLLMParseAPI = async (file: File): Promise<unknown> => {
   // 这里应该调用实际的LLM解析API
   return new Promise((resolve, reject) => {
     setTimeout(() => {

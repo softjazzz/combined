@@ -522,7 +522,7 @@ const handleSelectAll = (selected: boolean) => {
   }
 }
 
-const handleBatchAction = async (action, items: any[]) => {
+const handleBatchAction = async (action, items: unknown[]) => {
   switch (action.key) {
     case 'analyze':
       await handleBatchAnalysis()
@@ -535,7 +535,7 @@ const handleBatchAction = async (action, items: any[]) => {
   }
 }
 
-const handleBatchExport = async (items: any[]) => {
+const handleBatchExport = async (items: unknown[]) => {
   try {
     // 实现批量导出逻辑
     message.success(`导出 ${items.length} 条记录`)
@@ -544,7 +544,7 @@ const handleBatchExport = async (items: any[]) => {
   }
 }
 
-const handleBatchDelete = async (items: any[]) => {
+const handleBatchDelete = async (items: unknown[]) => {
   try {
     const deletePromises = items.map(item => deleteMedicalRecord(item.id))
     await Promise.all(deletePromises)
@@ -561,7 +561,7 @@ const viewRecord = (record) => {
   router.push(`/records/${record.id}`)
 }
 
-const handleRecordAction = async (action: string, record: any) => {
+const handleRecordAction = async (action: string, record: unknown) => {
   switch (action) {
     case 'edit':
       // 实现编辑逻辑

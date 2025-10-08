@@ -336,7 +336,7 @@ export class ClassificationTester {
   /**
    * 运行标准测试
    */
-  async runStandardTest(): Promise<any> {
+  async runStandardTest(): Promise<unknown> {
     const testSuite = ClassificationTester.createStandardTestSuite()
     const results = await this.runTestSuite(testSuite)
     const report = this.generateTestReport(results)
@@ -372,7 +372,7 @@ export class ClassificationTester {
   /**
    * 测试护理文书识别能力（重点测试）
    */
-  async testNursingDocuments(): Promise<any> {
+  async testNursingDocuments(): Promise<unknown> {
     const nursingTestCases: TestCase[] = [
       {
         title: '护理记录',
@@ -406,7 +406,7 @@ export class ClassificationTester {
   /**
    * 测试医嘱记录识别能力（重点测试）
    */
-  async testMedicalOrders(): Promise<any> {
+  async testMedicalOrders(): Promise<unknown> {
     const orderTestCases: TestCase[] = [
       {
         title: '长期医嘱记录',

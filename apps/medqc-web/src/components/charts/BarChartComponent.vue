@@ -112,7 +112,7 @@ const chartOption = computed(() => {
       axisPointer: {
         type: 'shadow'
       },
-      formatter: (params: any) => {
+      formatter: (params: unknown) => {
         const param = params[0]
         const dataItem = props.data.find(item => item.department === param.name)
         if (!dataItem) return ''

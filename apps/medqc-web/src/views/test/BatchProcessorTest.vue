@@ -67,12 +67,12 @@ const clearLogs = () => {
 }
 
 // 事件处理
-const handleFilesProcessed = (results: any[]) => {
+const handleFilesProcessed = (results: unknown[]) => {
   addLog(`处理了 ${results.length} 个文件`, 'info')
   message.info(`处理了 ${results.length} 个文件`)
 }
 
-const handleSingleFileProcessed = (result: any) => {
+const handleSingleFileProcessed = (result: unknown) => {
   if (result.success) {
     addLog(`文件解析成功: ${result.fileName || '未知文件'}`, 'success')
   } else {
@@ -80,7 +80,7 @@ const handleSingleFileProcessed = (result: any) => {
   }
 }
 
-const handleBatchCompleted = (results: any[]) => {
+const handleBatchCompleted = (results: unknown[]) => {
   const successCount = results.filter(r => r.success).length
   const failCount = results.length - successCount
   

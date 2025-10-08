@@ -134,7 +134,7 @@ export function checkPermission(
   user: User | null,
   resource: ResourceType,
   action: PermissionAction,
-  context?: Record<string, any>
+  context?: Record<string, unknown>
 ): PermissionCheckResult {
   if (!user || !user.roles) {
     return { allowed: false, reason: '用户未认证' }
@@ -160,7 +160,7 @@ function checkPermissionConditions(
   user: User,
   resource: ResourceType,
   action: PermissionAction,
-  context?: Record<string, any>
+  context?: Record<string, unknown>
 ): PermissionCheckResult {
   // 医生只能操作自己的记录
   if (user.roles?.includes(UserRole.DOCTOR)) {
@@ -206,7 +206,7 @@ export function hasRole(user: User | null, role: UserRole): boolean {
 }
 
 // 多角色权限检查
-export function hasAnyRole(user: User | null, roles: UserRole: any[]): boolean {
+export function hasAnyRole(user: User | null, roles: UserRole: unknown[]): boolean {
   if (!user?.roles) return false
   return roles.some(role => user.roles!.includes(role))
 }
@@ -323,10 +323,10 @@ export function requirePermission(
   resource: ResourceType,
   action: PermissionAction
 ) {
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  return function (target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value
     
-    descriptor.value = async function (...args: any[]) {
+    descriptor.value = async function (...args: unknown[]) {
       const user = this.user || args[0]?.user
       
       const result = checkPermission(user, resource, action, args[0]?.context)
@@ -346,7 +346,7 @@ export function createPermissionMiddleware(
   resource: ResourceType,
   action: PermissionAction
 ) {
-  return (user: User | null, context?: Record<string, any>) => {
+  return (user: User | null, context?: Record<string, unknown>) => {
     const result = checkPermission(user, resource, action, context)
     if (!result.allowed) {
       throw new Error(`权限不足: ${result.reason}`)

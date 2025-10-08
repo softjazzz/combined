@@ -19,7 +19,7 @@ export interface Database {
           file_size: number | null
           processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
           structured_record_id: string | null
-          extracted_data: Record<string, any>
+          extracted_data: Record<string, unknown>
           extraction_confidence: number | null
           qc_analysis_id: string | null
           qc_status: 'not_analyzed' | 'analyzing' | 'completed' | 'failed'
@@ -46,7 +46,7 @@ export interface Database {
           file_size?: number | null
           processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
           structured_record_id?: string | null
-          extracted_data?: Record<string, any>
+          extracted_data?: Record<string, unknown>
           extraction_confidence?: number | null
           qc_analysis_id?: string | null
           qc_status?: 'not_analyzed' | 'analyzing' | 'completed' | 'failed'
@@ -70,7 +70,7 @@ export interface Database {
           file_size?: number | null
           processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
           structured_record_id?: string | null
-          extracted_data?: Record<string, any>
+          extracted_data?: Record<string, unknown>
           extraction_confidence?: number | null
           qc_analysis_id?: string | null
           qc_status?: 'not_analyzed' | 'analyzing' | 'completed' | 'failed'

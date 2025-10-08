@@ -53,7 +53,7 @@ export function getGreetingByTime(hour: number): string {
 /**
  * 验证仪表盘数据
  */
-export function validateDashboardData(data: any): { isValid: boolean; errors: string[] } {
+export function validateDashboardData(data: unknown): { isValid: boolean; errors: string[] } {
   const errors: string[] = []
   
   // 检查必需字段
@@ -142,7 +142,7 @@ export function formatTimeAgo(date: Date): string {
 /**
  * 防抖函数
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -157,7 +157,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * 节流函数
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => any>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {

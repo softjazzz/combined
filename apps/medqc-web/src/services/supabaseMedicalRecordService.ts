@@ -63,8 +63,8 @@ export interface MedicalDocument extends DocumentInRecord {
   record_id: string
   document_type: string
   ai_confidence_score: number
-  ai_extraction_metadata: Record<string, any>
-  document_metadata: Record<string, any>
+  ai_extraction_metadata: Record<string, unknown>
+  document_metadata: Record<string, unknown>
   status: 'active' | 'archived'
   created_by: string
   created_at: string
@@ -93,7 +93,7 @@ export interface AIParsingHistory {
   tokens_used?: number
   model_name: string
   model_version?: string
-  user_corrections?: Record<string, any>
+  user_corrections?: Record<string, unknown>
   user_rating?: number
   user_feedback?: string
   created_by: string

@@ -146,7 +146,7 @@ ${text.substring(0, 1000)}${text.length > 1000 ? '...' : ''}
   /**
    * 解析分类响应
    */
-  static parseClassificationResponse(response: any): ClassificationResult {
+  static parseClassificationResponse(response: unknown): ClassificationResult {
     try {
       let result: any
 

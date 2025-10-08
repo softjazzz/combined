@@ -319,7 +319,7 @@ const testLogin = async () => {
       })
       message.error('登录测试失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '登录测试',
       message: '测试异常',
@@ -354,7 +354,7 @@ const testGetUser = async () => {
       })
       message.error('获取用户信息失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '获取用户信息',
       message: '测试异常',
@@ -390,7 +390,7 @@ const testUpdateProfile = async () => {
       })
       message.error('更新资料失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '更新用户资料',
       message: '测试异常',
@@ -423,7 +423,7 @@ const testLogout = async () => {
         type: 'error'
       })
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '用户登出',
       message: '测试异常',
@@ -460,7 +460,7 @@ const testGetRecords = async () => {
       })
       message.error('获取记录失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '获取医疗记录',
       message: '测试异常',
@@ -502,7 +502,7 @@ const testCreateRecord = async () => {
       })
       message.error('创建记录失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '创建医疗记录',
       message: '测试异常',
@@ -541,7 +541,7 @@ const testUploadFile = async () => {
       })
       message.error('文件上传失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '文件上传',
       message: '测试异常',
@@ -575,7 +575,7 @@ const testGetStatistics = async () => {
       })
       message.error('获取统计失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '获取统计信息',
       message: '测试异常',
@@ -610,7 +610,7 @@ const testGetQCRules = async () => {
       })
       message.error('获取规则失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '获取质控规则',
       message: '测试异常',
@@ -644,7 +644,7 @@ const testStartAnalysis = async () => {
       })
       message.error('开始分析失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '开始质控分析',
       message: '测试异常',
@@ -678,7 +678,7 @@ const testGetQCResult = async () => {
       })
       message.error('获取结果失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '获取质控结果',
       message: '测试异常',
@@ -712,7 +712,7 @@ const testGetQCHistory = async () => {
       })
       message.error('获取历史失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     addLog({
       title: '获取质控历史',
       message: '测试异常',

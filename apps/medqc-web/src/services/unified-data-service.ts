@@ -44,9 +44,9 @@ export interface UnifiedApiResponse<T = any> {
 
 // 缓存管理
 class SimpleCache {
-  private cache = new Map<string, { data: any; timestamp: number; ttl: number }>()
+  private cache = new Map<string, { data: unknown; timestamp: number; ttl: number }>()
   
-  set(key: string, data: any, ttl: number = 5 * 60 * 1000) { // 默认5分钟
+  set(key: string, data: unknown, ttl: number = 5 * 60 * 1000) { // 默认5分钟
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
@@ -103,7 +103,7 @@ class SecurityUtils {
 
 // 审计日志
 class AuditLogger {
-  static async log(operation: string, details: any) {
+  static async log(operation: string, details: unknown) {
     try {
       const logEntry = {
         operation,

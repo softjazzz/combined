@@ -56,7 +56,7 @@ import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 
 const loading = ref(false)
 const exporting = ref(false)
-const kpis = ref<any>({
+const kpis = ref<unknown>({
   total_records: 0,
   active_rules: 0,
   qc_executions: 0,
@@ -74,7 +74,7 @@ const fetchSummary = async () => {
     if (!resp.ok) throw new Error(await resp.text())
     const data = await resp.json()
     kpis.value = data.kpis || {}
-  } catch (e: any) {
+  } catch (e: unknown) {
     message.error('加载看板失败: ' + (e?.message || e))
   } finally {
     loading.value = false
@@ -93,7 +93,7 @@ const exportSummary = async () => {
     const data = await resp.json()
     downloadUrl.value = data.download_url
     message.success('导出任务已创建')
-  } catch (e: any) {
+  } catch (e: unknown) {
     message.error('导出失败: ' + (e?.message || e))
   } finally {
     exporting.value = false

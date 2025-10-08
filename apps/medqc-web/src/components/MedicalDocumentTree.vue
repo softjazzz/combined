@@ -67,7 +67,7 @@ const groupedDocs = computed(() => {
   }
   // 按时间顺序排序（优先）或标题排序（兜底）
   for (const [k, arr] of map) {
-    arr.sort((a, b: any) => {
+    arr.sort((a, b: unknown) => {
       const timeA = getDocumentTimestamp(a)
       const timeB = getDocumentTimestamp(b)
 

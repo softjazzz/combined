@@ -183,7 +183,7 @@ class LLMConfigService {
       const data = result.data || []
 
       // 解密API密钥
-      return data.map((config: any) => ({
+      return data.map((config: unknown) => ({
         ...config,
         api_key_decrypted: config.api_key_encrypted ? this.decryptApiKey(config.api_key_encrypted) : null
       }))
@@ -232,7 +232,7 @@ class LLMConfigService {
   async saveConfig(config: LLMConfigInput, userId?: string): Promise<UserLLMConfig> {
     try {
       // 准备数据（支持按ID或按code提交，后端负责解析）
-      const configData: any = {
+      const configData: unknown = {
         user_id: userId || null,
         config_name: config.config_name,
         // 这两组字段按需传递，后端会优先使用 *_id，否则按 *_code 解析

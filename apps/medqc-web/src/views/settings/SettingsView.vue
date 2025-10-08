@@ -707,17 +707,17 @@ const showCreateUserModal = () => {
   modals.userEdit = true
 }
 
-const editUser = (user: any) => {
+const editUser = (user: unknown) => {
   selectedUser.value = user
   modals.userEdit = true
 }
 
-const editRole = (role: any) => {
+const editRole = (role: unknown) => {
   selectedRole.value = role
   modals.roleEdit = true
 }
 
-const toggleUserStatus = async (user: any) => {
+const toggleUserStatus = async (user: unknown) => {
   try {
     user.is_active = !user.is_active
     message.success(`用户已${user.is_active ? '激活' : '停用'}`)
@@ -726,11 +726,11 @@ const toggleUserStatus = async (user: any) => {
   }
 }
 
-const deleteUser = (user: any) => {
+const deleteUser = (user: unknown) => {
   message.info('删除用户功能开发中')
 }
 
-const handleUserSubmit = async (userData: any) => {
+const handleUserSubmit = async (userData: unknown) => {
   try {
     message.success('用户保存成功')
     modals.userEdit = false
@@ -740,7 +740,7 @@ const handleUserSubmit = async (userData: any) => {
   }
 }
 
-const handleRoleSubmit = async (roleData: any) => {
+const handleRoleSubmit = async (roleData: unknown) => {
   try {
     message.success('角色保存成功')
     modals.roleEdit = false

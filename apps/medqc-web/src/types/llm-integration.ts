@@ -56,7 +56,7 @@ export interface PromptVariable {
 }
 
 export interface PromptExample {
-  input: Record<string, any>
+  input: Record<string, unknown>
   expectedOutput: any
   description: string
 }
@@ -186,7 +186,7 @@ export interface CacheEntry<T> {
   value: T
   timestamp: number
   ttl: number
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface CacheStats {
@@ -248,7 +248,7 @@ export interface RecoveryStrategy {
 // Monitoring and Observability
 export interface ExecutionMonitor {
   updateProgress(batchId: string, status: string): void
-  recordError(batchId: string, error: any): void
+  recordError(batchId: string, error: unknown): void
   getMetrics(): ExecutionMetrics
   getPerformanceMetrics(): PerformanceMetrics
 }
@@ -284,19 +284,19 @@ export interface OptimizationStrategy {
 }
 
 // Result Processing and Validation
-export interface ResultValidator { validate(result: any, rule: EnhancedQCRule): QCRuleResult
-  validateBatch(results[], rules: EnhancedQCRule: any[]): QCRuleResult[]
+export interface ResultValidator { validate(result: unknown, rule: EnhancedQCRule): QCRuleResult
+  validateBatch(results[], rules: EnhancedQCRule: unknown[]): QCRuleResult[]
 }
 
-export interface ResultProcessor { process(results: QCExecutionResult[], rules: EnhancedQCRule: any[]): Promise<any>
-  consolidate(results: QCExecutionResult[]): Promise<any>
-  postProcess(results: any): Promise<any>
+export interface ResultProcessor { process(results: QCExecutionResult[], rules: EnhancedQCRule: unknown[]): Promise<unknown>
+  consolidate(results: QCExecutionResult[]): Promise<unknown>
+  postProcess(results: unknown): Promise<unknown>
 }
 
 // Configuration Management
 export interface ConfigurationCache {
   get(key: string): any
-  set(key: string, value: any, ttl?: number): void
+  set(key: string, value: unknown, ttl?: number): void
   invalidate(key: string): void
   invalidateRule(ruleId: string): void
   clear(): void
@@ -305,8 +305,8 @@ export interface ConfigurationCache {
 export interface RealTimeSyncManager {
   notifyRuleUpdate(rule: EnhancedQCRule): void
   notifyRuleDelete(ruleId: string): void
-  subscribeToUpdates(callback: (event: any) => void): void
-  unsubscribe(callback: (event: any) => void): void
+  subscribeToUpdates(callback: (event: unknown) => void): void
+  unsubscribe(callback: (event: unknown) => void): void
 }
 
 // Service Interfaces
@@ -314,12 +314,12 @@ export interface LLMService {
   analyze(prompt: string, options?: Partial<LLMRequest>): Promise<string>
   analyzeStructured(request: LLMRequest): Promise<LLMResponse>
   isHealthy(): Promise<boolean>
-  getUsageStats(): Promise<any>
+  getUsageStats(): Promise<unknown>
 }
 
 export interface PromptTemplateLibrary {
   getTemplate(templateType: string): PromptTemplate
-  renderTemplate(template: PromptTemplate, context: any): string
+  renderTemplate(template: PromptTemplate, context: unknown): string
   validateTemplate(template: PromptTemplate): ValidationResult
   registerTemplate(template: PromptTemplate): void
 }
@@ -333,11 +333,11 @@ export interface DynamicPromptGenerator {
 // Integration Interfaces
 export interface IntegratedQCEngine {
   executeQualityControl(
-    patientData: any,
+    patientData: unknown,
     departmentId?: string,
     ruleFilter?: any
-  ): Promise<any>
-  updateRuleConfiguration(ruleId: string, config: any): Promise<void>
+  ): Promise<unknown>
+  updateRuleConfiguration(ruleId: string, config: unknown): Promise<void>
   testRule(ruleId: string): Promise<RuleTestResult>
   getExecutionMetrics(): ExecutionMetrics
 }

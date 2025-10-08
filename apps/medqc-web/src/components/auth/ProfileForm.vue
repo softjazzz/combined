@@ -274,7 +274,7 @@ const profileRules = {
   ],
   phone: [
     {
-      validator: (_: any, value: string) => {
+      validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
         if (!/^1[3-9]\d{9}$/.test(value)) {
           return Promise.reject('手机号格式不正确')
@@ -337,7 +337,7 @@ const handleAvatarError = (error: string) => {
 }
 
 // Filter department options
-const filterDepartment = (input: string, option: any) => {
+const filterDepartment = (input: string, option: unknown) => {
   return option.children.toLowerCase().includes(input.toLowerCase())
 }
 

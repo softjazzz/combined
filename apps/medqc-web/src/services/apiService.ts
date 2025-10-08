@@ -119,7 +119,7 @@ apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
     
     return config
   },
-  (error: any) => {
+  (error: unknown) => {
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
   }
@@ -133,7 +133,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
     })
     return response
   },
-  async (error: any) => {
+  async (error: unknown) => {
     const originalRequest = error.config
     
     // 只在开发环境或非认证错误时记录详细错误
@@ -272,7 +272,7 @@ export class ApiService {
         data: response.data,
         message: '登录成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '登录失败',
@@ -292,7 +292,7 @@ export class ApiService {
         data: response.data,
         message: '注册成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '注册失败',
@@ -311,7 +311,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取用户信息失败',
@@ -331,7 +331,7 @@ export class ApiService {
         data: response.data,
         message: '资料更新成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '资料更新失败',
@@ -353,7 +353,7 @@ export class ApiService {
         success: true,
         message: '密码修改成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '密码修改失败'
@@ -372,7 +372,7 @@ export class ApiService {
         success: true,
         message: '登出成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 即使API调用失败，也要清除本地token
       TokenManager.clearTokens()
       return {
@@ -408,7 +408,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       TokenManager.clearTokens()
       return {
         success: false,
@@ -427,7 +427,7 @@ export class ApiService {
         success: true,
         message: '重置密码邮件已发送'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '发送重置邮件失败'
@@ -448,7 +448,7 @@ export class ApiService {
         success: true,
         message: '密码重置成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '密码重置失败'
@@ -479,7 +479,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取医疗记录失败',
@@ -498,7 +498,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取医疗记录详情失败',
@@ -539,7 +539,7 @@ export class ApiService {
         data: response.data,
         message: '医疗记录创建成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '创建医疗记录失败',
@@ -580,7 +580,7 @@ export class ApiService {
         data: response.data,
         message: '医疗记录更新成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '更新医疗记录失败',
@@ -599,7 +599,7 @@ export class ApiService {
         success: true,
         message: '医疗记录删除成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '删除医疗记录失败'
@@ -619,7 +619,7 @@ export class ApiService {
         success: true,
         message: '批量删除成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '批量删除失败'
@@ -640,7 +640,7 @@ export class ApiService {
         data: response.data,
         message: '导出任务创建成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '导出失败',
@@ -652,14 +652,14 @@ export class ApiService {
   /**
    * 获取医疗记录统计信息
    */
-  static async getMedicalRecordsStatistics(): Promise<ApiResponse<any>> {
+  static async getMedicalRecordsStatistics(): Promise<ApiResponse<unknown>> {
     try {
       const response = await apiClient.get('/api/records/statistics')
       return {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取统计信息失败',
@@ -687,7 +687,7 @@ export class ApiService {
         data: response.data,
         message: '文件上传成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '文件上传失败',
@@ -707,7 +707,7 @@ export class ApiService {
         data: response.data,
         message: '记录复制成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '记录复制失败',
@@ -729,7 +729,7 @@ export class ApiService {
         data: response.data,
         message: '质控分析已开始'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '开始分析失败',
@@ -751,7 +751,7 @@ export class ApiService {
         data: response.data,
         message: '批量分析已开始'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '批量分析失败',
@@ -770,7 +770,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取分析结果失败',
@@ -782,14 +782,14 @@ export class ApiService {
   /**
    * 获取分析进度
    */
-  static async getAnalysisProgress(analysisId: string): Promise<ApiResponse<any>> {
+  static async getAnalysisProgress(analysisId: string): Promise<ApiResponse<unknown>> {
     try {
       const response = await apiClient.get(`/api/qc/progress/${analysisId}`)
       return {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取分析进度失败',
@@ -808,7 +808,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取质控规则失败',
@@ -828,7 +828,7 @@ export class ApiService {
         data: response.data,
         message: '质控规则创建成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '创建质控规则失败',
@@ -848,7 +848,7 @@ export class ApiService {
         data: response.data,
         message: '质控规则更新成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '更新质控规则失败',
@@ -867,7 +867,7 @@ export class ApiService {
         success: true,
         message: '质控规则删除成功'
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '删除质控规则失败'
@@ -889,7 +889,7 @@ export class ApiService {
         success: true,
         data: response.data
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取质控历史失败',

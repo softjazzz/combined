@@ -739,7 +739,7 @@ interface QCRule {
   max_score: number
   weight: number
   is_active: boolean
-  check_logic: Record<string, any>
+  check_logic: Record<string, unknown>
   prompt_template?: string
   version: string
   created_at: string
@@ -781,20 +781,20 @@ const loadDocumentCategoryOptions = async () => {
     const canonical = new Set([
       'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
     ])
-    const nonCanonical = categories.filter((c: any) => !canonical.has(c.category_code))
+    const nonCanonical = categories.filter((c: unknown) => !canonical.has(c.category_code))
     if (nonCanonical.length > 0) {
-      console.warn('⚠️ 发现非标准文书类别，将被过滤:', nonCanonical.map((c: any) => c.category_code))
+      console.warn('⚠️ 发现非标准文书类别，将被过滤:', nonCanonical.map((c: unknown) => c.category_code))
     }
 
     // 只使用6个标准类别
-    const validCategories = categories.filter((c: any) => canonical.has(c.category_code))
+    const validCategories = categories.filter((c: unknown) => canonical.has(c.category_code))
     if (validCategories.length === 0) {
       throw new Error('未找到有效的标准文书类别配置')
     }
 
     documentCategoryOptions.value = validCategories
-      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((cfg: any) => {
+      .sort((a: unknown, b: unknown) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((cfg: unknown) => {
         const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(cfg.category_code as DocumentCategory)
         return {
           value: cfg.category_code as DocumentCategory,
@@ -1101,7 +1101,7 @@ const rowSelection: TableProps['rowSelection'] = {
 // watch(documentCategoryOptions, (opts) => {
 //   const col = (columns as any[]).find(c => c.key === 'primary_document_category')
 //   if (col) {
-//     col.filters = (opts || []).map((o: any) => ({ text: o.label, value: o.value }))
+//     col.filters = (opts || []).map((o: unknown) => ({ text: o.label, value: o.value }))
 //   }
 // }, { immediate: true })
 
@@ -1338,7 +1338,7 @@ const fallbackRulesService = {
     await new Promise(resolve => setTimeout(resolve, 500)) // 模拟网络延迟
     return mockRules
   },
-  createRule: async (ruleData: any) => {
+  createRule: async (ruleData: unknown) => {
     await new Promise(resolve => setTimeout(resolve, 300))
     const newRule = {
       ...ruleData,
@@ -1349,7 +1349,7 @@ const fallbackRulesService = {
     mockRules.push(newRule)
     return newRule
   },
-  updateRule: async (id: string, ruleData: any) => {
+  updateRule: async (id: string, ruleData: unknown) => {
     await new Promise(resolve => setTimeout(resolve, 300))
     const index = mockRules.findIndex(r => r.id === id)
     if (index !== -1) {
@@ -1398,8 +1398,8 @@ const fallbackRulesService = {
 }
 
 // 模拟验证器
-const buildSupabaseRulePayload = (ruleData: any) => {
-  const payload: any = {
+const buildSupabaseRulePayload = (ruleData: unknown) => {
+  const payload: unknown = {
     ...ruleData,
     check_logic: ruleData.check_logic || {},
     prompt_template: ruleData.prompt_template || null
@@ -1422,7 +1422,7 @@ const buildSupabaseRulePayload = (ruleData: any) => {
 }
 
 const rulesRepository = {
-  async createRule(ruleData: any) {
+  async createRule(ruleData: unknown) {
     const payload = buildSupabaseRulePayload(ruleData)
     try {
       return await RulesService.createRule(payload)
@@ -1432,7 +1432,7 @@ const rulesRepository = {
       return fallbackRulesService.createRule(ruleData)
     }
   },
-  async updateRule(id: string, ruleData: any) {
+  async updateRule(id: string, ruleData: unknown) {
     const payload = buildSupabaseRulePayload(ruleData)
     try {
       return await RulesService.updateRule(id, payload)
@@ -1491,7 +1491,7 @@ const rulesRepository = {
 }
 
 const mockRulesValidator = {
-  validateRule: (ruleData: any) => {
+  validateRule: (ruleData: unknown) => {
     const errors: string[] = []
     const warnings: string[] = []
 
@@ -1679,7 +1679,7 @@ const batchDelete = async () => {
   }
 }
 
-const handleTableChange: TableProps['onChange'] = (pag: any) => {
+const handleTableChange: TableProps['onChange'] = (pag: unknown) => {
   if (pag) {
     pagination.current = pag.current || 1
     pagination.pageSize = pag.pageSize || 10

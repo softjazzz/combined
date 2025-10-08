@@ -355,7 +355,7 @@ const markAsRead = async (messageId: string) => {
     await notificationService.markAsRead(messageId)
     await loadMessages()
     message.success('已标记为已读')
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error('操作失败')
   }
 }
@@ -365,7 +365,7 @@ const markAsProcessed = async (messageId: string) => {
     await notificationService.markAsProcessed(messageId)
     await loadMessages()
     message.success('已标记为已处理')
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error('操作失败')
   }
 }
@@ -439,7 +439,7 @@ const executeAction = async (action: MessageAction, notification: QCNotification
     // 标记消息为已处理
     await markAsProcessed(notification.id)
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error('操作失败')
   }
 }
@@ -522,7 +522,7 @@ const setupRealTimeListener = () => {
   })
   
   // 监听消息更新事件
-  window.addEventListener('notification-updated',  (event: any) => {
+  window.addEventListener('notification-updated',  (event: unknown) => {
     const updatedNotification = event.detail as QCNotification
     const index = messages.value.findIndex(m => m.id === updatedNotification.id)
     if (index !== -1) {

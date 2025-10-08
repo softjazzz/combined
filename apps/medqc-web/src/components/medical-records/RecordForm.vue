@@ -354,7 +354,7 @@ const handleSubmit = async () => {
     }
     
     emit('submit', submitData)
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error?.errorFields) {
       message.warning('请检查输入信息')
     }
@@ -419,7 +419,7 @@ const handleFileUpload = async (options: UploadRequestOption) => {
 }
 
 // 筛选科室选项
-const filterDepartment = (input: string, option: any) => {
+const filterDepartment = (input: string, option: unknown) => {
   return option.children.toLowerCase().includes(input.toLowerCase())
 }
 

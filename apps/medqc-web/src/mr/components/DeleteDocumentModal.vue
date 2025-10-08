@@ -137,7 +137,7 @@ const handleConfirm = async () => {
     })
     emit('update:visible', false)
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('删除文档失败:', error)
     message.error(error.message || '删除文档失败')
   } finally {

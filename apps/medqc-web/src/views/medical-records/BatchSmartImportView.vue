@@ -391,11 +391,11 @@ const getFileIcon = (fileName: string) => {
 }
 
 // 事件处理
-const handleFilesProcessed = (results: any[]) => {
+const handleFilesProcessed = (results: unknown[]) => {
   addLog(`处理了 ${results.length} 个文件`, 'info')
 }
 
-const handleSingleFileProcessed = (result: any) => {
+const handleSingleFileProcessed = (result: unknown) => {
   totalProcessed.value++
   if (result.success) {
     successCount.value++
@@ -406,13 +406,13 @@ const handleSingleFileProcessed = (result: any) => {
   }
 }
 
-const handleBatchCompleted = (results: any[]) => {
+const handleBatchCompleted = (results: unknown[]) => {
   batchResults.value = results
   addLog(`批量处理完成，共处理 ${results.length} 个文件`, 'success')
   message.success('批量处理完成!')
 }
 
-const handleLLMConfigUpdated = (config: any) => {
+const handleLLMConfigUpdated = (config: unknown) => {
   addLog('LLM配置已更新', 'info')
 }
 
@@ -426,13 +426,13 @@ const viewSingleResult = (index: number) => {
   showBatchResultsModal.value = true
 }
 
-const saveSingleResult = async (result: any) => {
+const saveSingleResult = async (result: unknown) => {
   try {
     // 这里实现单个结果保存逻辑
     await new Promise(resolve => setTimeout(resolve, 1000))
     message.success(`保存 ${result.fileName} 成功`)
     addLog(`保存文件结果: ${result.fileName}`, 'success')
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(`保存失败: ${error.message}`)
     addLog(`保存失败: ${result.fileName} - ${error.message}`, 'error')
   }
@@ -458,7 +458,7 @@ const saveAllToDatabase = async () => {
     await new Promise(resolve => setTimeout(resolve, 3000))
     message.success('批量保存成功!')
     addLog(`批量保存 ${batchResults.value.length} 个文件到数据库`, 'success')
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(`批量保存失败: ${error.message}`)
     addLog(`批量保存失败: ${error.message}`, 'error')
   } finally {
@@ -466,11 +466,11 @@ const saveAllToDatabase = async () => {
   }
 }
 
-const handleResultSave = (result: any) => {
+const handleResultSave = (result: unknown) => {
   saveSingleResult(result)
 }
 
-const handleResultExport = (result: any) => {
+const handleResultExport = (result: unknown) => {
   const dataStr = JSON.stringify(result, null, 2)
   const blob = new Blob([dataStr], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -481,7 +481,7 @@ const handleResultExport = (result: any) => {
   URL.revokeObjectURL(url)
 }
 
-const handleResultExportPDF = (result: any) => {
+const handleResultExportPDF = (result: unknown) => {
   message.info('PDF导出功能开发中...')
 }
 

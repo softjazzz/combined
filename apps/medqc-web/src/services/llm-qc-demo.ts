@@ -226,7 +226,7 @@ export class LLMQCDemoService {
           const rule = await llmIntegratedRulesService.createEnhancedRule(ruleData)
           createdRules.push(rule)
           console.log(`✅ Created rule: ${rule.name}`)
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.log(`⚠️ Rule ${ruleData.name} may already exist: ${error.message}`)
         }
       }
@@ -285,7 +285,7 @@ export class LLMQCDemoService {
 
       return qcResult
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ QC Demo failed:', error)
       throw error
     }
@@ -295,7 +295,7 @@ export class LLMQCDemoService {
     console.log('\n📋 Detailed QC Results:')
     console.log('=' .repeat(50))
 
-    result.ruleResults.forEach((ruleResult: any,  index: any) => {
+    result.ruleResults.forEach((ruleResult: unknown,  index: unknown) => {
       console.log(`\n${index + 1}. ${ruleResult.ruleName} (${ruleResult.ruleCode})`)
       console.log(`   Status: ${ruleResult.isCompliant ? '✅ COMPLIANT' : '❌ NON-COMPLIANT'}`)
       console.log(`   Score: ${ruleResult.score}/100`)
@@ -304,7 +304,7 @@ export class LLMQCDemoService {
 
       if (ruleResult.findings.length > 0) {
         console.log('   Findings:')
-        ruleResult.findings.forEach((finding: any,  fIndex: any) => {
+        ruleResult.findings.forEach((finding: unknown,  fIndex: unknown) => {
           const severityIcon = finding.severity === 'critical' ? '🔴' : 
                               finding.severity === 'major' ? '🟡' : '🟢'
           console.log(`     ${fIndex + 1}. ${severityIcon} ${finding.description}`)
@@ -330,11 +330,11 @@ export class LLMQCDemoService {
     }
   }
 
-  async getCacheStats(): Promise<any> {
+  async getCacheStats(): Promise<unknown> {
     return intelligentQCCache.getCacheStats()
   }
 
-  async getExecutionMetrics(): Promise<any> {
+  async getExecutionMetrics(): Promise<unknown> {
     return integratedQCEngine.getExecutionMetrics()
   }
 
@@ -414,7 +414,7 @@ export class LLMQCDemoService {
       console.log('\n🎉 Full demo completed successfully!')
       return qcResult
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Full demo failed:', error)
       throw error
     }

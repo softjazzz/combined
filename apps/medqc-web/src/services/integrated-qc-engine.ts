@@ -106,8 +106,8 @@ class QCPerformanceOptimizer { async createExecutionPlan(
     return tasks
   }
 
-  private createOptimalBatches(tasks: QCTask[]): any[] {
-    const batches: any[] = []
+  private createOptimalBatches(tasks: QCTask[]): unknown[] {
+    const batches: unknown[] = []
     const batchableRules = ['completeness', 'duplication', 'writing_alerts']
     
     // Group batchable tasks
@@ -136,7 +136,7 @@ class QCPerformanceOptimizer { async createExecutionPlan(
     }
     
     // Create individual batches for complex tasks
-    individualTasks.forEach((task: any,  index: any) => {
+    individualTasks.forEach((task: unknown,  index: unknown) => {
       batches.push({
         id: `single_${task.id}`,
         type: 'single',
@@ -229,15 +229,15 @@ class QCPerformanceOptimizer { async createExecutionPlan(
     return Math.floor((baseTokens + documentTokens) * multiplier)
   }
 
-  private estimateExecutionTime(batches: any[]): number {
-    return batches.reduce((total: any,  batch: any) => {
+  private estimateExecutionTime(batches: unknown[]): number {
+    return batches.reduce((total: unknown,  batch: unknown) => {
       const baseTime = batch.type === 'batch' ? 3000 : 2000 // ms
       const tokenTime = batch.estimatedTokens * 0.1 // 0.1ms per token
       return total + baseTime + tokenTime
     }, 0)
   }
 
-  private estimateCost(batches: any[]): number {
+  private estimateCost(batches: unknown[]): number {
     const costPerToken = 0.00002 // $0.00002 per token
     const totalTokens = batches.reduce((sum, batch) => sum + batch.estimatedTokens, 0)
     return totalTokens * costPerToken
@@ -299,7 +299,7 @@ export class IntegratedQCEngine implements IIntegratedQCEngine {
   }
 
   private async getApplicableRules(
-    patientData: any,
+    patientData: unknown,
     departmentId?: string,
     ruleFilter?: EnhancedRuleFilter
   ): Promise<EnhancedQCRule[]> {
@@ -330,7 +330,7 @@ export class IntegratedQCEngine implements IIntegratedQCEngine {
     })
   }
 
-  private buildExecutionContext(patientData: any, departmentId?: string): QCExecutionContext {
+  private buildExecutionContext(patientData: unknown, departmentId?: string): QCExecutionContext {
     return {
       patientId: patientData.patientId || 'unknown',
       executionId: `exec_${Date.now()}`,
@@ -426,7 +426,7 @@ export class IntegratedQCEngine implements IIntegratedQCEngine {
     }
   }
 
-  async updateRuleConfiguration(ruleId: string, config: any): Promise<void> {
+  async updateRuleConfiguration(ruleId: string, config: unknown): Promise<void> {
     // This would update the rule configuration and sync with LLM engine
     console.log(`Updating rule configuration for ${ruleId}:`, config)
   }

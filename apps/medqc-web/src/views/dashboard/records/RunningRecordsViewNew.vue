@@ -454,7 +454,7 @@ const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   },
-  getCheckboxProps: (record: any) => ({
+  getCheckboxProps: (record: unknown) => ({
     disabled: record.disabled
   })
 }))
@@ -538,7 +538,7 @@ const handleRefresh = () => {
   }, 1000)
 }
 
-const handleTableChange = (pag, filters: any,  sorter: any) => {
+const handleTableChange = (pag, filters: unknown,  sorter: unknown) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
   handleQuery()

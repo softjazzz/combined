@@ -249,7 +249,7 @@ const handleSelectAll = (e) => {
 }
 
 const clearSelection = () => {
-  emit('update: selectedItems', : any[])
+  emit('update: selectedItems', : unknown[])
 }
 
 const canExecuteAction = (action: BatchAction): boolean => {
@@ -306,7 +306,7 @@ const handleAction = async (action: BatchAction) => {
   }
 }
 
-const executeBatchOperation = async (action: BatchAction, items: any[]) => {
+const executeBatchOperation = async (action: BatchAction, items: unknown[]) => {
   const results: ResultDetail[] = []
   let successCount = 0
   let failedCount = 0
@@ -396,7 +396,7 @@ const showResults = (successCount: number, failedCount: number, details: ResultD
 }
 
 const showConfirm = (action: BatchAction): Promise<boolean> => {
-  return new Promise((resolve: any) => {
+  return new Promise((resolve: unknown) => {
     // 这里应该显示确认对话框
     // 简化实现，直接返回 true
     resolve(true)

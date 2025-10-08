@@ -261,7 +261,7 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
   return false // 阻止自动上传
 }
 
-const handleRemoveFile = (file: any) => {
+const handleRemoveFile = (file: unknown) => {
   const index = fileList.value.indexOf(file)
   if (index > -1) {
     fileList.value.splice(index, 1)

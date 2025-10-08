@@ -283,9 +283,9 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
     return 'medium'
   }
 
-  const adaptQCResultFromBackend = (raw: any): QCResult => {
+  const adaptQCResultFromBackend = (raw: unknown): QCResult => {
     const issues = Array.isArray(raw?.issues)
-      ? raw.issues.map((issue: any) => ({
+      ? raw.issues.map((issue: unknown) => ({
           id: issue.id || generateId(),
           ruleName: issue.rule_name || issue.ruleName || '未命名规则',
           ruleId: issue.rule_id || issue.ruleId || '',
@@ -299,7 +299,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       : []
 
     const suggestions = Array.isArray(raw?.suggestions)
-      ? raw.suggestions.map((item: any) => ({
+      ? raw.suggestions.map((item: unknown) => ({
           id: item.id || generateId(),
           category: item.category || '整改建议',
           title: item.title || '完善质控项',
@@ -310,7 +310,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       : []
 
     const ruleResults = Array.isArray(raw?.rule_results)
-      ? raw.rule_results.map((rr: any) => ({
+      ? raw.rule_results.map((rr: unknown) => ({
           ruleId: rr.rule_id || rr.ruleId || '',
           ruleName: rr.rule_name || rr.ruleName || '质控规则',
           passed: Boolean(rr.passed),
@@ -325,7 +325,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       : []
 
     const steps = Array.isArray(raw?.analysis_steps)
-      ? raw.analysis_steps.map((step: any): AnalysisStep => ({
+      ? raw.analysis_steps.map((step: unknown): AnalysisStep => ({
           id: step.id || generateId(),
           name: step.name || '质控步骤',
           description: step.description || '',
@@ -468,7 +468,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
         progress.value = 45
       })
 
-      let backendResult: any = null
+      let backendResult: unknown = null
       await runStep(2, async () => {
         const maxAttempts = 5
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -595,7 +595,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
   /**
    * 创建申诉
    */
-  const createAppeal = async (appealData: any) => {
+  const createAppeal = async (appealData: unknown) => {
     if (!activeNotification.value && !appealData.notificationId) {
       throw new Error('没有可申诉的通知')
     }
@@ -769,8 +769,8 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
 
       // 并行加载所有数据以提高性能
       // 优先尝试使用本地API，失败时回退到Supabase
-      let records: any[] = []
-      let rules: any[] = []
+      let records: unknown[] = []
+      let rules: unknown[] = []
       let departments: string[] = []
 
       try {
@@ -782,7 +782,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
         ])
 
         if (apiRecords.success && apiRecords.data?.data) {
-          records = apiRecords.data.data.map((record: any) => ({
+          records = apiRecords.data.data.map((record: unknown) => ({
             ...record,
             // 数据结构适配：将 patient_info.name 映射到 patient_name
             patient_name: record.patient_info?.name || record.patient_name || '未知患者',
@@ -825,7 +825,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
         ])
 
         // 对Supabase数据也进行相同的数据结构适配
-        records = supabaseRecords.map((record: any) => ({
+        records = supabaseRecords.map((record: unknown) => ({
           ...record,
           // 数据结构适配：确保 patient_name 字段存在
           patient_name: record.patient_info?.name || record.patient_name || '未知患者',
@@ -853,7 +853,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       if (selectedRules.value.length === 0 && availableRules.value.length > 0) {
         // 优先选择不同类别的活跃规则
         const categories = new Set<string>()
-        const selectedRulesList: any[] = []
+        const selectedRulesList: unknown[] = []
 
         for (const rule of availableRules.value.filter(r => r.isActive)) {
           if (selectedRulesList.length >= 3) break
@@ -1360,7 +1360,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
   /**
    * 处理申诉相关操作
    */
-  const handleAppealAction = (action: string, data?: any) => {
+  const handleAppealAction = (action: string, data?: unknown) => {
     switch (action) {
       case 'create':
         showAppealModal.value = true

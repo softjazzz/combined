@@ -299,7 +299,7 @@ const hasValidContent = computed(() => {
 })
 
 // 监听输入模式变化
-watch(inputMode,  (newMode: any) => {
+watch(inputMode,  (newMode: unknown) => {
   if (newMode === 'text') {
     fileList.value = []
     fileContent.value = ''

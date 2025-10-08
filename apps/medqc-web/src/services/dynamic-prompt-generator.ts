@@ -260,7 +260,7 @@ class PromptTemplateLibrary {
     return template
   }
 
-  renderTemplate(template: PromptTemplate, context: any): string {
+  renderTemplate(template: PromptTemplate, context: unknown): string {
     let rendered = template.userPromptTemplate
     
     // Simple template rendering (in production, use a proper template engine like Handlebars)
@@ -269,16 +269,16 @@ class PromptTemplateLibrary {
     return rendered
   }
 
-  private simpleTemplateRender(template: string, context: any): string {
+  private simpleTemplateRender(template: string, context: unknown): string {
     // Replace {{variable}} patterns with context values
-    return template.replace(/\{\{([^}]+)\}\}/g, (match: any,  path: any) => {
+    return template.replace(/\{\{([^}]+)\}\}/g, (match: unknown,  path: unknown) => {
       const value = this.getNestedValue(context, path.trim())
       return value !== undefined ? String(value) : match
     })
   }
 
-  private getNestedValue(obj: any, path: string): any {
-    return path.split('.').reduce((current: any,  key: any) => {
+  private getNestedValue(obj: unknown, path: string): any {
+    return path.split('.').reduce((current: unknown,  key: unknown) => {
       if (key.includes('#each')) {
         // Handle simple array iteration (simplified)
         const arrayPath = key.replace('#each ', '')
@@ -362,7 +362,7 @@ class ContextBuilder {
 
     if (qualityLogic.validation_criteria?.length > 0) {
       instructions += `\n验证标准：\n`
-      qualityLogic.validation_criteria.forEach((criteria: any,  index: any) => {
+      qualityLogic.validation_criteria.forEach((criteria: unknown,  index: unknown) => {
         instructions += `${index + 1}. ${criteria.field} ${criteria.operator} ${criteria.value || ''} - ${criteria.description}\n`
       })
     }
@@ -512,7 +512,7 @@ export class DynamicPromptGenerator {
         compiledAt: new Date().toISOString(),
         isValid: true
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         ruleId: rule.id,
         template: null,

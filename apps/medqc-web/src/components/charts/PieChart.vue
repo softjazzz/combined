@@ -82,7 +82,7 @@ const chartOption = computed(() => {
     },
     tooltip: {
       trigger: 'item',
-      formatter: (params: any) => {
+      formatter: (params: unknown) => {
         const percentage = params.percent || 0
         return `
           <div style="font-weight: bold; margin-bottom: 8px;">${params.name}</div>
@@ -124,7 +124,7 @@ const chartOption = computed(() => {
         label: {
           show: true,
           position: 'outside',
-          formatter: (params: any) => {
+          formatter: (params: unknown) => {
             if (props.showPercentage) {
               return `${params.name}\n${params.percent}%`
             }

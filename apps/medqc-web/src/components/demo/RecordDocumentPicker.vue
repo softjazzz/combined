@@ -188,7 +188,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', val: boolean): void
-  (e: 'picked', payload: { record: any; document: DocInfo | null; documents: DocInfo[] }): void
+  (e: 'picked', payload: { record: unknown; document: DocInfo | null; documents: DocInfo[] }): void
 }>()
 
 const innerVisible = computed({
@@ -242,7 +242,7 @@ async function loadSichuanRules() {
       `${location.protocol}//${location.hostname}:8001/api/qc/sichuan/rules`
     ]
 
-    let data: any = null
+    let data: unknown = null
     for (const url of candidates) {
       try {
         const resp = await fetch(url, { cache: 'no-store' })
@@ -257,7 +257,7 @@ async function loadSichuanRules() {
 
     if (data) {
       const raw = Array.isArray(data) ? data : (data.rules || [])
-      sichuanRules.value = raw.map((r: any) => ({
+      sichuanRules.value = raw.map((r: unknown) => ({
         id: r.rule_id || r.id || r.ruleCode || r.code,
         name: r.name || r.rule_name || '未命名规则',
         description: r.description || r.desc || '',
@@ -332,7 +332,7 @@ const rulesWithApplicability = computed<any[]>(() => {
     return labelToCode[s]
   }
 
-  const arr = all.map((r: any) => {
+  const arr = all.map((r: unknown) => {
     // 1) 先尝试从映射表/后端字段取得标准类别集合
     const mapped = lookupRuleCategories(r)
     const raw: string[] = mapped.length > 0 ? mapped : (r.applicable_documents || [])
@@ -354,7 +354,7 @@ const rulesWithApplicability = computed<any[]>(() => {
     }
     return { ...r, _applicable: applicable, _disabled: !applicable }
   })
-  return arr.sort((a: any, b: any) => Number(b._applicable) - Number(a._applicable))
+  return arr.sort((a: unknown, b: unknown) => Number(b._applicable) - Number(a._applicable))
 })
 
 const onlyShowApplicable = ref(true)
@@ -367,15 +367,15 @@ const filteredRules = computed<any[]>(() => {
   const kw = ruleKeyword.value.trim().toLowerCase()
   let base = availableRules.value
   if (!kw) return base
-  return base.filter((r: any) =>
+  return base.filter((r: unknown) =>
     [r.name, r.category, r.description, r.ruleCode, r.id]
       .filter(Boolean)
-      .some((f: any) => String(f).toLowerCase().includes(kw))
+      .some((f: unknown) => String(f).toLowerCase().includes(kw))
   )
 })
 
-const isRuleChecked = (rule: any) => selectedRulesLocal.value.some(r => r.id === rule.id)
-const toggleRule = (rule: any) => {
+const isRuleChecked = (rule: unknown) => selectedRulesLocal.value.some(r => r.id === rule.id)
+const toggleRule = (rule: unknown) => {
   if (rule._disabled) return
   const idx = selectedRulesLocal.value.findIndex(r => r.id === rule.id)
   if (idx >= 0) selectedRulesLocal.value.splice(idx, 1)
@@ -493,7 +493,7 @@ const filteredRecords = computed(() => {
   return demoStore.availableRecords.filter(r =>
     [r.patient_name, r.department, r.id, r.record_type]
       .filter(Boolean)
-      .some((f: any) => String(f).toLowerCase().includes(kw.toLowerCase()))
+      .some((f: unknown) => String(f).toLowerCase().includes(kw.toLowerCase()))
   )
 })
 
@@ -535,7 +535,7 @@ async function loadDocuments(recordId: string) {
   }
 }
 
-function selectRecord(r: any) {
+function selectRecord(r: unknown) {
   selectedRecord.value = r
   selectedDocument.value = null
   selectedDocuments.value = []
@@ -593,7 +593,7 @@ watch(innerVisible, (v) => {
     ruleKeyword.value = ''
     // 初始化已选病历与文书
     selectedRecord.value = demoStore.testRecord || null
-    const storeDoc: any = demoStore.selectedDocument
+    const storeDoc: unknown = demoStore.selectedDocument
     if (Array.isArray(storeDoc)) {
       isMulti.value = true
       selectedDocuments.value = storeDoc

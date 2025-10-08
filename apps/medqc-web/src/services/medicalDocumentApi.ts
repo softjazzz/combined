@@ -7,9 +7,9 @@ export interface MedicalDocumentPayload {
   summary?: string
   ai_classified?: boolean
   ai_confidence_score?: number
-  ai_extraction_metadata?: Record<string, any>
-  document_metadata?: Record<string, any>
-  position?: Record<string, any>
+  ai_extraction_metadata?: Record<string, unknown>
+  document_metadata?: Record<string, unknown>
+  position?: Record<string, unknown>
   sort_order?: number
   status?: 'active' | 'archived'
 }

@@ -124,7 +124,7 @@ export class MedicalQcApiClient {
   }
 
   // 获取三层漏斗优化演示
-  async getOptimizationDemo(): Promise<any> {
+  async getOptimizationDemo(): Promise<unknown> {
     return this.request('/medical-qc/demo')
   }
 

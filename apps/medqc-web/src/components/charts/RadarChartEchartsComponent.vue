@@ -75,7 +75,7 @@ const chartOption = computed(() => {
     
     tooltip: {
       trigger: 'item',
-      formatter: (params: any) => {
+      formatter: (params: unknown) => {
         const { name, value } = params
         let content = `<div style="font-weight: bold; margin-bottom: 8px;">${name}</div>`
         

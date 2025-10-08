@@ -125,7 +125,7 @@ class LRUCache<T> {
 
 // Hash Generator for Cache Keys
 class CacheKeyGenerator {
-  static generatePatientDataKey(patientData: any, rules: EnhancedQCRule[]): string {
+  static generatePatientDataKey(patientData: unknown, rules: EnhancedQCRule[]): string {
     const contentHash = this.hashPatientData(patientData)
     const rulesHash = this.hashRules(rules)
     return `qc_result_${contentHash}_${rulesHash}`
@@ -139,11 +139,11 @@ class CacheKeyGenerator {
     return `prompt_template_${ruleId}_${version}`
   }
 
-  private static hashPatientData(patientData: any): string {
+  private static hashPatientData(patientData: unknown): string {
     // Generate hash based on document content and metadata
     const content = JSON.stringify({
       patientId: patientData.patientId,
-      documents: patientData.documents?.map((doc: any) => ({
+      documents: patientData.documents?.map((doc: unknown) => ({
         type: doc.type,
         timestamp: doc.timestamp,
         contentLength: doc.content?.length || 0,
@@ -178,7 +178,7 @@ class CacheKeyGenerator {
 
 // Configuration Cache Implementation
 class ConfigurationCacheImpl implements ConfigurationCache {
-  private cache: LRUCache<any>
+  private cache: LRUCache<unknown>
 
   constructor() {
     this.cache = new LRUCache(500) // Smaller cache for configurations
@@ -188,7 +188,7 @@ class ConfigurationCacheImpl implements ConfigurationCache {
     return this.cache.get(key)
   }
 
-  set(key: string, value: any, ttl?: number): void {
+  set(key: string, value: unknown, ttl?: number): void {
     this.cache.set(key, value, ttl || 1800000) // Default 30 minutes for configs
   }
 
@@ -223,7 +223,7 @@ class ConfigurationCacheImpl implements ConfigurationCache {
 export class IntelligentQCCache {
   private resultCache: LRUCache<ComprehensiveQCResult>
   private configCache: ConfigurationCacheImpl
-  private promptCache: LRUCache<any>
+  private promptCache: LRUCache<unknown>
   private stats: {
     totalRequests: number
     cacheHits: number
@@ -233,7 +233,7 @@ export class IntelligentQCCache {
   constructor() {
     this.resultCache = new LRUCache<ComprehensiveQCResult>(2000) // 2000 QC results
     this.configCache = new ConfigurationCacheImpl()
-    this.promptCache = new LRUCache<any>(1000) // 1000 prompt templates
+    this.promptCache = new LRUCache<unknown>(1000) // 1000 prompt templates
     this.stats = {
       totalRequests: 0,
       cacheHits: 0,
@@ -243,7 +243,7 @@ export class IntelligentQCCache {
 
   // QC Result Caching
   async getCachedQCResult(
-    patientData: any,
+    patientData: unknown,
     rules: EnhancedQCRule[]
   ): Promise<ComprehensiveQCResult | null> {
     this.stats.totalRequests++
@@ -262,7 +262,7 @@ export class IntelligentQCCache {
   }
 
   cacheQCResult(
-    patientData: any,
+    patientData: unknown,
     rules: EnhancedQCRule[],
     result: ComprehensiveQCResult
   ): void {
@@ -287,7 +287,7 @@ export class IntelligentQCCache {
     return this.configCache.get(cacheKey)
   }
 
-  cacheRuleConfig(ruleId: string, config: any): void {
+  cacheRuleConfig(ruleId: string, config: unknown): void {
     const cacheKey = CacheKeyGenerator.generateRuleConfigKey(ruleId)
     this.configCache.set(cacheKey, config)
   }
@@ -298,7 +298,7 @@ export class IntelligentQCCache {
     return this.promptCache.get(cacheKey)
   }
 
-  cachePromptTemplate(ruleId: string, template: any, version: string = 'current'): void {
+  cachePromptTemplate(ruleId: string, template: unknown, version: string = 'current'): void {
     const cacheKey = CacheKeyGenerator.generatePromptTemplateKey(ruleId, version)
     this.promptCache.set(cacheKey, template, 3600000) // 1 hour TTL for templates
   }

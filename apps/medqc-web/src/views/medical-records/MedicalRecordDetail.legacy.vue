@@ -961,7 +961,7 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const error = ref('')
-const record = ref<any>(null)
+const record = ref<unknown>(null)
 const contentExpanded = ref(false)
 
 // 视图模式状态
@@ -975,8 +975,8 @@ const exportLoading = ref(false)
 // 四川省质控相关状态
 const qcLoading = ref(false)
 const showQCModal = ref(false)
-const qcProgress = ref<any>({})
-const qcResults = ref<any>({})
+const qcProgress = ref<unknown>({})
+const qcResults = ref<unknown>({})
 const detectedDocumentTypes = ref<string[]>([])
 const applicableRules = ref<any[]>([])
 const qcStatus = ref<'idle' | 'analyzing' | 'evaluating' | 'completed' | 'error'>('idle')
@@ -1007,7 +1007,7 @@ const documentClassificationData = ref({
 
 // 文档查看对话框状态
 const documentViewDialogVisible = ref(false)
-const selectedDocument = ref<any>(null)
+const selectedDocument = ref<unknown>(null)
 const showSidebar = ref(true)
 
 const computedSummaryText = computed(() => {
@@ -1058,7 +1058,7 @@ const loadRecord = async () => {
 
     // 加载文档统计信息
     await loadDocumentStats()
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('加载医疗记录失败:', err)
     error.value = err.message || '加载医疗记录失败'
     message.error(error.value)
@@ -1098,7 +1098,7 @@ const handleContentHighlight = (texts: string[]) => {
   // 可以在这里添加高亮相关的逻辑
 }
 
-const handleDocumentSelect = async (document: any) => {
+const handleDocumentSelect = async (document: unknown) => {
   console.log('=== 文档选择调试信息 ===')
   console.log('选择的文档:', document)
   console.log('文档类型:', document?.type)
@@ -1187,7 +1187,7 @@ const handleDocumentSelect = async (document: any) => {
   }
 }
 
-const handleClassificationFilter = (filter: any) => {
+const handleClassificationFilter = (filter: unknown) => {
   console.log('分类筛选:', filter)
   // 可以在这里添加筛选相关的逻辑
 }
@@ -1213,16 +1213,16 @@ const validateClassification = () => {
 }
 
 // 从API返回的数据中查找匹配的文档
-const findMatchingDocument = (apiData: any, targetDocument: any): any => {
+const findMatchingDocument = (apiData: unknown, targetDocument: unknown): unknown => {
   if (!apiData || !apiData.categories) return null
 
   // 规范化比较
-  const norm = (s: any) => String(s || '').replace(/\s+/g, '').toLowerCase()
+  const norm = (s: unknown) => String(s || '').replace(/\s+/g, '').toLowerCase()
   const tId = targetDocument?.id ? String(targetDocument.id) : ''
   const tType = norm(targetDocument?.type)
   const tTitle = norm(targetDocument?.title)
 
-  let best: any = null
+  let best: unknown = null
   let bestScore = -1
 
   for (const category of apiData.categories) {
@@ -1363,13 +1363,13 @@ const returnToOriginalContent = () => {
 }
 
 // 新增：文档相关方法
-const handleDocumentEdit = (document: any) => {
+const handleDocumentEdit = (document: unknown) => {
   console.log('编辑文档:', document)
   showEditor.value = true
   activeContentTab.value = 'editor'
 }
 
-const handleDocumentView = (document: any) => {
+const handleDocumentView = (document: unknown) => {
   console.log('查看文档:', document)
 
   // 设置选中的文档并显示对话框
@@ -1377,7 +1377,7 @@ const handleDocumentView = (document: any) => {
   documentViewDialogVisible.value = true
 }
 
-const handleDocumentSaveSuccess = (document: any) => {
+const handleDocumentSaveSuccess = (document: unknown) => {
   console.log('文档保存成功:', document)
   message.success('文档保存成功')
   // 刷新文档统计信息
@@ -1404,7 +1404,7 @@ const copyDocumentContent = async () => {
   }
 }
 
-const handleDocumentSaveError = (error: any) => {
+const handleDocumentSaveError = (error: unknown) => {
   console.error('文档保存失败:', error)
   message.error('文档保存失败')
 }
@@ -1424,17 +1424,17 @@ const loadDocumentStats = async () => {
       documentStats.value = {
         total_documents: data.total_documents || 0,
         categories_count: data.categories?.length || 0,
-        ai_classified_count: data.categories?.reduce((count: number, category: any) => {
-          return count + category.documents.filter((doc: any) => doc.ai_classified).length
+        ai_classified_count: data.categories?.reduce((count: number, category: unknown) => {
+          return count + category.documents.filter((doc: unknown) => doc.ai_classified).length
         }, 0) || 0
       }
 
       // 构建文档列表用于增强分类组件
-      const documents: any[] = []
+      const documents: unknown[] = []
       if (data.categories && Array.isArray(data.categories)) {
-        data.categories.forEach((category: any) => {
+        data.categories.forEach((category: unknown) => {
           if (category.documents && Array.isArray(category.documents)) {
-            category.documents.forEach((doc: any) => {
+            category.documents.forEach((doc: unknown) => {
               documents.push({
                 ...doc,
                 type: doc.type_info?.type_name || doc.category_code || '未分类',
@@ -1597,7 +1597,7 @@ const performDelete = async () => {
       router.back()
     }, 1500)
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('删除医疗记录失败:', err)
     message.error(err.message || '删除医疗记录失败')
   } finally {
@@ -1707,7 +1707,7 @@ const loadRulesMapping = async (docTypes: string[]) => {
         documentTypeRuleMapping[dt].rules = ruleIds
       } else if (Array.isArray(rulesByType[dt]) && rulesByType[dt].length > 0) {
         documentTypeRuleMapping[dt].rules = rulesByType[dt]
-          .map((r: any) => r.rule_id || r.rule_code)
+          .map((r: unknown) => r.rule_id || r.rule_code)
           .filter(Boolean)
           .slice(0, 200)
       }
@@ -1820,7 +1820,7 @@ const startSichuanQC = async () => {
     qcStatus.value = 'evaluating'
     await performQCEvaluation(types, rules)
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ 四川省质控评估失败:', error)
     message.error('质控评估失败: ' + (error.message || '未知错误'))
     qcStatus.value = 'error'
@@ -1903,7 +1903,7 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
     qcStatus.value = 'completed'
     message.success(`质控评估完成！共评估 ${rules.length} 条规则`)
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ 质控评估执行失败:', error)
     qcStatus.value = 'error'
     throw error
@@ -1911,7 +1911,7 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
 }
 
 // 处理质控结果
-const processQCResults = (apiResponse: any, documentTypes: string[]) => {
+const processQCResults = (apiResponse: unknown, documentTypes: string[]) => {
   console.log('📊 开始处理质控结果...')
   console.log('📋 API响应结构:', apiResponse)
 
@@ -1926,7 +1926,7 @@ const processQCResults = (apiResponse: any, documentTypes: string[]) => {
 }
 
 // 处理多文书模式结果
-const processMultiDocumentResults = (apiResponse: any, documentTypes: string[]) => {
+const processMultiDocumentResults = (apiResponse: unknown, documentTypes: string[]) => {
   const documentResults = apiResponse.document_results || {}
 
   documentTypes.forEach(docType => {
@@ -1947,7 +1947,7 @@ const processMultiDocumentResults = (apiResponse: any, documentTypes: string[]) 
 
         // 更新每个规则的状态
         if (docResult.evaluation_results) {
-          docResult.evaluation_results.forEach((result: any) => {
+          docResult.evaluation_results.forEach((result: unknown) => {
             const isCompliant = result.is_compliant
             progress.rules[result.rule_id] = {
               status: isCompliant ? 'passed' : 'failed',
@@ -1971,13 +1971,13 @@ const processMultiDocumentResults = (apiResponse: any, documentTypes: string[]) 
 }
 
 // 处理单一prompt模式结果（保持向后兼容）
-const processSinglePromptResults = (apiResponse: any, documentTypes: string[]) => {
+const processSinglePromptResults = (apiResponse: unknown, documentTypes: string[]) => {
   // 兼容不同的API响应结构
   const evaluationResults = apiResponse.evaluation_results || apiResponse.results || []
   console.log('📊 评估结果数组:', evaluationResults)
 
   documentTypes.forEach(docType => {
-    const docTypeResults = evaluationResults.filter((result: any) => {
+    const docTypeResults = evaluationResults.filter((result: unknown) => {
       const ruleMapping = documentTypeRuleMapping[docType]
       return ruleMapping && ruleMapping.rules.includes(result.rule_id)
     }) || []
@@ -1989,13 +1989,13 @@ const processSinglePromptResults = (apiResponse: any, documentTypes: string[]) =
     const progress = qcProgress.value[docType]
     progress.completed = docTypeResults.length
     // 兼容 compliant 和 is_compliant 字段
-    progress.passed = docTypeResults.filter((r: any) => r.compliant || r.is_compliant).length
-    progress.failed = docTypeResults.filter((r: any) => !(r.compliant || r.is_compliant)).length
+    progress.passed = docTypeResults.filter((r: unknown) => r.compliant || r.is_compliant).length
+    progress.failed = docTypeResults.filter((r: unknown) => !(r.compliant || r.is_compliant)).length
 
     console.log(`📊 ${docType} 进度统计:`, progress)
 
     // 更新每个规则的状态
-    docTypeResults.forEach((result: any) => {
+    docTypeResults.forEach((result: unknown) => {
       const isCompliant = result.compliant || result.is_compliant
       progress.rules[result.rule_id] = {
         status: isCompliant ? 'passed' : 'failed',
@@ -2039,7 +2039,7 @@ const clearAllHighlights = () => {
 }
 
 // 获取预分类文书映射
-const getPreclassifiedDocuments = async (documentTypes: string[]): Promise<Record<string, any> | null> => {
+const getPreclassifiedDocuments = async (documentTypes: string[]): Promise<Record<string, unknown> | null> => {
   if (!record.value?.id) {
     console.warn('⚠️ 无法获取预分类文书：缺少记录ID')
     return null
@@ -2219,9 +2219,9 @@ const exportQCReport = async () => {
       qc_progress: qcProgress.value,
       summary: {
         total_rules: applicableRules.value.length,
-        total_passed: Object.values(qcProgress.value).reduce((sum: number, progress: any) => sum + (progress.passed || 0), 0),
-        total_failed: Object.values(qcProgress.value).reduce((sum: number, progress: any) => sum + (progress.failed || 0), 0),
-        total_score_deduction: Object.values(qcResults.value).flat().reduce((sum: number, result: any) => sum + (result.compliant ? 0 : result.score_deduction || 0), 0)
+        total_passed: Object.values(qcProgress.value).reduce((sum: number, progress: unknown) => sum + (progress.passed || 0), 0),
+        total_failed: Object.values(qcProgress.value).reduce((sum: number, progress: unknown) => sum + (progress.failed || 0), 0),
+        total_score_deduction: Object.values(qcResults.value).flat().reduce((sum: number, result: unknown) => sum + (result.compliant ? 0 : result.score_deduction || 0), 0)
       }
     }
 
@@ -2245,7 +2245,7 @@ const exportQCReport = async () => {
 }
 
 // 生成质控报告内容
-const generateQCReportContent = (data: any): string => {
+const generateQCReportContent = (data: unknown): string => {
   let content = `四川省住院病历语义质控评估报告\n`
   content += `${'='.repeat(50)}\n\n`
 
@@ -2268,7 +2268,7 @@ const generateQCReportContent = (data: any): string => {
     content += `${'-'.repeat(30)}\n`
 
     const results = data.qc_results[docType] || []
-    results.forEach((result: any) => {
+    results.forEach((result: unknown) => {
       content += `  规则: ${result.rule_id} - ${result.rule_name}\n`
       content += `  结果: ${result.compliant ? '✓ 通过' : '✗ 不通过'}\n`
       content += `  置信度: ${Math.round(result.confidence * 100)}%\n`

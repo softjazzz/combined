@@ -178,7 +178,7 @@ interface Props {
 
 interface Emits {
   (e: 'update:visible', value: boolean): void
-  (e: 'submit', data: any): void
+  (e: 'submit', data: unknown): void
   (e: 'cancel'): void
 }
 
@@ -224,7 +224,7 @@ const rules = {
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     {
-      validator: (rule: any, value: string) => {
+      validator: (rule: unknown, value: string) => {
         if (value && value !== formData.password) {
           return Promise.reject('两次输入的密码不一致')
         }
@@ -277,7 +277,7 @@ watch(
 // 监听visible变化
 watch(
   () => props.visible,
-  (newVisible: any) => {
+  (newVisible: unknown) => {
     if (!newVisible) {
       // 关闭时重置表单
       formRef.value?.resetFields()

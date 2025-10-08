@@ -223,11 +223,11 @@ const currentConfig = computed(() => ENHANCED_LLM_API_CONFIGS[selectedConfig.val
 // 可用模型 - 优先使用动态获取的模型列表（兼容多种字段命名）
 const availableModels = computed(() => {
   if (dynamicModels.value.length > 0) {
-    return dynamicModels.value.map((model: any) => {
+    return dynamicModels.value.map((model: unknown) => {
       const value = model.model_code || model.id || model.code || model.name || ''
       const label = model.model_name || model.name || model.id || value
       return { label, value }
-    }).filter((m: any) => !!m.value)
+    }).filter((m: unknown) => !!m.value)
   }
   // 回退到硬编码配置（向后兼容）
   return currentConfig.value?.availableModels || []
@@ -237,7 +237,7 @@ const availableModels = computed(() => {
 const currentModelInfo = computed(() => {
   if (!selectedModel.value) return null
   const list = availableModels.value || []
-  return list.find((m: any) => m.value === selectedModel.value) || null
+  return list.find((m: unknown) => m.value === selectedModel.value) || null
 })
 
 // 配置状态
@@ -271,7 +271,7 @@ const loadModelsForProvider = async (providerCode: string) => {
     const providersResponse = await fetch('/api/llm/providers')
     const providersData = await providersResponse.json()
     const providerList = (providersData && (providersData.data || providersData.providers)) || []
-    const provider = providerList.find((p: any) => (p.provider_code || p.id) === providerCode || p.id === providerCode)
+    const provider = providerList.find((p: unknown) => (p.provider_code || p.id) === providerCode || p.id === providerCode)
 
     // 加载模型（兼容 {data:[]} 与 {models:[]}；后端可能不支持 provider_id 过滤时回退全量）
     const modelsUrl = provider?.id ? `/api/llm/models?provider_id=${provider.id}` : '/api/llm/models'
@@ -282,7 +282,7 @@ const loadModelsForProvider = async (providerCode: string) => {
     console.log(`✅ 已加载 ${dynamicModels.value.length} 个模型`)
 
     // 若当前选择不在新列表中，则回退到默认或第一项
-    const values = new Set((availableModels.value || []).map((m: any) => m.value))
+    const values = new Set((availableModels.value || []).map((m: unknown) => m.value))
     if (!values.has(selectedModel.value)) {
       selectedModel.value = currentConfig.value?.defaultModel || (availableModels.value[0]?.value || '')
     }
@@ -544,7 +544,7 @@ const saveConfig = async () => {
       console.log('✅ 已发送所有关闭事件 (drawer + modal + global)')
     }, 1000) // 1秒后自动关闭
 
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('保存配置失败:', e)
     message.destroy()
 

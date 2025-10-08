@@ -17,7 +17,7 @@ const KAG_API_CONFIG = {
 export interface KAGQCRequest {
   recordId: string
   content: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   analysisMode?: 'comprehensive' | 'focused' | 'quick'
   selectedRules?: string[]
 }
@@ -56,7 +56,7 @@ export interface KAGBatchRequest {
   records: Array<{
     recordId: string
     content: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   }>
   batchId?: string
   analysisMode?: 'comprehensive' | 'focused' | 'quick'
@@ -307,7 +307,7 @@ export class KAGQCService {
   /**
    * 通用HTTP请求方法
    */
-  private async request(method: string, path: string, data?: any): Promise<any> {
+  private async request(method: string, path: string, data?: unknown): Promise<unknown> {
     const url = `${this.baseUrl}${path}`
     
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {

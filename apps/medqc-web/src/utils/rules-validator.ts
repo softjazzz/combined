@@ -17,7 +17,7 @@ export interface RuleData {
   severity: string
   max_score: number
   weight: number
-  check_logic: Record<string, any>
+  check_logic: Record<string, unknown>
   prompt_template?: string
   version: string
 }
@@ -282,7 +282,7 @@ export class RulesValidator { /**
   /**
    * 验证检查逻辑
    */
-  static validateCheckLogic(checkLogic: Record<string, any>): ValidationResult { const result: ValidationResult = {
+  static validateCheckLogic(checkLogic: Record<string, unknown>): ValidationResult { const result: ValidationResult = {
       isValid: true,
       errors:  [],
       warnings: []

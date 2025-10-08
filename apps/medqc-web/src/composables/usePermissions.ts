@@ -162,7 +162,7 @@ export function usePermissions() {
   const checkPermission = (
     resource: ResourceType, 
     action: PermissionAction,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): PermissionCheckResult => {
     const user = currentUser.value
     if (!user || !user.roles) {

@@ -534,7 +534,7 @@ const handleRefreshData = async () => {
 /*
 
 //   
-const onTargetPicked = ({ record, document }: { record: any; document: { id: string; title?: string; type?: string; created_at?: string } }) => {
+const onTargetPicked = ({ record, document }: { record: unknown; document: { id: string; title?: string; type?: string; created_at?: string } }) => {
   demoStore.testRecord = record as any
   demoStore.setSelectedDocument(document)
   message.success(` a已选择：${record.patient_name} · ${document.title}`)
@@ -570,7 +570,7 @@ const handleAnalysisComplete = () => {
 
 
 // 选择病历+文书回调（供 RecordDocumentPicker 使用）
-const onTargetPicked = async ({ record, document, documents }: { record: any; document: { id: string; title?: string; type?: string; created_at?: string } | null; documents: Array<{ id: string; title?: string; type?: string; created_at?: string }> }) => {
+const onTargetPicked = async ({ record, document, documents }: { record: unknown; document: { id: string; title?: string; type?: string; created_at?: string } | null; documents: Array<{ id: string; title?: string; type?: string; created_at?: string }> }) => {
   try {
     // 设置选择的记录和文档
     demoStore.testRecord = record as any
@@ -592,7 +592,7 @@ const onTargetPicked = async ({ record, document, documents }: { record: any; do
 }
 
 
-const handleNotificationModalAction = (action: string, notification?: any) => {
+const handleNotificationModalAction = (action: string, notification?: unknown) => {
   console.log('通知模态框操作:', action, notification)
 
   switch (action) {

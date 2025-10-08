@@ -209,7 +209,7 @@ export async function searchUnstructuredDocuments(
 export async function markDocumentAsProcessed(
   id: string,
   structuredRecordId?: string,
-  extractedData?: Record<string, any>
+  extractedData?: Record<string, unknown>
 ): Promise<ApiResponse<UnstructuredDocument>> {
   const updateData: UpdateUnstructuredDocument = {
     processing_status: 'completed',

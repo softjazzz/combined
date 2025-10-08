@@ -132,7 +132,7 @@ class IntelligentMessageGenerator {
 `
   }
 
-  private async parseGeneratedContent(content: string, type: MessageType): Promise<any> {
+  private async parseGeneratedContent(content: string, type: MessageType): Promise<unknown> {
     try {
       // 尝试解析JSON响应
       const jsonMatch = content.match(/\{[\s\S]*\}/);

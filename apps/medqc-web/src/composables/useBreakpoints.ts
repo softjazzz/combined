@@ -85,7 +85,7 @@ export function useBreakpoints() {
   }
 
   // 响应式类名生成
-  const getResponsiveClass = (baseClass: string, variants?: Partial<Record<Breakpoint, string>>: any) => {
+  const getResponsiveClass = (baseClass: string, variants?: Partial<Record<Breakpoint, string>>: unknown) => {
     const classes = [baseClass]
     
     if (variants) {

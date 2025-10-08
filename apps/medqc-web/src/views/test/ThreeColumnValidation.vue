@@ -131,7 +131,7 @@ import {
 } from '@ant-design/icons-vue'
 
 const apiLoading = ref(false)
-const apiStatus = ref<any>(null)
+const apiStatus = ref<unknown>(null)
 
 const recordId = '7fcb8e4c-3892-40c4-92f3-19bf5061aa41'
 

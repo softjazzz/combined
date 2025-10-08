@@ -178,7 +178,7 @@ const resetForm = () => {
 }
 
 // 文档类型选择过滤
-const filterOption = (input: string, option: any) => {
+const filterOption = (input: string, option: unknown) => {
   const label = option.label || ''
   const value = option.value || ''
   return label.toLowerCase().includes(input.toLowerCase()) ||
@@ -234,7 +234,7 @@ const handleSubmit = async () => {
     emit('success', result.document)
     emit('update:visible', false)
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('创建文档失败:', error)
     message.error(error.message || '创建文档失败')
   } finally {

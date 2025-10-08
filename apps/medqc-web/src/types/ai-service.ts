@@ -35,7 +35,7 @@ export interface QCRule {
   max_score: number
   weight: number
   prompt_template: string
-  check_logic: Record<string, any>
+  check_logic: Record<string, unknown>
   is_active: boolean
   version: string
 }

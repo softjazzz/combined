@@ -237,7 +237,7 @@ const errorChart = ref<HTMLElement>()
 
 // 错误详情
 const showErrorModal = ref(false)
-const selectedError = ref<any>(null)
+const selectedError = ref<unknown>(null)
 
 // 表格列定义
 const errorColumns = [

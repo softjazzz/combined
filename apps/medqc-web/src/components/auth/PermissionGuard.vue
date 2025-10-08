@@ -8,7 +8,7 @@ interface Props {
   // 权限操作
   action?: string
   // 权限上下文
-  context?: Record<string, any>
+  context?: Record<string, unknown>
   // 用户角色（可选，用于简单的角色检查）
   roles?: string[]
   // 权限检查模式：'all' 表示需要所有权限，'any' 表示需要任意一个权限

@@ -26,7 +26,7 @@ export interface QueryOptions {
   pageSize?: number
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
-  filters?: Record<string, any>
+  filters?: Record<string, unknown>
 }
 
 // API包装器类

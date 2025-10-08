@@ -35,7 +35,7 @@ export function useBatchMonitor() {
   const allTasks = ref<BatchTask[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  const subscription = ref<any>(null)
+  const subscription = ref<unknown>(null)
 
   // 计算属性
   const activeTasks = computed(() => 
@@ -126,7 +126,7 @@ export function useBatchMonitor() {
       .channel('batch_tasks_monitor')
       .on('postgres_changes', {
           event: '*', schema: 'public', table: TABLES.BATCH_PROCESSING_TASKS
-        }, (payload: any) => {
+        }, (payload: unknown) => {
           handleTaskChange(payload)
         }
       )

@@ -574,7 +574,7 @@ const handleAppeal = () => {
   }
 }
 
-const handleAppealIssue = (issue: any) => {
+const handleAppealIssue = (issue: unknown) => {
   if (props.notification) {
     emit('action', 'appealIssue', { ...props.notification, selectedIssue: issue })
     message.info('开始针对此问题的申诉')

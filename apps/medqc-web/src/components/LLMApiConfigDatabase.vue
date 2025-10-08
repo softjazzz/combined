@@ -491,7 +491,7 @@ const testConnection = async () => {
     } else {
       message.error(result.error || '连接失败')
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     message.error(`连接失败：${e.message || e}`)
   } finally {
     testing.value = false

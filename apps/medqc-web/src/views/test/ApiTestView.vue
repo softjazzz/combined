@@ -211,8 +211,8 @@ import { medicalQcApi, type QCAnalysisRequest, type QCAnalysisResponse, type Sys
 
 // 响应式数据
 const systemStatus = ref<SystemStatus | null>(null)
-const healthStatus = ref<any>(null)
-const demoData = ref<any>(null)
+const healthStatus = ref<unknown>(null)
+const demoData = ref<unknown>(null)
 const analysisResult = ref<QCAnalysisResponse | null>(null)
 
 // 加载状态

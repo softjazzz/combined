@@ -174,7 +174,7 @@ const passwordRules = {
     { required: true, message: '请输入新密码', trigger: 'blur' },
     { min: 8, message: '新密码至少8位字符', trigger: 'blur' },
     { 
-      validator: (_: any, value: string) => {
+      validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
         
         // 检查是否与当前密码相同
@@ -200,7 +200,7 @@ const passwordRules = {
   confirm_password: [
     { required: true, message: '请确认新密码', trigger: 'blur' },
     {
-      validator: (_: any, value: string) => {
+      validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
         if (value !== passwordForm.new_password) {
           return Promise.reject('两次输入的密码不一致')

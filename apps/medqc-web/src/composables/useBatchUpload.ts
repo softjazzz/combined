@@ -55,7 +55,7 @@ export function useBatchUpload() {
    * 文件内容提取
    */
   const extractFileContent = async (file: File): Promise<string> => {
-    return new Promise((resolve: any,  reject: any) => {
+    return new Promise((resolve: unknown,  reject: unknown) => {
       const reader = new FileReader()
       
       reader.onload = (e) => {
@@ -335,7 +335,7 @@ export function useBatchUpload() {
       .channel(`batch_task_${taskId}`)
       .on('postgres_changes',  {
           event: 'UPDATE', schema: 'public', table: TABLES.BATCH_PROCESSING_TASKS, filter: `id=eq.${taskId}`
-        }, (payload: any) => {
+        }, (payload: unknown) => {
           callback(payload.new as BatchTask)
         }
       )

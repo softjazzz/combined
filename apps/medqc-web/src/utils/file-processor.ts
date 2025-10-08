@@ -292,7 +292,7 @@ export function getFileTypeDisplayName(file: File | string): string {
  * 读取文本文件内容
  */
 export function readTextFile(file: File): Promise<string> {
-  return new Promise((resolve: any,  reject: any) => {
+  return new Promise((resolve: unknown,  reject: unknown) => {
     const reader = new FileReader()
     
     reader.onload = (e) => {
@@ -311,7 +311,7 @@ export function readTextFile(file: File): Promise<string> {
  * 读取文件为ArrayBuffer
  */
 export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-  return new Promise((resolve: any,  reject: any) => {
+  return new Promise((resolve: unknown,  reject: unknown) => {
     const reader = new FileReader()
     
     reader.onload = (e) => {
@@ -330,7 +330,7 @@ export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
  * 读取文件为Base64
  */
 export function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve: any,  reject: any) => {
+  return new Promise((resolve: unknown,  reject: unknown) => {
     const reader = new FileReader()
     
     reader.onload = (e) => {

@@ -244,7 +244,7 @@ ${text}
     sections.push('你是一个专业的医疗信息批量处理助手。请处理以下多个病历文本，并为每个文本提取关键信息。')
     sections.push('')
 
-    texts.forEach((text: any,  index: any) => {
+    texts.forEach((text: unknown,  index: unknown) => {
       sections.push(`=== 文本 ${index + 1} ===`)
       sections.push(text.substring(0, 500) + (text.length > 500 ? '...' : ''))
       sections.push('')
@@ -268,7 +268,7 @@ ${text}
   /**
    * 构建质量检查提示词
    */
-  static buildQualityCheckPrompt(extractedData: any): string {
+  static buildQualityCheckPrompt(extractedData: unknown): string {
     return `请检查以下提取的医疗信息的质量和完整性：
 
 提取的数据：
@@ -302,7 +302,7 @@ ${JSON.stringify(extractedData, null, 2)}
   /**
    * 构建错误修复提示词
    */
-  static buildErrorFixPrompt(originalText: string, errorData: any, errorDescription: string): string {
+  static buildErrorFixPrompt(originalText: string, errorData: unknown, errorDescription: string): string {
     return `原始文本中的信息提取出现了错误，请重新分析并修正：
 
 原始文本：

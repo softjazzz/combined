@@ -346,7 +346,7 @@ export const saveFilterTemplate = async (
 }
 
 // 获取病历详情
-export const getRecordDetail = async (id: string): Promise<ApiResponse<any>> => {
+export const getRecordDetail = async (id: string): Promise<ApiResponse<unknown>> => {
   await delay(600)
   
   const record = mockRecords.find(r => r.id === id)

@@ -168,7 +168,7 @@ export interface AuditLog {
   action: string
   resource_type: ResourceType
   resource_id?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
   ip_address?: string
   user_agent?: string
   created_at: string
@@ -231,7 +231,7 @@ export type PermissionChecker = (
   user: User,
   resource: ResourceType,
   action: PermissionAction,
-  context?: Record<string, any>
+  context?: Record<string, unknown>
 ) => Promise<PermissionCheckResult>
 
 // 认证状态

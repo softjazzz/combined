@@ -42,7 +42,7 @@ export function useBatchUploadMock() {
    * 文件内容提取
    */
   const extractFileContent = async (file: File): Promise<string> => {
-    return new Promise((resolve: any,  reject: any) => {
+    return new Promise((resolve: unknown,  reject: unknown) => {
       const reader = new FileReader()
       
       reader.onload = (e) => {

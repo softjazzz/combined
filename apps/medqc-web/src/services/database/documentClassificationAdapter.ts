@@ -231,7 +231,7 @@ export class DocumentClassificationAdapter {
   /**
    * 映射DocumentType枚举到代码字符串
    */
-  private mapDocumentTypeToCode(type: any): string {
+  private mapDocumentTypeToCode(type: unknown): string {
     // 这里需要根据实际的DocumentType枚举进行映射
     const typeMapping: Record<string, string> = {
       'ADMISSION_RECORD': 'admission_record',

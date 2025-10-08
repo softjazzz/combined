@@ -217,7 +217,7 @@ const testConnection = async () => {
       })
       message.error('API连接失败')
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     connectionStatus.value = 'disconnected'
     const duration = Date.now() - startTime
     
@@ -292,7 +292,7 @@ const testAuth = async () => {
         message.error('认证测试失败')
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     const duration = Date.now() - startTime
     addTestResult({
       name: '认证测试',
@@ -352,7 +352,7 @@ const testMedicalRecordsApi = async () => {
         error: response.error || '获取记录失败'
       })
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     const duration = Date.now() - startTime
     addTestResult({
       name: '医疗记录API测试',
@@ -388,7 +388,7 @@ const testQCApi = async () => {
         error: response.error || '获取规则失败'
       })
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     const duration = Date.now() - startTime
     addTestResult({
       name: '质控API测试',

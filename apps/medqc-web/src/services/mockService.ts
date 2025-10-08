@@ -249,7 +249,7 @@ export class MockService {
   /**
    * 模拟获取医疗记录列表
    */
-  static async getRecords(params: any = {}): Promise<{
+  static async getRecords(params: unknown = {}): Promise<{
     records: MedicalRecord[]
     pagination: {
       total: number
@@ -420,7 +420,7 @@ export class MockService {
   /**
    * 模拟获取仪表板数据
    */
-  static async getDashboardData(): Promise<any> {
+  static async getDashboardData(): Promise<unknown> {
     await delay(1000)
     
     return {

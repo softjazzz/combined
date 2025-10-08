@@ -440,7 +440,7 @@ const showDeleteDocumentModal = () => {
   deleteModalVisible.value = true
 }
 
-const handleDocumentCreated = async (document: any) => {
+const handleDocumentCreated = async (document: unknown) => {
   try {
     message.success('文档创建成功')
 
@@ -457,7 +457,7 @@ const handleDocumentCreated = async (document: any) => {
   }
 }
 
-const handleDocumentDeleted = async (result: any) => {
+const handleDocumentDeleted = async (result: unknown) => {
   try {
     const operationType = result.deleteType === 'hard' ? '永久删除' : '删除'
     message.success(`文档${operationType}成功`)

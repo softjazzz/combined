@@ -162,7 +162,7 @@ export async function getMultipleQCResults(
       throw new Error(`获取质控结果失败: ${error.message}`)
     }
 
-    const results = (data || : any[]).map(convertRowToQCResult)
+    const results = (data || : unknown[]).map(convertRowToQCResult)
     return { data: results, error: null }
   } catch (error) { console.error('获取质控结果失败:', error)
     return {

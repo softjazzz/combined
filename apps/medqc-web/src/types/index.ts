@@ -173,9 +173,9 @@ export interface QCAnalysisRequest {
   /** 可选：仅传递规则ID，由后端自行查找 */
   ruleIds?: string[]
   /** 额外的病历或上下文信息 */
-  recordMetadata?: Record<string, any>
+  recordMetadata?: Record<string, unknown>
   /** 扩展配置，用于控制分析行为 */
-  options?: Record<string, any>
+  options?: Record<string, unknown>
 }
 
 export interface QCAnalysisResponse {
@@ -197,7 +197,7 @@ export interface QCAnalysisResponse {
 export interface BatchOperation {
   type: 'analyze' | 'delete' | 'export'
   ids: string[]
-  options?: Record<string, any>
+  options?: Record<string, unknown>
 }
 
 export interface BatchResult {
@@ -277,7 +277,7 @@ export interface OperationLog {
   userName: string
   action: string
   resource: string
-  details: Record<string, any>
+  details: Record<string, unknown>
   ip: string
   userAgent: string
   timestamp: string

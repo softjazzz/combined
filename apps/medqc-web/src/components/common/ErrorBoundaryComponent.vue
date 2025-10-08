@@ -372,19 +372,19 @@ onErrorCaptured((error: Error) => {
 })
 
 // 监听全局错误
-window.addEventListener('error',  (event: any) => {
+window.addEventListener('error',  (event: unknown) => {
   if (event.error) {
     handleError(event.error)
   }
 })
 
-window.addEventListener('unhandledrejection',  (event: any) => {
+window.addEventListener('unhandledrejection',  (event: unknown) => {
   handleError(new Error(event.reason))
 })
 
 // 暴露方法给父组件
 defineExpose({
-  handleError: any, reset: () => {
+  handleError: unknown, reset: () => {
     hasError.value = false
     currentError.value = null
     retryCount.value = 0

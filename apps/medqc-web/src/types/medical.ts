@@ -223,7 +223,7 @@ export interface DocumentTypeInfo {
   sort_order: number
   is_active: boolean
   required_sections: string[]
-  validation_rules: Record<string, any>
+  validation_rules: Record<string, unknown>
 }
 
 export interface MedicalDocumentInfo {
@@ -249,7 +249,7 @@ export interface MedicalDocumentInfo {
   qc_status: 'pending' | 'passed' | 'failed' | 'reviewing'
   qc_score?: number
   qc_issues: QCIssue[]
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -260,7 +260,7 @@ export interface QCIssue {
   severity: 'critical' | 'major' | 'minor'
   suggestion: string
   evidence_text?: string
-  evidence_location?: Record<string, any>
+  evidence_location?: Record<string, unknown>
 }
 
 export interface QCTemplate {
@@ -270,9 +270,9 @@ export interface QCTemplate {
   description?: string
   applicable_categories: string[]
   applicable_document_types: string[]
-  template_config: Record<string, any>
+  template_config: Record<string, unknown>
   prompt_template: string
-  scoring_rules: Record<string, any>
+  scoring_rules: Record<string, unknown>
   is_active: boolean
   version: string
 }
@@ -288,7 +288,7 @@ export interface DocumentQCResult {
   issue_category?: string
   issue_description?: string
   evidence_text?: string
-  evidence_location?: Record<string, any>
+  evidence_location?: Record<string, unknown>
   suggestions: string[]
   ai_reasoning?: string
   ai_model_used?: string

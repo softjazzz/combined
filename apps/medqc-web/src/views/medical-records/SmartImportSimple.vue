@@ -264,12 +264,12 @@ const activeTab = ref('text')
 const inputText = ref('')
 const parsing = ref(false)
 const importing = ref(false)
-const parseResult = ref<any>(null)
+const parseResult = ref<unknown>(null)
 const operationLog = ref('系统已就绪')
 const uploadedFiles = ref<any[]>([])
 const llmParsing = ref(false)
 const batchParsing = ref(false)
-const mergedResults = ref<any>(null) // 存储合并后的多文档结果
+const mergedResults = ref<unknown>(null) // 存储合并后的多文档结果
 const activeDocumentTypes = ref<string[]>([]) // 控制文档分类折叠面板
 
 // 结果显示的兼容性处理
@@ -772,7 +772,7 @@ const exportResult = () => {
   const dataBlob = new Blob([dataStr], { type: 'application/json' })
 
 // 接收LLM配置更新（可用于更新 llmService 的运行时配置）
-const onLLMConfigUpdated = (configData: any) => {
+const onLLMConfigUpdated = (configData: unknown) => {
   operationLog.value += '\nLLM 配置已更新'
 }
 
@@ -868,7 +868,7 @@ const preciseLLMParse = async () => {
     } else {
       throw new Error((result && result.error) || 'LLM 解析失败')
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('LLM精准解析失败:', e)
     message.error('LLM精准解析失败: ' + (e.message || e))
     operationLog.value += '\nLLM精准解析失败: ' + (e.message || e)

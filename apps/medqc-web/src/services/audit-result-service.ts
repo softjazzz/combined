@@ -49,7 +49,7 @@ class AIDefectAssistantService {
   }
 
   private convertToDefectSuggestions(
-    analysisResult: any,
+    analysisResult: unknown,
     context: DefectAnalysisContext
   ): AIDefectSuggestion[] {
     
@@ -107,7 +107,7 @@ class AIDefectAssistantService {
     return severityMap[severity] || 'minor'
   }
 
-  private enhanceDefectDescription(finding: any,  ruleResult: any): string {
+  private enhanceDefectDescription(finding: unknown,  ruleResult: unknown): string {
     let description = finding.description || ''
     
     if (finding.evidence) {
@@ -315,7 +315,7 @@ export class AuditResultService {
   private async processSingleBatchItem(
     taskItemId: string,
     template?: any
-  ): Promise<any> {
+  ): Promise<unknown> {
     
     const startTime = Date.now()
 
@@ -339,7 +339,7 @@ export class AuditResultService {
 
     // 3. 应用审核模板
     const score = template?.default_score || this.calculateDefaultScore(aiSuggestions)
-    const defects = this.mergeTemplateDefects(aiSuggestions, template?.common_defects || : any[])
+    const defects = this.mergeTemplateDefects(aiSuggestions, template?.common_defects || : unknown[])
 
     // 4. 创建审核结果
     const auditResult = await this.createAuditResult(
@@ -507,7 +507,7 @@ export class AuditResultService {
       .eq('id', taskItemId)
   }
 
-  private async sendAuditCompletionNotification(auditResult: any): Promise<void> {
+  private async sendAuditCompletionNotification(auditResult: unknown): Promise<void> {
     // 发送给临床医生的通知
     await notificationService.sendNotification(
       auditResult.qc_audit_task_items.patient_id, // 假设患者ID就是医生ID

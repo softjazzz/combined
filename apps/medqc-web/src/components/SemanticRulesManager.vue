@@ -394,9 +394,9 @@ interface TableColumn {
   fixed?: string
   ellipsis?: boolean
   // antd-vue 列筛选可选属性（为简化类型，这里使用 any）
-  filters?: any[]
-  onFilter?: (value: any, record: any) => boolean
-  filteredValue?: any[] | null
+  filters?: unknown[]
+  onFilter?: (value: unknown, record: unknown) => boolean
+  filteredValue?: unknown[] | null
 }
 
 // 四川省规则相关数据
@@ -504,11 +504,11 @@ const sichuanColumns = computed<TableColumn[]>(() => [
       (sichuanRules.value || [])
         .flatMap(r => r.applicable_documents || [])
         .map(mapDocTypeToCanonical)
-        .filter((x: any) => !!x)
-    ) as Set<string>).map((code: any) => ({ text: CANONICAL_LABEL_ZH[String(code)], value: String(code) })),
+        .filter((x: unknown) => !!x)
+    ) as Set<string>).map((code: unknown) => ({ text: CANONICAL_LABEL_ZH[String(code)], value: String(code) })),
     filteredValue: headerSelected.value.applicable_documents ?? null,
     onFilter: (value, record) => {
-      const mapped = (record.applicable_documents || []).map((d: any) => mapDocTypeToCanonical(d)).filter((x: any) => !!x)
+      const mapped = (record.applicable_documents || []).map((d: unknown) => mapDocTypeToCanonical(d)).filter((x: unknown) => !!x)
       return mapped.includes(String(value))
     }
   },
@@ -542,9 +542,9 @@ const platformColumns = computed<TableColumn[]>(() => {
       .filter(Boolean)))
     const canonicalPlatformDocs = Array.from(new Set(rawPlatformDocs
       .map(mapDocTypeToCanonical)
-      .filter((x: any) => !!x)))
+      .filter((x: unknown) => !!x)))
     console.log('🧪 平台规则 applicable_documents 原始值 count=', rawPlatformDocs.length, rawPlatformDocs)
-    console.log('✅ 平台规则 文书类别过滤项(标准6类)=', canonicalPlatformDocs.map((code: any) => ({ code, label: CANONICAL_LABEL_ZH[String(code)] })))
+    console.log('✅ 平台规则 文书类别过滤项(标准6类)=', canonicalPlatformDocs.map((code: unknown) => ({ code, label: CANONICAL_LABEL_ZH[String(code)] })))
   } catch {}
 
   return [
@@ -576,11 +576,11 @@ const platformColumns = computed<TableColumn[]>(() => {
       filters: Array.from(new Set((platformRules.value || [])
         .flatMap(r => r.applicable_documents || [])
         .map(mapDocTypeToCanonical)
-        .filter((x: any) => !!x)
-      ) as Set<string>).map((code: any) => ({ text: CANONICAL_LABEL_ZH[String(code)], value: String(code) })),
+        .filter((x: unknown) => !!x)
+      ) as Set<string>).map((code: unknown) => ({ text: CANONICAL_LABEL_ZH[String(code)], value: String(code) })),
       filteredValue: headerSelected.value.applicable_documents ?? null,
       onFilter: (value, record) => {
-        const mapped = (record.applicable_documents || []).map((d: any) => mapDocTypeToCanonical(d)).filter((x: any) => !!x)
+        const mapped = (record.applicable_documents || []).map((d: unknown) => mapDocTypeToCanonical(d)).filter((x: unknown) => !!x)
         return mapped.includes(String(value))
       }
     },
@@ -611,7 +611,7 @@ const refreshSichuanRules = async () => {
     if (response.ok) {
       const data = await response.json()
       // 后端返回的字段可能为英文或缺失，这里做一次规范化
-      const normalizeRule = (r: any): SichuanQCRule => {
+      const normalizeRule = (r: unknown): SichuanQCRule => {
         return {
           rule_id: r.rule_id || r.id || '',
           name: r.name || r.rule_name || '未命名规则',
@@ -628,7 +628,7 @@ const refreshSichuanRules = async () => {
       }
 
       const rawRules = data.rules || []
-      sichuanRules.value = rawRules.map((r: any) => normalizeRule(r))
+      sichuanRules.value = rawRules.map((r: unknown) => normalizeRule(r))
       sichuanStats.value = {
         total_rules: data.total_rules || 68,
         rule_categories: data.rule_categories || [],
@@ -676,7 +676,7 @@ const refreshPlatformRules = async () => {
     }
     // 简单推断分类列表
     platformCategories.value = Array.from(new Set(platformRules.value.map(r => r.category).filter(Boolean) as string[]))
-  } catch (e: any) {
+  } catch (e: unknown) {
     message.error('加载平台规则失败: ' + (e?.message || e))
   } finally {
     loading.value = false
@@ -684,7 +684,7 @@ const refreshPlatformRules = async () => {
 }
 
 // 本地受控筛选：结合分页事件获取 filters
-const handleTableChange = (pagination: any, tableFilters?: Record<string, any[]>) => {
+const handleTableChange = (pagination: unknown, tableFilters?: Record<string, any[]>) => {
   tablePagination.value = {
     ...tablePagination.value,
     current: pagination?.current || 1,
@@ -771,7 +771,7 @@ const getCategoryCount = (category: string) => {
 }
 
 // 短编号显示：优先使用平台的 rule_code；否则显示 UUID 前 8 位
-const getDisplayId = (record: any): string => {
+const getDisplayId = (record: unknown): string => {
   const code = (record.rule_code || '').toString().trim()
   if (code) return code
   const id = (record.rule_id || record.id || '').toString()
@@ -877,7 +877,7 @@ const onTogglePlatformRule = async (record: PlatformRule, checked: boolean) => {
     const updated = data.rule || {}
     record.is_enabled = !!updated.is_enabled
     message.success(checked ? '规则已启用' : '规则已停用')
-  } catch (e: any) {
+  } catch (e: unknown) {
     // 回滚
     record.is_enabled = old
     message.error('更新启用状态失败: ' + (e?.message || e))

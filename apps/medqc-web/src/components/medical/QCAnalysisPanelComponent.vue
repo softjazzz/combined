@@ -182,7 +182,7 @@ const props = withDefaults(defineProps<Props>(), {
 const analyzing = ref(false)
 const progressPercent = ref(0)
 const analysisMode = ref<'comprehensive' | 'focused' | 'quick'>('comprehensive')
-const analysisResult = ref<any>(null)
+const analysisResult = ref<unknown>(null)
 
 // 表格列定义
 const scoreColumns: TableColumnsType = [
@@ -384,7 +384,7 @@ ${content}
         grade: parsed.summary?.grade || '丙级',
         overall_assessment: parsed.summary?.overallAssessment || 'AI分析完成'
       },
-      item_scores: (parsed.itemScores || []).map((item: any) => ({
+      item_scores: (parsed.itemScores || []).map((item: unknown) => ({
         item_name: item.itemName,
         total_score: item.totalScore,
         actual_score: item.actualScore,

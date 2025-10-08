@@ -166,7 +166,7 @@ class BaseEnhancedRulesService {
     }
   }
 
-  async exportRulesConfig(ruleIds: string[]): Promise<any> {
+  async exportRulesConfig(ruleIds: string[]): Promise<unknown> {
     const rules = await this.getEnhancedRules({ ruleIds  })
     
     return {
@@ -180,7 +180,7 @@ class BaseEnhancedRulesService {
     }
   }
 
-  async importRulesConfig(configData: any, options: RuleImportConfig): Promise<ImportResult> { const result: ImportResult = {
+  async importRulesConfig(configData: unknown, options: RuleImportConfig): Promise<ImportResult> { const result: ImportResult = {
       importedCount: 0,
       skippedCount: 0,
       errorCount: 0,
@@ -281,7 +281,7 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
       
       console.log(`Rule ${rule.id} synchronized to LLM engine successfully`)
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Failed to sync rule ${rule.id} to LLM engine:`, error)
       throw new Error(`规则同步失败: ${error.message}`)
     }
@@ -459,7 +459,7 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
     }
   }
 
-  private async storeLLMConfiguration(ruleId: string, config: any): Promise<void> {
+  private async storeLLMConfiguration(ruleId: string, config: unknown): Promise<void> {
     // Store the LLM configuration for the execution engine
     // This could be in a separate table or cache
     console.log(`Storing LLM config for rule ${ruleId}:`, config)
@@ -494,7 +494,7 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
         result: mockResult,
         testData
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         ruleId,
         isSuccessful: false,

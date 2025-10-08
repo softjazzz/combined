@@ -137,7 +137,7 @@ interface Props {
 
 interface Emits {
   (e: 'update:visible', value: boolean): void
-  (e: 'submit', data: any): void
+  (e: 'submit', data: unknown): void
   (e: 'cancel'): void
 }
 
@@ -260,7 +260,7 @@ const roleUsers = ref([
 // 监听角色变化
 watch(
   () => props.role,
-  (newRole: any) => {
+  (newRole: unknown) => {
     if (newRole) {
       // 根据角色类型设置权限
       updatePermissionsByRole(newRole.key)

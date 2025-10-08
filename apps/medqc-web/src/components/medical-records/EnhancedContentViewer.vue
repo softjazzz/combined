@@ -30,7 +30,7 @@
           v-if="props.enableSummaryToggle"
           :options="[{label:'全文', value:'full'},{label:'摘要', value:'summary'}]"
           :value="showSummary ? 'summary' : 'full'"
-          @change="(v:any)=>{ showSummary.value = (v==='summary') }"
+          @change="(v: unknown)=>{ showSummary.value = (v==='summary') }"
         />
         <a-button-group>
           <a-tooltip title="全屏查看">

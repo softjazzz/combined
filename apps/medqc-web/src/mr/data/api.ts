@@ -76,7 +76,7 @@ export interface Document {
   status: string
   qc_status: string
   qc_score: number
-  qc_issues: any[]
+  qc_issues: unknown[]
   metadata: {
     type_code: string
     content_hash: string
@@ -438,7 +438,7 @@ export async function getDocumentTypes(): Promise<DocumentCategory[]> {
   return data.categories || []
 }
 
-export async function createDocument(recordId: string, request: CreateDocumentRequest): Promise<any> {
+export async function createDocument(recordId: string, request: CreateDocumentRequest): Promise<unknown> {
   const response = await fetch(`${API_BASE_URL}/api/medical-records/${recordId}/documents`, {
     method: 'POST',
     headers: {
@@ -455,7 +455,7 @@ export async function createDocument(recordId: string, request: CreateDocumentRe
   return await response.json()
 }
 
-export async function deleteDocument(documentId: string, hardDelete: boolean = false): Promise<any> {
+export async function deleteDocument(documentId: string, hardDelete: boolean = false): Promise<unknown> {
   const url = `${API_BASE_URL}/api/medical-documents/${documentId}${hardDelete ? '?hard_delete=true' : ''}`
 
   const response = await fetch(url, {

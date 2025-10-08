@@ -343,7 +343,7 @@ const tableColumns = [
 
 // 图标映射
 const getIcon = (iconName: string) => {
-  const iconMap: Record<string, any> = {
+  const iconMap: Record<string, unknown> = {
     FileTextOutlined,
     ClockCircleOutlined,
     SyncOutlined,

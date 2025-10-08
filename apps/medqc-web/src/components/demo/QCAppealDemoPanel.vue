@@ -157,7 +157,7 @@
             <div class="appeal-checkbox" v-if="filteredAppeals.length > 1">
               <a-checkbox
                 :checked="selectedAppeals.includes(appeal.id)"
-                @change="(e: any) => handleSelectAppeal(appeal.id, e.target.checked)"
+                @change="(e: unknown) => handleSelectAppeal(appeal.id, e.target.checked)"
               />
             </div>
             <div class="appeal-header">
@@ -459,7 +459,7 @@ const handleBatchAction = ({ key }: { key: string }) => {
   selectedAppeals.value = []
 }
 
-const handleSelectAll = (e: any) => {
+const handleSelectAll = (e: unknown) => {
   if (e.target.checked) {
     selectedAppeals.value = filteredAppeals.value.map(appeal => appeal.id)
   } else {

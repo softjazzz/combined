@@ -7,7 +7,7 @@ export interface LLMParseResultState {
 export const useLLMParseStore = defineStore('llmParse', {
   state: (): LLMParseResultState => ({ lastResult: null }),
   actions: {
-    setResult(result: any) {
+    setResult(result: unknown) {
       this.lastResult = result
       try {
         if (typeof sessionStorage !== 'undefined') {

@@ -157,7 +157,7 @@ const beforeUpload = (file: File) => {
 }
 
 // 处理文件上传变化
-const handleUploadChange = (info: any) => {
+const handleUploadChange = (info: unknown) => {
   addDebugLog(`handleUploadChange 被调用，文件数量: ${info.fileList?.length || 0}`)
   
   const { fileList } = info
@@ -168,7 +168,7 @@ const handleUploadChange = (info: any) => {
   }
   
   // 处理新添加的文件
-  fileList.forEach((fileItem: any, index: number) => {
+  fileList.forEach((fileItem: unknown, index: number) => {
     const file = fileItem.originFileObj || fileItem
     
     if (!file) {
@@ -206,7 +206,7 @@ const addFileToList = (file: File) => {
     
     message.success(`文件 ${file.name} 上传成功`)
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     addDebugLog(`文件处理失败: ${file.name} - ${error.message}`)
     message.error(`文件处理失败: ${file.name}`)
   }

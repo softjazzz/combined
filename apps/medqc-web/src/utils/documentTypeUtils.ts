@@ -36,7 +36,7 @@ const TYPE_ALIASES: Record<string, DocumentType> = {
   'attending_first_progress': DocumentType.ATTENDING_PROGRESS
 }
 
-function normalizeType(input: any): DocumentType {
+function normalizeType(input: unknown): DocumentType {
   const raw = String(input ?? '').trim()
   const lower = raw.toLowerCase()
   if ((KNOWN_TYPES as Set<string>).has(lower)) {

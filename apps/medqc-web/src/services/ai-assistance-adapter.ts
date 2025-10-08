@@ -225,7 +225,7 @@ export class AIAssistanceServiceAdapter {
     defects: QCDefect[],
     medicalRecordId: string,
     context?: any
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       console.log(`生成整改计划: ${defects.length} 个缺陷`)
       
@@ -265,7 +265,7 @@ export class AIAssistanceServiceAdapter {
       analysis_depth?: 'basic' | 'comprehensive' | 'detailed'
       include_recommendations?: boolean
     } = {}
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       console.log(`智能分析医疗记录: ${medicalRecordId}`)
       
@@ -332,7 +332,7 @@ export class AIAssistanceServiceAdapter {
       console.log(`预测评分: ${result.predicted_score}`)
       return result
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('质量评分预测失败:', error)
       throw new Error(`质量评分预测失败: ${error.message}`)
     }
@@ -354,7 +354,7 @@ export class AIAssistanceServiceAdapter {
   }>> {
     try {
       return await unifiedAPIClient.getAIAnalysisHistory(taskItemId, limit)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取分析历史失败:', error)
       return []
     }
@@ -393,7 +393,7 @@ export class AIAssistanceServiceAdapter {
       
       console.log('反馈提交成功')
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('提交反馈失败:', error)
       throw new Error(`提交反馈失败: ${error.message}`)
     }
@@ -421,7 +421,7 @@ export class AIAssistanceServiceAdapter {
         success_rate: 0.95 // 需要从实际统计数据获取
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取AI服务状态失败:', error)
       return {
         qc_engine_status: 'unknown',
@@ -459,7 +459,7 @@ export class AIAssistanceServiceAdapter {
     return null
   }
 
-  private setCachedAnalysis(cacheKey: string, data: any, ttlMinutes: number = 30): void {
+  private setCachedAnalysis(cacheKey: string, data: unknown, ttlMinutes: number = 30): void {
     this.analysisCache.set(cacheKey, {
       data,
       timestamp: Date.now(),

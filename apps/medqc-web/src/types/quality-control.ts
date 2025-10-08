@@ -30,10 +30,10 @@ export interface EnhancedQCRule {
   target_sections: string[]
   applicable_record_types: string[]
   applicable_departments?: string[]
-  check_logic: Record<string, any>
-  scoring_config: Record<string, any>
+  check_logic: Record<string, unknown>
+  scoring_config: Record<string, unknown>
   prompt_template?: string
-  examples: any[]
+  examples: unknown[]
   is_active: boolean
   execution_order: number
   estimated_tokens: number
@@ -320,10 +320,10 @@ export interface QCResultMetadata {
   totalTokens?: number
   confidence: number
   documents?: Array<{ id: string; title?: string; type?: string }>
-  record?: Record<string, any>
+  record?: Record<string, unknown>
   engine?: string
   analysisId?: string
-  scoreBaseline?: Record<string, any>
+  scoreBaseline?: Record<string, unknown>
 }
 
 // 演示配置模型

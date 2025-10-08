@@ -390,7 +390,7 @@ const handleSave = async () => {
       defects: formData.value.defects
     })
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error('保存失败')
   } finally {
     saving.value = false

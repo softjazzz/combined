@@ -522,7 +522,7 @@ const handleLogout = async () => {
 // 监听路由变化更新选中的菜单
 watch(
   () => route.path,
-  (newPath: any) => {
+  (newPath: unknown) => {
     selectedKeys.value = [newPath]
     // 如果是质控相关路径，展开质控子菜单
     if (newPath.includes('/dashboard/qc')) {

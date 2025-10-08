@@ -32,7 +32,7 @@ Object.keys(Icons).forEach(key => {
 import errorHandler from './utils/error-handler'
 
 // 全局错误处理
-app.config.errorHandler = (err, vm: any,  info: any) => {
+app.config.errorHandler = (err, vm: unknown,  info: unknown) => {
   console.error('Global error:', err, vm, info)
   errorHandler.handleError(err)
 }

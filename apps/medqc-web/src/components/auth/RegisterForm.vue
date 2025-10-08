@@ -276,7 +276,7 @@ const registerRules = {
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 8, message: '密码至少8位字符', trigger: 'blur' },
     { 
-      validator: (_: any, value: string) => {
+      validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
         
         const hasUpper = /[A-Z]/.test(value)
@@ -294,7 +294,7 @@ const registerRules = {
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },
     {
-      validator: (_: any, value: string) => {
+      validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
         if (value !== registerForm.password) {
           return Promise.reject('两次输入的密码不一致')
@@ -306,7 +306,7 @@ const registerRules = {
   ],
   phone: [
     {
-      validator: (_: any, value: string) => {
+      validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
         if (!/^1[3-9]\d{9}$/.test(value)) {
           return Promise.reject('手机号格式不正确')
@@ -318,7 +318,7 @@ const registerRules = {
   ],
   agreeTerms: [
     {
-      validator: (_: any, value: boolean) => {
+      validator: (_: unknown, value: boolean) => {
         if (!value) {
           return Promise.reject('请阅读并同意服务条款')
         }
@@ -344,7 +344,7 @@ const handleRegister = async () => {
 }
 
 // Filter department options
-const filterDepartment = (input: string, option: any) => {
+const filterDepartment = (input: string, option: unknown) => {
   return option.children.toLowerCase().includes(input.toLowerCase())
 }
 

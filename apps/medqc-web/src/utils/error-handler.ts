@@ -32,7 +32,7 @@ export interface AppError {
   code: string
   message: string
   originalError?: Error
-  context?: Record<string, any>
+  context?: Record<string, unknown>
   timestamp: string
   userMessage: string
   suggestions?: string[]
@@ -57,7 +57,7 @@ export class ErrorHandler {
     code: string,
     message: string,
     originalError?: Error,
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): AppError {
     const userMessage = this.generateUserMessage(type, code, message)
     const suggestions = this.generateSuggestions(type, code)
@@ -312,13 +312,13 @@ export class ErrorHandler {
   }
 
   // 发送到日志服务
-  private sendToLogService(logData: any): void {
+  private sendToLogService(logData: unknown): void {
     // TODO: 实现日志服务集成
     console.log('发送错误日志:', logData)
   }
 
   // 检查是否为应用错误
-  private isAppError(error: any): error is AppError {
+  private isAppError(error: unknown): error is AppError {
     return error && typeof error === 'object' && 'type' in error && 'level' in error
   }
 
@@ -337,7 +337,7 @@ export class ErrorHandler {
 export const errorHandler = ErrorHandler.getInstance()
 
 // 特定类型的错误处理函数
-export const handleValidationError = (message: string, context?: Record<string, any>) => {
+export const handleValidationError = (message: string, context?: Record<string, unknown>) => {
   const error = errorHandler.createError(
     ErrorType.VALIDATION,
     ErrorLevel.WARNING,
@@ -349,7 +349,7 @@ export const handleValidationError = (message: string, context?: Record<string, 
   errorHandler.handleError(error)
 }
 
-export const handleNetworkError = (error: Error, context?: Record<string, any>) => {
+export const handleNetworkError = (error: Error, context?: Record<string, unknown>) => {
   const appError = errorHandler.createError(
     ErrorType.NETWORK,
     ErrorLevel.ERROR,
@@ -361,7 +361,7 @@ export const handleNetworkError = (error: Error, context?: Record<string, any>) 
   errorHandler.handleError(appError)
 }
 
-export const handleDatabaseError = (error: Error, context?: Record<string, any>) => {
+export const handleDatabaseError = (error: Error, context?: Record<string, unknown>) => {
   const appError = errorHandler.createError(
     ErrorType.DATABASE,
     ErrorLevel.ERROR,
@@ -373,7 +373,7 @@ export const handleDatabaseError = (error: Error, context?: Record<string, any>)
   errorHandler.handleError(appError)
 }
 
-export const handleAuthError = (message: string, context?: Record<string, any>) => {
+export const handleAuthError = (message: string, context?: Record<string, unknown>) => {
   const error = errorHandler.createError(
     ErrorType.AUTHENTICATION,
     ErrorLevel.ERROR,
@@ -385,7 +385,7 @@ export const handleAuthError = (message: string, context?: Record<string, any>) 
   errorHandler.handleError(error)
 }
 
-export const handleBusinessError = (message: string, context?: Record<string, any>) => {
+export const handleBusinessError = (message: string, context?: Record<string, unknown>) => {
   const error = errorHandler.createError(
     ErrorType.BUSINESS,
     ErrorLevel.ERROR,

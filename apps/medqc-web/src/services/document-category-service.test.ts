@@ -39,7 +39,7 @@ const mockRulesData = [
 /**
  * 模拟统计逻辑（从修复后的代码复制）
  */
-function simulateStats(data: any[]): Record<string, number> {
+function simulateStats(data: unknown[]): Record<string, number> {
   const CANONICAL_CATEGORIES = new Set([
     'admission_record', 'progress_note', 'discharge_record',
     'operation_record', 'examination_report', 'consent_form'

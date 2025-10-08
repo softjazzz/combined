@@ -413,7 +413,7 @@ const startUpload = async () => {
       onProgress: (progress) => {
         uploadProgress.value = progress
       },
-      onFileComplete: (index: any,  success: any, error: any) => {
+      onFileComplete: (index: unknown,  success: unknown, error: unknown) => {
         const file = pendingFiles[index]
         if (file) {
           file.status = success ? 'success' : 'error'

@@ -105,9 +105,9 @@ const chartOption = computed(() => {
           backgroundColor: '#6a7985'
         }
       },
-      formatter: (params: any) => {
+      formatter: (params: unknown) => {
         let result = `<div style="font-weight: bold; margin-bottom: 8px;">${params[0].axisValue}</div>`
-        params.forEach((param: any) => {
+        params.forEach((param: unknown) => {
           const value = param.seriesName === '病案数量' 
             ? `${param.value}个`
             : param.seriesName === '平均评分'

@@ -14,7 +14,7 @@ export interface ValidationResult {
 export class ValidationRules {
   
   // 必填验证
-  static required(value: any, fieldName: string): string | null {
+  static required(value: unknown, fieldName: string): string | null {
     if (value === null || value === undefined || value === '') {
       return `${fieldName}不能为空`
     }
@@ -106,7 +106,7 @@ export class ValidationRules {
   }
 
   // 文件类型验证
-  static fileType(file: File, allowedTypes: string: any[]): string | null {
+  static fileType(file: File, allowedTypes: string: unknown[]): string | null {
     if (!allowedTypes.includes(file.type)) {
       return `不支持的文件格式，仅支持：${allowedTypes.join(', ')}`
     }
@@ -174,7 +174,7 @@ export class FormValidator {
   private warnings: Record<string, string[]> = {}
 
   // 添加验证规则
-  validate(field: string, value: any,  rules: ((value: any) => string | null)[]): this {
+  validate(field: string, value: unknown,  rules: ((value: unknown) => string | null)[]): this {
     this.errors[field] = []
     this.warnings[field] = []
 
@@ -272,9 +272,9 @@ export function validateMedicalRecord(data): ValidationResult {
 }
 
 // Ant Design Vue 表单规则转换器
-export function toAntdRules(validators: ((value: any) => string | null)[])[] {
+export function toAntdRules(validators: ((value: unknown) => string | null)[])[] {
   return validators.map(validator => ({
-    validator: (_rule: any,  value: any) => {
+    validator: (_rule: unknown,  value: unknown) => {
       const error = validator(value)
       if (error) {
         return Promise.reject(new Error(error))

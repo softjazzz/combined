@@ -62,7 +62,7 @@ onMounted(async () => {
 })
 
 const result = computed(() => store.lastResult)
-const data = computed<any>(() => result.value?.data)
+const data = computed<unknown>(() => result.value?.data)
 
 // 计算属性用于获取解析元数据
 const tokensUsed = computed(() => result.value?.tokensUsed || 0)
@@ -147,7 +147,7 @@ const saveToDatabase = async (): Promise<string | null> => {
     saving.value = true
 
     // 构建保存数据 - 优化文档数据以减少请求体大小
-    const optimizedDocuments = (data.value.documents || []).map((doc: any) => ({
+    const optimizedDocuments = (data.value.documents || []).map((doc: unknown) => ({
       title: doc.title || '',
       summary: doc.summary || '',
       category: doc.category || '',
@@ -218,7 +218,7 @@ const saveToDatabase = async (): Promise<string | null> => {
     console.log('✅ 保存成功:', savedRecord)
     return savedRecord.id
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ 保存失败:', error)
 
     // 提供更详细的错误信息

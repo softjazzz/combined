@@ -5,7 +5,7 @@ import QCTrendChart from './QCTrendChart.vue'
 import type { ChartDataPoint } from '@/types/dashboard'
 
 describe('QCTrendChart', () => {
-  let wrapper: VueWrapper<any>
+  let wrapper: VueWrapper<unknown>
 
   const mockChartData: ChartDataPoint[] = [
     { date: '2024-01', count: 120, score: 85, passRate: 92 },

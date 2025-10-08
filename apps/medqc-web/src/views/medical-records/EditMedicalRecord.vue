@@ -329,7 +329,7 @@ const route = useRoute()
 const formRef = ref<FormInstance>()
 const loading = ref(true)
 const submitting = ref(false)
-const originalData = ref<any>(null) // 用于并发编辑检测
+const originalData = ref<unknown>(null) // 用于并发编辑检测
 
 // 表单数据
 const formData = reactive({ recordNumber: '',
@@ -455,14 +455,14 @@ const loadRecordData = async () => { try {
 
     // 处理文档数据 - 从content_sections或documents字段中提取
     if (record.content_sections?.documents && Array.isArray(record.content_sections.documents)) {
-      formattedData.documents = record.content_sections.documents.map((doc: any, index: number) => ({
+      formattedData.documents = record.content_sections.documents.map((doc: unknown, index: number) => ({
         id: doc.id || `doc_${index}`,
         type: doc.type || '病程记录',
         title: doc.title || doc.name || `文档${index + 1}`,
         content: doc.content || ''
       }))
     } else if (record.documents && Array.isArray(record.documents)) {
-      formattedData.documents = record.documents.map((doc: any, index: number) => ({
+      formattedData.documents = record.documents.map((doc: unknown, index: number) => ({
         id: doc.id || `doc_${index}`,
         type: doc.type || '病程记录',
         title: doc.title || doc.name || `文档${index + 1}`,
@@ -626,7 +626,7 @@ const handleSubmit = async () => {
     setTimeout(() => {
       router.push('/dashboard/medical-records')
     }, 1500)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存失败:', error)
 
     // 根据错误类型显示不同的错误消息

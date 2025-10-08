@@ -152,7 +152,7 @@ interface Props {
 
 interface Emits {
   (e: 'update:visible', value: boolean): void
-  (e: 'confirm', conditions: any, templateName?: string): void
+  (e: 'confirm', conditions: unknown, templateName?: string): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -201,12 +201,12 @@ const doctorOptions = [
 ]
 
 // 搜索过滤
-const filterOption = (input: string, option: any) => {
+const filterOption = (input: string, option: unknown) => {
   return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
 }
 
 // 监听visible变化，初始化表单数据
-watch(() => props.visible, (newVal: any) => {
+watch(() => props.visible, (newVal: unknown) => {
   if (newVal) {
     // 初始化表单数据
     Object.assign(formData, props.currentConditions)

@@ -171,7 +171,7 @@ const handleSearch = () => {
 }
 
 // 处理节点选择
-const handleSelect = (keys: string[], { node }: any) => {
+const handleSelect = (keys: string[], { node }: unknown) => {
   if (keys.length === 0) return
 
   const selectedKey = keys[0]

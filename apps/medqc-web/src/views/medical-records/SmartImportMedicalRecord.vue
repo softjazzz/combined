@@ -1029,7 +1029,7 @@ ${content.length > 2000 ? content.substring(0, 2000) + '\n\n...(内容已截断�
 
 // 解析文本文件
 const parseTextFile = async (file: File) => {
-  return new Promise((resolve: any,  reject: any) => {
+  return new Promise((resolve: unknown,  reject: unknown) => {
     const reader = new FileReader()
 
     reader.onload = (e) => {
@@ -1244,7 +1244,7 @@ const handleConfirmImport = async () => {
     try {
       const { createDocumentsBatch } = await import('@/services/medicalDocumentApi')
       const baseText = originalFullText.value || rawText || ''
-      const batch = (extractedMedicalData.documents || []).map((d: any, idx: any) => {
+      const batch = (extractedMedicalData.documents || []).map((d: unknown, idx: unknown) => {
         const pos = (d as any).position || {}
         const si = pos.startIndex
         const ei = pos.endIndex

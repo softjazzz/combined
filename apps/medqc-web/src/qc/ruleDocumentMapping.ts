@@ -29,7 +29,7 @@ export const RULE_TO_CATEGORIES: Record<RuleKey, DocumentCategoryCode[]> = {
   '植入物信息完整性': ['operation_record'],
 }
 
-function normalizeCategory(input: any): DocumentCategoryCode | undefined {
+function normalizeCategory(input: unknown): DocumentCategoryCode | undefined {
   if (input && typeof input === 'object') {
     const possible =
       (input.value ?? input.code ?? input.category_code ?? input.category ?? input.label ?? input.name) as
@@ -85,7 +85,7 @@ function normalizeCategory(input: any): DocumentCategoryCode | undefined {
   return zh2code[s]
 }
 
-function toCategoryCandidates(inputs: any): string[] {
+function toCategoryCandidates(inputs: unknown): string[] {
   if (!inputs && inputs !== 0) return []
   if (Array.isArray(inputs)) return inputs
   if (inputs instanceof Set) return Array.from(inputs)
@@ -117,7 +117,7 @@ function toCategoryCandidates(inputs: any): string[] {
   return []
 }
 
-export function normalizeCategories(inputs: any): DocumentCategoryCode[] {
+export function normalizeCategories(inputs: unknown): DocumentCategoryCode[] {
   const arr = toCategoryCandidates(inputs)
   const result = new Set<DocumentCategoryCode>()
   for (const v of arr) {
@@ -167,7 +167,7 @@ function inferCategoriesFromText(text?: string): DocumentCategoryCode[] {
   return uniq(result)
 }
 
-export function lookupRuleCategories(rule: any): DocumentCategoryCode[] {
+export function lookupRuleCategories(rule: unknown): DocumentCategoryCode[] {
   // 0) 首先尝试已归一化的 document_categories（用于服务端直接下发标准代码）
   const embeddedCategories = normalizeCategories(rule?.document_categories)
   if (embeddedCategories.length > 0) return embeddedCategories
