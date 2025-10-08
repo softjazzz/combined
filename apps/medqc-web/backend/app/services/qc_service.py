@@ -3,73 +3,240 @@ Later, wrap real engines (e.g., SichuanQCService) with proper HTTP/timeouts.
 """
 
 from typing import Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
-import random
 
-from ..schemas.qc import QCResult, QCIssue, QCSuggestion, QCRuleResult
+from ..schemas.qc import (
+    QCResult,
+    QCIssue,
+    QCSuggestion,
+    QCRuleResult,
+    QCAnalysisStep,
+)
 from ..storage.memory import qc_rules_db
 
 
 class QCService:
     async def evaluate(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        record_id = payload.get("record_id") or f"record-{uuid.uuid4().hex[:8]}"
-        analysis_id = f"analysis-{uuid.uuid4().hex[:8]}"
+        """Run a lightweight deterministic QC evaluation.
 
-        # Generate mock rule results based on existing rules
-        rules = list(qc_rules_db.values())
+        The demo前端会传入病历内容、选中文书与规则，本方法根据这些信息
+        生成一个稳定但富有语义的分析结果，以便在演示模式下模拟真实质控流程。
+        """
+
+        # ===== 基础上下文 =====
+        record: Dict[str, Any] = payload.get("record") or {}
+        record_id = payload.get("record_id") or record.get("id") or f"record-{uuid.uuid4().hex[:8]}"
+        analysis_id = f"analysis-{uuid.uuid4().hex[:8]}"
+        content: str = payload.get("content") or record.get("content") or ""
+        documents: List[Dict[str, Any]] = payload.get("documents") or record.get("documents") or []
+        rules_payload: List[Dict[str, Any]] = payload.get("rules") or []
+        rule_ids: List[str] = payload.get("rule_ids") or []
+
+        # ===== 规则归一化 =====
+        def normalize_rule(raw: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                "id": str(raw.get("id") or raw.get("rule_id") or raw.get("ruleCode") or f"rule-{uuid.uuid4().hex[:6]}"),
+                "name": str(raw.get("name") or raw.get("rule_name") or raw.get("ruleName") or "未命名规则"),
+                "description": str(raw.get("description") or ""),
+                "category": str(raw.get("category") or "general").lower(),
+                "severity": str(raw.get("severity") or raw.get("defect_level") or "medium").lower(),
+                "weight": int(float(raw.get("weight") or raw.get("max_score") or 10)),
+                "rule_code": raw.get("rule_code") or raw.get("ruleCode") or "",
+            }
+
+        normalized_rules: List[Dict[str, Any]] = []
+        if rules_payload:
+            normalized_rules = [normalize_rule(r) for r in rules_payload if isinstance(r, dict)]
+        elif rule_ids:
+            for rid in rule_ids:
+                data = qc_rules_db.get(rid)
+                if data:
+                    normalized_rules.append(normalize_rule(data))
+        else:
+            normalized_rules = [normalize_rule(r) for r in qc_rules_db.values()]
+
+        if not normalized_rules:
+            normalized_rules = [normalize_rule(r) for r in qc_rules_db.values()]
+
+        # ===== 计算辅助变量 =====
+        content_lower = content.lower()
+        content_strength = min(30, max(0, len(content_lower) // 400 * 5))
+        doc_types = {str(doc.get("type") or "").lower() for doc in documents if doc.get("type")}
+        doc_titles = {str(doc.get("title") or "").lower() for doc in documents if doc.get("title")}
+
+        CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+            "completeness": ["完整", "完整性", "补充"],
+            "consistency": ["一致", "逻辑"],
+            "rationality": ["合理", "依据"],
+            "timeliness": ["及时", "时间"],
+            "compliance": ["规范", "符合"],
+        }
+        CATEGORY_DOC_HINTS: Dict[str, set] = {
+            "completeness": {"admission", "first_course", "record"},
+            "consistency": {"progress", "daily"},
+            "rationality": {"discharge", "summary"},
+            "timeliness": {"nursing", "progress"},
+            "compliance": {"operation", "surgery"},
+        }
+        SEVERITY_THRESHOLD = {
+            "critical": 78,
+            "major": 72,
+            "medium": 68,
+            "minor": 62,
+            "low": 60,
+        }
+
         rule_results: List[QCRuleResult] = []
         issues: List[QCIssue] = []
+        suggestions: List[QCSuggestion] = []
 
-        score_total = 0
-        score_gain = 0
-        for r in rules:
-            weight = int(r.get("weight", 10))
-            score_total += weight
-            passed = bool(random.getrandbits(1))
+        total_weight = sum(max(1, r["weight"]) for r in normalized_rules) or 1
+        accumulated_score = 0
+
+        for rule in normalized_rules:
+            severity = rule["severity"]
+            threshold = SEVERITY_THRESHOLD.get(severity, 65)
+            keywords = CATEGORY_KEYWORDS.get(rule["category"], [])
+            keyword_hits = sum(1 for kw in keywords if kw and kw in content_lower)
+            keyword_bonus = min(12, keyword_hits * 6)
+
+            doc_bonus = 0
+            hint_targets = CATEGORY_DOC_HINTS.get(rule["category"], set())
+            if hint_targets and doc_types.intersection(hint_targets):
+                doc_bonus = 8
+            elif documents:
+                doc_bonus = 4
+
+            score_components = 50 + content_strength + keyword_bonus + doc_bonus
+            score_components = min(98, score_components)
+
+            passed = score_components >= threshold
+            weight = max(1, rule["weight"])
             if passed:
-                score_gain += weight
-            rr = QCRuleResult(
-                rule_id=r["id"],
-                rule_name=r["name"],
+                accumulated_score += weight
+            else:
+                accumulated_score += int(weight * 0.5)
+
+            execution_time = 400 + len(content) // 20 + weight * 5
+            confidence = round(min(0.98, 0.55 + score_components / 200), 2)
+
+            rule_result = QCRuleResult(
+                rule_id=rule["id"],
+                rule_name=rule["name"],
                 passed=passed,
-                score=weight if passed else 0,
-                details=f"规则执行详情：{'通过' if passed else '未通过'}质控检查",
+                score=int(score_components if passed else score_components * 0.6),
+                details=(
+                    f"⚙️ 规则 `{rule['name']}` 评估完成："
+                    f"{'符合' if passed else '存在待改进项'}，评分 {score_components:.0f}"
+                ),
+                max_score=100,
+                execution_time=execution_time,
+                confidence=confidence,
             )
-            rule_results.append(rr)
+            rule_results.append(rule_result)
+
             if not passed:
+                first_doc = documents[0] if documents else {}
                 issues.append(
                     QCIssue(
                         id=f"issue-{uuid.uuid4().hex[:6]}",
-                        rule_name=r["name"],
-                        description=f"发现质控问题：{r['description']}",
-                        severity=r.get("severity", "minor"),
-                        category=r.get("category", "general"),
-                        location="文档内容第3-5段",
-                        suggestion="建议完善相关内容，确保符合医疗质控标准",
+                        rule_name=rule["name"],
+                        description=rule["description"] or "需要进一步完善该项记录",
+                        severity=severity,
+                        category=rule["category"],
+                        location=str(first_doc.get("title") or first_doc.get("type") or "病历正文"),
+                        suggestion="请补充相关内容，确保符合医疗质控标准",
                     )
                 )
 
-        overall_score = int(100 * score_gain / max(score_total, 1))
-        overall_grade = "A" if overall_score >= 90 else "B" if overall_score >= 75 else "C"
-        suggestions = [
-            QCSuggestion(
-                id=f"sug-{uuid.uuid4().hex[:6]}",
-                category="规范性",
-                title="补充主诉描述",
-                description="建议补充主诉持续时间与症状细节，提升记录完整度",
-                priority="medium",
+        # 总体评分与等级
+        overall_score = int(accumulated_score / total_weight * 100)
+        if overall_score >= 90:
+            overall_grade = "A"
+        elif overall_score >= 80:
+            overall_grade = "B"
+        elif overall_score >= 70:
+            overall_grade = "C"
+        else:
+            overall_grade = "D"
+
+        if not issues:
+            suggestions.append(
+                QCSuggestion(
+                    id=f"sug-{uuid.uuid4().hex[:6]}",
+                    category="质量保持",
+                    title="保持文书质量",
+                    description="当前质控结果良好，请持续保持规范记录。",
+                    priority="low",
+                )
             )
+        else:
+            suggestions.append(
+                QCSuggestion(
+                    id=f"sug-{uuid.uuid4().hex[:6]}",
+                    category="整改建议",
+                    title="完善重点文书内容",
+                    description="针对未通过的规则逐项补充或修订，并在提交前再次核对。",
+                    priority="medium",
+                )
+            )
+
+        now = datetime.utcnow()
+        step_start = now - timedelta(seconds=3)
+        analysis_steps = [
+            QCAnalysisStep(
+                id="prepare",
+                name="准备数据",
+                description="整合病历、文书与质控规则",
+                status="completed",
+                started_at=step_start.isoformat() + "Z",
+                completed_at=(step_start + timedelta(seconds=1)).isoformat() + "Z",
+            ),
+            QCAnalysisStep(
+                id="engine",
+                name="调用质控引擎",
+                description="执行规则匹配与语义分析",
+                status="completed",
+                started_at=(step_start + timedelta(seconds=1)).isoformat() + "Z",
+                completed_at=(step_start + timedelta(seconds=2)).isoformat() + "Z",
+            ),
+            QCAnalysisStep(
+                id="aggregate",
+                name="生成分析结果",
+                description="整合规则评分，产出最终报告",
+                status="completed",
+                started_at=(step_start + timedelta(seconds=2)).isoformat() + "Z",
+                completed_at=now.isoformat() + "Z",
+            ),
         ]
+
+        metadata: Dict[str, Any] = {
+            "analysisId": analysis_id,
+            "engine": "demo-qc-engine",
+            "record": {
+                "id": record_id,
+                "patientName": record.get("patient_name") or record.get("patientName"),
+                "department": record.get("department"),
+            },
+            "documents": documents,
+            "rulesApplied": len(normalized_rules),
+            "scoreBaseline": {
+                "contentStrength": content_strength,
+                "documentBonus": len(documents),
+            },
+        }
 
         result = QCResult(
             id=analysis_id,
             record_id=record_id,
             overall_score=overall_score,
             overall_grade=overall_grade,
-            analysis_date=datetime.utcnow().isoformat() + "Z",
+            analysis_date=now.isoformat() + "Z",
             issues=issues,
             suggestions=suggestions,
             rule_results=rule_results,
+            analysis_steps=analysis_steps,
+            metadata=metadata,
         )
         return result.model_dump()

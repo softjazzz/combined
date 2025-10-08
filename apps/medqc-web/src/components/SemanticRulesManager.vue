@@ -160,9 +160,9 @@
                   v-for="docType in (record.applicable_documents || [])"
                   :key="docType"
                   size="small"
-                  color="geekblue"
+                  color="blue"
                 >
-                  {{ getDocTypeZh(docType) }}
+                  {{ docType || '未知类型' }}
                 </a-tag>
               </div>
             </template>

@@ -824,7 +824,7 @@ async def get_medical_records(
         if supabase:
             try:
                 # 默认按创建时间倒序排列（最新的在前面）
-                response = supabase.table('medical_records_test').select('*').order('created_at', desc=True).execute()
+                response = supabase.table('medical_records_test').select('*').order('created_at', {'ascending': False}).execute()
                 if response.data:
                     # 处理记录，恢复LLM解析记录的正确类型和部门信息
                     records = []

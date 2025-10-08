@@ -51,19 +51,37 @@ export class DocumentClassificationAdapter {
    * 初始化分类映射
    */
   private initializeMappings(): void {
-    // 一级分类映射
+    // 一级分类映射 - 仅使用6个标准类别，非标准类别映射到相应的标准类别
     const categories: DocumentCategoryMapping[] = [
       { id: 'cat_admission', category_code: 'admission_record', category_name: '入院记录' },
       { id: 'cat_progress', category_code: 'progress_note', category_name: '病程记录' },
-      { id: 'cat_operation', category_code: 'operation_record', category_name: '手术记录' },
-      { id: 'cat_nursing', category_code: 'nursing_document', category_name: '护理文书' },
+      { id: 'cat_operation', category_code: 'operation_record', category_name: '手术相关记录' },
       { id: 'cat_discharge', category_code: 'discharge_record', category_name: '出院记录' },
-      { id: 'cat_examination', category_code: 'examination_report', category_name: '检查报告' },
-      { id: 'cat_order', category_code: 'medical_order', category_name: '医嘱记录' }
+      { id: 'cat_examination', category_code: 'examination_report', category_name: '辅助检查' },
+      { id: 'cat_consent', category_code: 'consent_form', category_name: '知情同意书' }
     ]
+
+    // 非标准类别到标准类别的映射
+    const legacyMappings = new Map([
+      ['nursing_document', 'progress_note'], // 护理文书 -> 病程记录
+      ['medical_order', 'progress_note'],    // 医嘱记录 -> 病程记录
+      ['blood_transfusion', 'progress_note'] // 输血记录 -> 病程记录
+    ])
 
     categories.forEach(cat => {
       this.categoryMappings.set(cat.category_code, cat)
+    })
+
+    // 添加遗留映射支持
+    legacyMappings.forEach((standardCode, legacyCode) => {
+      const standardCategory = categories.find(c => c.category_code === standardCode)
+      if (standardCategory) {
+        this.categoryMappings.set(legacyCode, {
+          ...standardCategory,
+          id: `legacy_${legacyCode}`,
+          category_code: legacyCode
+        })
+      }
     })
 
     // 二级分类映射

@@ -10,27 +10,45 @@ from ..storage.memory import medical_records_db
 logger = logging.getLogger(__name__)
 
 
-async def get_classification_mapping() -> Dict[str, Dict[str, str]]:
+async def get_classification_mapping() -> Dict[str, Dict[str, Any]]:
     try:
         supabase = get_supabase()
         if not supabase:
             return {"categories": {}, "types": {}}
 
-        categories_response = await async_execute(supabase.table("document_categories_test").select("id, category_code"))
-        categories = {cat["category_code"]: cat["id"] for cat in (categories_response.data or [])}
+        # 同时返回分类的中文名称与描述，供前端展示
+        categories_response = await async_execute(
+            supabase.table("document_categories_test").select("id, category_code, category_name, description")
+        )
+        categories: Dict[str, Any] = {}
+        for cat in (categories_response.data or []):
+            categories[cat["category_code"]] = {
+                "id": cat["id"],
+                "category_name": cat.get("category_name", cat["category_code"]),
+                "description": cat.get("description", ""),
+            }
 
+        # 文档类型也返回中文名称，便于作为标题/展示
         types_response = await async_execute(
             supabase.table("document_types_test").select(
-                "id, type_code, category_id, document_categories_test!inner(category_code)"
+                "id, type_code, type_name, description, category_id, document_categories_test!inner(category_code)"
             )
         )
 
-        types: Dict[str, str] = {}
+        types: Dict[str, Any] = {}
         if types_response.data:
             for doc_type in types_response.data:
                 parent_code = doc_type["document_categories_test"]["category_code"]
-                key = f"{parent_code}.{doc_type['type_code']}"
-                types[key] = doc_type["id"]
+                type_code = doc_type["type_code"]
+                entry = {
+                    "id": doc_type["id"],
+                    "type_code": type_code,
+                    "type_name": doc_type.get("type_name", type_code),
+                    "description": doc_type.get("description", ""),
+                }
+                # 复合键："category.type"，同时也提供仅 type_code 的键以最大化兼容
+                types[f"{parent_code}.{type_code}"] = entry
+                types[type_code] = entry
 
         return {"categories": categories, "types": types}
     except Exception as e:

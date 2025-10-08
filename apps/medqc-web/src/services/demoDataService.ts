@@ -4,6 +4,7 @@
  */
 
 import { supabase, TABLES, checkSupabaseConnection } from '@/lib/supabase'
+import { DOCUMENT_TYPE_LABELS } from '@/utils/documentTypeUtils'
 import type { MedicalRecord } from '@/types/medical-records'
 import type { QualityControlRule } from '@/types/quality-control'
 
@@ -56,6 +57,9 @@ export class DemoDataService {
   private static instance: DemoDataService
   private isConnected: boolean = false
   private connectionChecked: boolean = false
+  private recordsCache: { data: MedicalRecord[]; ts: number } | null = null
+  private departmentsCache: { data: string[]; ts: number } | null = null
+  private readonly CACHE_TTL_MS = 60000
 
   private constructor() {}
 
@@ -69,24 +73,77 @@ export class DemoDataService {
   /**
    * 检查数据库连接状态
    */
-  async checkConnection(): Promise<boolean> {
-    if (this.connectionChecked) {
+  async checkConnection(opts: { timeoutMs?: number; forceRefresh?: boolean } = {}): Promise<boolean> {
+    const timeoutMs = opts.timeoutMs ?? 5000 // 增加超时时间到5秒，适应跨国网络延迟
+    const forceRefresh = opts.forceRefresh ?? false
+
+    // 如果不强制刷新且已检查过连接，返回缓存结果
+    if (!forceRefresh && this.connectionChecked) {
       console.log(`[DemoDataService] 使用缓存的连接状态: ${this.isConnected ? '已连接' : '未连接'}`)
       return this.isConnected
     }
 
-    try {
-      console.log('[DemoDataService] 正在检查数据库连接...')
-      this.isConnected = await checkSupabaseConnection()
-      this.connectionChecked = true
-      console.log(`[DemoDataService] 数据库连接状态: ${this.isConnected ? '已连接' : '未连接'}`)
-      return this.isConnected
-    } catch (error) {
-      console.error('[DemoDataService] 连接检查失败:', error)
-      this.isConnected = false
-      this.connectionChecked = true
-      return false
+    console.log('[DemoDataService] 开始数据库连接检查...')
+
+    // 重试机制：最多尝试2次
+    const maxRetries = 2
+    let lastError: any = null
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[DemoDataService] 连接尝试 ${attempt}/${maxRetries}...`)
+
+      // 快速返回策略：超过 timeoutMs 立即降级为未连接，同时在后台继续真实检测
+      const timeoutPromise = new Promise<boolean>(resolve => {
+        setTimeout(() => {
+          console.log(`[DemoDataService] 连接检查超时 (${timeoutMs}ms)，尝试 ${attempt}/${maxRetries}`)
+          resolve(false)
+        }, timeoutMs)
+      })
+
+      const probe = checkSupabaseConnection()
+
+      try {
+        const result = await Promise.race([probe, timeoutPromise])
+
+        if (result) {
+          this.isConnected = true
+          this.connectionChecked = true
+          console.log(`[DemoDataService] ✅ 数据库连接成功 (尝试 ${attempt}/${maxRetries})`)
+          return true
+        } else if (attempt < maxRetries) {
+          console.log(`[DemoDataService] ⚠️ 连接超时，可能是网络延迟导致，等待重试... (尝试 ${attempt}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, 1000)) // 等待1秒后重试
+          continue
+        } else {
+          console.log('[DemoDataService] ⚠️ 网络连接超时，可能是跨国网络延迟，将使用模拟数据')
+          this.isConnected = false
+          this.connectionChecked = true
+          return false
+        }
+      } catch (error) {
+        lastError = error
+        if (attempt < maxRetries) {
+          console.log(`[DemoDataService] 连接异常，准备重试: ${error}`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          continue
+        }
+      }
     }
+
+    // 如果所有尝试都失败了
+    console.error('[DemoDataService] 所有连接尝试失败:', lastError)
+    this.isConnected = false
+    this.connectionChecked = true
+    return false
+  }
+
+  /**
+   * 重置连接状态，强制重新检查
+   */
+  resetConnectionState(): void {
+    this.connectionChecked = false
+    this.isConnected = false
+    console.log('[DemoDataService] 连接状态已重置')
   }
 
   /**
@@ -99,51 +156,57 @@ export class DemoDataService {
     status?: string
   } = {}): Promise<MedicalRecord[]> {
     console.log('[DemoDataService] 开始获取医疗记录，参数:', params)
+    // 先用缓存提升首次打开速度
+    const now = Date.now()
+    if (this.recordsCache && now - this.recordsCache.ts < this.CACHE_TTL_MS) {
+      // 后台刷新但不阻塞 UI
+      this.refreshMedicalRecords(params).catch(() => {})
+      return this.recordsCache.data
+    }
+    // 无缓存则刷新
+    return this.refreshMedicalRecords(params)
+  }
+
+  private async refreshMedicalRecords(params: {
+    limit?: number
+    search?: string
+    department?: string
+    status?: string
+  } = {}): Promise<MedicalRecord[]> {
     const isConnected = await this.checkConnection()
     if (!isConnected) {
-      console.warn('[DemoDataService] 数据库未连接，返回模拟数据')
-      return this.getMockMedicalRecords()
+      const mock = this.getMockMedicalRecords()
+      this.recordsCache = { data: mock, ts: Date.now() }
+      return mock
     }
-
     try {
-      console.log('[DemoDataService] 正在从数据库查询医疗记录...')
       let query = supabase
         .from(TABLES.MEDICAL_RECORDS_TEST)
         .select('*')
         .eq('status', 'active')
 
-      // 应用筛选条件
       if (params.search) {
         query = query.or(`record_name.ilike.%${params.search}%,primary_diagnosis.ilike.%${params.search}%`)
       }
-      if (params.department) {
-        query = query.eq('department', params.department)
-      }
-      if (params.status) {
-        query = query.eq('status', params.status)
-      }
+      if (params.department) query = query.eq('department', params.department)
+      if (params.status) query = query.eq('status', params.status)
 
-      // 排序和限制
       query = query.order('created_at', { ascending: false })
-      if (params.limit) {
-        query = query.limit(params.limit)
-      }
+      if (params.limit) query = query.limit(params.limit)
 
       const { data, error } = await query
-      console.log('[DemoDataService] 数据库查询结果:', { data: data?.length, error })
-
-      if (error) {
-        console.error('[DemoDataService] 获取医疗记录失败:', error)
-        return this.getMockMedicalRecords()
+      if (error || !data) {
+        const mock = this.getMockMedicalRecords()
+        this.recordsCache = { data: mock, ts: Date.now() }
+        return mock
       }
-
-      // 转换数据格式
-      const transformedData = this.transformDatabaseRecords(data || [])
-      console.log('[DemoDataService] 转换后的医疗记录数量:', transformedData.length)
-      return transformedData
-    } catch (error) {
-      console.error('[DemoDataService] 获取医疗记录异常:', error)
-      return this.getMockMedicalRecords()
+      const transformed = this.transformDatabaseRecords(data)
+      this.recordsCache = { data: transformed, ts: Date.now() }
+      return transformed
+    } catch (e) {
+      const mock = this.getMockMedicalRecords()
+      this.recordsCache = { data: mock, ts: Date.now() }
+      return mock
     }
   }
 
@@ -151,9 +214,12 @@ export class DemoDataService {
    * 根据ID获取单个医疗记录
    */
   async getMedicalRecordById(id: string): Promise<MedicalRecord | null> {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const isUuid = uuidRe.test(id)
     const isConnected = await this.checkConnection()
-    if (!isConnected) {
-      console.warn('[DemoDataService] 数据库未连接，返回模拟数据')
+    // 若ID不是UUID（如 mock-record-001），直接走本地数据，避免无效的远端查询
+    if (!isUuid || !isConnected) {
+      if (!isConnected) console.warn('[DemoDataService] 数据库未连接，返回模拟数据')
       const mockRecords = this.getMockMedicalRecords()
       return mockRecords.find(record => record.id === id) || null
     }
@@ -234,36 +300,44 @@ export class DemoDataService {
    * 获取可用的科室列表
    */
   async getDepartments(): Promise<string[]> {
+    const now = Date.now()
+    if (this.departmentsCache && now - this.departmentsCache.ts < this.CACHE_TTL_MS) {
+      return this.departmentsCache.data
+    }
     const isConnected = await this.checkConnection()
     if (!isConnected) {
-      return ['内科', '外科', '妇产科', '儿科', '急诊科', '骨科', '神经内科', '心内科']
+      const fallback = ['内科', '外科', '妇产科', '儿科', '急诊科', '骨科', '神经内科', '心内科']
+      this.departmentsCache = { data: fallback, ts: Date.now() }
+      return fallback
     }
-
     try {
       const { data, error } = await supabase
         .from(TABLES.MEDICAL_RECORDS_TEST)
         .select('department')
         .not('department', 'is', null)
-
       if (error) {
-        console.error('[DemoDataService] 获取科室列表失败:', error)
-        return ['内科', '外科', '妇产科', '儿科', '急诊科', '骨科', '神经内科', '心内科']
+        const fallback = ['内科', '外科', '妇产科', '儿科', '急诊科', '骨科', '神经内科', '心内科']
+        this.departmentsCache = { data: fallback, ts: Date.now() }
+        return fallback
       }
-
-      // 去重并排序
-      const departments = [...new Set(data.map(item => item.department).filter(Boolean))]
-      return departments.sort()
+      const departments = [...new Set((data || []).map((item: any) => item.department).filter(Boolean))].sort()
+      this.departmentsCache = { data: departments, ts: Date.now() }
+      return departments
     } catch (error) {
-      console.error('[DemoDataService] 获取科室列表异常:', error)
-      return ['内科', '外科', '妇产科', '儿科', '急诊科', '骨科', '神经内科', '心内科']
+      const fallback = ['内科', '外科', '妇产科', '儿科', '急诊科', '骨科', '神经内科', '心内科']
+      this.departmentsCache = { data: fallback, ts: Date.now() }
+      return fallback
     }
   }
   /**
    * 获取指定病历的文书列表
    */
   async getDocumentsForRecord(recordId: string): Promise<Array<{ id: string; title: string; type: string; created_at?: string }>> {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const isUuid = uuidRe.test(recordId)
     const isConnected = await this.checkConnection()
-    if (!isConnected) {
+    // 非UUID（mock记录）或未连接，直接返回模拟文书，避免远端报 22P02
+    if (!isUuid || !isConnected) {
       return this.getMockDocuments(recordId)
     }
     try {
@@ -278,12 +352,17 @@ export class DemoDataService {
       }
       const docs = (data as any)?.documents
       if (Array.isArray(docs) && docs.length > 0) {
-        return docs.map((d: any, i: number) => ({
-          id: d.id || `${recordId}-doc-${i + 1}`,
-          title: d.title || d.type || '未命名文书',
-          type: d.type || 'unknown',
-          created_at: d.created_at || data.updated_at
-        }))
+        return docs.map((d: any, i: number) => {
+          const typeCode = (d.type || d.type_code || '').toString()
+          const chineseLabel = (DOCUMENT_TYPE_LABELS as any)[typeCode] || ''
+          return {
+            id: d.id || `${recordId}-doc-${i + 1}`,
+            // 标题优先：已有标题 -> 中文类型名 -> 英文代码 -> 兜底
+            title: d.title || chineseLabel || typeCode || '未命名文书',
+            type: typeCode || 'unknown',
+            created_at: d.created_at || data.updated_at
+          }
+        })
       }
       // 数据库无文书字段，回退
       return this.getMockDocuments(recordId)

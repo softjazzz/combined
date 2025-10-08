@@ -106,6 +106,17 @@
 
           <a-tab-pane key="available" :tab="`可用规则库 (${availableRules.length})`">
             <div class="available-rules">
+              <!-- 文书类别筛选提示 -->
+              <div v-if="selectedDocuments && selectedDocuments.length > 0" class="document-filter-info" style="margin-bottom: 12px;">
+                <a-alert
+                  type="info"
+                  show-icon
+                  :message="`已根据选中的文书类别自动筛选适用规则`"
+                  :description="`当前文书类别：${selectedDocTypeNames.join('、')} | 显示 ${filteredRules.length} 条适用规则`"
+                  banner
+                />
+              </div>
+
               <div class="rules-filter" style="margin-bottom: 16px;">
                 <a-row :gutter="8">
                   <a-col :span="8">
@@ -242,12 +253,15 @@ import { ref, h, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { SettingOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import type { QualityControlRule } from '@/types/quality-control'
+import { DOCUMENT_TYPE_TO_CATEGORY } from '@/utils/documentTypeUtils'
+import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
 
 // Props
 const props = defineProps<{
   selectedRules: any[]
   availableRules: any[]
   testRecord: any
+  selectedDocuments?: Array<{ id: string; title?: string; type?: string; created_at?: string }>
 }>()
 
 // Emits
@@ -264,9 +278,120 @@ const statusFilter = ref<string>()
 // 可用规则由父组件传入（来源：Supabase / 本地回退）
 const availableRules = (props.availableRules || []) as any[]
 
+// 获取选中文书对应的"6大类"标准英文代码（用于规则匹配）
+const selectedDocTypeCodes = computed<string[]>(() => {
+  const docs = props.selectedDocuments || []
+  const set = new Set<string>()
+  docs.forEach(d => {
+    const typeCode = d.type || ''
+    // 将细分类(type)映射到"6大类"分类代码
+    const cat = (DOCUMENT_TYPE_TO_CATEGORY as any)[typeCode]
+    let mapped = cat as string | undefined
+    if (!mapped) {
+      const s = (typeCode || '').toLowerCase()
+      if (s.includes('admission')) mapped = 'admission_record'
+      else if (s.includes('discharge')) mapped = 'discharge_record'
+      else if (s.includes('operation') || s.includes('surgery') || s.includes('preoperative') || s.includes('anesthesia')) mapped = 'operation_record'
+      else if (s.includes('imaging') || s.includes('lab') || s.includes('examination') || s.includes('report')) mapped = 'examination_report'
+      else mapped = 'progress_note'
+    }
+    if (mapped) set.add(mapped)
+  })
+  return Array.from(set)
+})
+
+// 获取选中文书的中文名称（用于显示）
+const selectedDocTypeNames = computed<string[]>(() => {
+  const docs = props.selectedDocuments || []
+  const set = new Set<string>()
+  docs.forEach(d => {
+    const typeCode = d.type || ''
+    const label = getDocumentTypeLabel(typeCode)
+    if (label) set.add(label)
+  })
+  return Array.from(set)
+})
+
+// 文书类型中文标签映射
+const DOC_TYPE_LABELS: Record<string, string> = {
+  admission_record: '入院记录',
+  progress_note: '病程记录',
+  discharge_record: '出院记录',
+  operation_record: '手术相关记录',
+  examination_report: '辅助检查',
+  consent_form: '知情同意书',
+  first_progress_note: '首次病程记录',
+  daily_progress_note: '日常病程记录',
+  attending_first_progress: '查房记录',
+  attending_progress: '查房记录',
+  consultation_record: '会诊记录',
+  handover_record: '接班记录',
+  stage_summary: '阶段小结',
+  preoperative_summary: '术前小结',
+  preoperative_discussion: '术前讨论',
+  preoperative_checklist: '术前核查',
+  admission_note: '入院记录',
+  discharge_summary: '出院小结',
+  anesthesia_record: '麻醉记录',
+  nursing_record: '护理记录'
+}
+
+function getDocumentTypeLabel(type?: string): string {
+  if (!type) return ''
+  return DOC_TYPE_LABELS[type] || ''
+}
+
+// 为规则标注是否适用，并将适用项排在前面
+const rulesWithApplicability = computed<any[]>(() => {
+  const codes = new Set(selectedDocTypeCodes.value)
+  const all = availableRules
+  if (codes.size === 0) return all.map(r => ({ ...r, _applicable: true, _disabled: false }))
+
+  const labelToCode: Record<string, string> = {
+    '入院记录': 'admission_record',
+    '病程记录': 'progress_note',
+    '出院记录': 'discharge_record',
+    '手术相关记录': 'operation_record',
+    '手术记录': 'operation_record',
+    '辅助检查': 'examination_report',
+    '检查记录': 'examination_report',
+    '知情同意书': 'consent_form'
+  }
+  const normalize = (d: string): string | undefined => {
+    if (!d) return undefined
+    const s = String(d).trim()
+    if (['admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'].includes(s)) return s
+    return labelToCode[s]
+  }
+
+  const arr = all.map((r: any) => {
+    // 1) 先尝试从映射表/后端字段取得标准类别集合
+    const mapped = lookupRuleCategories(r)
+    const raw: string[] = mapped.length > 0 ? mapped : (r.applicable_documents || [])
+    const norm = raw.map(normalize).filter((x): x is string => !!x)
+    let applicable = false
+    if (codes.size === 1) {
+      const [only] = Array.from(codes)
+      // 修正：规则的文书类别列表中包含选中的类别即为适用
+      applicable = norm.length > 0 && norm.some(d => codes.has(d))
+      // 额外保护：若只选了入院记录，名称/描述命中手术相关关键词则不视为适用
+      if (only === 'admission_record') {
+        const text = `${r.name || ''} ${r.description || ''}`
+        if (/手术|术前|术后|术中|麻醉|植入|出入量|出院|死亡/.test(text)) {
+          applicable = false
+        }
+      }
+    } else {
+      applicable = norm.some(d => codes.has(d))
+    }
+    return { ...r, _applicable: applicable, _disabled: !applicable }
+  })
+  return arr.sort((a: any, b: any) => Number(b._applicable) - Number(a._applicable))
+})
+
 // 计算属性：过滤后的规则
 const filteredRules = computed(() => {
-  let rules = availableRules
+  let rules = rulesWithApplicability.value
 
   if (categoryFilter.value) {
     rules = rules.filter(rule => rule.category === categoryFilter.value)

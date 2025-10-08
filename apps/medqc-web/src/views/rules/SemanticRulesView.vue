@@ -521,12 +521,22 @@ onMounted(() => {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
   border: none;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  color: #ffffff !important; /* 确保文字为白色 */
 }
 
 :deep(.ant-btn-primary:hover) {
   background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+  color: #ffffff !important; /* 确保悬停时文字也为白色 */
+}
+
+:deep(.ant-btn-primary span) {
+  color: #ffffff !important; /* 确保按钮内的span文字为白色 */
+}
+
+:deep(.ant-btn-primary:hover span) {
+  color: #ffffff !important; /* 确保悬停时按钮内的span文字也为白色 */
 }
 
 /* 卡片样式优化 */

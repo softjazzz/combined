@@ -17,6 +17,8 @@ import type {
 } from '@/types/quality-control'
 import type { MedicalRecord } from '@/types/medical-records'
 import { DemoDataService } from '@/services/demoDataService'
+import { ApiService } from '@/services/apiService'
+import type { QCAnalysisRequest } from '@/types'
 
 // ==================== 工具函数 ====================
 
@@ -26,6 +28,8 @@ import { DemoDataService } from '@/services/demoDataService'
 const generateId = () => {
   return `id-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export const useQCDemoStore = defineStore('qcDemo', () => {
   // ==================== 数据服务实例 ====================
@@ -264,6 +268,120 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
     console.log('演示已重置，可以重新开始')
   }
 
+  const normalizeSeverity = (severity?: string): 'low' | 'medium' | 'high' | 'critical' => {
+    const value = (severity || '').toString().toLowerCase()
+    if (['critical', 'fatal', '严重', '紧急'].includes(value)) return 'critical'
+    if (['high', 'major', '较重', 'highrisk'].includes(value)) return 'high'
+    if (['low', 'minor', '轻', '提醒'].includes(value)) return 'low'
+    return 'medium'
+  }
+
+  const normalizePriority = (priority?: string): 'low' | 'medium' | 'high' => {
+    const value = (priority || '').toString().toLowerCase()
+    if (['high', 'urgent', '紧急'].includes(value)) return 'high'
+    if (['low', 'minor', '可选'].includes(value)) return 'low'
+    return 'medium'
+  }
+
+  const adaptQCResultFromBackend = (raw: any): QCResult => {
+    const issues = Array.isArray(raw?.issues)
+      ? raw.issues.map((issue: any) => ({
+          id: issue.id || generateId(),
+          ruleName: issue.rule_name || issue.ruleName || '未命名规则',
+          ruleId: issue.rule_id || issue.ruleId || '',
+          description: issue.description || '检测到该规则存在待改进项',
+          severity: normalizeSeverity(issue.severity),
+          category: issue.category || 'general',
+          location: issue.location || '病历正文',
+          suggestion: issue.suggestion || '请补充相关内容，确保记录规范完整',
+          canAppeal: true
+        }))
+      : []
+
+    const suggestions = Array.isArray(raw?.suggestions)
+      ? raw.suggestions.map((item: any) => ({
+          id: item.id || generateId(),
+          category: item.category || '整改建议',
+          title: item.title || '完善质控项',
+          description: item.description || '根据分析结果更新或补充文书内容。',
+          priority: normalizePriority(item.priority),
+          actionRequired: item.action_required !== false
+        }))
+      : []
+
+    const ruleResults = Array.isArray(raw?.rule_results)
+      ? raw.rule_results.map((rr: any) => ({
+          ruleId: rr.rule_id || rr.ruleId || '',
+          ruleName: rr.rule_name || rr.ruleName || '质控规则',
+          passed: Boolean(rr.passed),
+          score: Number(rr.score ?? 0),
+          maxScore: Number(rr.max_score ?? 100),
+          details: rr.details || '',
+          executionTime: Number(rr.execution_time ?? 1000),
+          confidence: Number(
+            rr.confidence ?? (rr.passed ? 0.9 : 0.7)
+          )
+        }))
+      : []
+
+    const steps = Array.isArray(raw?.analysis_steps)
+      ? raw.analysis_steps.map((step: any): AnalysisStep => ({
+          id: step.id || generateId(),
+          name: step.name || '质控步骤',
+          description: step.description || '',
+          status: (step.status || 'completed') as AnalysisStep['status'],
+          startTime: step.started_at ? new Date(step.started_at) : undefined,
+          endTime: step.completed_at ? new Date(step.completed_at) : undefined,
+          result: step.result,
+          error: step.error
+        }))
+      : []
+
+    const confidenceFallback = ruleResults.length
+      ? Number(
+          (
+            ruleResults.reduce((acc, item) => acc + (item.confidence ?? 0.75), 0) /
+            ruleResults.length
+          ).toFixed(2)
+        )
+      : 0.8
+
+    const metadata = raw?.metadata
+      ? {
+          analysisVersion: raw.metadata.analysisVersion || '1.0.0',
+          modelVersion: raw.metadata.modelVersion || 'demo-qc-engine',
+          processingTime: raw.metadata.processingTime ?? 0,
+          rulesApplied: raw.metadata.rulesApplied ?? ruleResults.length,
+          totalTokens: raw.metadata.totalTokens,
+          confidence: raw.metadata.confidence ?? confidenceFallback,
+          documents: raw.metadata.documents,
+          record: raw.metadata.record,
+          engine: raw.metadata.engine,
+          analysisId: raw.metadata.analysisId || raw.id,
+          scoreBaseline: raw.metadata.scoreBaseline
+        }
+      : {
+          analysisVersion: '1.0.0',
+          modelVersion: 'demo-qc-engine',
+          processingTime: 0,
+          rulesApplied: ruleResults.length,
+          confidence: confidenceFallback
+        }
+
+    return {
+      id: raw?.id || raw?.analysis_id || `qc-result-${Date.now()}`,
+      recordId: raw?.record_id || raw?.recordId || testRecord.value?.id || 'unknown',
+      overallScore: Number(raw?.overall_score ?? raw?.overallScore ?? 0),
+      overallGrade: raw?.overall_grade || raw?.overallGrade || 'B',
+      analysisDate: raw?.analysis_date || raw?.analysisDate || new Date().toISOString(),
+      issues,
+      suggestions,
+      ruleResults,
+      analysisSteps: steps,
+      metadata
+    }
+  }
+
   /**
    * 执行质控分析演示
    */
@@ -272,37 +390,168 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       throw new Error('缺少测试对象（病历或文书）或质控规则')
     }
 
-    try {
-      currentStep.value = 'run'
+    currentStep.value = 'run'
 
-      // 模拟分析步骤
-      const steps: AnalysisStep[] = [
-        { id: '1', name: '数据预处理', description: '清理和标准化病历数据', status: 'pending' },
-        { id: '2', name: '规则匹配', description: '匹配适用的质控规则', status: 'pending' },
-        { id: '3', name: 'LLM分析', description: '使用大语言模型进行质控分析', status: 'pending' },
-        { id: '4', name: '结果生成', description: '生成质控报告和建议', status: 'pending' }
-      ]
+    const baseSteps: AnalysisStep[] = [
+      { id: 'prepare', name: '准备数据', description: '整合所选病历、文书与规则', status: 'pending' },
+      { id: 'engine', name: '调用质控引擎', description: '将分析任务发送至后端质控引擎', status: 'pending' },
+      { id: 'fetch', name: '获取分析结果', description: '等待并解析质控分析结果', status: 'pending' },
+      { id: 'notify', name: '生成通知', description: '同步质控结果至演示面板', status: 'pending' }
+    ]
+    analysisSteps.value = baseSteps.map(step => ({ ...step }))
 
-      analysisSteps.value = steps
-
-      // 逐步执行分析
-      for (const step of steps) {
-        step.status = 'running'
-        step.startTime = new Date()
-
-        // 模拟处理时间
-        await new Promise(resolve => setTimeout(resolve, demoConfig.value.stepDelay))
-
+    const stepDelay = Math.max(0, Number(demoConfig.value.stepDelay) || 0)
+    const runStep = async (index: number, handler: () => Promise<void>) => {
+      const step = analysisSteps.value[index]
+      step.status = 'running'
+      step.startTime = new Date()
+      try {
+        await handler()
+        if (stepDelay > 0) {
+          await sleep(stepDelay)
+        }
         step.status = 'completed'
+      } catch (err) {
+        step.status = 'error'
+        step.error = err instanceof Error ? err.message : String(err)
+        throw err
+      } finally {
         step.endTime = new Date()
       }
+    }
 
-      // 生成模拟结果
-      analysisResult.value = await generateMockQCResult()
+    let analysisId = ''
 
-      console.log('质控分析完成', analysisResult.value)
+    try {
+      await runStep(0, async () => {
+        error.value = null
+        analysisResult.value = null
+        progress.value = 5
+      })
+
+      await runStep(1, async () => {
+        const payload: QCAnalysisRequest = {
+          recordId: testRecord.value!.id,
+          content: testRecord.value?.content || '',
+          rules: selectedRules.value.map(rule => ({
+            id: rule.id,
+            name: rule.name,
+            description: rule.description || '',
+            weight: Number(rule.weight ?? rule.maxScore ?? 10) || 1,
+            category: rule.category,
+            severity: rule.severity,
+            ruleCode: rule.ruleCode || rule.rule_code
+          })),
+          documents: selectedDocumentList.value.map(doc => ({
+            id: doc.id,
+            title: doc.title,
+            type: doc.type
+          })),
+          recordMetadata: {
+            patientName: testRecord.value?.patient_name,
+            department: testRecord.value?.department,
+            qcScore: testRecord.value?.qc_score,
+            admissionDate: testRecord.value?.admission_date,
+            documentCount: selectedDocumentList.value.length
+          },
+          options: {
+            dataSource: isDatabaseConnected.value ? 'database' : 'mock',
+            autoAdvance: demoConfig.value.autoAdvance
+          }
+        }
+
+        const response = await ApiService.analyzeRecord(testRecord.value!.id, payload)
+        if (!response.success || !response.data) {
+          throw new Error(response.error || '质控引擎未返回结果')
+        }
+        analysisId = response.data.analysis_id || response.data.analysisId || ''
+        progress.value = 45
+      })
+
+      let backendResult: any = null
+      await runStep(2, async () => {
+        const maxAttempts = 5
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          const resultResponse = await ApiService.getQCResult(testRecord.value!.id)
+          if (resultResponse.success && resultResponse.data) {
+            backendResult = resultResponse.data
+            break
+          }
+          await sleep(300 + attempt * 200)
+        }
+
+        if (!backendResult) {
+          throw new Error('质控结果尚未生成，请稍后重试')
+        }
+
+        const adapted = adaptQCResultFromBackend(backendResult)
+        if (adapted.analysisSteps && adapted.analysisSteps.length > 0) {
+          analysisSteps.value = analysisSteps.value.map((step, index) => {
+            const backendStep = adapted.analysisSteps?.[index]
+            if (backendStep) {
+              return {
+                ...step,
+                ...backendStep,
+                status: backendStep.status,
+                startTime: backendStep.startTime ?? step.startTime,
+                endTime: backendStep.endTime ?? new Date()
+              }
+            }
+            return {
+              ...step,
+              status: step.status === 'error' ? 'error' : 'completed',
+              endTime: step.endTime || new Date()
+            }
+          })
+        } else {
+          analysisSteps.value = analysisSteps.value.map(step => ({
+            ...step,
+            status: step.status === 'error' ? 'error' : 'completed',
+            endTime: step.endTime || new Date()
+          }))
+        }
+
+        analysisResult.value = { ...adapted, analysisSteps: analysisSteps.value }
+        if (analysisResult.value) {
+          analysisResult.value.metadata = {
+            ...(analysisResult.value.metadata || {
+              analysisVersion: '1.0.0',
+              modelVersion: 'demo-qc-engine',
+              processingTime: 0,
+              rulesApplied: analysisResult.value.ruleResults.length,
+              confidence:
+                analysisResult.value.ruleResults.reduce((acc, item) => acc + item.confidence, 0) /
+                Math.max(analysisResult.value.ruleResults.length, 1)
+            }),
+            analysisId: analysisResult.value.metadata?.analysisId || analysisId || analysisResult.value.id
+          }
+        }
+        progress.value = 85
+      })
+
+      await runStep(3, async () => {
+        if (analysisResult.value) {
+          simulateQCNotification(analysisResult.value)
+          if (demoConfig.value.enableNotifications) {
+            playNotificationSound()
+          }
+        }
+        progress.value = 95
+      })
+
+      progress.value = 100
+      isRunning.value = false
+      await saveDemoState()
+
+      console.log('质控分析完成', {
+        analysisId,
+        record: testRecord.value?.id,
+        rules: selectedRules.value.length
+      })
     } catch (err) {
+      console.error('[QCDemoStore] runQCAnalysis failed:', err)
       error.value = `分析失败: ${err instanceof Error ? err.message : '未知错误'}`
+      isRunning.value = false
       throw err
     }
   }
@@ -320,7 +569,17 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       timestamp: new Date(),
       isRead: false,
       canAppeal: result.issues.some(issue => issue.canAppeal),
-      severity: result.overallScore < 60 ? 'critical' : result.overallScore < 80 ? 'high' : 'low'
+      severity: result.overallScore < 60 ? 'critical' : result.overallScore < 80 ? 'high' : 'low',
+      status: 'pending'
+    }
+
+    if (result.metadata?.record) {
+      notification.recordInfo = {
+        patientName: result.metadata.record.patientName || result.metadata.record.name,
+        recordNumber: result.metadata.record.recordNumber || result.recordId,
+        department: result.metadata.record.department,
+        status: '待处理'
+      }
     }
 
     notifications.value.unshift(notification)
@@ -495,48 +754,155 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
   /**
    * 加载测试数据
    */
-  const loadTestData = async () => {
+  const loadTestData = async (forceRefresh = false) => {
     isLoadingData.value = true
+    error.value = null // 清除之前的错误
+
     try {
-      // 检查数据库连接
-      isDatabaseConnected.value = await demoDataService.checkConnection()
+      console.log('[QCDemoStore] 开始加载测试数据...')
 
-      // 加载可用的医疗记录
-      availableRecords.value = await demoDataService.getMedicalRecords({
-        limit: 20,
-        ...recordFilters.value
+      // 检查数据库连接（支持强制刷新）
+      isDatabaseConnected.value = await demoDataService.checkConnection({
+        timeoutMs: 1500,
+        forceRefresh
       })
 
-      // 加载可用的质控规则
-      availableRules.value = await demoDataService.getQCRules({
-        limit: 50,
-        ...ruleFilters.value
-      })
+      // 并行加载所有数据以提高性能
+      // 优先尝试使用本地API，失败时回退到Supabase
+      let records: any[] = []
+      let rules: any[] = []
+      let departments: string[] = []
 
-      // 加载科室列表
-      availableDepartments.value = await demoDataService.getDepartments()
+      try {
+        console.log('[QCDemoStore] 尝试使用本地API加载数据...')
+        // 尝试使用本地API
+        const [apiRecords, apiRules] = await Promise.all([
+          ApiService.getMedicalRecords({ page: 1, page_size: 20 }),
+          ApiService.getQCRules()
+        ])
 
-      // 如果没有选择测试记录，选择第一个
+        if (apiRecords.success && apiRecords.data?.data) {
+          records = apiRecords.data.data.map((record: any) => ({
+            ...record,
+            // 数据结构适配：将 patient_info.name 映射到 patient_name
+            patient_name: record.patient_info?.name || record.patient_name || '未知患者',
+            // 添加其他可能需要的字段映射
+            admission_date: record.admission_date || record.created_at?.split('T')[0] || '未知',
+            qc_score: record.qc_score || record.ai_confidence_score || 0
+          }))
+          console.log('[QCDemoStore] ✅ 本地API医疗记录加载成功:', records.length)
+        }
+
+        if (apiRules.success && apiRules.data?.data) {
+          rules = apiRules.data.data
+          console.log('[QCDemoStore] ✅ 本地API质控规则加载成功:', rules.length)
+        }
+
+        // 从记录中提取科室信息
+        departments = [...new Set(records.map(r => r.department).filter(Boolean))]
+
+        // 如果本地API成功，标记数据库已连接
+        if (records.length > 0 && rules.length > 0) {
+          isDatabaseConnected.value = true
+          console.log('[QCDemoStore] ✅ 本地API连接成功')
+        } else {
+          throw new Error('本地API返回数据为空')
+        }
+      } catch (apiError) {
+        console.warn('[QCDemoStore] 本地API失败，回退到Supabase:', apiError)
+
+        // 回退到原有的Supabase逻辑
+        const [supabaseRecords, supabaseRules, supabaseDepartments] = await Promise.all([
+          demoDataService.getMedicalRecords({
+            limit: 20,
+            ...recordFilters.value
+          }),
+          demoDataService.getQCRules({
+            limit: 50,
+            ...ruleFilters.value
+          }),
+          demoDataService.getDepartments()
+        ])
+
+        // 对Supabase数据也进行相同的数据结构适配
+        records = supabaseRecords.map((record: any) => ({
+          ...record,
+          // 数据结构适配：确保 patient_name 字段存在
+          patient_name: record.patient_info?.name || record.patient_name || '未知患者',
+          admission_date: record.admission_date || record.created_at?.split('T')[0] || '未知',
+          qc_score: record.qc_score || record.ai_confidence_score || 0
+        }))
+        rules = supabaseRules
+        departments = supabaseDepartments
+      }
+
+      availableRecords.value = records
+      availableRules.value = rules
+      availableDepartments.value = departments
+
+      // 智能选择默认测试记录
       if (!testRecord.value && availableRecords.value.length > 0) {
-        testRecord.value = availableRecords.value[0]
+        // 优先选择有完整信息的记录
+        const preferredRecord = availableRecords.value.find(r =>
+          r.patient_info && r.primary_diagnosis
+        ) || availableRecords.value[0]
+        testRecord.value = preferredRecord
       }
 
-      // 如果没有选择规则，选择前3个活跃规则
+      // 智能选择默认规则
       if (selectedRules.value.length === 0 && availableRules.value.length > 0) {
-        selectedRules.value = availableRules.value
-          .filter(rule => rule.isActive)
-          .slice(0, 3)
+        // 优先选择不同类别的活跃规则
+        const categories = new Set<string>()
+        const selectedRulesList: any[] = []
+
+        for (const rule of availableRules.value.filter(r => r.isActive)) {
+          if (selectedRulesList.length >= 3) break
+          if (!categories.has(rule.category) || selectedRulesList.length < 2) {
+            selectedRulesList.push(rule)
+            categories.add(rule.category)
+          }
+        }
+
+        selectedRules.value = selectedRulesList
       }
 
-      console.log(`[DemoDataService] 数据加载完成:`, {
+      const dataSource = isDatabaseConnected.value ? '数据库' : '模拟数据'
+      console.log(`[QCDemoStore] 数据加载完成 (${dataSource}):`, {
         records: availableRecords.value.length,
         rules: availableRules.value.length,
         departments: availableDepartments.value.length,
-        connected: isDatabaseConnected.value
+        connected: isDatabaseConnected.value,
+        selectedRecord: testRecord.value?.id,
+        selectedRules: selectedRules.value.length
       })
+
     } catch (err) {
-      console.error('[DemoDataService] 数据加载失败:', err)
-      error.value = `数据加载失败: ${err instanceof Error ? err.message : '未知错误'}`
+      console.error('[QCDemoStore] 数据加载失败:', err)
+      const errorMessage = err instanceof Error ? err.message : '未知错误'
+      error.value = `数据加载失败: ${errorMessage}`
+
+      // 即使出错也要确保有基本的模拟数据可用
+      if (availableRecords.value.length === 0 || availableRules.value.length === 0) {
+        console.log('[QCDemoStore] 尝试加载备用模拟数据...')
+        try {
+          // 强制使用模拟数据
+          isDatabaseConnected.value = false
+          availableRecords.value = await demoDataService.getMedicalRecords({ limit: 10 })
+          availableRules.value = await demoDataService.getQCRules({ limit: 20 })
+          availableDepartments.value = await demoDataService.getDepartments()
+
+          if (!testRecord.value && availableRecords.value.length > 0) {
+            testRecord.value = availableRecords.value[0]
+          }
+          if (selectedRules.value.length === 0 && availableRules.value.length > 0) {
+            selectedRules.value = availableRules.value.filter(r => r.isActive).slice(0, 3)
+          }
+
+          console.log('[QCDemoStore] 备用模拟数据加载成功')
+        } catch (fallbackError) {
+          console.error('[QCDemoStore] 备用数据加载也失败:', fallbackError)
+        }
+      }
     } finally {
       isLoadingData.value = false
     }
@@ -1154,7 +1520,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
 
     // 数据管理方法
     loadTestData,
-    refreshData: loadTestData,
+    refreshData: (forceRefresh = true) => loadTestData(forceRefresh),
     selectTestRecord: (record: MedicalRecord) => { testRecord.value = record },
     setSelectedDocument: (doc: DocInfo | DocInfo[] | null) => {
       selectedDocument.value = doc
@@ -1162,11 +1528,16 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
     clearSelectedDocument: () => { selectedDocument.value = null },
     updateRecordFilters: (filters: Partial<typeof recordFilters.value>) => {
       Object.assign(recordFilters.value, filters)
-      loadTestData() // 重新加载数据
+      loadTestData(true) // 重新加载数据，强制刷新连接状态
     },
     updateRuleFilters: (filters: Partial<typeof ruleFilters.value>) => {
       Object.assign(ruleFilters.value, filters)
-      loadTestData() // 重新加载数据
+      loadTestData(true) // 重新加载数据，强制刷新连接状态
+    },
+    // 重置连接状态并重新加载数据
+    resetConnection: async () => {
+      demoDataService.resetConnectionState()
+      await loadTestData(true)
     },
 
     // 状态持久化

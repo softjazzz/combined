@@ -68,6 +68,47 @@ async def get_all(
         # 其他情况保持原样
         return [str(d) for d in docs]
 
+    def _refine_docs(docs: list[str], rule_name: str) -> list[str]:
+        """对文书类别做校准：
+        - 避免因为就诊类型或默认值导致“入院记录”被大范围误标
+        - 依据规则名称的强特征进行覆盖修正
+        """
+        name = (rule_name or "").strip()
+        base = set(docs)
+
+        def has(pattern: str) -> bool:
+            import re
+            return re.search(pattern, name, flags=re.I) is not None
+
+        # 强覆盖：若命中以下关键类目，直接收敛为该类目
+        if has(r"手术|术前|术后|术中|麻醉|植入|出入量"):
+            return ["手术记录"]
+        if has(r"出院|死亡"):
+            return ["出院记录"]
+        if has(r"检验|检查|影像|CT|MRI|X线|放射|化验|病理"):
+            return ["检验检查"]
+        if has(r"同意书|知情|告知书"):
+            return ["知情同意书"]
+
+        # 病程类优先级高于默认“入院记录”
+        if has(r"首次病程|病程|查房|诊疗经过|病情"):
+            base.discard("入院记录")
+            base.add("病程记录")
+
+        # 若同时存在入院记录与其他类，去掉入院记录，避免“入院记录”兜底误标
+        conflict_classes = {"病程记录", "手术记录", "检验检查", "出院记录", "知情同意书"}
+        if "入院记录" in base and base.intersection(conflict_classes):
+            base.discard("入院记录")
+
+        # 如果仍为空，依据名称兜底
+        if not base:
+            if has(r"入院"):
+                base = {"入院记录"}
+            elif has(r"病程|查房|诊疗经过"):
+                base = {"病程记录"}
+
+        return list(sorted(base))
+
     async def _exec(q):
         # 优先使用异步以避免阻塞
         try:
@@ -90,6 +131,8 @@ async def get_all(
             or []
         )
 
+        refined_docs = _refine_docs(_to_chinese_docs(docs, r.get("name") or r.get("rule_name") or ""), r.get("name") or r.get("rule_name") or "")
+
         return {
             "rule_id": r.get("id") or r.get("rule_code") or r.get("rule_id") or "",
             "rule_name": r.get("name") or r.get("rule_name") or "未命名规则",
@@ -104,8 +147,8 @@ async def get_all(
             "prompt_template": r.get("prompt_template") or "请检查以下内容：\n{{content}}",
             "metadata": r.get("metadata") or {},
             "updated_at": r.get("updated_at") or r.get("modified_at") or r.get("created_at"),
-            # 输出尽量细粒度（中文）文书类型
-            "applicable_documents": _to_chinese_docs(docs, r.get("name") or r.get("rule_name") or ""),
+            # 输出尽量细粒度（中文）文书类型（经校准）
+            "applicable_documents": refined_docs,
             # 兼容提供原始 rule_code，便于前端或后续迁移使用
             "rule_code": r.get("rule_code") or "",
         }
@@ -596,7 +639,7 @@ _RULE_DOCUMENT_MAPPING: dict[str, list[str]] = {
     "SC-001": ["病程记录", "入院记录"],
     "SC-002": ["病程记录", "入院记录"],
     "SC-003": ["入院记录", "出院记录"],
-    "SC-004": ["病程记录", "入院记录", "出院记录"],
+    "SC-004": ["入院记录", "病程记录", "出院记录"],  # 主要针对入院诊断，优先入院记录
     "SC-005": ["手术记录", "病程记录"],
     "SC-006": ["病程记录", "入院记录"],
     "SC-007": ["病程记录", "入院记录"],

@@ -168,7 +168,26 @@ async def get_medical_record_documents(record_id: str):
             else:
                 resolved_type_info = {}
             type_name = (resolved_type_info or {}).get("type_name") or typ_code or "未分类"
-            title = d.get("title") or meta.get("title") or type_name or "未命名文书"
+            # 生成更友好的默认标题：优先已有标题；否则用“日期 + 中文类型名”
+            raw_title = d.get("title") or meta.get("title") or ""
+            # 提取可用日期
+            raw_dt = d.get("created_at") or d.get("updated_at") or meta.get("extracted_at") or ""
+            dt_str: str = ""
+            if isinstance(raw_dt, str) and raw_dt:
+                # 兼容 2025-09-16T03:22:42.037663+00:00 / 2025-09-16 03:22:42 两种格式
+                if "T" in raw_dt:
+                    dt_str = raw_dt.split("T", 1)[0]
+                else:
+                    dt_str = raw_dt.split(" ", 1)[0]
+            # 判定是否需要替换标题
+            if not raw_title or raw_title in ("未命名文档", "未命名文书", "untitled", "unknown"):
+                title = f"{dt_str} {type_name}".strip()
+            else:
+                code_like = str(raw_title).strip().lower().replace(" ", "_")
+                if code_like == str(typ_code or "").strip().lower():
+                    title = f"{dt_str} {type_name}".strip()
+                else:
+                    title = raw_title
 
             content = d.get("content") or ""
             content_preview = (content[:180] + ("…" if len(content) > 180 else "")) if content else ""
@@ -188,6 +207,19 @@ async def get_medical_record_documents(record_id: str):
         grouped: Dict[str, List[Dict[str, Any]]] = {}
         for d in docs:
             grouped.setdefault(d["category_code"], []).append(d)
+
+        # 在每个分类内，为同名文档进行去重编号（同一天同类型可能多份）
+        for cat_code, lst in grouped.items():
+            try:
+                lst.sort(key=lambda x: (x.get("created_at") or x.get("updated_at") or ""))
+                title_counts: Dict[str, int] = {}
+                for doc in lst:
+                    base_title = doc.get("title") or "未命名文书"
+                    title_counts[base_title] = title_counts.get(base_title, 0) + 1
+                    if title_counts[base_title] > 1:
+                        doc["title"] = f"{base_title}（{title_counts[base_title]}）"
+            except Exception:
+                pass
 
         # 构建分类与汇总
         categories: List[Dict[str, Any]] = []

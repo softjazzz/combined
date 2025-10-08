@@ -156,7 +156,22 @@ export interface QCAnalysisRequest {
     name: string
     description: string
     weight: number
+    category?: string
+    severity?: string
+    ruleCode?: string
   }>
+  /** 选中文书传递给质控引擎的精简信息 */
+  documents?: Array<{
+    id: string
+    title?: string
+    type?: string
+  }>
+  /** 可选：仅传递规则ID，由后端自行查找 */
+  ruleIds?: string[]
+  /** 额外的病历或上下文信息 */
+  recordMetadata?: Record<string, any>
+  /** 扩展配置，用于控制分析行为 */
+  options?: Record<string, any>
 }
 
 export interface QCAnalysisResponse {

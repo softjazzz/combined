@@ -1,41 +1,54 @@
 <template>
-  <div class="page-container min-h-screen bg-gray-50 p-4 lg:p-6">
-    <!-- 页面头部 -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+  <div class="page-container min-h-screen bg-gray-50 p-2 lg:p-3">
+    <!-- 页面头部 - 更紧凑 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
         <div class="flex-1">
-          <div class="flex items-center space-x-3 mb-2">
-            <div class="p-2 bg-blue-100 rounded-lg">
-              <SettingOutlined class="text-xl text-blue-600" />
+          <div class="flex items-center space-x-2 mb-0.5">
+            <div class="p-1 bg-blue-100 rounded-md">
+              <SettingOutlined class="text-base text-blue-600" />
             </div>
-            <h1 class="text-2xl lg:text-3xl font-bold text-gray-900">
+            <h1 class="text-lg lg:text-xl font-bold text-gray-900">
               质控规则管理
             </h1>
           </div>
-          <p class="text-gray-600 text-sm lg:text-base">
+          <p class="text-gray-600 text-xs">
             统一管理传统质控规则和语义质控规则，支持规则创建、编辑、测试和版本管理
           </p>
         </div>
-        <div class="flex flex-wrap gap-2" v-if="activeTab === 'traditional'">
+        <div class="flex flex-wrap gap-1.5" v-if="activeTab === 'traditional'">
           <a-button
             @click="refreshRules"
             :loading="loading"
-            class="flex items-center space-x-2"
+            size="small"
+            class="flex items-center space-x-1"
           >
             <template #icon><ReloadOutlined /></template>
             <span>刷新</span>
           </a-button>
           <a-button
             @click="importRules"
-            class="flex items-center space-x-2"
+            size="small"
+            class="flex items-center space-x-1"
           >
             <template #icon><ImportOutlined /></template>
             <span>导入规则</span>
           </a-button>
           <a-button
             type="primary"
+            ghost
+            @click="showCustomRuleModal"
+            size="small"
+            class="flex items-center space-x-1 border-blue-600 text-blue-600"
+          >
+            <template #icon><ThunderboltOutlined /></template>
+            <span>新增自定义质控点</span>
+          </a-button>
+          <a-button
+            type="primary"
             @click="showCreateModal"
-            class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700"
+            size="small"
+            class="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700"
           >
             <template #icon><PlusOutlined /></template>
             <span>新增规则</span>
@@ -44,26 +57,27 @@
       </div>
     </div>
 
-    <!-- 标签页导航 -->
+    <!-- 标签页导航 - 更紧凑 -->
     <a-tabs
       v-model:activeKey="activeTab"
       type="card"
-      class="rules-tabs"
+      class="rules-tabs compact-tabs mb-2"
       @change="handleTabChange"
+      size="small"
     >
-      <a-tab-pane key="semantic" tab="语义质控规则">
+      <a-tab-pane key="traditional" tab="传统质控规则">
         <template #tab>
-          <span>
-            <BranchesOutlined />
-            语义质控规则
+          <span class="text-xs">
+            <SettingOutlined />
+            传统质控规则
           </span>
         </template>
       </a-tab-pane>
-      <a-tab-pane key="traditional" tab="传统质控规则">
+      <a-tab-pane key="semantic" tab="语义质控规则">
         <template #tab>
-          <span>
-            <SettingOutlined />
-            传统质控规则
+          <span class="text-xs">
+            <BranchesOutlined />
+            语义质控规则
           </span>
         </template>
       </a-tab-pane>
@@ -73,63 +87,63 @@
     <div class="tab-content">
       <!-- 传统质控规则标签页 -->
       <div v-if="activeTab === 'traditional'">
-        <!-- 统计卡片 -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-900">规则统计</h2>
-            <a-tag color="blue" class="px-3 py-1">
+        <!-- 统计卡片 - 更紧凑 -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-sm font-semibold text-gray-900">规则统计</h2>
+            <a-tag color="blue" class="px-1.5 py-0.5 text-xs">
               传统规则模式
             </a-tag>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-md p-2 border border-blue-200">
               <a-statistic
                 title="总规则数"
                 :value="statistics.total"
-                :value-style="{ color: '#1890ff', fontSize: '18px', fontWeight: '600' }"
+                :value-style="{ color: '#1890ff', fontSize: '16px', fontWeight: '600' }"
               >
                 <template #prefix>
-                  <div class="p-2 bg-blue-500 rounded-lg inline-block">
-                    <FileTextOutlined class="text-white text-lg" />
+                  <div class="p-1 bg-blue-500 rounded-md inline-block">
+                    <FileTextOutlined class="text-white text-xs" />
                   </div>
                 </template>
               </a-statistic>
             </div>
-            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-md p-2 border border-green-200">
               <a-statistic
                 title="激活规则"
                 :value="statistics.active"
-                :value-style="{ color: '#16a34a', fontSize: '18px', fontWeight: '600' }"
+                :value-style="{ color: '#16a34a', fontSize: '14px', fontWeight: '600' }"
               >
                 <template #prefix>
-                  <div class="p-2 bg-green-500 rounded-lg inline-block">
-                    <CheckCircleOutlined class="text-white text-lg" />
+                  <div class="p-1 bg-green-500 rounded-md inline-block">
+                    <CheckCircleOutlined class="text-white text-xs" />
                   </div>
                 </template>
               </a-statistic>
             </div>
-            <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+            <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-md p-2 border border-red-200">
               <a-statistic
                 title="严重规则"
                 :value="statistics.critical"
-                :value-style="{ color: '#dc2626', fontSize: '18px', fontWeight: '600' }"
+                :value-style="{ color: '#dc2626', fontSize: '14px', fontWeight: '600' }"
               >
                 <template #prefix>
-                  <div class="p-2 bg-red-500 rounded-lg inline-block">
-                    <ExclamationCircleOutlined class="text-white text-lg" />
+                  <div class="p-1 bg-red-500 rounded-md inline-block">
+                    <ExclamationCircleOutlined class="text-white text-xs" />
                   </div>
                 </template>
               </a-statistic>
             </div>
-            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-md p-2 border border-purple-200">
               <a-statistic
                 title="规则分类"
                 :value="statistics.categories"
-                :value-style="{ color: '#9333ea', fontSize: '18px', fontWeight: '600' }"
+                :value-style="{ color: '#9333ea', fontSize: '14px', fontWeight: '600' }"
               >
                 <template #prefix>
-                  <div class="p-2 bg-purple-500 rounded-lg inline-block">
-                    <TagsOutlined class="text-white text-lg" />
+                  <div class="p-1 bg-purple-500 rounded-md inline-block">
+                    <TagsOutlined class="text-white text-xs" />
                   </div>
                 </template>
               </a-statistic>
@@ -137,10 +151,10 @@
           </div>
         </div>
 
-        <!-- 筛选和搜索 -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-900">筛选条件</h2>
+        <!-- 筛选和搜索 - 更紧凑 -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-sm font-semibold text-gray-900">筛选条件</h2>
             <a-button
               size="small"
               @click="resetFilters"
@@ -151,25 +165,27 @@
             </a-button>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-4">
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">搜索</label>
+          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-2">
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-700">搜索</label>
               <a-input-search
                 v-model:value="searchText"
-                placeholder="搜索规则名称或描述"
+                placeholder="搜索规则"
                 @search="handleSearch"
                 allow-clear
+                size="small"
                 class="w-full"
               />
             </div>
 
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">文书类别</label>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-700">文书类别</label>
               <a-select
                 v-model:value="filterDocumentCategory"
-                placeholder="选择文书类别"
+                placeholder="文书类别"
                 allowClear
                 @change="handleFilter"
+                size="small"
                 class="w-full"
               >
                 <a-select-option
@@ -177,7 +193,7 @@
                   :key="option.value"
                   :value="option.value"
                 >
-                  <div class="flex items-center space-x-2">
+                  <div class="flex items-center space-x-1">
                     <a-tag :color="option.color" class="text-xs">
                       {{ option.label }}
                     </a-tag>
@@ -186,13 +202,14 @@
               </a-select>
             </div>
 
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">规则分类</label>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-700">规则分类</label>
               <a-select
                 v-model:value="filterCategory"
-                placeholder="选择分类"
+                placeholder="分类"
                 allowClear
                 @change="handleFilter"
+                size="small"
                 class="w-full"
               >
                 <a-select-option value="completeness">完整性</a-select-option>
@@ -202,13 +219,14 @@
               </a-select>
             </div>
 
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">严重程度</label>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-700">严重程度</label>
               <a-select
                 v-model:value="filterSeverity"
                 placeholder="严重程度"
                 allowClear
                 @change="handleFilter"
+                size="small"
                 class="w-full"
               >
                 <a-select-option value="critical">严重</a-select-option>
@@ -217,13 +235,14 @@
               </a-select>
             </div>
 
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">规则类型</label>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-700">规则类型</label>
               <a-select
                 v-model:value="filterType"
-                placeholder="选择类型"
+                placeholder="类型"
                 allowClear
                 @change="handleFilter"
+                size="small"
                 class="w-full"
               >
                 <a-select-option value="logical">逻辑规则</a-select-option>
@@ -232,13 +251,14 @@
               </a-select>
             </div>
 
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-700">状态</label>
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-700">状态</label>
               <a-select
                 v-model:value="filterStatus"
-                placeholder="选择状态"
+                placeholder="状态"
                 allowClear
                 @change="handleFilter"
+                size="small"
                 class="w-full"
               >
                 <a-select-option value="active">激活</a-select-option>
@@ -247,13 +267,13 @@
             </div>
           </div>
 
-          <!-- 快速筛选标签 -->
-          <div class="space-y-3">
+          <!-- 快速筛选标签 - 紧凑化 -->
+          <div class="space-y-2">
             <!-- 文书类别快速筛选 -->
-            <div class="flex items-center gap-3 flex-wrap">
-              <span class="text-sm font-semibold text-gray-800">文书类别：</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-semibold text-gray-800">文书类别：</span>
               <div
-                :class="['filter-tag', { 'filter-tag-active': !filterDocumentCategory }]"
+                :class="['filter-tag-compact', { 'filter-tag-compact-active': !filterDocumentCategory }]"
                 @click="clearDocumentCategoryFilter"
               >
                 <span class="filter-tag-text">全部文书</span>
@@ -262,7 +282,7 @@
               <div
                 v-for="option in documentCategoryOptions"
                 :key="option.value"
-                :class="['filter-tag', { 'filter-tag-active': filterDocumentCategory === option.value }]"
+                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterDocumentCategory === option.value }]"
                 @click="quickFilterDocumentCategory(option.value)"
                 :style="{ borderColor: option.color }"
               >
@@ -272,41 +292,41 @@
             </div>
 
             <!-- 其他快速筛选 -->
-            <div class="flex items-center gap-3 flex-wrap">
-              <span class="text-sm font-semibold text-gray-800">其他筛选：</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-semibold text-gray-800">快速筛选：</span>
               <div
-                :class="['filter-tag', { 'filter-tag-active': !filterCategory && !filterSeverity && !filterType && !filterStatus && !filterDocumentCategory }]"
+                :class="['filter-tag-compact', { 'filter-tag-compact-active': !filterCategory && !filterSeverity && !filterType && !filterStatus && !filterDocumentCategory }]"
                 @click="clearAllFilters"
               >
                 <span class="filter-tag-text">全部规则</span>
                 <span class="filter-tag-count">({{ statistics.total }})</span>
               </div>
               <div
-                :class="['filter-tag', { 'filter-tag-active': filterCategory === 'completeness' }]"
+                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterCategory === 'completeness' }]"
                 @click="quickFilterCategory('completeness')"
               >
                 <span class="filter-tag-text">完整性</span>
               </div>
               <div
-                :class="['filter-tag', { 'filter-tag-active': filterCategory === 'consistency' }]"
+                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterCategory === 'consistency' }]"
                 @click="quickFilterCategory('consistency')"
               >
                 <span class="filter-tag-text">一致性</span>
               </div>
               <div
-                :class="['filter-tag', { 'filter-tag-active': filterCategory === 'rationality' }]"
+                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterCategory === 'rationality' }]"
                 @click="quickFilterCategory('rationality')"
               >
                 <span class="filter-tag-text">合理性</span>
               </div>
               <div
-                :class="['filter-tag filter-tag-danger', { 'filter-tag-danger-active': filterSeverity === 'critical' }]"
+                :class="['filter-tag-compact filter-tag-danger', { 'filter-tag-danger-active': filterSeverity === 'critical' }]"
                 @click="quickFilterSeverity('critical')"
               >
                 <span class="filter-tag-text">严重缺陷</span>
               </div>
               <div
-                :class="['filter-tag filter-tag-success', { 'filter-tag-success-active': filterStatus === 'active' }]"
+                :class="['filter-tag-compact filter-tag-success', { 'filter-tag-success-active': filterStatus === 'active' }]"
                 @click="quickFilterStatus('active')"
               >
                 <span class="filter-tag-text">已激活</span>
@@ -314,29 +334,29 @@
             </div>
           </div>
 
-            <!-- 操作按钮 -->
-            <div class="ml-auto flex items-center gap-2 flex-shrink-0">
-              <a-button type="primary" @click="handleFilter" class="bg-blue-600 hover:bg-blue-700">
+            <!-- 操作按钮 - 紧凑化 -->
+            <div class="ml-auto flex items-center gap-1.5 flex-shrink-0">
+              <a-button type="primary" @click="handleFilter" size="small" class="bg-blue-600 hover:bg-blue-700">
                 <template #icon><SearchOutlined /></template>
                 查询
               </a-button>
-              <a-button @click="resetFilters">
+              <a-button @click="resetFilters" size="small">
                 <template #icon><ClearOutlined /></template>
                 重置
               </a-button>
             </div>
         </div>
 
-        <!-- 批量操作区域 -->
+        <!-- 批量操作区域 - 紧凑化 -->
         <div class="batch-actions" v-if="selectedRowKeys.length > 0">
           <a-alert
             :message="`已选择 ${selectedRowKeys.length} 条规则`"
             type="info"
             show-icon
-            class="selection-alert mb-4"
+            class="selection-alert mb-2"
           >
             <template #action>
-              <a-space>
+              <a-space size="small">
                 <a-button size="small" @click="batchActivate(true)">
                   <template #icon><CheckCircleOutlined /></template>
                   批量激活
@@ -357,20 +377,20 @@
           </a-alert>
         </div>
 
-        <!-- 规则列表 -->
+        <!-- 规则列表 - 更紧凑 -->
         <div class="rules-table-section">
-          <a-card class="table-card">
+          <a-card class="table-card compact-card" size="small">
             <template #title>
               <div class="table-header">
-                <span class="table-title">
-                  <FileTextOutlined class="table-icon" />
+                <span class="table-title text-sm">
+                  <FileTextOutlined class="table-icon text-sm" />
                   规则列表
                 </span>
-                <span class="table-count">共 {{ statistics.total }} 条规则</span>
+                <span class="table-count text-xs">共 {{ statistics.total }} 条规则</span>
               </div>
             </template>
             <template #extra>
-              <a-space>
+              <a-space size="small">
                 <a-button size="small" @click="exportRules">
                   <template #icon><ExportOutlined /></template>
                   导出规则
@@ -380,13 +400,13 @@
 
             <a-table
             :columns="columns"
-            :data-source="filteredRules"
+            :data-source="rules"
             :loading="loading"
             :pagination="pagination"
             :row-selection="rowSelection"
             row-key="id"
             @change="handleTableChange"
-            size="middle"
+            size="small"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'rule_code'">
@@ -403,6 +423,16 @@
                 <div class="rule-name">
                   {{ record.description }}
                 </div>
+              </template>
+
+              <template v-else-if="column.key === 'primary_document_category'">
+                <!-- 强制使用中文显示，优先使用resolvedPrimary，否则使用原始字段 -->
+                <template v-if="record.resolvedPrimary || record.primary_document_category">
+                  <a-tag :color="getDocumentCategoryDisplay(record.resolvedPrimary || record.primary_document_category)!.color">
+                    {{ getDocumentCategoryDisplay(record.resolvedPrimary || record.primary_document_category)!.label }}
+                  </a-tag>
+                </template>
+                <span v-else>-</span>
               </template>
 
               <template v-else-if="column.key === 'category'">
@@ -426,7 +456,7 @@
               <template v-else-if="column.key === 'is_active'">
                 <a-switch
                   v-model:checked="record.is_active"
-                  @change="(checked) => toggleRuleStatus(record, checked)"
+                  @change="(checked: boolean) => toggleRuleStatus(record, checked)"
                   :loading="record.updating"
                 />
               </template>
@@ -438,13 +468,13 @@
 
               <template v-else-if="column.key === 'actions'">
                 <a-space>
-                  <a-button type="link" size="small" @click="viewRule(record)">
+                  <a-button type="link" size="small" @click="viewRule()">
                     查看
                   </a-button>
                   <a-button type="link" size="small" @click="editRule(record)">
                     编辑
                   </a-button>
-                  <a-button type="link" size="small" @click="testRule(record)">
+                  <a-button type="link" size="small" @click="testRule()">
                     测试
                   </a-button>
                   <a-popconfirm
@@ -478,6 +508,19 @@
       @cancel="handleModalCancel"
       :confirm-loading="modalLoading"
     >
+      <div v-if="isCustomRule" class="mb-4">
+        <a-steps size="small" :current="customStepCurrent">
+          <a-step title="选择文书" :status="customStepStatuses[0]" />
+          <a-step title="填写质控点" :status="customStepStatuses[1]" />
+          <a-step title="生成Prompt" :status="customStepStatuses[2]" />
+        </a-steps>
+        <a-alert
+          type="info"
+          show-icon
+          class="mt-3"
+          message="先选择病历文书类型，再填写质控点内容，最后一键生成Prompt即可保存。"
+        />
+      </div>
       <a-form
         ref="formRef"
         :model="formData"
@@ -487,7 +530,14 @@
         <a-row :gutter="16">
           <a-col :span="12">
             <a-form-item label="规则编码" name="rule_code">
-              <a-input v-model:value="formData.rule_code" placeholder="如: 1.1.1" />
+              <a-input
+                v-model:value="formData.rule_code"
+                :placeholder="isCustomRule ? '系统自动生成' : '如: 1.1.1'"
+                :disabled="isCustomRule"
+              />
+              <template v-if="isCustomRule" #extra>
+                <span class="text-gray-500 text-xs">选择文书后将自动生成规则编号</span>
+              </template>
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -497,13 +547,33 @@
           </a-col>
         </a-row>
 
-        <a-form-item label="规则描述" name="description">
+        <a-form-item label="质控点内容" name="description">
           <a-textarea
             v-model:value="formData.description"
             placeholder="详细描述规则内容和检查要点"
             :rows="3"
           />
         </a-form-item>
+
+        <a-row :gutter="16">
+          <a-col :span="24">
+            <a-form-item label="病历文书类型" name="primary_document_category">
+              <a-select
+                v-model:value="formData.primary_document_category"
+                placeholder="请选择文书类别"
+                allowClear
+              >
+                <a-select-option
+                  v-for="option in documentCategoryOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  <span>{{ option.label }}</span>
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
 
         <a-row :gutter="16">
           <a-col :span="8">
@@ -580,6 +650,19 @@
         </a-form-item>
 
         <a-form-item label="提示模板" name="prompt_template">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-gray-500">生成后可根据需要微调Prompt模板</span>
+            <a-button
+              size="small"
+              type="primary"
+              @click="handleAutoGeneratePrompt"
+              :loading="promptGenerating"
+              :disabled="!formData.primary_document_category || !(formData.description && formData.description.trim())"
+            >
+              <ThunderboltOutlined />
+              <span class="ml-1">一键生成Prompt</span>
+            </a-button>
+          </div>
           <a-textarea
             v-model:value="formData.prompt_template"
             placeholder="AI分析时使用的提示模板"
@@ -592,7 +675,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
@@ -600,7 +683,6 @@ import {
   ReloadOutlined,
   ImportOutlined,
   ExportOutlined,
-  DownOutlined,
   ClearOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
@@ -610,11 +692,14 @@ import {
   BranchesOutlined,
   SearchOutlined,
   StopOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons-vue'
 import SemanticRulesView from './SemanticRulesView.vue'
 import { DocumentCategoryService } from '@/services/document-category-service'
 import { DocumentCategory } from '@/types/medical'
+import { RulesService } from '@/services/rules-service'
+import { lookupRuleCategories, normalizeCategories } from '@/qc/ruleDocumentMapping'
 import type { EnhancedQCRule, QCRuleFilterParams } from '@/types/quality-control'
 // import { RulesService } from '@/services/rules-service'
 // import { RulesValidator } from '@/utils/rules-validator'
@@ -646,6 +731,8 @@ interface QCRule {
   rule_code: string
   name: string
   description: string
+  primary_document_category?: DocumentCategory
+  document_categories?: DocumentCategory[]
   category: 'completeness' | 'consistency' | 'rationality' | 'timeliness'
   rule_type: 'objective' | 'subjective' | 'hybrid'
   severity: 'critical' | 'major' | 'minor'
@@ -661,9 +748,14 @@ interface QCRule {
 }
 
 // 响应式数据
-const activeTab = ref('semantic') // 默认显示语义质控规则
+const activeTab = ref('traditional') // 默认显示传统质控规则
 const loading = ref(false)
-const rules = ref<EnhancedQCRule[]>([])
+type ResolvedRule = EnhancedQCRule & {
+  resolvedPrimary?: DocumentCategory
+  normalizedCategories: DocumentCategory[]
+}
+
+const rules = ref<ResolvedRule[]>([])
 const selectedRowKeys = ref<string[]>([])
 const searchText = ref('')
 const filterCategory = ref<string>()
@@ -677,31 +769,49 @@ const documentCategoryOptions = ref<Array<{ value: DocumentCategory; label: stri
 const documentCategoryStats = ref<Record<string, number>>({})
 const categoriesLoaded = ref(false)
 
-// 仅从数据库加载文书类别，失败则抛出错误，由调用方处理
+// 仅从数据库加载文书类别，失败则抛出错误，不使用硬编码回退
 const loadDocumentCategoryOptions = async () => {
-  const categories = await DocumentCategoryService.getDocumentCategories()
-  if (!categories || categories.length === 0) {
-    throw new Error('No document categories found')
-  }
-  documentCategoryOptions.value = categories
-    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((cfg: any) => {
-      const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(cfg.category_code as DocumentCategory)
-      return {
-        value: cfg.category_code as DocumentCategory,
-        label: cfg.category_name,
-        description: cfg.category_description || cfg.description,
-        color: disp.color,
-        icon: disp.icon
-      }
-    })
-  categoriesLoaded.value = true
-  // 调试输出：实际用于下拉框的文书类别选项
   try {
-    // 仅打印关键信息，避免刷屏
-    console.log('📄 文书类别选项(用于筛选) count=', documentCategoryOptions.value.length,
-      documentCategoryOptions.value.map(o => ({ value: o.value, label: o.label })))
-  } catch {}
+    const categories = await DocumentCategoryService.getDocumentCategories()
+    if (!categories || categories.length === 0) {
+      throw new Error('未找到文书类别配置，请检查数据库中的 document_category_config 表')
+    }
+
+    // 验证只包含6个标准类别
+    const canonical = new Set([
+      'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
+    ])
+    const nonCanonical = categories.filter((c: any) => !canonical.has(c.category_code))
+    if (nonCanonical.length > 0) {
+      console.warn('⚠️ 发现非标准文书类别，将被过滤:', nonCanonical.map((c: any) => c.category_code))
+    }
+
+    // 只使用6个标准类别
+    const validCategories = categories.filter((c: any) => canonical.has(c.category_code))
+    if (validCategories.length === 0) {
+      throw new Error('未找到有效的标准文书类别配置')
+    }
+
+    documentCategoryOptions.value = validCategories
+      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((cfg: any) => {
+        const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(cfg.category_code as DocumentCategory)
+        return {
+          value: cfg.category_code as DocumentCategory,
+          label: cfg.category_name,
+          description: cfg.category_description || cfg.description,
+          color: disp.color,
+          icon: disp.icon
+        }
+      })
+    categoriesLoaded.value = true
+
+    console.log('📄 已加载文书类别选项:', documentCategoryOptions.value.map(o => o.label).join(', '))
+  } catch (error) {
+    console.error('加载文书类别失败:', error)
+    categoriesLoaded.value = false
+    throw error // 重新抛出错误，让调用方处理
+  }
 }
 
 // 模态框相关
@@ -711,12 +821,15 @@ const modalTitle = ref('')
 const formRef = ref()
 const isEditing = ref(false)
 const editingId = ref<string>()
+const isCustomRule = ref(false)
 
 // 表单数据
 const formData = reactive({
   rule_code: '',
   name: '',
   description: '',
+  primary_document_category: '' as DocumentCategory | '',
+  document_categories: [] as DocumentCategory[],
   category: 'completeness' as const,
   rule_type: 'objective' as const,
   severity: 'minor' as const,
@@ -729,6 +842,122 @@ const formData = reactive({
 })
 
 const checkLogicText = ref('')
+const promptGenerating = ref(false)
+
+const customStepCurrent = computed(() => {
+  if (!isCustomRule.value) return 0
+  if (!formData.primary_document_category) return 0
+  if (!formData.description.trim()) return 1
+  return 2
+})
+
+const customStepStatuses = computed(() => {
+  if (!isCustomRule.value) {
+    return ['process', 'wait', 'wait'] as Array<'wait' | 'process' | 'finish'>
+  }
+
+  const docSelected = Boolean(formData.primary_document_category)
+  const contentFilled = docSelected && Boolean(formData.description.trim())
+  const promptReady = contentFilled && Boolean(formData.prompt_template.trim())
+
+  return [
+    docSelected ? 'finish' : 'process',
+    contentFilled ? (promptReady ? 'finish' : 'process') : docSelected ? 'process' : 'wait',
+    promptReady ? 'finish' : 'wait'
+  ] as Array<'wait' | 'process' | 'finish'>
+})
+
+const collectRuleCodesByCategory = () => {
+  const map = new Map<string, string[]>()
+  const pushCode = (categoryKey: string | undefined, code?: string | null) => {
+    if (!categoryKey || !code) return
+    if (!map.has(categoryKey)) {
+      map.set(categoryKey, [])
+    }
+    map.get(categoryKey)!.push(code)
+  }
+
+  rules.value.forEach(rule => {
+    const resolved = rule.primary_document_category || (rule as ResolvedRule).resolvedPrimary
+    pushCode(resolved as string | undefined, rule.rule_code)
+  })
+
+  mockRules.forEach(rule => {
+    pushCode(rule.primary_document_category as string | undefined, rule.rule_code)
+  })
+
+  return map
+}
+
+const formatRuleCode = (prefix: string, number: number) => {
+  const normalizedPrefix = prefix.endsWith('-') ? prefix : `${prefix}-`
+  return `${normalizedPrefix}${String(number).padStart(3, '0')}`
+}
+
+const extractCodeInfo = (code: string) => {
+  const match = code.trim().match(/^([A-Za-z]+-?)(\d{1,})$/)
+  if (match) {
+    const [, rawPrefix, rawNumber] = match
+    const prefix = rawPrefix
+    const number = parseInt(rawNumber, 10)
+    if (!Number.isNaN(number)) {
+      return { prefix, number }
+    }
+  }
+  return null
+}
+
+const generateNextRuleCode = (category?: DocumentCategory | '') => {
+  const codeBuckets = collectRuleCodesByCategory()
+  const searchOrder: Array<string | undefined> = []
+  if (category) {
+    searchOrder.push(category)
+  }
+  searchOrder.push(undefined)
+
+  for (const key of searchOrder) {
+    const codes = key ? codeBuckets.get(key) : Array.from(codeBuckets.values()).flat()
+    if (!codes || codes.length === 0) continue
+
+    let candidatePrefix = 'SC-'
+    let maxNumber = 0
+
+    codes.forEach(code => {
+      if (!code) return
+      const info = extractCodeInfo(code)
+      if (!info) return
+      const { prefix, number } = info
+      if (number >= maxNumber) {
+        maxNumber = number
+        candidatePrefix = prefix
+      }
+    })
+
+    if (maxNumber > 0) {
+      return formatRuleCode(candidatePrefix, maxNumber + 1)
+    }
+  }
+
+  return formatRuleCode('SC-', 1)
+}
+
+const assignRuleCodeForCustomRule = () => {
+  if (!isCustomRule.value) return
+  const nextCode = generateNextRuleCode(formData.primary_document_category)
+  formData.rule_code = nextCode
+}
+
+watch(() => formData.primary_document_category, () => {
+  if (isCustomRule.value) {
+    assignRuleCodeForCustomRule()
+  }
+})
+
+watch(rules, () => {
+  if (isCustomRule.value) {
+    assignRuleCodeForCustomRule()
+  }
+})
 
 // 表单验证规则
 const formRules = {
@@ -741,8 +970,11 @@ const formRules = {
     { min: 2, max: 100, message: '规则名称长度在2-100个字符' }
   ],
   description: [
-    { required: true, message: '请输入规则描述' },
-    { min: 10, max: 500, message: '规则描述长度在10-500个字符' }
+    { required: true, message: '请输入质控点内容' },
+    { min: 10, max: 500, message: '质控点内容长度在10-500个字符' }
+  ],
+  primary_document_category: [
+    { required: true, message: '请选择病历文书类型' }
   ],
   category: [{ required: true, message: '请选择规则分类' }],
   rule_type: [{ required: true, message: '请选择规则类型' }],
@@ -751,56 +983,55 @@ const formRules = {
   weight: [{ required: true, type: 'number', min: 0.1, max: 5.0, message: '权重范围0.1-5.0' }]
 }
 
-// 分页配置
+// 分页配置 - 增加每页显示数量，提高空间利用率
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  pageSize: 20,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
+  pageSizeOptions: ['10', '20', '50', '100'],
   showTotal: (total: number, range: [number, number]) =>
-    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+  size: 'small'
 })
 
-// 表格列配置
+// 表格列配置 - 紧凑化宽度
 const columns: TableColumnsType = [
   {
-    title: '规则编码',
+    title: '编码',
     dataIndex: 'rule_code',
     key: 'rule_code',
-    width: 90,
+    width: 70,
     sorter: true
   },
   {
     title: '质控点来源',
     dataIndex: 'name',
     key: 'source',
-    width: 180
+    width: 150
   },
   {
     title: '质控点名称',
     dataIndex: 'description',
     key: 'name',
-    width: 220
+    width: 180
   },
   {
     title: '文书类别',
-    dataIndex: 'primary_document_category',
     key: 'primary_document_category',
-    width: 120,
-    filters: documentCategoryOptions.value.map(option => ({
-      text: option.label,
-      value: option.value
-    })),
-    customRender: ({ record }: { record: EnhancedQCRule }) => {
-      return renderDocumentCategory(record.primary_document_category)
-    }
+    width: 90,
+    // 暂时禁用表格列筛选器，只使用顶部的筛选器
+    // filters: documentCategoryOptions.value.map(option => ({
+    //   text: option.label,
+    //   value: option.value
+    // }))
   },
   {
     title: '分类',
     dataIndex: 'category',
     key: 'category',
-    width: 80,
+    width: 70,
     filters: [
       { text: '完整性', value: 'completeness' },
       { text: '一致性', value: 'consistency' },
@@ -812,7 +1043,7 @@ const columns: TableColumnsType = [
     title: '严重程度',
     dataIndex: 'severity',
     key: 'severity',
-    width: 90,
+    width: 75,
     filters: [
       { text: '严重', value: 'critical' },
       { text: '重要', value: 'major' },
@@ -823,7 +1054,7 @@ const columns: TableColumnsType = [
     title: '类型',
     dataIndex: 'rule_type',
     key: 'rule_type',
-    width: 80,
+    width: 70,
     filters: [
       { text: '客观规则', value: 'objective' },
       { text: '主观规则', value: 'subjective' },
@@ -831,29 +1062,29 @@ const columns: TableColumnsType = [
     ]
   },
   {
-    title: '最大扣分',
+    title: '扣分',
     dataIndex: 'max_score',
     key: 'max_score',
-    width: 85,
+    width: 60,
     sorter: true
   },
   {
     title: '权重',
     dataIndex: 'weight',
     key: 'weight',
-    width: 60,
+    width: 50,
     sorter: true
   },
   {
     title: '状态',
     dataIndex: 'is_active',
     key: 'is_active',
-    width: 60
+    width: 50
   },
   {
     title: '操作',
     key: 'actions',
-    width: 200,
+    width: 160,
     fixed: 'right'
   }
 ]
@@ -866,12 +1097,13 @@ const rowSelection: TableProps['rowSelection'] = {
   }
 }
 // 让表头“文书类别”筛选项跟随选项变化而更新
-watch(documentCategoryOptions, (opts) => {
-  const col = (columns as any[]).find(c => c.key === 'primary_document_category')
-  if (col) {
-    col.filters = (opts || []).map((o: any) => ({ text: o.label, value: o.value }))
-  }
-}, { immediate: true })
+// 暂时禁用表格列筛选器的动态更新，只使用顶部筛选器
+// watch(documentCategoryOptions, (opts) => {
+//   const col = (columns as any[]).find(c => c.key === 'primary_document_category')
+//   if (col) {
+//     col.filters = (opts || []).map((o: any) => ({ text: o.label, value: o.value }))
+//   }
+// }, { immediate: true })
 
 
 // 计算属性
@@ -884,50 +1116,7 @@ const statistics = computed(() => {
   return { total, active, critical, categories }
 })
 
-const filteredRules = computed(() => {
-  let filtered = [...rules.value]
 
-  // 搜索过滤
-  if (searchText.value) {
-    const search = searchText.value.toLowerCase()
-    filtered = filtered.filter(rule =>
-      rule.name.toLowerCase().includes(search) ||
-      rule.description.toLowerCase().includes(search) ||
-      rule.rule_code.toLowerCase().includes(search)
-    )
-  }
-
-  // 文书类别过滤
-  if (filterDocumentCategory.value) {
-    filtered = filtered.filter(rule =>
-      rule.primary_document_category === filterDocumentCategory.value ||
-      (rule.document_categories && rule.document_categories.includes(filterDocumentCategory.value))
-    )
-  }
-
-  // 分类过滤
-  if (filterCategory.value) {
-    filtered = filtered.filter(rule => rule.category === filterCategory.value)
-  }
-
-  // 严重程度过滤
-  if (filterSeverity.value) {
-    filtered = filtered.filter(rule => rule.severity === filterSeverity.value)
-  }
-
-  // 类型过滤
-  if (filterType.value) {
-    filtered = filtered.filter(rule => rule.rule_type === filterType.value)
-  }
-
-  // 状态过滤
-  if (filterStatus.value) {
-    const isActive = filterStatus.value === 'active'
-    filtered = filtered.filter(rule => rule.is_active === isActive)
-  }
-
-  return filtered
-})
 
 // 工具函数
 const getCategoryColor = (category: string) => {
@@ -954,22 +1143,64 @@ const getTypeLabel = (type: string) => {
   return RULES_CONFIG.types[type as keyof typeof RULES_CONFIG.types]?.label || type
 }
 
-// 文书类别相关工具函数
-const getDocumentCategoryLabel = (category: DocumentCategory) => {
-  const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
-  return config.label
+// 文书类别显示函数
+
+const getDocumentCategoryDisplay = (category?: DocumentCategory) => {
+  if (!category) return undefined
+
+  try {
+    const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
+    // 确保返回中文标签而不是英文代码
+    if (config.label === category) {
+      return { label: '未分类', color: '#666666' }
+    }
+    return { label: config.label, color: config.color }
+  } catch (error) {
+    console.warn('获取文书类别显示配置失败:', category, error)
+    return { label: '未分类', color: '#666666' }
+  }
 }
 
-const getDocumentCategoryColor = (category: DocumentCategory) => {
-  const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
-  return config.color
+// 标准文书类别集合
+const CANONICAL_CATEGORIES = new Set([
+  'admission_record', 'progress_note', 'discharge_record',
+  'operation_record', 'examination_report', 'consent_form'
+])
+
+// 过滤并保留标准类别
+const filterCanonicalCategories = (categories: string[]): DocumentCategory[] => {
+  return categories.filter(cat => CANONICAL_CATEGORIES.has(cat)) as DocumentCategory[]
 }
 
-const renderDocumentCategory = (category: DocumentCategory) => {
-  if (!category) return '-'
-  const config = DocumentCategoryService.getDocumentCategoryDisplayConfig(category)
-  return h('a-tag', { color: config.color }, config.label)
+const augmentRuleWithDocumentCategories = (rule: EnhancedQCRule): ResolvedRule => {
+  const clone: ResolvedRule = { ...rule, normalizedCategories: [] }
+
+  // 获取各种来源的类别
+  const primaryCandidates = filterCanonicalCategories(normalizeCategories(
+    rule.primary_document_category ? [rule.primary_document_category] : []
+  ))
+  const directCategories = filterCanonicalCategories(normalizeCategories((rule as any).document_categories))
+  const checkLogicCategories = filterCanonicalCategories(normalizeCategories((rule as any)?.check_logic?.applicable_documents))
+  const inferredCategories = filterCanonicalCategories(lookupRuleCategories(rule))
+
+  // 合并所有类别
+  const allCategories = [
+    ...primaryCandidates,
+    ...directCategories,
+    ...checkLogicCategories,
+    ...inferredCategories
+  ]
+  clone.normalizedCategories = Array.from(new Set(allCategories))
+
+  // 按优先级选择主要类别
+  clone.resolvedPrimary = primaryCandidates[0] ||
+                          directCategories[0] ||
+                          checkLogicCategories[0] ||
+                          inferredCategories[0]
+
+  return clone
 }
+
 
 // 模拟数据
 const mockRules: QCRule[] = [
@@ -978,6 +1209,7 @@ const mockRules: QCRule[] = [
     rule_code: '1.1.1',
     name: '入院记录完整性检查',
     description: '检查入院记录是否包含必要的基本信息，包括患者基本信息、主诉、现病史、既往史等',
+    primary_document_category: 'admission_record',
     category: 'completeness',
     rule_type: 'objective',
     severity: 'critical',
@@ -997,6 +1229,7 @@ const mockRules: QCRule[] = [
     rule_code: '1.2.1',
     name: '诊断一致性检查',
     description: '检查入院诊断与出院诊断的一致性，确保诊断变更有合理依据',
+    primary_document_category: 'discharge_record',
     category: 'consistency',
     rule_type: 'hybrid',
     severity: 'major',
@@ -1017,6 +1250,7 @@ const mockRules: QCRule[] = [
     rule_code: '2.1.1',
     name: '用药合理性检查',
     description: '检查药物使用是否符合适应症，剂量是否合理，是否存在禁忌症',
+    primary_document_category: 'progress_note',
     category: 'rationality',
     rule_type: 'subjective',
     severity: 'critical',
@@ -1038,6 +1272,7 @@ const mockRules: QCRule[] = [
     rule_code: '3.1.1',
     name: '手术记录及时性检查',
     description: '检查手术记录是否在规定时间内完成，确保医疗文书的及时性',
+    primary_document_category: 'operation_record',
     category: 'timeliness',
     rule_type: 'objective',
     severity: 'major',
@@ -1058,6 +1293,7 @@ const mockRules: QCRule[] = [
     rule_code: '1.1.2',
     name: '病程记录完整性检查',
     description: '检查病程记录是否按规定频次记录，内容是否完整',
+    primary_document_category: 'progress_note',
     category: 'completeness',
     rule_type: 'objective',
     severity: 'minor',
@@ -1078,6 +1314,7 @@ const mockRules: QCRule[] = [
     rule_code: '2.2.1',
     name: '检查结果合理性分析',
     description: '分析检查结果是否与临床表现相符，是否需要进一步检查',
+    primary_document_category: 'examination_report',
     category: 'rationality',
     rule_type: 'hybrid',
     severity: 'major',
@@ -1096,7 +1333,7 @@ const mockRules: QCRule[] = [
 ]
 
 // 模拟服务
-const mockRulesService = {
+const fallbackRulesService = {
   getAllRules: async () => {
     await new Promise(resolve => setTimeout(resolve, 500)) // 模拟网络延迟
     return mockRules
@@ -1154,13 +1391,105 @@ const mockRulesService = {
       }
     })
   },
-  exportRules: async (format: string) => {
+  exportRules: async () => {
     await new Promise(resolve => setTimeout(resolve, 300))
     return JSON.stringify(mockRules, null, 2)
   }
 }
 
 // 模拟验证器
+const buildSupabaseRulePayload = (ruleData: any) => {
+  const payload: any = {
+    ...ruleData,
+    check_logic: ruleData.check_logic || {},
+    prompt_template: ruleData.prompt_template || null
+  }
+
+  if (payload.primary_document_category) {
+    const docCategories = Array.isArray(ruleData.document_categories) ? ruleData.document_categories : []
+    payload.document_categories = docCategories.length > 0
+      ? docCategories
+      : [payload.primary_document_category]
+  } else {
+    delete payload.primary_document_category
+    delete payload.document_categories
+  }
+
+  // Supabase 列没有 updating 字段，确保不传临时属性
+  delete payload.updating
+
+  return payload
+}
+
+const rulesRepository = {
+  async createRule(ruleData: any) {
+    const payload = buildSupabaseRulePayload(ruleData)
+    try {
+      return await RulesService.createRule(payload)
+    } catch (error) {
+      console.error('Supabase 创建规则失败，降级到本地模拟:', error)
+      message.warning('Supabase 未连接，已使用本地模拟创建规则')
+      return fallbackRulesService.createRule(ruleData)
+    }
+  },
+  async updateRule(id: string, ruleData: any) {
+    const payload = buildSupabaseRulePayload(ruleData)
+    try {
+      return await RulesService.updateRule(id, payload)
+    } catch (error) {
+      console.error('Supabase 更新规则失败，降级到本地模拟:', error)
+      message.warning('Supabase 未连接，已使用本地模拟更新规则')
+      return fallbackRulesService.updateRule(id, ruleData)
+    }
+  },
+  async deleteRule(id: string) {
+    try {
+      await RulesService.deleteRule(id)
+    } catch (error) {
+      console.error('Supabase 删除规则失败，降级到本地模拟:', error)
+      message.warning('Supabase 未连接，已在本地模拟删除规则')
+      await fallbackRulesService.deleteRule(id)
+    }
+  },
+  async toggleRuleStatus(id: string, isActive: boolean) {
+    try {
+      return await RulesService.toggleRuleStatus(id, isActive)
+    } catch (error) {
+      console.error('Supabase 更新规则状态失败，降级到本地模拟:', error)
+      message.warning('Supabase 未连接，已在本地模拟更新规则状态')
+      return fallbackRulesService.toggleRuleStatus(id, isActive)
+    }
+  },
+  async batchUpdateRuleStatus(ids: string[], isActive: boolean) {
+    try {
+      await RulesService.batchUpdateRuleStatus(ids, isActive)
+    } catch (error) {
+      console.error('Supabase 批量更新规则状态失败，降级到本地模拟:', error)
+      message.warning('Supabase 未连接，已在本地模拟批量更新状态')
+      await fallbackRulesService.batchUpdateRuleStatus(ids, isActive)
+    }
+  },
+  async deleteRules(ids: string[]) {
+    try {
+      await RulesService.deleteRules(ids)
+    } catch (error) {
+      console.error('Supabase 批量删除规则失败，降级到本地模拟:', error)
+      message.warning('Supabase 未连接，已在本地模拟批量删除')
+      await fallbackRulesService.deleteRules(ids)
+    }
+  },
+  async exportRules() {
+    try {
+      const supabaseRules = await RulesService.getAllRules()
+      return JSON.stringify(supabaseRules, null, 2)
+    } catch (error) {
+      console.error('Supabase 导出规则失败，使用本地模拟数据:', error)
+      message.warning('Supabase 未连接，导出内容来自本地模拟数据')
+      return fallbackRulesService.exportRules()
+    }
+  }
+}
+
 const mockRulesValidator = {
   validateRule: (ruleData: any) => {
     const errors: string[] = []
@@ -1168,7 +1497,8 @@ const mockRulesValidator = {
 
     if (!ruleData.rule_code) errors.push('规则编码不能为空')
     if (!ruleData.name) errors.push('规则名称不能为空')
-    if (!ruleData.description) errors.push('规则描述不能为空')
+    if (!ruleData.description) errors.push('质控点内容不能为空')
+    if (!ruleData.primary_document_category) errors.push('文书类型不能为空')
 
     if (ruleData.max_score < 0 || ruleData.max_score > 100) {
       errors.push('最大扣分必须在0-100之间')
@@ -1204,10 +1534,31 @@ const loadRules = async () => {
       pageSize: pagination.pageSize
     }
     const result = await DocumentCategoryService.getEnhancedQCRules(filters)
-    rules.value = result.data
+    rules.value = (result.data || []).map(r => augmentRuleWithDocumentCategories(r))
+
+    // 调试输出
+    console.log(`📘 [RulesView] 已加载 ${rules.value.length} 条规则`)
+
+    // 调试：检查规则中的文书类别值
+    const categoryValues = new Set()
+    rules.value.forEach(rule => {
+      if (rule.primary_document_category) categoryValues.add(rule.primary_document_category)
+      if (rule.resolvedPrimary) categoryValues.add(rule.resolvedPrimary)
+    })
+    console.log('📋 [RulesView] 规则中的文书类别值:', Array.from(categoryValues))
+    console.log('📋 [RulesView] documentCategoryOptions:', documentCategoryOptions.value.map(o => `${o.value}:${o.label}`))
+
     pagination.total = result.total
   } finally {
     loading.value = false
+  }
+}
+
+const reloadRulesSafely = async () => {
+  try {
+    await loadRules()
+  } catch (error) {
+    console.error('刷新规则失败:', error)
   }
 }
 
@@ -1225,7 +1576,11 @@ const refreshRules = async () => {
     await loadDocumentCategoryStats()
   } catch (e) {
     console.error('刷新失败:', e)
-    message.error('无法加载文书类别或规则数据，请检查数据库连接')
+    const errorMsg = e instanceof Error ? e.message : '未知错误'
+    message.error(`加载失败: ${errorMsg}`)
+    // 不显示任何数据，确保用户看到错误而不是不一致的数据
+    documentCategoryOptions.value = []
+    rules.value = []
   }
 }
 
@@ -1234,7 +1589,9 @@ const handleSearch = () => {
 }
 
 const handleFilter = () => {
-  // 过滤逻辑已在计算属性中处理
+  // 重置分页到第一页并重新加载数据
+  pagination.current = 1
+  reloadRulesSafely()
 }
 
 const resetFilters = () => {
@@ -1244,63 +1601,45 @@ const resetFilters = () => {
   filterSeverity.value = undefined
   filterType.value = undefined
   filterStatus.value = undefined
+  handleFilter()
 }
 
-const clearAllFilters = () => {
-  resetFilters()
+const clearAllFilters = resetFilters
+
+// 通用快速筛选函数
+const createQuickFilter = <T>(filterRef: Ref<T | undefined>, needsHandleFilter = true) => {
+  return (value: T) => {
+    filterRef.value = filterRef.value === value ? undefined : value
+    if (needsHandleFilter) handleFilter()
+  }
 }
 
 // 文书类别相关方法
 const clearDocumentCategoryFilter = () => {
   filterDocumentCategory.value = undefined
+  handleFilter()
 }
 
-const quickFilterDocumentCategory = (category: DocumentCategory) => {
-  if (filterDocumentCategory.value === category) {
-    filterDocumentCategory.value = undefined
-  } else {
-    filterDocumentCategory.value = category
-  }
-}
+const quickFilterDocumentCategory = createQuickFilter(filterDocumentCategory, true)
+const quickFilterCategory = createQuickFilter(filterCategory)
+const quickFilterSeverity = createQuickFilter(filterSeverity)
+const quickFilterStatus = createQuickFilter(filterStatus)
 
 // 加载文书类别统计
 const loadDocumentCategoryStats = async () => {
   try {
     const stats = await DocumentCategoryService.getDocumentCategoryStats()
     documentCategoryStats.value = stats
+
+    // 调试输出
+    console.log('📊 [RulesView] 文书类别统计数据:', stats)
+    console.log('📊 [RulesView] 统计数据的键:', Object.keys(stats))
   } catch (error) {
     console.error('加载文书类别统计失败:', error)
   }
 }
 
-const quickFilterCategory = (category) => {
-  if (filterCategory.value === category) {
-    filterCategory.value = undefined
-  } else {
-    filterCategory.value = category
-  }
-  handleFilter()
-}
-
-const quickFilterSeverity = (severity) => {
-  if (filterSeverity.value === severity) {
-    filterSeverity.value = undefined
-  } else {
-    filterSeverity.value = severity
-  }
-  handleFilter()
-}
-
-const quickFilterStatus = (status) => {
-  if (filterStatus.value === status) {
-    filterStatus.value = undefined
-  } else {
-    filterStatus.value = status
-  }
-  handleFilter()
-}
-
-const batchActivate = async (isActive) => {
+const batchActivate = async (isActive: boolean) => {
   if (selectedRowKeys.value.length === 0) {
     message.warning('请先选择要操作的规则')
     return
@@ -1308,10 +1647,10 @@ const batchActivate = async (isActive) => {
 
   try {
     loading.value = true
-    await mockRulesService.batchUpdateRuleStatus(selectedRowKeys.value, isActive)
+    await rulesRepository.batchUpdateRuleStatus(selectedRowKeys.value, isActive)
     message.success(`批量${isActive ? '激活' : '停用'}成功`)
     selectedRowKeys.value = []
-    loadRules()
+    await reloadRulesSafely()
   } catch (error) {
     console.error('批量操作失败:', error)
     message.error(error instanceof Error ? error.message : '批量操作失败')
@@ -1328,10 +1667,10 @@ const batchDelete = async () => {
 
   try {
     loading.value = true
-    await mockRulesService.deleteRules(selectedRowKeys.value)
+    await rulesRepository.deleteRules(selectedRowKeys.value)
     message.success(`批量删除 ${selectedRowKeys.value.length} 条规则成功`)
     selectedRowKeys.value = []
-    loadRules()
+    await reloadRulesSafely()
   } catch (error) {
     console.error('批量删除失败:', error)
     message.error(error instanceof Error ? error.message : '批量删除失败')
@@ -1340,7 +1679,7 @@ const batchDelete = async () => {
   }
 }
 
-const handleTableChange: TableProps['onChange'] = (pag: any,  filters: any, sorter: any) => {
+const handleTableChange: TableProps['onChange'] = (pag: any) => {
   if (pag) {
     pagination.current = pag.current || 1
     pagination.pageSize = pag.pageSize || 10
@@ -1350,14 +1689,25 @@ const handleTableChange: TableProps['onChange'] = (pag: any,  filters: any, sort
 // 规则操作
 const showCreateModal = () => {
   isEditing.value = false
+  isCustomRule.value = false
   modalTitle.value = '新增规则'
   resetFormData()
   modalVisible.value = true
 }
 
-const editRule = (rule: QCRule) => {
+const showCustomRuleModal = () => {
+  isEditing.value = false
+  isCustomRule.value = true
+  modalTitle.value = '新增自定义质控点'
+  resetFormData()
+  formData.rule_type = 'subjective'
+  modalVisible.value = true
+}
+
+const editRule = (rule: ResolvedRule) => {
   isEditing.value = true
   editingId.value = rule.id
+  isCustomRule.value = false
   modalTitle.value = '编辑规则'
 
   // 填充表单数据
@@ -1365,6 +1715,8 @@ const editRule = (rule: QCRule) => {
     rule_code: rule.rule_code,
     name: rule.name,
     description: rule.description,
+    primary_document_category: (rule.primary_document_category || (rule as ResolvedRule).resolvedPrimary || '') as DocumentCategory | '',
+    document_categories: ((rule as any).document_categories || (rule as ResolvedRule).normalizedCategories || []) as DocumentCategory[],
     category: rule.category,
     rule_type: rule.rule_type,
     severity: rule.severity,
@@ -1380,21 +1732,21 @@ const editRule = (rule: QCRule) => {
   modalVisible.value = true
 }
 
-const viewRule = (rule: QCRule) => {
+const viewRule = () => {
   // 可以打开详情页面或模态框
   message.info('查看规则详情功能待实现')
 }
 
-const testRule = (rule: QCRule) => {
+const testRule = () => {
   // 可以打开测试页面
   message.info('规则测试功能待实现')
 }
 
 const deleteRule = async (rule: QCRule) => {
   try {
-    await mockRulesService.deleteRule(rule.id)
+    await rulesRepository.deleteRule(rule.id)
     message.success('删除成功')
-    loadRules()
+    await reloadRulesSafely()
   } catch (error) {
     console.error('删除规则失败:', error)
     message.error(error instanceof Error ? error.message : '删除规则失败')
@@ -1404,7 +1756,7 @@ const deleteRule = async (rule: QCRule) => {
 const toggleRuleStatus = async (rule: QCRule, checked: boolean) => {
   try {
     rule.updating = true
-    await mockRulesService.toggleRuleStatus(rule.id, checked)
+    await rulesRepository.toggleRuleStatus(rule.id, checked)
     rule.is_active = checked
     message.success(checked ? '规则已激活' : '规则已停用')
   } catch (error) {
@@ -1416,44 +1768,13 @@ const toggleRuleStatus = async (rule: QCRule, checked: boolean) => {
   }
 }
 
-// 批量操作
-const handleBatchAction = async ({ key }: { key: string }) => {
-  if (selectedRowKeys.value.length === 0) {
-    message.warning('请先选择要操作的规则')
-    return
-  }
-
-  try {
-    loading.value = true
-
-    switch (key) {
-      case 'activate':
-        await mockRulesService.batchUpdateRuleStatus(selectedRowKeys.value, true)
-        message.success('批量激活成功')
-        break
-      case 'deactivate':
-        await mockRulesService.batchUpdateRuleStatus(selectedRowKeys.value, false)
-        message.success('批量停用成功')
-        break
-      case 'delete':
-        await mockRulesService.deleteRules(selectedRowKeys.value)
-        message.success('批量删除成功')
-        break
-    }
-
-    selectedRowKeys.value = []
-    loadRules()
-  } catch (error) {
-    console.error('批量操作失败:', error)
-    message.error(error instanceof Error ? error.message : '批量操作失败')
-  } finally {
-    loading.value = false
-  }
-}
 
 // 模态框操作
 const handleModalOk = async () => {
   try {
+    if (isCustomRule.value) {
+      assignRuleCodeForCustomRule()
+    }
     await formRef.value.validate()
     modalLoading.value = true
 
@@ -1473,6 +1794,11 @@ const handleModalOk = async () => {
       check_logic: checkLogic
     }
 
+    if (isCustomRule.value && !(formData.prompt_template && formData.prompt_template.trim())) {
+      message.error('请先点击“一键生成Prompt”生成提示模板')
+      return
+    }
+
     // 验证规则数据
     const validation = mockRulesValidator.validateRule(ruleData)
     if (!validation.isValid) {
@@ -1486,16 +1812,17 @@ const handleModalOk = async () => {
 
     if (isEditing.value && editingId.value) {
       // 更新规则
-      await mockRulesService.updateRule(editingId.value, ruleData)
+      await rulesRepository.updateRule(editingId.value, ruleData)
       message.success('更新规则成功')
     } else {
       // 创建规则
-      await mockRulesService.createRule(ruleData)
+      await rulesRepository.createRule(ruleData)
       message.success('创建规则成功')
     }
 
     modalVisible.value = false
-    loadRules()
+    isCustomRule.value = false
+    await reloadRulesSafely()
   } catch (error) {
     console.error('保存规则失败:', error)
     message.error(error instanceof Error ? error.message : '保存规则失败')
@@ -1506,6 +1833,7 @@ const handleModalOk = async () => {
 
 const handleModalCancel = () => {
   modalVisible.value = false
+  isCustomRule.value = false
   resetFormData()
 }
 
@@ -1514,6 +1842,8 @@ const resetFormData = () => {
     rule_code: '',
     name: '',
     description: '',
+    primary_document_category: '' as DocumentCategory | '',
+    document_categories: [] as DocumentCategory[],
     category: 'completeness',
     rule_type: 'objective',
     severity: 'minor',
@@ -1528,6 +1858,57 @@ const resetFormData = () => {
   formRef.value?.resetFields()
 }
 
+const handleAutoGeneratePrompt = async () => {
+  if (!formData.primary_document_category) {
+    message.warning('请先选择病历文书类型')
+    return
+  }
+
+  const trimmedDescription = (formData.description || '').trim()
+  if (!trimmedDescription) {
+    message.warning('请先填写质控点的具体要求')
+    return
+  }
+
+  promptGenerating.value = true
+  try {
+    const display = DocumentCategoryService.getDocumentCategoryDisplayConfig(
+      formData.primary_document_category as DocumentCategory
+    )
+    const ruleName = (formData.name || '').trim() || '自定义质控点'
+    const docLabel = display.label || '医疗文书'
+
+    const promptLines = [
+      `你是一名专业的${docLabel}质控专家，熟悉国内医疗质量控制标准。`,
+      `请阅读一份${docLabel}，并围绕以下自定义质控点进行审核：`,
+      `【质控点名称】${ruleName}`,
+      `【质控点要求】${trimmedDescription}`,
+      '请按照质控规范判断文书是否达标，并以JSON格式返回：',
+      '{',
+      '  "is_compliant": true | false,',
+      '  "issues": [',
+      '    {',
+      '      "description": "问题描述",',
+      '      "evidence": "相关原文",',
+      '      "suggestion": "整改建议",',
+      '      "severity": "critical | major | minor"',
+      '    }',
+      '  ],',
+      '  "summary": "总体评价和提醒"',
+      '}',
+      '如不存在问题，请返回 is_compliant 为 true，issues 为空数组，summary 说明符合要求。'
+    ]
+
+    formData.prompt_template = promptLines.join('\n')
+    message.success('已为该质控点生成Prompt模板')
+  } catch (error) {
+    console.error('自动生成Prompt失败:', error)
+    message.error('自动生成Prompt失败，请稍后重试')
+  } finally {
+    promptGenerating.value = false
+  }
+}
+
 // 导入导出
 const importRules = () => {
   message.info('规则导入功能待实现')
@@ -1535,7 +1916,7 @@ const importRules = () => {
 
 const exportRules = async () => {
   try {
-    const exportData = await mockRulesService.exportRules('json')
+    const exportData = await rulesRepository.exportRules()
     const blob = new Blob([exportData], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -1560,7 +1941,11 @@ onMounted(async () => {
     await loadDocumentCategoryStats()
   } catch (e) {
     console.error('初始化数据失败:', e)
-    message.error('无法加载文书类别或规则数据，请检查数据库连接')
+    const errorMsg = e instanceof Error ? e.message : '未知错误'
+    message.error(`初始化失败: ${errorMsg}`)
+    // 确保不显示任何可能不一致的数据
+    documentCategoryOptions.value = []
+    rules.value = []
   }
 })
 </script>
@@ -1573,18 +1958,18 @@ onMounted(async () => {
   min-height: auto;
 }
 
-/* 标签页样式 */
+/* 标签页样式 - 更紧凑 */
 .rules-tabs {
-  @apply mb-4;
+  @apply mb-1;
 }
 
 :deep(.rules-tabs .ant-tabs-nav) {
-  @apply mb-3;
+  @apply mb-1;
 }
 
 :deep(.rules-tabs .ant-tabs-tab) {
-  @apply px-4 py-2;
-  font-size: 14px !important;
+  @apply px-3 py-1;
+  font-size: 12px !important;
   font-weight: 500 !important;
 }
 
@@ -1593,11 +1978,11 @@ onMounted(async () => {
 }
 
 :deep(.rules-tabs .ant-tabs-tab .anticon) {
-  @apply mr-2;
+  @apply mr-1;
 }
 
 .tab-content {
-  @apply min-h-96;
+  @apply min-h-80;
 }
 
 /* 统计卡片内部样式优化 */
@@ -1786,12 +2171,22 @@ onMounted(async () => {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
   border: none;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  color: #ffffff !important; /* 确保文字为白色 */
 }
 
 :deep(.ant-btn-primary:hover) {
   background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+  color: #ffffff !important; /* 确保悬停时文字也为白色 */
+}
+
+:deep(.ant-btn-primary span) {
+  color: #ffffff !important; /* 确保按钮内的span文字为白色 */
+}
+
+:deep(.ant-btn-primary:hover span) {
+  color: #ffffff !important; /* 确保悬停时按钮内的span文字也为白色 */
 }
 
 /* 卡片样式优化 */
@@ -2166,5 +2561,153 @@ onMounted(async () => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* 新增紧凑样式 */
+/* 紧凑筛选标签样式 */
+.filter-tag-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  border: 1px solid transparent;
+  background: rgba(248, 250, 252, 0.8);
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.filter-tag-compact:hover {
+  background: rgba(239, 246, 255, 1);
+  color: #3b82f6;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.filter-tag-compact-active {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border-color: #2563eb;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.filter-tag-compact.filter-tag-danger {
+  background: rgba(254, 242, 242, 0.8);
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.filter-tag-compact.filter-tag-danger:hover {
+  background: rgba(254, 226, 226, 1);
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.filter-tag-compact.filter-tag-danger-active {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  border-color: #dc2626;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.filter-tag-compact.filter-tag-success {
+  background: rgba(240, 253, 244, 0.8);
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.filter-tag-compact.filter-tag-success:hover {
+  background: rgba(220, 252, 231, 1);
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.filter-tag-compact.filter-tag-success-active {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  border-color: #16a34a;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+/* 紧凑卡片样式 */
+.compact-card :deep(.ant-card-head) {
+  padding: 8px 16px !important;
+  min-height: auto !important;
+}
+
+.compact-card :deep(.ant-card-body) {
+  padding: 12px !important;
+}
+
+/* 紧凑标签页样式 - 更紧凑 */
+.compact-tabs :deep(.ant-tabs-nav) {
+  margin-bottom: 4px !important;
+}
+
+.compact-tabs :deep(.ant-tabs-tab) {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+}
+
+.compact-tabs :deep(.ant-tabs-content-holder) {
+  padding-top: 4px !important;
+}
+
+/* 表格行高进一步优化 */
+:deep(.ant-table-small .ant-table-tbody > tr > td) {
+  padding: 2px 4px !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+/* 页面整体间距优化 */
+.page-container {
+  padding: 8px !important;
+}
+
+/* 卡片间距优化 */
+.page-container > div {
+  margin-bottom: 8px !important;
+}
+
+.page-container > div:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* 统计卡片标题优化 */
+:deep(.ant-statistic-title) {
+  font-size: 11px !important;
+  margin-bottom: 2px !important;
+}
+
+:deep(.ant-statistic-content) {
+  font-size: 14px !important;
+}
+
+:deep(.ant-table-small .ant-table-thead > tr > th) {
+  padding: 4px 4px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  height: 24px !important;
+}
+
+:deep(.ant-table-small .ant-table-tbody > tr) {
+  height: 24px !important;
+}
+
+/* 紧凑分页器 */
+:deep(.ant-pagination-small) {
+  font-size: 12px !important;
+}
+
+:deep(.ant-pagination-small .ant-pagination-item) {
+  min-width: 24px !important;
+  height: 24px !important;
+  line-height: 22px !important;
 }
 </style>

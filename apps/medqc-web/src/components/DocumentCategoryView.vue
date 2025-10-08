@@ -368,22 +368,26 @@ const aiClassifiedCount = computed(() => {
 // 方法
 const loadQCRules = async () => {
   try {
-    const baseURL = import.meta.env.VITE_API_BASE_URL || ''
-    const response = await fetch(`${baseURL}/api/qc/sichuan/rules?grouped=true`)
-    
+    // 在开发环境中使用代理，生产环境使用完整URL
+    const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || '')
+    const apiUrl = `${baseURL}/api/qc/sichuan/rules?grouped=true`
+    const response = await fetch(apiUrl)
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
-    
+
     const data = await response.json()
     rulesByDocumentType.value = data.rules_by_document_type || {}
-    
+
     // 展平所有规则到 qcRules 数组
     qcRules.value = []
     Object.values(rulesByDocumentType.value).forEach(rules => {
       qcRules.value.push(...rules)
     })
-    
+
+    console.log('✅ 质控规则加载成功，总数量:', qcRules.value.length)
+
   } catch (error) {
     console.error('加载质控规则失败:', error)
     // 不显示错误消息，静默失败
@@ -395,8 +399,8 @@ const loadDocuments = async () => {
 
   loading.value = true
   try {
-    // 使用相对路径，交由 Vite 代理转发，避免硬编码 IP/端口
-    const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+    // 在开发环境中使用代理，生产环境使用完整URL
+    const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || '')
 
     // 并行获取文档分类数据和原始记录内容
     const [documentsResponse, recordResponse] = await Promise.all([
@@ -484,20 +488,9 @@ const getTypeTagColor = (typeCode) => {
 
 // 获取适用于某个文档分类的质控规则
 const getApplicableRules = (categoryCode) => {
-  // 映射文档分类代码到中文名称（6个标准分类）
-  const categoryMapping = {
-    'admission_record': '入院记录',
-    'progress_note': '病程记录',
-    'discharge_record': '出院记录',
-    'operation_record': '手术相关记录',
-    'examination_report': '辅助检查',
-    'consent_form': '知情同意书'
-  }
-  
-  const chineseName = categoryMapping[categoryCode]
-  if (!chineseName) return []
-  
-  return rulesByDocumentType.value[chineseName] || []
+  // 直接使用英文代码作为键名，因为API返回的数据使用英文键名
+  const rules = rulesByDocumentType.value[categoryCode] || []
+  return rules
 }
 
 // 获取分类颜色

@@ -1,5 +1,7 @@
 // API 配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+// 默认走相对路径，由前端开发服务器或网关反向代理转发到后端
+// 可通过 VITE_API_BASE_URL 覆盖为绝对地址（例如 http://api.example.com 或 http://127.0.0.1:8001）
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // 通用请求函数
 async function request<T>(url: string, options?: RequestInit): Promise<T> {

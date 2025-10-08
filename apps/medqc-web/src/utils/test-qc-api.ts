@@ -148,8 +148,8 @@ ${testContent}
 
 // 在控制台中运行测试
 // @ts-ignore
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   // @ts-ignore
   window.testQCAPI = testQCAPI
   console.log('💡 在浏览器控制台中运行 testQCAPI() 来测试API')
-} 
+}

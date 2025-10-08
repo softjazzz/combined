@@ -114,12 +114,19 @@
     <!-- 第二步：选择质控规则 -->
     <div v-else-if="currentStep === 2" class="rules-wrap">
       <a-card size="small" :title="`质控规则（已选 ${selectedRulesLocal.length} 条）`">
-        <a-input-search v-model:value="ruleKeyword" placeholder="按名称/类别筛选" allow-clear style="margin-bottom: 8px" />
+        <div class="flex items-center gap-2" style="margin-bottom: 8px">
+          <a-input-search v-model:value="ruleKeyword" placeholder="按名称/类别筛选" allow-clear style="flex: 1" />
+          <a-switch v-model:checked="onlyShowApplicable" checked-children="只看适用" un-checked-children="全部" />
+        </div>
         <a-list :data-source="filteredRules" :row-key="r => r.id" item-layout="horizontal" class="scroll-list">
           <template #renderItem="{ item }">
             <a-list-item :class="['rule-item', { disabled: item._disabled }]" @click="!item._disabled && toggleRule(item)">
               <template #actions>
-                <a-checkbox :checked="isRuleChecked(item)" :disabled="item._disabled" @change="toggleRule(item)" />
+                <a-checkbox
+                  :checked="isRuleChecked(item)"
+                  :disabled="item._disabled"
+                  @click.stop="toggleRule(item)"
+                />
               </template>
               <a-list-item-meta :title="item.name || item.ruleCode || item.id" :description="item.description || '暂无描述'">
                 <template #avatar>
@@ -159,7 +166,7 @@
         <a-space>
           <a-button v-if="currentStep > 1" @click="prevStep">上一步</a-button>
           <a-button v-if="currentStep < 3" type="primary" :disabled="nextDisabled" @click="nextStep">下一步</a-button>
-          <a-button v-else type="primary" :disabled="!canFinish" @click="finish">完成</a-button>
+          <a-button v-else type="primary" :disabled="!canFinish" @click="finish">开始质控</a-button>
         </a-space>
       </div>
     </template>
@@ -167,10 +174,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useQCDemoStore } from '@/stores/qcDemo'
 import { DemoDataService } from '@/services/demoDataService'
 import { DOCUMENT_TYPE_TO_CATEGORY } from '@/utils/documentTypeUtils'
+import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
 
 type DocInfo = { id: string; title?: string; type?: string; created_at?: string }
 
@@ -223,9 +231,31 @@ async function loadSichuanRules() {
   if (isLoadingSichuanRules.value || sichuanRules.value.length > 0) return
   isLoadingSichuanRules.value = true
   try {
-    const resp = await fetch('/api/qc/sichuan/rules')
-    if (resp.ok) {
-      const data = await resp.json()
+    const base = (import.meta as any).env?.VITE_API_BASE_URL || ''
+    // 优先使用“规则管理页”同源接口 /api/semantic-rules，字段与管理页一致，包含 applicable_documents
+    const candidates = [
+      `${base}/api/semantic-rules`,
+      '/api/semantic-rules',
+      `${base}/api/qc/sichuan/rules`,
+      '/api/qc/sichuan/rules',
+      `${location.protocol}//${location.hostname}:8001/api/semantic-rules`,
+      `${location.protocol}//${location.hostname}:8001/api/qc/sichuan/rules`
+    ]
+
+    let data: any = null
+    for (const url of candidates) {
+      try {
+        const resp = await fetch(url, { cache: 'no-store' })
+        if (resp.ok) {
+          data = await resp.json()
+          break
+        }
+      } catch (_) {
+        // 尝试下一个候选地址
+      }
+    }
+
+    if (data) {
       const raw = Array.isArray(data) ? data : (data.rules || [])
       sichuanRules.value = raw.map((r: any) => ({
         id: r.rule_id || r.id || r.ruleCode || r.code,
@@ -237,7 +267,7 @@ async function loadSichuanRules() {
         applicable_documents: r.applicable_documents || r.document_types || []
       }))
     } else {
-      console.error('加载四川省规则失败', await resp.text())
+      console.error('加载四川省规则失败：所有候选地址均不可用')
     }
   } catch (e) {
     console.error('加载四川省规则异常', e)
@@ -303,15 +333,35 @@ const rulesWithApplicability = computed<any[]>(() => {
   }
 
   const arr = all.map((r: any) => {
-    const raw: string[] = r.applicable_documents || []
+    // 1) 先尝试从映射表/后端字段取得标准类别集合
+    const mapped = lookupRuleCategories(r)
+    const raw: string[] = mapped.length > 0 ? mapped : (r.applicable_documents || [])
     const norm = raw.map(normalize).filter((x): x is string => !!x)
-    const applicable = norm.some(d => codes.has(d))
+    let applicable = false
+    if (codes.size === 1) {
+      const [only] = Array.from(codes)
+      // 修正：规则的文书类别列表中包含选中的类别即为适用
+      applicable = norm.length > 0 && norm.some(d => codes.has(d))
+      // 额外保护：若只选了入院记录，名称/描述命中手术相关关键词则不视为适用
+      if (only === 'admission_record') {
+        const text = `${r.name || ''} ${r.description || ''}`
+        if (/手术|术前|术后|术中|麻醉|植入|出入量|出院|死亡/.test(text)) {
+          applicable = false
+        }
+      }
+    } else {
+      applicable = norm.some(d => codes.has(d))
+    }
     return { ...r, _applicable: applicable, _disabled: !applicable }
   })
   return arr.sort((a: any, b: any) => Number(b._applicable) - Number(a._applicable))
 })
 
-const availableRules = computed<any[]>(() => rulesWithApplicability.value)
+const onlyShowApplicable = ref(true)
+const availableRules = computed<any[]>(() => {
+  const list = rulesWithApplicability.value
+  return onlyShowApplicable.value ? list.filter(r => r._applicable) : list
+})
 
 const filteredRules = computed<any[]>(() => {
   const kw = ruleKeyword.value.trim().toLowerCase()
@@ -388,7 +438,7 @@ const finish = () => {
   innerVisible.value = false
 }
 
-const isLoadingRecords = ref(false)
+const isLoadingRecords = computed(() => demoStore.isLoadingData)
 const isLoadingDocs = ref(false)
 
 const recordKeyword = ref('')
@@ -537,8 +587,7 @@ watch(innerVisible, (v) => {
   if (v) {
     // 重置到第一步
     currentStep.value = 1
-    // 初始化加载状态与关键字
-    isLoadingRecords.value = demoStore.isLoadingData
+    // 初始化关键字
     recordKeyword.value = ''
     docKeyword.value = ''
     ruleKeyword.value = ''
@@ -554,10 +603,26 @@ watch(innerVisible, (v) => {
       selectedDocument.value = storeDoc || null
       selectedDocuments.value = storeDoc ? [storeDoc] : []
     }
-    // 初始化规则选择
-    selectedRulesLocal.value = Array.isArray(demoStore.selectedRules) ? [...(demoStore.selectedRules as any[])] : []
+    // 初始化规则选择：为避免上次会话或默认规则干扰，此处不预填充，交由用户本次选择
+    selectedRulesLocal.value = []
 
     if (selectedRecord.value) loadDocuments(selectedRecord.value.id)
+  }
+})
+
+onMounted(async () => {
+  // 打开对话框即刻准备数据：若列表为空，触发一次加载；并在 1s 后仍为空则强制刷新一次
+  try {
+    if (demoStore.availableRecords.length === 0) {
+      await demoStore.loadTestData()
+    }
+    setTimeout(() => {
+      if (demoStore.availableRecords.length === 0) {
+        demoStore.refreshData()
+      }
+    }, 1000)
+  } catch (_) {
+    // 忽略
   }
 })
 </script>

@@ -11,16 +11,16 @@
           <p class="text-sm text-slate-400">管理和配置质控分析规则，自定义检查标准</p>
         </div>
         <div class="flex items-center gap-3">
-          <a-button 
+          <a-button
             @click="importRules"
-            class="bg-blue-500/20 border-blue-400/30 text-blue-300 hover:bg-blue-500/30"
+            class="bg-blue-500/20 border-blue-400/30 text-blue-100 hover:bg-blue-500/30 hover:text-white"
           >
             <ImportOutlined />
             导入规则
           </a-button>
-          <a-button 
+          <a-button
             @click="exportRules"
-            class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30"
+            class="bg-emerald-500/20 border-emerald-400/30 text-emerald-100 hover:bg-emerald-500/30 hover:text-white"
           >
             <ExportOutlined />
             导出规则
@@ -140,31 +140,31 @@
                 </div>
                 <div class="flex items-center gap-2">
                   <a-tooltip title="编辑规则">
-                    <a-button 
-                      size="small" 
+                    <a-button
+                      size="small"
                       type="text"
                       @click="editRule(rule)"
-                      class="text-blue-400 hover:text-blue-300"
+                      class="text-blue-200 hover:text-blue-100 hover:bg-blue-500/20"
                     >
                       <EditOutlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip title="复制规则">
-                    <a-button 
-                      size="small" 
+                    <a-button
+                      size="small"
                       type="text"
                       @click="duplicateRule(rule)"
-                      class="text-emerald-400 hover:text-emerald-300"
+                      class="text-emerald-200 hover:text-emerald-100 hover:bg-emerald-500/20"
                     >
                       <CopyOutlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip title="删除规则">
-                    <a-button 
-                      size="small" 
+                    <a-button
+                      size="small"
                       type="text"
                       @click="deleteRule(rule)"
-                      class="text-red-400 hover:text-red-300"
+                      class="text-red-200 hover:text-red-100 hover:bg-red-500/20"
                     >
                       <DeleteOutlined />
                     </a-button>
@@ -227,18 +227,18 @@
                   </span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <a-button 
+                  <a-button
                     size="small"
                     @click="testRule(rule)"
-                    class="bg-amber-500/20 border-amber-400/30 text-amber-300 hover:bg-amber-500/30"
+                    class="bg-amber-500/20 border-amber-400/30 text-amber-100 hover:bg-amber-500/30 hover:text-white"
                   >
                     <ExperimentOutlined />
                     测试规则
                   </a-button>
-                  <a-button 
+                  <a-button
                     size="small"
                     @click="viewRuleHistory(rule)"
-                    class="bg-slate-600/50 border-slate-500/50 text-slate-300 hover:bg-slate-600/70"
+                    class="bg-slate-600/50 border-slate-500/50 text-slate-100 hover:bg-slate-600/70 hover:text-white"
                   >
                     <HistoryOutlined />
                     历史记录

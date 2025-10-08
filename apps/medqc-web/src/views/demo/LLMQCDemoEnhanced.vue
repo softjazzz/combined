@@ -145,27 +145,38 @@
     <div class="status-bar">
       <!-- 数据库连接状态 -->
       <a-alert
-        v-if="!demoStore.isDatabaseConnected"
-        message="数据库未连接，使用本地模拟数据"
+        v-if="demoStore.isLoadingData"
+        message="正在自动连接数据库..."
+        type="info"
+        show-icon
+        banner
+      >
+        <template #icon>
+          <LoadingOutlined spin />
+        </template>
+      </a-alert>
+      <a-alert
+        v-else-if="!demoStore.isDatabaseConnected"
+        message="数据库连接失败，已自动切换到本地模拟数据"
         type="warning"
         show-icon
         banner
       >
         <template #action>
-          <a-button size="small" @click="handleRefreshData">
+          <a-button size="small" @click="handleRefreshData" :loading="demoStore.isLoadingData">
             重试连接
           </a-button>
         </template>
       </a-alert>
       <a-alert
         v-else
-        message="已连接到数据库，使用真实数据"
+        message="已自动连接到数据库，使用真实数据"
         type="success"
         show-icon
         banner
       >
         <template #action>
-          <a-button size="small" @click="handleRefreshData">
+          <a-button size="small" @click="handleRefreshData" :loading="demoStore.isLoadingData">
             刷新数据
           </a-button>
         </template>
@@ -280,6 +291,7 @@
               :selected-rules="demoStore.selectedRules"
               :available-rules="demoStore.availableRules"
               :test-record="demoStore.testRecord"
+              :selected-documents="demoStore.selectedDocumentList"
               @rules-updated="handleRulesUpdated"
             />
           </div>
@@ -389,13 +401,12 @@ import {
   FileTextOutlined,
   LeftOutlined,
   RightOutlined,
-
   CheckCircleOutlined,
-
   MoreOutlined,
   DownloadOutlined,
   UploadOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  LoadingOutlined
 } from '@ant-design/icons-vue'
 
 import { useQCDemoStore } from '@/stores/qcDemo'
@@ -501,16 +512,24 @@ const handleStartDemo = async () => {
 
 const handleRefreshData = async () => {
   try {
-    message.loading('正在刷新数据...', 0.5)
-    console.log('[DEBUG] 刷新前 - 可用记录数量:', demoStore.availableRecords.length)
-    console.log('[DEBUG] 刷新前 - 可用规则数量:', demoStore.availableRules.length)
-    console.log('[DEBUG] 刷新前 - 数据库连接状态:', demoStore.isDatabaseConnected)
+    const loadingMessage = message.loading('正在重新连接数据库并刷新数据...', 0)
+    console.log('[LLM质控演示] 开始手动刷新数据...')
+    console.log('[LLM质控演示] 刷新前状态:', {
+      records: demoStore.availableRecords.length,
+      rules: demoStore.availableRules.length,
+      connected: demoStore.isDatabaseConnected
+    })
 
-    await demoStore.refreshData()
+    // 使用新的重置连接方法
+    await demoStore.resetConnection()
 
-    console.log('[DEBUG] 刷新后 - 可用记录数量:', demoStore.availableRecords.length)
-    console.log('[DEBUG] 刷新后 - 可用规则数量:', demoStore.availableRules.length)
-    console.log('[DEBUG] 刷新后 - 数据库连接状态:', demoStore.isDatabaseConnected)
+    loadingMessage()
+
+    console.log('[LLM质控演示] 刷新后状态:', {
+      records: demoStore.availableRecords.length,
+      rules: demoStore.availableRules.length,
+      connected: demoStore.isDatabaseConnected
+    })
 
 /*
 
@@ -523,10 +542,17 @@ const onTargetPicked = ({ record, document }: { record: any; document: { id: str
 
 
 
-    message.success(`数据刷新成功 - 记录:${demoStore.availableRecords.length}条, 规则:${demoStore.availableRules.length}条`)
+    // 根据连接状态显示不同的成功消息
+    if (demoStore.isDatabaseConnected) {
+      message.success(`✅ 数据库重连成功！已加载 ${demoStore.availableRecords.length} 条记录和 ${demoStore.availableRules.length} 条规则`, 3)
+    } else {
+      message.warning(`⚠️ 数据库连接失败，已切换到模拟数据模式 (${demoStore.availableRecords.length} 条记录，${demoStore.availableRules.length} 条规则)`, 4)
+    }
+
   } catch (error) {
-    console.error('刷新数据失败:', error)
-    message.error('数据刷新失败')
+    console.error('[LLM质控演示] 刷新数据失败:', error)
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    message.error(`❌ 数据刷新失败: ${errorMessage}`, 5)
   }
 }
 
@@ -544,12 +570,25 @@ const handleAnalysisComplete = () => {
 
 
 // 选择病历+文书回调（供 RecordDocumentPicker 使用）
-const onTargetPicked = ({ record, document, documents }: { record: any; document: { id: string; title?: string; type?: string; created_at?: string } | null; documents: Array<{ id: string; title?: string; type?: string; created_at?: string }> }) => {
-  demoStore.testRecord = record as any
-  demoStore.setSelectedDocument(documents && documents.length > 0 ? documents : (document ? [document] : []))
-  const count = documents?.length || (document ? 1 : 0)
-  const docLabel = count > 1 ? `已选${count}份文书` : (document?.title || '文书')
-  message.success(`已选择：${record.patient_name} · ${docLabel}`)
+const onTargetPicked = async ({ record, document, documents }: { record: any; document: { id: string; title?: string; type?: string; created_at?: string } | null; documents: Array<{ id: string; title?: string; type?: string; created_at?: string }> }) => {
+  try {
+    // 设置选择的记录和文档
+    demoStore.testRecord = record as any
+    demoStore.setSelectedDocument(documents && documents.length > 0 ? documents : (document ? [document] : []))
+
+    const count = documents?.length || (document ? 1 : 0)
+    const docLabel = count > 1 ? `已选${count}份文书` : (document?.title || '文书')
+    message.success(`已选择：${record.patient_name} · ${docLabel}`)
+
+    // 自动启动质控演示
+    console.log('🚀 自动启动质控演示...')
+    await demoStore.startDemo()
+    message.success('质控演示已开始！', 2)
+
+  } catch (error) {
+    console.error('启动质控演示失败:', error)
+    message.error('启动质控演示失败，请重试')
+  }
 }
 
 
@@ -732,49 +771,75 @@ onMounted(async () => {
   // 清除旧的本地存储状态（临时调试）
   localStorage.removeItem('qc-demo-state')
 
-  console.log('[DEBUG] 页面挂载，开始初始化...')
+  console.log('[LLM质控演示] 页面加载，开始自动初始化...')
 
   try {
-    // 强制重新加载数据，不恢复旧状态
+    // 显示友好的加载提示
+    message.loading('正在自动连接数据库并初始化演示环境...', 0)
+
+    // 自动初始化演示环境（包括数据库连接）
     await demoStore.initializeDemo({}, false)
 
-    console.log('[DEBUG] 初始化完成 - 可用记录:', demoStore.availableRecords.length)
-    console.log('[DEBUG] 初始化完成 - 可用规则:', demoStore.availableRules.length)
-    console.log('[DEBUG] 初始化完成 - 当前测试记录:', demoStore.testRecord?.id)
-    console.log('[DEBUG] 初始化完成 - 数据库连接:', demoStore.isDatabaseConnected)
-  } catch (error) {
-    console.error('[DEBUG] 初始化失败:', error)
-  }
+    // 关闭加载提示
+    message.destroy()
 
-  // 添加一些示例通知用于演示
-  setTimeout(() => {
-    demoStore.simulateRandomNotification()
-  }, 1000)
-
-  setTimeout(() => {
-    demoStore.simulateRandomNotification()
-  }, 2000)
-
-  // 添加一些示例申诉用于演示
-  setTimeout(() => {
-    const sampleAppeal = {
-      id: 'appeal-demo-001',
-      appealType: 'quality_dispute',
-      reason: 'rule_misapplication',
-      description: '该质控规则在此病历场景下应用不当，患者的特殊情况未被考虑在内。',
-      priority: 'high',
-      contact: 'doctor@example.com',
-      attachments: [],
-      submittedBy: '张医生',
-      submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2天前
-      status: 'reviewing'
+    // 根据连接状态显示不同的提示
+    if (demoStore.isDatabaseConnected) {
+      message.success('✅ 已自动连接到数据库，演示环境初始化完成！', 3)
+      console.log('[LLM质控演示] 数据库连接成功 - 可用记录:', demoStore.availableRecords.length)
+      console.log('[LLM质控演示] 数据库连接成功 - 可用规则:', demoStore.availableRules.length)
+    } else {
+      message.warning('⚠️ 数据库连接失败，已自动切换到本地模拟数据', 4)
+      console.log('[LLM质控演示] 使用模拟数据 - 可用记录:', demoStore.availableRecords.length)
+      console.log('[LLM质控演示] 使用模拟数据 - 可用规则:', demoStore.availableRules.length)
     }
 
+    console.log('[LLM质控演示] 初始化完成 - 当前测试记录:', demoStore.testRecord?.id)
+
+  } catch (error) {
+    message.destroy()
+    console.error('[LLM质控演示] 自动初始化失败:', error)
+
+    // 显示友好的错误提示
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
+    message.error(`❌ 演示环境初始化失败: ${errorMessage}`, 5)
+
+    // 设置错误状态，让用户知道发生了什么
+    demoStore.error = `自动初始化失败: ${errorMessage}`
+  }
+
+  // 延迟添加示例通知，确保初始化完成后再添加
+  setTimeout(() => {
+    if (demoStore.availableRecords.length > 0) {
+      demoStore.simulateRandomNotification()
+    }
+  }, 2000)
+
+  setTimeout(() => {
+    if (demoStore.availableRecords.length > 0) {
+      demoStore.simulateRandomNotification()
+    }
+  }, 4000)
+
+  // 添加示例申诉
+  setTimeout(() => {
     if (demoStore.notifications.length > 0) {
+      const sampleAppeal = {
+        id: 'appeal-demo-001',
+        appealType: 'quality_dispute',
+        reason: 'rule_misapplication',
+        description: '该质控规则在此病历场景下应用不当，患者的特殊情况未被考虑在内。',
+        priority: 'high',
+        contact: 'doctor@example.com',
+        attachments: [],
+        submittedBy: '张医生',
+        submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2天前
+        status: 'reviewing'
+      }
       ;(sampleAppeal as any).notificationId = demoStore.notifications[0].id
       demoStore.createAppeal(sampleAppeal)
     }
-  }, 3000)
+  }, 6000)
 })
 </script>
 

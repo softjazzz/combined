@@ -43,7 +43,8 @@ function computeBaseURL(): string {
 }
 
 const API_BASE_URL = computeBaseURL()
-const API_TIMEOUT = 30000 // 30秒超时
+const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
+const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
 
 // 调试信息
 console.log('🔧 API Configuration:')
@@ -135,11 +136,14 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
   async (error: any) => {
     const originalRequest = error.config
     
-    console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    })
+    // 只在开发环境或非认证错误时记录详细错误
+    if (process.env.NODE_ENV === 'development' || error.response?.status !== 401) {
+      console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      })
+    }
 
     // Token过期处理（带单航刷新，避免并发冲突）
     if (error.response?.status === 401 && !originalRequest._retry) {

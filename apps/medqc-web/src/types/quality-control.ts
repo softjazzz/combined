@@ -202,6 +202,15 @@ export interface QCNotification {
   severity: 'low' | 'medium' | 'high' | 'critical'
   location?: string
   suggestion?: string
+  status?: 'pending' | 'processing' | 'resolved' | 'appealed' | string
+  recordInfo?: {
+    patientName?: string
+    recordNumber?: string
+    department?: string
+    doctor?: string
+    admissionDate?: string
+    status?: string
+  }
 }
 
 // 申诉理由枚举
@@ -310,6 +319,11 @@ export interface QCResultMetadata {
   rulesApplied: number
   totalTokens?: number
   confidence: number
+  documents?: Array<{ id: string; title?: string; type?: string }>
+  record?: Record<string, any>
+  engine?: string
+  analysisId?: string
+  scoreBaseline?: Record<string, any>
 }
 
 // 演示配置模型

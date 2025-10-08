@@ -101,6 +101,7 @@
 
   .btn-medical-primary:hover {
     background-color: #1677ff;
+    color: #ffffff; /* 确保悬停时文字也保持白色 */
   }
 
   .btn-medical-secondary {
@@ -413,6 +414,28 @@
   .print-avoid-break {
     page-break-inside: avoid;
   }
+}
+
+/* 全局 Ant Design 按钮样式修复 */
+/* 确保所有主要按钮的文字颜色正确 */
+:deep(.ant-btn-primary) {
+  color: #ffffff !important;
+}
+
+:deep(.ant-btn-primary:hover),
+:deep(.ant-btn-primary:focus),
+:deep(.ant-btn-primary:active) {
+  color: #ffffff !important;
+}
+
+:deep(.ant-btn-primary span) {
+  color: #ffffff !important;
+}
+
+:deep(.ant-btn-primary:hover span),
+:deep(.ant-btn-primary:focus span),
+:deep(.ant-btn-primary:active span) {
+  color: #ffffff !important;
 }
 
 /* 移动端适配 */

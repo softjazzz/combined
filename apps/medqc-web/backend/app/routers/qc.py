@@ -14,23 +14,44 @@ service = QCService()
 
 
 @router.post("/analyze/{record_id}")
-async def analyze_record(record_id: str):
-    result = await service.evaluate({"record_id": record_id})
-    # store result
+async def analyze_record(record_id: str, payload: Optional[Dict[str, Any]] = None):
+    request_payload = dict(payload or {})
+    request_payload["record_id"] = record_id
+    result = await service.evaluate(request_payload)
     qc_results_db[record_id] = result
-    analysis_id = f"analysis-{uuid.uuid4().hex[:8]}"
-    return {"analysis_id": analysis_id, "status": "started", "record_id": record_id}
+    analysis_id = result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
+    return {
+        "analysis_id": analysis_id,
+        "status": "completed",
+        "record_id": record_id,
+    }
 
 
 @router.post("/analyze/batch")
 async def analyze_batch(payload: Dict[str, Any]):
-    record_ids: List[str] = payload.get("record_ids", [])
     started = []
-    for rid in record_ids:
-        res = await service.evaluate({"record_id": rid})
-        qc_results_db[rid] = res
-        started.append({"record_id": rid, "status": "started"})
-    return {"started": started, "message": f"已为 {len(started)} 个文档启动质控分析"}
+    records_payload: List[Dict[str, Any]] = payload.get("records", [])
+    if records_payload:
+        for entry in records_payload:
+            rid = entry.get("record_id") or entry.get("id")
+            if not rid:
+                continue
+            entry_payload = dict(entry)
+            entry_payload["record_id"] = rid
+            res = await service.evaluate(entry_payload)
+            qc_results_db[rid] = res
+            started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
+    else:
+        record_ids: List[str] = payload.get("record_ids", [])
+        for rid in record_ids:
+            res = await service.evaluate({"record_id": rid})
+            qc_results_db[rid] = res
+            started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
+
+    return {
+        "started": started,
+        "message": f"已完成 {len(started)} 个文档的质控分析",
+    }
 
 
 @router.get("/result/{record_id}", response_model=QCResult)

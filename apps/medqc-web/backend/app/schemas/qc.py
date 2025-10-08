@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class QCIssue(BaseModel):
@@ -26,6 +26,18 @@ class QCRuleResult(BaseModel):
     passed: bool
     score: int
     details: str
+    max_score: Optional[int] = None
+    execution_time: Optional[int] = None
+    confidence: Optional[float] = None
+
+
+class QCAnalysisStep(BaseModel):
+    id: str
+    name: str
+    description: str
+    status: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 class QCResult(BaseModel):
@@ -37,6 +49,8 @@ class QCResult(BaseModel):
     issues: List[QCIssue]
     suggestions: List[QCSuggestion]
     rule_results: List[QCRuleResult]
+    analysis_steps: Optional[List[QCAnalysisStep]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class QCRule(BaseModel):
@@ -54,4 +68,3 @@ class QCRule(BaseModel):
     execution_count: Optional[int] = 0
     pass_rate: Optional[float] = 0.0
     issue_count: Optional[int] = 0
-

@@ -125,12 +125,12 @@ export async function testQCAnalysis(): Promise<boolean> {
 }
 
 // 在浏览器控制台中运行测试
-if (typeof globalThis !== 'undefined' && (globalThis as any).window) {
+if (typeof globalThis !== 'undefined' && (globalThis as any).window && process.env.NODE_ENV === 'development') {
   (globalThis as any).testAliyunAPI = testAliyunAPI;
   (globalThis as any).testQCAnalysis = testQCAnalysis;
-  
+
   console.log('🚀 阿里云百炼API测试工具已加载！')
   console.log('💡 使用方法：')
   console.log('   - 基础连接测试: testAliyunAPI()')
   console.log('   - 质控分析测试: testQCAnalysis()')
-} 
+}
