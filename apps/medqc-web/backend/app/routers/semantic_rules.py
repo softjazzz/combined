@@ -215,27 +215,28 @@ async def get_all(
 
 
 @router.get("/stats")
-async def stats():
+async def stats(request: Request):
     try:
-        result = {
-            "success": True,
-            "stats": {
-                "total_executions": 0,
-                "successful_executions": 0,
-                "failed_executions": 0,
-                "total_tokens": 0,
-                "total_time": 0.0,
-                "success_rate": 0.0,
-                "avg_execution_time": 0.0,
+        return success_response(
+            data={
+                "stats": {
+                    "total_executions": 0,
+                    "successful_executions": 0,
+                    "failed_executions": 0,
+                    "total_tokens": 0,
+                    "total_time": 0.0,
+                    "success_rate": 0.0,
+                    "avg_execution_time": 0.0,
+                }
             },
-        }
-        return result
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
         raise
 
 
 @router.get("/validate-llm")
-async def validate_llm():
+async def validate_llm(request: Request):
     """检测 LLM 连接状态。
     - 若 Supabase 中存在激活的 provider 或 model，则认为具备真实配置，显示为非 Mock。
     - 若查询失败或没有配置，则返回 Mock 模式。
@@ -259,47 +260,51 @@ async def validate_llm():
         except Exception:
             real = False
 
-    return {
-        "success": True,
-        "connection_info": {
-            "real_llm_available": real,
-            "mock_mode": not real,
-            "provider": provider_name,
-            "model": model_name,
+    return success_response(
+        data={
+            "connection_info": {
+                "real_llm_available": real,
+                "mock_mode": not real,
+                "provider": provider_name,
+                "model": model_name,
+            }
         },
-    }
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/{rule_id}")
-async def get_rule(rule_id: str):
+async def get_rule(request: Request, rule_id: str):
     for r in _rules:
         if r["rule_id"] == rule_id:
-            return {"success": True, "rule": r}
-    raise HTTPException(status_code=404, detail=f"规则 {rule_id} 不存在")
+            return success_response(data={"rule": r}, trace_id=get_trace_id(request))
+    raise HTTPException(status_code=StatusCode.NOT_FOUND, detail=f"规则 {rule_id} 不存在")
 
 
 @router.post("/{rule_id}/execute")
-async def execute(rule_id: str, payload: Dict[str, Any]):
+async def execute(request: Request, rule_id: str, payload: Dict[str, Any]):
     content = (payload.get("input_data") or {}).get("content", "")
     compliant = len(content) > 0
-    return {
-        "success": True,
-        "result": {
-            "rule_id": rule_id,
-            "rule_name": rule_id,
-            "compliant": compliant,
-            "confidence": 0.8,
-            "evidence": content[:120],
-            "reasoning": "基于内容非空的占位判断",
-            "defect_details": {},
-            "execution_time": 0.05,
-            "token_usage": {"total": 0},
+    return success_response(
+        data={
+            "result": {
+                "rule_id": rule_id,
+                "rule_name": rule_id,
+                "compliant": compliant,
+                "confidence": 0.8,
+                "evidence": content[:120],
+                "reasoning": "基于内容非空的占位判断",
+                "defect_details": {},
+                "execution_time": 0.05,
+                "token_usage": {"total": 0},
+            }
         },
-    }
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.post("/batch-execute")
-async def batch_execute(payload: Dict[str, Any]):
+async def batch_execute(request: Request, payload: Dict[str, Any]):
     rule_ids: List[str] = payload.get("rule_ids", [])
     input_data = payload.get("input_data", {})
     results = []
@@ -315,15 +320,22 @@ async def batch_execute(payload: Dict[str, Any]):
             "execution_time": 0.05,
             "token_usage": {"total": 0},
         })
-    return {"success": True, "results": results, "count": len(results)}
+    return success_response(
+        data={"results": results, "count": len(results)},
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.post("/custom")
-async def custom(payload: Dict[str, Any]):
+async def custom(request: Request, payload: Dict[str, Any]):
     rid = f"SR-{len(_rules)+1:03d}"
     rule = {"rule_id": rid, **payload}
     _rules.append(rule)
-    return {"success": True, "rule": rule, "message": f"自定义规则 {rid} 创建成功"}
+    return success_response(
+        data={"rule": rule},
+        message=f"自定义规则 {rid} 创建成功",
+        trace_id=get_trace_id(request)
+    )
 
 
 # ------------------------- CRUD & Import/Export -------------------------
@@ -348,25 +360,29 @@ def _normalize_from_db(r: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.post("")
-async def create_rule(payload: Dict[str, Any]):
+async def create_rule(request: Request, payload: Dict[str, Any]):
     sb = get_supabase()
     if sb is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
     try:
         body = {**payload}
         body.setdefault("is_active", True)
         resp = sb.table("qc_rules").insert(body).execute()
         data = (resp.data or [{}])[0]
-        return {"success": True, "rule": _normalize_from_db(data)}
+        return success_response(
+            data={"rule": _normalize_from_db(data)},
+            message="规则创建成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"创建规则失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"创建规则失败: {e}")
 
 
 @router.put("/{rule_id}")
-async def update_rule(rule_id: str, payload: Dict[str, Any]):
+async def update_rule(request: Request, rule_id: str, payload: Dict[str, Any]):
     sb = get_supabase()
     if sb is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
     try:
         body = dict(payload)
         # 兼容前端 is_enabled 字段，落库为 is_active
@@ -393,8 +409,12 @@ async def update_rule(rule_id: str, payload: Dict[str, Any]):
                 updated_rows = []
 
         if not updated_rows:
-            raise HTTPException(status_code=404, detail="规则不存在")
-        return {"success": True, "rule": _normalize_from_db(updated_rows[0])}
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="规则不存在")
+        return success_response(
+            data={"rule": _normalize_from_db(updated_rows[0])},
+            message="规则更新成功",
+            trace_id=get_trace_id(request)
+        )
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001
@@ -402,10 +422,10 @@ async def update_rule(rule_id: str, payload: Dict[str, Any]):
 
 
 @router.delete("/{rule_id}")
-async def delete_rule(rule_id: str):
+async def delete_rule(request: Request, rule_id: str):
     sb = get_supabase()
     if sb is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
     try:
         resp = sb.table("qc_rules").delete().eq("id", rule_id).execute()
         rows = resp.data or []
@@ -413,22 +433,26 @@ async def delete_rule(rule_id: str):
             resp = sb.table("qc_rules").delete().eq("rule_code", rule_id).execute()
             rows = resp.data or []
         if not rows:
-            raise HTTPException(status_code=404, detail="规则不存在或已删除")
-        return {"success": True, "deleted": len(rows)}
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="规则不存在或已删除")
+        return success_response(
+            data={"deleted": len(rows)},
+            message="规则删除成功",
+            trace_id=get_trace_id(request)
+        )
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"删除规则失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"删除规则失败: {e}")
 
 
 @router.post("/import")
-async def import_rules(body: Dict[str, Any]):
+async def import_rules(request: Request, body: Dict[str, Any]):
     sb = get_supabase()
     if sb is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
     rules = body.get("rules") or []
     if not isinstance(rules, list):
-        raise HTTPException(status_code=400, detail="rules 字段应为数组")
+        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail="rules 字段应为数组")
     try:
         # 映射函数：将中文/别名映射为数据库允许的枚举
         def map_category(raw: Any) -> str:
@@ -620,24 +644,35 @@ async def import_rules(body: Dict[str, Any]):
                         sample_error = "unknown error"
                 errors += 1
                 continue
-        return {"success": True, "inserted": inserted, "updated": updated, "errors": errors, "sample_error": sample_error}
+        return success_response(
+            data={"inserted": inserted, "updated": updated, "errors": errors, "sample_error": sample_error},
+            message=f"导入完成：插入{inserted}条，更新{updated}条，错误{errors}条",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"导入规则失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导入规则失败: {e}")
 
 
 @router.get("/export")
-async def export_rules():
+async def export_rules(request: Request):
     sb = get_supabase()
     if sb is None:
         # 与列表接口保持一致，返回空
-        return {"success": True, "rules": [], "count": 0}
+        return success_response(
+            data={"rules": [], "count": 0},
+            trace_id=get_trace_id(request)
+        )
     try:
         resp = sb.table("qc_rules").select("*").limit(2000).execute()
         records = resp.data or []
         rules = [_normalize_from_db(r) for r in records]
-        return {"success": True, "rules": rules, "count": len(rules)}
+        return success_response(
+            data={"rules": rules, "count": len(rules)},
+            message="导出成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"导出规则失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导出规则失败: {e}")
 
 
 # ------------------------- Utilities: 文书类型细粒度映射/推断 -------------------------
@@ -706,7 +741,7 @@ def _infer_docs_from_rule_name(rule_name: str) -> list[str]:
 
 
 @router.post("/ops/normalize-docs")
-async def normalize_documents(dry_run: bool = Query(default=True)):
+async def normalize_documents(request: Request, dry_run: bool = Query(default=True)):
     """将规则的文书类型从粗粒度(inpatient/outpatient/emergency)批量归一为细粒度中文。
     - 优先保留已存在的细粒度中文 `check_logic.applicable_documents`
     - 否则：按 `rule_code` 精确映射；若无，基于名称关键词推断
@@ -714,7 +749,7 @@ async def normalize_documents(dry_run: bool = Query(default=True)):
     """
     sb = get_supabase()
     if sb is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
 
     # 拉取必要字段
     # 仅选择存在的安全字段，避免未知列导致 400
@@ -759,4 +794,13 @@ async def normalize_documents(dry_run: bool = Query(default=True)):
             sb.table("qc_rules").update({"check_logic": new_logic}).eq("id", rid).execute()
             updated += 1
 
-    return {"success": True, "total": len(records), "would_update": len(updates), "updated": updated, "sample": updates[:10]}
+    return success_response(
+        data={
+            "total": len(records),
+            "would_update": len(updates),
+            "updated": updated,
+            "sample": updates[:10]
+        },
+        message=f"规范化完成：共{len(records)}条规则，{'将更新' if dry_run else '已更新'}{len(updates)}条",
+        trace_id=get_trace_id(request)
+    )
