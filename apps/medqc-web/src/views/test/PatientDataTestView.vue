@@ -102,7 +102,7 @@ const patients = ref<MedicalRecord[]>([])
 const testResults = ref<Array<{
   type: 'success' | 'error' | 'info'
   message: string
-  data?: any
+  data?: Record<string, unknown>
 }>>([])
 
 const addResult = (type: 'success' | 'error' | 'info', message: string, data?: unknown) => {

@@ -365,7 +365,7 @@ function convertRowToQCResult(row: QCResultRow): QCAnalysisResult { return {
 export async function healthCheck(): Promise<{ 
   status: 'ok' | 'error'; 
   message: string; 
-  details?: any 
+  details?: Record<string, unknown> 
 }> {
   try {
     const response = await fetch(`${DEEPSEEK_CONFIG.baseURL}/chat/completions`, {

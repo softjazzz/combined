@@ -194,7 +194,7 @@ class UnifiedAPIClient {
   async generateRectificationPlan(
     defectsData[],
     medicalRecordId: string,
-    context?: any
+    context?: Record<string, unknown>
   ): Promise<unknown> {
     return this.request('/api/ai-assistance/rectification-plan', {
       method: 'POST',
@@ -208,7 +208,7 @@ class UnifiedAPIClient {
   
   async smartMedicalRecordAnalysis(
     medicalRecordId: string,
-    analysisConfig: any
+    analysisConfig: Record<string, unknown>
   ): Promise<unknown> {
     return this.request(`/api/ai-assistance/smart-analysis/${medicalRecordId}`, {
       method: 'POST',
@@ -218,7 +218,7 @@ class UnifiedAPIClient {
   
   async predictQualityScore(
     medicalRecordId: string,
-    predictionConfig: any
+    predictionConfig: Record<string, unknown>
   ): Promise<unknown> {
     return this.request('/api/ai-assistance/quality-score-prediction', {
       method: 'POST',

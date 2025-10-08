@@ -177,14 +177,14 @@ interface FilterItem {
   label: string
   type: 'select' | 'input' | 'date'
   placeholder?: string
-  options?: { label: string; value: any }[]
+  options?: { label: string; value: unknown }[]
 }
 
 interface BatchAction {
   key: string
   text: string
   type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
-  icon?: any
+  icon?: Record<string, unknown>
   danger?: boolean
   loading?: boolean
   disabled?: boolean
@@ -195,7 +195,7 @@ interface EmptyAction {
   key: string
   text: string
   type?: 'primary' | 'default'
-  icon?: any
+  icon?: Record<string, unknown>
   onClick?: () => void
 }
 
@@ -208,10 +208,10 @@ interface Props {
   bordered?: boolean
   
   // 分页配置
-  pagination?: any
+  pagination?: Record<string, unknown>
   
   // 选择配置
-  rowSelection?: any
+  rowSelection?: Record<string, unknown>
   
   // 工具栏配置
   showToolbar?: boolean

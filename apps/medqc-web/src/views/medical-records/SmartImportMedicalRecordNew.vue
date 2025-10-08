@@ -498,12 +498,12 @@ import MedicalDocumentResultModal from '@/components/MedicalDocumentResultModal.
 // 临时类型定义
 interface UserLLMConfig {
   config_name: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 interface SavedRecord {
   id: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 const router = useRouter()
@@ -551,11 +551,11 @@ interface UploadedFile {
   uploadTime: string
   parsed: boolean
   parsing: boolean
-  parseResult: any
+  parseResult: Record<string, unknown>
   error: string | null
   previewUrl: string | null
   imported: boolean
-  importResult: any
+  importResult: Record<string, unknown>
 }
 
 // 批量文件管理

@@ -504,7 +504,7 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
     }
   }
 
-  private createTestData(rule: EnhancedQCRule): any {
+  private createTestData(rule: EnhancedQCRule): Record<string, unknown> {
     // Create mock test data based on rule category and applicable documents
     return {
       patientId: 'test-patient-001',

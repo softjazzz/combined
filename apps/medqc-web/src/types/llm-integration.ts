@@ -42,7 +42,7 @@ export interface PromptTemplate {
   name: string
   systemMessage: string
   userPromptTemplate: string
-  outputSchema?: any
+  outputSchema?: Record<string, unknown>
   variables: PromptVariable[]
   examples?: PromptExample[]
 }
@@ -52,12 +52,12 @@ export interface PromptVariable {
   type: 'string' | 'number' | 'boolean' | 'array' | 'object'
   required: boolean
   description: string
-  defaultValue?: any
+  defaultValue?: Record<string, unknown>
 }
 
 export interface PromptExample {
   input: Record<string, unknown>
-  expectedOutput: any
+  expectedOutput: Record<string, unknown>
   description: string
 }
 
@@ -77,7 +77,7 @@ export interface GeneratedPrompt {
     maxTokens: number
     responseFormat: string
   }
-  expectedOutputSchema?: any
+  expectedOutputSchema?: Record<string, unknown>
 }
 
 // Rule Context and Execution
@@ -99,7 +99,7 @@ export interface RuleContext {
   auxiliaryData?: {
     orders?[]
     reports?[]
-    timeline?: any
+    timeline?: Record<string, unknown>
   }
 }
 
@@ -232,7 +232,7 @@ export interface PerformanceMetrics {
 export interface ExecutionError {
   type: 'timeout' | 'api_error' | 'parsing_error' | 'validation_error' | 'unknown'
   message: string
-  details?: any
+  details?: Record<string, unknown>
   timestamp: string
   ruleId?: string
   taskId?: string
@@ -260,7 +260,7 @@ export interface RuleTestResult {
   executionTime?: number
   result?: QCRuleResult
   error?: string
-  testData: any
+  testData: Record<string, unknown>
 }
 
 export interface ValidationResult {
@@ -295,7 +295,7 @@ export interface ResultProcessor { process(results: QCExecutionResult[], rules: 
 
 // Configuration Management
 export interface ConfigurationCache {
-  get(key: string): any
+  get(key: string): unknown
   set(key: string, value: unknown, ttl?: number): void
   invalidate(key: string): void
   invalidateRule(ruleId: string): void
@@ -335,7 +335,7 @@ export interface IntegratedQCEngine {
   executeQualityControl(
     patientData: unknown,
     departmentId?: string,
-    ruleFilter?: any
+    ruleFilter?: Record<string, unknown>
   ): Promise<unknown>
   updateRuleConfiguration(ruleId: string, config: unknown): Promise<void>
   testRule(ruleId: string): Promise<RuleTestResult>

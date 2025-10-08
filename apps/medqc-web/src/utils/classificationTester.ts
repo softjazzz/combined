@@ -22,7 +22,7 @@ export interface TestResult {
   confidence: number
   method: string
   passed: boolean
-  details?: any
+  details?: Record<string, unknown>
 }
 
 export interface TestSuite {
@@ -88,7 +88,7 @@ export class ClassificationTester {
   /**
    * 生成测试报告
    */
-  generateTestReport(results: TestResult[]): any {
+  generateTestReport(results: TestResult[]): Record<string, unknown> {
     const totalTests = results.length
     const passedTests = results.filter(r => r.passed).length
     const failedTests = totalTests - passedTests

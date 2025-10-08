@@ -133,7 +133,7 @@ import EnhancedDocumentClassification from './EnhancedDocumentClassification.vue
 
 // Props
 interface Props {
-  record: any
+  record: Record<string, unknown>
 }
 
 const props = defineProps<Props>()
@@ -141,9 +141,9 @@ const props = defineProps<Props>()
 // Emits
 const emit = defineEmits<{
   back: []
-  edit: [record: any]
-  export: [record: any]
-  delete: [record: any]
+  edit: [record: unknown]
+  export: [record: unknown]
+  delete: [record: unknown]
 }>()
 
 // 状态管理

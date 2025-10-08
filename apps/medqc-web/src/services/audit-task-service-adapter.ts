@@ -104,11 +104,11 @@ export class AuditTaskServiceAdapter {
       useEnhanced?: boolean
       includePerformanceStats?: boolean
     } = {}
-  ): Promise<{ tasks: QCAuditTask[]; total: number; stats?: any }> {
+  ): Promise<{ tasks: QCAuditTask[]; total: number; stats?: Record<string, unknown> }> {
     const { useEnhanced = this.useEnhancedAPI, includePerformanceStats = false } = options
 
     try {
-      let result: { tasks: QCAuditTask[]; total: number; stats?: any }
+      let result: { tasks: QCAuditTask[]; total: number; stats?: Record<string, unknown> }
 
       if (useEnhanced) {
         // 使用增强版API
@@ -141,7 +141,7 @@ export class AuditTaskServiceAdapter {
     page: number = 1,
     pageSize: number = 20,
     includeStats: boolean = false
-  ): Promise<{ tasks: QCAuditTask[]; total: number; stats?: any }> {
+  ): Promise<{ tasks: QCAuditTask[]; total: number; stats?: Record<string, unknown> }> {
     const params = new URLSearchParams()
     params.append('page', page.toString())
     params.append('page_size', pageSize.toString())
@@ -453,10 +453,10 @@ export class AuditTaskServiceAdapter {
    * 获取增强版服务统计信息
    */
   async getEnhancedServiceStatistics(): Promise<{
-    performance_stats: any
-    sampling_stats: any
-    load_balancer_stats: any
-    config: any
+    performance_stats: Record<string, unknown>
+    sampling_stats: Record<string, unknown>
+    load_balancer_stats: Record<string, unknown>
+    config: Record<string, unknown>
   }> {
     try {
       if (this.useEnhancedAPI) {
@@ -588,7 +588,7 @@ export class AuditTaskServiceAdapter {
     service: string
     status: string
     version: string
-    stats: any
+    stats: Record<string, unknown>
   }> {
     try {
       const response = await fetch(

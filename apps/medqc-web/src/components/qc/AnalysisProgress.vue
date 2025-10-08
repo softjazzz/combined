@@ -274,7 +274,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'analysis-completed': [result: any]
+  'analysis-completed': [result: unknown]
   'analysis-failed': [error: string]
   'analysis-paused': []
   'analysis-resumed': []

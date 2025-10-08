@@ -132,7 +132,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  'success': [document: any]
+  'success': [document: unknown]
 }>()
 
 // 响应式数据

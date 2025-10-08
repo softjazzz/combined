@@ -36,7 +36,7 @@ export interface UnifiedApiResponse<T = any> {
   error?: {
     message: string
     code?: string
-    details?: any
+    details?: Record<string, unknown>
   }
   count?: number
   message?: string
@@ -54,7 +54,7 @@ class SimpleCache {
     })
   }
   
-  get(key: string): any | null {
+  get(key: string): unknown | null {
     const item = this.cache.get(key)
     if (!item) return null
     
@@ -74,7 +74,7 @@ class SimpleCache {
 // 安全工具
 class SecurityUtils {
   // 数据脱敏
-  static sanitizePatientData(record, userRole: string): any {
+  static sanitizePatientData(record: unknown, userRole: string): unknown {
     const sanitized = { ...record }
     
     // 非管理员用户脱敏处理

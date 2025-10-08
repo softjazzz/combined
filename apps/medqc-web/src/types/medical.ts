@@ -195,7 +195,7 @@ export interface ClassificationResult {
 // API响应接口
 export interface LLMResponse {
   success: boolean
-  data?: any
+  data?: Record<string, unknown>
   error?: string
   usage?: {
     prompt_tokens: number

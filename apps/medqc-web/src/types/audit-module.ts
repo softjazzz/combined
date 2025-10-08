@@ -405,7 +405,7 @@ export interface AIDefectSuggestion {
 }
 
 export interface DefectAnalysisContext {
-  medical_record: any
+  medical_record: Record<string, unknown>
   audit_level: AuditLevel
   reviewer_expertise: string[]
   historical_defects?: QCDefect[]

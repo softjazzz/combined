@@ -14,7 +14,7 @@ export interface ApiResponse<T = any> {
   error?: {
     message: string
     code?: string
-    details?: any
+    details?: Record<string, unknown>
   }
   count?: number
   message?: string

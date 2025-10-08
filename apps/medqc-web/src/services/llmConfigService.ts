@@ -35,7 +35,7 @@ export interface LLMModel {
   context_length: number
   pricing_tier: string
   capabilities: string[]
-  parameters: any
+  parameters: Record<string, unknown>
   is_default: boolean
   is_active: boolean
   sort_order: number
@@ -51,7 +51,7 @@ export interface UserLLMConfig {
   model_id: string
   api_key_encrypted: string | null
   custom_endpoint: string | null
-  custom_parameters: any
+  custom_parameters: Record<string, unknown>
   is_active: boolean
   created_at: string
   updated_at: string
@@ -69,7 +69,7 @@ export interface LLMConfigInput {
   model_code?: string
   api_key?: string
   custom_endpoint?: string
-  custom_parameters?: any
+  custom_parameters?: Record<string, unknown>
   is_active?: boolean
 }
 

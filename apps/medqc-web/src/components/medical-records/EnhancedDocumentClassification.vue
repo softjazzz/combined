@@ -319,7 +319,7 @@ import {
 // Props
 interface Props {
   documents: unknown[]
-  classificationResult?: any
+  classificationResult?: Record<string, unknown>
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -329,8 +329,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'document-select': [document: any]
-  'classification-filter': [filter: any]
+  'document-select': [document: unknown]
+  'classification-filter': [filter: unknown]
   'refresh': []
   'reclassify': []
   'export': []

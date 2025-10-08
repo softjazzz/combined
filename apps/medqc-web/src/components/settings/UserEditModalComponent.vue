@@ -173,7 +173,7 @@ import {
 
 interface Props {
   visible: boolean
-  user?: any
+  user?: Record<string, unknown>
 }
 
 interface Emits {

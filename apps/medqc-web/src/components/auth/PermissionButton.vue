@@ -90,7 +90,7 @@ const buttonTitle = computed(() => {
 
 // 按钮点击事件
 const emit = defineEmits<{
-  click: [event: any]
+  click: [event: unknown]
 }>()
 
 const handleClick = (event) => {

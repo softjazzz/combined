@@ -417,7 +417,7 @@ ${index + 1}. 规则名称：${task.rule.name}
     ).join('\n\n') || '无文书数据'
   }
 
-  private parseBatchResponse(response: string, tasks: QCTask[]): any {
+  private parseBatchResponse(response: string, tasks: QCTask[]): unknown {
     try {
       const parsed = JSON.parse(response)
       

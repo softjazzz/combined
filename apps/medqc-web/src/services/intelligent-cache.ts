@@ -184,7 +184,7 @@ class ConfigurationCacheImpl implements ConfigurationCache {
     this.cache = new LRUCache(500) // Smaller cache for configurations
   }
 
-  get(key: string): any {
+  get(key: string): unknown {
     return this.cache.get(key)
   }
 
@@ -282,7 +282,7 @@ export class IntelligentQCCache {
   }
 
   // Configuration Caching
-  getCachedRuleConfig(ruleId: string): any {
+  getCachedRuleConfig(ruleId: string): unknown {
     const cacheKey = CacheKeyGenerator.generateRuleConfigKey(ruleId)
     return this.configCache.get(cacheKey)
   }

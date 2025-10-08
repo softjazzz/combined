@@ -79,7 +79,7 @@ export interface AIExtractionResult {
   confidence_scores: Record<string, number>
   processing_time_ms: number
   tokens_used?: number
-  raw_response?: any
+  raw_response?: Record<string, unknown>
 }
 
 export interface AIParsingHistory {
@@ -87,7 +87,7 @@ export interface AIParsingHistory {
   record_id: string
   input_text: string
   input_method: 'paste' | 'upload' | 'batch'
-  extraction_result: any
+  extraction_result: Record<string, unknown>
   confidence_scores: Record<string, number>
   processing_time_ms: number
   tokens_used?: number

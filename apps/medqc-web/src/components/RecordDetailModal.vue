@@ -214,7 +214,7 @@ import {
 
 interface Props {
   visible: boolean
-  record?: any
+  record?: Record<string, unknown>
   viewType: 'records' | 'defects'
 }
 

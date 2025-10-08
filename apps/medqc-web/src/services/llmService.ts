@@ -1481,7 +1481,7 @@ ${text.substring(0, 500)}...
   /**
    * 构建API请求体 - 支持多种API格式
    */
-  private buildAPIRequest(prompt: string): any {
+  private buildAPIRequest(prompt: string): Record<string, unknown> {
     // OpenAI格式 (包括阿里云DashScope兼容模式)
     if (this.apiEndpoint.includes('openai.com') || this.apiEndpoint.includes('dashscope.aliyuncs.com')) {
       return {
@@ -1556,7 +1556,7 @@ ${text.substring(0, 500)}...
   /**
    * 解析API响应 - 支持多种API格式
    */
-  private parseAPIResponse(data: unknown): any {
+  private parseAPIResponse(data: unknown): unknown {
     let content = ''
     let tokensUsed = 0
 

@@ -268,7 +268,7 @@ interface ProcessingFile {
   progress: number
   confidence?: number
   error?: string
-  result?: any
+  result?: Record<string, unknown>
   originalText?: string
 }
 

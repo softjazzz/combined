@@ -185,8 +185,8 @@ interface BatchTask {
   processed_items: number
   failed_items: number
   progress_percentage: number
-  error_details?: any
-  metadata?: any
+  error_details?: Record<string, unknown>
+  metadata?: Record<string, unknown>
   created_at: string
   started_at?: string
   completed_at?: string

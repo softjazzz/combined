@@ -153,7 +153,7 @@ interface BatchAction {
   key: string
   label: string
   shortLabel?: string
-  icon?: any
+  icon?: Record<string, unknown>
   type?: 'primary' | 'default' | 'dashed' | 'link' | 'text'
   danger?: boolean
   requireConfirm?: boolean

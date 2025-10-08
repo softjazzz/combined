@@ -163,11 +163,11 @@ export interface Database {
           rule_score: number | null
           score: number
           grade: 'A' | 'B' | 'C' | null
-          issues: any
-          suggestions: any
+          issues: Record<string, unknown>
+          suggestions: Record<string, unknown>
           summary: string | null
           raw_analysis: string | null
-          category_scores: any
+          category_scores: Record<string, unknown>
           confidence_score: number | null
           rule_version: string
           analysis_time: string
@@ -182,11 +182,11 @@ export interface Database {
           rule_score?: number | null
           score: number
           grade?: 'A' | 'B' | 'C' | null
-          issues?: any
-          suggestions?: any
+          issues?: Record<string, unknown>
+          suggestions?: Record<string, unknown>
           summary?: string | null
           raw_analysis?: string | null
-          category_scores?: any
+          category_scores?: Record<string, unknown>
           confidence_score?: number | null
           rule_version?: string
           analysis_time?: string
@@ -201,11 +201,11 @@ export interface Database {
           rule_score?: number | null
           score?: number
           grade?: 'A' | 'B' | 'C' | null
-          issues?: any
-          suggestions?: any
+          issues?: Record<string, unknown>
+          suggestions?: Record<string, unknown>
           summary?: string | null
           raw_analysis?: string | null
-          category_scores?: any
+          category_scores?: Record<string, unknown>
           confidence_score?: number | null
           rule_version?: string
           analysis_time?: string
@@ -241,7 +241,7 @@ export interface Database {
           weight: number
           is_active: boolean
           prompt_template: string | null
-          check_logic: any
+          check_logic: Record<string, unknown>
           version: string
           created_at: string
           created_by: string | null
@@ -258,7 +258,7 @@ export interface Database {
           weight?: number
           is_active?: boolean
           prompt_template?: string | null
-          check_logic?: any
+          check_logic?: Record<string, unknown>
           version?: string
           created_at?: string
           created_by?: string | null
@@ -275,7 +275,7 @@ export interface Database {
           weight?: number
           is_active?: boolean
           prompt_template?: string | null
-          check_logic?: any
+          check_logic?: Record<string, unknown>
           version?: string
           created_at?: string
           created_by?: string | null
@@ -328,9 +328,9 @@ export interface Database {
         Row: {
           id: string
           cube_name: string
-          dimensions: any
-          measures: any
-          aggregation_rules: any | null
+          dimensions: Record<string, unknown>
+          measures: Record<string, unknown>
+          aggregation_rules: Record<string, unknown> | null
           refresh_schedule: string | null
           last_refresh: string | null
           created_at: string
@@ -340,9 +340,9 @@ export interface Database {
         Insert: {
           id?: string
           cube_name: string
-          dimensions: any
-          measures: any
-          aggregation_rules?: any | null
+          dimensions: Record<string, unknown>
+          measures: Record<string, unknown>
+          aggregation_rules?: Record<string, unknown> | null
           refresh_schedule?: string | null
           last_refresh?: string | null
           created_at?: string
@@ -352,9 +352,9 @@ export interface Database {
         Update: {
           id?: string
           cube_name?: string
-          dimensions?: any
-          measures?: any
-          aggregation_rules?: any | null
+          dimensions?: Record<string, unknown>
+          measures?: Record<string, unknown>
+          aggregation_rules?: Record<string, unknown> | null
           refresh_schedule?: string | null
           last_refresh?: string | null
           created_at?: string
@@ -427,7 +427,7 @@ export interface Database {
         Row: {
           id: string
           metric_id: string
-          dimension_values: any
+          dimension_values: Record<string, unknown>
           metric_value: number
           comparison_value: number | null
           trend_direction: 'up' | 'down' | 'stable' | null
@@ -440,7 +440,7 @@ export interface Database {
         Insert: {
           id?: string
           metric_id: string
-          dimension_values: any
+          dimension_values: Record<string, unknown>
           metric_value: number
           comparison_value?: number | null
           trend_direction?: 'up' | 'down' | 'stable' | null
@@ -453,7 +453,7 @@ export interface Database {
         Update: {
           id?: string
           metric_id?: string
-          dimension_values?: any
+          dimension_values?: Record<string, unknown>
           metric_value?: number
           comparison_value?: number | null
           trend_direction?: 'up' | 'down' | 'stable' | null
@@ -480,10 +480,10 @@ export interface Database {
           template_name: string
           template_type: 'qc_summary' | 'performance' | 'trend' | 'comparison'
           description: string | null
-          layout_config: any
-          chart_configs: any
-          filters: any | null
-          schedule_config: any | null
+          layout_config: Record<string, unknown>
+          chart_configs: Record<string, unknown>
+          filters: Record<string, unknown> | null
+          schedule_config: Record<string, unknown> | null
           output_formats: string[]
           is_active: boolean
           is_system_template: boolean
@@ -497,10 +497,10 @@ export interface Database {
           template_name: string
           template_type: 'qc_summary' | 'performance' | 'trend' | 'comparison'
           description?: string | null
-          layout_config: any
-          chart_configs: any
-          filters?: any | null
-          schedule_config?: any | null
+          layout_config: Record<string, unknown>
+          chart_configs: Record<string, unknown>
+          filters?: Record<string, unknown> | null
+          schedule_config?: Record<string, unknown> | null
           output_formats?: string[]
           is_active?: boolean
           is_system_template?: boolean
@@ -514,10 +514,10 @@ export interface Database {
           template_name?: string
           template_type?: 'qc_summary' | 'performance' | 'trend' | 'comparison'
           description?: string | null
-          layout_config?: any
-          chart_configs?: any
-          filters?: any | null
-          schedule_config?: any | null
+          layout_config?: Record<string, unknown>
+          chart_configs?: Record<string, unknown>
+          filters?: Record<string, unknown> | null
+          schedule_config?: Record<string, unknown> | null
           output_formats?: string[]
           is_active?: boolean
           is_system_template?: boolean
@@ -543,7 +543,7 @@ export interface Database {
           report_period: string
           period_start: string
           period_end: string
-          parameters: any | null
+          parameters: Record<string, unknown> | null
           status: 'pending' | 'generating' | 'completed' | 'failed'
           progress: number
           file_path: string | null
@@ -564,7 +564,7 @@ export interface Database {
           report_period: string
           period_start: string
           period_end: string
-          parameters?: any | null
+          parameters?: Record<string, unknown> | null
           status?: 'pending' | 'generating' | 'completed' | 'failed'
           progress?: number
           file_path?: string | null
@@ -585,7 +585,7 @@ export interface Database {
           report_period?: string
           period_start?: string
           period_end?: string
-          parameters?: any | null
+          parameters?: Record<string, unknown> | null
           status?: 'pending' | 'generating' | 'completed' | 'failed'
           progress?: number
           file_path?: string | null
@@ -621,12 +621,12 @@ export interface Database {
           snapshot_name: string
           snapshot_type: 'daily' | 'weekly' | 'monthly'
           snapshot_date: string
-          data_summary: any
+          data_summary: Record<string, unknown>
           record_count: number
           avg_qc_score: number | null
-          department_stats: any | null
-          doctor_stats: any | null
-          quality_indicators: any | null
+          department_stats: Record<string, unknown> | null
+          doctor_stats: Record<string, unknown> | null
+          quality_indicators: Record<string, unknown> | null
           created_at: string
         }
         Insert: {
@@ -634,12 +634,12 @@ export interface Database {
           snapshot_name: string
           snapshot_type: 'daily' | 'weekly' | 'monthly'
           snapshot_date: string
-          data_summary: any
+          data_summary: Record<string, unknown>
           record_count: number
           avg_qc_score?: number | null
-          department_stats?: any | null
-          doctor_stats?: any | null
-          quality_indicators?: any | null
+          department_stats?: Record<string, unknown> | null
+          doctor_stats?: Record<string, unknown> | null
+          quality_indicators?: Record<string, unknown> | null
           created_at?: string
         }
         Update: {
@@ -647,12 +647,12 @@ export interface Database {
           snapshot_name?: string
           snapshot_type?: 'daily' | 'weekly' | 'monthly'
           snapshot_date?: string
-          data_summary?: any
+          data_summary?: Record<string, unknown>
           record_count?: number
           avg_qc_score?: number | null
-          department_stats?: any | null
-          doctor_stats?: any | null
-          quality_indicators?: any | null
+          department_stats?: Record<string, unknown> | null
+          doctor_stats?: Record<string, unknown> | null
+          quality_indicators?: Record<string, unknown> | null
           created_at?: string
         }
         Relationships: []
@@ -663,11 +663,11 @@ export interface Database {
           id: string
           analysis_name: string
           analysis_type: 'department_vs_department' | 'period_vs_period' | 'doctor_vs_doctor'
-          baseline_criteria: any
-          comparison_criteria: any
-          analysis_results: any
-          insights: any | null
-          recommendations: any | null
+          baseline_criteria: Record<string, unknown>
+          comparison_criteria: Record<string, unknown>
+          analysis_results: Record<string, unknown>
+          insights: Record<string, unknown> | null
+          recommendations: Record<string, unknown> | null
           created_at: string
           created_by: string | null
         }
@@ -675,11 +675,11 @@ export interface Database {
           id?: string
           analysis_name: string
           analysis_type: 'department_vs_department' | 'period_vs_period' | 'doctor_vs_doctor'
-          baseline_criteria: any
-          comparison_criteria: any
-          analysis_results: any
-          insights?: any | null
-          recommendations?: any | null
+          baseline_criteria: Record<string, unknown>
+          comparison_criteria: Record<string, unknown>
+          analysis_results: Record<string, unknown>
+          insights?: Record<string, unknown> | null
+          recommendations?: Record<string, unknown> | null
           created_at?: string
           created_by?: string | null
         }
@@ -687,11 +687,11 @@ export interface Database {
           id?: string
           analysis_name?: string
           analysis_type?: 'department_vs_department' | 'period_vs_period' | 'doctor_vs_doctor'
-          baseline_criteria?: any
-          comparison_criteria?: any
-          analysis_results?: any
-          insights?: any | null
-          recommendations?: any | null
+          baseline_criteria?: Record<string, unknown>
+          comparison_criteria?: Record<string, unknown>
+          analysis_results?: Record<string, unknown>
+          insights?: Record<string, unknown> | null
+          recommendations?: Record<string, unknown> | null
           created_at?: string
           created_by?: string | null
         }
@@ -711,9 +711,9 @@ export interface Database {
           rule_name: string
           metric_id: string
           condition_type: 'threshold' | 'trend' | 'anomaly'
-          condition_config: any
+          condition_config: Record<string, unknown>
           alert_level: 'info' | 'warning' | 'critical'
-          notification_config: any | null
+          notification_config: Record<string, unknown> | null
           is_active: boolean
           created_at: string
           created_by: string | null
@@ -723,9 +723,9 @@ export interface Database {
           rule_name: string
           metric_id: string
           condition_type: 'threshold' | 'trend' | 'anomaly'
-          condition_config: any
+          condition_config: Record<string, unknown>
           alert_level: 'info' | 'warning' | 'critical'
-          notification_config?: any | null
+          notification_config?: Record<string, unknown> | null
           is_active?: boolean
           created_at?: string
           created_by?: string | null
@@ -735,9 +735,9 @@ export interface Database {
           rule_name?: string
           metric_id?: string
           condition_type?: 'threshold' | 'trend' | 'anomaly'
-          condition_config?: any
+          condition_config?: Record<string, unknown>
           alert_level?: 'info' | 'warning' | 'critical'
-          notification_config?: any | null
+          notification_config?: Record<string, unknown> | null
           is_active?: boolean
           created_at?: string
           created_by?: string | null
@@ -765,7 +765,7 @@ export interface Database {
           alert_level: 'info' | 'warning' | 'critical'
           alert_message: string
           metric_value: number | null
-          dimension_values: any | null
+          dimension_values: Record<string, unknown> | null
           triggered_at: string
           acknowledged_at: string | null
           acknowledged_by: string | null
@@ -778,7 +778,7 @@ export interface Database {
           alert_level: 'info' | 'warning' | 'critical'
           alert_message: string
           metric_value?: number | null
-          dimension_values?: any | null
+          dimension_values?: Record<string, unknown> | null
           triggered_at?: string
           acknowledged_at?: string | null
           acknowledged_by?: string | null
@@ -791,7 +791,7 @@ export interface Database {
           alert_level?: 'info' | 'warning' | 'critical'
           alert_message?: string
           metric_value?: number | null
-          dimension_values?: any | null
+          dimension_values?: Record<string, unknown> | null
           triggered_at?: string
           acknowledged_at?: string | null
           acknowledged_by?: string | null

@@ -177,7 +177,7 @@ class QCPerformanceOptimizer { async createExecutionPlan(
 `
   }
 
-  private buildDepartmentContext(rule: EnhancedQCRule, departmentId?: string): any {
+  private buildDepartmentContext(rule: EnhancedQCRule, departmentId?: string): Record<string, unknown> {
     if (!departmentId || !rule.department_overrides?.length) {
       return { hasOverrides: false }
     }
@@ -401,7 +401,7 @@ export class IntegratedQCEngine implements IIntegratedQCEngine {
     return `共检查${totalRules}项规则，其中${compliantRules}项合规，${nonCompliantRules}项存在问题。总计发现${totalFindings}个质控问题。`
   }
 
-  private performCrossRuleAnalysis(results: QCRuleResult[]): any {
+  private performCrossRuleAnalysis(results: QCRuleResult[]): Record<string, unknown> {
     // Simple cross-rule analysis
     const categories = new Set(results.map(r => r.ruleCode.split('.')[0]))
     const systemicIssues = categories.size < results.length / 2 ? '发现系统性质量问题' : '问题相对分散'

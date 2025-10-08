@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 
 export interface LLMParseResultState {
-  lastResult: any | null
+  lastResult: unknown | null
 }
 
 export const useLLMParseStore = defineStore('llmParse', {

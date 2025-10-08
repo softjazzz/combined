@@ -245,7 +245,7 @@ export interface DemoStep {
   description: string
   duration: number
   component: string
-  data: any
+  data: Record<string, unknown>
   status: 'pending' | 'running' | 'completed' | 'error'
 }
 
@@ -307,7 +307,7 @@ export interface AnalysisStep {
   status: 'pending' | 'running' | 'completed' | 'error'
   startTime?: Date
   endTime?: Date
-  result?: any
+  result?: Record<string, unknown>
   error?: string
 }
 
@@ -345,7 +345,7 @@ export interface DemoState {
   isPaused: boolean
   progress: number
   selectedRules: QualityControlRule[]
-  testRecord: any
+  testRecord: Record<string, unknown>
   // 单/多选文书：向后兼容
   selectedDocument?: RecordDocumentInfo | RecordDocumentInfo[] | null
   analysisResult: QCResult | null

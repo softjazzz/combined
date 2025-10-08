@@ -147,7 +147,7 @@ import { message } from 'ant-design-vue'
 
 interface Props {
   visible: boolean
-  currentConditions?: any
+  currentConditions?: Record<string, unknown>
 }
 
 interface Emits {

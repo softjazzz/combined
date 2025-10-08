@@ -183,7 +183,7 @@ const props = defineProps<{
 // Emits
 const emit = defineEmits<{
   'update:visible': [visible: boolean]
-  'appeal-submitted': [appeal: any]
+  'appeal-submitted': [appeal: unknown]
 }>()
 
 // 响应式数据

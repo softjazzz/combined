@@ -148,7 +148,7 @@ ${text.substring(0, 1000)}${text.length > 1000 ? '...' : ''}
    */
   static parseClassificationResponse(response: unknown): ClassificationResult {
     try {
-      let result: any
+      let result: unknown
 
       if (typeof response === 'string') {
         // 尝试提取JSON部分

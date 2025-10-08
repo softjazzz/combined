@@ -112,7 +112,7 @@ interface Props {
   asideWidth?: number
   collapsedNav?: boolean
   collapsedAside?: boolean
-  patient?: any
+  patient?: Record<string, unknown>
 }
 
 const props = withDefaults(defineProps<Props>(), {

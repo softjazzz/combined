@@ -211,7 +211,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'update-profile': [data: any]
+  'update-profile': [data: unknown]
   'change-password': []
 }>()
 

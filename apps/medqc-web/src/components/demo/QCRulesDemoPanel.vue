@@ -260,7 +260,7 @@ import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
 const props = defineProps<{
   selectedRules: unknown[]
   availableRules: unknown[]
-  testRecord: any
+  testRecord: Record<string, unknown>
   selectedDocuments?: Array<{ id: string; title?: string; type?: string; created_at?: string }>
 }>()
 

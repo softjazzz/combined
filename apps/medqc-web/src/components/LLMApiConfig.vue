@@ -186,7 +186,7 @@ import { LLMService } from '@/services/llmServiceNew'
 
 // 定义组件事件
 const emit = defineEmits<{
-  'config-updated': [configData: any]
+  'config-updated': [configData: unknown]
   'close-drawer': []
   'close-modal': []
 }>()

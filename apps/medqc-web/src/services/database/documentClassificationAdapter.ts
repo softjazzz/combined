@@ -30,11 +30,11 @@ export interface MedicalDocumentRecord {
   ai_classified: boolean
   classification_confidence: number
   manual_verified: boolean
-  position_info: any
+  position_info: Record<string, unknown>
   sort_order: number
   status: string
   qc_status: string
-  metadata: any
+  metadata: Record<string, unknown>
 }
 
 export class DocumentClassificationAdapter {
@@ -285,7 +285,7 @@ export class DocumentClassificationAdapter {
   /**
    * 获取分类统计信息
    */
-  getClassificationStats(documents: MedicalDocumentRecord[]): any {
+  getClassificationStats(documents: MedicalDocumentRecord[]): Record<string, unknown> {
     const stats = {
       totalDocuments: documents.length,
       byCategory: new Map<string, number>(),

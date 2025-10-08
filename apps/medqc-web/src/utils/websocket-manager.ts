@@ -21,7 +21,7 @@ interface ConnectionConfig {
 interface WebSocketMessage {
   id: string
   type: string
-  payload: any
+  payload: Record<string, unknown>
   timestamp: number
   priority: 'low' | 'normal' | 'high' | 'critical'
 }

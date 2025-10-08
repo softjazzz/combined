@@ -12,7 +12,7 @@ export class ResponseParser {
    */
   static parseMedicalResponse(response: unknown): ExtractedMedicalData {
     try {
-      let data: any
+      let data: unknown
 
       // 移除调试日志，指针模式应该能避免解析问题
 
@@ -81,7 +81,7 @@ export class ResponseParser {
   }
 
   // 尝试宽松解析字符串中的 JSON
-  private static tryParseJsonLoose(raw: string): any {
+  private static tryParseJsonLoose(raw: string): unknown {
     const removeCodeFence = (s: string) => s.replace(/```json/gi, '').replace(/```/g, '').trim()
     const removeTrailingCommas = (s: string) => s.replace(/,\s*([}\]])/g, '$1')
     const sanitize = (s: string) => s.replace(/[\u0000-\u001F]+/g, ' ').trim()
@@ -225,9 +225,9 @@ export class ResponseParser {
   /**
    * 解析文档索引响应（指针模式专用）
    */
-  static parseIndexResponse(response: unknown): any {
+  static parseIndexResponse(response: unknown): unknown {
     try {
-      let data: any
+      let data: unknown
 
       // 处理不同格式的响应
       if (typeof response === 'string') {

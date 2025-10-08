@@ -21,7 +21,7 @@ class IntelligentMessageGenerator {
     type: MessageType,
     recipientType: RecipientType,
     relatedData: NotificationRelatedData,
-    context?: any
+    context?: Record<string, unknown>
   ): Promise<Partial<QCNotification>> {
     
     console.log(`生成智能消息: ${type} -> ${recipientType}`)
@@ -65,7 +65,7 @@ class IntelligentMessageGenerator {
     type: MessageType,
     recipientType: RecipientType,
     relatedData: NotificationRelatedData,
-    context?: any
+    context?: Record<string, unknown>
   ): string {
     
     const basePrompt = `
@@ -147,7 +147,7 @@ class IntelligentMessageGenerator {
     return this.extractContentFromText(content, type)
   }
 
-  private extractContentFromText(content: string, type: MessageType): any {
+  private extractContentFromText(content: string, type: MessageType): Record<string, unknown> {
     const lines = content.split('\n').filter(line => line.trim())
     
     return {

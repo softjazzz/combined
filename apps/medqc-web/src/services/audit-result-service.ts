@@ -314,7 +314,7 @@ export class AuditResultService {
 
   private async processSingleBatchItem(
     taskItemId: string,
-    template?: any
+    template?: Record<string, unknown>
   ): Promise<unknown> {
     
     const startTime = Date.now()
@@ -560,7 +560,7 @@ export class AuditResultService {
   private async logResultModification(
     auditResultId: string,
     modifierId: string,
-    modifications: any
+    modifications: Record<string, unknown>
   ): Promise<void> {
     // 记录修改日志的逻辑
     console.log('记录审核结果修改:', { auditResultId, modifierId, modifications })

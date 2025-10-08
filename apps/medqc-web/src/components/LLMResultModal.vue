@@ -260,8 +260,8 @@ import {
 
 interface Props {
   visible: boolean
-  data: any
-  result: any
+  data: Record<string, unknown>
+  result: Record<string, unknown>
   originalText?: string
 }
 

@@ -158,7 +158,7 @@ interface Document {
 }
 
 interface Props {
-  patient?: any
+  patient?: Record<string, unknown>
   docs?: Document[]
 }
 

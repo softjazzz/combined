@@ -168,7 +168,7 @@ export class LLMConfigManager {
   /**
    * 构建API请求配置
    */
-  buildAPIRequest(prompt: string): any {
+  buildAPIRequest(prompt: string): Record<string, unknown> {
     // OpenAI格式 (包括阿里云DashScope兼容模式)
     if (this.apiEndpoint.includes('openai.com') || this.apiEndpoint.includes('dashscope.aliyuncs.com')) {
       return {

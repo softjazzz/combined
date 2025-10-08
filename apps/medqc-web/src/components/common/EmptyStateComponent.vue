@@ -73,7 +73,7 @@ interface ActionItem {
   text: string
   type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
   size?: 'small' | 'middle' | 'large'
-  icon?: any
+  icon?: Record<string, unknown>
   loading?: boolean
   disabled?: boolean
   onClick?: () => void
@@ -83,7 +83,7 @@ interface Props {
   type?: 'empty' | 'error' | 'network' | 'search' | 'permission' | 'maintenance' | 'custom'
   title?: string
   description?: string
-  icon?: any
+  icon?: Record<string, unknown>
   image?: string
   iconColor?: string
   size?: 'small' | 'medium' | 'large'

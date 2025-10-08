@@ -224,7 +224,7 @@ export class AIAssistanceServiceAdapter {
   async generateRectificationPlan(
     defects: QCDefect[],
     medicalRecordId: string,
-    context?: any
+    context?: Record<string, unknown>
   ): Promise<unknown> {
     try {
       console.log(`生成整改计划: ${defects.length} 个缺陷`)
@@ -348,9 +348,9 @@ export class AIAssistanceServiceAdapter {
     id: string
     analysis_type: string
     timestamp: string
-    results_summary: any
+    results_summary: Record<string, unknown>
     confidence_score: number
-    reviewer_feedback?: any
+    reviewer_feedback?: Record<string, unknown>
   }>> {
     try {
       return await unifiedAPIClient.getAIAnalysisHistory(taskItemId, limit)
@@ -446,7 +446,7 @@ export class AIAssistanceServiceAdapter {
     return `${taskItemId}_${context.audit_level}_${JSON.stringify(context.reviewer_expertise)}`
   }
 
-  private getCachedAnalysis(cacheKey: string): any | null {
+  private getCachedAnalysis(cacheKey: string): unknown | null {
     const cached = this.analysisCache.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < cached.ttl) {
       return cached.data
@@ -500,7 +500,7 @@ export class AIAssistanceServiceAdapter {
   async getAIPerformanceStats(): Promise<{
     cache_hit_rate: number
     memory_cache_size: number
-    performance_stats: any
+    performance_stats: Record<string, unknown>
     service_status: string
   }> {
     try {
@@ -579,7 +579,7 @@ export class AIAssistanceServiceAdapter {
     service: string
     status: string
     version: string
-    cache_stats: any
+    cache_stats: Record<string, unknown>
   }> {
     try {
       const response = await fetch(

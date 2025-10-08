@@ -151,7 +151,7 @@ export interface GeneratedPrompt {
     maxTokens: number
     responseFormat: string
   }
-  expectedOutputSchema?: any
+  expectedOutputSchema?: Record<string, unknown>
 }
 
 // Medical data interfaces for QC context
@@ -311,7 +311,7 @@ export interface RuleExportConfig {
 }
 
 export interface RuleImportConfig {
-  data: any
+  data: Record<string, unknown>
   conflictResolution: 'skip' | 'overwrite' | 'merge'
   validateBeforeImport: boolean
   createBackup: boolean
@@ -331,7 +331,7 @@ export interface RuleTemplate {
   templateName: string
   templateCategory: string
   description: string
-  templateConfig: any
+  templateConfig: Record<string, unknown>
   applicableDepartments: string[]
   isDefault: boolean
   createdAt: string
@@ -344,8 +344,8 @@ export interface RuleAuditLog {
   id: string
   ruleId: string
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'BATCH_UPDATE' | 'IMPORT' | 'EXPORT'
-  oldData?: any
-  newData?: any
+  oldData?: Record<string, unknown>
+  newData?: Record<string, unknown>
   changeReason?: string
   createdAt: string
   createdBy: string
@@ -355,7 +355,7 @@ export interface RuleVersion {
   id: string
   ruleId: string
   version: string
-  ruleData: any
+  ruleData: Record<string, unknown>
   changeSummary?: string
   createdAt: string
   createdBy: string

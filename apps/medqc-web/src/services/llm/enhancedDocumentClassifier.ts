@@ -21,7 +21,7 @@ export interface EnhancedClassificationResult {
   matchedRule?: string
   suggestions?: string[]
   method: 'title_exact' | 'title_fuzzy' | 'content_feature' | 'keyword_match' | 'fallback'
-  details?: any
+  details?: Record<string, unknown>
 }
 
 export class EnhancedDocumentClassifier {

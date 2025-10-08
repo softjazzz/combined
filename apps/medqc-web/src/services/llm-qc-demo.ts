@@ -13,7 +13,7 @@ import { intelligentQCCache } from './intelligent-cache'
 
 // Demo Data Generator
 class DemoDataGenerator {
-  static generateSamplePatientData(): any {
+  static generateSamplePatientData(): Record<string, unknown> {
     return {
       patientId: 'demo-patient-001',
       patientName: '张三',

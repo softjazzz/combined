@@ -17,7 +17,7 @@ export interface RealTimeQCResult {
   id: string
   recordId: string
   content: string
-  analysisResult: any
+  analysisResult: Record<string, unknown>
   alertLevel: QCAlertLevel
   issues: QCIssue[]
   suggestions: string[]

@@ -220,9 +220,9 @@ export async function getAnalysisHistory(
  * 获取性能统计
  */
 export async function getPerformanceStats(): Promise<ApiResponse<{
-  analysis: any
-  database: any
-  cache: any
+  analysis: Record<string, unknown>
+  database: Record<string, unknown>
+  cache: Record<string, unknown>
 }>> {
   try {
     const analysisStats = optimizedQCAnalysisService.getPerformanceStats()

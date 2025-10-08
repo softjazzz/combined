@@ -277,7 +277,7 @@ class PromptTemplateLibrary {
     })
   }
 
-  private getNestedValue(obj: unknown, path: string): any {
+  private getNestedValue(obj: unknown, path: string): unknown {
     return path.split('.').reduce((current: unknown,  key: unknown) => {
       if (key.includes('#each')) {
         // Handle simple array iteration (simplified)
@@ -397,7 +397,7 @@ class ContextBuilder {
   private buildDepartmentContext(
     departmentOverrides: DepartmentOverride[],
     departmentId?: string
-  ): any {
+  ): unknown {
     if (!departmentId || !departmentOverrides?.length) {
       return { hasOverrides: false }
     }

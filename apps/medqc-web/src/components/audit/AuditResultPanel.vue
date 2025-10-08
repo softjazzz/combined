@@ -273,7 +273,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'update': [data: any]
+  'update': [data: unknown]
   'submit': [auditResultId: string]
   'modify-lower': [result: QCAuditResult]
 }>()

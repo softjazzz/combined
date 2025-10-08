@@ -73,7 +73,7 @@ export interface Permission {
 export interface PermissionCondition {
   field: string
   operator: 'eq' | 'neq' | 'in' | 'nin' | 'gt' | 'gte' | 'lt' | 'lte'
-  value: any
+  value: Record<string, unknown>
 }
 
 // 权限检查结果

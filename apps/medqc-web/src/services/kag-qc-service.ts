@@ -350,7 +350,7 @@ export class KAGQCService {
   /**
    * 将KAG结果转换为兼容原有系统的格式
    */
-  convertToLegacyFormat(kagResult: KAGQCResponse): any {
+  convertToLegacyFormat(kagResult: KAGQCResponse): Record<string, unknown> {
     return {
       recordId: kagResult.recordId,
       summary: {

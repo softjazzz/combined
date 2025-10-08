@@ -110,7 +110,7 @@ import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 interface BreadcrumbItem {
   name: string
   path?: string
-  icon?: any
+  icon?: Record<string, unknown>
   disabled?: boolean
 }
 
@@ -118,7 +118,7 @@ interface ActionItem {
   key: string
   text: string
   type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
-  icon?: any
+  icon?: Record<string, unknown>
   loading?: boolean
   disabled?: boolean
   onClick?: () => void
@@ -127,7 +127,7 @@ interface ActionItem {
 interface TabItem {
   key: string
   label: string
-  icon?: any
+  icon?: Record<string, unknown>
   badge?: number
   disabled?: boolean
 }
@@ -136,14 +136,14 @@ interface StatItem {
   key: string
   label: string
   value: string | number
-  icon?: any
+  icon?: Record<string, unknown>
   color?: string
 }
 
 interface Props {
   title: string
   subtitle?: string
-  icon?: any
+  icon?: Record<string, unknown>
   showBack?: boolean
   backText?: string
   showBreadcrumb?: boolean

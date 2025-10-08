@@ -24,7 +24,7 @@ export interface DatabaseMedicalRecord {
   secondary_diagnosis: string[]
   major_surgery: string
   raw_text?: string
-  ai_extraction_result: any
+  ai_extraction_result: Record<string, unknown>
   ai_confidence_score: number
   documents: unknown[]
   status: 'draft' | 'active' | 'archived'
@@ -45,7 +45,7 @@ export interface DatabaseQCRule {
   max_score: number
   weight: number
   is_active: boolean
-  check_logic: any
+  check_logic: Record<string, unknown>
   prompt_template?: string
   version: string
   created_at: string
