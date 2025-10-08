@@ -156,9 +156,10 @@ export async function batchAnalyzeRecords(requests: AnalysisAPIRequest[]): Promi
  */
 export async function getAnalysisHistory(recordId: string): Promise<{
   success: boolean
-  data?[]
+  data?: unknown[]
   error?: string
-}> { try {
+}> {
+  try {
     // 这里应该从数据库查询分析历史
     // 暂时返回模拟数据
     return {
@@ -210,9 +211,10 @@ export async function getSystemHealth(): Promise<{
  */
 export async function getQCRules(category?: string): Promise<{
   success: boolean
-  data?[]
+  data?: unknown[]
   error?: string
-}> { try {
+}> {
+  try {
     // 这里应该从数据库查询质控规则
     // 暂时返回模拟数据
     return {

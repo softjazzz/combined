@@ -139,7 +139,7 @@ class WebSocketManager {
 
   on(event: string, handler: Function): void {
     if (!this.messageHandlers.has(event)) {
-      this.messageHandlers.set(event, : unknown[])
+      this.messageHandlers.set(event, [])
     }
     this.messageHandlers.get(event)!.push(handler)
   }
@@ -431,7 +431,7 @@ export class NotificationServiceAdapter {
    */
   on(event: string, handler: Function): void {
     if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, : unknown[])
+      this.eventHandlers.set(event, [])
     }
     this.eventHandlers.get(event)!.push(handler)
   }

@@ -106,7 +106,7 @@ export class ValidationRules {
   }
 
   // 文件类型验证
-  static fileType(file: File, allowedTypes: string: unknown[]): string | null {
+  static fileType(file: File, allowedTypes: string[]): string | null {
     if (!allowedTypes.includes(file.type)) {
       return `不支持的文件格式，仅支持：${allowedTypes.join(', ')}`
     }
@@ -272,7 +272,7 @@ export function validateMedicalRecord(data): ValidationResult {
 }
 
 // Ant Design Vue 表单规则转换器
-export function toAntdRules(validators: ((value: unknown) => string | null)[])[] {
+export function toAntdRules(validators: ((value: unknown) => string | null)[]): unknown[] {
   return validators.map(validator => ({
     validator: (_rule: unknown,  value: unknown) => {
       const error = validator(value)

@@ -149,7 +149,7 @@ interface Props {
 
 interface Emits {
   (e: 'update:visible', value: boolean): void
-  (e: 'confirm', columns: ColumnConfig: unknown[]): void
+  (e: 'confirm', columns: ColumnConfig[]): void
 }
 
 const props = withDefaults(defineProps<Props>(), {

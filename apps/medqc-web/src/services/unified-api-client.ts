@@ -192,7 +192,7 @@ class UnifiedAPIClient {
   }
   
   async generateRectificationPlan(
-    defectsData[],
+    defectsData: unknown[],
     medicalRecordId: string,
     context?: Record<string, unknown>
   ): Promise<unknown> {

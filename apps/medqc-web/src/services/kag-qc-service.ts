@@ -384,7 +384,7 @@ export class KAGQCService {
   /**
    * 生成项目评分（兼容原有格式）
    */
-  private generateItemScores(kagResult: KAGQCResponse)[] {
+  private generateItemScores(kagResult: KAGQCResponse): unknown[] {
     const categories = {
       'completeness': '完整性',
       'consistency': '一致性', 
@@ -392,7 +392,7 @@ export class KAGQCService {
       'timeliness': '时效性'
     }
 
-    const itemScores[] = []
+    const itemScores: unknown[] = []
     
     for (const [categoryKey, categoryName] of Object.entries(categories)) {
       const categoryDefects = kagResult.defects.filter(d => 

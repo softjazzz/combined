@@ -89,7 +89,7 @@ export interface RuleContext {
     category: string
     severity: string
   }
-  applicableDocuments[]
+  applicableDocuments: unknown[]
   checkingCriteria: string
   scoringGuidelines: string
   departmentContext?: {
@@ -97,8 +97,8 @@ export interface RuleContext {
     specialRequirements?: string
   }
   auxiliaryData?: {
-    orders?[]
-    reports?[]
+    orders?: unknown[]
+    reports?: unknown[]
     timeline?: Record<string, unknown>
   }
 }
@@ -284,11 +284,13 @@ export interface OptimizationStrategy {
 }
 
 // Result Processing and Validation
-export interface ResultValidator { validate(result: unknown, rule: EnhancedQCRule): QCRuleResult
-  validateBatch(results[], rules: EnhancedQCRule: unknown[]): QCRuleResult[]
+export interface ResultValidator {
+  validate(result: unknown, rule: EnhancedQCRule): QCRuleResult
+  validateBatch(results: unknown[], rules: EnhancedQCRule[]): QCRuleResult[]
 }
 
-export interface ResultProcessor { process(results: QCExecutionResult[], rules: EnhancedQCRule: unknown[]): Promise<unknown>
+export interface ResultProcessor {
+  process(results: QCExecutionResult[], rules: EnhancedQCRule[]): Promise<unknown>
   consolidate(results: QCExecutionResult[]): Promise<unknown>
   postProcess(results: unknown): Promise<unknown>
 }

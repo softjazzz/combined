@@ -339,7 +339,7 @@ export class AuditResultService {
 
     // 3. 应用审核模板
     const score = template?.default_score || this.calculateDefaultScore(aiSuggestions)
-    const defects = this.mergeTemplateDefects(aiSuggestions, template?.common_defects || : unknown[])
+    const defects = this.mergeTemplateDefects(aiSuggestions, (template?.common_defects || []) as unknown[])
 
     // 4. 创建审核结果
     const auditResult = await this.createAuditResult(

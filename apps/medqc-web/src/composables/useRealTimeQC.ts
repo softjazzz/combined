@@ -438,7 +438,7 @@ export function useRealTimeQC() {
   /**
    * 合并分析结果
    */
-  const mergeAnalysisResults = (ruleResults[], aiAnalysis) => {
+  const mergeAnalysisResults = (ruleResults: unknown[], aiAnalysis: unknown) => {
     return {
       ruleResults,
       aiAnalysis,

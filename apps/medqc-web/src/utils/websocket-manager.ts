@@ -80,7 +80,7 @@ export class WebSocketManager {
       })
 
       // 初始化消息队列
-      this.messageQueue.set(channelName, : unknown[])
+      this.messageQueue.set(channelName, [])
 
       // 创建Supabase实时连接
       const channel = supabase.channel(channelName, {

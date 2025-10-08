@@ -299,9 +299,9 @@ export class MockService {
    */
   static async getRecordDetail(recordId: string): Promise<MedicalRecord & {
     content: string
-    attachments[]
+    attachments: unknown[]
     qc_results?: QCResult[]
-    history[]
+    history: unknown[]
   }> {
     await delay(400)
     

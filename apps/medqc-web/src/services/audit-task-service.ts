@@ -169,7 +169,7 @@ class IntelligentSamplingService {
   }
 
   private async applySamplingAlgorithm(
-    records[],
+    records: unknown[],
     config: SamplingConfig
   ): Promise<QCAuditTaskItem[]> {
     
@@ -185,7 +185,7 @@ class IntelligentSamplingService {
   }
 
   private async stratifiedSampling(
-    records[],
+    records: unknown[],
     config: SamplingConfig
   ): Promise<QCAuditTaskItem[]> {
     
@@ -199,7 +199,7 @@ class IntelligentSamplingService {
     }
 
     // 应用分层抽样规则
-    for (const rule of config.stratification_rules || : unknown[]) {
+    for (const rule of (config.stratification_rules || []) as unknown[]) {
       const stratumRecords = strata[rule.stratum_name as keyof typeof strata] || []
       const sampleSize = Math.min(
         Math.max(
@@ -256,7 +256,7 @@ class IntelligentSamplingService {
     return sample.map(record => this.convertToTaskItem(record))
   }
 
-  private systematicSampling(records[], config: SamplingConfig): QCAuditTaskItem[] {
+  private systematicSampling(records: unknown[], config: SamplingConfig): QCAuditTaskItem[] {
     const sampleSize = config.total_sample_size || 
                       Math.ceil(records.length * (config.sampling_ratio || 0.1))
     
@@ -369,7 +369,7 @@ export class AuditTaskService {
     return data
   }
 
-  private async createTaskItems(taskId: string, items: QCAuditTaskItem: unknown[]): Promise<void> {
+  private async createTaskItems(taskId: string, items: QCAuditTaskItem[]): Promise<void> {
     const itemsWithTaskId = items.map(item => ({
       ...item,
       task_id: taskId
@@ -384,7 +384,7 @@ export class AuditTaskService {
     }
   }
 
-  private async assignReviewers(taskId: string, reviewerIds: string: unknown[]): Promise<void> {
+  private async assignReviewers(taskId: string, reviewerIds: string[]): Promise<void> {
     // 获取任务明细
     const { data: taskItems, error } = await supabase
       .from('qc_audit_task_items')
@@ -410,11 +410,11 @@ export class AuditTaskService {
     }
   }
 
-  private distributeTaskItems(items[], reviewerIds: string: unknown[]): Map<string, string[]> {
+  private distributeTaskItems(items: unknown[], reviewerIds: string[]): Map<string, string[]> {
     const assignments = new Map<string, string[]>()
-    
+
     // 初始化分配映射
-    reviewerIds.forEach(id => assignments.set(id, : unknown[]))
+    reviewerIds.forEach(id => assignments.set(id, []))
     
     // 轮询分配
     items.forEach((item, index: unknown) => {
