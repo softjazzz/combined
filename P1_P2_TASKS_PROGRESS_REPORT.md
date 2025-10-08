@@ -11,18 +11,18 @@
 
 | 类别 | 总任务数 | 已完成 | 进行中 | 待开始 | 完成度 |
 |------|---------|--------|--------|--------|--------|
-| **P1 任务** | 7 | 1 | 1 | 5 | 14.3% |
+| **P1 任务** | 7 | 2 | 1 | 4 | 28.6% |
 | **P2 任务** | 3 | 0 | 0 | 3 | 0% |
-| **总计** | 10 | 1 | 1 | 8 | 10% |
+| **总计** | 10 | 2 | 1 | 7 | 20% |
 
-**总工作量**: 154 小时  
-**已用时间**: 2 小时  
-**剩余时间**: 152 小时  
+**总工作量**: 154 小时
+**已用时间**: 6 小时
+**剩余时间**: 148 小时
 **预计完成**: 第 6 周结束
 
 ---
 
-## ✅ 已完成的任务（1/10）
+## ✅ 已完成的任务（2/10）
 
 ### P1-2: 清理前端编译产物 ✅
 
@@ -73,41 +73,113 @@
 
 ---
 
+### P1-3: API 请求/响应日志 ✅
+
+**状态**: 完成
+**完成时间**: 2025-10-09
+**实际用时**: 4 小时
+**Commit**: `6126a9d5`
+
+**问题描述**:
+- 后端缺少统一的请求/响应日志记录
+- 难以调试和监控 API 请求
+- 缺少请求追踪机制
+- 违反 TDD 第 9.4 节监控与可观测性规范
+
+**实现功能**:
+- ✅ 自动生成唯一的 trace_id（UUID 格式）
+- ✅ 支持从请求头传入自定义 trace_id
+- ✅ 记录请求开始信息（方法、路径、查询参数、客户端 IP、User-Agent）
+- ✅ 记录请求完成信息（状态码、耗时）
+- ✅ 记录请求失败信息（异常、堆栈跟踪）
+- ✅ 在响应头中添加 `X-Trace-ID`
+- ✅ 将 trace_id 存储到 `request.state` 供其他中间件使用
+- ✅ 统一的日志格式（包含 trace_id）
+
+**技术实现**:
+
+1. **增强 request_logger_middleware**
+   ```python
+   async def request_logger_middleware(request: Request, call_next: Callable) -> Response:
+       # 生成或获取 trace_id
+       trace_id = get_trace_id(request)
+       request.state.trace_id = trace_id
+
+       # 记录请求开始
+       logger.info("Request started", extra={"trace_id": trace_id, ...})
+
+       # 执行请求
+       response = await call_next(request)
+
+       # 记录请求完成
+       logger.info("Request completed", extra={"trace_id": trace_id, ...})
+
+       # 添加响应头
+       response.headers["X-Trace-ID"] = trace_id
+       return response
+   ```
+
+2. **改进日志配置**
+   - 创建 `TraceIDFilter` 类自动添加 trace_id
+   - 统一日志格式：`%(asctime)s - %(name)s - %(levelname)s - [%(trace_id)s] - %(message)s`
+   - 配置 `app.access` logger
+
+3. **添加工具函数**
+   - `get_trace_id(request)`: 获取或生成 trace_id
+   - `configure_logging(level)`: 配置日志系统
+
+**测试结果**:
+- ✅ 6 个单元测试全部通过
+- ✅ 测试请求日志记录
+- ✅ 测试自定义 trace_id
+- ✅ 测试错误日志记录
+- ✅ 测试 trace_id 生成和一致性
+
+**日志示例**:
+```
+2025-10-09 07:50:19 - app.access - INFO - [550e8400-e29b-41d4-a716-446655440000] - Request started
+2025-10-09 07:50:19 - app.access - INFO - [550e8400-e29b-41d4-a716-446655440000] - Request completed
+```
+
+**文档**:
+- ✅ 创建 `LOGGING_GUIDE.md` 使用指南
+- ✅ 包含使用方法、示例、最佳实践
+
+**成果**:
+- 提升系统可观测性
+- 便于问题追踪和调试
+- 支持分布式追踪
+- 符合生产环境监控要求
+
+---
+
 ## 🔄 进行中的任务（1/10）
 
-### P1-3: API 请求/响应日志 🔄
+### P1-4: SQL 注入风险修复 🔄
 
-**状态**: 进行中  
-**开始时间**: 2025-10-08  
-**预估用时**: 4 小时  
+**状态**: 进行中
+**开始时间**: 2025-10-09
+**预估用时**: 8 小时
 
 **任务目标**:
-- 添加统一的请求/响应日志中间件
-- 记录所有 API 请求的详细信息
-- 添加 trace_id 用于请求追踪
-- 提升系统可观测性
+- 审查所有数据库查询代码
+- 修复 SQL 注入风险
+- 确保使用参数化查询或 Supabase 客户端
+- 提升系统安全性
 
-**实现方案**:
+**问题示例**:
 ```python
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    trace_id = str(uuid.uuid4())
-    request.state.trace_id = trace_id
-    
-    start_time = time.time()
-    logger.info(f"[{trace_id}] {request.method} {request.url.path}")
-    
-    response = await call_next(request)
-    
-    duration = time.time() - start_time
-    logger.info(
-        f"[{trace_id}] {request.method} {request.url.path} "
-        f"- {response.status_code} - {duration:.3f}s"
-    )
-    
-    response.headers["X-Trace-ID"] = trace_id
-    return response
+# ❌ 危险代码
+query = f"SELECT * FROM medical_records WHERE patient_name = '{name}'"
+
+# ✅ 安全代码
+query = supabase.table('medical_records').select('*').eq('patient_name', name)
 ```
+
+**审查范围**:
+- `apps/medqc-web/backend/main_api_with_supabase.py`
+- 所有路由文件中的数据库查询
+- 自定义 SQL 查询
 
 ---
 
@@ -169,7 +241,7 @@ async def log_requests(request: Request, call_next):
 | 阶段 | 已完成任务 | 完成度 | 累计用时 |
 |------|-----------|--------|----------|
 | 开始时 | 0 | 0% | 0h |
-| 当前 | 1 | 10% | 2h |
+| 当前 | 2 | 20% | 6h |
 | 第 1 周目标 | 3 | 30% | 14h |
 | 第 2-3 周目标 | 4 | 40% | 70h |
 | 第 4-5 周目标 | 7 | 70% | 130h |
@@ -182,10 +254,11 @@ async def log_requests(request: Request, call_next):
 ### 本周计划（第 1 周）
 
 1. ✅ **P1-2**: 清理编译产物 (2h) - 已完成
-2. 🔄 **P1-3**: API 日志中间件 (4h) - 进行中
-3. ⏳ **P1-4**: SQL 注入修复 (8h) - 待开始
+2. ✅ **P1-3**: API 日志中间件 (4h) - 已完成
+3. 🔄 **P1-4**: SQL 注入修复 (8h) - 进行中
 
 **本周目标**: 完成 3 个快速见效任务，总计 14 小时
+**当前进度**: 2/3 完成（66.7%）
 
 ### 下周计划（第 2-3 周）
 
@@ -200,6 +273,7 @@ async def log_requests(request: Request, call_next):
 ## 📝 Git 提交记录
 
 ```
+6126a9d5 - feat(P1-3): 添加统一的 API 请求/响应日志中间件
 b15d0bf1 - fix(P1-2): 清理前端编译产物和临时脚本
 ```
 
