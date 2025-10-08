@@ -1,7 +1,8 @@
 import json
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
+from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException, status, Depends
 
+from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.security import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ def _import_pdf_parser():
             from services.pdf_parser import parse_pdf_file  # type: ignore
             return parse_pdf_file
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"PDF解析服务不可用: {e}")
+            raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"PDF解析服务不可用: {e}")
 
 
 ALLOWED_TYPES = [
@@ -37,7 +38,7 @@ async def _parse_text_file(file: UploadFile, file_content: bytes):
         try:
             text = file_content.decode('gbk')
         except UnicodeDecodeError:
-            raise HTTPException(status_code=400, detail="文本文件编码不支持，请使用UTF-8或GBK编码")
+            raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail="文本文件编码不支持，请使用UTF-8或GBK编码")
 
     # 简单的医疗信息提取
     import re
@@ -74,10 +75,10 @@ async def _parse_text_file(file: UploadFile, file_content: bytes):
 
 async def _parse_file_common(file: UploadFile, options: str):
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"不支持的文件类型: {file.content_type}")
+        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail=f"不支持的文件类型: {file.content_type}")
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="文件大小不能超过10MB")
+        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail="文件大小不能超过10MB")
     try:
         parse_options = json.loads(options)
     except json.JSONDecodeError:
@@ -87,7 +88,7 @@ async def _parse_file_common(file: UploadFile, options: str):
         parse_pdf_file = _import_pdf_parser()
         result = parse_pdf_file(content, file.filename)
         if not result.get("success"):
-            raise HTTPException(status_code=500, detail=f"PDF解析失败: {result.get('error', '未知错误')}")
+            raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"PDF解析失败: {result.get('error', '未知错误')}")
         return {
             "success": True,
             "data": {
@@ -106,21 +107,21 @@ async def _parse_file_common(file: UploadFile, options: str):
     elif file.content_type == 'text/plain' or (file.filename and file.filename.endswith('.txt')):
         return await _parse_text_file(file, content)
     else:
-        raise HTTPException(status_code=400, detail=f"暂不支持解析 {file.content_type} 格式的文件")
+        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail=f"暂不支持解析 {file.content_type} 格式的文件")
 
 
 @router.post("/parse-medical-file-public")
-async def parse_medical_file_public(file: UploadFile = File(...), options: str = Form("{}")):
+async def parse_medical_file_public(    request: Request,file: UploadFile = File(...), options: str = Form("{}")):
     return await _parse_file_common(file, options)
 
 
 @router.post("/parse-medical-file")
-async def parse_medical_file(file: UploadFile = File(...), options: str = Form("{}"), current_user: dict = Depends(get_current_user)):
+async def parse_medical_file(    request: Request,file: UploadFile = File(...), options: str = Form("{}"), current_user: dict = Depends(get_current_user)):
     return await _parse_file_common(file, options)
 
 
 @router.post("/parse-medical-text")
-async def parse_medical_text(text: str = Form(...)):
+async def parse_medical_text(    request: Request,text: str = Form(...)):
     # Reuse text parsing logic
     from starlette.datastructures import UploadFile as _UF  # type: ignore
     fake_file = type("F", (), {"filename": "input.txt", "content_type": "text/plain"})()

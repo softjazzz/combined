@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.responses import JSONResponse
 from pydantic import EmailStr
 
+from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..schemas.auth import (
     UserCreate,
     UserUpdate,
@@ -26,11 +27,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.options("/login")
 async def login_options():
-    return {"message": "OK"}
+    return success_response(data={}, message="OK", trace_id=get_trace_id(request))
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(login_data: LoginRequest):
+async def login(request: Request, login_data: LoginRequest):
     settings = get_settings()
     user = users_db.get(login_data.email)
     if not user or not verify_password(login_data.password, user["password_hash"]):
@@ -48,7 +49,7 @@ async def login(login_data: LoginRequest):
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(user_data: UserCreate):
+async def register(request: Request, user_data: UserCreate):
     if user_data.email in users_db:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱已被注册")
 
@@ -83,7 +84,7 @@ async def register(user_data: UserCreate):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+async def get_current_user_info(    request: Request,current_user: dict = Depends(get_current_user)):
     return UserResponse(**{
         "id": current_user["id"],
         "email": current_user["email"],
@@ -99,7 +100,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 
 
 @router.put("/profile", response_model=UserResponse)
-async def update_profile(profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
     user = users_db[current_user["email"]]
     if profile_data.display_name is not None:
         user["display_name"] = profile_data.display_name
@@ -125,7 +126,7 @@ async def update_profile(profile_data: UserUpdate, current_user: dict = Depends(
 
 
 @router.put("/password")
-async def update_password(
+async def update_password(    request: Request,
     new_password: str = Form(...),
     current_password: str = Form(None),
     current_user: dict = Depends(get_current_user),
@@ -134,17 +135,17 @@ async def update_password(
     if current_password and not verify_password(current_password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码错误")
     user["password_hash"] = get_password_hash(new_password)
-    return {"message": "密码修改成功"}
+    return success_response(data={}, message="密码修改成功", trace_id=get_trace_id(request))
 
 
 @router.post("/logout")
-async def logout():
+async def logout(    request: Request,):
     # 放宽登出：无论是否携带 Authorization，都返回 200，避免前端因 token 过期/缺失导致 401/403
-    return {"message": "登出成功"}
+    return success_response(data={}, message="登出成功", trace_id=get_trace_id(request))
 
 
 @router.post("/refresh", response_model=LoginResponse)
-async def refresh_token(refresh_token: str = Form(...)):
+async def refresh_token(    request: Request,refresh_token: str = Form(...)):
     from jose import jwt, JWTError
     settings = get_settings()
     try:
@@ -166,14 +167,14 @@ async def refresh_token(refresh_token: str = Form(...)):
 
 
 @router.post("/forgot-password")
-async def forgot_password(email: EmailStr = Form(...)):
+async def forgot_password(    request: Request,email: EmailStr = Form(...)):
     user = users_db.get(email)
     # 返回成功以避免账户枚举
-    return {"message": "如果邮箱存在，重置密码邮件已发送"}
+    return success_response(data={}, message="如果邮箱存在，重置密码邮件已发送", trace_id=get_trace_id(request))
 
 
 @router.post("/reset-password")
-async def reset_password(token: str = Form(...), new_password: str = Form(...)):
+async def reset_password(    request: Request,token: str = Form(...), new_password: str = Form(...)):
     # 简化处理：不实现 token 校验
-    return {"message": "密码重置成功"}
+    return success_response(data={}, message="密码重置成功", trace_id=get_trace_id(request))
 

@@ -6,6 +6,7 @@ import csv
 import os
 from pydantic import BaseModel
 
+from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..services.sichuan_qc_service import SichuanQCService
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
 @router.get("/qc/summary")
-async def qc_summary():
+async def qc_summary(    request: Request,):
     """质控看板汇总（改为真实聚合）。
 
     - 从视图 `qc_statistics_view` 聚合：按病历维度统计文书总数、通过/告警/失败数量、平均分、最近分析时间。
@@ -99,7 +100,7 @@ class ExportRequest(BaseModel):
 
 
 @router.post("/qc/export")
-async def qc_export(payload: ExportRequest):
+async def qc_export(    request: Request,payload: ExportRequest):
     """导出质控汇总（CSV）。
 
     - 数据来源：`qc_statistics_view`（若 Supabase 可用），否则返回 503。

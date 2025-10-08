@@ -2,33 +2,45 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Request
 
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
 from ..storage.memory import qc_results_db, qc_rules_db
 from ..core.supabase_client import get_supabase, async_execute
+from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
 
 router = APIRouter(prefix="/api/qc", tags=["qc"])
 service = QCService()
 
 
 @router.post("/analyze/{record_id}")
-async def analyze_record(record_id: str, payload: Optional[Dict[str, Any]] = None):
+async def analyze_record(
+    request: Request,
+    record_id: str,
+    payload: Optional[Dict[str, Any]] = None
+):
+    """分析单个病案记录"""
     request_payload = dict(payload or {})
     request_payload["record_id"] = record_id
     result = await service.evaluate(request_payload)
     qc_results_db[record_id] = result
     analysis_id = result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
-    return {
-        "analysis_id": analysis_id,
-        "status": "completed",
-        "record_id": record_id,
-    }
+
+    return success_response(
+        data={
+            "analysis_id": analysis_id,
+            "status": "completed",
+            "record_id": record_id,
+        },
+        message="质控分析完成",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.post("/analyze/batch")
-async def analyze_batch(payload: Dict[str, Any]):
+async def analyze_batch(request: Request, payload: Dict[str, Any]):
+    """批量分析病案记录"""
     started = []
     records_payload: List[Dict[str, Any]] = payload.get("records", [])
     if records_payload:
@@ -48,24 +60,40 @@ async def analyze_batch(payload: Dict[str, Any]):
             qc_results_db[rid] = res
             started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
 
-    return {
-        "started": started,
-        "message": f"已完成 {len(started)} 个文档的质控分析",
-    }
+    return success_response(
+        data={
+            "started": started,
+            "count": len(started),
+        },
+        message=f"已完成 {len(started)} 个文档的质控分析",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/result/{record_id}", response_model=QCResult)
 async def get_result(record_id: str):
+    """获取质控结果"""
     res = qc_results_db.get(record_id)
     if not res:
-        raise HTTPException(status_code=404, detail="质控结果不存在")
+        raise HTTPException(
+            status_code=StatusCode.NOT_FOUND,
+            detail="质控结果不存在"
+        )
     return res
 
 
 @router.get("/progress/{analysis_id}")
-async def get_progress(analysis_id: str):
+async def get_progress(request: Request, analysis_id: str):
+    """获取分析进度"""
     # Simplified: assume completed if any result exists
-    return {"analysis_id": analysis_id, "status": "completed"}
+    return success_response(
+        data={
+            "analysis_id": analysis_id,
+            "status": "completed"
+        },
+        message="获取进度成功",
+        trace_id=get_trace_id(request)
+    )
 
 
  
@@ -73,6 +101,7 @@ async def get_progress(analysis_id: str):
 
 @router.get("/rules")
 async def list_rules(
+    request: Request,
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     category: Optional[str] = Query(None, description="规则分类"),
     document_category: Optional[str] = Query(None, description="文书类别"),
@@ -89,7 +118,14 @@ async def list_rules(
     sb = get_supabase()
     if sb is None:
         # 数据库不可用时，返回空数据，避免与前端不一致
-        return {"data": [], "total": 0, "page": page, "limit": limit}
+        return paginated_response(
+            items=[],
+            total=0,
+            page=page,
+            page_size=limit,
+            message="数据库不可用",
+            trace_id=get_trace_id(request)
+        )
 
     # 优先尝试后端筛选
     try:
@@ -124,7 +160,14 @@ async def list_rules(
         # 某些实现不返回 count
         if total is None:
             total = len(data)
-        return {"data": data, "total": total, "page": page, "limit": limit}
+        return paginated_response(
+            items=data,
+            total=total,
+            page=page,
+            page_size=limit,
+            message="获取规则列表成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
         # 兼容回退：拉取较小窗口数据到内存再筛选
         try:
@@ -175,16 +218,27 @@ async def list_rules(
         total = len(filtered)
         offset = (page - 1) * limit
         paginated = filtered[offset: offset + limit]
-        return {"data": paginated, "total": total, "page": page, "limit": limit}
+        return paginated_response(
+            items=paginated,
+            total=total,
+            page=page,
+            page_size=limit,
+            message="获取规则列表成功（应用层筛选）",
+            trace_id=get_trace_id(request)
+        )
 
 
 @router.get("/rules/document-categories/stats")
-async def get_document_category_stats():
+async def get_document_category_stats(request: Request):
     """获取文书类别统计信息"""
     try:
         sb = get_supabase()
         if sb is None:
-            return {"data": {}}
+            return success_response(
+                data={},
+                message="数据库不可用",
+                trace_id=get_trace_id(request)
+            )
         response = await async_execute(sb.table('qc_rules').select('primary_document_category'))
         rows = list(getattr(response, 'data', None) or [])
         stats: Dict[str, int] = {}
@@ -192,64 +246,113 @@ async def get_document_category_stats():
             category = rule.get('primary_document_category')
             if category:
                 stats[category] = stats.get(category, 0) + 1
-        return {"data": stats}
+        return success_response(
+            data=stats,
+            message="获取统计信息成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
         print(f"获取文书类别统计失败: {e}")
         import traceback
         traceback.print_exc()
-        return {"data": {}}
+        return success_response(
+            data={},
+            message="获取统计信息失败",
+            trace_id=get_trace_id(request)
+        )
 
 @router.get("/rules/document-categories/config")
-async def get_document_category_config():
+async def get_document_category_config(request: Request):
     """获取文书类别配置"""
     try:
         sb = get_supabase()
         if sb is None:
-            return {"data": []}
+            return success_response(
+                data=[],
+                message="数据库不可用",
+                trace_id=get_trace_id(request)
+            )
         response = await async_execute(
             sb.table('document_category_config').select('*').eq('is_active', True).order('sort_order')
         )
         rows = list(getattr(response, 'data', None) or [])
-        return {"data": rows}
+        return success_response(
+            data=rows,
+            message="获取配置成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
         print(f"获取文书类别配置失败: {e}")
-        return {"data": []}
+        return success_response(
+            data=[],
+            message="获取配置失败",
+            trace_id=get_trace_id(request)
+        )
 
 @router.post("/rules", response_model=QCRule)
 async def create_rule(rule: QCRule):
+    """创建质控规则"""
     if rule.id in qc_rules_db:
-        raise HTTPException(status_code=400, detail="质控规则已存在")
+        raise HTTPException(
+            status_code=StatusCode.BAD_REQUEST,
+            detail="质控规则已存在"
+        )
     qc_rules_db[rule.id] = rule.model_dump()
     return rule
 
 
 @router.put("/rules/{rule_id}", response_model=QCRule)
 async def update_rule(rule_id: str, rule: QCRule):
+    """更新质控规则"""
     if rule_id not in qc_rules_db:
-        raise HTTPException(status_code=404, detail="质控规则不存在")
+        raise HTTPException(
+            status_code=StatusCode.NOT_FOUND,
+            detail="质控规则不存在"
+        )
     qc_rules_db[rule_id] = rule.model_dump()
     return rule
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_rule(rule_id: str):
+async def delete_rule(request: Request, rule_id: str):
+    """删除质控规则"""
     if rule_id not in qc_rules_db:
-        raise HTTPException(status_code=404, detail="质控规则不存在")
+        raise HTTPException(
+            status_code=StatusCode.NOT_FOUND,
+            detail="质控规则不存在"
+        )
     del qc_rules_db[rule_id]
-    return {"message": "质控规则删除成功"}
+    return success_response(
+        data={"rule_id": rule_id},
+        message="质控规则删除成功",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/history")
-async def get_history():
+async def get_history(request: Request):
+    """获取质控历史"""
     # Simplified history: return all results summary
-    return {"items": list(qc_results_db.values()), "total": len(qc_results_db)}
+    return success_response(
+        data={
+            "items": list(qc_results_db.values()),
+            "total": len(qc_results_db)
+        },
+        message="获取历史记录成功",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/poc/rules")
-async def poc_rules():
-    return {
-        "rules": [
-            {"id": "POC-001", "name": "主诉完整性（PoC）", "category": "基础", "severity": "minor"},
-            {"id": "POC-002", "name": "诊断一致性（PoC）", "category": "诊断", "severity": "major"},
-        ]
-    }
+async def poc_rules(request: Request):
+    """获取 PoC 规则（演示用）"""
+    return success_response(
+        data={
+            "rules": [
+                {"id": "POC-001", "name": "主诉完整性（PoC）", "category": "基础", "severity": "minor"},
+                {"id": "POC-002", "name": "诊断一致性（PoC）", "category": "诊断", "severity": "major"},
+            ]
+        },
+        message="获取 PoC 规则成功",
+        trace_id=get_trace_id(request)
+    )

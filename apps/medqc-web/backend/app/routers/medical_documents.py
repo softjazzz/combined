@@ -1,11 +1,12 @@
 import logging
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
 
 from ..core.supabase_client import get_supabase, async_execute
+from ..core.response import success_response, get_trace_id, ErrorCode, StatusCode
 from ..services.records_ingest_service import get_classification_mapping
 from ..services.qc_service import QCService
 from ..core.security import get_current_user
@@ -40,11 +41,14 @@ class DocumentTypeInfo(BaseModel):
 
 
 @router.get("/document-types")
-async def get_document_types():
+async def get_document_types(request: Request):
     """获取所有文档类型列表，按分类分组"""
     supabase = get_supabase()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
+            detail="数据库连接未初始化"
+        )
 
     try:
         # 获取分类信息
@@ -92,11 +96,18 @@ async def get_document_types():
                     "types": category_types
                 })
 
-        return {"categories": result}
+        return success_response(
+            data={"categories": result},
+            message="获取文档类型成功",
+            trace_id=get_trace_id(request)
+        )
 
     except Exception as e:
         logger.error(f"获取文档类型失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取文档类型失败: {e}")
+        raise HTTPException(
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
+            detail=f"获取文档类型失败: {e}"
+        )
 
 
 @router.get("/medical-records/{record_id}")

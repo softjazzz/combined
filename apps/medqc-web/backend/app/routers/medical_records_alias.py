@@ -1,8 +1,9 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, Request, HTTPException, status, Depends
 
+from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..storage.memory import medical_records_db
@@ -33,7 +34,7 @@ def _normalize_record(rec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/{record_id}", response_model=MedicalRecordResponse)
-async def get_record_public(record_id: str):
+async def get_record_public(    request: Request,record_id: str):
     """兼容老接口：公开获取单条医疗记录（用于质控取内容）。
     优先从 Supabase 读取；失败或未配置则回退到内存。无鉴权依赖。
     """
@@ -60,11 +61,11 @@ async def get_record_public(record_id: str):
 
 
 @router.delete("/{record_id}")
-async def delete_record_compat(record_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_record_compat(    request: Request,record_id: str, current_user: dict = Depends(get_current_user)):
     """兼容老接口：删除医疗记录，需鉴权。优先删除内存，若后续接入持久层可扩展。"""
     if record_id not in medical_records_db:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="医疗记录不存在")
     del medical_records_db[record_id]
-    return {"message": "医疗记录删除成功"}
+    return success_response(data={}, message="医疗记录删除成功", trace_id=get_trace_id(request))
 
 
