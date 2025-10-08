@@ -90,6 +90,12 @@ logs/
 *.tsbuildinfo
 next-env.d.ts
 
+# Compiled JavaScript files in src (should not be committed)
+src/**/*.js
+src/**/*.js.map
+!src/**/*.config.js
+!src/**/*.setup.js
+
 # Cache directories
 .cache/
 .temp/
