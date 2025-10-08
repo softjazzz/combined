@@ -4,6 +4,9 @@ import type { MedicalRecord, QCResult, QCRule, UserRole } from './supabase'
 // 重新导出auth类型
 export * from './auth'
 
+// 重新导出API类型
+export * from './api'
+
 // 用户相关类型
 export interface User extends SupabaseUser {
   roles?: string[]
@@ -12,8 +15,9 @@ export interface User extends SupabaseUser {
   display_name?: string
 }
 
-// API响应通用格式
-export interface ApiResponse<T = any> {
+// API响应通用格式（已废弃，请使用 api.ts 中的类型）
+// @deprecated 使用 ApiSuccessResponse 或 ApiErrorResponse 替代
+export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: string
@@ -46,7 +50,7 @@ export interface SortParams {
 
 // 筛选参数
 export interface FilterParams {
-  [key: string]
+  [key: string]: string | number | boolean | null | undefined
 }
 
 // 搜索参数
@@ -79,23 +83,23 @@ export interface FormState {
 }
 
 // 模态框状态
-export interface ModalState {
+export interface ModalState<T = unknown> {
   visible: boolean
   loading: boolean
-  data?: any
+  data?: T
 }
 
 // 表格列配置
-export interface TableColumn {
+export interface TableColumn<T = unknown> {
   key: string
   title: string
   dataIndex?: string
   width?: number | string
   align?: 'left' | 'center' | 'right'
   fixed?: 'left' | 'right'
-  sorter?: boolean | ((a: any,  b: any) => number)
-  filters?: Array<{ text: string; value: any }>
-  render?: (value: any, record: any, index: number) => any
+  sorter?: boolean | ((a: T, b: T) => number)
+  filters?: Array<{ text: string; value: string | number | boolean }>
+  render?: (value: unknown, record: T, index: number) => unknown
 }
 
 // 菜单项类型
@@ -225,7 +229,7 @@ export interface DashboardCard {
     value: number
     type: 'increase' | 'decrease'
   }
-  icon?: any // Vue组件引用
+  icon?: unknown // Vue组件引用
   color?: string
   loading?: boolean
 }
@@ -252,9 +256,9 @@ export interface ExportOptions {
 }
 
 // WebSocket消息类型
-export interface WebSocketMessage {
+export interface WebSocketMessage<T = unknown> {
   type: string
-  payload: any
+  payload: T
   timestamp: string
 }
 
@@ -262,7 +266,7 @@ export interface WebSocketMessage {
 export interface AppError {
   code: string
   message: string
-  details?: any
+  details?: Record<string, unknown>
   timestamp: string
 }
 
