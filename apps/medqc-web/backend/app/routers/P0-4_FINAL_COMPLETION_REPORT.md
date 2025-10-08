@@ -71,23 +71,23 @@
 |------|--------|------|
 | system.py | 2 | ✅ |
 | llm_info.py | 2 | ✅ |
-| records.py | 5 | ✅ |
-| qc.py | 15 | ✅ |
-| auth.py | 8 | ✅ |
+| records.py | 10 | ✅ |
+| qc.py | 12 | ✅ |
+| auth.py | 9 | ✅ |
 | medical_records_alias.py | 2 | ✅ |
-| tools.py | 2 | ✅ |
+| tools.py | 3 | ✅ |
 | tasks.py | 1 | ✅ |
 | classification.py | 1 | ✅ |
-| reports.py | 1 | ✅ |
-| qc_sichuan.py | 3 | ✅ |
-| proxy.py | 4 | ✅ |
-| debug.py | 0 | ✅ |
-| ingest.py | 0 | ✅ |
-| qc_llm_configs.py | 3 | ✅ |
+| reports.py | 2 | ✅ |
+| qc_sichuan.py | 4 | ✅ |
+| proxy.py | 1 | ✅ |
+| debug.py | 1 | ✅ |
+| ingest.py | 1 | ✅ |
+| qc_llm_configs.py | 5 | ✅ |
 | llm_configs.py | 3 | ✅ |
 | medical_documents.py | 9 | ✅ |
 | semantic_rules.py | 13 | ✅ |
-| **总计** | **74** | **✅** |
+| **总计** | **81** | **✅** |
 
 ## ⏱️ 时间统计
 
@@ -98,13 +98,14 @@
 ## 🎉 主要成就
 
 1. ✅ **完成了 100% 的路由文件更新**
-2. ✅ **更新了 74 个 API 端点**
+2. ✅ **更新了 81 个 API 端点**（实际统计）
 3. ✅ 所有核心业务路由已完成
 4. ✅ 所有辅助功能路由已完成
 5. ✅ 所有配置管理路由已完成
 6. ✅ 建立了完整的工具链
 7. ✅ 所有文件通过 Python 语法检查
 8. ✅ **统一响应格式已在所有端点实现**
+9. ✅ **所有 HTTPException 使用 StatusCode 常量**
 
 ## 📝 技术实现细节
 
@@ -145,6 +146,55 @@ raise HTTPException(
 2. **trace_id**: 所有响应都包含 trace_id 用于请求追踪
 3. **StatusCode 常量**: 所有 HTTPException 都使用 StatusCode 常量
 4. **统一格式**: 所有成功响应都使用 success_response() 或 paginated_response()
+
+## 🔧 问题修复记录
+
+在代码审查后发现并修复了以下问题（Commit: `20427442`）：
+
+### 1. reports.py
+- ❌ **问题**: 缺少 `Request` 导入，导致模块无法加载
+- ❌ **问题**: 2个端点直接返回原始 dict，未使用统一响应格式
+- ✅ **修复**: 添加 `Request` 导入
+- ✅ **修复**: `qc_summary` 和 `qc_export` 使用 `success_response` 和 `trace_id`
+- ✅ **修复**: 使用 `StatusCode.SERVICE_UNAVAILABLE` 替代裸数字 503
+
+### 2. debug.py
+- ❌ **问题**: `pdf_env` 端点直接返回 dict，缺少统一响应
+- ✅ **修复**: 添加 `success_response` 和 `get_trace_id` 导入
+- ✅ **修复**: 使用 `success_response` 包装返回值
+
+### 3. medical_documents.py
+- ❌ **问题**: 多处使用裸数字状态码（404, 400, 500）
+- ❌ **问题**: `get_document_qc_results` 缺少统一响应
+- ✅ **修复**: 所有 404 改为 `StatusCode.NOT_FOUND`
+- ✅ **修复**: 所有 400 改为 `StatusCode.BAD_REQUEST`
+- ✅ **修复**: 所有 500 改为 `StatusCode.INTERNAL_SERVER_ERROR`
+- ✅ **修复**: `get_document_qc_results` 添加 `Request` 参数和 `success_response`
+
+### 4. proxy.py
+- ❌ **问题**: 使用裸数字状态码（200, 502）
+- ✅ **修复**: 200 改为 `StatusCode.OK`
+- ✅ **修复**: 502 改为 `StatusCode.BAD_GATEWAY`
+
+### 5. qc_llm_configs.py
+- ❌ **问题**: 4个端点未使用统一响应格式
+- ❌ **问题**: 使用裸数字状态码（400, 404）
+- ✅ **修复**: 所有端点添加 `Request` 参数
+- ✅ **修复**: 所有端点使用 `success_response` 和 `trace_id`
+- ✅ **修复**: 所有 404 改为 `StatusCode.NOT_FOUND`
+- ✅ **修复**: 所有 400 改为 `StatusCode.BAD_REQUEST`
+
+### 6. semantic_rules.py
+- ❌ **问题**: 1处使用裸数字状态码（500）
+- ✅ **修复**: 500 改为 `StatusCode.INTERNAL_SERVER_ERROR`
+
+### 修复验证
+- ✅ 所有路由文件通过 Python 语法检查
+- ✅ 所有裸数字状态码已替换（0个剩余）
+- ✅ 所有端点使用统一响应格式
+- ✅ 实际端点数重新统计：81个（之前统计为74个）
+
+---
 
 ## ✅ semantic_rules.py 完成详情
 
@@ -231,9 +281,10 @@ raise HTTPException(
 
 ## 📊 统计数据
 
-- **更新的端点数**: 74 个
-- **添加的 trace_id**: 74 个
+- **更新的端点数**: 81 个（实际统计）
+- **添加的 trace_id**: 81 个
 - **统一的响应格式**: 100% ✅
+- **StatusCode 常量使用**: 100% ✅
 - **代码行数变化**: +~1500 行
 - **文件修改数**: 18 个
 - **创建的工具脚本**: 4 个
@@ -245,11 +296,11 @@ raise HTTPException(
 
 **完成情况**:
 - ✅ 所有 18 个路由文件已更新
-- ✅ 所有 74 个 API 端点已实现统一响应格式
+- ✅ 所有 81 个 API 端点已实现统一响应格式（实际统计）
 - ✅ 所有文件通过 Python 语法检查
 - ✅ 建立了完善的工具链和标准化流程
 - ✅ 所有端点包含 trace_id 用于请求追踪
-- ✅ 所有端点使用 StatusCode 常量
+- ✅ 所有 HTTPException 使用 StatusCode 常量（0个裸数字状态码）
 
 **核心成果**:
 1. **API 响应格式完全统一**: 所有端点都使用 `success_response()` 和 `paginated_response()`
