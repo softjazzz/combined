@@ -418,7 +418,7 @@ async def update_rule(request: Request, rule_id: str, payload: Dict[str, Any]):
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"更新规则失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"更新规则失败: {e}")
 
 
 @router.delete("/{rule_id}")

@@ -54,7 +54,7 @@ async def llm_parse_text_proxy(
         result = await safe_post_json(api_endpoint, headers, request_body, timeout_seconds=60)
         # 若上游返回错误，透传其状态码与消息
         if isinstance(result, dict) and result.get("__error__"):
-            return JSONResponse(status_code=int(result.get("__status__", 502)), content=result.get("body") or {"error": "UpstreamError"})
-        return JSONResponse(status_code=200, content=result)
+            return JSONResponse(status_code=int(result.get("__status__", StatusCode.BAD_GATEWAY)), content=result.get("body") or {"error": "UpstreamError"})
+        return JSONResponse(status_code=StatusCode.OK, content=result)
     except Exception as e:
-        return JSONResponse(status_code=502, content={"error": "ProxyError", "message": str(e)})
+        return JSONResponse(status_code=StatusCode.BAD_GATEWAY, content={"error": "ProxyError", "message": str(e)})

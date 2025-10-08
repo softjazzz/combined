@@ -2,12 +2,13 @@ from fastapi import APIRouter, Request
 import sys
 import os
 
+from ..core.response import success_response, get_trace_id
+
 router = APIRouter(prefix="/api/debug", tags=["debug"], include_in_schema=False)
 
 
 @router.get("/pdf-env")
-async def pdf_env(
-    request: Request,):
+async def pdf_env(request: Request):
     info = {
         "python_executable": sys.executable,
         "python_version": sys.version,
@@ -28,5 +29,5 @@ async def pdf_env(
     except Exception as e:
         info["has_pdfplumber"] = False
         info["pdfplumber_error"] = str(e)
-    return info
+    return success_response(data=info, trace_id=get_trace_id(request))
 

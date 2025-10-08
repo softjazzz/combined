@@ -119,17 +119,17 @@ async def get_medical_record_detail(record_id: str):
             resp = await async_execute(supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id))
             rows = resp.data or []
             if not rows:
-                raise HTTPException(status_code=404, detail="医疗记录不存在")
+                raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
             return rows[0]
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"获取医疗记录失败: {e}")
+            raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取医疗记录失败: {e}")
     # fallback: 内存
     from ..storage.memory import medical_records_db
     rec = medical_records_db.get(record_id)
     if not rec:
-        raise HTTPException(status_code=404, detail="医疗记录不存在")
+        raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
     return rec
 
 @router.get("/medical-records/{record_id}/documents")
@@ -150,7 +150,7 @@ async def get_medical_record_documents(request: Request, record_id: str):
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
         # 取文档
         resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select("*").eq("record_id", record_id))
@@ -276,7 +276,7 @@ async def get_medical_record_documents(request: Request, record_id: str):
         )
     except Exception as e:
         logger.error(f"获取文档失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取文档失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取文档失败: {e}")
 
 
 @router.post("/medical-records/{record_id}/documents")
@@ -285,7 +285,7 @@ async def create_medical_document(req: Request, record_id: str, doc_request: Cre
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
 
     try:
         # 验证医疗记录是否存在
@@ -295,7 +295,7 @@ async def create_medical_document(req: Request, record_id: str, doc_request: Cre
             .eq("id", record_id)
         )
         if not record_resp.data:
-            raise HTTPException(status_code=404, detail="医疗记录不存在")
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
 
         # 获取分类映射以确定category_id和type_id
         mapping = await get_classification_mapping()
@@ -344,7 +344,7 @@ async def create_medical_document(req: Request, record_id: str, doc_request: Cre
 
         # 确保有有效的category_id和type_id
         if not category_id or not type_id:
-            raise HTTPException(status_code=400, detail="无法确定文档分类，请检查分类配置")
+            raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail="无法确定文档分类，请检查分类配置")
 
         # 创建文档数据 - 包含必需字段
         document_data = {
@@ -378,7 +378,7 @@ async def create_medical_document(req: Request, record_id: str, doc_request: Cre
         )
 
         if not resp.data:
-            raise HTTPException(status_code=500, detail="文档创建失败")
+            raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="文档创建失败")
 
         return success_response(
             data={"document": resp.data[0]},
@@ -390,7 +390,7 @@ async def create_medical_document(req: Request, record_id: str, doc_request: Cre
         raise
     except Exception as e:
         logger.error(f"创建文档失败: {e}")
-        raise HTTPException(status_code=500, detail=f"创建文档失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"创建文档失败: {e}")
 
 
 @router.put("/medical-documents/{document_id}")
@@ -421,7 +421,7 @@ async def delete_medical_document(
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
 
     try:
         # 验证文档是否存在
@@ -431,7 +431,7 @@ async def delete_medical_document(
             .eq("id", document_id)
         )
         if not doc_resp.data:
-            raise HTTPException(status_code=404, detail="文档不存在")
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="文档不存在")
 
         document = doc_resp.data[0]
 
@@ -475,7 +475,7 @@ async def delete_medical_document(
         raise
     except Exception as e:
         logger.error(f"删除文档失败: {e}")
-        raise HTTPException(status_code=500, detail=f"删除失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"删除失败: {e}")
 
 
 @router.post("/medical-records/{record_id}/batch-qc-analysis")
@@ -522,12 +522,12 @@ async def analyze_medical_document(request: Request, document_id: str, current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"质控分析失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"质控分析失败: {e}")
 
 
 @router.get("/medical-documents/{document_id}/qc-results")
-async def get_document_qc_results(document_id: str):
+async def get_document_qc_results(request: Request, document_id: str):
     res = qc_results_db.get(document_id)
     if not res:
-        raise HTTPException(status_code=404, detail="质控结果不存在")
-    return res
+        raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="质控结果不存在")
+    return success_response(data=res, trace_id=get_trace_id(request))

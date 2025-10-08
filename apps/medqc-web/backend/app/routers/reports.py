@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from datetime import datetime
 from typing import List, Dict, Any
 import time
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
 @router.get("/qc/summary")
-async def qc_summary(    request: Request,):
+async def qc_summary(request: Request):
     """质控看板汇总（改为真实聚合）。
 
     - 从视图 `qc_statistics_view` 聚合：按病历维度统计文书总数、通过/告警/失败数量、平均分、最近分析时间。
@@ -31,7 +31,9 @@ async def qc_summary(    request: Request,):
     global _QC_SUMMARY_CACHE, _QC_SUMMARY_CACHE_TS
     now = time.time()
     if _QC_SUMMARY_CACHE is not None and (now - _QC_SUMMARY_CACHE_TS) < _QC_SUMMARY_TTL_SECONDS:
-        return _QC_SUMMARY_CACHE
+        # 返回缓存时也要包装成统一格式
+        cached_data = _QC_SUMMARY_CACHE.get("data") if isinstance(_QC_SUMMARY_CACHE, dict) and "data" in _QC_SUMMARY_CACHE else _QC_SUMMARY_CACHE
+        return success_response(data=cached_data, trace_id=get_trace_id(request))
 
     sb = get_supabase()
     active_rules = 0
@@ -73,8 +75,7 @@ async def qc_summary(    request: Request,):
 
     qc_stats = SichuanQCService().stats()
 
-    result = {
-        "success": True,
+    data = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "kpis": {
             "total_records": total_records,
@@ -90,9 +91,10 @@ async def qc_summary(    request: Request,):
         },
         "top_categories": [],
     }
-    _QC_SUMMARY_CACHE = result
+    # 缓存数据部分（不包含 success/trace_id）
+    _QC_SUMMARY_CACHE = data
     _QC_SUMMARY_CACHE_TS = now
-    return result
+    return success_response(data=data, trace_id=get_trace_id(request))
 
 
 class ExportRequest(BaseModel):
@@ -100,7 +102,7 @@ class ExportRequest(BaseModel):
 
 
 @router.post("/qc/export")
-async def qc_export(    request: Request,payload: ExportRequest):
+async def qc_export(request: Request, payload: ExportRequest):
     """导出质控汇总（CSV）。
 
     - 数据来源：`qc_statistics_view`（若 Supabase 可用），否则返回 503。
@@ -108,7 +110,7 @@ async def qc_export(    request: Request,payload: ExportRequest):
     """
     sb = get_supabase()
     if sb is None:
-        raise HTTPException(status_code=503, detail="supabase unavailable")
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="supabase unavailable")
 
     # 查询视图
     q = sb.table("qc_statistics_view").select("*").limit(5000)
@@ -141,12 +143,15 @@ async def qc_export(    request: Request,payload: ExportRequest):
         for r in rows:
             writer.writerow({k: r.get(k) for k in headers})
 
-    return {
-        "success": True,
-        "export_id": export_id,
-        "requested_records": payload.record_ids or [],
-        "download_url": f"/downloads/{filename}",
-        "count": len(rows),
-    }
+    return success_response(
+        data={
+            "export_id": export_id,
+            "requested_records": payload.record_ids or [],
+            "download_url": f"/downloads/{filename}",
+            "count": len(rows),
+        },
+        message="导出成功",
+        trace_id=get_trace_id(request)
+    )
 
 
