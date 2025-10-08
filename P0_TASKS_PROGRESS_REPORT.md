@@ -79,12 +79,13 @@
   - 辅助功能: medical_records_alias.py, tools.py, tasks.py, classification.py, reports.py
   - 配置和代理: qc_sichuan.py, proxy.py, debug.py, ingest.py, qc_llm_configs.py
   - 文档和配置管理: llm_configs.py, medical_documents.py, semantic_rules.py
-- ✅ 更新 74 个 API 端点
+- ✅ 更新 81 个 API 端点（实际统计）
 - ✅ 所有端点使用 success_response() 和 paginated_response()
 - ✅ 所有响应包含 trace_id 用于追踪
-- ✅ 所有 HTTPException 使用 StatusCode 常量
+- ✅ 所有 HTTPException 使用 StatusCode 常量（0个裸数字状态码）
 - ✅ 所有文件通过 Python 语法检查
 - ✅ 创建完整的工具链和文档
+- ✅ 修复了代码审查发现的所有问题
 
 ---
 
