@@ -1,8 +1,8 @@
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from ..core.supabase_client import get_supabase
+from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from datetime import datetime
-from fastapi import status
 
 router = APIRouter(prefix="/api/semantic-rules", tags=["semantic-rules"])
 
@@ -13,6 +13,7 @@ _rules: list[dict[str, Any]] = []
 
 @router.get("")
 async def get_all(
+    request: Request,
     q: Optional[str] = Query(default=None, description="按名称/描述搜索"),
     category: Optional[str] = Query(default=None),
     defect_level: Optional[str] = Query(default=None),
@@ -28,7 +29,14 @@ async def get_all(
     """
     supabase = get_supabase()
     if supabase is None:
-        return {"success": True, "rules": [], "count": 0, "page": page, "page_size": page_size}
+        return paginated_response(
+            items=[],
+            total=0,
+            page=page,
+            page_size=page_size,
+            message="数据库不可用",
+            trace_id=get_trace_id(request)
+        )
 
     def _infer_docs_from_name(rule_name: str) -> list[str]:
         name = (rule_name or "").lower()

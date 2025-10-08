@@ -133,7 +133,7 @@ async def get_medical_record_detail(record_id: str):
     return rec
 
 @router.get("/medical-records/{record_id}/documents")
-async def get_medical_record_documents(record_id: str):
+async def get_medical_record_documents(request: Request, record_id: str):
     """
     返回与前端期望对齐的结构：
     {
@@ -265,19 +265,22 @@ async def get_medical_record_documents(record_id: str):
         # 分类稳定排序：按 document_count DESC
         categories.sort(key=lambda x: (-x["document_count"], x["category_name"]))
 
-        return {
-            "record_id": record_id,
-            "total_documents": len(docs),
-            "categories": categories,
-            "classification_summary": classification_summary,
-        }
+        return success_response(
+            data={
+                "record_id": record_id,
+                "total_documents": len(docs),
+                "categories": categories,
+                "classification_summary": classification_summary,
+            },
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
         logger.error(f"获取文档失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取文档失败: {e}")
 
 
 @router.post("/medical-records/{record_id}/documents")
-async def create_medical_document(record_id: str, request: CreateDocumentRequest):
+async def create_medical_document(req: Request, record_id: str, doc_request: CreateDocumentRequest):
     """为指定医疗记录创建新文档"""
     supabase = get_supabase()
     settings = get_settings()
@@ -303,21 +306,21 @@ async def create_medical_document(record_id: str, request: CreateDocumentRequest
         category_id = None
         type_id = None
 
-        if request.category_code and request.type_code:
+        if doc_request.category_code and doc_request.type_code:
             # 使用提供的分类和类型代码
-            category_id = categories.get(request.category_code)
-            composite_key = f"{request.category_code}.{request.type_code}"
-            type_info = types.get(composite_key) or types.get(request.type_code)
+            category_id = categories.get(doc_request.category_code)
+            composite_key = f"{doc_request.category_code}.{doc_request.type_code}"
+            type_info = types.get(composite_key) or types.get(doc_request.type_code)
             if isinstance(type_info, dict):
                 type_id = type_info.get("id")
             else:
                 type_id = type_info
-        elif request.document_type:
+        elif doc_request.document_type:
             # 尝试从document_type解析
-            if "." in request.document_type:
-                cat_code, type_code = request.document_type.split(".", 1)
+            if "." in doc_request.document_type:
+                cat_code, type_code = doc_request.document_type.split(".", 1)
                 category_id = categories.get(cat_code)
-                type_info = types.get(request.document_type)
+                type_info = types.get(doc_request.document_type)
                 if isinstance(type_info, dict):
                     type_id = type_info.get("id")
                 else:
@@ -348,8 +351,8 @@ async def create_medical_document(record_id: str, request: CreateDocumentRequest
             "record_id": record_id,
             "category_id": category_id,
             "type_id": type_id,
-            "title": request.title,
-            "content": request.content,
+            "title": doc_request.title,
+            "content": doc_request.content,
             "ai_classified": False,
             "classification_confidence": 0.0,
             "manual_verified": True,  # 手动创建的文档标记为已验证
@@ -358,15 +361,15 @@ async def create_medical_document(record_id: str, request: CreateDocumentRequest
             "status": "active",
             "qc_status": "pending",
             "metadata": {
-                "category_code": request.category_code,
-                "type_code": request.type_code,
+                "category_code": doc_request.category_code,
+                "type_code": doc_request.type_code,
                 "manually_created": True
             }
         }
 
         # 如果有摘要，添加
-        if request.summary:
-            document_data["summary"] = request.summary
+        if doc_request.summary:
+            document_data["summary"] = doc_request.summary
 
         # 插入文档
         resp = await async_execute(
@@ -377,11 +380,11 @@ async def create_medical_document(record_id: str, request: CreateDocumentRequest
         if not resp.data:
             raise HTTPException(status_code=500, detail="文档创建失败")
 
-        return {
-            "success": True,
-            "document": resp.data[0],
-            "message": "文档创建成功"
-        }
+        return success_response(
+            data={"document": resp.data[0]},
+            message="文档创建成功",
+            trace_id=get_trace_id(req)
+        )
 
     except HTTPException:
         raise
@@ -391,20 +394,25 @@ async def create_medical_document(record_id: str, request: CreateDocumentRequest
 
 
 @router.put("/medical-documents/{document_id}")
-async def update_medical_document(document_id: str, update_data: Dict[str, Any]):
+async def update_medical_document(request: Request, document_id: str, update_data: Dict[str, Any]):
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
         resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).update(update_data).eq("id", document_id))
-        return {"success": True, "updated": len(resp.data or [])}
+        return success_response(
+            data={"updated": len(resp.data or [])},
+            message="更新成功",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"更新失败: {e}")
 
 
 @router.delete("/medical-documents/{document_id}")
 async def delete_medical_document(
+    request: Request,
     document_id: str,
     hard_delete: bool = False,
     # current_user: dict = Depends(get_current_user)  # 暂时注释掉认证
@@ -452,14 +460,16 @@ async def delete_medical_document(
             )
             operation = "软删除"
 
-        return {
-            "success": True,
-            "deleted": len(resp.data or []),
-            "operation": operation,
-            "document_id": document_id,
-            "document_title": document["title"],
-            "message": f"文档已{operation}成功"
-        }
+        return success_response(
+            data={
+                "deleted": len(resp.data or []),
+                "operation": operation,
+                "document_id": document_id,
+                "document_title": document["title"],
+            },
+            message=f"文档已{operation}成功",
+            trace_id=get_trace_id(request)
+        )
 
     except HTTPException:
         raise
@@ -469,10 +479,10 @@ async def delete_medical_document(
 
 
 @router.post("/medical-records/{record_id}/batch-qc-analysis")
-async def batch_qc_analysis(record_id: str, current_user: dict = Depends(get_current_user)):
+async def batch_qc_analysis(request: Request, record_id: str, current_user: dict = Depends(get_current_user)):
     supabase = get_supabase()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
         settings = get_settings()
         resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select("id, content, title").eq("record_id", record_id))
@@ -482,25 +492,33 @@ async def batch_qc_analysis(record_id: str, current_user: dict = Depends(get_cur
             res = await qc_service.evaluate({"record_id": d["id"]})
             qc_results_db[d["id"]] = res
             started.append({"document_id": d["id"], "status": "started"})
-        return {"record_id": record_id, "started": started, "count": len(started)}
+        return success_response(
+            data={"record_id": record_id, "started": started, "count": len(started)},
+            message="批量质控已启动",
+            trace_id=get_trace_id(request)
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"批量质控启动失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"批量质控启动失败: {e}")
 
 
 @router.post("/medical-documents/{document_id}/qc-analysis")
-async def analyze_medical_document(document_id: str, current_user: dict = Depends(get_current_user)):
+async def analyze_medical_document(request: Request, document_id: str, current_user: dict = Depends(get_current_user)):
     supabase = get_supabase()
     if not supabase:
-        raise HTTPException(status_code=500, detail="数据库连接未初始化")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
         settings = get_settings()
         resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select('id, content, title').eq('id', document_id))
         data = (resp.data or [])
         if not data:
-            raise HTTPException(status_code=404, detail="文档不存在")
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="文档不存在")
         res = await qc_service.evaluate({"record_id": document_id})
         qc_results_db[document_id] = res
-        return {"analysis_id": res.get("id"), "status": "started"}
+        return success_response(
+            data={"analysis_id": res.get("id"), "status": "started"},
+            message="质控分析已启动",
+            trace_id=get_trace_id(request)
+        )
     except HTTPException:
         raise
     except Exception as e:
