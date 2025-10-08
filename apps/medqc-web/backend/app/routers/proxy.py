@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
+from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..core.http import safe_post_json
 from ..core.settings import get_settings
 
@@ -8,7 +9,8 @@ router = APIRouter(prefix="/api/llm", tags=["llm-proxy"])
 
 
 @router.post("/parse-text")
-async def llm_parse_text_proxy(payload: Dict[str, Any]):
+async def llm_parse_text_proxy(
+    request: Request,payload: Dict[str, Any]):
     # Minimal safe placeholder: validate input shape and refuse if missing
     api_config = payload.get("apiConfig") or {}
     request_body = payload.get("requestBody") or {}
@@ -17,7 +19,7 @@ async def llm_parse_text_proxy(payload: Dict[str, Any]):
     api_key = api_config.get("apiKey") or ""
 
     if not api_endpoint or not api_key:
-        return JSONResponse(status_code=400, content={
+        return JSONResponse(status_code=StatusCode.BAD_REQUEST, content={
             'error': 'Missing apiEndpoint or apiKey',
             'apiEndpoint': bool(api_endpoint),
             'apiKeyProvided': bool(api_key)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 import sys
 import os
 
@@ -6,7 +6,8 @@ router = APIRouter(prefix="/api/debug", tags=["debug"], include_in_schema=False)
 
 
 @router.get("/pdf-env")
-async def pdf_env():
+async def pdf_env(
+    request: Request,):
     info = {
         "python_executable": sys.executable,
         "python_version": sys.version,

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timezone
 
+from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..services.sichuan_qc_service import SichuanQCService
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
@@ -46,7 +47,8 @@ def _grade_from_rate(rate: float) -> str:
 
 
 @router.post("/evaluate")
-async def evaluate(req: SichuanEvaluateRequest):
+async def evaluate(
+    request: Request,req: SichuanEvaluateRequest):
     try:
         # Allow runtime override of model (for A/B testing different LLMs)
         if req.model:
@@ -187,11 +189,12 @@ async def evaluate(req: SichuanEvaluateRequest):
                 _persist_evaluation_to_db(req.document_id, response)
             return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"四川省质控评估失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省质控评估失败: {e}")
 
 
 @router.post("/evaluate/batch")
-async def evaluate_batch(req: SichuanBatchRequest):
+async def evaluate_batch(
+    request: Request,req: SichuanBatchRequest):
     try:
         payloads = [
             {
@@ -257,11 +260,12 @@ async def evaluate_batch(req: SichuanBatchRequest):
         }
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"四川省批量质控评估失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省批量质控评估失败: {e}")
 
 
 @router.get("/stats")
-async def stats():
+async def stats(
+    request: Request,):
     try:
         st = service.stats()
         s = get_settings()
@@ -294,11 +298,12 @@ async def stats():
         }
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取四川省质控统计失败: {e}")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取四川省质控统计失败: {e}")
 
 
 @router.get("/rules")
 async def rules(
+    request: Request,
     document_type: Optional[str] = Query(default=None, description="单个文书类型（中文）"),
     document_types: Optional[str] = Query(default=None, description="逗号分隔的文书类型（中文）"),
     grouped: Optional[bool] = Query(default=False, description="是否按文书类型分组返回")
