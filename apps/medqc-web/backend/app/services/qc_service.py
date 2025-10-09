@@ -35,6 +35,32 @@ class QCService:
 
         # ===== 规则归一化 =====
         def normalize_rule(raw: Dict[str, Any]) -> Dict[str, Any]:
+            """
+            归一化质控规则数据
+
+            将来自不同来源的规则数据统一为标准格式，确保：
+            - 所有必需字段都有默认值
+            - 字段名称标准化
+            - 数据类型正确
+
+            Args:
+                raw: 原始规则数据，可能包含不同的字段名和格式
+
+            Returns:
+                Dict[str, Any]: 标准化后的规则数据，包含以下字段：
+                    - id: 规则唯一标识
+                    - name: 规则名称
+                    - description: 规则描述
+                    - category: 规则类别（completeness, consistency等）
+                    - severity: 严重程度（critical, major, medium, minor, low）
+                    - weight: 权重（用于计算总分）
+                    - rule_code: 规则编码
+
+            Example:
+                >>> raw = {"ruleCode": "R001", "ruleName": "入院记录完整性"}
+                >>> normalized = normalize_rule(raw)
+                >>> print(normalized["id"])  # "R001" or generated UUID
+            """
             return {
                 "id": str(raw.get("id") or raw.get("rule_id") or raw.get("ruleCode") or f"rule-{uuid.uuid4().hex[:6]}"),
                 "name": str(raw.get("name") or raw.get("rule_name") or raw.get("ruleName") or "未命名规则"),

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.settings import get_settings
 from .core.logging import configure_logging, request_logger_middleware
 from .core.middleware_errors import UnifiedErrorMiddleware
+from .core.middleware_api_version import APIVersionMiddleware
 
 logger = logging.getLogger(__name__)
 from .routers import system as system_router
@@ -29,6 +30,8 @@ from .routers import classification as classification_router
 from .routers import llm_configs as llm_configs_router
 from .routers import medical_records_alias as medical_records_alias_router
 from .routers import reports as reports_router
+from .routers import appeals as appeals_router
+from .routers import remediation as remediation_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -40,6 +43,32 @@ except Exception:  # pragma: no cover
 
 
 def create_app() -> FastAPI:
+    """
+    创建并配置 FastAPI 应用实例
+
+    该函数负责:
+    1. 加载配置和初始化日志
+    2. 配置 CORS 跨域策略
+    3. 注册中间件（API 版本控制、日志记录、错误处理）
+    4. 注册全局异常处理器
+    5. 注册所有业务路由
+    6. 挂载静态文件服务
+
+    Returns:
+        FastAPI: 配置完成的 FastAPI 应用实例
+
+    Middleware 执行顺序（按注册顺序逆序执行）:
+        1. APIVersionMiddleware - API 版本控制和向后兼容
+        2. request_logger_middleware - 请求/响应日志记录
+        3. UnifiedErrorMiddleware - 统一错误格式处理
+        4. CORSMiddleware - 跨域资源共享
+
+    Example:
+        >>> app = create_app()
+        >>> # 使用 uvicorn 运行
+        >>> import uvicorn
+        >>> uvicorn.run(app, host="0.0.0.0", port=8001)
+    """
     settings = get_settings()
     configure_logging()
 
@@ -70,6 +99,8 @@ def create_app() -> FastAPI:
         allow_headers=settings.CORS_ALLOW_HEADERS,
     )
 
+    # API Version middleware (with backward compatibility)
+    app.add_middleware(APIVersionMiddleware, enable_legacy_redirect=True)
     # Logging middleware
     app.middleware("http")(request_logger_middleware)
     # Unified error shape
@@ -177,6 +208,8 @@ def create_app() -> FastAPI:
     # Compatibility alias for /api/medical-records endpoints
     app.include_router(medical_records_alias_router.router)
     app.include_router(reports_router.router)
+    app.include_router(appeals_router.router)
+    app.include_router(remediation_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

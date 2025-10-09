@@ -15,7 +15,7 @@ from ..core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["medical-documents"])
+router = APIRouter(prefix="/api/v1", tags=["medical-documents"])
 qc_service = QCService()
 
 

@@ -22,7 +22,7 @@ from ..core.security import (
 from ..storage.memory import users_db
 
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.options("/login")

@@ -10,7 +10,7 @@ from ..storage.memory import qc_results_db, qc_rules_db
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
 
-router = APIRouter(prefix="/api/qc", tags=["qc"])
+router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
 
 

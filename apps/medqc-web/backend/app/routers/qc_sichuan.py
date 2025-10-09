@@ -10,7 +10,7 @@ from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 
 
-router = APIRouter(prefix="/api/qc/sichuan", tags=["qc-sichuan"])
+router = APIRouter(prefix="/api/v1/qc/sichuan", tags=["qc-sichuan"])
 service = SichuanQCService()
 
 

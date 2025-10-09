@@ -9,7 +9,7 @@ from ..core.settings import get_settings
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 
 
-router = APIRouter(prefix="/api/llm", tags=["llm-configs"])
+router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
 
 
 def _now_iso() -> str:

@@ -4,7 +4,7 @@ import os
 
 from ..core.response import success_response, get_trace_id
 
-router = APIRouter(prefix="/api/debug", tags=["debug"], include_in_schema=False)
+router = APIRouter(prefix="/api/v1/debug", tags=["debug"], include_in_schema=False)
 
 
 @router.get("/pdf-env")

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Request
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 
-router = APIRouter(prefix="/api/llm", tags=["llm-info"])
+router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
 
 @router.get("/providers")

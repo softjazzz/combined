@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from ..storage.memory import llm_configs
 
 
-router = APIRouter(prefix="/api/qc", tags=["qc-llm-configs"])
+router = APIRouter(prefix="/api/v1/qc", tags=["qc-llm-configs"])
 
 
 @router.get("/llm-configs")

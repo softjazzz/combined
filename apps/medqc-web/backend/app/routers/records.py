@@ -13,7 +13,7 @@ from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
 
 
-router = APIRouter(prefix="/api/records", tags=["records"])
+router = APIRouter(prefix="/api/v1/records", tags=["records"])
 
 
 @router.get("")

@@ -4,7 +4,7 @@ from ..schemas.ingest import LLMParseResultSave
 from ..services.records_ingest_service import ingest_llm_parse_result
 from ..schemas.records import MedicalRecordResponse
 
-router = APIRouter(prefix="/api", tags=["ingest"])
+router = APIRouter(prefix="/api/v1", tags=["ingest"])
 
 
 @router.post("/medical-records", response_model=MedicalRecordResponse)

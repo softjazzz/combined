@@ -17,7 +17,7 @@ _QC_SUMMARY_CACHE_TS: float = 0.0
 _QC_SUMMARY_TTL_SECONDS = 10.0
 
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 
 
 @router.get("/qc/summary")

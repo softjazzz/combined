@@ -90,6 +90,16 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'records/test',
+        name: 'TestMedicalRecords',
+        component: () => import('@/views/test-medical-records/TestMedicalRecordsView.vue'),
+        meta: {
+          title: '测试病历管理',
+          icon: 'ProfileOutlined',
+          permission: ['admin', 'qc_manager', 'developer']
+        }
+      },
+      {
         path: 'records/:id',
         name: 'RecordDetail',
         component: () => import('@/views/records/RecordDetailView.vue'),

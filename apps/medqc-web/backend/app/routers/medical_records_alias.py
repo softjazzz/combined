@@ -11,7 +11,7 @@ from ..schemas.records import MedicalRecordResponse
 from ..core.security import get_current_user
 
 
-router = APIRouter(prefix="/api/medical-records", tags=["medical-records-compat"])
+router = APIRouter(prefix="/api/v1/medical-records", tags=["medical-records-compat"])
 
 
 def _normalize_record(rec: Dict[str, Any]) -> Dict[str, Any]:

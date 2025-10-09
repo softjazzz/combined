@@ -5,7 +5,7 @@ from ..core.response import success_response, paginated_response, error_response
 from ..core.http import safe_post_json
 from ..core.settings import get_settings
 
-router = APIRouter(prefix="/api/llm", tags=["llm-proxy"])
+router = APIRouter(prefix="/api/v1/llm", tags=["llm-proxy"])
 
 
 @router.post("/parse-text")

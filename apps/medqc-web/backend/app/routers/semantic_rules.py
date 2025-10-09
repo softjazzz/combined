@@ -4,7 +4,7 @@ from ..core.supabase_client import get_supabase
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from datetime import datetime
 
-router = APIRouter(prefix="/api/semantic-rules", tags=["semantic-rules"])
+router = APIRouter(prefix="/api/v1/semantic-rules", tags=["semantic-rules"])
 
 
 # 移除内置占位规则，保持为空。

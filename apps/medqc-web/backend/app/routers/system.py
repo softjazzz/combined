@@ -7,7 +7,7 @@ from ..core.settings import get_settings
 from ..core.response import success_response, get_trace_id
 from ..services.sichuan_qc_service import SichuanQCService
 
-router = APIRouter(prefix="/api", tags=["system"])
+router = APIRouter(prefix="/api/v1", tags=["system"])
 
 
 @router.get("/health")
