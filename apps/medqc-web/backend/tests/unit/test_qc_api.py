@@ -10,17 +10,25 @@ import uuid
 from tests.conftest import assert_response_success, assert_response_error
 
 
+# Helper function to create async mock
+def async_return(value):
+    """Create an async function that returns a value"""
+    async def _async_return():
+        return value
+    return _async_return()
+
+
 @pytest.mark.unit
 @pytest.mark.api
 @pytest.mark.qc
 class TestQCAPI:
     """质控 API 测试类"""
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_record_success(self, mock_evaluate, client, sample_qc_result):
         """测试分析单个病历成功"""
         record_id = str(uuid.uuid4())
-        
+
         # Mock 质控服务返回结果
         mock_evaluate.return_value = sample_qc_result
 
@@ -33,11 +41,11 @@ class TestQCAPI:
         assert "analysis_id" in data["data"]
         assert data["message"] == "质控分析完成"
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_record_with_payload(self, mock_evaluate, client, sample_qc_result):
         """测试分析病历 - 携带额外参数"""
         record_id = str(uuid.uuid4())
-        
+
         mock_evaluate.return_value = sample_qc_result
 
         payload = {
@@ -55,11 +63,12 @@ class TestQCAPI:
         assert call_args["record_id"] == record_id
         assert call_args["content"] == "患者因胸痛入院..."
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_batch_with_record_ids(self, mock_evaluate, client, sample_qc_result):
         """测试批量分析 - 使用 record_ids"""
         record_ids = [str(uuid.uuid4()) for _ in range(3)]
-        
+
+        # AsyncMock 自动处理异步返回
         mock_evaluate.return_value = sample_qc_result
 
         payload = {
@@ -79,7 +88,7 @@ class TestQCAPI:
             assert item["status"] == "completed"
             assert "analysis_id" in item
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_batch_with_records(self, mock_evaluate, client, sample_qc_result):
         """测试批量分析 - 使用 records 数组"""
         mock_evaluate.return_value = sample_qc_result
@@ -109,7 +118,7 @@ class TestQCAPI:
         assert data["data"]["count"] == 3
         assert len(data["data"]["started"]) == 3
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_batch_empty_list(self, mock_evaluate, client):
         """测试批量分析 - 空列表"""
         payload = {
@@ -122,7 +131,7 @@ class TestQCAPI:
         assert data["data"]["count"] == 0
         assert len(data["data"]["started"]) == 0
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_batch_skip_invalid_records(self, mock_evaluate, client, sample_qc_result):
         """测试批量分析 - 跳过无效记录"""
         mock_evaluate.return_value = sample_qc_result
@@ -166,13 +175,13 @@ class TestQCAPI:
     def test_get_result_not_found(self, client):
         """测试获取质控结果 - 不存在"""
         record_id = str(uuid.uuid4())
-        
+
         with patch("app.routers.qc.qc_results_db", {}):
             response = client.get(f"/api/v1/qc/result/{record_id}")
 
             assert response.status_code == 404
             data = response.json()
-            assert "质控结果不存在" in data["detail"]
+            assert "质控结果不存在" in (data.get("error") or data.get("detail", ""))
 
     def test_get_progress_success(self, client):
         """测试获取分析进度"""
@@ -185,18 +194,20 @@ class TestQCAPI:
         assert data["data"]["analysis_id"] == analysis_id
         assert data["data"]["status"] == "completed"
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_record_service_error(self, mock_evaluate, client):
         """测试分析病历 - 服务错误"""
         record_id = str(uuid.uuid4())
-        
+
         # Mock 服务抛出异常
         mock_evaluate.side_effect = Exception("Service error")
 
-        with pytest.raises(Exception):
-            response = client.post(f"/api/v1/qc/analyze/{record_id}")
+        response = client.post(f"/api/v1/qc/analyze/{record_id}")
 
-    @patch("app.routers.qc.service.evaluate")
+        # 应该返回 500 错误
+        assert response.status_code == 500
+
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_multiple_times(self, mock_evaluate, client, sample_qc_result):
         """测试多次分析同一病历"""
         record_id = str(uuid.uuid4())
@@ -220,7 +231,7 @@ class TestQCAPI:
         "550e8400-e29b-41d4-a716-446655440000",
         "record_2025_001",
     ])
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_various_record_id_formats(self, mock_evaluate, client, sample_qc_result, record_id):
         """测试分析 - 各种 record_id 格式"""
         mock_evaluate.return_value = sample_qc_result
@@ -231,7 +242,7 @@ class TestQCAPI:
         data = response.json()
         assert data["data"]["record_id"] == record_id
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_concurrent_analyze(self, mock_evaluate, client, sample_qc_result):
         """测试并发分析"""
         import concurrent.futures
@@ -252,7 +263,7 @@ class TestQCAPI:
         for response in responses:
             assert_response_success(response, 200)
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_with_empty_payload(self, mock_evaluate, client, sample_qc_result):
         """测试分析 - 空 payload"""
         record_id = str(uuid.uuid4())
@@ -263,7 +274,7 @@ class TestQCAPI:
 
         assert_response_success(response, 200)
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_with_null_payload(self, mock_evaluate, client, sample_qc_result):
         """测试分析 - null payload"""
         record_id = str(uuid.uuid4())
@@ -289,21 +300,25 @@ class TestQCAPI:
                     "rule_name": "入院记录完整性",
                     "description": "缺少过敏史",
                     "severity": "medium",
-                    "category": "completeness"
+                    "category": "completeness",
+                    "location": "入院记录",
+                    "suggestion": "请补充过敏史信息"
                 },
                 {
                     "id": "issue-2",
                     "rule_name": "诊断准确性",
                     "description": "诊断不明确",
                     "severity": "major",
-                    "category": "accuracy"
+                    "category": "accuracy",
+                    "location": "诊断记录",
+                    "suggestion": "请明确诊断"
                 }
             ],
             "suggestions": [],
             "rule_results": [],
             "metadata": {}
         }
-        
+
         with patch("app.routers.qc.qc_results_db", {record_id: qc_result}):
             response = client.get(f"/api/v1/qc/result/{record_id}")
 
@@ -313,7 +328,7 @@ class TestQCAPI:
             assert data["issues"][0]["rule_name"] == "入院记录完整性"
             assert data["issues"][1]["severity"] == "major"
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_batch_large_batch(self, mock_evaluate, client, sample_qc_result):
         """测试批量分析 - 大批量"""
         mock_evaluate.return_value = sample_qc_result
@@ -341,7 +356,7 @@ class TestQCAPI:
             # 验证响应头中有 trace_id
             assert "X-Trace-ID" in response.headers
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_response_structure(self, mock_evaluate, client, sample_qc_result):
         """测试分析响应结构"""
         record_id = str(uuid.uuid4())
@@ -364,7 +379,7 @@ class TestQCAPI:
         assert "status" in data["data"]
         assert "record_id" in data["data"]
 
-    @patch("app.routers.qc.service.evaluate")
+    @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_batch_analyze_response_structure(self, mock_evaluate, client, sample_qc_result):
         """测试批量分析响应结构"""
         mock_evaluate.return_value = sample_qc_result

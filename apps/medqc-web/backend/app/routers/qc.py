@@ -14,30 +14,6 @@ router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
 
 
-@router.post("/analyze/{record_id}")
-async def analyze_record(
-    request: Request,
-    record_id: str,
-    payload: Optional[Dict[str, Any]] = None
-):
-    """分析单个病案记录"""
-    request_payload = dict(payload or {})
-    request_payload["record_id"] = record_id
-    result = await service.evaluate(request_payload)
-    qc_results_db[record_id] = result
-    analysis_id = result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
-
-    return success_response(
-        data={
-            "analysis_id": analysis_id,
-            "status": "completed",
-            "record_id": record_id,
-        },
-        message="质控分析完成",
-        trace_id=get_trace_id(request)
-    )
-
-
 @router.post("/analyze/batch")
 async def analyze_batch(request: Request, payload: Dict[str, Any]):
     """批量分析病案记录"""
@@ -66,6 +42,30 @@ async def analyze_batch(request: Request, payload: Dict[str, Any]):
             "count": len(started),
         },
         message=f"已完成 {len(started)} 个文档的质控分析",
+        trace_id=get_trace_id(request)
+    )
+
+
+@router.post("/analyze/{record_id}")
+async def analyze_record(
+    request: Request,
+    record_id: str,
+    payload: Optional[Dict[str, Any]] = None
+):
+    """分析单个病案记录"""
+    request_payload = dict(payload or {})
+    request_payload["record_id"] = record_id
+    result = await service.evaluate(request_payload)
+    qc_results_db[record_id] = result
+    analysis_id = result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
+
+    return success_response(
+        data={
+            "analysis_id": analysis_id,
+            "status": "completed",
+            "record_id": record_id,
+        },
+        message="质控分析完成",
         trace_id=get_trace_id(request)
     )
 
