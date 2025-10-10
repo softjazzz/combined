@@ -135,7 +135,7 @@ export class ValidationRules {
 
   static patientAge(value: number): string | null {
     if (value === null || value === undefined) return '患者年龄不能为空'
-    return this.numberRange(value, 0, 150, '患者年龄')
+    return ValidationRules.numberRange(value, 0, 150, '患者年龄')
   }
 
   static department(value: string): string | null {

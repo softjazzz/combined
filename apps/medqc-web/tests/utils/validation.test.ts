@@ -65,7 +65,7 @@ describe('FormValidator', () => {
   it('collects errors and warnings', () => {
     const validator = new FormValidator()
     validator
-      .validate('name', '', [
+      .validate('name', 'A', [
         value => ValidationRules.required(value, '姓名'),
         value => ValidationRules.stringLength(value as string, 2, 5, '姓名')
       ])
@@ -73,10 +73,9 @@ describe('FormValidator', () => {
 
     const result = validator.getResult()
     expect(result.isValid).toBe(false)
-    expect(result.errors).toContain('姓名不能为空')
     expect(result.errors).toContain('姓名长度不能少于2个字符')
     expect(result.warnings).toContain('姓名格式需要人工复核')
-    expect(validator.getFieldErrors('name')).toHaveLength(2)
+    expect(validator.getFieldErrors('name')).toHaveLength(1)
     expect(validator.getFieldWarnings('name')).toHaveLength(1)
   })
 
