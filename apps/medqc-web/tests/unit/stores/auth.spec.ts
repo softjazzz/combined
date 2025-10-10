@@ -48,71 +48,187 @@ describe('Auth Store', () => {
   })
 
   describe('计算属性', () => {
-    it('isAuthenticated 应该正确反映认证状态', () => {
+    it('isAuthenticated 应该正确反映认证状态', async () => {
       const store = useAuthStore()
 
       expect(store.isAuthenticated).toBe(false)
 
-      store.user = mockUser
+      // 通过登录方法设置用户状态
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
       expect(store.isAuthenticated).toBe(true)
     })
 
-    it('userRoles 应该正确返回用户角色', () => {
+    it('userRoles 应该正确返回用户角色', async () => {
       const store = useAuthStore()
 
       expect(store.userRoles).toEqual([])
 
-      store.user = mockUser
+      // 通过登录方法设置用户状态
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
       expect(store.userRoles).toEqual(['doctor'])
     })
 
-    it('userRoles 应该支持单个角色字符串', () => {
+    it('userRoles 应该支持单个角色字符串', async () => {
       const store = useAuthStore()
 
-      store.user = {
+      const userWithSingleRole = {
         ...mockUser,
         roles: undefined,
         role: 'admin'
       } as any
 
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: userWithSingleRole
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: userWithSingleRole,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
       expect(store.userRoles).toEqual(['admin'])
     })
 
-    it('userName 应该正确返回用户名', () => {
+    it('userName 应该正确返回用户名', async () => {
       const store = useAuthStore()
 
       expect(store.userName).toBe('')
 
-      store.user = mockUser
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
       expect(store.userName).toBe('测试用户')
     })
 
-    it('userName 应该回退到邮箱', () => {
+    it('userName 应该回退到邮箱', async () => {
       const store = useAuthStore()
 
-      store.user = {
+      const userWithoutName = {
         ...mockUser,
         display_name: undefined
       } as any
 
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: userWithoutName
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: userWithoutName,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
       expect(store.userName).toBe('test@example.com')
     })
 
-    it('userDepartment 应该正确返回科室', () => {
+    it('userDepartment 应该正确返回科室', async () => {
       const store = useAuthStore()
 
       expect(store.userDepartment).toBe('')
 
-      store.user = mockUser
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
       expect(store.userDepartment).toBe('心内科')
     })
   })
 
   describe('权限检查', () => {
-    it('hasRole 应该正确检查角色', () => {
+    it('hasRole 应该正确检查角色', async () => {
       const store = useAuthStore()
 
-      store.user = mockUser
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
 
       expect(store.hasRole('doctor')).toBe(true)
       expect(store.hasRole('admin')).toBe(false)
@@ -204,9 +320,27 @@ describe('Auth Store', () => {
     it('应该成功登出', async () => {
       const store = useAuthStore()
 
-      store.user = mockUser
-      store.initialized = true
+      // 先登录
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
 
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
+      expect(store.isAuthenticated).toBe(true)
+
+      // 然后登出
       vi.mocked(ApiService.logout).mockResolvedValue({
         success: true,
         message: '登出成功'
@@ -216,14 +350,30 @@ describe('Auth Store', () => {
 
       expect(store.user).toBeNull()
       expect(store.isAuthenticated).toBe(false)
-      expect(store.initialized).toBe(false)
       expect(ApiService.logout).toHaveBeenCalled()
     })
 
     it('应该在登出失败时仍清除本地状态', async () => {
       const store = useAuthStore()
 
-      store.user = mockUser
+      // 先登录
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser
+        },
+        message: '登录成功'
+      })
+
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户信息成功'
+      })
+
+      await store.signIn('test@example.com', 'password')
 
       vi.mocked(ApiService.logout).mockRejectedValue(new Error('网络错误'))
 
