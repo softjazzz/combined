@@ -14,6 +14,9 @@ from datetime import datetime
 # 导入应用
 from app.main import create_app
 
+# 导入语义规则 fixtures
+pytest_plugins = ["tests.fixtures.semantic_rules_fixtures"]
+
 
 @pytest.fixture(scope="session")
 def app():
