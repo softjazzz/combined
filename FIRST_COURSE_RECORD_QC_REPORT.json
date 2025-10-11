@@ -1,0 +1,33 @@
+{
+  "document_id": "record-first-course-qc-report",
+  "evaluation_summary": {
+    "total_rules": 68,
+    "compliant_rules": 57,
+    "compliance_rate": 85.0,
+    "overall_grade": "B",
+    "critical_violations": 3
+  },
+  "performance_metrics": {
+    "processing_time": 20.636037349700928,
+    "token_usage": 2664,
+    "estimated_cost": 0.005328
+  },
+  "evaluation_results": [
+    {
+      "rule_id": "SC-PLACEHOLDER",
+      "is_compliant": true,
+      "findings": "模型输出摘要",
+      "evidence": "### 四川省住院病历质控分析：首次病程记录\n\n#### 一、总体评价\n该份首次病程记录整体结构完整，信息详实，符合临床病历书写规范。以下从多个方面进行具体分析：\n\n---\n\n#### 二、优点\n1. **格式规范**：\n   - 包含了患",
+      "confidence": 0.75
+    }
+  ],
+  "optimization_metrics": {
+    "token_savings_rate": 0.8,
+    "estimated_original_tokens": 13320,
+    "actual_tokens_saved": 10656,
+    "cost_savings": 0.021312
+  },
+  "timestamp": "2025-10-11T07:43:23.834383+00:00",
+  "status": "success",
+  "mode": "single_prompt"
+}
