@@ -1,8 +1,12 @@
 from typing import Dict, Any, List, Optional
 import time
+import logging
 
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
+from ..core.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
 
 
 class SichuanQCLLMClient:
@@ -83,16 +87,184 @@ class SichuanQCService:
     def __init__(self) -> None:
         self.client = SichuanQCLLMClient()
 
+    async def _load_rules_from_db(self, document_type: str) -> List[Dict[str, Any]]:
+        """
+        从 Supabase 数据库加载适用于指定文书类型的质控规则。
+
+        Args:
+            document_type: 文书类型（如 "病程记录"、"入院记录" 等）
+
+        Returns:
+            适用规则列表。如果数据库不可用或加载失败，返回空列表。
+
+        规则筛选逻辑：
+        1. 从 qc_rules 表加载所有 is_active=true 的规则
+        2. 从 check_logic JSONB 字段中读取 applicable_documents 数组
+        3. 如果规则的 applicable_documents 包含指定的 document_type，则包含该规则
+        4. 如果 applicable_documents 为空或不存在，视为通用规则，也包含该规则
+        """
+        try:
+            supabase = get_supabase()
+            if supabase is None:
+                logger.warning("Supabase client not available, cannot load rules from database")
+                return []
+
+            # 加载所有激活的规则
+            # 尝试使用异步执行，如果不支持则使用同步执行
+            async def _exec(query):
+                try:
+                    exec_async = getattr(query, "execute_async", None)
+                    if callable(exec_async):
+                        return await exec_async()
+                except Exception:
+                    pass
+                return query.execute()
+
+            resp = await _exec(
+                supabase.table("qc_rules")
+                .select("*")
+                .eq("is_active", True)
+                .limit(1000)
+            )
+
+            all_rules = resp.data or []
+            logger.info(f"Loaded {len(all_rules)} active rules from database")
+
+            # 筛选适用于指定文书类型的规则
+            applicable_rules = []
+            for rule in all_rules:
+                # 从 check_logic JSONB 字段中读取 applicable_documents
+                check_logic = rule.get("check_logic", {})
+                if isinstance(check_logic, dict):
+                    applicable_docs = check_logic.get("applicable_documents", [])
+                else:
+                    applicable_docs = []
+
+                # 也支持从顶层字段读取（向后兼容）
+                if not applicable_docs:
+                    applicable_docs = rule.get("applicable_documents", [])
+
+                # 规范化为列表
+                if isinstance(applicable_docs, str):
+                    applicable_docs = [d.strip() for d in applicable_docs.split(",") if d.strip()]
+                elif not isinstance(applicable_docs, list):
+                    applicable_docs = []
+
+                # 筛选逻辑：
+                # 1. 如果 applicable_documents 为空，视为通用规则，包含该规则
+                # 2. 如果 applicable_documents 包含指定的 document_type，包含该规则
+                if not applicable_docs or document_type in applicable_docs:
+                    applicable_rules.append(rule)
+
+            logger.info(f"Found {len(applicable_rules)} rules applicable to document type '{document_type}'")
+            return applicable_rules
+
+        except Exception as e:
+            logger.error(f"Failed to load rules from database: {e}", exc_info=True)
+            return []
+
+    async def _build_prompt(
+        self,
+        rules: List[Dict[str, Any]],
+        content: str,
+        document_type: str
+    ) -> str:
+        """
+        使用规则列表和病历内容构建质控分析 Prompt。
+
+        Args:
+            rules: 适用规则列表
+            content: 病历内容
+            document_type: 文书类型
+
+        Returns:
+            完整的 Prompt 字符串
+
+        Prompt 结构：
+        1. 系统角色定义（资深病案质控专家）
+        2. 文书类型和规则数量
+        3. 规则清单（编号、名称、描述）
+        4. 病历内容（截取前 4000 字符）
+        5. 输出要求
+        """
+        # 构建规则清单
+        rules_text = ""
+        if rules:
+            rules_text = "\n".join([
+                f"{i+1}. {rule.get('name', '未命名规则')}: {rule.get('description', '无描述')}"
+                for i, rule in enumerate(rules)
+            ])
+        else:
+            rules_text = "（未加载到具体规则，将进行通用质控分析）"
+
+        # 基础 Prompt 模板
+        base_template = """你是一位具有20年经验的资深病案质控专家，严格按照《四川省住院病历质量评定标准（2023年版）》进行病历质量评价。
+
+## 质控任务
+文书类型: {document_type}
+适用规则数: {rules_count}
+
+## 质控规则清单
+{rules_text}
+
+## 病历内容
+{content}
+
+## 输出要求
+请根据上述规则对病历进行全面质控分析，并给出：
+1. 每条规则的符合情况（符合/不符合）
+2. 不符合项的具体问题描述
+3. 改进建议
+4. 总体评价和建议
+
+请以结构化的方式输出分析结果。"""
+
+        return base_template.format(
+            document_type=document_type,
+            rules_count=len(rules),
+            rules_text=rules_text,
+            content=content[:4000]
+        )
+
     async def evaluate_document(self, document_id: str, content: str, document_type: str = "病程记录") -> Dict[str, Any]:
-        prompt = f"进行四川省住院病历质控分析。文书类型: {document_type}\n内容:\n{content[:4000]}"
+        """
+        对单个病历文档进行质控评估。
+
+        Args:
+            document_id: 文档 ID
+            content: 病历内容
+            document_type: 文书类型（默认为 "病程记录"）
+
+        Returns:
+            质控评估结果，包含：
+            - document_id: 文档 ID
+            - document_type: 文书类型
+            - total_rules: 适用规则总数
+            - applicable_rules: 适用规则代码列表
+            - evaluation_summary: 评估摘要
+            - llm_output: LLM 原始输出
+            - token_usage: Token 使用量
+            - api_time: API 调用时间
+        """
+        # P0 任务 1: 从数据库加载规则
+        rules = await self._load_rules_from_db(document_type)
+
+        # P0 任务 2: 使用 Prompt 模板构建 Prompt
+        prompt = await self._build_prompt(rules, content, document_type)
+
+        # 调用 LLM
         result = await self.client.generate(prompt)
         text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
         return {
             "document_id": document_id,
+            "document_type": document_type,
+            "total_rules": len(rules),
+            "applicable_rules": [r.get("rule_code", r.get("id", "")) for r in rules],
             "evaluation_summary": {
                 "compliance_rate": 85.0,
                 "issues_found": 3,
-                "model":"mock" if result.get("_mock") else self.client.model,
+                "model": "mock" if result.get("_mock") else self.client.model,
             },
             "llm_output": text,
             "token_usage": result.get("usage", {}),
@@ -150,13 +322,15 @@ class SichuanQCService:
             doc_map["病程记录"] = document_content
 
         n_docs = max(1, len(doc_map))
-        
-        # Use actual rules if provided, otherwise fallback to default calculation
-        if rules_by_document_type:
-            total_rules_per_doc = lambda doc_type: len(rules_by_document_type.get(doc_type, []))
-        else:
-            default_rules_per_doc = max(10, int(68 / n_docs))
-            total_rules_per_doc = lambda doc_type: default_rules_per_doc
+
+        # P0 任务 1: 从数据库加载规则（如果未提供预加载的规则）
+        # 如果前端提供了 rules_by_document_type，优先使用
+        # 否则，从数据库动态加载每种文书类型的规则
+        if not rules_by_document_type:
+            rules_by_document_type = {}
+            for doc_type in doc_map.keys():
+                rules_by_document_type[doc_type] = await self._load_rules_from_db(doc_type)
+            logger.info(f"Loaded rules from database for {len(rules_by_document_type)} document types")
 
         document_results: Dict[str, Any] = {}
         total_tokens = 0
@@ -166,20 +340,20 @@ class SichuanQCService:
         sum_critical = 0
 
         for idx, (doc_type, text) in enumerate(doc_map.items(), start=1):
-            gen = await self.client.generate(
-                f"进行四川省住院病历质控分析（多文书模式）。文书类型: {doc_type}\n内容:\n{text[:4000]}"
-            )
+            # P0 任务 1: 获取该文书类型的规则
+            doc_rules = rules_by_document_type.get(doc_type, [])
+            total_rules = len(doc_rules)
+
+            # P0 任务 2: 使用 Prompt 模板构建 Prompt
+            prompt = await self._build_prompt(doc_rules, text, doc_type)
+
+            # 调用 LLM
+            gen = await self.client.generate(prompt)
             api_time = float(gen.get("_api_time", 0.0))
             usage = gen.get("usage", {})
             tokens = int(usage.get("total_tokens", 0))
             total_tokens += tokens
             total_time += api_time
-
-            # Use actual rules for this document type if available
-            doc_rules = rules_by_document_type.get(doc_type, []) if rules_by_document_type else []
-            # If provided rules exist, use their count; otherwise fallback
-            trpd = total_rules_per_doc(doc_type)
-            total_rules = len(doc_rules) if doc_rules else trpd if trpd > 0 else max(10, int(68 / n_docs))
             
             # fabricate per-doc metrics
             rate = 78.0 + (idx % 5)  # 79~82 range
