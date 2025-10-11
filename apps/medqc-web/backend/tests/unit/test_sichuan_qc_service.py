@@ -74,34 +74,72 @@ class TestSichuanQCService:
         ]
 
     @pytest.mark.asyncio
-    async def test_load_rules_from_db_success(self, service, mock_rules):
-        """测试从数据库成功加载规则"""
+    async def test_load_rules_from_db_success_with_db_filtering(self, service, mock_rules):
+        """测试从数据库成功加载规则（使用数据库层面筛选）"""
+        # Mock Supabase 客户端
+        mock_supabase = MagicMock()
+        mock_query = MagicMock()
+        mock_response = MagicMock()
+
+        # 模拟数据库层面筛选后的结果（只返回适用的规则）
+        filtered_rules = [r for r in mock_rules if r["rule_code"] in ["SC-001", "SC-002", "SC-003"]]
+        mock_response.data = filtered_rules
+
+        # 设置 Mock 链
+        mock_supabase.table.return_value = mock_query
+        mock_query.select.return_value = mock_query
+        mock_query.eq.return_value = mock_query
+        mock_query.or_.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.execute.return_value = mock_response
+
+        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
+            # 测试加载首次病程记录的规则
+            rules = await service._load_rules_from_db("首次病程记录")
+
+            # 验证结果
+            assert len(rules) == 3  # SC-001, SC-002, SC-003
+            assert all(r["rule_code"] in ["SC-001", "SC-002", "SC-003"] for r in rules)
+
+            # 验证 Supabase 调用（使用数据库层面筛选）
+            mock_supabase.table.assert_called_once_with("qc_rules")
+            mock_query.select.assert_called_once_with("*")
+            mock_query.eq.assert_called_once_with("is_active", True)
+            mock_query.or_.assert_called_once()  # 验证使用了 or_ 筛选
+            mock_query.limit.assert_called_once_with(1000)
+
+    @pytest.mark.asyncio
+    async def test_load_rules_from_db_success_with_app_filtering(self, service, mock_rules):
+        """测试从数据库成功加载规则（回退到应用层筛选）"""
         # Mock Supabase 客户端
         mock_supabase = MagicMock()
         mock_query = MagicMock()
         mock_response = MagicMock()
         mock_response.data = mock_rules
-        
+
         # 设置 Mock 链
         mock_supabase.table.return_value = mock_query
         mock_query.select.return_value = mock_query
         mock_query.eq.return_value = mock_query
+
+        # 模拟数据库层面筛选失败（or_ 方法抛出异常）
+        mock_query.or_.side_effect = Exception("Database filtering not supported")
+
         mock_query.limit.return_value = mock_query
         mock_query.execute.return_value = mock_response
-        
+
         with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
             # 测试加载首次病程记录的规则
             rules = await service._load_rules_from_db("首次病程记录")
-            
-            # 验证结果
+
+            # 验证结果（应该回退到应用层筛选）
             assert len(rules) == 3  # SC-001, SC-002, SC-003
             assert all(r["rule_code"] in ["SC-001", "SC-002", "SC-003"] for r in rules)
-            
+
             # 验证 Supabase 调用
-            mock_supabase.table.assert_called_once_with("qc_rules")
-            mock_query.select.assert_called_once_with("*")
-            mock_query.eq.assert_called_once_with("is_active", True)
-            mock_query.limit.assert_called_once_with(1000)
+            mock_supabase.table.assert_called_with("qc_rules")
+            mock_query.select.assert_called_with("*")
+            mock_query.eq.assert_called_with("is_active", True)
 
     @pytest.mark.asyncio
     async def test_load_rules_from_db_filter_by_document_type(self, service, mock_rules):
@@ -110,18 +148,22 @@ class TestSichuanQCService:
         mock_supabase = MagicMock()
         mock_query = MagicMock()
         mock_response = MagicMock()
-        mock_response.data = mock_rules
-        
+
+        # 模拟数据库层面筛选后的结果（只返回适用于手术记录的规则）
+        filtered_rules = [r for r in mock_rules if r["rule_code"] == "SC-004"]
+        mock_response.data = filtered_rules
+
         mock_supabase.table.return_value = mock_query
         mock_query.select.return_value = mock_query
         mock_query.eq.return_value = mock_query
+        mock_query.or_.return_value = mock_query
         mock_query.limit.return_value = mock_query
         mock_query.execute.return_value = mock_response
-        
+
         with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
             # 测试加载手术记录的规则
             rules = await service._load_rules_from_db("手术记录")
-            
+
             # 验证结果：只有 SC-004 适用于手术记录
             assert len(rules) == 1
             assert rules[0]["rule_code"] == "SC-004"
@@ -189,14 +231,18 @@ class TestSichuanQCService:
         mock_supabase = MagicMock()
         mock_query = MagicMock()
         mock_response = MagicMock()
-        mock_response.data = mock_rules
-        
+
+        # 模拟数据库层面筛选后的结果（只返回适用于首次病程记录的规则）
+        filtered_rules = [r for r in mock_rules if r["rule_code"] in ["SC-001", "SC-002", "SC-003"]]
+        mock_response.data = filtered_rules
+
         mock_supabase.table.return_value = mock_query
         mock_query.select.return_value = mock_query
         mock_query.eq.return_value = mock_query
+        mock_query.or_.return_value = mock_query
         mock_query.limit.return_value = mock_query
         mock_query.execute.return_value = mock_response
-        
+
         # Mock LLM 客户端
         mock_llm_response = {
             "choices": [{"message": {"content": "质控分析结果..."}}],
@@ -204,7 +250,7 @@ class TestSichuanQCService:
             "_api_time": 2.5,
             "_mock": True
         }
-        
+
         with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
             with patch.object(service.client, 'generate', return_value=mock_llm_response):
                 result = await service.evaluate_document(
@@ -212,7 +258,7 @@ class TestSichuanQCService:
                     content="首次病程记录内容...",
                     document_type="首次病程记录"
                 )
-                
+
                 # 验证结果
                 assert result["document_id"] == "test-001"
                 assert result["document_type"] == "首次病程记录"
@@ -256,16 +302,34 @@ class TestSichuanQCService:
         """测试多文档质控使用数据库规则"""
         # Mock Supabase 客户端
         mock_supabase = MagicMock()
-        mock_query = MagicMock()
-        mock_response = MagicMock()
-        mock_response.data = mock_rules
-        
-        mock_supabase.table.return_value = mock_query
-        mock_query.select.return_value = mock_query
-        mock_query.eq.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.execute.return_value = mock_response
-        
+
+        # 使用计数器跟踪调用次数
+        call_counter = {'count': 0}
+
+        # 为不同的文书类型返回不同的规则
+        def mock_table_call(table_name):
+            mock_query = MagicMock()
+            mock_response = MagicMock()
+
+            # 根据调用次数返回不同的规则
+            if call_counter['count'] == 0:  # 第一次调用：首次病程记录
+                filtered_rules = [r for r in mock_rules if r["rule_code"] in ["SC-001", "SC-002", "SC-003"]]
+                call_counter['count'] += 1
+            else:  # 第二次调用：手术记录
+                filtered_rules = [r for r in mock_rules if r["rule_code"] == "SC-004"]
+
+            mock_response.data = filtered_rules
+
+            mock_query.select.return_value = mock_query
+            mock_query.eq.return_value = mock_query
+            mock_query.or_.return_value = mock_query
+            mock_query.limit.return_value = mock_query
+            mock_query.execute.return_value = mock_response
+
+            return mock_query
+
+        mock_supabase.table.side_effect = mock_table_call
+
         # Mock LLM 客户端
         mock_llm_response = {
             "choices": [{"message": {"content": "质控分析结果..."}}],
@@ -273,7 +337,7 @@ class TestSichuanQCService:
             "_api_time": 2.5,
             "_mock": True
         }
-        
+
         with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
             with patch.object(service.client, 'generate', return_value=mock_llm_response):
                 result = await service.evaluate_multi_document(
@@ -281,17 +345,17 @@ class TestSichuanQCService:
                     document_content="病历内容...",
                     document_types=["首次病程记录", "手术记录"]
                 )
-                
+
                 # 验证结果
                 assert result["document_id"] == "test-multi-001"
                 assert "document_results" in result
                 assert "首次病程记录" in result["document_results"]
                 assert "手术记录" in result["document_results"]
-                
+
                 # 验证首次病程记录的规则数（SC-001, SC-002, SC-003）
                 first_course_result = result["document_results"]["首次病程记录"]
                 assert first_course_result["total_rules"] == 3
-                
+
                 # 验证手术记录的规则数（SC-004）
                 surgery_result = result["document_results"]["手术记录"]
                 assert surgery_result["total_rules"] == 1

@@ -97,11 +97,11 @@ class SichuanQCService:
         Returns:
             适用规则列表。如果数据库不可用或加载失败，返回空列表。
 
-        规则筛选逻辑：
-        1. 从 qc_rules 表加载所有 is_active=true 的规则
-        2. 从 check_logic JSONB 字段中读取 applicable_documents 数组
-        3. 如果规则的 applicable_documents 包含指定的 document_type，则包含该规则
-        4. 如果 applicable_documents 为空或不存在，视为通用规则，也包含该规则
+        规则筛选逻辑（优化版 - 使用数据库层面筛选）：
+        1. 优先使用 applicable_documents TEXT[] 字段进行数据库层面筛选
+        2. 如果 applicable_documents 字段不存在，回退到应用层筛选（从 check_logic JSONB 读取）
+        3. 通用规则（applicable_documents 为空）会被包含
+        4. 特定规则（applicable_documents 包含指定的 document_type）会被包含
         """
         try:
             supabase = get_supabase()
@@ -109,7 +109,6 @@ class SichuanQCService:
                 logger.warning("Supabase client not available, cannot load rules from database")
                 return []
 
-            # 加载所有激活的规则
             # 尝试使用异步执行，如果不支持则使用同步执行
             async def _exec(query):
                 try:
@@ -120,44 +119,63 @@ class SichuanQCService:
                     pass
                 return query.execute()
 
-            resp = await _exec(
-                supabase.table("qc_rules")
-                .select("*")
-                .eq("is_active", True)
-                .limit(1000)
-            )
+            # 尝试使用数据库层面筛选（如果 applicable_documents 字段存在）
+            try:
+                # 方法 1: 使用 Supabase 的 contains 方法（推荐）
+                # 注意：这会匹配包含指定文书类型的规则，以及 applicable_documents 为空的通用规则
+                resp = await _exec(
+                    supabase.table("qc_rules")
+                    .select("*")
+                    .eq("is_active", True)
+                    .or_(f"applicable_documents.cs.{{{document_type}}},applicable_documents.is.null")
+                    .limit(1000)
+                )
 
-            all_rules = resp.data or []
-            logger.info(f"Loaded {len(all_rules)} active rules from database")
+                applicable_rules = resp.data or []
+                logger.info(f"Loaded {len(applicable_rules)} rules applicable to document type '{document_type}' (database-level filtering)")
+                return applicable_rules
 
-            # 筛选适用于指定文书类型的规则
-            applicable_rules = []
-            for rule in all_rules:
-                # 从 check_logic JSONB 字段中读取 applicable_documents
-                check_logic = rule.get("check_logic", {})
-                if isinstance(check_logic, dict):
-                    applicable_docs = check_logic.get("applicable_documents", [])
-                else:
-                    applicable_docs = []
+            except Exception as db_filter_error:
+                # 如果数据库层面筛选失败（可能是字段不存在或语法不支持），回退到应用层筛选
+                logger.warning(f"Database-level filtering failed, falling back to application-level filtering: {db_filter_error}")
 
-                # 也支持从顶层字段读取（向后兼容）
-                if not applicable_docs:
+                # 加载所有激活的规则
+                resp = await _exec(
+                    supabase.table("qc_rules")
+                    .select("*")
+                    .eq("is_active", True)
+                    .limit(1000)
+                )
+
+                all_rules = resp.data or []
+                logger.info(f"Loaded {len(all_rules)} active rules from database")
+
+                # 在应用层筛选适用于指定文书类型的规则
+                applicable_rules = []
+                for rule in all_rules:
+                    # 优先从顶层 applicable_documents 字段读取（新字段）
                     applicable_docs = rule.get("applicable_documents", [])
 
-                # 规范化为列表
-                if isinstance(applicable_docs, str):
-                    applicable_docs = [d.strip() for d in applicable_docs.split(",") if d.strip()]
-                elif not isinstance(applicable_docs, list):
-                    applicable_docs = []
+                    # 如果顶层字段为空，尝试从 check_logic JSONB 字段读取（向后兼容）
+                    if not applicable_docs:
+                        check_logic = rule.get("check_logic", {})
+                        if isinstance(check_logic, dict):
+                            applicable_docs = check_logic.get("applicable_documents", [])
 
-                # 筛选逻辑：
-                # 1. 如果 applicable_documents 为空，视为通用规则，包含该规则
-                # 2. 如果 applicable_documents 包含指定的 document_type，包含该规则
-                if not applicable_docs or document_type in applicable_docs:
-                    applicable_rules.append(rule)
+                    # 规范化为列表
+                    if isinstance(applicable_docs, str):
+                        applicable_docs = [d.strip() for d in applicable_docs.split(",") if d.strip()]
+                    elif not isinstance(applicable_docs, list):
+                        applicable_docs = []
 
-            logger.info(f"Found {len(applicable_rules)} rules applicable to document type '{document_type}'")
-            return applicable_rules
+                    # 筛选逻辑：
+                    # 1. 如果 applicable_documents 为空，视为通用规则，包含该规则
+                    # 2. 如果 applicable_documents 包含指定的 document_type，包含该规则
+                    if not applicable_docs or document_type in applicable_docs:
+                        applicable_rules.append(rule)
+
+                logger.info(f"Found {len(applicable_rules)} rules applicable to document type '{document_type}' (application-level filtering)")
+                return applicable_rules
 
         except Exception as e:
             logger.error(f"Failed to load rules from database: {e}", exc_info=True)
