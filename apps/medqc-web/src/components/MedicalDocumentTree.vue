@@ -44,7 +44,8 @@
 
 <script setup lang="ts">
 import { computed, defineProps } from 'vue'
-import type { ExtractedDocument, DocumentType, DocumentCategory } from '@/services/llmService'
+import type { ExtractedDocument, DocumentType } from '@/services/llmService'
+import { DocumentCategory } from '@/services/llmService'
 import {
   getDocumentTypeLabel,
   getDocumentTypeColor,
@@ -57,17 +58,17 @@ const props = defineProps<{
   originalText: string
 }>()
 
-const groupedDocs = computed(() => {
+const groupedDocs = computed<Map<DocumentCategory, ExtractedDocument[]>>(() => {
   const map = new Map<DocumentCategory, ExtractedDocument[]>()
-  if (!props.documents) return map
+  if (!Array.isArray(props.documents)) return map
   for (const d of props.documents) {
-    const cat = DOCUMENT_TYPE_TO_CATEGORY[d.type]
+    const cat = DOCUMENT_TYPE_TO_CATEGORY[d.type as DocumentType] ?? DocumentCategory.PROGRESS_NOTE
     if (!map.has(cat)) map.set(cat, [])
     map.get(cat)!.push(d)
   }
   // 按时间顺序排序（优先）或标题排序（兜底）
   for (const [k, arr] of map) {
-    arr.sort((a, b: unknown) => {
+    arr.sort((a, b) => {
       const timeA = getDocumentTimestamp(a)
       const timeB = getDocumentTimestamp(b)
 
@@ -88,7 +89,9 @@ const groupedDocs = computed(() => {
   return map
 })
 
-const groupedArray = computed(() => Array.from(groupedDocs.value.entries()))
+const groupedArray = computed<[DocumentCategory, ExtractedDocument[]][]>(() => 
+  Array.from(groupedDocs.value.entries()) as [DocumentCategory, ExtractedDocument[]][]
+)
 
 function categoryLabel(cat: DocumentCategory) {
   return DOCUMENT_CATEGORY_LABELS[cat] || String(cat)
@@ -253,4 +256,3 @@ pre {
   }
 }
 </style>
-

@@ -287,7 +287,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { documentQCService } from '@/services/document-qc-service'
-import type { QCTaskStatus } from '@/services/document-qc-service'
+import type { DocumentUpdateRequest } from '@/services/document-qc-service'
+import type { DocumentApiResponse, DocumentCategoryItem, DocumentItem, DocumentQCResult } from '@/types/document-category'
+import { resolveApiBaseUrl, extractApiData } from '@/utils/api-helpers'
 import {
   SaveOutlined,
   ReloadOutlined,
@@ -310,25 +312,25 @@ const emit = defineEmits(['save-success', 'save-error'])
 // 响应式数据
 const loading = ref(false)
 const saving = ref(false)
-const documentData = ref({
+const documentData = ref<DocumentApiResponse>({
   record_id: '',
   categories: [],
   total_documents: 0,
   classification_summary: {}
 })
 const activeTab = ref('')
-const modifiedDocuments = ref(new Set())
-const expandedContent = ref(new Set())
-const savingDocuments = ref(new Set())
-const analyzingDocuments = ref(new Set())
-const originalData = ref({})
-const availableTypes = ref({})
+const modifiedDocuments = ref<Set<string>>(new Set())
+const expandedContent = ref<Set<string>>(new Set())
+const savingDocuments = ref<Set<string>>(new Set())
+const analyzingDocuments = ref<Set<string>>(new Set())
+const originalData = ref<DocumentApiResponse | null>(null)
+const availableTypes = ref<Record<string, Array<{ type_code: string; type_name: string; type_id?: string }>>>({})
 
 // 实时质控相关
 const realTimeQCEnabled = ref(true)
-const qcPanelVisible = ref(new Set())
-const qcResults = ref(new Map())
-const qcDebounceTimers = ref(new Map())
+const qcPanelVisible = ref<Set<string>>(new Set())
+const qcResults = ref<Map<string, DocumentQCResult>>(new Map())
+const qcDebounceTimers = ref<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
 // 计算属性
 const hasChanges = computed(() => modifiedDocuments.value.size > 0)
@@ -339,9 +341,7 @@ const loadDocuments = async () => {
   
   loading.value = true
   try {
-    const baseURL = window.location.hostname === 'localhost' 
-      ? 'http://localhost:8001' 
-      : 'http://124.220.6.136:8001'
+    const baseURL = resolveApiBaseUrl()
     
     const response = await fetch(`${baseURL}/api/medical-records/${props.recordId}/documents`)
     
@@ -349,11 +349,15 @@ const loadDocuments = async () => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
     
-    const data = await response.json()
+    const raw = await response.json()
+    const data = extractApiData<DocumentApiResponse>(raw, '加载文档失败')
+    if (!data || !Array.isArray(data.categories)) {
+      throw new Error('文档数据格式不正确')
+    }
     documentData.value = data
     
     // 保存原始数据用于重置
-    originalData.value = JSON.parse(JSON.stringify(data))
+    originalData.value = JSON.parse(JSON.stringify(data)) as DocumentApiResponse
     
     // 设置默认活动标签
     if (data.categories.length > 0) {
@@ -365,7 +369,8 @@ const loadDocuments = async () => {
     
   } catch (error) {
     console.error('加载文档失败:', error)
-    message.error('加载文档失败: ' + error.message)
+    const errMsg = error instanceof Error ? error.message : '未知错误'
+    message.error('加载文档失败: ' + errMsg)
   } finally {
     loading.value = false
   }
@@ -373,65 +378,70 @@ const loadDocuments = async () => {
 
 const loadAvailableTypes = async () => {
   try {
-    const baseURL = window.location.hostname === 'localhost' 
-      ? 'http://localhost:8001' 
-      : 'http://124.220.6.136:8001'
+    const baseURL = resolveApiBaseUrl()
     
     const response = await fetch(`${baseURL}/api/test-classification-mapping`)
-    const data = await response.json()
+    const raw = await response.json()
+    const data = extractApiData<{ types?: Record<string, { id?: string } | string> } | Record<string, { id?: string } | string> | null | undefined>(raw, '加载文档类型失败')
+    const typesSource =
+      data && typeof data === 'object' && 'types' in (data as Record<string, unknown>)
+        ? ((data as { types?: Record<string, { id?: string } | string> }).types ?? {})
+        : ((data ?? {}) as Record<string, { id?: string } | string>)
     
     // 按分类组织类型数据
-    availableTypes.value = {}
-    Object.entries(data.types).forEach(([key, typeId]) => {
+    const typeMap: Record<string, Array<{ type_code: string; type_name: string; type_id?: string }>> = {}
+    Object.entries(typesSource || {}).forEach(([key, typeInfo]) => {
       const [categoryCode, typeCode] = key.split('.')
-      if (!availableTypes.value[categoryCode]) {
-        availableTypes.value[categoryCode] = []
+      if (!typeMap[categoryCode]) {
+        typeMap[categoryCode] = []
       }
-      availableTypes.value[categoryCode].push({
+      typeMap[categoryCode].push({
         type_code: typeCode,
         type_name: typeCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        type_id: typeId
+        type_id: typeof typeInfo === 'string' ? typeInfo : typeInfo?.id
       })
     })
+
+    availableTypes.value = typeMap
     
   } catch (error) {
     console.error('加载文档类型失败:', error)
   }
 }
 
-const getCategoryTabLabel = (category) => {
+const getCategoryTabLabel = (category: DocumentCategoryItem) => {
   const modifiedCount = getModifiedCount(category.category_code)
   return `${category.category_name} (${category.document_count})${modifiedCount > 0 ? ' *' : ''}`
 }
 
-const getModifiedCount = (categoryCode) => {
+const getModifiedCount = (categoryCode: string) => {
   const category = documentData.value.categories.find(c => c.category_code === categoryCode)
   if (!category) return 0
   
   return category.documents.filter(doc => modifiedDocuments.value.has(doc.id)).length
 }
 
-const getAvailableTypes = (categoryCode) => {
+const getAvailableTypes = (categoryCode: string) => {
   return availableTypes.value[categoryCode] || []
 }
 
-const markAsModified = (documentId) => {
+const markAsModified = (documentId: string) => {
   modifiedDocuments.value.add(documentId)
 }
 
-const isModified = (documentId) => {
+const isModified = (documentId: string) => {
   return modifiedDocuments.value.has(documentId)
 }
 
-const isContentExpanded = (documentId) => {
+const isContentExpanded = (documentId: string) => {
   return expandedContent.value.has(documentId)
 }
 
-const isSaving = (documentId) => {
+const isSaving = (documentId: string) => {
   return savingDocuments.value.has(documentId)
 }
 
-const toggleContentExpand = (documentId) => {
+const toggleContentExpand = (documentId: string) => {
   if (expandedContent.value.has(documentId)) {
     expandedContent.value.delete(documentId)
   } else {
@@ -439,7 +449,7 @@ const toggleContentExpand = (documentId) => {
   }
 }
 
-const formatContent = (document) => {
+const formatContent = (document: DocumentItem) => {
   // 简单的内容格式化
   document.content = document.content
     .replace(/\n\s*\n/g, '\n\n') // 规范化换行
@@ -447,16 +457,19 @@ const formatContent = (document) => {
   markAsModified(document.id)
 }
 
-const saveDocument = async (document) => {
+const saveDocument = async (document: DocumentItem) => {
   savingDocuments.value.add(document.id)
   try {
     // 准备更新数据
-    const updates = {
+    const typeCode =
+      typeof document.type_info?.type_code === 'string'
+        ? document.type_info.type_code
+        : (typeof document.type === 'string' ? document.type : undefined)
+    const updates: Omit<DocumentUpdateRequest, 'auto_qc'> = {
       title: document.title,
       content: document.content,
       summary: document.summary,
-      type_code: document.type_info?.type_code || document.type_code,
-      auto_qc: realTimeQCEnabled.value
+      type_code: typeCode
     }
 
     // 使用质控服务保存文档
@@ -471,16 +484,25 @@ const saveDocument = async (document) => {
 
     // 如果有质控结果，更新文档状态
     if (result.qcResult) {
-      document.qc_status = result.qcResult.qc_status
-      document.qc_score = result.qcResult.qc_score
-      document.qc_last_analyzed = result.qcResult.analysis_time
-      document.qc_issues_count = result.qcResult.failed_rules || 0
+      const qcResult: DocumentQCResult = {
+        qc_status: result.qcResult.qc_status,
+        qc_score: result.qcResult.qc_score,
+        analysis_time: result.qcResult.analysis_time,
+        failed_rules: result.qcResult.failed_rules,
+        results: result.qcResult.results,
+        suggestions: result.qcResult.suggestions
+      }
+
+      document.qc_status = qcResult.qc_status
+      document.qc_score = qcResult.qc_score
+      document.qc_last_analyzed = qcResult.analysis_time
+      document.qc_issues_count = qcResult.failed_rules || 0
 
       // 存储质控结果
-      qcResults.value.set(document.id, result.qcResult)
+      qcResults.value.set(document.id, qcResult)
       qcPanelVisible.value.add(document.id)
 
-      message.success(`文档保存成功，质控评分: ${result.qcResult.qc_score}分`)
+      message.success(`文档保存成功，质控评分: ${qcResult.qc_score}分`)
     } else if (result.updateResult.auto_qc_triggered) {
       message.success('文档保存成功，质控分析进行中...')
       qcPanelVisible.value.add(document.id)
@@ -492,14 +514,15 @@ const saveDocument = async (document) => {
 
   } catch (error) {
     console.error('保存文档失败:', error)
-    message.error('保存文档失败: ' + (error.message || '未知错误'))
+    const errMsg = error instanceof Error ? error.message : '未知错误'
+    message.error('保存文档失败: ' + errMsg)
     emit('save-error', error)
   } finally {
     savingDocuments.value.delete(document.id)
   }
 }
 
-const resetDocument = (document) => {
+const resetDocument = (document: DocumentItem) => {
   const originalDoc = findOriginalDocument(document.id)
   if (originalDoc) {
     Object.assign(document, JSON.parse(JSON.stringify(originalDoc)))
@@ -508,7 +531,7 @@ const resetDocument = (document) => {
   }
 }
 
-const deleteDocument = async (document) => {
+const deleteDocument = async (document: DocumentItem) => {
   Modal.confirm({
     title: '确认删除',
     content: `确定要删除文档"${document.title}"吗？此操作不可恢复。`,
@@ -526,7 +549,7 @@ const deleteDocument = async (document) => {
 }
 
 // 质控分析方法
-const analyzeDocument = async (document) => {
+const analyzeDocument = async (document: DocumentItem) => {
   if (!document.id || document.id.startsWith('new_')) {
     message.warning('请先保存文档后再进行质控分析')
     return
@@ -534,9 +557,7 @@ const analyzeDocument = async (document) => {
 
   analyzingDocuments.value.add(document.id)
   try {
-    const baseURL = window.location.hostname === 'localhost'
-      ? 'http://localhost:8001'
-      : 'http://124.220.6.136:8001'
+    const baseURL = resolveApiBaseUrl()
 
     // 更新文档状态为分析中
     document.qc_status = 'analyzing'
@@ -555,7 +576,13 @@ const analyzeDocument = async (document) => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-    const result = await response.json()
+    const raw = await response.json()
+    const result = extractApiData<DocumentQCResult & {
+      qc_status: string
+      qc_score: number
+      results?: unknown
+      failed_rules?: number
+    }>(raw, '质控分析失败')
 
     // 更新文档的质控状态和结果
     document.qc_status = result.qc_status
@@ -573,17 +600,18 @@ const analyzeDocument = async (document) => {
   } catch (error) {
     console.error('质控分析失败:', error)
     document.qc_status = 'failed'
-    message.error('质控分析失败: ' + error.message)
+    const errMsg = error instanceof Error ? error.message : '未知错误'
+    message.error('质控分析失败: ' + errMsg)
   } finally {
     analyzingDocuments.value.delete(document.id)
   }
 }
 
-const addNewDocument = (categoryCode) => {
+const addNewDocument = (categoryCode: string) => {
   const category = documentData.value.categories.find(c => c.category_code === categoryCode)
   if (!category) return
   
-  const newDocument = {
+  const newDocument: DocumentItem = {
     id: `new_${Date.now()}`,
     title: '新文档',
     content: '',
@@ -617,7 +645,7 @@ const saveAllChanges = async () => {
 
   saving.value = true
   try {
-    const promises = []
+    const promises: Array<Promise<unknown>> = []
 
     documentData.value.categories.forEach(category => {
       category.documents.forEach(document => {
@@ -638,12 +666,14 @@ const saveAllChanges = async () => {
 }
 
 const resetAllChanges = () => {
-  documentData.value = JSON.parse(JSON.stringify(originalData.value))
+  if (!originalData.value) return
+  documentData.value = JSON.parse(JSON.stringify(originalData.value)) as DocumentApiResponse
   modifiedDocuments.value.clear()
   message.success('所有更改已重置')
 }
 
-const findOriginalDocument = (documentId) => {
+const findOriginalDocument = (documentId: string): DocumentItem | null => {
+  if (!originalData.value) return null
   for (const category of originalData.value.categories) {
     const doc = category.documents.find(d => d.id === documentId)
     if (doc) return doc
@@ -652,7 +682,7 @@ const findOriginalDocument = (documentId) => {
 }
 
 // 质控状态相关方法
-const getQCStatusColor = (status) => {
+const getQCStatusColor = (status?: string) => {
   const statusColors = {
     'passed': 'green',
     'warning': 'orange',
@@ -663,7 +693,7 @@ const getQCStatusColor = (status) => {
   return statusColors[status] || 'default'
 }
 
-const getQCStatusText = (status) => {
+const getQCStatusText = (status?: string) => {
   const statusTexts = {
     'passed': '质控通过',
     'warning': '质控警告',
@@ -675,7 +705,7 @@ const getQCStatusText = (status) => {
 }
 
 // 实时质控相关方法
-const handleContentChange = (document) => {
+const handleContentChange = (document: DocumentItem) => {
   markAsModified(document.id)
 
   if (realTimeQCEnabled.value) {
@@ -693,7 +723,7 @@ const handleContentChange = (document) => {
   }
 }
 
-const performRealTimeQC = async (document) => {
+const performRealTimeQC = async (document: DocumentItem) => {
   if (!document.content || document.content.trim().length < 10) {
     return // 内容太短，不进行质控
   }
@@ -706,7 +736,7 @@ const performRealTimeQC = async (document) => {
   }
 }
 
-const toggleRealTimeQC = (enabled) => {
+const toggleRealTimeQC = (enabled: boolean) => {
   if (!enabled) {
     // 清除所有防抖定时器
     qcDebounceTimers.value.forEach(timer => clearTimeout(timer))
@@ -714,7 +744,7 @@ const toggleRealTimeQC = (enabled) => {
   }
 }
 
-const showQCPanel = (documentId) => {
+const showQCPanel = (documentId: string) => {
   return qcPanelVisible.value.has(documentId) || analyzingDocuments.value.has(documentId)
 }
 
@@ -723,21 +753,22 @@ const hideQCPanel = (documentId) => {
   qcResults.value.delete(documentId)
 }
 
-const getDocumentQCResult = (documentId) => {
+const getDocumentQCResult = (documentId: string): DocumentQCResult | undefined => {
   return qcResults.value.get(documentId)
 }
 
-const getDocumentQCIssues = (documentId) => {
+const getDocumentQCIssues = (documentId: string) => {
   const result = qcResults.value.get(documentId)
   return result?.results?.filter(r => !r.compliant) || []
 }
 
-const getDocumentQCSuggestions = (documentId) => {
+const getDocumentQCSuggestions = (documentId: string) => {
   const result = qcResults.value.get(documentId)
   return result?.suggestions || []
 }
 
-const getQCScoreColor = (score) => {
+const getQCScoreColor = (score?: number) => {
+  if (typeof score !== 'number') return '#f5222d'
   if (score >= 90) return '#52c41a'
   if (score >= 80) return '#1890ff'
   if (score >= 70) return '#faad14'
@@ -745,7 +776,7 @@ const getQCScoreColor = (score) => {
   return '#f5222d'
 }
 
-const getIssueSeverityColor = (severity) => {
+const getIssueSeverityColor = (severity?: string) => {
   const colors = {
     'critical': 'red',
     'major': 'orange',
@@ -755,7 +786,7 @@ const getIssueSeverityColor = (severity) => {
   return colors[severity] || 'default'
 }
 
-const getIssueSeverityText = (severity) => {
+const getIssueSeverityText = (severity?: string) => {
   const texts = {
     'critical': '严重',
     'major': '重要',
@@ -767,7 +798,8 @@ const getIssueSeverityText = (severity) => {
 
 const highlightIssue = (document, issue) => {
   // TODO: 实现问题定位功能
-  message.info(`定位到问题: ${issue.message}`)
+  const text = issue?.message ? String(issue.message) : '未提供问题描述'
+  message.info(`定位到问题: ${text}`)
 }
 
 // 生命周期

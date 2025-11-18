@@ -5,6 +5,7 @@
 import { mount, VueWrapper } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import type { ComponentPublicInstance } from 'vue'
+import { expect, vi } from 'vitest'
 
 /**
  * 创建测试用的 Pinia 实例
@@ -283,4 +284,3 @@ export function mockFailedApiCall(error = '操作失败') {
 export function mockNetworkError() {
   return vi.fn().mockRejectedValue(new Error('Network Error'))
 }
-

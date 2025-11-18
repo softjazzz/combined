@@ -101,10 +101,11 @@ export interface LoginRequest {
 
 // 登录响应
 export interface LoginResponse {
-  success: boolean
-  user?: User
-  token?: string
-  error?: string
+  access_token: string
+  refresh_token?: string
+  token_type?: string
+  expires_in?: number
+  user: User
 }
 
 // 注册请求

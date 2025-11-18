@@ -1,170 +1,284 @@
 <template>
   <div class="llm-api-config">
-    <a-card size="small">
-      <div class="config-content">
-        <!-- API选择 -->
-        <div class="config-section">
-          <h4>选择API服务商</h4>
-          <a-radio-group v-model:value="selectedConfig" @change="handleConfigChange">
-            <div class="config-options">
-              <div
-                v-for="config in availableConfigs"
-                :key="config.name"
-                class="config-option"
-              >
-                <a-radio :value="config.name">
-                  <div class="config-info">
-                    <div class="config-name">{{ config.displayName }}</div>
-                    <div class="config-desc">{{ config.description }}</div>
-                    <div class="config-features">
-                      <a-tag
-                        v-for="feature in config.features"
-                        :key="feature"
-                        size="small"
-                        :color="getFeatureColor(feature)"
-                      >
-                        {{ feature }}
-                      </a-tag>
-                    </div>
-                  </div>
-                </a-radio>
-              </div>
-            </div>
-          </a-radio-group>
-        </div>
-
-        <!-- 模型选择和API配置 -->
-        <div v-if="currentConfig && availableModels.length > 1" class="config-section">
-          <a-row :gutter="24" align="top">
-            <!-- 模型选择 -->
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="form-item">
-                <label class="form-label">选择模型</label>
-                <a-select
-                  v-model:value="selectedModel"
-                  @change="handleModelChange"
-                  style="width: 100%"
-                  placeholder="请选择模型"
-                  :dropdown-style="{ maxHeight: '500px' }"
-                  :option-label-prop="'label'"
-                  size="large"
-                  :loading="isLoadingModels"
-                  :disabled="isLoadingModels"
-                >
-                  <a-select-option
-                    v-for="model in availableModels"
-                    :key="model.value"
-                    :value="model.value"
-                    :label="model.label"
+    <a-row :gutter="24" class="master-detail-layout">
+      <!-- 左侧：API 服务商列表 (Master) -->
+      <a-col :xs="24" :md="8" :lg="6" class="master-panel">
+        <div class="provider-list">
+          <h4 class="panel-title">API 服务商</h4>
+          <div class="provider-items">
+            <div
+              v-for="config in availableConfigs"
+              :key="config.name"
+              class="provider-item"
+              :class="{ 'provider-item--active': selectedConfig === config.name }"
+              @click="handleProviderSelect(config.name)"
+            >
+              <div class="provider-item__content">
+                <div class="provider-item__name">{{ config.displayName }}</div>
+                <div class="provider-item__desc">{{ config.description }}</div>
+                <div class="provider-item__features">
+                  <a-tag
+                    v-for="feature in config.features"
+                    :key="feature"
+                    size="small"
+                    :color="getFeatureColor(feature)"
                   >
-                    <span class="model-name">{{ model.label }}</span>
-                    <a-tag v-if="model.value === currentConfig.defaultModel" color="blue" size="small" style="margin-left: 8px;">推荐</a-tag>
-                  </a-select-option>
-                </a-select>
+                    {{ feature }}
+                  </a-tag>
+                </div>
               </div>
-            </a-col>
-
-            <!-- API配置 -->
-            <a-col :xs="24" :sm="12" :md="16">
-              <div class="form-item">
-                <label class="form-label">API密钥配置</label>
-                <a-input-password
-                  v-model:value="apiKey"
-                  placeholder="请输入API密钥"
-                  @change="handleApiKeyChange"
-                  size="large"
-                  style="width: 100%"
-                  :visibility-toggle="true"
-                >
-                  <template #prefix>
-                    <SearchOutlined style="color: #bfbfbf" />
-                  </template>
-                </a-input-password>
-              </div>
-            </a-col>
-          </a-row>
-
-          <!-- 简化的模型信息显示 -->
-          <div v-if="currentModelInfo" class="model-summary">
-            <div class="model-summary-content">
-              <span class="model-summary-name">{{ currentModelInfo.label }}</span>
-              <a-tag v-if="currentModelInfo.value === currentConfig.defaultModel" color="blue" size="small">推荐</a-tag>
-              <span class="model-summary-desc">{{ currentModelInfo.description }}</span>
             </div>
           </div>
         </div>
+      </a-col>
 
+      <!-- 右侧：配置详情 (Detail) -->
+      <a-col :xs="24" :md="16" :lg="18" class="detail-panel">
+        <div v-if="currentConfig" class="config-detail">
+          <h4 class="panel-title">{{ currentConfig.displayName }} 配置</h4>
 
+          <!-- 模型选择和API配置 -->
+          <div v-if="availableModels.length > 1" class="config-section">
+            <div class="form-item">
+              <label class="form-label">选择模型</label>
+              <a-select
+                v-model:value="selectedModel"
+                @change="handleModelChange"
+                style="width: 100%"
+                placeholder="请选择模型"
+                :dropdown-style="{ maxHeight: '500px' }"
+                :option-label-prop="'label'"
+                size="large"
+                :loading="isLoadingModels"
+                :disabled="isLoadingModels"
+              >
+                <a-select-option
+                  v-for="model in availableModels"
+                  :key="model.value"
+                  :value="model.value"
+                  :label="model.label"
+                >
+                  <span class="model-name">{{ model.label }}</span>
+                  <a-tag v-if="model.value === currentConfig.defaultModel" color="blue" size="small" style="margin-left: 8px;">推荐</a-tag>
+                  <a-tag
+                    v-if="model.qcStatus === 'passed'"
+                    color="green"
+                    size="small"
+                    style="margin-left: 8px;"
+                  >
+                    质控验证
+                  </a-tag>
+                </a-select-option>
+              </a-select>
+            </div>
 
-        <!-- 自定义端点 -->
-        <div v-if="selectedConfig === 'local'" class="config-section">
-          <h4>自定义端点</h4>
-          <a-input
-            v-model:value="customEndpoint"
-            placeholder="http://localhost:8001/v1/chat/completions"
-            @change="handleEndpointChange"
-          >
-            <template #prefix>
-              <LinkOutlined />
-            </template>
-          </a-input>
+            <!-- 简化的模型信息显示 -->
+            <div v-if="currentModelInfo" class="model-summary">
+              <div class="model-summary-content">
+                <span class="model-summary-name">{{ currentModelInfo.label }}</span>
+                <a-tag v-if="currentModelInfo.value === currentConfig.defaultModel" color="blue" size="small">推荐</a-tag>
+                <a-tag v-if="currentModelInfo.qcStatus === 'passed'" color="green" size="small">质控验证</a-tag>
+                <span class="model-summary-desc">{{ currentModelInfo.description }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- API密钥配置 -->
+          <div class="config-section">
+            <div class="form-item">
+              <label class="form-label">API密钥配置</label>
+              <a-input-password
+                v-model:value="apiKey"
+                placeholder="请输入API密钥"
+                @change="handleApiKeyChange"
+                size="large"
+                style="width: 100%"
+                :visibility-toggle="true"
+              >
+                <template #prefix>
+                  <SearchOutlined style="color: #bfbfbf" />
+                </template>
+              </a-input-password>
+            </div>
+          </div>
+
+          <!-- 自定义端点 -->
+          <div v-if="selectedConfig === 'local'" class="config-section">
+            <div class="form-item">
+              <label class="form-label">自定义端点</label>
+              <a-input
+                v-model:value="customEndpoint"
+                placeholder="http://localhost:8001/v1/chat/completions"
+                @change="handleEndpointChange"
+                size="large"
+              >
+                <template #prefix>
+                  <LinkOutlined />
+                </template>
+              </a-input>
+            </div>
+          </div>
+
+          <!-- 高级参数配置 -->
+          <div class="config-section advanced-params-section">
+            <a-collapse v-model:activeKey="advancedParamsExpanded" :bordered="false" class="advanced-params-collapse">
+              <a-collapse-panel key="1" class="advanced-params-panel">
+                <template #header>
+                  <div class="advanced-params-header">
+                    <SettingOutlined class="header-icon" />
+                    <span class="header-title">高级参数</span>
+                    <a-tag color="blue" size="small" style="margin-left: 8px;">影响质控稳定性</a-tag>
+                  </div>
+                </template>
+
+                <div class="advanced-params-content">
+                  <!-- Temperature 参数 -->
+                  <div class="param-item">
+                    <div class="param-header">
+                      <label class="param-label">
+                        Temperature（温度参数）
+                        <a-tooltip title="控制输出的随机性。值越低输出越确定，值越高输出越随机。推荐质控场景使用 0.1-0.3 以提高一致性。">
+                          <QuestionCircleOutlined class="param-help-icon" />
+                        </a-tooltip>
+                      </label>
+                      <div class="param-value-display">
+                        <span class="current-value">{{ advancedParams.temperature }}</span>
+                        <a-tag v-if="advancedParams.temperature >= 0.1 && advancedParams.temperature <= 0.3" color="green" size="small">推荐</a-tag>
+                        <a-tag v-else color="orange" size="small">非推荐</a-tag>
+                      </div>
+                    </div>
+                    <a-slider
+                      v-model:value="advancedParams.temperature"
+                      :min="0"
+                      :max="2"
+                      :step="0.1"
+                      :marks="{ 0: '0', 0.2: '0.2 (推荐)', 1: '1', 2: '2' }"
+                      :tooltip="{ formatter: (value: number) => `${value}` }"
+                    />
+                    <div class="param-description">
+                      值越低输出越确定，值越高输出越随机。推荐质控场景使用 0.1-0.3。
+                    </div>
+                  </div>
+
+                  <!-- Top P 参数 -->
+                  <div class="param-item">
+                    <div class="param-header">
+                      <label class="param-label">
+                        Top P（核采样参数）
+                        <a-tooltip title="控制输出多样性。与 temperature 配合使用，控制采样范围。通常保持 0.9 即可。">
+                          <QuestionCircleOutlined class="param-help-icon" />
+                        </a-tooltip>
+                      </label>
+                      <div class="param-value-display">
+                        <span class="current-value">{{ advancedParams.top_p }}</span>
+                      </div>
+                    </div>
+                    <a-slider
+                      v-model:value="advancedParams.top_p"
+                      :min="0"
+                      :max="1"
+                      :step="0.1"
+                      :marks="{ 0: '0', 0.5: '0.5', 0.9: '0.9 (推荐)', 1: '1' }"
+                      :tooltip="{ formatter: (value: number) => `${value}` }"
+                    />
+                    <div class="param-description">
+                      控制输出多样性。与 temperature 配合使用，通常保持 0.9。
+                    </div>
+                  </div>
+
+                  <!-- Max Tokens 参数 -->
+                  <div class="param-item">
+                    <div class="param-header">
+                      <label class="param-label">
+                        Max Tokens（最大输出长度）
+                        <a-tooltip title="控制 LLM 单次输出的最大 token 数量。质控场景推荐 4000-8000。">
+                          <QuestionCircleOutlined class="param-help-icon" />
+                        </a-tooltip>
+                      </label>
+                      <div class="param-value-display">
+                        <span class="current-value">{{ advancedParams.max_tokens }}</span>
+                      </div>
+                    </div>
+                    <a-input-number
+                      v-model:value="advancedParams.max_tokens"
+                      :min="1000"
+                      :max="16000"
+                      :step="1000"
+                      style="width: 100%"
+                    />
+                    <div class="param-description">
+                      控制单次输出的最大 token 数量。质控场景推荐 4000-8000。
+                    </div>
+                  </div>
+
+                  <!-- 恢复默认值按钮 -->
+                  <div class="param-actions">
+                    <a-button @click="resetAdvancedParams" size="small">
+                      <template #icon><ReloadOutlined /></template>
+                      恢复默认值
+                    </a-button>
+                  </div>
+                </div>
+              </a-collapse-panel>
+            </a-collapse>
+          </div>
+
+          <!-- 配置状态 -->
+          <div class="config-status">
+            <a-alert
+              :type="configStatus.type"
+              :message="configStatus.message"
+              show-icon
+              :closable="false"
+            />
+          </div>
+
+          <!-- 测试连接 -->
+          <div class="config-actions">
+            <a-space>
+              <a-button
+                @click="testConnection"
+                :loading="testing"
+                :disabled="!configStatus.valid"
+                class="elevated-action"
+              >
+                <template #icon><ExperimentOutlined /></template>
+                测试连接
+              </a-button>
+              <a-button
+                :type="saveSuccess ? 'default' : 'primary'"
+                @click="saveConfig"
+                :loading="saving"
+                :disabled="!configStatus.valid || saving"
+                :class="['elevated-action', { 'save-success': saveSuccess }]"
+              >
+                <template #icon>
+                  <SaveOutlined v-if="!saveSuccess" />
+                  <span v-else>✅</span>
+                </template>
+                {{ saving ? '保存中...' : saveSuccess ? '保存成功' : '保存配置' }}
+              </a-button>
+            </a-space>
+          </div>
+
+          <!-- 测试结果 -->
+          <div v-if="testResult" class="test-result">
+            <a-alert
+              :type="testResult.success ? 'success' : 'error'"
+              :message="testResult.message"
+              :description="testResult.details"
+              show-icon
+              :closable="false"
+            />
+          </div>
         </div>
-
-        <!-- 配置状态 -->
-        <div class="config-status">
-          <a-alert
-            :type="configStatus.type"
-            :message="configStatus.message"
-            show-icon
-            :closable="false"
-          />
-        </div>
-
-        <!-- 测试连接 -->
-        <div class="config-actions">
-          <a-space>
-            <a-button 
-              @click="testConnection" 
-              :loading="testing"
-              :disabled="!configStatus.valid"
-            >
-              <template #icon><ExperimentOutlined /></template>
-              测试连接
-            </a-button>
-            <a-button
-              :type="saveSuccess ? 'default' : 'primary'"
-              @click="saveConfig"
-              :loading="saving"
-              :disabled="!configStatus.valid || saving"
-              :class="{ 'save-success': saveSuccess }"
-            >
-              <template #icon>
-                <SaveOutlined v-if="!saveSuccess" />
-                <span v-else>✅</span>
-              </template>
-              {{ saving ? '保存中...' : saveSuccess ? '保存成功' : '保存配置' }}
-            </a-button>
-          </a-space>
-        </div>
-
-        <!-- 测试结果 -->
-        <div v-if="testResult" class="test-result">
-          <h4>测试结果</h4>
-          <a-alert
-            :type="testResult.success ? 'success' : 'error'"
-            :message="testResult.message"
-            :description="testResult.details"
-            show-icon
-            :closable="false"
-          />
-        </div>
-      </div>
-    </a-card>
+      </a-col>
+    </a-row>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 import { llmConfigService, type LLMProvider, type LLMModel, type UserLLMConfig } from '@/services/llmConfigService'
 import {
@@ -174,7 +288,10 @@ import {
   ExperimentOutlined,
   SaveOutlined,
   SearchOutlined,
-  EyeInvisibleOutlined
+  EyeInvisibleOutlined,
+  SettingOutlined,
+  QuestionCircleOutlined,
+  ReloadOutlined
 } from '@ant-design/icons-vue'
 import {
   ENHANCED_LLM_API_CONFIGS,
@@ -183,6 +300,36 @@ import {
   type ModelOption
 } from '@/services/llmApiConfig'
 import { LLMService } from '@/services/llmServiceNew'
+import type { ParseResult } from '@/services/llmService'
+import { resolveApiBaseUrl, extractApiData } from '@/utils/api-helpers'
+
+interface RemoteProvider {
+  id?: string
+  provider_code?: string
+  provider_name?: string
+  [key: string]: unknown
+}
+
+interface RemoteModel {
+  id?: string
+  model_code?: string
+  model_name?: string
+  code?: string
+  name?: string
+  description?: string
+  [key: string]: unknown
+}
+
+// 经过质控验证的阿里云模型列表
+const QC_SUCCESS_MODELS = new Set<string>([
+  'qwen-plus',
+  'qwen-turbo',
+  'qwen3-30b-a3b',
+  'qwen3-4b',
+  'qwen3-235b-a22b-instruct-2507',
+  'qwen2.5-32b-instruct',
+  'qwen2.5-14b-instruct'
+])
 
 // 定义组件事件
 const emit = defineEmits<{
@@ -200,9 +347,19 @@ const testing = ref(false)
 const saving = ref(false)
 const saveSuccess = ref(false)
 
+// LLM 高级参数配置
+const advancedParams = reactive({
+  temperature: 0.2,  // 默认值：0.2（推荐用于质控场景）
+  top_p: 0.9,        // 默认值：0.9
+  max_tokens: 4000,  // 默认值：4000
+})
+
+// 高级参数区域是否展开
+const advancedParamsExpanded = ref(false)
+
 // 动态获取的数据
-const dynamicProviders = ref<any[]>([])
-const dynamicModels = ref<any[]>([])
+const dynamicProviders = ref<RemoteProvider[]>([])
+const dynamicModels = ref<RemoteModel[]>([])
 const isLoadingProviders = ref(false)
 const isLoadingModels = ref(false)
 const testResult = ref<{
@@ -218,26 +375,46 @@ const configManager = new EnhancedLLMApiConfigManager()
 const availableConfigs = computed(() => Object.values(ENHANCED_LLM_API_CONFIGS))
 
 // 当前配置
-const currentConfig = computed(() => ENHANCED_LLM_API_CONFIGS[selectedConfig.value])
+const currentConfig = computed<EnhancedLLMApiConfig | undefined>(() => ENHANCED_LLM_API_CONFIGS[selectedConfig.value])
 
 // 可用模型 - 优先使用动态获取的模型列表（兼容多种字段命名）
-const availableModels = computed(() => {
+const availableModels = computed<ModelOption[]>(() => {
   if (dynamicModels.value.length > 0) {
-    return dynamicModels.value.map((model: unknown) => {
-      const value = model.model_code || model.id || model.code || model.name || ''
-      const label = model.model_name || model.name || model.id || value
-      return { label, value }
-    }).filter((m: unknown) => !!m.value)
+    return dynamicModels.value
+      .map(model => {
+        const value = model.model_code || model.id || model.code || model.name || ''
+        let label = model.model_name || model.name || model.id || value
+        if (value.includes('30b-a3b') && value.includes('2507') && !label.includes('2507')) {
+          label = `${label} (2507)`
+        }
+        if (!value) return null
+        return {
+          label,
+          value,
+          description: model.description || '',
+          qcStatus: QC_SUCCESS_MODELS.has(value) ? 'passed' : undefined
+        }
+      })
+      .filter((item): item is ModelOption => item !== null)
   }
   // 回退到硬编码配置（向后兼容）
-  return currentConfig.value?.availableModels || []
+  return (currentConfig.value?.availableModels || []).map(model => {
+    const nextLabel =
+      model.value.includes('30b-a3b') && model.value.includes('2507') && !model.label.includes('2507')
+        ? `${model.label} (2507)`
+        : model.label
+    return {
+      ...model,
+      label: nextLabel,
+      qcStatus: model.qcStatus || (QC_SUCCESS_MODELS.has(model.value) ? 'passed' : undefined)
+    }
+  })
 })
 
 // 当前模型信息（优先从动态模型或可用模型中查找）
-const currentModelInfo = computed(() => {
+const currentModelInfo = computed<ModelOption | null>(() => {
   if (!selectedModel.value) return null
-  const list = availableModels.value || []
-  return list.find((m: unknown) => m.value === selectedModel.value) || null
+  return availableModels.value.find(model => model.value === selectedModel.value) || null
 })
 
 // 配置状态
@@ -262,29 +439,53 @@ const configStatus = computed(() => {
   }
 })
 
+const LLM_API_PREFIX = '/api/v1/llm'
+
 // 从数据库获取模型列表
 const loadModelsForProvider = async (providerCode: string) => {
   try {
     isLoadingModels.value = true
+    const baseURL = resolveApiBaseUrl()
 
     // 首先获取提供商信息（兼容 {data:[]} 与 {providers:[]} 两种返回结构）
-    const providersResponse = await fetch('/api/llm/providers')
-    const providersData = await providersResponse.json()
-    const providerList = (providersData && (providersData.data || providersData.providers)) || []
-    const provider = providerList.find((p: unknown) => (p.provider_code || p.id) === providerCode || p.id === providerCode)
+    const providersResponse = await fetch(`${baseURL}${LLM_API_PREFIX}/providers`)
+    if (!providersResponse.ok) {
+      throw new Error(`加载大模型提供商失败: ${providersResponse.status}`)
+    }
+    const providersRaw = await providersResponse.json()
+    const providersData = extractApiData<{ data?: RemoteProvider[]; providers?: RemoteProvider[] } | RemoteProvider[] | null | undefined>(
+      providersRaw,
+      '加载大模型提供商失败'
+    )
+    const providerList = Array.isArray(providersData)
+      ? providersData
+      : ((providersData?.data || providersData?.providers || []) as RemoteProvider[])
+    dynamicProviders.value = providerList
+    const provider = providerList.find(p => (p.provider_code || p.id) === providerCode)
 
     // 加载模型（兼容 {data:[]} 与 {models:[]}；后端可能不支持 provider_id 过滤时回退全量）
-    const modelsUrl = provider?.id ? `/api/llm/models?provider_id=${provider.id}` : '/api/llm/models'
-    const modelsResponse = await fetch(modelsUrl)
-    const modelsData = await modelsResponse.json()
-    const modelsList = (modelsData && (modelsData.data || modelsData.models)) || []
-    dynamicModels.value = modelsList
+    const modelsPath = provider?.id
+      ? `${LLM_API_PREFIX}/models?provider_id=${provider.id}`
+      : `${LLM_API_PREFIX}/models`
+    const modelsResponse = await fetch(`${baseURL}${modelsPath}`)
+    if (!modelsResponse.ok) {
+      throw new Error(`加载模型列表失败: ${modelsResponse.status}`)
+    }
+    const modelsRaw = await modelsResponse.json()
+    const modelsData = extractApiData<{ data?: RemoteModel[]; models?: RemoteModel[] } | RemoteModel[] | null | undefined>(
+      modelsRaw,
+      '加载模型列表失败'
+    )
+    const modelsList = Array.isArray(modelsData)
+      ? modelsData
+      : ((modelsData?.data || modelsData?.models || []) as RemoteModel[])
+    dynamicModels.value = Array.isArray(modelsList) ? modelsList : []
     console.log(`✅ 已加载 ${dynamicModels.value.length} 个模型`)
 
     // 若当前选择不在新列表中，则回退到默认或第一项
-    const values = new Set((availableModels.value || []).map((m: unknown) => m.value))
+    const values = new Set(availableModels.value.map(model => model.value))
     if (!values.has(selectedModel.value)) {
-      selectedModel.value = currentConfig.value?.defaultModel || (availableModels.value[0]?.value || '')
+      selectedModel.value = currentConfig.value?.defaultModel || availableModels.value[0]?.value || ''
     }
   } catch (error) {
     console.error('加载模型列表失败:', error)
@@ -295,6 +496,11 @@ const loadModelsForProvider = async (providerCode: string) => {
 }
 
 // 方法
+const handleProviderSelect = async (providerName: string) => {
+  selectedConfig.value = providerName
+  await handleConfigChange()
+}
+
 const handleConfigChange = async () => {
   // 如果选择阿里通义千问，自动设置API密钥
   if (selectedConfig.value === 'alibaba') {
@@ -361,6 +567,14 @@ const getPricingColor = (pricing?: string): string => {
   return colorMap[pricing || ''] || 'default'
 }
 
+// 恢复高级参数默认值
+const resetAdvancedParams = () => {
+  advancedParams.temperature = 0.2
+  advancedParams.top_p = 0.9
+  advancedParams.max_tokens = 4000
+  message.success('已恢复默认参数值')
+}
+
 const getApiKeyHelp = (): string => {
   const helpMap: Record<string, string> = {
     'openai': '在 OpenAI 官网获取 API Key',
@@ -393,7 +607,7 @@ const testConnection = async () => {
     const testPrompt = '请回复"连接测试成功"'
     const result = await llmService.parseMedicalText(testPrompt, {
       confidenceThreshold: 0.5
-    })
+    }) as ParseResult
 
     if (result.success) {
       testResult.value = {
@@ -468,7 +682,11 @@ const saveConfig = async () => {
       model_code: selectedModel.value,
       api_key: apiKey.value || undefined,
       custom_endpoint: customEndpoint.value || undefined,
-      custom_parameters: {},
+      custom_parameters: {
+        temperature: advancedParams.temperature,
+        top_p: advancedParams.top_p,
+        max_tokens: advancedParams.max_tokens,
+      },
       is_active: true
     }
     console.log('💾 保存配置数据(按code):', configData)
@@ -496,6 +714,45 @@ const saveConfig = async () => {
         console.error('⚠️ 运行时配置同步失败:', syncError)
         // 不阻断保存流程
       }
+    }
+
+    // 调用后端配置重载 API
+    console.log('🔄 通知后端重新加载配置...')
+    try {
+      const reloadResponse = await fetch('/api/v1/qc/sichuan/reload-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (reloadResponse.ok) {
+        const reloadResult = await reloadResponse.json()
+        if (reloadResult.success) {
+          console.log('✅ 后端配置已重载:', reloadResult.data?.current_model)
+          message.success({
+            content: `✅ 后端配置已更新，当前模型: ${reloadResult.data?.current_model || '未知'}`,
+            duration: 2,
+            style: {
+              marginTop: '20vh',
+            }
+          })
+        } else {
+          console.warn('⚠️ 后端配置重载失败:', reloadResult.message)
+        }
+      } else {
+        console.warn('⚠️ 后端配置重载请求失败:', reloadResponse.status)
+      }
+    } catch (reloadError) {
+      console.error('⚠️ 后端配置重载异常:', reloadError)
+      // 不阻断保存流程，只记录警告
+      message.warning({
+        content: '⚠️ 后端配置重载失败，可能需要手动重启后端服务',
+        duration: 3,
+        style: {
+          marginTop: '20vh',
+        }
+      })
     }
 
     // 销毁loading消息并显示成功消息
@@ -549,7 +806,7 @@ const saveConfig = async () => {
     message.destroy()
 
     // 显示详细的错误信息
-    const errorMessage = e?.message || e?.toString() || '未知错误'
+    const errorMessage = e instanceof Error ? e.message : String(e ?? '未知错误')
     message.error({
       content: `❌ 保存失败：${errorMessage}`,
       duration: 5,
@@ -583,6 +840,12 @@ const loadConfig = async () => {
       }
 
       customEndpoint.value = dbConfig.custom_endpoint || ''
+
+      // 加载高级参数
+      const customParams = dbConfig.custom_parameters || {}
+      advancedParams.temperature = customParams.temperature ?? 0.2
+      advancedParams.top_p = customParams.top_p ?? 0.9
+      advancedParams.max_tokens = customParams.max_tokens ?? 4000
 
       // 加载该提供商的模型列表
       await loadModelsForProvider(selectedConfig.value)
@@ -661,67 +924,125 @@ onMounted(async () => {
 
 <style scoped>
 .llm-api-config {
-  max-width: 800px;
+  width: 100%;
 }
 
-.config-content {
-  space-y: 24px;
+/* Master-Detail 布局 */
+.master-detail-layout {
+  min-height: 500px;
+}
+
+/* 左侧面板 (Master) */
+.master-panel {
+  border-right: 1px solid rgba(11, 100, 212, 0.12);
+  padding-right: 0 !important;
+}
+
+.provider-list {
+  position: sticky;
+  top: 0;
+}
+
+.panel-title {
+  margin-bottom: 16px;
+  padding: 0 16px;
+  font-weight: 600;
+  color: var(--text-primary, #262626);
+  font-size: 16px;
+}
+
+.provider-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.provider-item {
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-left: 3px solid transparent;
+  background: transparent;
+  position: relative;
+}
+
+.provider-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: all 0.3s ease;
+}
+
+.provider-item:hover {
+  background: rgba(24, 144, 255, 0.04);
+}
+
+.provider-item:hover::before {
+  background: rgba(24, 144, 255, 0.3);
+}
+
+.provider-item--active {
+  background: linear-gradient(90deg, rgba(24, 144, 255, 0.08) 0%, rgba(24, 144, 255, 0.02) 100%);
+}
+
+.provider-item--active::before {
+  background: #1890ff;
+  box-shadow: 0 0 8px rgba(24, 144, 255, 0.4);
+}
+
+.provider-item--active .provider-item__name {
+  color: #1890ff;
+  font-weight: 600;
+}
+
+.provider-item__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.provider-item__name {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-primary, #262626);
+  transition: all 0.3s;
+}
+
+.provider-item__desc {
+  font-size: 12px;
+  color: var(--text-secondary, #8c8c8c);
+  line-height: 1.4;
+}
+
+.provider-item__features {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* 右侧面板 (Detail) */
+.detail-panel {
+  padding-left: 24px !important;
+}
+
+.detail-panel .panel-title {
+  padding: 0 0 16px 0;
+  margin-bottom: 24px;
+  border-bottom: 2px solid rgba(24, 144, 255, 0.1);
+  color: #1890ff;
+}
+
+.config-detail {
+  width: 100%;
 }
 
 .config-section {
   margin-bottom: 24px;
-}
-
-.config-section h4 {
-  margin-bottom: 12px;
-  font-weight: 600;
-  color: #262626;
-}
-
-.config-options {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.config-option {
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  padding: 16px;
-  transition: all 0.3s;
-}
-
-.config-option:hover {
-  border-color: #1890ff;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
-}
-
-.config-info {
-  margin-left: 8px;
-}
-
-.config-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: #262626;
-  margin-bottom: 4px;
-}
-
-.config-desc {
-  font-size: 12px;
-  color: #8c8c8c;
-  margin-bottom: 8px;
-}
-
-.config-features {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.api-key-help {
-  margin-top: 8px;
-  font-size: 12px;
 }
 
 .config-status {
@@ -729,21 +1050,42 @@ onMounted(async () => {
 }
 
 .config-actions {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(11, 100, 212, 0.12);
 }
 
 .test-result {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(11, 100, 212, 0.12);
 }
 
-.test-result h4 {
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 600;
+/* 响应式：移动端垂直堆叠 */
+@media (max-width: 768px) {
+  .master-panel {
+    border-right: none;
+    border-bottom: 1px solid rgba(11, 100, 212, 0.12);
+    padding-right: 24px !important;
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+  }
+
+  .detail-panel {
+    padding-left: 24px !important;
+  }
+
+  .provider-list {
+    position: static;
+  }
+
+  .panel-title {
+    font-size: 14px;
+  }
+
+  .provider-item {
+    padding: 12px 16px;
+  }
 }
 
 :deep(.ant-radio-wrapper) {
@@ -1060,5 +1402,125 @@ onMounted(async () => {
   100% {
     transform: scale(1);
   }
+}
+
+/* 高级参数配置区域样式 */
+.advanced-params-section {
+  margin-top: 16px;
+}
+
+.advanced-params-collapse {
+  background: transparent !important;
+  border: none !important;
+}
+
+.advanced-params-panel {
+  background: #f8f9fa !important;
+  border: 1px solid #e8e8e8 !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.advanced-params-header {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.advanced-params-header .header-icon {
+  margin-right: 8px;
+  font-size: 16px;
+  color: #1890ff;
+}
+
+.advanced-params-header .header-title {
+  color: #262626;
+}
+
+.advanced-params-content {
+  padding: 16px 0;
+}
+
+.param-item {
+  margin-bottom: 24px;
+}
+
+.param-item:last-child {
+  margin-bottom: 0;
+}
+
+.param-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.param-label {
+  font-weight: 500;
+  font-size: 14px;
+  color: #262626;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.param-help-icon {
+  color: #8c8c8c;
+  cursor: help;
+  font-size: 14px;
+}
+
+.param-value-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.param-value-display .current-value {
+  font-weight: 600;
+  font-size: 16px;
+  color: #1890ff;
+  min-width: 40px;
+  text-align: right;
+}
+
+.param-description {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8c8c8c;
+  line-height: 1.5;
+}
+
+.param-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e8e8e8;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Slider 样式优化 */
+:deep(.ant-slider) {
+  margin: 8px 0 16px 0;
+}
+
+:deep(.ant-slider-mark-text) {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+:deep(.ant-slider-mark-text-active) {
+  color: #1890ff;
+  font-weight: 500;
+}
+
+/* 与系统设置页面统一的按钮样式 */
+.elevated-action {
+  border-radius: 20px !important;
+  padding: 0 18px !important;
+  height: 36px;
+  font-weight: 500;
 }
 </style>

@@ -32,6 +32,8 @@ from .routers import medical_records_alias as medical_records_alias_router
 from .routers import reports as reports_router
 from .routers import appeals as appeals_router
 from .routers import remediation as remediation_router
+from .routers import department_qc_rules as department_qc_rules_router
+from .routers import demo as demo_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -100,7 +102,8 @@ def create_app() -> FastAPI:
     )
 
     # API Version middleware (with backward compatibility)
-    app.add_middleware(APIVersionMiddleware, enable_legacy_redirect=True)
+    # 禁用重定向，避免307导致CORS问题（前端已使用/api/v1/*路径）
+    app.add_middleware(APIVersionMiddleware, enable_legacy_redirect=False)
     # Logging middleware
     app.middleware("http")(request_logger_middleware)
     # Unified error shape
@@ -210,6 +213,10 @@ def create_app() -> FastAPI:
     app.include_router(reports_router.router)
     app.include_router(appeals_router.router)
     app.include_router(remediation_router.router)
+    # Department QC Rules (Migration 009)
+    app.include_router(department_qc_rules_router.router)
+    # Demo page for LX33 rules (no auth required)
+    app.include_router(demo_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
@@ -220,6 +227,17 @@ def create_app() -> FastAPI:
     # Temporarily disabled to avoid route conflicts with semantic-rules
     # if legacy_app is not None:
     #     app.include_router(legacy_app.router)  # type: ignore[attr-defined]
+
+    # Startup event: 初始化四川质控服务
+    @app.on_event("startup")
+    async def startup_event():
+        """应用启动时初始化四川质控服务"""
+        logger.info("🚀 应用启动中...")
+        try:
+            await qc_sichuan_router.init_qc_service()
+            logger.info("✅ 四川质控服务初始化完成")
+        except Exception as exc:
+            logger.error(f"❌ 四川质控服务初始化失败: {exc}")
 
     return app
 

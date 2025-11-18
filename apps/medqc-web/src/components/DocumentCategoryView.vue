@@ -98,7 +98,7 @@
                   </a-card>
                 </div>
               </div>
-              
+
               <!-- 文档列表 -->
               <div class="documents-section">
                 <h4 class="documents-title" v-if="getApplicableRules(category.category_code).length > 0">
@@ -204,7 +204,7 @@
                         size="small"
                         type="default"
                         :loading="analyzingDocuments.has(document.id)"
-                        @click.stop="analyzeDocumentQC(document)"
+                        @click.stop="analyzeDocumentQC(document, category.category_code)"
                       >
                         <template #icon><ExperimentOutlined /></template>
                         {{ analyzingDocuments.has(document.id) ? '分析中' : '质控分析' }}
@@ -290,16 +290,82 @@
     <!-- 质控结果展示 -->
     <a-modal
       v-model:open="showQCResults"
-      title="质控分析结果"
       width="1000px"
       :footer="null"
       centered
     >
-      <QCResultDisplay
-        v-if="showQCResults && currentQCDocument && qcAnalysisResult"
-        :result="qcAnalysisResult"
-        @highlight-issue="handleHighlightIssue"
-      />
+      <template #title>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span>质控分析结果</span>
+          <a-button
+            size="small"
+            type="link"
+            @click="showDebugInfo = !showDebugInfo"
+            style="margin-left: 16px;"
+          >
+            {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
+          </a-button>
+        </div>
+      </template>
+
+      <div v-if="showQCResults && currentQCDocument && qcAnalysisResult" class="qc-results-container">
+        <!-- 调试开关（备用，若标题插槽不可见） -->
+        <div class="flex justify-end mb-2">
+          <a-button size="small" type="link" @click="showDebugInfo = !showDebugInfo">
+            {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
+          </a-button>
+        </div>
+
+        <!-- 调试信息面板 -->
+        <div v-if="showDebugInfo" class="debug-panel">
+          <div class="debug-section">
+            <h4>📊 性能指标计算结果</h4>
+            <pre>{{ JSON.stringify({
+              totalTime: qcPerformanceMetrics.totalTime,
+              totalTokens: qcPerformanceMetrics.totalTokens,
+              averageTime: qcAverageTime,
+              rulesCount: qcAnalysisResult?.evaluation_results?.length || 0
+            }, null, 2) }}</pre>
+          </div>
+
+          <div class="debug-section">
+            <h4>🔍 后端返回的 performance_metrics</h4>
+            <pre>{{ JSON.stringify(qcAnalysisResult?.performance_metrics || '无', null, 2) }}</pre>
+          </div>
+
+          <div class="debug-section">
+            <h4>📝 第一条规则的 metadata</h4>
+            <pre>{{ JSON.stringify(qcAnalysisResult?.evaluation_results?.[0]?.metadata || '无', null, 2) }}</pre>
+          </div>
+
+          <div class="debug-section">
+            <h4>📦 完整响应结构（前100字符）</h4>
+            <pre>{{ JSON.stringify(qcAnalysisResult, null, 2).substring(0, 500) }}...</pre>
+          </div>
+        </div>
+
+        <!-- 性能指标（兼容无 performance_metrics 的情况） -->
+        <div v-if="qcAnalysisResult" class="summary-metrics compact">
+          <div class="metric-item">
+            <div class="metric-label">累计耗时</div>
+            <div class="metric-value">{{ formatSeconds(qcPerformanceMetrics.totalTime) }}</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">平均耗时</div>
+            <div class="metric-value">{{ formatSeconds(qcAverageTime) }}</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Token 消耗</div>
+            <div class="metric-value">{{ formatTokens(qcPerformanceMetrics.totalTokens) }}</div>
+          </div>
+        </div>
+
+        <!-- 质控结果详情 -->
+        <QCResultDisplay
+          :result="qcAnalysisResult"
+          @highlight-issue="handleHighlightIssue"
+        />
+      </div>
     </a-modal>
   </div>
 </template>
@@ -319,6 +385,15 @@ import {
 } from '@ant-design/icons-vue'
 import AnalysisProgress from './qc/AnalysisProgress.vue'
 import QCResultDisplay from './qc/QCResultDisplay.vue'
+import type { QCAnalysisResult } from '@/types/ai-service'
+import type {
+  DocumentApiResponse,
+  DocumentCategoryItem,
+  DocumentItem,
+  DocumentRule,
+  AnalysisResultPayload
+} from '@/types/document-category'
+import { resolveApiBaseUrl, extractApiData } from '@/utils/api-helpers'
 
 const props = defineProps({
   recordId: {
@@ -331,28 +406,29 @@ const emit = defineEmits(['document-edit', 'document-view'])
 
 // 响应式数据
 const loading = ref(false)
-const documentData = ref({
+const documentData = ref<DocumentApiResponse>({
   record_id: '',
   categories: [],
   total_documents: 0,
   classification_summary: {}
 })
 const originalRecordContent = ref('')
-const activeCategories = ref([])
+const activeCategories = ref<string[]>([])
 const documentDialogVisible = ref(false)
-const selectedDocument = ref(null)
-const analyzingDocuments = ref(new Set()) // 正在分析的文档ID集合
+const selectedDocument = ref<DocumentItem | null>(null)
+const analyzingDocuments = ref<Set<string>>(new Set()) // 正在分析的文档ID集合
 
 // 质控分析相关状态
 const showAnalysisProgress = ref(false)
-const currentAnalysisDocument = ref(null)
+const currentAnalysisDocument = ref<DocumentItem | null>(null)
 const showQCResults = ref(false)
-const currentQCDocument = ref(null)
-const qcAnalysisResult = ref(null)
+const currentQCDocument = ref<DocumentItem | null>(null)
+const qcAnalysisResult = ref<QCAnalysisResult | null>(null)
+const showDebugInfo = ref(false) // 调试信息开关
 
 // 质控规则相关数据
-const qcRules = ref([])
-const rulesByDocumentType = ref({})
+const qcRules = ref<DocumentRule[]>([])
+const rulesByDocumentType = ref<Record<string, DocumentRule[]>>({})
 
 // 计算属性
 const aiClassifiedCount = computed(() => {
@@ -368,22 +444,31 @@ const aiClassifiedCount = computed(() => {
 // 方法
 const loadQCRules = async () => {
   try {
-    // 在开发环境中使用代理，生产环境使用完整URL
-    const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || '')
-    const apiUrl = `${baseURL}/api/qc/sichuan/rules?grouped=true`
+    const baseURL = resolveApiBaseUrl()
+    const apiUrl = `${baseURL}/api/v1/qc/sichuan/rules?grouped=true`
     const response = await fetch(apiUrl)
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-    const data = await response.json()
-    rulesByDocumentType.value = data.rules_by_document_type || {}
+    const raw = await response.json()
+    const data = extractApiData<{ rules_by_document_type?: Record<string, DocumentRule[]> } | Record<string, DocumentRule[]> | null | undefined>(
+      raw,
+      '加载质控规则失败'
+    )
+    const grouped =
+      data && typeof data === 'object' && 'rules_by_document_type' in (data as Record<string, unknown>)
+        ? ((data as { rules_by_document_type?: Record<string, DocumentRule[]> }).rules_by_document_type ?? {})
+        : ((data ?? {}) as Record<string, DocumentRule[]>)
+    rulesByDocumentType.value = grouped
 
     // 展平所有规则到 qcRules 数组
     qcRules.value = []
     Object.values(rulesByDocumentType.value).forEach(rules => {
-      qcRules.value.push(...rules)
+      if (Array.isArray(rules)) {
+        qcRules.value.push(...rules)
+      }
     })
 
     console.log('✅ 质控规则加载成功，总数量:', qcRules.value.length)
@@ -399,15 +484,14 @@ const loadDocuments = async () => {
 
   loading.value = true
   try {
-    // 在开发环境中使用代理，生产环境使用完整URL
-    const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || '')
+    const baseURL = resolveApiBaseUrl()
 
     // 并行获取文档分类数据和原始记录内容
     const [documentsResponse, recordResponse] = await Promise.all([
       fetch(`${baseURL}/api/medical-records/${props.recordId}/documents`),
       fetch(`${baseURL}/api/medical-records/${props.recordId}`)
     ])
-    
+
     // 同时加载质控规则
     await loadQCRules()
 
@@ -419,12 +503,16 @@ const loadDocuments = async () => {
       throw new Error(`HTTP error! status: ${recordResponse.status}`)
     }
 
-    const documentsData = await documentsResponse.json()
-    const recordData = await recordResponse.json()
+    const documentsRaw = await documentsResponse.json()
+    const documentsData = extractApiData<DocumentApiResponse>(documentsRaw, '加载文档失败')
+    if (!documentsData || !Array.isArray(documentsData.categories)) {
+      throw new Error('文档数据格式不正确')
+    }
+    const recordRaw = await recordResponse.json()
+    const recordData = extractApiData<{ content?: string } | null | undefined>(recordRaw, '加载病历内容失败') || {}
 
     // 对分类进行排序
-    const sortedCategories = sortDocumentCategories(documentsData.categories)
-    documentsData.categories = sortedCategories
+    documentsData.categories = sortDocumentCategories(documentsData.categories)
 
     documentData.value = documentsData
     originalRecordContent.value = recordData.content || ''
@@ -436,14 +524,15 @@ const loadDocuments = async () => {
 
   } catch (error) {
     console.error('加载文档失败:', error)
-    message.error('加载文档失败: ' + error.message)
+    const errMsg = error instanceof Error ? error.message : '未知错误'
+    message.error('加载文档失败: ' + errMsg)
   } finally {
     loading.value = false
   }
 }
 
 // 文档分类排序函数
-const sortDocumentCategories = (categories) => {
+const sortDocumentCategories = (categories: DocumentCategoryItem[]): DocumentCategoryItem[] => {
   // 定义分类优先级顺序
   const categoryPriority = {
     'progress_note': 1,        // 病程记录 - 最高优先级
@@ -465,15 +554,19 @@ const sortDocumentCategories = (categories) => {
   })
 }
 
-const getCategoryHeader = (category) => {
+const getCategoryHeader = (category: DocumentCategoryItem) => {
   return `${category.category_name} (${category.document_count})`
 }
 
-const getTypesForCategory = (categoryCode) => {
-  return documentData.value.classification_summary[categoryCode]?.types || {}
+const getTypesForCategory = (categoryCode: string): Record<string, { name: string; count: number }> => {
+  const entry = documentData.value.classification_summary[categoryCode]
+  if (entry && typeof entry === 'object' && entry.types && typeof entry.types === 'object') {
+    return entry.types as Record<string, { name: string; count: number }>
+  }
+  return {}
 }
 
-const getTypeTagColor = (typeCode) => {
+const getTypeTagColor = (typeCode: string) => {
   const typeMap = {
     'first_progress_note': 'green',
     'daily_progress_note': 'green',
@@ -486,18 +579,34 @@ const getTypeTagColor = (typeCode) => {
   return typeMap[typeCode] || 'default'
 }
 
+// 将英文分类代码映射为用于规则分组的中文文书类型标签
+const mapCategoryCodeToDocLabel = (code?: string): string => {
+  switch (code) {
+    case 'admission_record':
+      return '入院记录'
+    case 'progress_note':
+      return '病程记录'
+    case 'discharge_record':
+      return '出院记录'
+    case 'operation_record':
+      // 后端规则可能使用“手术记录”作为键名
+      return rulesByDocumentType.value['手术记录'] ? '手术记录' : '手术相关记录'
+    default:
+      return ''
+  }
+}
+
 // 获取适用于某个文档分类的质控规则
-const getApplicableRules = (categoryCode) => {
-  // 直接使用英文代码作为键名，因为API返回的数据使用英文键名
-  const rules = rulesByDocumentType.value[categoryCode] || []
-  return rules
+const getApplicableRules = (categoryCode: string): DocumentRule[] => {
+  const label = mapCategoryCodeToDocLabel(categoryCode) || categoryCode
+  return rulesByDocumentType.value[label] || []
 }
 
 // 获取分类颜色
-const getCategoryColor = (category) => {
+const getCategoryColor = (category?: string) => {
   const categoryColors = {
     'completeness': 'blue',
-    'accuracy': 'green', 
+    'accuracy': 'green',
     'timeliness': 'orange',
     'consistency': 'purple',
     'compliance': 'red'
@@ -506,11 +615,11 @@ const getCategoryColor = (category) => {
 }
 
 // 获取分类显示名称
-const getCategoryDisplayName = (category) => {
+const getCategoryDisplayName = (category?: string) => {
   const categoryNames = {
     'completeness': '完整性',
     'accuracy': '准确性',
-    'timeliness': '时效性', 
+    'timeliness': '时效性',
     'consistency': '一致性',
     'compliance': '合规性'
   }
@@ -518,7 +627,7 @@ const getCategoryDisplayName = (category) => {
 }
 
 // 获取严重程度颜色
-const getSeverityColor = (severity) => {
+const getSeverityColor = (severity?: string) => {
   const severityColors = {
     'critical': 'red',
     'major': 'orange',
@@ -528,25 +637,21 @@ const getSeverityColor = (severity) => {
 }
 
 // 获取严重程度显示名称
-const getSeverityDisplayName = (severity) => {
+const getSeverityDisplayName = (severity?: string) => {
   const severityNames = {
     'critical': '严重缺陷',
-    'major': '重要缺陷', 
+    'major': '重要缺陷',
     'minor': '一般缺陷'
   }
   return severityNames[severity] || severity
 }
 
 // 兼容缺失的 type_info 或 type_name 字段
-const getDocumentTypeName = (doc) => {
-  try {
-    return doc?.type_info?.type_name || doc?.type_name || '未分类'
-  } catch {
-    return '未分类'
-  }
+const getDocumentTypeName = (doc: DocumentItem) => {
+  return doc?.type_info?.type_name || doc?.type_name || '未分类'
 }
 
-const getStatusTagColor = (status) => {
+const getStatusTagColor = (status?: string) => {
   const statusMap = {
     // 原有状态
     'pending': 'default',
@@ -562,7 +667,7 @@ const getStatusTagColor = (status) => {
 }
 
 // 质控状态相关方法
-const getQCStatusColor = (status) => {
+const getQCStatusColor = (status?: string) => {
   const statusColors = {
     'passed': 'green',
     'warning': 'orange',
@@ -573,7 +678,7 @@ const getQCStatusColor = (status) => {
   return statusColors[status] || 'default'
 }
 
-const getQCStatusText = (status) => {
+const getQCStatusText = (status?: string) => {
   const statusTexts = {
     'passed': '质控通过',
     'warning': '质控警告',
@@ -585,7 +690,8 @@ const getQCStatusText = (status) => {
 }
 
 // 质控评分样式类
-const getQCScoreClass = (score) => {
+const getQCScoreClass = (score?: number) => {
+  if (score === undefined || score === null) return 'qc-score-fail'
   if (score >= 90) return 'qc-score-excellent'
   if (score >= 80) return 'qc-score-good'
   if (score >= 70) return 'qc-score-fair'
@@ -594,7 +700,7 @@ const getQCScoreClass = (score) => {
 }
 
 // 时间格式化方法
-const formatDateTime = (dateTime) => {
+const formatDateTime = (dateTime?: string) => {
   if (!dateTime) return ''
   const date = new Date(dateTime)
   return date.toLocaleString('zh-CN', {
@@ -606,7 +712,7 @@ const formatDateTime = (dateTime) => {
   })
 }
 
-const formatRelativeTime = (dateTime) => {
+const formatRelativeTime = (dateTime?: string) => {
   if (!dateTime) return ''
   const now = new Date()
   const date = new Date(dateTime)
@@ -622,7 +728,7 @@ const formatRelativeTime = (dateTime) => {
   return formatDateTime(dateTime)
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status?: string) => {
   const statusMap = {
     // 原有状态
     'pending': '待审核',
@@ -637,7 +743,7 @@ const getStatusText = (status) => {
   return statusMap[status] || '未知'
 }
 
-const handleDocumentClick = (document) => {
+const handleDocumentClick = (document: DocumentItem) => {
   // 创建一个包含完整内容的文档副本
   selectedDocument.value = {
     ...document,
@@ -646,11 +752,11 @@ const handleDocumentClick = (document) => {
   documentDialogVisible.value = true
 }
 
-const editDocument = (document) => {
+const editDocument = (document: DocumentItem) => {
   emit('document-edit', document)
 }
 
-const viewDocument = (document) => {
+const viewDocument = (document: DocumentItem) => {
   // 创建一个包含完整内容的文档副本
   const documentWithFullContent = {
     ...document,
@@ -660,7 +766,7 @@ const viewDocument = (document) => {
 }
 
 // 获取文档的完整内容
-const getFullContent = (document) => {
+const getFullContent = (document: DocumentItem) => {
   // 1) 优先：使用新的 fullContent 字段（来自确定性切片）
   if (document.position_info?.fullContent && document.position_info.fullContent.trim()) {
     return document.position_info.fullContent
@@ -689,7 +795,7 @@ const getFullContent = (document) => {
 }
 
 // 根据文档标题从原始文本中提取完整内容
-const extractContentByTitle = (source, title) => {
+const extractContentByTitle = (source: string, title: string) => {
   try {
     // 查找标题在原始文本中的位置
     const titleIndex = source.indexOf(title)
@@ -729,7 +835,7 @@ const extractContentByTitle = (source, title) => {
 }
 
 // 清理医疗记录内容
-const cleanMedicalRecordContent = (content) => {
+const cleanMedicalRecordContent = (content: string) => {
   // 移除页面标记
   content = content.replace(/\n={3,}\s*第\(\d+\)页\s*={3,}/g, '')
 
@@ -747,19 +853,104 @@ const cleanMedicalRecordContent = (content) => {
 }
 
 // 质控分析方法
-const analyzeDocumentQC = async (document) => {
+const analyzeDocumentQC = async (document: DocumentItem, categoryCode?: string) => {
   try {
     // 设置当前分析文档并显示进度
     currentAnalysisDocument.value = document
-    showAnalysisProgress.value = true
+    showAnalysisProgress.value = false // 先不显示模拟进度条
 
     // 添加到正在分析的集合中
     analyzingDocuments.value.add(document.id)
 
+    message.loading('正在进行质控分析...', 0)
+
+    // 根据分类代码映射到标准中文文书类型，用于规则选择和请求参数
+    const docLabel = mapCategoryCodeToDocLabel(categoryCode) || '病程记录'
+    const applicableRules = rulesByDocumentType.value[docLabel] || []
+    const ruleIds = applicableRules.map(r => r.rule_id).filter(Boolean)
+
+    // 调用四川质控 API 进行真实的质控分析
+    const response = await fetch('/api/v1/qc/sichuan/evaluate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        document_id: String(document.id),
+        // 使用更可靠的完整内容提取，避免 content 为空导致后端走降级/Mock 路径
+        document_content: getFullContent(document),
+        document_type: docLabel,
+        rule_ids: ruleIds,
+        // evaluate 接口会忽略该字段，但保持与批量质控一致
+        prompt_mode: 'plan_a',
+        persist: false
+      }),
+      signal: AbortSignal.timeout(180000) // 3分钟超时
+    })
+
+    message.destroy()
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`质控评估API调用失败: ${response.status} ${errorText}`)
+    }
+
+    const result = await response.json()
+
+    // 调试：打印完整响应结构
+    console.log('质控API响应结构:', result)
+    console.log('performance_metrics:', result.performance_metrics)
+    console.log('data.performance_metrics:', result.data?.performance_metrics)
+
+    // 保存完整的质控结果（包括性能指标）
+    // 兼容两种响应格式：直接返回 或 嵌套在 data 中
+    qcAnalysisResult.value = result.data || result
+    currentQCDocument.value = document
+
+    // 更新文档的质控状态
+    const qcScore = (result.data?.evaluation_summary?.compliance_rate || result.evaluation_summary?.compliance_rate) || 0
+    const qcStatus = qcScore >= 90 ? 'passed' : qcScore >= 70 ? 'warning' : 'failed'
+
+    const updatedDocument: DocumentItem = {
+      ...document,
+      qc_status: qcStatus,
+      qc_score: qcScore,
+      qc_last_analyzed: new Date().toISOString()
+    }
+
+    // 在documentData中更新对应的文档
+    documentData.value.categories = documentData.value.categories.map(category => {
+      const documents = category.documents.map(doc => (doc.id === updatedDocument.id ? updatedDocument : doc))
+      return { ...category, documents }
+    })
+
+    // 显示分析结果
+    const statusText = qcStatus === 'passed' ? '通过' : qcStatus === 'warning' ? '警告' : '不合格'
+    const statusIcon = qcStatus === 'passed' ? '✅' : qcStatus === 'warning' ? '⚠️' : '❌'
+
+    message.success(
+      `${statusIcon} 质控分析完成！状态: ${statusText}，合规率: ${qcScore.toFixed(1)}%`,
+      3
+    )
+
+    // 显示质控结果弹窗
+    showQCResults.value = true
+
+    // 触发分析完成回调
+    onAnalysisComplete({
+      qc_status: qcStatus,
+      qc_score: qcScore,
+      analysis_time: new Date().toISOString()
+    })
+
   } catch (error) {
     message.destroy()
     console.error('质控分析失败:', error)
-    message.error(`质控分析失败: ${error.message}`)
+    const errMsg = error instanceof Error ? error.message : '质控分析失败'
+    message.error(`质控分析失败: ${errMsg}`)
+
+    // 触发错误回调
+    onAnalysisError(error)
   } finally {
     // 从正在分析的集合中移除
     analyzingDocuments.value.delete(document.id)
@@ -767,16 +958,18 @@ const analyzeDocumentQC = async (document) => {
 }
 
 // 查看质控结果
-const viewQCResults = (document) => {
+const viewQCResults = (document: DocumentItem) => {
   currentQCDocument.value = document
   showQCResults.value = true
 }
 
 // 质控分析完成回调
-const onAnalysisComplete = (result) => {
+const onAnalysisComplete = (result: AnalysisResultPayload) => {
   try {
+    if (!currentAnalysisDocument.value) return
+
     // 更新文档的质控状态
-    const updatedDocument = {
+    const updatedDocument: DocumentItem = {
       ...currentAnalysisDocument.value,
       qc_status: result.qc_status,
       qc_score: result.qc_score,
@@ -784,11 +977,9 @@ const onAnalysisComplete = (result) => {
     }
 
     // 在documentData中更新对应的文档
-    documentData.value.categories.forEach(category => {
-      const docIndex = category.documents.findIndex(d => d.id === currentAnalysisDocument.value.id)
-      if (docIndex !== -1) {
-        category.documents[docIndex] = updatedDocument
-      }
+    documentData.value.categories = documentData.value.categories.map(category => {
+      const documents = category.documents.map(doc => (doc.id === updatedDocument.id ? updatedDocument : doc))
+      return { ...category, documents }
     })
 
     // 显示分析结果
@@ -803,14 +994,17 @@ const onAnalysisComplete = (result) => {
 
   } finally {
     // 从正在分析的集合中移除
-    analyzingDocuments.value.delete(currentAnalysisDocument.value.id)
+    if (currentAnalysisDocument.value) {
+      analyzingDocuments.value.delete(currentAnalysisDocument.value.id)
+    }
   }
 }
 
 // 质控分析错误回调
-const onAnalysisError = (error) => {
+const onAnalysisError = (error: unknown) => {
   console.error('质控分析失败:', error)
-  message.error(`质控分析失败: ${error.message}`)
+  const errMsg = error instanceof Error ? error.message : '质控分析失败'
+  message.error(`质控分析失败: ${errMsg}`)
 
   // 从正在分析的集合中移除
   if (currentAnalysisDocument.value) {
@@ -819,17 +1013,70 @@ const onAnalysisError = (error) => {
 }
 
 // 查看结果回调
-const onViewResults = (result) => {
+const onViewResults = () => {
   if (currentAnalysisDocument.value) {
     viewQCResults(currentAnalysisDocument.value)
   }
 }
 
 // 高亮问题处理
-const handleHighlightIssue = (issue) => {
+const handleHighlightIssue = (issue: unknown) => {
   console.log('高亮问题:', issue)
   // 这里可以添加高亮逻辑
 }
+
+// 格式化秒数
+const formatSeconds = (value?: number) => {
+  if (!value || Number.isNaN(value)) return '--'
+  if (value < 0.1) {
+    return `${Math.round(value * 1000)} ms`
+  }
+  return `${value.toFixed(2)} s`
+}
+
+// 格式化Token数量
+const formatTokens = (value?: number) => {
+  if (!value || Number.isNaN(value)) return '--'
+  return value.toLocaleString()
+}
+
+// 计算平均耗时
+const getAverageTime = (result: any) => {
+  const totalTime = result.performance_metrics?.processing_time || 0
+  const totalRules = result.evaluation_results?.length || 1
+  return totalTime / Math.max(totalRules, 1)
+}
+
+// 兼容两种来源的性能指标：后端 performance_metrics 或逐条 metadata 汇总
+const qcPerformanceMetrics = computed(() => {
+  const result: any = qcAnalysisResult.value || {}
+  const metrics = result?.performance_metrics
+  if (metrics) {
+    return {
+      totalTokens: Number(metrics.token_usage ?? 0),
+      totalTime: Number(metrics.processing_time ?? 0)
+    }
+  }
+  const results = Array.isArray(result?.evaluation_results) ? result.evaluation_results : []
+  const totalTokens = results.reduce((sum: number, r: any) => {
+    const meta = r?.metadata || {}
+    return sum + Number(meta.tokens_used ?? meta.token_usage ?? 0)
+  }, 0)
+  const totalTime = results.reduce((sum: number, r: any) => {
+    const meta = r?.metadata || {}
+    return sum + Number(meta.api_time ?? 0)
+  }, 0)
+  return { totalTokens, totalTime }
+})
+
+// 平均耗时
+const qcAverageTime = computed(() => {
+  const result: any = qcAnalysisResult.value || {}
+  const totalTime = Number(qcPerformanceMetrics.value.totalTime || 0)
+  const count = Array.isArray(result?.evaluation_results) ? result.evaluation_results.length : 0
+  return count > 0 ? totalTime / count : totalTime
+})
+
 
 // 生命周期
 onMounted(() => {
@@ -852,6 +1099,87 @@ watch(() => props.recordId, () => {
 
 .summary-card {
   margin-bottom: 20px;
+}
+
+/* 质控结果容器 */
+.qc-results-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 调试信息面板 */
+.debug-panel {
+  background: #f0f9ff;
+  border: 2px solid #0ea5e9;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.debug-section {
+  margin-bottom: 16px;
+}
+
+.debug-section:last-child {
+  margin-bottom: 0;
+}
+
+.debug-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0c4a6e;
+}
+
+.debug-section pre {
+  background: #ffffff;
+  border: 1px solid #bae6fd;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  color: #1e293b;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* 性能指标 - 与批量测试页面保持一致 */
+.summary-metrics {
+  margin-top: 0;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-metrics.compact {
+  justify-content: flex-start;
+}
+
+.summary-metrics .metric-item {
+  min-width: 140px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.summary-metrics .metric-item .metric-label {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.summary-metrics .metric-item .metric-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .summary-header {
@@ -1210,28 +1538,28 @@ watch(() => props.recordId, () => {
   .documents-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .rules-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .category-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
   }
-  
+
   .summary-content {
     flex-direction: column;
     gap: 20px;
   }
-  
+
   .rule-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .rule-tags {
     flex-direction: row;
   }

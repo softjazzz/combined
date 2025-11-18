@@ -264,20 +264,20 @@ const handleFileUpload = async (info) => {
             else if (error instanceof TypeError && error.message.includes('fetch')) {
                 errorMessage = '无法连接到服务器，请检查服务是否正常运行';
             }
-            uploadedContent.value = `❌ 文档解析失败
+            uploadedContent.value = `【解析失败】
 
-📄 文件信息:
+【文件信息】
 - 文件名: ${file.name}
 - 文件大小: ${formatFileSize(file.size)}
 - 文件类型: ${getFileTypeDescription(file)}
 
-🔍 错误详情:
+【错误详情】
 ${errorMessage}
 
-💡 解决建议:
+【解决建议】
 ${getErrorSuggestions(errorMessage)}
 
-🔄 您可以尝试:
+【请尝试】
 1. 重新上传文件
 2. 检查文件是否损坏
 3. 尝试其他格式的文件
@@ -362,20 +362,20 @@ const handleDebugParsePDF = async () => {
     catch (error) {
         console.error('备用上传解析失败:', error);
         let errorMessage = error instanceof Error ? error.message : '未知错误';
-        uploadedContent.value = `❌ 文件解析失败
+        uploadedContent.value = `【解析失败】
 
-📄 文件信息:
+【文件信息】
 - 文件名: ${debugSelectedFile.value.name}
 - 文件大小: ${formatFileSize(debugSelectedFile.value.size)}
 - 文件类型: ${getFileTypeDescription(debugSelectedFile.value)}
 
-🔍 错误详情:
+【错误详情】
 ${errorMessage}
 
-💡 解决建议:
+【解决建议】
 ${getErrorSuggestions(errorMessage)}
 
-🔄 您可以尝试:
+【请尝试】
 1. 重新选择文件
 2. 检查文件是否损坏
 3. 尝试其他格式的文件`;

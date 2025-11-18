@@ -140,11 +140,12 @@ interface ColumnConfig {
   fixed: boolean | 'left' | 'right'
   sorter: boolean
   sortable?: boolean
+  dataIndex?: string
 }
 
 interface Props {
   visible: boolean
-  columns[]
+  columns: ColumnConfig[]
 }
 
 interface Emits {
@@ -154,7 +155,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
-  columns: () => []
+  columns: () => [] as ColumnConfig[]
 })
 
 const emit = defineEmits<Emits>()

@@ -240,19 +240,20 @@ const executionMetrics = reactive({
 const addLog = (message: string) => {
   const timestamp = new Date().toLocaleTimeString()
   logs.value.push(`[${timestamp}] ${message}`)
-  
+
   // 保持最新的50条日志
   if (logs.value.length > 50) {
     logs.value = logs.value.slice(-50)
   }
+
+  // 同时输出到控制台（仅在开发模式）
+  if (import.meta.env.MODE === 'development') {
+    console.log(`[LLM质控演示] ${message}`)
+  }
 }
 
-// 重写console.log来捕获日志
-const originalConsoleLog = console.log
-console.log = (...args) => {
-  originalConsoleLog(...args)
-  addLog(args.join(' '))
-}
+// ❌ 移除全局 console.log 重写，避免影响全站调试
+// 改为在需要记录日志的地方显式调用 addLog()
 
 // 方法实现
 const initializeDemo = async () => {

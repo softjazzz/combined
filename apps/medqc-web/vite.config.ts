@@ -44,10 +44,18 @@ export default defineConfig({
     strictPort: true, // 端口被占用时报错，不自动切换
 
     proxy: {
-      '/api': {
+      // DRG 相关接口需要转发到新的后端服务
+      '/api/v1/drg': {
         target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         secure: false
+      },
+      // 其余历史接口保持指向原有 medqc 后端
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false
+        // 不需要rewrite，因为前端代码已经使用 /api/v1/* 路径
       }
     }
   },

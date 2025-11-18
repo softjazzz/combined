@@ -1,0 +1,244 @@
+{
+  "id": "370bd184-75cb-4359-9e28-48819fddb669",
+  "mode": "optimized_batch",
+  "document_type": "入院记录",
+  "document_id": "test_1762854433517",
+  "rule_ids": [
+    "LX-001",
+    "LX-002",
+    "LX-003",
+    "LX-004",
+    "LX-005",
+    "LX-006",
+    "LX-007",
+    "LX-008",
+    "LX-009"
+  ],
+  "medical_text": "患者信息：张伟，男，44岁，入院科室：呼吸与危重症医学科，病区：呼吸内一科。\n\n主诉：体检发现肺部结节1周。\n\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n\n既往史：既往体健。否认高血压、糖尿病病史。否认肝炎、结核病史。否认手术史、外伤史、输血史。否认食物、药物过敏史。\n\n体格检查：T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\n\n辅助检查：\n1. 血常规：WBC 8.6×10⁹/L，N 72%，Hb 135g/L，PLT 210×10⁹/L\n2. 肝功能：ALT 38U/L，AST 42U/L，TBIL 16μmol/L，ALB 41g/L\n3. 肾功能：Cr 78μmol/L，BUN 5.2mmol/L\n4. 心电图：窦性心律，大致正常心电图\n5. 胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\n6. 腹部超声：肝胆胰脾未见明显异常，双肾未见结石及积水\n7. 空腹血糖：5.9mmol/L\n8. 凝血功能：PT 12.3s，APTT 31.5s，FIB 3.8g/L\n\n入院诊断：右肺占位性病变",
+  "medical_text_length": 684,
+  "stats": {
+    "total": 9,
+    "compliant": 3,
+    "passed": 1,
+    "notApplicable": 2,
+    "issues": 6,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 13692,
+    "totalTime": 27.54028558731079
+  },
+  "results": null,
+  "payload": {
+    "document_id": "test_1762854433517",
+    "evaluation_summary": {
+      "total_rules": 9,
+      "compliant_rules": 3,
+      "not_applicable": 2,
+      "issues_found": 6,
+      "compliance_rate": 33.33,
+      "overall_grade": "C",
+      "critical_violations": 6,
+      "model": "qwen3-30b-a3b"
+    },
+    "evaluation_results": [
+      {
+        "rule_id": "LX-001",
+        "rule_name": "主诉书写不规范或不能导出第一诊断",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "主诉中未明确患者年龄或孕周信息，且主诉与诊断逻辑不完全匹配。",
+        "evidence": "记载：\"主诉：体检发现肺部结节1周。\"\n记载：\"入院诊断：右肺占位性病变。\"",
+        "suggestion": "(1) 补充患者年龄信息于主诉部分，如'44岁，体检发现肺部结节1周'。\n(2) 在主诉中补充说明结节的性质或初步判断，如'体检发现右肺下叶磨玻璃结节1周'。\n(3) 在现病史中进一步描述结节的演变过程，以增强主诉与诊断之间的逻辑关联。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1933,
+          "api_time": 4.668950796127319
+        }
+      },
+      {
+        "rule_id": "LX-002",
+        "rule_name": "入院记录-现病史缺少一般情况",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "现病史中缺少一般情况描述，符合规则LX-002要求的缺陷。",
+        "evidence": "记载：\"现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\" 该段落未提及患者的一般情况（如饮食、睡眠、体力、精神状态等）。",
+        "suggestion": "(1) 补充现病史中关于患者一般情况的描述，如饮食、睡眠、体力、精神状态等。\n(2) 在现病史部分增加对患者日常活动能力及精神状态的简要记录。\n(3) 确保后续入院记录中完整包含发病时间、主要症状及一般情况三要素。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1866,
+          "api_time": 3.7923693656921387
+        }
+      },
+      {
+        "rule_id": "LX-003",
+        "rule_name": "入院记录-婴幼儿个人史缺少喂养史",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "findings": "病历不属于婴幼儿范围（年龄 44 岁 > 7 岁）",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "applicability": {
+          "is_applicable": false,
+          "reason": "病历不属于婴幼儿范围（年龄 44 岁 > 7 岁）",
+          "method": "lx003_age_guard"
+        },
+        "evidence_verified": true,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-004",
+        "rule_name": "入院记录-专科检查缺失",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "入院记录中未见针对呼吸与危重症医学科的专科查体内容，不符合规则要求。",
+        "evidence": "记载：\"体格检查：T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\"",
+        "suggestion": "(1) 补充呼吸系统专科查体内容，如肺部触觉语颤、叩诊音、听诊情况等。\n(2) 增加对肺部结节相关体征的描述，如是否有胸膜牵拉、呼吸运动是否对称等。\n(3) 明确是否进行胸部叩诊、听诊等呼吸系统专项检查，并在体格检查中体现。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1893,
+          "api_time": 4.760161638259888
+        }
+      },
+      {
+        "rule_id": "LX-005",
+        "rule_name": "入院记录-体格检查缺生命体征-血压",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "体格检查部分已记录血压值，符合质控要求。",
+        "evidence": "记载：\"T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。\"",
+        "suggestion": "无建议，病历中已完整记录血压数值，符合规则要求。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1841,
+          "api_time": 1.7621958255767822
+        }
+      },
+      {
+        "rule_id": "LX-006",
+        "rule_name": "入院记录-7岁以上儿科患者体格检查缺生命体征-血压",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "findings": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "applicability": {
+          "is_applicable": false,
+          "reason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+          "method": "lx006_age_guard"
+        },
+        "evidence_verified": true,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-007",
+        "rule_name": "入院记录缺辅助检查",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "入院记录中现病史提及了院外辅助检查，但辅助检查部分未完整记录该检查的名称、时间及结果。",
+        "evidence": "记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\"；记载：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\"（注：此为辅助检查中的内容，但未在现病史中明确提及“外院”或“院外”字样，存在信息不一致）。",
+        "suggestion": "(1) 在现病史中补充说明‘外院’或‘院外’字样，以明确该CT为院外检查。\n(2) 在辅助检查部分增加对‘胸部CT（外院）’的详细描述，包括检查时间、影像学表现等。\n(3) 确保现病史与辅助检查内容的一致性，避免信息脱节。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1848,
+          "api_time": 4.303241014480591
+        }
+      },
+      {
+        "rule_id": "LX-008",
+        "rule_name": "入院记录-检查结果未记录",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "入院记录中现病史提及院外胸部CT发现肺部结节，但辅助检查部分未记录该检查的具体结果或结论。",
+        "evidence": "记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\"；记载：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\"（注：此为辅助检查中的内容，但未在现病史中明确对应）",
+        "suggestion": "(1) 在现病史中补充说明院外胸部CT的具体结果，如‘胸部CT显示右肺下叶磨玻璃结节，直径约1.8cm，边界清晰’。\n(2) 在辅助检查部分明确标注‘胸部CT（外院）：右肺下叶磨玻璃结节，直径约1.8cm，边界清晰’，以确保与现病史一致。\n(3) 建议在辅助检查中增加对影像学报告的简要描述，避免仅列出项目而无结果。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1871,
+          "api_time": 3.8273394107818604
+        }
+      },
+      {
+        "rule_id": "LX-009",
+        "rule_name": "入院记录缺初步诊断",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "入院记录存在要点3问题：次要诊断有重要遗漏",
+        "evidence": "既往史记载：'既往体健。否认高血压、糖尿病病史。否认肝炎、结核病史。否认手术史、外伤史、输血史。否认食物、药物过敏史。'；现病史记载：'患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。'；入院诊断：'右肺占位性病变'",
+        "suggestion": "(1) 建议在入院诊断中补充'右肺磨玻璃结节'作为次要诊断，以更准确反映病情。\n(2) 若'右肺占位性病变'为初步诊断，建议在后续诊疗中进一步明确其性质，如是否为良性或恶性。\n(3) 若患者确实无其他慢性疾病，可保留'既往体健'的表述，但需确保所有现病史中提及的异常情况均在诊断中体现。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 2440,
+          "api_time": 4.426027536392212
+        }
+      }
+    ],
+    "performance_metrics": {
+      "processing_time": 27.54028558731079,
+      "token_usage": 13692,
+      "estimated_cost": 0.027384000000000002
+    },
+    "optimization_metrics": {
+      "token_savings_rate": 0.8,
+      "estimated_original_tokens": 68460,
+      "actual_tokens_saved": 54768,
+      "cost_savings": 0.10953600000000001
+    }
+  },
+  "metadata": {
+    "trigger": "quick_qc_ui",
+    "prompt_mode": "plan_a"
+  },
+  "model": "qwen3-30b-a3b",
+  "created_at": "2025-11-11T09:47:42.362049+00:00"
+}

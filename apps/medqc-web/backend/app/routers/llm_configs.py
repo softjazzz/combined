@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional
+import logging
 from fastapi import APIRouter, HTTPException, Query, Request
 from datetime import datetime, timezone
 import base64
@@ -97,7 +98,8 @@ def _lookup_provider_and_model_ids(supabase, provider_code: str, model_code: str
 @router.get("/configs")
 async def list_configs(request: Request, user_id: Optional[str] = Query(default=None)):
     supabase = get_supabase()
-    if supabase is None:
+
+    def _fallback() -> Dict[str, Any]:
         items: List[Dict[str, Any]] = list(llm_configs.values())
         if user_id is not None:
             items = [c for c in items if c.get("user_id") == user_id]
@@ -105,37 +107,53 @@ async def list_configs(request: Request, user_id: Optional[str] = Query(default=
             data={"items": items, "total": len(items)},
             trace_id=get_trace_id(request)
         )
-    # Supabase 分支
-    q = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("is_active", True)
-    if user_id:
-        q = q.eq("user_id", user_id)
-    else:
-        q = q.is_("user_id", None)  # type: ignore[attr-defined]
-    resp = await async_execute(q)
-    data = resp.data or []
-    return success_response(
-        data={"items": data, "total": len(data)},
-        trace_id=get_trace_id(request)
-    )
+
+    if supabase is None:
+        return _fallback()
+
+    try:
+        q = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("is_active", True)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+        resp = await async_execute(q)
+        data = resp.data or []
+        return success_response(
+            data={"items": data, "total": len(data)},
+            trace_id=get_trace_id(request)
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Supabase list_configs 失败，回退内存配置: %s", exc)
+        return _fallback()
 
 
 @router.get("/configs/{config_name}")
 async def get_config_by_name(request: Request, config_name: str, user_id: Optional[str] = Query(default=None)):
     supabase = get_supabase()
-    if supabase is None:
+
+    def _fallback() -> Dict[str, Any]:
         for cfg in llm_configs.values():
             if cfg.get("config_name") == config_name and (user_id is None or cfg.get("user_id") == user_id):
                 return success_response(data=cfg, trace_id=get_trace_id(request))
-        raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="配置不存在")
-    q = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("config_name", config_name).eq("is_active", True)
-    if user_id:
-        q = q.eq("user_id", user_id)
-    else:
-        q = q.is_("user_id", None)  # type: ignore[attr-defined]
-    resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
-    if resp.data:
-        return success_response(data=resp.data[0], trace_id=get_trace_id(request))
-    return success_response(data=None, trace_id=get_trace_id(request))
+        return success_response(data=None, trace_id=get_trace_id(request))
+
+    if supabase is None:
+        return _fallback()
+
+    try:
+        q = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("config_name", config_name).eq("is_active", True)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+        resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
+        if resp.data:
+            return success_response(data=resp.data[0], trace_id=get_trace_id(request))
+        return success_response(data=None, trace_id=get_trace_id(request))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Supabase get_config_by_name 失败，回退内存配置: %s", exc)
+        return _fallback()
 
 
 @router.post("/configs")
@@ -153,8 +171,7 @@ async def save_config(request: Request, payload: Dict[str, Any]):
 
     now = _now_iso()
 
-    if supabase is None:
-        # 内存分支
+    def _save_in_memory() -> Dict[str, Any]:
         existing_id: Optional[str] = None
         for cid, cfg in llm_configs.items():
             if cfg.get("config_name") == cfg_name and cfg.get("user_id") == payload.get("user_id"):
@@ -181,6 +198,9 @@ async def save_config(request: Request, payload: Dict[str, Any]):
         llm_configs[data["id"]] = data
         return success_response(data=data, trace_id=get_trace_id(request))
 
+    if supabase is None:
+        return _save_in_memory()
+
     # Supabase 分支：按 config_name + user_id upsert
     # Resolve UUID foreign keys when Supabase is available
     resolved_ids = {"provider_id": None, "model_id": None}
@@ -201,28 +221,51 @@ async def save_config(request: Request, payload: Dict[str, Any]):
     }
 
     # 尝试查找现有
-    q = supabase.table("user_llm_configs").select("id").eq("config_name", cfg_name)
-    if row["user_id"]:
-        q = q.eq("user_id", row["user_id"])
-    else:
-        q = q.is_("user_id", None)  # type: ignore[attr-defined]
-    existing = await async_execute(q.limit(1))
+    try:
+        q = supabase.table("user_llm_configs").select("id").eq("config_name", cfg_name)
+        if row["user_id"]:
+            q = q.eq("user_id", row["user_id"])
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
 
-    if existing.data:
-        cfg_id = existing.data[0]["id"]
-        resp = await async_execute(supabase.table("user_llm_configs").update(row).eq("id", cfg_id))
-    else:
-        row["created_at"] = now
-        resp = await async_execute(supabase.table("user_llm_configs").insert(row))
+        # 查询现有配置（404 不抛出异常）
+        existing_data = None
+        try:
+            existing = await async_execute(q.limit(1))
+            existing_data = existing.data if existing.data else None
+        except Exception as e:
+            # 404 是正常的，表示配置不存在
+            if "404" not in str(e):
+                raise
+            existing_data = None
 
-    # 读取含关联的完整行返回
-    q2 = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("config_name", cfg_name)
-    if row["user_id"]:
-        q2 = q2.eq("user_id", row["user_id"])
-    else:
-        q2 = q2.is_("user_id", None)  # type: ignore[attr-defined]
-    full = await async_execute(q2.order("updated_at", {"ascending": False}).limit(1))
-    return success_response(
-        data=(full.data[0] if full.data else None),
-        trace_id=get_trace_id(request)
-    )
+        if existing_data:
+            cfg_id = existing_data[0]["id"]
+            await async_execute(supabase.table("user_llm_configs").update(row).eq("id", cfg_id))
+        else:
+            row["created_at"] = now
+            await async_execute(supabase.table("user_llm_configs").insert(row))
+
+        # 读取完整行返回（不使用关联查询，避免 400 错误）
+        q2 = supabase.table("user_llm_configs").select("*").eq("config_name", cfg_name)
+        if row["user_id"]:
+            q2 = q2.eq("user_id", row["user_id"])
+        else:
+            q2 = q2.is_("user_id", None)  # type: ignore[attr-defined]
+        full = await async_execute(q2.order("updated_at", desc=True).limit(1))
+
+        # 构建返回数据（包含 provider 和 model 信息）
+        result_data = full.data[0] if full.data else None
+        if result_data:
+            result_data["provider"] = provider
+            result_data["model"] = model
+            result_data["provider_code"] = provider["provider_code"]
+            result_data["model_code"] = model["model_code"]
+
+        return success_response(
+            data=result_data,
+            trace_id=get_trace_id(request)
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Supabase save_config 失败，回退内存配置: %s", exc)
+        return _save_in_memory()

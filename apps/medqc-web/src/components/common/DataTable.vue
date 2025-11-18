@@ -162,7 +162,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import type { Component } from 'vue'
 import { 
   FilterOutlined, 
   SettingOutlined, 
@@ -184,7 +185,7 @@ interface BatchAction {
   key: string
   text: string
   type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
-  icon?: Record<string, unknown>
+  icon?: Component
   danger?: boolean
   loading?: boolean
   disabled?: boolean
@@ -195,20 +196,22 @@ interface EmptyAction {
   key: string
   text: string
   type?: 'primary' | 'default'
-  icon?: Record<string, unknown>
+  icon?: Component
   onClick?: () => void
 }
+
+type TableRecord = Record<string, unknown>
 
 interface Props {
   // 基础属性
   columns: TableColumnsType
-  dataSource[]
+  dataSource: TableRecord[]
   loading?: boolean
   size?: 'small' | 'middle' | 'large'
   bordered?: boolean
   
   // 分页配置
-  pagination?: Record<string, unknown>
+  pagination?: Record<string, unknown> | false
   
   // 选择配置
   rowSelection?: Record<string, unknown>
@@ -240,7 +243,7 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'change', pagination: unknown,  filters: unknown, sorter: unknown): void
+  (e: 'change', pagination: unknown, filters: unknown, sorter: unknown): void
   (e: 'search', value: string): void
   (e: 'filter-change', filters: Record<string, unknown>): void
   (e: 'batch-action', action: BatchAction, selectedKeys: string[]): void
@@ -249,7 +252,9 @@ interface Emits {
   (e: 'empty-action', action: EmptyAction): void
 }
 
-const props = withDefaults(defineProps<Props>(), { loading: false,
+const props = withDefaults(defineProps<Props>(), {
+  dataSource: () => [] as TableRecord[],
+  loading: false,
   size: 'middle',
   bordered: false,
   showToolbar: true,
@@ -257,13 +262,13 @@ const props = withDefaults(defineProps<Props>(), { loading: false,
   searchPlaceholder: '请输入关键词搜索',
   showColumnSettings: true,
   showExport: false,
-  filters: () => [],
-  batchActions: () => [],
+  filters: () => [] as FilterItem[],
+  batchActions: () => [] as BatchAction[],
   emptyType: 'empty',
   emptyTitle: '暂无数据',
   emptyDescription: '当前没有可显示的内容',
-  emptyActions: () => [],
-  tableProps: () => ({})
+  emptyActions: () => [] as EmptyAction[],
+  tableProps: () => ({}) as Partial<TableProps>
 })
 
 const emit = defineEmits<Emits>()
@@ -415,7 +420,7 @@ const handleExport = () => {
   }, 1000)
 }
 
-const handleTableChange = (pagination, filters: unknown,  sorter: unknown) => {
+const handleTableChange = (pagination: unknown, filters: unknown, sorter: unknown) => {
   emit('change', pagination, filters, sorter)
 }
 
@@ -441,7 +446,7 @@ const resetFilters = () => {
 defineExpose({
   clearSelection,
   resetFilters,
-  selectedRowKeys: selectedRowKeys.value
+  selectedRowKeys
 })
 </script>
 

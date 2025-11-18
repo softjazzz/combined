@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/apps/medqc-web/backend"
 
 HOST="${HOST:-0.0.0.0}"
-PORT="${BACKEND_PORT:-8001}"
+PORT="${BACKEND_PORT:-8000}"  # 修正：根据 DEVELOPMENT_PORTS.md，medqc-api 标准端口为 8000
 
 log() {
   echo "[start_backend] $*"

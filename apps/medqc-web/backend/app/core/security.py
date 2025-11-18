@@ -49,3 +49,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise credentials_exception
     return user
 
+
+async def require_admin(current_user: dict = Depends(get_current_user)):
+    """
+    验证当前用户是否为系统管理员
+    只有角色中包含 'admin' 的用户才能访问
+    """
+    if "admin" not in current_user.get("roles", []):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="此操作需要系统管理员权限"
+        )
+    return current_user
+

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # API配置
     api_host: str = "0.0.0.0"
-    api_port: int = 8001
+    api_port: int = 8000  # 修正：根据 DEVELOPMENT_PORTS.md，medqc-api 标准端口为 8000
 
     # 安全配置
     secret_key: Optional[str] = None  # 从 jwt_secret 映射

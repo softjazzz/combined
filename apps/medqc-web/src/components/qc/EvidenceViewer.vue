@@ -15,25 +15,42 @@
     </a-button>
 
     <!-- 佐证依据内容 -->
-    <a-collapse 
-      v-model:activeKey="activeKey" 
+    <a-collapse
+      v-model:activeKey="activeKey"
       v-if="showEvidence"
       class="evidence-collapse mt-3"
       ghost
     >
-      <a-collapse-panel key="evidence" header="📋 佐证依据详情">
+      <a-collapse-panel key="evidence">
+        <template #header>
+          <span class="evidence-panel-header">
+            <ProfileOutlined class="mr-2" />
+            佐证依据详情
+          </span>
+        </template>
         <div class="evidence-content">
           
           <!-- 评估结论摘要 -->
           <div class="evidence-summary mb-4">
             <div class="flex items-center mb-2">
-              <component 
-                :is="getComplianceIcon()" 
+              <component
+                :is="getComplianceIcon()"
                 :style="{ color: getComplianceColor(), fontSize: '16px' }"
                 class="mr-2"
               />
-              <span class="font-medium text-gray-800">
-                评估结论: {{ evidence.is_compliant ? '✅ 合规' : '❌ 不合规' }}
+              <span class="font-medium text-gray-800 flex items-center gap-1">
+                评估结论:
+                <span class="flex items-center gap-1">
+                  <CheckCircleOutlined
+                    v-if="evidence.is_compliant"
+                    class="text-green-500"
+                  />
+                  <CloseCircleOutlined
+                    v-else
+                    class="text-red-500"
+                  />
+                  {{ evidence.is_compliant ? '合规' : '不合规' }}
+                </span>
               </span>
               <a-tag 
                 :color="getConfidenceColor()" 
@@ -70,8 +87,9 @@
                 class="evidence-quote mb-3"
               >
                 <div class="quote-header flex items-center justify-between mb-2">
-                  <span class="text-xs text-gray-500 font-medium">
-                    📍 {{ quote.location || `证据片段 ${index + 1}` }}
+                  <span class="text-xs text-gray-500 font-medium flex items-center gap-1">
+                    <PushpinOutlined />
+                    {{ quote.location || `证据片段 ${index + 1}` }}
                   </span>
                   <a-button 
                     type="link" 
@@ -149,7 +167,9 @@ import {
   AimOutlined,
   InboxOutlined,
   CheckCircleOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
+  ProfileOutlined,
+  PushpinOutlined
 } from '@ant-design/icons-vue'
 
 // 组件属性
@@ -267,6 +287,10 @@ const highlightInOriginal = (text: string) => {
 
 .evidence-collapse {
   @apply border border-gray-200 rounded-lg bg-white;
+}
+
+.evidence-panel-header {
+  @apply inline-flex items-center gap-2 text-gray-800;
 }
 
 .evidence-collapse :deep(.ant-collapse-header) {

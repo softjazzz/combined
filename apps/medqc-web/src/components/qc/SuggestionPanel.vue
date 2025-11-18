@@ -126,7 +126,9 @@
               </div>
 
               <!-- 描述 -->
-              <p class="text-sm text-slate-300 mb-4 leading-relaxed">{{ suggestion.description }}</p>
+              <ol class="text-sm text-slate-300 mb-4 leading-relaxed list-decimal list-inside space-y-1 marker:text-amber-300">
+                <li v-for="(step, stepIndex) in suggestion.steps" :key="stepIndex">{{ step }}</li>
+              </ol>
 
               <!-- 展开内容 -->
               <div 
@@ -264,6 +266,7 @@ import {
   StarOutlined,
   FlagOutlined
 } from '@ant-design/icons-vue'
+import { structureSuggestions } from '@/utils/suggestionFormatter'
 
 // Props
 interface Props {
@@ -290,26 +293,28 @@ const selectedPriority = ref('all')
 const sortBy = ref('priority')
 const expandedSuggestions = ref<string[]>([])
 
+const structuredSuggestions = computed(() => structureSuggestions(props.suggestions as any))
+
 // 计算属性
 const categories = computed(() => {
-  const cats = [...new Set(props.suggestions.map(s => s.category))]
+  const cats = [...new Set(structuredSuggestions.value.map(s => s.category))]
   return cats.sort()
 })
 
 const highPrioritySuggestions = computed(() => 
-  props.suggestions.filter(s => s.priority === 'high')
+  structuredSuggestions.value.filter(s => s.priority === 'high')
 )
 
 const mediumPrioritySuggestions = computed(() => 
-  props.suggestions.filter(s => s.priority === 'medium')
+  structuredSuggestions.value.filter(s => s.priority === 'medium')
 )
 
 const lowPrioritySuggestions = computed(() => 
-  props.suggestions.filter(s => s.priority === 'low')
+  structuredSuggestions.value.filter(s => s.priority === 'low')
 )
 
 const filteredSuggestions = computed(() => {
-  let filtered = props.suggestions
+  let filtered = [...structuredSuggestions.value]
 
   // 按类别筛选
   if (selectedCategory.value !== 'all') {
@@ -452,16 +457,20 @@ const saveSuggestion = (suggestion) => {
 }
 
 const shareSuggestion = (suggestion) => {
+  const formattedSteps = suggestion.steps?.length
+    ? suggestion.steps.map((step: string, index: number) => `${index + 1}. ${step}`).join('\n')
+    : suggestion.description
+
   // 模拟分享功能
   if (navigator.share) {
     navigator.share({
       title: suggestion.title,
-      text: suggestion.description,
+      text: formattedSteps,
       url: window.location.href
     })
   } else {
     // 复制到剪贴板
-    navigator.clipboard.writeText(`${suggestion.title}\n${suggestion.description}`)
+    navigator.clipboard.writeText(`${suggestion.title}\n${formattedSteps}`)
     message.success('建议内容已复制到剪贴板')
   }
 }

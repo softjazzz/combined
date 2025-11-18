@@ -7,7 +7,13 @@
 
     <div class="validation-sections">
       <!-- 功能验证 -->
-      <a-card title="✅ 功能验证" class="section-card">
+      <a-card class="section-card">
+        <template #title>
+          <div class="card-title">
+            <SafetyCertificateOutlined class="card-title__icon card-title__icon-success" />
+            <span>功能验证</span>
+          </div>
+        </template>
         <div class="feature-list">
           <div class="feature-item">
             <CheckCircleOutlined style="color: #52c41a;" />
@@ -41,7 +47,13 @@
       </a-card>
 
       <!-- 路由测试 -->
-      <a-card title="🔗 路由测试" class="section-card">
+      <a-card class="section-card">
+        <template #title>
+          <div class="card-title">
+            <LinkOutlined class="card-title__icon" />
+            <span>路由测试</span>
+          </div>
+        </template>
         <div class="route-buttons">
           <a-button type="primary" @click="openNewLayout" size="large">
             <RocketOutlined />
@@ -59,7 +71,13 @@
       </a-card>
 
       <!-- API 状态 -->
-      <a-card title="🔌 API 状态" class="section-card">
+      <a-card class="section-card">
+        <template #title>
+          <div class="card-title">
+            <ApiOutlined class="card-title__icon" />
+            <span>API 状态</span>
+          </div>
+        </template>
         <div class="api-status">
           <a-button @click="checkAPI" :loading="apiLoading">
             检查 API 状态
@@ -88,25 +106,64 @@
       </a-card>
 
       <!-- 实施说明 -->
-      <a-card title="📋 实施说明" class="section-card">
+      <a-card class="section-card">
+        <template #title>
+          <div class="card-title">
+            <ReadOutlined class="card-title__icon" />
+            <span>实施说明</span>
+          </div>
+        </template>
         <div class="implementation-notes">
           <h3>已完成的工作：</h3>
           <ul>
-            <li>✅ 备份原页面为 <code>MedicalRecordDetail.legacy.vue</code></li>
-            <li>✅ 创建三栏布局组件 (<code>LayoutShell</code>, <code>NavTree</code>, <code>Toolbar</code>, <code>ContextAside</code>)</li>
-            <li>✅ 实现数据层 API 封装</li>
-            <li>✅ 创建新的主页面集成所有组件</li>
-            <li>✅ 配置路由支持新旧版本切换</li>
+            <li class="icon-list-item">
+              <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
+              <span>备份原页面为 <code>MedicalRecordDetail.legacy.vue</code></span>
+            </li>
+            <li class="icon-list-item">
+              <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
+              <span>创建三栏布局组件 (<code>LayoutShell</code>, <code>NavTree</code>, <code>Toolbar</code>, <code>ContextAside</code>)</span>
+            </li>
+            <li class="icon-list-item">
+              <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
+              <span>实现数据层 API 封装</span>
+            </li>
+            <li class="icon-list-item">
+              <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
+              <span>创建新的主页面集成所有组件</span>
+            </li>
+            <li class="icon-list-item">
+              <CheckCircleOutlined class="icon-list-item__icon icon-list-item__icon--success" />
+              <span>配置路由支持新旧版本切换</span>
+            </li>
           </ul>
           
           <h3>技术特性：</h3>
           <ul>
-            <li>🎨 Vue 3 + TypeScript + Composition API</li>
-            <li>🎯 Ant Design Vue 组件库</li>
-            <li>📱 响应式设计，支持移动端</li>
-            <li>💾 LocalStorage 状态持久化</li>
-            <li>🔍 实时搜索和内容高亮</li>
-            <li>🖱️ 拖拽调整面板宽度</li>
+            <li class="icon-list-item">
+              <HighlightOutlined class="icon-list-item__icon" />
+              <span>Vue 3 + TypeScript + Composition API</span>
+            </li>
+            <li class="icon-list-item">
+              <AimOutlined class="icon-list-item__icon" />
+              <span>Ant Design Vue 组件库</span>
+            </li>
+            <li class="icon-list-item">
+              <MobileOutlined class="icon-list-item__icon" />
+              <span>响应式设计，支持移动端</span>
+            </li>
+            <li class="icon-list-item">
+              <DatabaseOutlined class="icon-list-item__icon" />
+              <span>LocalStorage 状态持久化</span>
+            </li>
+            <li class="icon-list-item">
+              <SearchOutlined class="icon-list-item__icon" />
+              <span>实时搜索和内容高亮</span>
+            </li>
+            <li class="icon-list-item">
+              <DragOutlined class="icon-list-item__icon" />
+              <span>拖拽调整面板宽度</span>
+            </li>
           </ul>
 
           <h3>回滚方案：</h3>
@@ -123,11 +180,21 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { 
-  CheckCircleOutlined, 
-  RocketOutlined, 
-  HistoryOutlined, 
-  ExperimentOutlined 
+import {
+  SafetyCertificateOutlined,
+  CheckCircleOutlined,
+  RocketOutlined,
+  HistoryOutlined,
+  ExperimentOutlined,
+  LinkOutlined,
+  ApiOutlined,
+  ReadOutlined,
+  HighlightOutlined,
+  AimOutlined,
+  MobileOutlined,
+  DatabaseOutlined,
+  SearchOutlined,
+  DragOutlined
 } from '@ant-design/icons-vue'
 
 const apiLoading = ref(false)
@@ -218,6 +285,24 @@ const checkAPI = async () => {
   border-radius: 8px;
 }
 
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.card-title__icon {
+  font-size: 18px;
+  color: #1890ff;
+}
+
+.card-title__icon-success {
+  color: #52c41a;
+}
+
 .feature-list {
   display: flex;
   flex-direction: column;
@@ -274,6 +359,24 @@ const checkAPI = async () => {
   color: #333;
   margin: 16px 0 8px 0;
   font-size: 16px;
+}
+
+.icon-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.icon-list-item__icon {
+  font-size: 16px;
+  color: #1890ff;
+  margin-top: 2px;
+}
+
+.icon-list-item__icon--success {
+  color: #52c41a;
 }
 
 .implementation-notes ul {

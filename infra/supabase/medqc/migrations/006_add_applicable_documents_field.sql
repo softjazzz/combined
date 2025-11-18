@@ -123,49 +123,39 @@ CREATE OR REPLACE FUNCTION get_applicable_rules(
 )
 RETURNS TABLE (
     id UUID,
-    rule_code VARCHAR(50),
-    name VARCHAR(200),
+    rule_code TEXT,
+    name TEXT,
     description TEXT,
-    category VARCHAR(50),
-    rule_type VARCHAR(20),
-    severity VARCHAR(20),
+    category TEXT,
     prompt_template TEXT,
     check_logic JSONB,
     applicable_documents TEXT[],
-    max_score INTEGER,
-    weight DECIMAL(3,2),
-    is_active BOOLEAN,
-    version VARCHAR(10)
+    is_active BOOLEAN
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         r.id,
         r.rule_code,
         r.name,
         r.description,
         r.category,
-        r.rule_type,
-        r.severity,
         r.prompt_template,
         r.check_logic,
         r.applicable_documents,
-        r.max_score,
-        r.weight,
-        r.is_active,
-        r.version
+        r.is_active
     FROM qc_rules r
-    WHERE 
+    WHERE
         (p_is_active IS NULL OR r.is_active = p_is_active)
         AND (
             -- 通用规则（applicable_documents 为空）
-            r.applicable_documents IS NULL 
+            r.applicable_documents IS NULL
             OR array_length(r.applicable_documents, 1) IS NULL
             OR array_length(r.applicable_documents, 1) = 0
             -- 或者包含指定的文书类型
             OR p_document_type = ANY(r.applicable_documents)
         )
-    ORDER BY r.severity DESC, r.weight DESC, r.rule_code;
+    ORDER BY r.rule_code;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -174,37 +164,20 @@ COMMENT ON FUNCTION get_applicable_rules(TEXT, BOOLEAN) IS '获取适用于指�
 
 -- 创建视图：规则统计
 CREATE OR REPLACE VIEW qc_rules_statistics AS
-SELECT 
+SELECT
     -- 总规则数
     COUNT(*) AS total_rules,
     COUNT(*) FILTER (WHERE is_active = true) AS active_rules,
     COUNT(*) FILTER (WHERE is_active = false) AS inactive_rules,
-    
-    -- 按类别统计
-    COUNT(*) FILTER (WHERE category = 'completeness') AS completeness_rules,
-    COUNT(*) FILTER (WHERE category = 'consistency') AS consistency_rules,
-    COUNT(*) FILTER (WHERE category = 'rationality') AS rationality_rules,
-    COUNT(*) FILTER (WHERE category = 'timeliness') AS timeliness_rules,
-    COUNT(*) FILTER (WHERE category = 'compliance') AS compliance_rules,
-    
-    -- 按严重程度统计
-    COUNT(*) FILTER (WHERE severity = 'critical') AS critical_rules,
-    COUNT(*) FILTER (WHERE severity = 'major') AS major_rules,
-    COUNT(*) FILTER (WHERE severity = 'minor') AS minor_rules,
-    
-    -- 按规则类型统计
-    COUNT(*) FILTER (WHERE rule_type = 'objective') AS objective_rules,
-    COUNT(*) FILTER (WHERE rule_type = 'subjective') AS subjective_rules,
-    COUNT(*) FILTER (WHERE rule_type = 'hybrid') AS hybrid_rules,
-    
+
     -- 通用规则和特定规则
     COUNT(*) FILTER (
-        WHERE applicable_documents IS NULL 
+        WHERE applicable_documents IS NULL
         OR array_length(applicable_documents, 1) IS NULL
         OR array_length(applicable_documents, 1) = 0
     ) AS universal_rules,
     COUNT(*) FILTER (
-        WHERE applicable_documents IS NOT NULL 
+        WHERE applicable_documents IS NOT NULL
         AND array_length(applicable_documents, 1) > 0
     ) AS specific_rules
 FROM qc_rules;
@@ -214,17 +187,14 @@ COMMENT ON VIEW qc_rules_statistics IS '质控规则统计视图，提供各维�
 
 -- 创建视图：按文书类型统计规则数量
 CREATE OR REPLACE VIEW qc_rules_by_document_type AS
-SELECT 
+SELECT
     unnest(applicable_documents) AS document_type,
     COUNT(*) AS rule_count,
     COUNT(*) FILTER (WHERE is_active = true) AS active_rule_count,
-    COUNT(*) FILTER (WHERE severity = 'critical') AS critical_rule_count,
-    COUNT(*) FILTER (WHERE severity = 'major') AS major_rule_count,
-    COUNT(*) FILTER (WHERE severity = 'minor') AS minor_rule_count,
-    array_agg(rule_code ORDER BY severity DESC, weight DESC) AS rule_codes
+    array_agg(rule_code ORDER BY rule_code) AS rule_codes
 FROM qc_rules
-WHERE 
-    applicable_documents IS NOT NULL 
+WHERE
+    applicable_documents IS NOT NULL
     AND array_length(applicable_documents, 1) > 0
 GROUP BY document_type
 ORDER BY rule_count DESC;

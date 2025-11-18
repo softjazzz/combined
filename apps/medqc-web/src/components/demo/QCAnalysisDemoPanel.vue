@@ -9,8 +9,8 @@
         </a-tooltip>
       </template>
       
-      <!-- 分析步骤 -->
-      <div class="analysis-steps" v-if="analysisSteps.length > 0">
+      <!-- 分析步骤（运行中时显示） -->
+      <div class="analysis-steps" v-if="isRunning && analysisSteps.length > 0">
         <h4>分析步骤</h4>
         <a-steps 
           :current="getCurrentStepIndex()" 
@@ -35,64 +35,53 @@
         </a-steps>
       </div>
       
-      <!-- 分析结果 -->
-      <div class="analysis-result" v-if="analysisResult">
-        <h4>分析结果</h4>
+      <!-- 分析结果汇总（完成后显示） -->
+      <div class="analysis-result-summary" v-if="analysisResult && !isRunning">
+        <h4>分析结果汇总</h4>
         <a-row :gutter="16">
-          <a-col :span="8">
+          <a-col :span="6">
             <a-statistic 
               title="总体评分" 
               :value="analysisResult.overallScore" 
               suffix="分"
-              :value-style="{ color: getScoreColor(analysisResult.overallScore) }"
+              :value-style="{ color: getScoreColor(analysisResult.overallScore), fontSize: '24px', fontWeight: 'bold' }"
             />
           </a-col>
-          <a-col :span="8">
+          <a-col :span="6">
+            <a-statistic 
+              title="质控等级" 
+              :value="analysisResult.overallGrade"
+              :value-style="{ color: getGradeColor(analysisResult.overallGrade), fontSize: '24px', fontWeight: 'bold' }"
+            />
+          </a-col>
+          <a-col :span="6">
             <a-statistic 
               title="发现问题" 
               :value="analysisResult.issues.length" 
               suffix="个"
-              :value-style="{ color: '#cf1322' }"
+              :value-style="{ color: analysisResult.issues.length > 0 ? '#cf1322' : '#52c41a', fontSize: '20px' }"
             />
           </a-col>
-          <a-col :span="8">
+          <a-col :span="6">
             <a-statistic 
               title="改进建议" 
               :value="analysisResult.suggestions.length" 
               suffix="条"
-              :value-style="{ color: '#1890ff' }"
+              :value-style="{ color: '#1890ff', fontSize: '20px' }"
             />
           </a-col>
         </a-row>
         
-        <!-- 问题列表 -->
-        <div class="issues-section" v-if="analysisResult.issues.length > 0">
-          <h5>发现的问题</h5>
-          <a-list 
-            :data-source="analysisResult.issues" 
-            size="small"
-          >
-            <template #renderItem="{ item }">
-              <a-list-item>
-                <a-list-item-meta>
-                  <template #title>
-                    <a-space>
-                      <a-tag :color="getSeverityColor(item.severity)">
-                        {{ getSeverityText(item.severity) }}
-                      </a-tag>
-                      {{ item.ruleName }}
-                    </a-space>
-                  </template>
-                  <template #description>
-                    {{ item.description }}
-                  </template>
-                </a-list-item-meta>
-              </a-list-item>
-            </template>
-          </a-list>
+        <!-- 查看详细报告按钮 -->
+        <div class="view-detail-section">
+          <a-button type="primary" size="large" block @click="handleViewDetail">
+            <FileTextOutlined />
+            查看完整质控报告
+          </a-button>
+          <p class="hint-text">点击查看详细的分析步骤、问题列表和规则明细</p>
         </div>
       </div>
-      
+
       <!-- 空状态 -->
       <div v-else-if="!isRunning" class="empty-state">
         <a-empty description="暂无分析结果">
@@ -112,19 +101,29 @@
         </a-spin>
       </div>
     </a-card>
+
+    <!-- 质控结果详情弹窗 -->
+    <QCResultDetailModal
+      v-model:visible="showDetailModal"
+      :result="analysisResult"
+      :analysisSteps="analysisSteps"
+      @close="showDetailModal = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   LoadingOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  FileTextOutlined
 } from '@ant-design/icons-vue'
 import type { QCResult, AnalysisStep } from '@/types/quality-control'
+import QCResultDetailModal from './QCResultDetailModal.vue'
 
 // Props
 const props = defineProps<{
@@ -137,6 +136,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   analysisComplete: [result: QCResult]
 }>()
+
+// State
+const showDetailModal = ref(false)
 
 // 计算属性
 const getCurrentStepIndex = () => {
@@ -171,28 +173,22 @@ const getScoreColor = (score: number) => {
   return '#f5222d'
 }
 
-const getSeverityColor = (severity: string) => {
-  const colors = {
-    low: 'green',
-    medium: 'orange',
-    high: 'red',
-    critical: 'red'
+const getGradeColor = (grade: string) => {
+  const colors: Record<string, string> = {
+    'A': '#52c41a',
+    'B': '#faad14',
+    'C': '#fa8c16',
+    'D': '#f5222d'
   }
-  return colors[severity as keyof typeof colors] || 'default'
-}
-
-const getSeverityText = (severity: string) => {
-  const texts = {
-    low: '轻微',
-    medium: '中等',
-    high: '严重',
-    critical: '严重'
-  }
-  return texts[severity as keyof typeof texts] || severity
+  return colors[grade] || '#1890ff'
 }
 
 const handleStartAnalysis = () => {
   message.info('请在左侧配置面板中开始演示')
+}
+
+const handleViewDetail = () => {
+  showDetailModal.value = true
 }
 </script>
 
@@ -209,20 +205,21 @@ const handleStartAnalysis = () => {
       }
     }
     
-    .analysis-result {
+    .analysis-result-summary {
       h4 {
         font-weight: 600;
         margin-bottom: 16px;
         color: #333;
       }
-      
-      .issues-section {
+
+      .view-detail-section {
         margin-top: 24px;
-        
-        h5 {
-          font-weight: 600;
-          margin-bottom: 12px;
-          color: #333;
+        text-align: center;
+
+        .hint-text {
+          margin-top: 12px;
+          color: #8c8c8c;
+          font-size: 14px;
         }
       }
     }
@@ -252,3 +249,4 @@ const handleStartAnalysis = () => {
   }
 }
 </style>
+

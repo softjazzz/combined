@@ -4,6 +4,8 @@
  * 这些类型定义与后端的统一响应格式保持一致
  */
 
+import type { User as AuthUser, LoginResponse as AuthLoginResponse } from './auth'
+
 // ============================================================================
 // 基础响应类型
 // ============================================================================
@@ -109,6 +111,37 @@ export interface MedicalDocument {
 }
 
 /**
+ * 医疗文档（含分类信息）响应负载
+ */
+export interface MedicalRecordDocumentPayload {
+  id: string;
+  title?: string;
+  type?: string;
+  type_info?: {
+    type_code?: string;
+    type_name?: string;
+  };
+  category_code?: string;
+  created_at?: string;
+  updated_at?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface MedicalRecordDocumentsResponse {
+  record_id: string;
+  total_documents: number;
+  categories: Array<{
+    category_code: string;
+    category_name: string;
+    category_description?: string;
+    document_count: number;
+    documents: MedicalRecordDocumentPayload[];
+  }>;
+  classification_summary?: Record<string, unknown>;
+}
+
+/**
  * 质控规则
  */
 export interface QCRule {
@@ -172,26 +205,9 @@ export interface LLMModel {
   is_active: boolean;
 }
 
-/**
- * 用户信息
- */
-export interface User {
-  id: string;
-  email: string;
-  username?: string;
-  role?: string;
-  created_at: string;
-  updated_at: string;
-}
+export type User = AuthUser;
 
-/**
- * 登录响应
- */
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  user: User;
-}
+export type LoginResponse = AuthLoginResponse;
 
 /**
  * 系统健康状态
@@ -317,4 +333,3 @@ export type QCStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
  * 排序顺序
  */
 export type SortOrder = 'asc' | 'desc';
-

@@ -559,7 +559,8 @@ const loadPatientList = async () => {
     } else {
       // 如果数据库中没有数据，回退到演示数据
       console.log('⚠️ 数据库中没有患者数据，使用演示数据')
-      const scenarios = ['complete', 'incomplete', 'inconsistent', 'irrational'] as const const allPatients: MedicalRecord[] = []
+      const scenarios = ['complete', 'incomplete', 'inconsistent', 'irrational'] as const
+      const allPatients: MedicalRecord[] = []
 
       for (const scenario of scenarios) {
         const demoResponse = await getDemoMedicalRecords(scenario)
@@ -576,7 +577,8 @@ const loadPatientList = async () => {
     // 发生错误时也尝试加载演示数据
     try {
       console.log('🔄 尝试加载演示数据作为备选...')
-      const scenarios = ['complete', 'incomplete', 'inconsistent', 'irrational'] as const const allPatients: MedicalRecord[] = []
+      const scenarios = ['complete', 'incomplete', 'inconsistent', 'irrational'] as const
+      const allPatients: MedicalRecord[] = []
 
       for (const scenario of scenarios) {
         const demoResponse = await getDemoMedicalRecords(scenario)

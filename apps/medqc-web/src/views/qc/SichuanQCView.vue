@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <h1 class="page-title">
-        <span class="title-icon">🏥</span>
+        <MedicineBoxOutlined class="title-icon" />
         四川省住院病历语义质控系统
       </h1>
       <div class="subtitle">
@@ -402,7 +402,7 @@ import {
   InboxOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
-  BarChartOutlined
+  MedicineBoxOutlined
 } from '@ant-design/icons-vue'
 import type { UploadFile } from 'ant-design-vue'
 
@@ -525,7 +525,7 @@ const startEvaluation = async () => {
 
   evaluating.value = true
   try {
-    const response = await fetch('/api/qc/sichuan/evaluate', {
+    const response = await fetch('/api/v1/qc/sichuan/evaluate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -592,7 +592,7 @@ const startEvaluationWithLinkedRecord = async () => {
       // 忽略读取失败，继续使用占位文本
     }
 
-    const resp = await fetch('/api/qc/sichuan/evaluate', {
+    const resp = await fetch('/api/v1/qc/sichuan/evaluate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -619,8 +619,8 @@ const startEvaluationWithLinkedRecord = async () => {
 const loadProvidersAndModels = async () => {
   try {
     const [p, m] = await Promise.all([
-      fetch('/api/llm/providers'),
-      fetch('/api/llm/models')
+      fetch('/api/v1/llm/providers'),
+      fetch('/api/v1/llm/models')
     ])
     if (p.ok) {
       const pd = await p.json()
@@ -638,7 +638,7 @@ const loadProvidersAndModels = async () => {
 const loadRules = async () => {
   loadingRules.value = true
   try {
-    const response = await fetch('/api/qc/sichuan/rules')
+    const response = await fetch(`/api/v1/qc/sichuan/rules?_ts=${Date.now()}`, { cache: 'no-store' })
     if (response.ok) {
       const data = await response.json()
       rules.value = data.rules
@@ -658,7 +658,7 @@ const loadRules = async () => {
 const loadStats = async () => {
   loadingStats.value = true
   try {
-    const response = await fetch('/api/qc/sichuan/stats')
+    const response = await fetch('/api/v1/qc/sichuan/stats')
     if (response.ok) {
       systemStats.value = await response.json()
       message.success('统计数据已更新')
@@ -741,6 +741,8 @@ onMounted(() => {
 
 .title-icon {
   margin-right: 12px;
+  font-size: 22px;
+  color: #2563eb;
 }
 
 .subtitle {

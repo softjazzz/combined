@@ -85,8 +85,9 @@ def get_supabase() -> Optional[Client]:
         if _supabase is None:
             try:
                 class _RestResponse:
-                    def __init__(self, data: Any) -> None:
+                    def __init__(self, data: Any, count: int | None = None) -> None:
                         self.data = data
+                        self.count = count
 
                 class _RestQuery:
                     def __init__(self, base_url: str, api_key: str, table: str) -> None:
@@ -99,11 +100,16 @@ def get_supabase() -> Optional[Client]:
                         self._payload: Any = None
                         self._orders: list[tuple[str, bool]] = []  # (column, ascending)
                         self._limit: int | None = None
+                        self._count: str | None = None  # 添加 count 支持
+                        self._range: tuple[int, int] | None = None  # 添加 range 支持
+                        self._single: bool = False  # 添加 single 支持
 
-                    # 选择字段，支持传入 "id, col1, rel!inner(col)" 字符串
-                    def select(self, columns: str = "*") -> "_RestQuery":
+                    # 选择字段，支持传入 "id, col1, rel!inner(col)" 字符串，以及 count 参数
+                    def select(self, columns: str = "*", count: str | None = None) -> "_RestQuery":
                         self._select = columns or "*"
                         self._method = "GET"
+                        if count:
+                            self._count = count  # 'exact', 'planned', 'estimated'
                         return self
 
                     # 删除操作，结合 eq 构造 where
@@ -123,14 +129,23 @@ def get_supabase() -> Optional[Client]:
                         self._payload = payload
                         return self
 
-                    # 排序（最小实现）：order("col", {"ascending": False})
-                    def order(self, column: str, options: Dict[str, Any] | None = None) -> "_RestQuery":
+                    # 排序（最小实现）：支持 order("col", {"ascending": False}) 和 order("col", desc=True)
+                    def order(self, column: str, options: Dict[str, Any] | None = None, desc: bool = False, **kwargs) -> "_RestQuery":
                         ascending = True
-                        if isinstance(options, dict) and "ascending" in options:
+
+                        # 支持 desc 关键字参数
+                        if desc:
+                            ascending = False
+                        # 支持 options 字典
+                        elif isinstance(options, dict) and "ascending" in options:
                             try:
                                 ascending = bool(options["ascending"])  # type: ignore[arg-type]
                             except Exception:
                                 ascending = True
+                        # 支持 ascending 关键字参数
+                        elif "ascending" in kwargs:
+                            ascending = bool(kwargs["ascending"])
+
                         self._orders.append((column, ascending))
                         return self
 
@@ -147,9 +162,25 @@ def get_supabase() -> Optional[Client]:
                         self._filters[column] = value
                         return self
 
+                    # IN 过滤（支持多个值），兼容 PostgREST 语法
+                    def in_(self, column: str, values: list) -> "_RestQuery":
+                        self._filters[column] = ("in", values)
+                        return self
+
                     # IS 过滤（支持 None/True/False），兼容 PostgREST 语法
                     def is_(self, column: str, value: Any) -> "_RestQuery":
                         self._filters[column] = ("is", value)
+                        return self
+
+                    # Range 过滤（用于分页）
+                    def range(self, start: int, end: int) -> "_RestQuery":
+                        self._range = (start, end)
+                        return self
+
+                    # Single 方法（返回单条记录）
+                    def single(self) -> "_RestQuery":
+                        self._single = True
+                        self._limit = 1
                         return self
 
                     def _headers(self) -> Dict[str, str]:
@@ -160,19 +191,25 @@ def get_supabase() -> Optional[Client]:
                         if self._method in ("POST", "DELETE", "PATCH"):
                             h["Prefer"] = "return=representation"
                             h["Content-Type"] = "application/json"
+                        # 添加 count 支持
+                        if self._count:
+                            h["Prefer"] = h.get("Prefer", "") + f",count={self._count}"
+                        # 添加 Range 头
+                        if self._range:
+                            h["Range"] = f"{self._range[0]}-{self._range[1]}"
                         return h
 
                     async def execute_async(self) -> _RestResponse:  # type: ignore[name-defined]
                         """异步执行，减少在 FastAPI 事件循环中的阻塞。
                         若调用方无法 `await`，仍可使用同步版 `execute()`。
                         """
-                        params = {"select": self._select}
-                        # 排序参数：PostgREST 使用 order=col.asc,other.desc
-                        if self._orders:
-                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
-                            params["order"] = ",".join(order_parts)
-                        if self._limit is not None:
-                            params["limit"] = str(self._limit)
+                        # 重要：PostgREST 参数顺序：select -> 过滤器 -> order -> limit
+                        params = {}
+
+                        # 1. select 参数
+                        params["select"] = self._select
+
+                        # 2. 过滤器参数（必须在 order 之前）
                         for k, v in self._filters.items():
                             if isinstance(v, tuple) and len(v) == 2:
                                 op, val = v
@@ -183,10 +220,26 @@ def get_supabase() -> Optional[Client]:
                                         params[k] = f"is.{str(val).lower()}"
                                     else:
                                         params[k] = f"is.{val}"
+                                elif op == "in":
+                                    # IN 操作符：格式为 in.(value1,value2,value3)
+                                    if isinstance(val, list):
+                                        values_str = ",".join(str(item) for item in val)
+                                        params[k] = f"in.({values_str})"
+                                    else:
+                                        params[k] = f"in.({val})"
                                 else:
                                     params[k] = f"{op}.{val}"
                             else:
                                 params[k] = f"eq.{v}"
+
+                        # 3. order 参数
+                        if self._orders:
+                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
+                            params["order"] = ",".join(order_parts)
+
+                        # 4. limit 参数
+                        if self._limit is not None and not self._range:
+                            params["limit"] = str(self._limit)
                         url = f"{self.base_url}/rest/v1/{self.table}"
                         async with httpx.AsyncClient(timeout=30) as c:  # 异步请求
                             if self._method == "GET":
@@ -204,18 +257,37 @@ def get_supabase() -> Optional[Client]:
                                 data = r.json()
                             except Exception:
                                 data = None
-                            return _RestResponse(data)
+
+                            # 处理 count
+                            count = None
+                            if self._count:
+                                content_range = r.headers.get("Content-Range")
+                                if content_range:
+                                    # Content-Range: 0-9/100
+                                    parts = content_range.split("/")
+                                    if len(parts) == 2:
+                                        try:
+                                            count = int(parts[1])
+                                        except:
+                                            pass
+
+                            # 处理 single
+                            if self._single and isinstance(data, list) and len(data) > 0:
+                                data = data[0]
+
+                            return _RestResponse(data, count)
 
                     def execute(self) -> _RestResponse:  # type: ignore[name-defined]
                         """同步执行（向后兼容）。
                         如在异步上下文中调用，仍为阻塞调用；建议改用 execute_async。
                         """
-                        params = {"select": self._select}
-                        if self._orders:
-                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
-                            params["order"] = ",".join(order_parts)
-                        if self._limit is not None:
-                            params["limit"] = str(self._limit)
+                        # 重要：PostgREST 参数顺序：select -> 过滤器 -> order -> limit
+                        params = {}
+
+                        # 1. select 参数
+                        params["select"] = self._select
+
+                        # 2. 过滤器参数（必须在 order 之前）
                         for k, v in self._filters.items():
                             if isinstance(v, tuple) and len(v) == 2:
                                 op, val = v
@@ -226,10 +298,26 @@ def get_supabase() -> Optional[Client]:
                                         params[k] = f"is.{str(val).lower()}"
                                     else:
                                         params[k] = f"is.{val}"
+                                elif op == "in":
+                                    # IN 操作符：格式为 in.(value1,value2,value3)
+                                    if isinstance(val, list):
+                                        values_str = ",".join(str(item) for item in val)
+                                        params[k] = f"in.({values_str})"
+                                    else:
+                                        params[k] = f"in.({val})"
                                 else:
                                     params[k] = f"{op}.{val}"
                             else:
                                 params[k] = f"eq.{v}"
+
+                        # 3. order 参数
+                        if self._orders:
+                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
+                            params["order"] = ",".join(order_parts)
+
+                        # 4. limit 参数
+                        if self._limit is not None and not self._range:
+                            params["limit"] = str(self._limit)
                         url = f"{self.base_url}/rest/v1/{self.table}"
                         with httpx.Client(timeout=30) as c:
                             if self._method == "GET":
@@ -247,7 +335,61 @@ def get_supabase() -> Optional[Client]:
                                 data = r.json()
                             except Exception:
                                 data = None
-                            return _RestResponse(data)
+
+                            # 处理 count
+                            count = None
+                            if self._count:
+                                content_range = r.headers.get("Content-Range")
+                                if content_range:
+                                    # Content-Range: 0-9/100
+                                    parts = content_range.split("/")
+                                    if len(parts) == 2:
+                                        try:
+                                            count = int(parts[1])
+                                        except:
+                                            pass
+
+                            # 处理 single
+                            if self._single and isinstance(data, list) and len(data) > 0:
+                                data = data[0]
+
+                            return _RestResponse(data, count)
+
+                    class _RpcCall:
+                        def __init__(self, base_url: str, api_key: str, function_name: str, params: Dict[str, Any]) -> None:
+                            self.base_url = base_url.rstrip("/")
+                            self.api_key = api_key
+                            self.function_name = function_name
+                            self.params = params or {}
+
+                        def execute(self):
+                            url = f"{self.base_url}/rest/v1/rpc/{self.function_name}"
+                            headers = {
+                                "apikey": self.api_key,
+                                "Authorization": f"Bearer {self.api_key}",
+                                "Content-Type": "application/json",
+                                "Accept": "application/json",
+                            }
+                            with httpx.Client(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                                r = client.post(url, json=self.params, headers=headers)
+                                r.raise_for_status()
+                                data = r.json() if r.text else None
+                                return _RestResponse(data)
+
+                        async def execute_async(self):
+                            url = f"{self.base_url}/rest/v1/rpc/{self.function_name}"
+                            headers = {
+                                "apikey": self.api_key,
+                                "Authorization": f"Bearer {self.api_key}",
+                                "Content-Type": "application/json",
+                                "Accept": "application/json",
+                            }
+                            async with httpx.AsyncClient(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                                r = await client.post(url, json=self.params, headers=headers)
+                                r.raise_for_status()
+                                data = r.json() if r.text else None
+                                return _RestResponse(data)
+
 
                 class _RestClient:
                     def __init__(self, base_url: str, api_key: str) -> None:
@@ -256,6 +398,52 @@ def get_supabase() -> Optional[Client]:
 
                     def table(self, table_name: str) -> _RestQuery:  # type: ignore[name-defined]
                         return _RestQuery(self.base_url, self.api_key, table_name)
+
+                    def rpc(self, function_name: str, params: Dict[str, Any] | None = None):  # type: ignore[name-defined]
+                        base_url = self.base_url.rstrip("/")
+                        api_key = self.api_key
+                        fn = function_name
+                        payload = params or {}
+
+                        class _InlineRpc:
+                            def execute(self_inner):
+                                url = f"{base_url}/rest/v1/rpc/{fn}"
+                                headers = {
+                                    "apikey": api_key,
+                                    "Authorization": f"Bearer {api_key}",
+                                    "Content-Type": "application/json",
+                                    "Accept": "application/json",
+                                }
+                                with httpx.Client(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                                    r = client.post(url, json=payload, headers=headers)
+                                    try:
+                                        r.raise_for_status()
+                                    except httpx.HTTPStatusError as e:  # pragma: no cover
+                                        # 提供更详细的错误信息，便于排查 RPC 400/500
+                                        detail = r.text
+                                        raise Exception(f"RPC {fn} failed: {e} | Body: {detail}")
+                                    data = r.json() if r.text else None
+                                    return _RestResponse(data)
+
+                            async def execute_async(self_inner):
+                                url = f"{base_url}/rest/v1/rpc/{fn}"
+                                headers = {
+                                    "apikey": api_key,
+                                    "Authorization": f"Bearer {api_key}",
+                                    "Content-Type": "application/json",
+                                    "Accept": "application/json",
+                                }
+                                async with httpx.AsyncClient(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                                    r = await client.post(url, json=payload, headers=headers)
+                                    try:
+                                        r.raise_for_status()
+                                    except httpx.HTTPStatusError as e:  # pragma: no cover
+                                        detail = r.text
+                                        raise Exception(f"RPC {fn} failed: {e} | Body: {detail}")
+                                    data = r.json() if r.text else None
+                                    return _RestResponse(data)
+
+                        return _InlineRpc()
 
                 _supabase = _RestClient(str(settings.SUPABASE_URL), api_key)
                 logging.getLogger(__name__).info("Supabase REST 兼容客户端就绪: %s", settings.SUPABASE_URL)

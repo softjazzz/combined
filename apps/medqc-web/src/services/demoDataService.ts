@@ -5,8 +5,10 @@
 
 import { supabase, TABLES, checkSupabaseConnection } from '@/lib/supabase'
 import { DOCUMENT_TYPE_LABELS } from '@/utils/documentTypeUtils'
+import { getDocumentTypeCode, getDocumentBaseCode } from '@/constants/documentTypes'
 import type { MedicalRecord } from '@/types/medical-records'
-import type { QualityControlRule } from '@/types/quality-control'
+import type { QualityControlRule, RecordDocumentInfo } from '@/types/quality-control'
+import { ApiService } from '@/services/apiService'
 
 // 数据库医疗记录类型
 export interface DatabaseMedicalRecord {
@@ -50,6 +52,7 @@ export interface DatabaseQCRule {
   version: string
   created_at: string
   updated_at: string
+  applicable_documents?: string[]  // 适用的文书类型列表
 }
 
 // 演示数据服务类
@@ -297,6 +300,126 @@ export class DemoDataService {
   }
 
   /**
+   * 获取四川省质控规则列表
+   * @param params 查询参数
+   * @returns 四川省质控规则列表
+   */
+  async getSichuanQCRules(params: {
+    document_type?: string
+    document_types?: string
+    grouped?: boolean
+  } = {}): Promise<QualityControlRule[]> {
+    console.log('[DemoDataService] 开始获取四川省质控规则，参数:', params)
+
+    try {
+      // 构建查询参数
+      const queryParams = new URLSearchParams()
+      if (params.document_type) {
+        queryParams.append('document_type', params.document_type)
+      }
+      if (params.document_types) {
+        queryParams.append('document_types', params.document_types)
+      }
+      if (params.grouped !== undefined) {
+        queryParams.append('grouped', String(params.grouped))
+      }
+
+      // 调用四川质控规则API
+      const url = `/api/v1/qc/sichuan/rules${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+      const response = await fetch(url)
+
+      if (!response.ok) {
+        throw new Error(`获取四川规则失败: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      // 处理分组返回格式
+      if (params.grouped && data.rules_by_document_type) {
+        console.log('[DemoDataService] 收到分组格式的四川规则')
+        // 展开所有分组规则
+        const allRules: any[] = []
+        Object.values(data.rules_by_document_type).forEach((rules: any) => {
+          if (Array.isArray(rules)) {
+            allRules.push(...rules)
+          }
+        })
+        return this.transformSichuanRules(allRules)
+      }
+
+      // 处理普通列表格式
+      if (data.rules && Array.isArray(data.rules)) {
+        console.log(`[DemoDataService] ✅ 成功加载 ${data.rules.length} 条四川省质控规则`)
+        return this.transformSichuanRules(data.rules)
+      }
+
+      console.warn('[DemoDataService] 四川规则API返回格式异常，使用空数组')
+      return []
+    } catch (error) {
+      console.error('[DemoDataService] 获取四川省质控规则失败:', error)
+      // 降级处理：返回空数组，让上层决定是否使用Mock数据
+      return []
+    }
+  }
+
+  /**
+   * 转换四川规则格式为演示系统使用的格式
+   */
+  private transformSichuanRules(rules: any[]): QualityControlRule[] {
+    return rules.map(rule => ({
+      id: rule.rule_id || rule.id,
+      pointId: rule.rule_id || rule.id,
+      conditions: [],
+      logicOperator: 'AND' as const,
+      createTime: new Date().toISOString(),
+      updateTime: new Date().toISOString(),
+      // 四川规则核心字段
+      name: rule.name || '未命名规则',
+      description: rule.description || '',
+      category: rule.category || '基础',
+      ruleType: this.mapRuleType(rule.complexity),
+      severity: this.mapSeverity(rule.defect_level),
+      maxScore: rule.score_deduction || 0,
+      weight: 1.0,
+      isActive: true,
+      checkLogic: {},
+      promptTemplate: rule.prompt_template || rule.description,
+      version: '1.0',
+      ruleCode: rule.rule_id || '',
+      // 四川规则特有字段
+      applicable_documents: rule.applicable_documents || [],
+      complexity: rule.complexity,
+      defect_level: rule.defect_level,
+      requires_rag: rule.requires_rag || false,
+      requires_cot: rule.requires_cot || false,
+      medical_domain: rule.medical_domain || '通用',
+      score_deduction: rule.score_deduction || 0
+    }))
+  }
+
+  /**
+   * 映射复杂度到规则类型
+   */
+  private mapRuleType(complexity?: string): 'objective' | 'subjective' | 'hybrid' {
+    if (!complexity) return 'hybrid'
+    const lower = complexity.toLowerCase()
+    if (lower.includes('低') || lower === 'low') return 'objective'
+    if (lower.includes('高') || lower === 'high') return 'subjective'
+    return 'hybrid'
+  }
+
+  /**
+   * 映射缺陷级别到严重程度
+   */
+  private mapSeverity(defectLevel?: string): 'critical' | 'major' | 'minor' {
+    if (!defectLevel) return 'major'
+    const lower = defectLevel.toLowerCase()
+    if (lower.includes('严重') || lower === 'critical') return 'critical'
+    if (lower.includes('轻微') || lower === 'minor') return 'minor'
+    return 'major'
+  }
+
+  /**
    * 获取可用的科室列表
    */
   async getDepartments(): Promise<string[]> {
@@ -332,12 +455,49 @@ export class DemoDataService {
   /**
    * 获取指定病历的文书列表
    */
-  async getDocumentsForRecord(recordId: string): Promise<Array<{ id: string; title: string; type: string; created_at?: string }>> {
+  async getDocumentsForRecord(recordId: string): Promise<RecordDocumentInfo[]> {
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const isUuid = uuidRe.test(recordId)
+
+    // 非UUID（mock记录）直接返回模拟文书
+    if (!isUuid) {
+      return this.getMockDocuments(recordId)
+    }
+
+    // 优先尝试后端API（FastAPI服务）
+    try {
+      const apiResult = await ApiService.getMedicalRecordDocuments(recordId)
+      if (apiResult.success && Array.isArray(apiResult.data)) {
+        console.log(`[DemoDataService] ✅ 使用后端API获取文书: ${apiResult.data.length} 条`)
+        // 统一文书结构，补齐/标准化 type 字段，避免出现 "unknown"
+        const normalized: RecordDocumentInfo[] = apiResult.data.map((doc, i) => {
+          // 1) 优先使用现有 doc.type
+          let type = (doc.type || '').toString()
+          // 2) 空或 unknown 时，尝试用标题/名称推断
+          if (!type || type === 'unknown') {
+            type = getDocumentTypeCode(doc.title || '')
+          }
+          // 3) 仍然无效则使用常见基础类型兜底（按业务默认：病程记录）
+          if (!type || type === 'unknown') {
+            type = getDocumentBaseCode('progress_note')
+          }
+          return {
+            id: doc.id || `${recordId}-doc-${i + 1}`,
+            title: doc.title || '未命名文书',
+            type,
+            created_at: doc.created_at,
+            content: doc.content
+          }
+        })
+        return normalized
+      }
+    } catch (apiError) {
+      console.warn('[DemoDataService] ⚠️ 后端API获取文书失败，准备回退到Supabase/Mock数据', apiError)
+    }
+
     const isConnected = await this.checkConnection()
-    // 非UUID（mock记录）或未连接，直接返回模拟文书，避免远端报 22P02
-    if (!isUuid || !isConnected) {
+    // 数据库不可用时使用模拟文书，避免远端报错
+    if (!isConnected) {
       return this.getMockDocuments(recordId)
     }
     try {
@@ -419,7 +579,9 @@ export class DemoDataService {
       checkLogic: rule.check_logic,
       promptTemplate: rule.prompt_template,
       version: rule.version,
-      ruleCode: rule.rule_code
+      ruleCode: rule.rule_code,
+      // 添加 applicable_documents 字段映射
+      applicable_documents: rule.applicable_documents || []
     }))
   }
 
@@ -546,7 +708,7 @@ ${record.raw_text || '病历内容暂无'}
 
 
   /** 获取模拟文书列表（当数据库不可用时使用） */
-  private getMockDocuments(recordId: string) {
+  private getMockDocuments(recordId: string): RecordDocumentInfo[] {
     const now = new Date().toISOString()
     return [
       { id: `${recordId}-doc-1`, title: '入院记录', type: 'admission', created_at: now },

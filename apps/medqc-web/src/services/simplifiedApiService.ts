@@ -108,7 +108,7 @@ export class SimplifiedApiService {
    */
   static async login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
-      const response = await apiClient.post<LoginResponse>('/api/auth/login', credentials)
+      const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials)
       
       // 保存token
       if (response.data.access_token) {
@@ -135,7 +135,7 @@ export class SimplifiedApiService {
    */
   static async getCurrentUser(): Promise<ApiResponse<User>> {
     try {
-      const response = await apiClient.get<User>('/api/auth/me')
+      const response = await apiClient.get<User>('/api/v1/auth/me')
       return {
         success: true,
         data: response.data
@@ -155,7 +155,7 @@ export class SimplifiedApiService {
    */
   static async logout(): Promise<ApiResponse<void>> {
     try {
-      await apiClient.post('/api/auth/logout')
+      await apiClient.post('/api/v1/auth/logout')
       TokenManager.clearTokens()
       return {
         success: true,

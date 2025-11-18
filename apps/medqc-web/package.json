@@ -25,6 +25,9 @@
     "init-comprehensive-rules": "node --import tsx scripts/init-comprehensive-rules.ts",
     "setup-rules-system": "node --import tsx scripts/setup-rules-system.ts",
     "check-work-rules": "node --import tsx scripts/check-work-rules.ts",
+    "db:init-drg": "node --import tsx scripts/migrations/create-drg-tables.ts",
+    "db:verify-drg": "node --import tsx scripts/migrations/verify-drg-tables.ts",
+    "db:import-icd": "node --import tsx scripts/migrations/import-icd-codes.ts",
     "setup": "npm run db:init-base && npm run verify-schema && npm run db:migrate && npm run db:init-rules && npm run init-comprehensive-rules",
     "build:check": "vue-tsc --noEmit && vite build"
   },
@@ -69,6 +72,7 @@
     "playwright": "^1.49.1",
     "postcss": "^8.5.3",
     "prettier": "^3.4.2",
+    "sass-embedded": "^1.93.3",
     "tailwindcss": "^3.4.16",
     "tsx": "^4.20.3",
     "typescript": "~5.7.2",

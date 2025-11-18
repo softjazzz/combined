@@ -6,7 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 // 通用请求函数
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const fullUrl = `${API_BASE_URL}${url}`
-  
+
   const defaultOptions: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
@@ -18,12 +18,21 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   try {
     const response = await fetch(fullUrl, defaultOptions)
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    
-    return await response.json()
+
+    const result = await response.json()
+
+    // 后端使用 success_response 包装，需要解包 data 字段
+    // 格式: { success: true, data: {...}, message: "...", trace_id: "..." }
+    if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+      return result.data as T
+    }
+
+    // 兼容未包装的响应
+    return result as T
   } catch (error) {
     console.error('API request failed:', error)
     throw error

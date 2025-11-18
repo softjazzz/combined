@@ -54,7 +54,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
 // Props 定义
 interface Props {
-  items[]
+  items: unknown[]
   itemHeight: number
   containerHeight: number
   buffer?: number
@@ -65,6 +65,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  items: () => [] as unknown[],
   buffer: 5,
   keyField: 'id',
   loading: false,
@@ -98,7 +99,7 @@ const endIndex = computed(() =>
 )
 
 const visibleItems = computed(() => {
-  const items = []
+  const items: Array<{ index: number; data: unknown }> = []
   for (let i = startIndex.value; i < endIndex.value; i++) {
     if (props.items[i]) {
       items.push({
@@ -113,9 +114,12 @@ const visibleItems = computed(() => {
 const offsetY = computed(() => startIndex.value * props.itemHeight)
 
 // 方法
-const getItemKey = (item): string | number => {
+const getItemKey = (item: unknown): string | number => {
   if (typeof item === 'object' && item !== null) {
-    return item[props.keyField] || item.id || JSON.stringify(item)
+    const record = item as Record<string, unknown>
+    return (record[props.keyField] as string | number | undefined)
+      ?? (record.id as string | number | undefined)
+      ?? JSON.stringify(record)
   }
   return item
 }
@@ -170,10 +174,11 @@ watch(() => props.items.length, async () => {
 })
 
 // 暴露方法给父组件
-defineExpose({ scrollTo,
+defineExpose({
+  scrollTo,
   scrollToTop,
   scrollToBottom
- })
+})
 
 // 生命周期
 onMounted(() => {

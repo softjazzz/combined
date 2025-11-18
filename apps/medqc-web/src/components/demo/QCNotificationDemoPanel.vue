@@ -642,16 +642,18 @@ onUnmounted(() => {
     .notification-controls {
       margin-bottom: 16px;
       padding: 16px;
-      background: #fafafa;
-      border-radius: 6px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.06);
     }
 
     // 通知统计
     .notification-stats {
       margin-bottom: 16px;
       padding: 16px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 8px;
+      background: linear-gradient(135deg, var(--primary-color-light) 0%, var(--primary-color) 100%);
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(14, 110, 209, 0.18);
 
       :deep(.ant-statistic-title) {
         color: rgba(255, 255, 255, 0.8);
@@ -673,8 +675,8 @@ onUnmounted(() => {
       .notifications-list {
         .notification-item {
           position: relative;
-          border: 1px solid #f0f0f0;
-          border-radius: 8px;
+          border: 1px solid #eef1f5;
+          border-radius: 12px;
           padding: 16px;
           margin-bottom: 12px;
           cursor: pointer;
@@ -693,14 +695,14 @@ onUnmounted(() => {
           }
 
           &:hover {
-            border-color: #1890ff;
-            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+            border-color: var(--primary-color);
+            box-shadow: 0 6px 18px rgba(24, 144, 255, 0.15);
             transform: translateY(-2px);
           }
 
           &.unread {
             border-left: 4px solid #1890ff;
-            background: linear-gradient(135deg, #f6ffed 0%, #f0f9ff 100%);
+            background: linear-gradient(135deg, #f0f6ff 0%, #f5fbff 100%);
           }
 
           &.active {
@@ -711,7 +713,7 @@ onUnmounted(() => {
 
           &.critical {
             border-left: 4px solid #ff4d4f;
-            background: linear-gradient(135deg, #fff2f0 0%, #fff1f0 100%);
+            background: linear-gradient(135deg, #fff5f0 0%, #fff9f5 100%);
 
             &::before {
               content: '';

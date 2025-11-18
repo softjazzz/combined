@@ -9,6 +9,7 @@ import CryptoJS from 'crypto-js'
 // API基础URL配置：优先用环境变量；若未设置则使用相对路径，交由 Vite 代理转发
 // 使用 nullish 合并，允许将环境变量显式设置为空字符串以启用相对路径
 const API_BASE_URL: string = (import.meta as any)?.env?.VITE_API_BASE_URL ?? ''
+const LLM_API_PREFIX = '/api/v1/llm'
 
 // 类型定义
 export interface LLMProvider {
@@ -112,13 +113,13 @@ class LLMConfigService {
    */
   async getProviders(): Promise<LLMProvider[]> {
     try {
-      console.log('🌐 发起请求:', `${API_BASE_URL}/api/llm/providers`)
+      console.log('🌐 发起请求:', `${API_BASE_URL}${LLM_API_PREFIX}/providers`)
 
       // 添加超时控制
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 15000) // 15秒超时
 
-      const response = await fetch(`${API_BASE_URL}/api/llm/providers`, {
+      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/providers`, {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +151,7 @@ class LLMConfigService {
    */
   async getModelsByProvider(providerId: string): Promise<LLMModel[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/llm/models?provider_id=${encodeURIComponent(providerId)}`)
+      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/models?provider_id=${encodeURIComponent(providerId)}`)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -172,7 +173,7 @@ class LLMConfigService {
         params.append('user_id', userId)
       }
 
-      const url = `${API_BASE_URL}/api/llm/configs${params.toString() ? '?' + params.toString() : ''}`
+      const url = `${API_BASE_URL}${LLM_API_PREFIX}/configs${params.toString() ? '?' + params.toString() : ''}`
       const response = await fetch(url)
 
       if (!response.ok) {
@@ -203,7 +204,7 @@ class LLMConfigService {
         params.append('user_id', userId)
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/llm/configs/${encodeURIComponent(configName)}?${params}`)
+      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/configs/${encodeURIComponent(configName)}?${params}`)
       if (!response.ok) {
         if (response.status === 404) {
           return null
@@ -252,7 +253,7 @@ class LLMConfigService {
       }
 
       // 通过后端API保存配置
-      const response = await fetch(`${API_BASE_URL}/api/llm/configs`, {
+      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/configs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

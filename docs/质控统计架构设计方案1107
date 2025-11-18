@@ -1,0 +1,1190 @@
+# 病历质控系统统一架构方案（最终执行版）
+
+## 一、问题本质
+
+**核心矛盾：** 生产批量质控和单条质控使用两套逻辑，导致同一病历得出不同结论，损害客户信任。
+
+**根本原因：**
+```
+批量质控：过度保守 → 漏检真实问题 → "假阴性"
+单条质控：严格准确 → 但非生产路径 → 用户看不到
+前端展示：只显示"全部合规" → 掩盖中间状态 → 误导用户
+```
+
+**解决目标：** 
+- ✅ 两条链路使用同一判定逻辑
+- ✅ 保持批量性能优化（不牺牲准确率）
+- ✅ 前端透明展示所有状态
+- ✅ 可监控、可验证、可回滚
+
+---
+
+## 二、核心设计：统一规则引擎
+
+### 2.1 架构总览
+
+```
+┌─────────────────────────────────────────────┐
+│          API 层（两个入口）                   │
+│  POST /batch-qc  |  POST /test-rule         │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│         调度层（性能优化在此）                │
+│  - 批量：规则聚合、并发、缓存                 │
+│  - 单条：直接透传                            │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│    ⭐ 统一规则引擎（核心，100%一致） ⭐        │
+│  1️⃣ 适用性判断（代码优先）                   │
+│  2️⃣ 证据检索（缓存复用）                     │
+│  3️⃣ LLM 语义检查（统一 Prompt）              │
+│  4️⃣ 证据校验（防幻觉）                       │
+│  5️⃣ 结果裁决（标准化输出）                   │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│           数据层                             │
+│  custom_rules_33.json | 病历原文             │
+└─────────────────────────────────────────────┘
+```
+
+### 2.2 统一返回格式（强制契约）
+
+```python
+# 所有接口必须返回此格式
+{
+    "rule_id": "LX-003",
+    "rule_version": "2025-11-01",
+    
+    # 核心判定结果（4种状态）
+    "status": "compliant | non_compliant | not_applicable | uncertain",
+    
+    # 适用性判断
+    "applicability": {
+        "is_applicable": true,
+        "reason": "患者年龄8个月，儿科科室",
+        "method": "code_check | llm_check"  # 判断方式
+    },
+    
+    # 证据信息
+    "evidence": [
+        {
+            "text": "患儿母乳喂养，每日8-10次",
+            "source": "既往史",
+            "verified": true,  # 是否在原文中验证通过
+            "verification_score": 0.95,
+            "char_span": [1234, 1256]
+        }
+    ],
+    
+    # 置信度和原因
+    "confidence": 0.92,
+    "reason": "缺少辅食添加记录",
+    
+    # 元数据（用于监控和调试）
+    "metadata": {
+        "tokens_used": 1234,
+        "latency_ms": 880,
+        "model_version": "gpt-4-turbo",
+        "cache_hit": false
+    }
+}
+```
+
+---
+
+## 三、代码实现（可直接使用）
+
+### 3.1 核心：统一规则引擎
+
+```python
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+import re
+
+@dataclass
+class RuleConfig:
+    rule_id: str
+    rule_name: str
+    applicable_departments: List[str]
+    age_range: Optional[Tuple[int, int]]  # 年龄范围（月）
+    applicable_gender: Optional[List[str]]
+    check_points: List[str]
+    evidence_keywords: List[str]
+    risk_level: str  # high/medium/low
+
+
+class UnifiedRuleEngine:
+    """
+    统一规则引擎 - 所有质控都走这个引擎
+    批量和单条的差异只在调用方式，判定逻辑100%一致
+    """
+    
+    def __init__(self, llm_client, config_loader):
+        self.llm = llm_client
+        self.config = config_loader
+        self.applicability_checker = ApplicabilityChecker()
+        self.evidence_verifier = EvidenceVerifier()
+        self.evidence_cache = {}  # 性能优化：证据缓存
+    
+    def execute_rule(
+        self, 
+        medical_record: Dict, 
+        rule_id: str,
+        use_cache: bool = True
+    ) -> Dict:
+        """
+        执行单条规则检查
+        
+        Args:
+            medical_record: 病历数据
+            rule_id: 规则ID
+            use_cache: 是否使用缓存（批量时启用）
+        
+        Returns:
+            标准化的检查结果
+        """
+        rule_config = self.config.get_rule(rule_id)
+        
+        # ===== 步骤1：适用性判断（代码优先，极速） =====
+        is_applicable, reason, method = self.applicability_checker.check(
+            medical_record, 
+            rule_config
+        )
+        
+        if not is_applicable:
+            return {
+                "rule_id": rule_id,
+                "status": "not_applicable",
+                "applicability": {
+                    "is_applicable": False,
+                    "reason": reason,
+                    "method": method
+                },
+                "evidence": [],
+                "confidence": 1.0,
+                "reason": reason,
+                "metadata": {"shortcut": True, "tokens_used": 0}
+            }
+        
+        # ===== 步骤2：证据检索（支持缓存） =====
+        cache_key = f"{medical_record['id']}:{rule_id}"
+        
+        if use_cache and cache_key in self.evidence_cache:
+            evidence_candidates = self.evidence_cache[cache_key]
+        else:
+            evidence_candidates = self._extract_evidence_candidates(
+                medical_record['content'],
+                rule_config.evidence_keywords
+            )
+            if use_cache:
+                self.evidence_cache[cache_key] = evidence_candidates
+        
+        # ===== 步骤3：LLM 语义检查 =====
+        llm_result = self._call_llm_checker(
+            medical_record,
+            rule_config,
+            evidence_candidates
+        )
+        
+        # ===== 步骤4：证据校验（防幻觉） =====
+        verified_evidence = self.evidence_verifier.verify(
+            llm_result['evidence'],
+            medical_record['content']
+        )
+        
+        # ===== 步骤5：结果裁决 =====
+        final_result = self._make_decision(
+            rule_config,
+            llm_result,
+            verified_evidence
+        )
+        
+        return final_result
+    
+    def _extract_evidence_candidates(
+        self, 
+        text: str, 
+        keywords: List[str]
+    ) -> List[Dict]:
+        """
+        提取可能的证据片段
+        使用关键词匹配 + 上下文窗口
+        """
+        candidates = []
+        for keyword in keywords:
+            # 查找关键词位置
+            for match in re.finditer(keyword, text, re.IGNORECASE):
+                start = max(0, match.start() - 100)
+                end = min(len(text), match.end() + 100)
+                candidates.append({
+                    "text": text[start:end],
+                    "keyword": keyword,
+                    "span": (start, end)
+                })
+        return candidates
+    
+    def _call_llm_checker(
+        self, 
+        record: Dict, 
+        rule: RuleConfig,
+        candidates: List[Dict]
+    ) -> Dict:
+        """
+        调用 LLM 进行语义检查
+        使用统一的 Prompt 和严格约束
+        """
+        prompt = f"""
+你是医疗质控专家。请严格检查以下病历是否符合规则。
+
+【规则】{rule.rule_name} ({rule.rule_id})
+
+【检查要点】
+{chr(10).join(f"{i+1}. {point}" for i, point in enumerate(rule.check_points))}
+
+【约束条件】
+1. 禁止编造证据：所有证据必须来自下方的候选片段
+2. 禁止推理：不要根据其他信息推断缺失内容
+3. 如实报告：缺少即报缺少
+
+【候选证据片段】
+{chr(10).join(f"片段{i+1}: {c['text']}" for i, c in enumerate(candidates))}
+
+请返回 JSON 格式：
+{{
+    "is_compliant": true/false,
+    "evidence": ["证据1原文", "证据2原文"],  // 必须从候选片段中选择
+    "missing_items": ["缺失项1"],
+    "reason": "简要说明"
+}}
+"""
+        
+        response = self.llm.create_completion(
+            prompt=prompt,
+            temperature=0.1,  # 低温度保证稳定性
+            response_format={"type": "json_object"}
+        )
+        
+        return response
+    
+    def _make_decision(
+        self, 
+        rule: RuleConfig,
+        llm_result: Dict,
+        verified_evidence: List[Dict]
+    ) -> Dict:
+        """
+        综合 LLM 结果和证据校验，做最终裁决
+        """
+        # 计算证据验证率
+        total_evidence = len(llm_result['evidence'])
+        verified_count = sum(1 for e in verified_evidence if e['verified'])
+        verification_rate = verified_count / total_evidence if total_evidence > 0 else 0
+        
+        # 裁决逻辑
+        if verification_rate < 0.5:
+            # 证据验证率低，存在幻觉风险
+            status = "uncertain"
+            confidence = 0.3
+            reason = "⚠️ LLM返回的证据未在原文中找到，可能存在幻觉"
+        elif llm_result['is_compliant'] and verification_rate >= 0.8:
+            status = "compliant"
+            confidence = 0.9 * verification_rate
+            reason = "符合规则要求"
+        elif not llm_result['is_compliant']:
+            status = "non_compliant"
+            confidence = 0.85
+            reason = llm_result.get('reason', '存在缺失项')
+        else:
+            status = "uncertain"
+            confidence = 0.6
+            reason = "证据不完整，建议人工复核"
+        
+        return {
+            "rule_id": rule.rule_id,
+            "status": status,
+            "applicability": {
+                "is_applicable": True,
+                "reason": "通过适用性检查",
+                "method": "code_check"
+            },
+            "evidence": verified_evidence,
+            "confidence": confidence,
+            "reason": reason,
+            "metadata": {
+                "verification_rate": verification_rate,
+                "llm_result": llm_result
+            }
+        }
+
+
+class ApplicabilityChecker:
+    """
+    适用性判断器 - 优先使用代码判断，避免 LLM
+    """
+    
+    def check(
+        self, 
+        record: Dict, 
+        rule: RuleConfig
+    ) -> Tuple[bool, str, str]:
+        """
+        返回：(是否适用, 原因, 判断方法)
+        """
+        # 检查年龄
+        if rule.age_range:
+            age_months = self._parse_age(record.get('patient_age'))
+            min_age, max_age = rule.age_range
+            
+            if age_months is not None:
+                if not (min_age <= age_months <= max_age):
+                    return (
+                        False, 
+                        f"患者年龄{age_months}月，不在适用范围({min_age}-{max_age}月)",
+                        "code_check"
+                    )
+        
+        # 检查科室
+        if rule.applicable_departments:
+            dept = record.get('department', '')
+            if dept not in rule.applicable_departments:
+                return (
+                    False,
+                    f"患者科室为'{dept}'，规则仅适用于{rule.applicable_departments}",
+                    "code_check"
+                )
+        
+        # 检查性别
+        if rule.applicable_gender:
+            gender = record.get('gender', '')
+            if gender not in rule.applicable_gender:
+                return (
+                    False,
+                    f"患者性别为'{gender}'，规则仅适用于{rule.applicable_gender}",
+                    "code_check"
+                )
+        
+        return (True, "符合适用条件", "code_check")
+    
+    def _parse_age(self, age_str: str) -> Optional[int]:
+        """解析年龄字符串为月数"""
+        if not age_str:
+            return None
+        
+        # 匹配各种年龄格式
+        patterns = [
+            (r'(\d+)岁', lambda y: int(y) * 12),
+            (r'(\d+)个?月', lambda m: int(m)),
+            (r'(\d+)Y', lambda y: int(y) * 12),
+            (r'(\d+)M', lambda m: int(m)),
+        ]
+        
+        for pattern, converter in patterns:
+            match = re.search(pattern, age_str)
+            if match:
+                return converter(match.group(1))
+        
+        return None
+
+
+class EvidenceVerifier:
+    """
+    证据校验器 - 防止 LLM 幻觉
+    """
+    
+    def verify(
+        self, 
+        llm_evidences: List[str], 
+        original_text: str
+    ) -> List[Dict]:
+        """
+        校验 LLM 返回的证据是否在原文中存在
+        """
+        verified_results = []
+        
+        for evidence in llm_evidences:
+            # 方法1：精确匹配
+            if evidence in original_text:
+                verified_results.append({
+                    "text": evidence,
+                    "verified": True,
+                    "method": "exact_match",
+                    "score": 1.0
+                })
+                continue
+            
+            # 方法2：标准化后匹配（去除空格、标点）
+            normalized_evidence = self._normalize_text(evidence)
+            normalized_original = self._normalize_text(original_text)
+            
+            if normalized_evidence in normalized_original:
+                verified_results.append({
+                    "text": evidence,
+                    "verified": True,
+                    "method": "normalized_match",
+                    "score": 0.95
+                })
+                continue
+            
+            # 方法3：模糊匹配（使用编辑距离）
+            similarity = self._fuzzy_match(evidence, original_text)
+            if similarity > 0.85:
+                verified_results.append({
+                    "text": evidence,
+                    "verified": True,
+                    "method": "fuzzy_match",
+                    "score": similarity
+                })
+            else:
+                # 未通过验证
+                verified_results.append({
+                    "text": evidence,
+                    "verified": False,
+                    "method": "not_found",
+                    "score": similarity,
+                    "warning": "⚠️ 此证据可能是LLM幻觉"
+                })
+        
+        return verified_results
+    
+    def _normalize_text(self, text: str) -> str:
+        """文本标准化"""
+        text = re.sub(r'[\s\u3000\xa0]+', '', text)  # 去除所有空白
+        text = re.sub(r'[，。、；：！？""''【】《》（）]', '', text)  # 去除标点
+        return text.lower()
+    
+    def _fuzzy_match(self, evidence: str, text: str) -> float:
+        """模糊匹配（简化版，实际可用 difflib）"""
+        # 这里简化实现，实际应使用 SequenceMatcher
+        words = evidence.split()
+        found_words = sum(1 for w in words if w in text)
+        return found_words / len(words) if words else 0.0
+```
+
+### 3.2 批量接口实现（性能优化层）
+
+```python
+class BatchQCService:
+    """
+    批量质控服务 - 性能优化在此，但判定逻辑使用统一引擎
+    """
+    
+    def __init__(self, engine: UnifiedRuleEngine):
+        self.engine = engine
+    
+    def batch_qc(
+        self, 
+        records: List[Dict], 
+        rule_ids: List[str]
+    ) -> List[Dict]:
+        """
+        批量质控入口
+        
+        优化策略：
+        1. 预先过滤不适用的规则（代码判断，零成本）
+        2. 证据缓存复用
+        3. 规则分组并发执行
+        """
+        results = []
+        
+        for record in records:
+            # 优化1：预先过滤不适用的规则
+            applicable_rules = self._filter_applicable_rules(record, rule_ids)
+            
+            # 优化2：启用缓存
+            self.engine.evidence_cache.clear()  # 每个病历清空缓存
+            
+            # 优化3：并发执行（可选）
+            for rule_id in rule_ids:
+                if rule_id in applicable_rules:
+                    # 使用统一引擎，启用缓存
+                    result = self.engine.execute_rule(
+                        record, 
+                        rule_id, 
+                        use_cache=True
+                    )
+                else:
+                    # 直接返回不适用（已通过代码判断）
+                    result = applicable_rules[rule_id]  # 包含不适用原因
+                
+                results.append(result)
+        
+        return results
+    
+    def _filter_applicable_rules(
+        self, 
+        record: Dict, 
+        rule_ids: List[str]
+    ) -> Dict[str, Dict]:
+        """
+        预先过滤出适用的规则
+        不适用的规则直接返回结果，不进LLM
+        """
+        applicable = {}
+        
+        for rule_id in rule_ids:
+            rule_config = self.engine.config.get_rule(rule_id)
+            is_applicable, reason, method = self.engine.applicability_checker.check(
+                record, 
+                rule_config
+            )
+            
+            if is_applicable:
+                applicable[rule_id] = None  # 标记为需要检查
+            else:
+                # 不适用的规则直接返回结果
+                applicable[rule_id] = {
+                    "rule_id": rule_id,
+                    "status": "not_applicable",
+                    "applicability": {
+                        "is_applicable": False,
+                        "reason": reason,
+                        "method": method
+                    },
+                    "evidence": [],
+                    "confidence": 1.0,
+                    "reason": reason,
+                    "metadata": {"shortcut": True, "tokens_used": 0}
+                }
+        
+        return applicable
+
+
+class SingleRuleTestService:
+    """
+    单条测试服务 - 直接使用统一引擎，不做额外优化
+    """
+    
+    def __init__(self, engine: UnifiedRuleEngine):
+        self.engine = engine
+    
+    def test_single_rule(
+        self, 
+        record: Dict, 
+        rule_id: str
+    ) -> Dict:
+        """
+        单条测试入口
+        直接调用统一引擎，不启用缓存
+        """
+        return self.engine.execute_rule(
+            record, 
+            rule_id, 
+            use_cache=False  # 测试时不用缓存
+        )
+```
+
+### 3.3 规则配置增强
+
+```json
+{
+  "rule_id": "LX-003",
+  "rule_name": "婴幼儿喂养史记录",
+  "version": "2025-11-01",
+  
+  "applicability": {
+    "age_range": [0, 36],
+    "departments": ["儿科", "新生儿科", "NICU"],
+    "logic": "age <= 36 OR department IN departments"
+  },
+  
+  "check_points": [
+    "是否记录喂养方式（母乳/配方/混合）",
+    "是否记录喂养频次或量",
+    "是否记录添加辅食情况（如适用）"
+  ],
+  
+  "evidence_keywords": [
+    "喂养", "母乳", "配方", "混合喂养", 
+    "奶量", "频次", "辅食", "添加"
+  ],
+  
+  "risk_level": "high",
+  
+  "verification_threshold": 0.85
+}
+```
+
+---
+
+## 四、前端改造方案
+
+### 4.1 React 组件实现
+
+```typescript
+// 类型定义
+interface QCResult {
+  rule_id: string;
+  status: 'compliant' | 'non_compliant' | 'not_applicable' | 'uncertain';
+  applicability: {
+    is_applicable: boolean;
+    reason: string;
+    method: string;
+  };
+  evidence: Array<{
+    text: string;
+    verified: boolean;
+    score: number;
+  }>;
+  confidence: number;
+  reason: string;
+}
+
+// 规则卡片组件
+function QCRuleCard({ result }: { result: QCResult }) {
+  const statusConfig = {
+    compliant: {
+      color: 'green',
+      icon: '✓',
+      label: '合规',
+      bgColor: 'bg-green-50',
+      borderColor: 'border-green-500'
+    },
+    non_compliant: {
+      color: 'red',
+      icon: '✗',
+      label: '不合规',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-red-500'
+    },
+    not_applicable: {
+      color: 'gray',
+      icon: '○',
+      label: '不适用',
+      bgColor: 'bg-gray-50',
+      borderColor: 'border-gray-300'
+    },
+    uncertain: {
+      color: 'orange',
+      icon: '⚠',
+      label: '待确认',
+      bgColor: 'bg-orange-50',
+      borderColor: 'border-orange-400'
+    }
+  };
+  
+  const config = statusConfig[result.status];
+  
+  return (
+    <div className={`border-2 ${config.borderColor} ${config.bgColor} rounded-lg p-4 mb-2`}>
+      {/* 头部：规则ID + 状态 */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-bold">{result.rule_id}</span>
+          <span className={`text-${config.color}-600 font-semibold`}>
+            {config.icon} {config.label}
+          </span>
+        </div>
+        
+        {/* 置信度指示器 */}
+        {result.status !== 'not_applicable' && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">置信度</span>
+            <div className="w-24 bg-gray-200 rounded-full h-2">
+              <div 
+                className={`bg-${config.color}-500 h-2 rounded-full`}
+                style={{ width: `${result.confidence * 100}%` }}
+              />
+            </div>
+            <span className="text-sm font-medium">{(result.confidence * 100).toFixed(0)}%</span>
+          </div>
+        )}
+      </div>
+      
+      {/* 原因说明 */}
+      <div className="text-sm text-gray-700 mb-2">
+        {result.status === 'not_applicable' ? (
+          <span className="italic">
+            🔍 {result.applicability.reason}
+          </span>
+        ) : (
+          <span>{result.reason}</span>
+        )}
+      </div>
+      
+      {/* 证据展示（可折叠） */}
+      {result.evidence.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-sm font-medium text-blue-600">
+            查看证据 ({result.evidence.length}条)
+          </summary>
+          <div className="mt-2 space-y-2">
+            {result.evidence.map((ev, idx) => (
+              <div 
+                key={idx}
+                className={`text-sm p-2 rounded ${
+                  ev.verified ? 'bg-green-100' : 'bg-red-100'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <span className="flex-shrink-0">
+                    {ev.verified ? '✓' : '✗'}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-gray-800">{ev.text}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {ev.verified 
+                        ? `验证通过 (${(ev.score * 100).toFixed(0)}%)` 
+                        : '⚠️ 未在原文中找到，可能是幻觉'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// 汇总统计组件
+function QCSummary({ results }: { results: QCResult[] }) {
+  const stats = results.reduce((acc, r) => {
+    acc[r.status] = (acc[r.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  return (
+    <div className="bg-white rounded-lg shadow p-6 mb-4">
+      <h2 className="text-xl font-bold mb-4">质控结果概览</h2>
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard 
+          label="合规" 
+          count={stats.compliant || 0} 
+          color="green"
+          icon="✓"
+        />
+        <StatCard 
+          label="不合规" 
+          count={stats.non_compliant || 0} 
+          color="red"
+          icon="✗"
+        />
+        <StatCard 
+          label="不适用" 
+          count={stats.not_applicable || 0} 
+          color="gray"
+          icon="○"
+        />
+        <StatCard 
+          label="待确认" 
+          count={stats.uncertain || 0} 
+          color="orange"
+          icon="⚠"
+        />
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, count, color, icon }) {
+  return (
+    <div className={`bg-${color}-50 border border-${color}-200 rounded-lg p-4`}>
+      <div className="text-3xl font-bold text-${color}-600">
+        {icon} {count}
+      </div>
+      <div className="text-sm text-gray-600 mt-1">{label}</div>
+    </div>
+  );
+}
+```
+
+### 4.2 关键交互改进
+
+```typescript
+// 过滤器组件
+function QCFilter({ onFilterChange }) {
+  const [filters, setFilters] = useState({
+    showCompliant: true,
+    showNonCompliant: true,
+    showNotApplicable: true,  // 默认显示
+    showUncertain: true
+  });
+  
+  return (
+    <div className="flex gap-4 mb-4">
+      <label className="flex items-center gap-2">
+        <input 
+          type="checkbox" 
+          checked={filters.showNotApplicable}
+          onChange={(e) => {
+            const newFilters = {...filters, showNotApplicable: e.target.checked};
+            setFilters(newFilters);
+            onFilterChange(newFilters);
+          }}
+        />
+        <span>显示不适用规则</span>
+      </label>
+      {/* 其他过滤器... */}
+    </div>
+  );
+}
+```
+
+---
+
+## 五、实施计划（6周）
+
+### Week 1：基础架构 + LX-003 试点
+
+**目标：** 建立统一引擎框架，用 LX-003 验证可行性
+
+**任务清单：**
+- [ ] 创建 `UnifiedRuleEngine` 类
+- [ ] 实现 `ApplicabilityChecker`（代码判断年龄/科室）
+- [ ] 实现 `EvidenceVerifier`（精确匹配 + 标准化匹配）
+- [ ] 针对 LX-003 编写单元测试
+- [ ] 对比测试：同一病历在旧逻辑 vs 新引擎的结果
+
+**验收标准：**
+```python
+# 测试用例1：成人病历
+record = {"patient_age": "45岁", "department": "内科"}
+result = engine.execute_rule(record, "LX-003")
+assert result["status"] == "not_applicable"
+assert result["applicability"]["reason"] == "患者年龄540月，不在适用范围(0-36月)"
+
+# 测试用例2：儿科病历缺喂养史
+record = {"patient_age": "8个月", "department": "儿科", "content": "..."}
+result = engine.execute_rule(record, "LX-003")
+assert result["status"] == "non_compliant"
+assert len(result["evidence"]) == 0
+```
+
+---
+
+### Week 2：扩展到全部33条规则
+
+**目标：** 所有规则配置化，完成规则元数据迁移
+
+**任务清单：**
+- [ ] 更新 `custom_rules_33.json`，为每条规则添加：
+  - `applicability` 配置（年龄/科室/性别）
+  - `evidence_keywords` 列表
+  - `check_points` 列表
+  - `verification_threshold`
+- [ ] 批量生成测试用例（每条规则至少3个case）
+- [ ] 建立"黄金数据集"（50份病历 × 33条规则 = 1650个标注）
+
+**重点规则配置示例：**
+```json
+{
+  "LX-015": {
+    "rule_name": "月经史",
+    "applicability": {
+      "gender": ["女"],
+      "age_range": [144, 660]  // 12-55岁
+    },
+    "evidence_keywords": ["月经", "初潮", "周期", "经量", "末次月经"]
+  }
+}
+```
+
+---
+
+### Week 3：单条接口迁移 + 回归测试
+
+**目标：** 单条接口完全切换到新引擎
+
+**任务清单：**
+- [ ] 修改 `POST /api/v1/qc/sichuan/test-rule`
+  ```python
+  @app.post("/api/v1/qc/sichuan/test-rule")
+  def test_rule(record: Dict, rule_id: str):
+      engine = UnifiedRuleEngine(llm_client, config_loader)
+      result = engine.execute_rule(record, rule_id, use_cache=False)
+      return result
+  ```
+- [ ] 回归测试：对比迁移前后的结果差异
+  - 运行黄金数据集
+  - 差异率目标：< 5%
+  - 对于差异case，人工判断哪个正确
+- [ ] 修复发现的问题
+
+**监控指标：**
+- 响应时间：中位数、P95、P99
+- Token 使用量
+- 证据验证通过率
+- 各状态分布
+
+---
+
+### Week 4：批量接口迁移 + 性能优化
+
+**目标：** 批量接口切换到新引擎，确保性能不劣化
+
+**任务清单：**
+- [ ] 实现 `BatchQCService`
+  - 适用性预过滤
+  - 证据缓存机制
+  - 规则分组优化
+- [ ] 修改 `POST /api/v1/qc/sichuan/batch`
+- [ ] 性能测试
+  - 对比新旧接口的耗时
+  - 目标：新接口耗时 ≤ 旧接口 × 1.2
+- [ ] 一致性验证
+  - 同一病历在批量和单条接口必须得到相同结果
+  - 自动化测试覆盖
+
+**性能优化检查点：**
+```python
+# 确保启用了这些优化
+assert batch_service.engine.evidence_cache is not None  # 缓存启用
+assert len(not_applicable_results) > 0  # 预过滤生效
+assert avg_tokens_per_record < old_avg_tokens * 1.5  # Token 控制
+```
+
+---
+
+### Week 5：前端改造 + 用户培训
+
+**目标：** 前端透明展示所有状态，用户能看懂
+
+**任务清单：**
+- [ ] 实现 `QCRuleCard` 组件（4种状态）
+- [ ] 实现 `QCSummary` 汇总组件
+- [ ] 实现证据展示（验证通过/幻觉警告）
+- [ ] 添加过滤器（显示/隐藏不适用）
+- [ ] 制作用户手册
+  - "不适用"是什么意思？
+  - "待确认"需要做什么？
+  - 如何理解置信度？
+- [ ] 内部培训（质控人员、医生代表）
+
+**前端验收：**
+- 打开任意病历详情页
+- 能看到 4 种状态的规则
+- 点击"不适用"规则，能看到原因
+- 证据展示中能看到验证状态
+
+---
+
+### Week 6：灰度发布 + 监控
+
+**目标：** 逐步切换生产流量，监控稳定性
+
+**灰度策略：**
+```
+Day 1-2:  10% 流量 → 新接口，90% → 旧接口
+Day 3-4:  30% 流量 → 新接口
+Day 5-6:  50% 流量 → 新接口
+Day 7-10: 100% 流量 → 新接口
+```
+
+**监控指标（实时大盘）：**
+```python
+# 核心指标
+- 准确率（与黄金集对比）
+- 幻觉率（evidence_verified=false 的比例）
+- 平均响应时间
+- Token 使用量
+- 错误率
+
+# 业务指标
+- not_applicable 占比（按规则）
+- non_compliant 检出数（是否合理）
+- 用户反馈数（前端"报告问题"按钮）
+```
+
+**回滚条件：**
+- 错误率 > 1%
+- P99 响应时间 > 旧接口 × 2
+- 用户投诉 > 5 条/天
+- 幻觉率 > 10%
+
+---
+
+## 六、监控和质量保障
+
+### 6.1 埋点方案
+
+```python
+import logging
+from datetime import datetime
+
+class QCMetrics:
+    """质控指标监控"""
+    
+    @staticmethod
+    def track_execution(result: Dict, duration_ms: int):
+        """记录每次执行"""
+        log_data = {
+            "timestamp": datetime.now().isoformat(),
+            "rule_id": result["rule_id"],
+            "status": result["status"],
+            "confidence": result["confidence"],
+            "evidence_count": len(result["evidence"]),
+            "evidence_verified": sum(
+                1 for e in result["evidence"] if e["verified"]
+            ),
+            "duration_ms": duration_ms,
+            "tokens_used": result["metadata"].get("tokens_used", 0),
+            "applicability_method": result["applicability"]["method"],
+            "shortcut": result["metadata"].get("shortcut", False)
+        }
+        
+        # 发送到监控系统（如 Prometheus、Datadog）
+        metrics.increment("qc.execution.total", tags={
+            "status": result["status"],
+            "rule_id": result["rule_id"]
+        })
+        
+        metrics.histogram("qc.duration_ms", duration_ms, tags={
+            "rule_id": result["rule_id"]
+        })
+        
+        metrics.histogram("qc.confidence", result["confidence"], tags={
+            "status": result["status"]
+        })
+        
+        # 幻觉检测
+        if result["evidence"]:
+            hallucination_rate = 1 - (log_data["evidence_verified"] / log_data["evidence_count"])
+            if hallucination_rate > 0.3:
+                logging.warning(f"High hallucination rate detected: {hallucination_rate:.2%}")
+                metrics.increment("qc.hallucination.high_risk", tags={
+                    "rule_id": result["rule_id"]
+                })
+        
+        return log_data
+```
+
+### 6.2 质量保障检查清单
+
+**每日检查（自动化）：**
+- [ ] not_applicable 占比异常（> 80% 或 < 5%）
+- [ ] 某条规则的 non_compliant 率突变（> 2σ）
+- [ ] 证据验证失败率 > 10%
+- [ ] 平均置信度 < 0.7
+- [ ] 响应时间 P99 > 5s
+
+**每周检查（人工抽查）：**
+- [ ] 随机抽取 20 份病历
+- [ ] 对比批量和单条结果是否一致
+- [ ] 检查 uncertain 状态的病历（是否需要规则优化）
+- [ ] 审查用户反馈（"报告问题"功能）
+
+---
+
+## 七、风险应对
+
+### 7.1 已知风险和缓解措施
+
+| 风险 | 影响 | 概率 | 缓解措施 |
+|------|------|------|---------|
+| 统一引擎引入 bug | 高 | 中 | 1. 充分单元测试<br>2. 灰度发布<br>3. 保留旧接口 1 个月 |
+| 性能下降 | 中 | 低 | 1. 证据缓存<br>2. 适用性预过滤<br>3. 降级策略 |
+| 用户不理解"不适用" | 中 | 高 | 1. 前端清晰说明<br>2. 用户培训<br>3. 在线帮助文档 |
+| LLM 幻觉率上升 | 高 | 中 | 1. 严格证据校验<br>2. 置信度阈值<br>3. 人工复核机制 |
+
+### 7.2 回滚计划
+
+**快速回滚（< 5分钟）：**
+```python
+# Feature Flag 控制
+if config.USE_UNIFIED_ENGINE:
+    result = unified_engine.execute_rule(record, rule_id)
+else:
+    result = legacy_engine.execute_rule(record, rule_id)  # 旧逻辑
+```
+
+**完整回滚步骤：**
+1. 修改配置文件 `USE_UNIFIED_ENGINE=false`
+2. 重启服务（无需重新部署）
+3. 通知团队和用户
+4. 分析回滚原因，修复问题
+5. 重新灰度发布
+
+---
+
+## 八、成功标准（验收）
+
+### 8.1 技术指标
+
+✅ **一致性：** 同一病历在批量和单条接口的结果 100% 一致  
+✅ **准确性：** 与黄金数据集对比，准确率 ≥ 95%  
+✅ **性能：** 批量接口 P95 响应时间 ≤ 旧接口 × 1.2  
+✅ **成本：** 平均 Token 使用量 ≤ 旧接口 × 1.5  
+✅ **稳定性：** 错误率 < 0.5%  
+
+### 8.2 业务指标
+
+✅ **用户投诉：** 关于"结果不一致"的投诉降至 0  
+✅ **信任度：** 用户调研满意度 ≥ 4.0/5.0  
+✅ **透明度：** 用户能理解"不适用""待确认"的含义  
+✅ **实际使用：** 质控人员开始依赖系统发现的问题  
+
+---
+
+## 九、长期优化方向
+
+1. **规则智能优化：** 根据历史数据自动调整 `evidence_keywords`
+2. **自适应阈值：** 根据规则风险级别动态调整 `verification_threshold`
+3. **人工反馈闭环：** 用户标注错误case，用于微调模型
+4. **多模型对比：** A/B 测试不同 LLM（GPT-4 vs Claude vs 文心）
+5. **规则自动生成：** 从医院文档自动解析出新规则
+
+---
+
+## 附录：快速参考
+
+### A. 关键决策对照表
+
+| 场景 | 旧逻辑 | 新逻辑 |
+|------|--------|--------|
+| 成人病历检查"婴幼儿喂养史" | 批量→合规（保守跳过）<br>单条→不合规（缺项） | **统一→不适用**<br>原因：年龄不符 |
+| 儿科病历缺喂养史 | 批量→合规（保守跳过）<br>单条→不合规 | **统一→不合规**<br>原因：缺少必填项 |
+| LLM 返回的证据在原文找不到 | 批量→合规（未校验）<br>单条→降置信度 | **统一→待确认**<br>原因：疑似幻觉 |
+
+### B. 代码仓库结构
+
+```
+medical-qc-system/
+├── backend/
+│   ├── core/
+│   │   ├── unified_engine.py          # 统一规则引擎 ⭐
+│   │   ├── applicability_checker.py
+│   │   ├── evidence_verifier.py
+│   │   └── metrics.py
+│   ├── services/
+│   │   ├── batch_qc_service.py        # 批量服务
+│   │   └── single_rule_service.py     # 单条服务
+│   ├── api/
+│   │   └── routes.py
+│   └── tests/
+│       ├── test_unified_engine.py
+│       └── golden_dataset/
+├── frontend/
+│   ├── components/
+│   │   ├── QCRuleCard.tsx
+│   │   ├── QCSummary.tsx
+│   │   └── QCFilter.tsx
+│   └── pages/
+│       ├── BatchQCPage.tsx
+│       └── SingleRulePage.tsx
+├── config/
+│   ├── custom_rules_33.json           # 规则配置 ⭐
+│   └── feature_flags.json
+└── docs/
+    ├── architecture.md
+    ├── user_guide.md
+    └── migration_plan.md
+```
+
+---
+
+**本方案版本：** v1.0  
+**编写日期：** 2025-11-07  
+**预计完成：** 2025-12-19（6周后）  
+
+---
+
+**关键联系人：**
+- 技术负责人：[姓名]
+- 产品负责人：[姓名]
+- 质控专家：[姓名]
+
+**紧急联系：** 如在实施过程中遇到问题，请立即联系技术负责人。

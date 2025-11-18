@@ -268,7 +268,23 @@ interface ProcessingFile {
   progress: number
   confidence?: number
   error?: string
-  result?: Record<string, unknown>
+  result?: LLMParsedResult
+  originalText?: string
+}
+
+interface LLMParsedResult {
+  success: boolean
+  data?: {
+    patientName?: string
+    content?: string
+    confidence?: number
+    documents?: unknown[]
+  }
+  message?: string
+}
+
+type ProcessedFileResult = LLMParsedResult & {
+  fileName: string
   originalText?: string
 }
 
@@ -280,9 +296,9 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'files-processed', results: unknown[]): void
-  (e: 'single-file-processed', result: unknown): void
-  (e: 'batch-completed', results: unknown[]): void
+  (e: 'files-processed', results: ProcessedFileResult[]): void
+  (e: 'single-file-processed', result: LLMParsedResult): void
+  (e: 'batch-completed', results: ProcessedFileResult[]): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -302,7 +318,7 @@ const isPaused = ref(false)
 const canPause = ref(true)
 const completedFiles = ref(0)
 const currentProcessingFile = ref('')
-const batchResults = ref<any[]>([])
+const batchResults = ref<ProcessedFileResult[]>([])
 const batchResultsModalVisible = ref(false)
 const activeResultTab = ref(0)
 const saving = ref(false)
@@ -355,7 +371,7 @@ const beforeUpload = (file: File) => {
   return false // 阻止自动上传
 }
 
-const handleFileUpload = (options: unknown) => {
+const handleFileUpload = (options: { file: File }) => {
   const { file } = options
   
   const processingFile: ProcessingFile = {
@@ -455,7 +471,7 @@ const processSingleFile = async (index: number) => {
     file.parsed = true
     file.status = FileStatus.COMPLETED
     file.result = result
-    file.confidence = result.data?.confidence || 0
+    file.confidence = result.data?.confidence ?? 0
     
     emit('single-file-processed', result)
     message.success(`文件 ${file.name} 解析完成`)
@@ -463,8 +479,9 @@ const processSingleFile = async (index: number) => {
   } catch (error: unknown) {
     file.processing = false
     file.status = FileStatus.FAILED
-    file.error = error.message
-    message.error(`文件 ${file.name} 解析失败: ${error.message}`)
+    const messageText = error instanceof Error ? error.message : '解析失败'
+    file.error = messageText
+    message.error(`文件 ${file.name} 解析失败: ${messageText}`)
   }
 }
 
@@ -509,7 +526,8 @@ const startBatchProcessing = async () => {
     emit('batch-completed', batchResults.value)
     
   } catch (error: unknown) {
-    message.error(`批量处理失败: ${error.message}`)
+    const messageText = error instanceof Error ? error.message : '批量处理失败'
+    message.error(`批量处理失败: ${messageText}`)
   } finally {
     batchProcessing.value = false
     currentProcessingFile.value = ''
@@ -557,11 +575,11 @@ const saveBatchToDatabase = async () => {
   }
 }
 
-const handleSingleSave = (result: unknown) => {
+const handleSingleSave = (result: ProcessedFileResult) => {
   message.success(`保存文件 ${result.fileName} 成功`)
 }
 
-const handleSingleExport = (result: unknown) => {
+const handleSingleExport = (result: ProcessedFileResult) => {
   const dataStr = JSON.stringify(result, null, 2)
   const blob = new Blob([dataStr], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -572,12 +590,12 @@ const handleSingleExport = (result: unknown) => {
   URL.revokeObjectURL(url)
 }
 
-const handleSingleExportPDF = (result: unknown) => {
+const handleSingleExportPDF = (result: ProcessedFileResult) => {
   message.info('PDF导出功能开发中...')
 }
 
 // 模拟LLM解析API调用
-const callLLMParseAPI = async (file: File): Promise<unknown> => {
+const callLLMParseAPI = async (file: File): Promise<LLMParsedResult> => {
   // 这里应该调用实际的LLM解析API
   return new Promise((resolve, reject) => {
     setTimeout(() => {

@@ -10,7 +10,7 @@ users_db = {
         "display_name": "系统管理员",
         "department": "系统管理部",
         "roles": ["admin", "qc_manager"],
-        "password_hash": pwd_context.hash("admin123"),
+        "password_hash": pwd_context.hash("admin888"),
         "avatar": "",
         "phone": "13800138000",
         "bio": "系统管理员，负责整个医疗质控系统的运维和管理工作。",
@@ -117,3 +117,6 @@ llm_configs = {
         "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     }
 }
+
+# Demo feedback storage (for LX33 demo page)
+demo_feedbacks_db = {}

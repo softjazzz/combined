@@ -80,7 +80,9 @@
             <a-col :span="8">
               <a-card size="small" hoverable @click="quickConfig('alibaba')">
                 <div class="text-center">
-                  <div class="text-lg mb-2">🤖</div>
+                  <div class="quick-config-icon">
+                    <RobotOutlined />
+                  </div>
                   <div class="font-medium">阿里通义千问</div>
                   <div class="text-xs text-gray-500">企业级AI服务</div>
                 </div>
@@ -89,7 +91,9 @@
             <a-col :span="8">
               <a-card size="small" hoverable @click="quickConfig('baidu')">
                 <div class="text-center">
-                  <div class="text-lg mb-2">🧠</div>
+                  <div class="quick-config-icon">
+                    <BulbOutlined />
+                  </div>
                   <div class="font-medium">百度文心一言</div>
                   <div class="text-xs text-gray-500">中文理解能力强</div>
                 </div>
@@ -98,7 +102,9 @@
             <a-col :span="8">
               <a-card size="small" hoverable @click="quickConfig('local')">
                 <div class="text-center">
-                  <div class="text-lg mb-2">🏠</div>
+                  <div class="quick-config-icon">
+                    <HomeOutlined />
+                  </div>
                   <div class="font-medium">本地部署模型</div>
                   <div class="text-xs text-gray-500">数据完全私有</div>
                 </div>
@@ -213,7 +219,10 @@ import {
   InfoCircleOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ApiOutlined
+  ApiOutlined,
+  RobotOutlined,
+  BulbOutlined,
+  HomeOutlined
 } from '@ant-design/icons-vue'
 import {
   llmConfigService,
@@ -520,6 +529,11 @@ onMounted(async () => {
 
 .quick-config .ant-card:hover {
   @apply shadow-md border-blue-300;
+}
+
+.quick-config-icon {
+  @apply flex items-center justify-center mb-2 text-blue-500;
+  font-size: 24px;
 }
 
 .current-config {

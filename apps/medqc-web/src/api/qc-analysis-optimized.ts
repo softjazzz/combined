@@ -178,31 +178,42 @@ export async function getAnalysisHistory(
     } = options
 
     // 使用优化的查询
-    const result = await databaseOptimizer.executeOptimizedQuery(
-      () => supabase
-        .from('qc_results')
-        .select('*')
-        .eq('record_id', recordId)
-        .order(orderBy, { ascending: order === 'asc' })
-        .range(offset, offset + limit - 1),
+    const historyResponse = await databaseOptimizer.executeOptimizedQuery(
+      async () => {
+        const response = await supabase
+          .from('qc_results')
+          .select('*')
+          .eq('record_id', recordId)
+          .order(orderBy, { ascending: order === 'asc' })
+          .range(offset, offset + limit - 1)
+
+        if (response.error) throw response.error
+        return response
+      },
       `analysis_history_${recordId}_${limit}_${offset}_${orderBy}_${order}`
     )
 
     // 获取总数
-    const countResult = await databaseOptimizer.executeOptimizedQuery(
-      () => supabase
-        .from('qc_results')
-        .select('*', { count: 'exact', head: true })
-        .eq('record_id', recordId),
+    const countResponse = await databaseOptimizer.executeOptimizedQuery(
+      async () => {
+        const response = await supabase
+          .from('qc_results')
+          .select('*', { count: 'exact', head: true })
+          .eq('record_id', recordId)
+
+        if (response.error) throw response.error
+        return response
+      },
       `analysis_count_${recordId}`
     )
 
-    const total = countResult.count || 0
+    const total = countResponse.count || 0
     const hasMore = offset + limit < total
 
-    return { success: true,
+    return {
+      success: true,
       data: {
-        data: result || [],
+        data: (historyResponse.data || []).map(convertRowToOptimizedResult),
         total,
         hasMore
       }
@@ -272,30 +283,51 @@ export async function clearAllCaches(): Promise<ApiResponse<{ message: string }>
  */
 async function saveAnalysisResult(result: OptimizedQCResult): Promise<void> {
   try {
-    await databaseOptimizer.executeOptimizedQuery(
-      () => supabase
-        .from('qc_results')
-        .upsert({
-          record_id: result.recordId,
-          overall_score: result.overallScore,
-          grade: result.grade,
-          completeness_score: result.completenessScore,
-          consistency_score: result.consistencyScore,
-          rationality_score: result.rationalityScore,
-          timeliness_score: result.timelinessScore,
-          issues: result.issues,
-          suggestions: result.suggestions,
-          analysis_time: result.analysisTime,
-          processing_stats: result.processingStats,
-          rules_engine_results: result.rulesEngineResults,
-          raw_response: result.rawResponse,
-          updated_at: new Date().toISOString()
-        }),
-      undefined,
-      { enableCache: false } // 不缓存写操作
-    )
+    const insertData = {
+      record_id: result.recordId,
+      score: result.overallScore,
+      grade: result.grade,
+      category_scores: {
+        completeness: result.completenessScore,
+        consistency: result.consistencyScore,
+        rationality: result.rationalityScore,
+        timeliness: result.timelinessScore
+      } as Record<string, unknown>,
+      issues: { items: result.issues } as Record<string, unknown>,
+      suggestions: { list: result.suggestions } as Record<string, unknown>,
+      analysis_time: String(result.analysisTime),
+      raw_analysis: JSON.stringify(result),
+      rule_version: 'optimized-1.0',
+      updated_at: new Date().toISOString()
+    }
+
+    await supabase.from('qc_results').upsert(insertData, { onConflict: 'record_id' })
   } catch (error) {
     console.error('保存分析结果失败:', error)
-    // 不抛出错误，避免影响主流程
+  }
+}
+
+function convertRowToOptimizedResult(row: any): OptimizedQCResult {
+  const raw = typeof row.raw_analysis === 'string'
+    ? (() => { try { return JSON.parse(row.raw_analysis) } catch { return {} } })()
+    : {}
+
+  return {
+    recordId: row.record_id,
+    overallScore: typeof row.score === 'number' ? row.score : raw.overallScore || 0,
+    grade: row.grade || raw.grade || 'C',
+    completenessScore: row.category_scores?.completeness ?? raw.completenessScore ?? 0,
+    consistencyScore: row.category_scores?.consistency ?? raw.consistencyScore ?? 0,
+    rationalityScore: row.category_scores?.rationality ?? raw.rationalityScore ?? 0,
+    timelinessScore: row.category_scores?.timeliness ?? raw.timelinessScore ?? 0,
+    issues: Array.isArray(row.issues?.items) ? row.issues.items : raw.issues || [],
+    suggestions: Array.isArray(row.suggestions?.list) ? row.suggestions.list : raw.suggestions || [],
+    analysisMode: raw.analysisMode || 'comprehensive',
+    priority: raw.priority || 'normal',
+    analysisTime: Number(row.analysis_time ?? raw.analysisTime ?? 0) || 0,
+    processingStats: raw.processingStats || {},
+    rulesEngineResults: raw.rulesEngineResults || {},
+    rawResponse: row.raw_response || raw.rawResponse || {},
+    createdAt: row.updated_at || raw.createdAt || new Date().toISOString()
   }
 }

@@ -12,6 +12,18 @@ if BASE_DIR not in sys.path:
 from seed_qc_rules import seed_rules  # type: ignore
 
 
+# 英文到中文文书类型映射
+DOCUMENT_TYPE_MAPPING = {
+    "admission_record": "入院记录",
+    "progress_note": "病程记录",
+    "operation_record": "手术记录",
+    "discharge_record": "出院记录",
+    "consent_form": "知情同意书",
+    "examination_report": "检查报告",
+    "medical_order": "医嘱",
+}
+
+
 def main(json_path: str) -> None:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -25,6 +37,16 @@ def main(json_path: str) -> None:
     # 仅保留最小字段，避免未知列；seed_rules 内部也会再次过滤
     cleaned: List[Dict[str, Any]] = []
     for r in rules:
+        # 转换 applicable_documents 从英文到中文
+        applicable_docs = r.get("applicable_documents", [])
+        if applicable_docs:
+            # 转换为中文
+            applicable_docs_cn = [
+                DOCUMENT_TYPE_MAPPING.get(doc, doc) for doc in applicable_docs
+            ]
+        else:
+            applicable_docs_cn = []
+
         rc = {
             "rule_code": r.get("rule_code") or r.get("rule_id"),
             "name": r.get("name") or r.get("rule_name") or "未命名规则",

@@ -1451,7 +1451,7 @@ ${text.substring(0, 500)}...
 
     // 代理URL：优先使用 VITE_API_BASE_URL；否则回退到同主机:8001；再不行用相对路径
     const BASE = this.resolveApiBase()
-    const proxyUrl = BASE ? `${BASE}/api/llm/parse-text` : '/api/llm/parse-text'
+    const proxyUrl = BASE ? `${BASE}/api/v1/llm/parse-text` : '/api/v1/llm/parse-text'
 
     const payload = {
       requestBody,

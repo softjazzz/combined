@@ -13,8 +13,11 @@ import type {
   PaginatedResponse,
   QCResult,
   QCRule,
-  QCAnalysisRequest
+  QCAnalysisRequest,
+  MedicalRecordDocumentsResponse,
+  MedicalRecordDocumentPayload
 } from '@/types'
+import type { RecordDocumentInfo } from '@/types/quality-control'
 
 // API基础配置
 const ENV_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined
@@ -25,7 +28,11 @@ function computeBaseURL(): string {
 
   // 开发环境使用vite代理，避免CORS问题
   if (import.meta.env.DEV) {
-    return '' // 使用相对路径，通过vite代理转发到后端
+    // 开发环境优先使用显式配置的地址；否则继续走 Vite 代理
+    if (base) {
+      return base
+    }
+    return '' // 使用相对路径，通过 Vite 代理转发到后端
   }
 
   try {
@@ -135,21 +142,28 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
   },
   async (error: unknown) => {
     const originalRequest = error.config
-    
+
+    // 跳过对认证接口401/403错误的日志打印（这些是正常的未登录状态）
+    const isAuthMeEndpoint = error.config?.url?.includes('/api/v1/auth/me')
+    const isAuthError = error.response?.status === 401 || error.response?.status === 403
+
     // 只在开发环境或非认证错误时记录详细错误
     if (process.env.NODE_ENV === 'development' || error.response?.status !== 401) {
-      console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      })
+      // 对于auth/me接口的403错误，不打印日志（用户未登录或访问demo页面时是正常的）
+      if (!(isAuthMeEndpoint && isAuthError)) {
+        console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message
+        })
+      }
     }
 
     // Token过期处理（带单航刷新，避免并发冲突）
     if (error.response?.status === 401 && !originalRequest._retry) {
       // 避免对登录/刷新接口自身进行循环处理
       const url: string = originalRequest?.url || ''
-      if (url.includes('/api/auth/login') || url.includes('/api/auth/refresh')) {
+      if (url.includes('/api/v1/auth/login') || url.includes('/api/v1/auth/refresh')) {
         return Promise.reject(error)
       }
 
@@ -165,7 +179,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
       // 复用正在进行的刷新请求
       if (!refreshPromise) {
         refreshPromise = axios
-          .post(`${API_BASE_URL}/api/auth/refresh`, { refresh_token: refreshToken })
+          .post(`${API_BASE_URL}/api/v1/auth/refresh`, { refresh_token: refreshToken })
           .then((response) => {
             const { access_token, refresh_token: newRefreshToken } = response.data
             if (access_token) TokenManager.setToken(access_token)
@@ -256,7 +270,7 @@ export class ApiService {
         fullCredentials: credentials
       })
 
-      const response = await apiClient.post<LoginResponse>('/api/auth/login', credentials)
+      const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials)
       console.log('📡 ApiService.login 收到响应:', response.data)
       
       // 保存token
@@ -286,7 +300,7 @@ export class ApiService {
    */
   static async register(userData: RegisterRequest): Promise<ApiResponse<User>> {
     try {
-      const response = await apiClient.post<User>('/api/auth/register', userData)
+      const response = await apiClient.post<User>('/api/v1/auth/register', userData)
       return {
         success: true,
         data: response.data,
@@ -306,7 +320,7 @@ export class ApiService {
    */
   static async getCurrentUser(): Promise<ApiResponse<User>> {
     try {
-      const response = await apiClient.get<User>('/api/auth/me')
+      const response = await apiClient.get<User>('/api/v1/auth/me')
       return {
         success: true,
         data: response.data
@@ -325,7 +339,7 @@ export class ApiService {
    */
   static async updateProfile(profileData: Partial<User>): Promise<ApiResponse<User>> {
     try {
-      const response = await apiClient.put<User>('/api/auth/profile', profileData)
+      const response = await apiClient.put<User>('/api/v1/auth/profile', profileData)
       return {
         success: true,
         data: response.data,
@@ -345,7 +359,7 @@ export class ApiService {
    */
   static async updatePassword(newPassword: string, currentPassword?: string): Promise<ApiResponse<void>> {
     try {
-      await apiClient.put('/api/auth/password', {
+      await apiClient.put('/api/v1/auth/password', {
         new_password: newPassword,
         current_password: currentPassword
       })
@@ -366,7 +380,7 @@ export class ApiService {
    */
   static async logout(): Promise<ApiResponse<void>> {
     try {
-      await apiClient.post('/api/auth/logout')
+      await apiClient.post('/api/v1/auth/logout')
       TokenManager.clearTokens()
       return {
         success: true,
@@ -392,7 +406,7 @@ export class ApiService {
         throw new Error('No refresh token available')
       }
 
-      const response = await apiClient.post<LoginResponse>('/api/auth/refresh', {
+      const response = await apiClient.post<LoginResponse>('/api/v1/auth/refresh', {
         refresh_token: refreshToken
       })
 
@@ -422,7 +436,7 @@ export class ApiService {
    */
   static async forgotPassword(email: string): Promise<ApiResponse<void>> {
     try {
-      await apiClient.post('/api/auth/forgot-password', { email })
+      await apiClient.post('/api/v1/auth/forgot-password', { email })
       return {
         success: true,
         message: '重置密码邮件已发送'
@@ -440,7 +454,7 @@ export class ApiService {
    */
   static async resetPassword(token: string, newPassword: string): Promise<ApiResponse<void>> {
     try {
-      await apiClient.post('/api/auth/reset-password', {
+      await apiClient.post('/api/v1/auth/reset-password', {
         token,
         new_password: newPassword
       })
@@ -502,6 +516,75 @@ export class ApiService {
       return {
         success: false,
         error: error.response?.data?.message || '获取医疗记录详情失败',
+        data: null
+      }
+    }
+  }
+
+  /**
+   * 获取指定医疗记录的文书列表（带适配）
+   */
+  static async getMedicalRecordDocuments(recordId: string): Promise<ApiResponse<RecordDocumentInfo[]>> {
+    try {
+      const response = await apiClient.get<MedicalRecordDocumentsResponse | { data: MedicalRecordDocumentsResponse }>(
+        `/api/medical-records/${recordId}/documents`
+      )
+
+      const rawPayload = (response.data as { data?: MedicalRecordDocumentsResponse }).data
+        ?? (response.data as MedicalRecordDocumentsResponse)
+      const documents: RecordDocumentInfo[] = []
+
+      if (rawPayload && Array.isArray(rawPayload.categories)) {
+        const seenIds = new Set<string>()
+        let generatedIndex = 0
+
+        rawPayload.categories.forEach(category => {
+          const categoryDocs = Array.isArray(category.documents) ? category.documents : []
+          categoryDocs.forEach((doc: MedicalRecordDocumentPayload) => {
+            generatedIndex += 1
+
+            let docId = (doc.id && String(doc.id)) || `${recordId}-doc-${generatedIndex}`
+            while (seenIds.has(docId)) {
+              generatedIndex += 1
+              docId = `${recordId}-doc-${generatedIndex}`
+            }
+            seenIds.add(docId)
+
+            const typeCode =
+              (typeof doc.type === 'string' && doc.type) ||
+              (doc.type_info && typeof doc.type_info.type_code === 'string' ? doc.type_info.type_code : undefined) ||
+              (category.category_code || '')
+
+            const titleCandidates = [
+              doc.title,
+              doc.type_info?.type_name,
+              typeof doc.type === 'string' ? doc.type : undefined,
+              category.category_name,
+              '未命名文书'
+            ]
+            const title = String(titleCandidates.find(candidate => !!candidate && String(candidate).trim().length > 0) ?? '未命名文书').trim()
+
+            documents.push({
+              id: docId,
+              title,
+              type: typeCode || undefined,
+              content: typeof doc.content === 'string' ? doc.content : '',
+              created_at: typeof doc.created_at === 'string'
+                ? doc.created_at
+                : (typeof doc.updated_at === 'string' ? doc.updated_at : undefined)
+            })
+          })
+        })
+      }
+
+      return {
+        success: true,
+        data: documents
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.response?.data?.message || error?.message || '获取医疗文书失败',
         data: null
       }
     }
@@ -899,6 +982,46 @@ export class ApiService {
   }
 
   // ==================== 工具方法 ====================
+
+  /**
+   * 通用 POST 请求方法
+   */
+  static async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.post<T>(url, data, config)
+      return {
+        success: true,
+        data: response.data,
+        message: '请求成功'
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.response?.data?.detail || (error.code === 'ECONNABORTED' ? '请求超时' : '请求失败'),
+        data: null
+      }
+    }
+  }
+
+  /**
+   * 通用 GET 请求方法
+   */
+  static async get<T = any>(url: string, params?: any): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.get<T>(url, { params })
+      return {
+        success: true,
+        data: response.data,
+        message: '请求成功'
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.response?.data?.detail || '请求失败',
+        data: null
+      }
+    }
+  }
 
   /**
    * 检查API连接状态

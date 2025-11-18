@@ -252,12 +252,17 @@ import { analyzeRecord as analyzeRecordAPI, batchAnalyzeRecords } from '@/api/qc
 import { formatDate, formatDateTime } from '@/utils/date'
 import { useBreakpoints } from '@/composables/useBreakpoints'
 
+type RecordItem = Record<string, any>
+interface BatchActionItem {
+  key: string
+}
+
 // 响应式数据
 const router = useRouter()
 const { isMobile } = useBreakpoints()
 
-const records = ref<any[]>([])
-const selectedRecords = ref<any[]>([])
+const records = ref<RecordItem[]>([])
+const selectedRecords = ref<RecordItem[]>([])
 const loading = ref(false)
 const uploading = ref(false)
 const batchAnalyzing = ref(false)
@@ -327,7 +332,7 @@ const batchActions = computed(() => [
     type: 'primary',
     minSelection: 1,
     maxSelection: 10,
-    validator: (items[]) => {
+    validator: (items: RecordItem[]) => {
       const analyzingCount = items.filter(item => item.status === 'analyzing').length
       if (analyzingCount > 0) {
         return '选中的病案中包含正在分析的记录'
@@ -353,7 +358,7 @@ const batchActions = computed(() => [
     confirmTitle: '确认删除',
     confirmContent: '删除后无法恢复，确定要删除选中的病案吗？',
     minSelection: 1,
-    validator: (items[]) => {
+    validator: (items: RecordItem[]) => {
       const analyzingCount = items.filter(item => item.status === 'analyzing').length
       if (analyzingCount > 0) {
         return '无法删除正在分析的病案'
@@ -403,7 +408,7 @@ const handleSearch = () => {
   loadRecords(1, false)
 }
 
-const handleRecordSubmit = async (formData) => {
+const handleRecordSubmit = async (formData: FormData) => {
   try {
     uploading.value = true
     const response = await createMedicalRecord(formData)
@@ -423,7 +428,7 @@ const handleRecordSubmit = async (formData) => {
   }
 }
 
-const analyzeRecord = async (record) => {
+const analyzeRecord = async (record: RecordItem) => {
   try {
     analyzingRecords.value.push(record.id)
 
@@ -504,7 +509,7 @@ const handleBatchAnalysis = async () => {
   }
 }
 
-const handleRecordSelect = (record, selected: boolean) => {
+const handleRecordSelect = (record: RecordItem, selected: boolean) => {
   if (selected) {
     if (!selectedRecords.value.find(r => r.id === record.id)) {
       selectedRecords.value.push(record)
@@ -522,7 +527,7 @@ const handleSelectAll = (selected: boolean) => {
   }
 }
 
-const handleBatchAction = async (action, items: unknown[]) => {
+const handleBatchAction = async (action: BatchActionItem, items: RecordItem[]) => {
   switch (action.key) {
     case 'analyze':
       await handleBatchAnalysis()
@@ -535,7 +540,7 @@ const handleBatchAction = async (action, items: unknown[]) => {
   }
 }
 
-const handleBatchExport = async (items: unknown[]) => {
+const handleBatchExport = async (items: RecordItem[]) => {
   try {
     // 实现批量导出逻辑
     message.success(`导出 ${items.length} 条记录`)
@@ -544,7 +549,7 @@ const handleBatchExport = async (items: unknown[]) => {
   }
 }
 
-const handleBatchDelete = async (items: unknown[]) => {
+const handleBatchDelete = async (items: RecordItem[]) => {
   try {
     const deletePromises = items.map(item => deleteMedicalRecord(item.id))
     await Promise.all(deletePromises)
@@ -557,11 +562,11 @@ const handleBatchDelete = async (items: unknown[]) => {
   }
 }
 
-const viewRecord = (record) => {
+const viewRecord = (record: RecordItem) => {
   router.push(`/records/${record.id}`)
 }
 
-const handleRecordAction = async (action: string, record: unknown) => {
+const handleRecordAction = async (action: string, record: RecordItem) => {
   switch (action) {
     case 'edit':
       // 实现编辑逻辑
@@ -578,7 +583,7 @@ const handleRecordAction = async (action: string, record: unknown) => {
   }
 }
 
-const handleDeleteRecord = async (record) => {
+const handleDeleteRecord = async (record: RecordItem) => {
   try {
     const response = await deleteMedicalRecord(record.id)
     if (response.success) {
@@ -593,11 +598,11 @@ const handleDeleteRecord = async (record) => {
 }
 
 // 工具方法
-const isSelected = (record) => {
+const isSelected = (record: RecordItem) => {
   return selectedRecords.value.some(r => r.id === record.id)
 }
 
-const getPatientAvatar = (record) => {
+const getPatientAvatar = (record: RecordItem) => {
   // 返回患者头像URL，这里使用占位符
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${record.patient_name}`
 }

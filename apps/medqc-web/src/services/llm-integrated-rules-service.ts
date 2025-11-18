@@ -26,13 +26,55 @@ import { supabase } from '@/lib/supabase'
 // Base Enhanced Rules Service (to be extended)
 class BaseEnhancedRulesService {
   async getEnhancedRules(filter?: EnhancedRuleFilter): Promise<EnhancedQCRule[]> {
+    // Migration 006: 优先使用 RPC 函数获取规则
+    if (filter?.document_type) {
+      try {
+        const { data, error } = await supabase.rpc('get_applicable_rules', {
+          p_document_type: filter.document_type,
+          p_is_active: true
+        })
+
+        if (error) throw error
+
+        // 应用其他筛选条件
+        let rules = data || []
+
+        if (filter?.implementation_type) {
+          rules = rules.filter(r => r.rule_implementation === filter.implementation_type)
+        }
+
+        if (filter?.alert_level) {
+          rules = rules.filter(r => r.alert_level === filter.alert_level)
+        }
+
+        if (filter?.core_system_only) {
+          rules = rules.filter(r => r.core_system_related === true)
+        }
+
+        if (filter?.department_id) {
+          rules = rules.filter(r =>
+            r.department_overrides?.some((d: any) => d.department_id === filter.department_id)
+          )
+        }
+
+        return rules
+      } catch (error) {
+        console.warn('RPC function not available, falling back to query:', error)
+      }
+    }
+
+    // 回退方案：使用传统查询
     let query = supabase
       .from('qc_rules')
       .select('*')
       .eq('is_active', true)
 
     if (filter?.document_type) {
-      query = query.contains('applicable_documents', [filter.document_type])
+      query = query.or(
+        `applicable_documents.cs.{${filter.document_type}},` +
+        `applicable_documents.is.null,` +
+        `applicable_documents.eq.{}`
+      )
     }
 
     if (filter?.implementation_type) {

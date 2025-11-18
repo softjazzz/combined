@@ -20,8 +20,19 @@ export class DocumentCategoryService {
       .order('sort_order')
 
     if (error) {
-      console.error('获取文书类别配置失败:', error)
-      throw new Error(`获取文书类别配置失败: ${error.message}`)
+      console.warn('获取文书类别配置失败，使用默认配置:', error)
+      // 返回默认的6个标准类别
+      return Object.entries(DOCUMENT_CATEGORY_CONFIG)
+        .sort(([, a], [, b]) => a.sortOrder - b.sortOrder)
+        .map(([code, config]) => ({
+          category_code: code,
+          category_name: config.label,
+          description: config.description,
+          color: config.color,
+          icon: config.icon,
+          sort_order: config.sortOrder,
+          is_active: true
+        }))
     }
 
     try {

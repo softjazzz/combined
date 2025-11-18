@@ -11,6 +11,7 @@ export interface ModelOption {
   contextLength?: number
   pricing?: string
   features?: string[]
+  qcStatus?: 'passed' | 'failed'
 }
 
 // 原有接口保持兼容
@@ -285,130 +286,98 @@ export const ENHANCED_LLM_API_CONFIGS: Record<string, EnhancedLLMApiConfig> = {
       {
         value: 'qwen-plus',
         label: 'Qwen-Plus',
-        description: '平衡性能和成本的选择，推荐使用',
+        description: '平衡性能与成本的主力模型，官方推荐',
         contextLength: 32768,
         pricing: '中',
-        features: ['平衡性能', '中等成本', '推荐']
+        features: ['平衡性能', '中等成本', '默认推荐']
       },
       {
         value: 'qwen-turbo',
         label: 'Qwen-Turbo',
-        description: '快速响应，适合简单任务',
+        description: '响应速度最快，适合高并发或轻量任务',
         contextLength: 8192,
         pricing: '低',
-        features: ['快速响应', '成本低']
+        features: ['极速响应', '成本友好']
       },
       {
         value: 'qwen-max',
         label: 'Qwen-Max',
-        description: '最强性能，适合复杂任务',
+        description: '旗舰级能力，适合复杂推理与高准确率场景',
         contextLength: 32768,
         pricing: '高',
-        features: ['最强性能', '复杂推理']
+        features: ['顶级性能', '复杂推理']
       },
       {
-        value: 'qwen2.5-14b-instruct',
-        label: 'Qwen2.5-14B-Instruct',
-        description: '14B参数指令调优模型',
+        value: 'qwen3-30b-a3b-instruct-2507',
+        label: 'Qwen3-30B-A3B (2507)',
+        description: '30B 参数的 Qwen3 指令模型，兼顾性能与成本',
+        contextLength: 32768,
+        pricing: '高',
+        features: ['30B 参数', '高级推理', '多任务']
+      },
+      {
+        value: 'qwen3-14b',
+        label: 'Qwen3-14B',
+        description: '14B 参数版本，性能稳定，适合医疗质控等场景',
         contextLength: 32768,
         pricing: '中',
-        features: ['14B参数', '指令调优']
+        features: ['性能稳定', '多场景适用']
       },
       {
-        value: 'qwen2.5-32b-instruct',
-        label: 'Qwen2.5-32B-Instruct',
-        description: '32B参数指令调优模型',
+        value: 'qwen3-8b',
+        label: 'Qwen3-8B',
+        description: '中等规模模型，兼顾速度与理解力',
         contextLength: 32768,
-        pricing: '高',
-        features: ['32B参数', '指令调优']
+        pricing: '中',
+        features: ['性价比高', '稳定可靠']
+      },
+      {
+        value: 'qwen3-4b',
+        label: 'Qwen3-4B',
+        description: '轻量级 Qwen3 模型，部署灵活，成本最低',
+        contextLength: 32768,
+        pricing: '低',
+        features: ['轻量级', '快速响应']
       },
       {
         value: 'qwen3-235b-a22b-instruct-2507',
         label: 'Qwen3-235B',
-        description: '超大参数模型，顶级性能',
+        description: '超大参数模型，提供顶级语言与推理能力',
         contextLength: 32768,
         pricing: '很高',
         features: ['超大参数', '顶级性能']
       },
       {
-        value: 'qwen-flash-2025-07-28',
-        label: 'Qwen Flash (2025-07-28)',
-        description: '最新Flash版本，极速响应',
-        contextLength: 32768,
-        pricing: '低',
-        features: ['极速响应', '最新版本']
-      },
-      {
-        value: 'qwen3-30b-a3b-instruct-2507',
-        label: 'Qwen3-30B-A3B',
-        description: '30B参数指令模型',
+        value: 'qwen2.5-32b-instruct',
+        label: 'Qwen2.5-32B-Instruct',
+        description: 'Qwen2.5 系列高阶模型，指令对齐效果优秀',
         contextLength: 32768,
         pricing: '高',
-        features: ['30B参数', '指令优化']
+        features: ['32B 参数', '指令调优']
       },
       {
-        value: 'qwen3-30b-a3b-instruct-2507',
-        label: 'Qwen3-30B-A3B',
-        description: '30B参数模型，高性能推理',
+        value: 'qwen2.5-14b-instruct',
+        label: 'Qwen2.5-14B-Instruct',
+        description: '经典 14B 指令模型，兼容性好，表现稳定',
         contextLength: 32768,
-        pricing: '高',
-        features: ['高性能', '平衡推理', '多任务']
+        pricing: '中',
+        features: ['14B 参数', '稳定表现']
       },
       {
         value: 'qwen2.5-7b-1m',
         label: 'Qwen2.5-7B-1M',
-        description: '7B参数模型，支持1M上下文长度',
+        description: '支持 1M 超长上下文的 7B 模型，适合长文档',
         contextLength: 1048576,
         pricing: '中',
-        features: ['超长上下文', '高效推理', '成本优化']
-      },
-      {
-        value: 'qwen2.5-32b-instruct',
-        label: 'Qwen2.5-32B',
-        description: '32B参数模型，强大的推理能力',
-        contextLength: 32768,
-        pricing: '高',
-        features: ['强推理', '多领域', '高准确率']
-      },
-      {
-        value: 'qwen2.5-14b-instruct',
-        label: 'Qwen2.5-14B',
-        description: '14B参数模型，性能与成本平衡',
-        contextLength: 32768,
-        pricing: '中',
-        features: ['平衡性能', '中等成本', '通用能力']
+        features: ['超长上下文', '文档理解']
       },
       {
         value: 'qwen-flash-2025-07-28',
         label: 'Qwen Flash (2025-07-28)',
-        description: '最新Flash版本，极速响应',
+        description: '最新版 Flash 系列，面向实时互动的极速模型',
         contextLength: 8192,
         pricing: '低',
-        features: ['极速响应', '最新版本', '高效处理']
-      },
-      {
-        value: 'qwen3-4b',
-        label: 'Qwen3-4B',
-        description: '轻量级Qwen3模型，快速高效',
-        contextLength: 32768,
-        pricing: '低',
-        features: ['轻量级', '快速响应', '成本友好']
-      },
-      {
-        value: 'qwen3-8b',
-        label: 'Qwen3-8B',
-        description: '中等规模Qwen3模型，性能均衡',
-        contextLength: 32768,
-        pricing: '中',
-        features: ['性能均衡', '多场景适用', '稳定可靠']
-      },
-      {
-        value: 'qwen3-14b',
-        label: 'Qwen3-14B',
-        description: '大规模Qwen3模型，强大性能',
-        contextLength: 32768,
-        pricing: '高',
-        features: ['大规模参数', '强大性能', '专业任务']
+        features: ['极速', '实时互动']
       }
     ],
     requiresApiKey: true,

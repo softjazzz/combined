@@ -212,16 +212,14 @@ export async function getDepartmentStats(): Promise<DepartmentStats[]> {
     // 按部门分组统计
     const departmentMap = new Map<string, { scores: number[], count: number }>()
     
-    records?.forEach(record => { const dept = record.department || '未知科室'
-      if (!departmentMap.has(dept)) {
-        departmentMap.set(dept, { scores:  [], count: 0 })
+    records?.forEach(record => {
+      const dept = record.department ?? '未知科室'
+      const entry = departmentMap.get(dept) || { scores: [] as number[], count: 0 }
+      entry.count += 1
+      if (typeof record.qc_score === 'number') {
+        entry.scores.push(record.qc_score)
       }
-      
-      const deptData = departmentMap.get(dept)!
-      deptData.count++
-      if (record.qc_score !== null) {
-        deptData.scores.push(record.qc_score)
-      }
+      departmentMap.set(dept, entry)
     })
 
     // 颜色配置
@@ -230,18 +228,18 @@ export async function getDepartmentStats(): Promise<DepartmentStats[]> {
     const departmentStats: DepartmentStats[] = []
     let colorIndex = 0
     
-    departmentMap.forEach((data: unknown,  department: unknown) => {
-      const averageScore = data.scores.length > 0 
-        ? data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length
+    departmentMap.forEach((deptData, department) => {
+      const averageScore = deptData.scores.length > 0 
+        ? deptData.scores.reduce((sum, score) => sum + score, 0) / deptData.scores.length
         : 0
       
-      const passRate = data.scores.length > 0
-        ? (data.scores.filter(score => score >= 80).length / data.scores.length) * 100
+      const passRate = deptData.scores.length > 0
+        ? (deptData.scores.filter(score => score >= 80).length / deptData.scores.length) * 100
         : 0
 
       departmentStats.push({
         department,
-        recordCount: data.count,
+        recordCount: deptData.count,
         averageScore: Math.round(averageScore * 10) / 10,
         passRate: Math.round(passRate * 10) / 10,
         color: colors[colorIndex % colors.length]
@@ -280,8 +278,10 @@ export async function getQCScoreDistribution(): Promise<QCScoreDistribution[]> {
     const distribution: QCScoreDistribution[] = []
 
     scoreRanges.forEach(range => {
-      const count = results?.filter(r => 
-        r.qc_score >= range.min && r.qc_score <= range.max
+      const count = results?.filter(r =>
+        typeof r.qc_score === 'number' &&
+        r.qc_score >= range.min &&
+        r.qc_score <= range.max
       ).length || 0
       
       distribution.push({
@@ -314,14 +314,18 @@ export async function getQCIssueStats(): Promise<QCIssueStats[]> {
     let totalIssues = 0
 
     results?.forEach(result => {
-      const issues = result.issues as any[]
-      if (Array.isArray(issues)) {
-        issues.forEach(issue => {
-          const category = issue.category || '其他'
-          categoryMap.set(category, (categoryMap.get(category) || 0) + 1)
-          totalIssues++
-        })
-      }
+      const issuesSource = result.issues as Record<string, unknown> | null
+      const issues = Array.isArray((issuesSource as any)?.items)
+        ? ((issuesSource as any).items as any[])
+        : Array.isArray(issuesSource)
+          ? (issuesSource as any[])
+          : []
+
+      issues.forEach(issue => {
+        const category = typeof issue?.category === 'string' ? issue.category : '其他'
+        categoryMap.set(category, (categoryMap.get(category) || 0) + 1)
+        totalIssues++
+      })
     })
 
     const issueStats: QCIssueStats[] = []

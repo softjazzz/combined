@@ -5,7 +5,10 @@
       <h1 class="page-title">测试病历管理</h1>
       <!-- 调试信息 -->
       <div class="debug-info" style="background: #f0f0f0; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px;">
-        🔧 调试: 记录数={{ records.length }}, 加载中={{ loading }}, 总数={{ pagination.total }}, 视图={{ viewMode }}
+        <span class="inline-flex items-center gap-1">
+          <ToolOutlined />
+          调试: 记录数={{ records.length }}, 加载中={{ loading }}, 总数={{ pagination.total }}, 视图={{ viewMode }}
+        </span>
       </div>
       <div class="header-actions">
         <a-space>
@@ -169,7 +172,10 @@
         <!-- 调试信息 -->
         <div v-if="records.length === 0" class="col-span-full text-center p-8">
           <div class="text-gray-500">
-            <p>📊 调试信息:</p>
+            <p class="debug-info-title">
+              <BarChartOutlined class="mr-1" />
+              调试信息:
+            </p>
             <p>记录数量: {{ records.length }}</p>
             <p>加载状态: {{ loading ? '加载中...' : '已完成' }}</p>
             <p>视图模式: {{ viewMode }}</p>
@@ -317,7 +323,9 @@ import {
   CheckCircleOutlined,
   ReloadOutlined,
   RobotOutlined,
-  PlusOutlined
+  PlusOutlined,
+  BarChartOutlined,
+  ToolOutlined
 } from '@ant-design/icons-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import dayjs from 'dayjs'
@@ -561,17 +569,30 @@ const loadRecords = async () => {
     const result = await response.json()
     console.log('📊 API返回的数据:', result)
 
-    // 检查数据结构
-    if (!result.data || !Array.isArray(result.data)) {
+    // 检查数据结构 - 适配后端的分页响应格式
+    // 后端返回格式: { success: true, data: { items: [...], total: 100, page: 1, page_size: 10 } }
+    if (!result.data) {
       console.error('❌ API返回的数据格式不正确:', result)
       message.error('数据格式错误')
       return
     }
 
-    console.log(`📋 获取到 ${result.data.length} 条记录`)
+    // 兼容两种格式：
+    // 1. 新格式: { data: { items: [...], total: 100 } }
+    // 2. 旧格式: { data: [...], total: 100 }
+    const items = result.data.items || result.data
+    const total = result.data.total || result.total || 0
+
+    if (!Array.isArray(items)) {
+      console.error('❌ API返回的数据不是数组:', result)
+      message.error('数据格式错误')
+      return
+    }
+
+    console.log(`📋 获取到 ${items.length} 条记录`)
 
     // 转换数据格式以适配现有UI - 适配medical_records表结构
-    records.value = result.data.map((record: unknown) => ({
+    records.value = items.map((record: unknown) => ({
       id: record.id,
       recordNumber: record.record_number || record.id,
       recordName: record.record_name || `${record.patient_info?.name || '未知患者'}的病历记录`,
@@ -590,9 +611,9 @@ const loadRecords = async () => {
     }))
 
     console.log('🔄 转换后的记录数据:', records.value)
-    console.log(`📊 设置分页总数: ${result.total}`)
+    console.log(`📊 设置分页总数: ${total}`)
 
-    pagination.total = result.total
+    pagination.total = total
 
     console.log('✅ 数据加载完成!')
     console.log('📊 最终状态:', {
@@ -864,6 +885,10 @@ const showQualityPointsModal = async (record) => {
 
 .records-table-card {
   @apply shadow-sm;
+}
+
+.debug-info-title {
+  @apply flex items-center justify-center gap-1 text-sm font-medium mb-2;
 }
 
 /* 表格卡片内部间距优化 */

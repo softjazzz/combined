@@ -70,7 +70,7 @@ const handleForgotPassword = () => {
 
 const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
   const demoAccounts = {
-    admin: { email: 'admin@medqc.com', password: 'admin123' },
+    admin: { email: 'admin@medqc.com', password: 'admin888' },
     qc_manager: { email: 'qc@medqc.com', password: 'qc123456' },
     doctor: { email: 'doctor@medqc.com', password: 'doctor123' }
   } as const
@@ -244,7 +244,7 @@ const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
                       <div class="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">管</div>
                       <div class="flex-1">
                         <div class="font-medium text-gray-900">系统管理员</div>
-                        <div class="text-sm text-gray-500">admin@medqc.com / admin123</div>
+                        <div class="text-sm text-gray-500">admin@medqc.com / admin888</div>
                       </div>
                       <LoginOutlined class="text-gray-400 group-hover:text-blue-500"/>
                     </div>

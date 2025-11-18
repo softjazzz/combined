@@ -94,7 +94,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getMedicalRecords, getDemoMedicalRecords } from '@/api/medical-records'
-import type { MedicalRecord } from '@/types/medical-record'
+import type { MedicalRecord } from '@/types/medical-records'
 
 const router = useRouter()
 const loading = ref(false)
@@ -152,7 +152,8 @@ const testDemoData = async () => {
   try {
     addResult('info', '开始测试演示数据...')
     
-    const scenarios = ['complete', 'incomplete', 'inconsistent', 'irrational'] as const const allPatients: MedicalRecord[] = []
+    const scenarios = ['complete', 'incomplete', 'inconsistent', 'irrational'] as const
+    const allPatients: MedicalRecord[] = []
 
     for (const scenario of scenarios) {
       const response = await getDemoMedicalRecords(scenario)

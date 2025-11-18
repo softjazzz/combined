@@ -1,0 +1,278 @@
+{
+  "id": "e6cd1e70-88ac-4df9-a164-1326d35a6874",
+  "mode": "sequential_batch",
+  "document_type": "入院记录",
+  "document_id": "batch_1762756847420",
+  "rule_ids": [
+    "LX-001",
+    "LX-002",
+    "LX-003",
+    "LX-004",
+    "LX-005",
+    "LX-006",
+    "LX-007",
+    "LX-008",
+    "LX-009"
+  ],
+  "medical_text_length": 1430,
+  "stats": {
+    "total": 9,
+    "compliant": 7,
+    "passed": 5,
+    "notApplicable": 2,
+    "issues": 2,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 17346,
+    "totalTime": 79.59973406791687,
+    "avgTime": 8.844414896435207
+  },
+  "results": [
+    {
+      "ruleId": "LX-001",
+      "ruleName": "主诉书写不规范或不能导出第一诊断",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "主诉‘胸闷胸痛3天’与第一诊断‘急性冠脉综合征’中的不稳定型心绞痛逻辑一致，症状持续时间与病程相符。但主诉未体现患者既往高血压、糖尿病等基础疾病信息，且未明确标注持续时间单位（如‘3天’），书写不够规范，影响诊断导出的清晰性。",
+      "issues": [
+        {
+          "description": "主诉书写不规范",
+          "evidence": "主诉仅写‘胸闷胸痛3天’，未说明症状性质或加重情况，缺乏规范要素。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"主诉：\n胸闷胸痛3天\"\n记载：\"现病史：\n患者3天前无明显诱因出现胸闷胸痛，呈压榨性，位于胸骨后，向左肩背部放射，持续约10-20分钟，休息后可缓解，伴大汗、恶心...\"\n记载：\"入院诊断：\n1. 急性冠脉综合征\n   - 不稳定型心绞痛\"",
+      "suggestion": "(1) 主诉应补充症状性质，如改为“阵发性胸闷胸痛3天，呈压榨性，伴放射痛”\n(2) 明确症状发作频率和诱因，如“劳累后加重，休息可缓解”\n(3) 若合并重要基础疾病（如高血压、糖尿病）为本次发病的重要背景，可在主诉中简要体现，如“高血压病史10年”可作为背景补充在主诉末尾括号内\n(4) 确保主诉时间表述完整，使用“3天来”或“近3天”更符合书写规范",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": false,\n  \"findings\": \"主诉‘胸闷胸痛3天’与第一诊断‘急性冠脉综合征’中的不稳定型心绞痛逻辑一致，症状持续时间与病程相符。但主诉未体现患者既往高血压、糖尿病等基础疾病信息，且未明确标注持续时间单位（如‘3天’），书写不够规范，影响诊断导出的清晰性。\",\n  \"issues\": [\n    {\n      \"description\": \"主诉书写不规范\",\n      \"evidence\": \"主诉仅写‘胸闷胸痛3天’，未说明症状性质或加重情况，缺乏规范要素。\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"主诉：\\n胸闷胸痛3天\\\"\\n记载：\\\"现病史：\\n患者3天前无明显诱因出现胸闷胸痛，呈压榨性，位于胸骨后，向左肩背部放射，持续约10-20分钟，休息后可缓解，伴大汗、恶心...\\\"\\n记载：\\\"入院诊断：\\n1. 急性冠脉综合征\\n   - 不稳定型心绞痛\\\"\",\n  \"suggestion\": \"(1) 主诉应补充症状性质，如改为“阵发性胸闷胸痛3天，呈压榨性，伴放射痛”\\n(2) 明确症状发作频率和诱因，如“劳累后加重，休息可缓解”\\n(3) 若合并重要基础疾病（如高血压、糖尿病）为本次发病的重要背景，可在主诉中简要体现，如“高血压病史10年”可作为背景补充在主诉末尾括号内\\n(4) 确保主诉时间表述完整，使用“3天来”或“近3天”更符合书写规范\",\n  \"confidence\": 0.85\n}",
+      "metadata": {
+        "tokens_used": 2616,
+        "api_time": 18.56246590614319
+      }
+    },
+    {
+      "ruleId": "LX-002",
+      "ruleName": "入院记录-现病史缺少一般情况",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "现病史中明确记载了发病时间（3天前）、起病情况（无明显诱因）、主要症状（胸闷胸痛、压榨性、放射至左肩背部，伴大汗、恶心）及病程演变，同时描述了一般情况（精神差、睡眠欠佳、食欲减退，大小便正常），三类要素齐全，符合质控要求。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"患者3天前无明显诱因出现胸闷胸痛，呈压榨性，位于胸骨后，向左肩背部放射，持续约10-20分钟，休息后可缓解，伴大汗、恶心……\"；记载：\"病程中，患者精神差，睡眠欠佳，食欲减退，大小便正常。\"",
+      "suggestion": "(1)继续保持在现病史中完整记录发病时间、症状特点及病程演变的书写规范\n(2)维持对一般情况（精神、睡眠、饮食、二便）的描述，必要时可进一步量化（如每日进食量、睡眠时长）\n(3)若症状有波动或治疗反应变化，建议动态记录症状缓解与加重的时间节点",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": true,\n  \"findings\": \"现病史中明确记载了发病时间（3天前）、起病情况（无明显诱因）、主要症状（胸闷胸痛、压榨性、放射至左肩背部，伴大汗、恶心）及病程演变，同时描述了一般情况（精神差、睡眠欠佳、食欲减退，大小便正常），三类要素齐全，符合质控要求。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"患者3天前无明显诱因出现胸闷胸痛，呈压榨性，位于胸骨后，向左肩背部放射，持续约10-20分钟，休息后可缓解，伴大汗、恶心……\\\"；记载：\\\"病程中，患者精神差，睡眠欠佳，食欲减退，大小便正常。\\\"\",\n  \"suggestion\": \"(1)继续保持在现病史中完整记录发病时间、症状特点及病程演变的书写规范\\n(2)维持对一般情况（精神、睡眠、饮食、二便）的描述，必要时可进一步量化（如每日进食量、睡眠时长）\\n(3)若症状有波动或治疗反应变化，建议动态记录症状缓解与加重的时间节点\",\n  \"confidence\": 0.9\n}",
+      "metadata": {
+        "tokens_used": 2443,
+        "api_time": 7.908581733703613
+      }
+    },
+    {
+      "ruleId": "LX-003",
+      "ruleName": "入院记录-婴幼儿个人史缺少喂养史",
+      "isCompliant": true,
+      "status": "not_applicable",
+      "findings": "病历不属于婴幼儿范围（年龄 68 岁 > 7 岁）",
+      "issues": [
+        {
+          "description": "病历不属于婴幼儿范围（年龄 68 岁 > 7 岁）",
+          "evidence": ""
+        }
+      ],
+      "applicability": {
+        "is_applicable": false,
+        "reason": "病历不属于婴幼儿范围（年龄 68 岁 > 7 岁）",
+        "method": "lx003_age_guard"
+      },
+      "notApplicable": true,
+      "notApplicableReason": "病历不属于婴幼儿范围（年龄 68 岁 > 7 岁）",
+      "evidence": "",
+      "suggestion": "",
+      "evidenceVerified": true,
+      "confidence": 0.9,
+      "llmRawOutput": null,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0
+      }
+    },
+    {
+      "ruleId": "LX-004",
+      "ruleName": "入院记录-专科检查缺失",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "患者入院科室为心血管内科，不属于规则适用的外科或神经内科范畴，因此本规则不适用。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"入院科室：心血管内科\"。根据规则说明，该规则仅质控外科、神经内科的专科检查，其他科室不适用。",
+      "suggestion": "(1) 本规则适用于外科和神经内科，心血管内科不在本规则质控范围内，无需补充专科查体细节。(2) 若未来涉及跨科收治或转科情况，请注意根据实际主管科室判断是否需执行相应专科查体要求。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": true,\n  \"findings\": \"患者入院科室为心血管内科，不属于规则适用的外科或神经内科范畴，因此本规则不适用。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"入院科室：心血管内科\\\"。根据规则说明，该规则仅质控外科、神经内科的专科检查，其他科室不适用。\",\n  \"suggestion\": \"(1) 本规则适用于外科和神经内科，心血管内科不在本规则质控范围内，无需补充专科查体细节。(2) 若未来涉及跨科收治或转科情况，请注意根据实际主管科室判断是否需执行相应专科查体要求。\",\n  \"confidence\": 0.9\n}",
+      "metadata": {
+        "tokens_used": 2304,
+        "api_time": 6.411964178085327
+      }
+    },
+    {
+      "ruleId": "LX-005",
+      "ruleName": "入院记录-体格检查缺生命体征-血压",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "患者年龄68岁，属于成人人群，体格检查中已记录血压值为165/95mmHg，符合质控要求。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"T 36.5℃，P 96次/分，R 22次/分，BP 165/95mmHg\"，位于体格检查生命体征部分；患者年龄为68岁，属于规则适用人群。",
+      "suggestion": "(1)继续保持在体格检查中完整记录血压数值的做法\n(2)建议在后续病程记录中动态监测并记录血压变化情况，尤其是针对高血压及心功能不全患者\n(3)若使用有创血压或动态血压监测，应注明测量方式并记录具体数值",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": true,\n  \"findings\": \"患者年龄68岁，属于成人人群，体格检查中已记录血压值为165/95mmHg，符合质控要求。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"T 36.5℃，P 96次/分，R 22次/分，BP 165/95mmHg\\\"，位于体格检查生命体征部分；患者年龄为68岁，属于规则适用人群。\",\n  \"suggestion\": \"(1)继续保持在体格检查中完整记录血压数值的做法\\n(2)建议在后续病程记录中动态监测并记录血压变化情况，尤其是针对高血压及心功能不全患者\\n(3)若使用有创血压或动态血压监测，应注明测量方式并记录具体数值\",\n  \"confidence\": 0.9\n}",
+      "metadata": {
+        "tokens_used": 2367,
+        "api_time": 6.956214666366577
+      }
+    },
+    {
+      "ruleId": "LX-006",
+      "ruleName": "入院记录-7岁以上人群体格检查缺生命体征-血压",
+      "isCompliant": true,
+      "status": "not_applicable",
+      "findings": "患者年龄 68 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+      "issues": [
+        {
+          "description": "患者年龄 68 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+          "evidence": ""
+        }
+      ],
+      "applicability": {
+        "is_applicable": false,
+        "reason": "患者年龄 68 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "method": "lx006_age_guard"
+      },
+      "notApplicable": true,
+      "notApplicableReason": "患者年龄 68 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+      "evidence": "",
+      "suggestion": "",
+      "evidenceVerified": true,
+      "confidence": 0.9,
+      "llmRawOutput": null,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0
+      }
+    },
+    {
+      "ruleId": "LX-007",
+      "ruleName": "入院记录缺辅助检查",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "现病史中提到的急诊心电图和心肌酶谱检查在辅助检查章节中均有完整记录，包括检查时间、项目名称和结果，符合质控要求。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"急诊心电图示：V1-V4导联ST段压低0.1-0.2mV，T波倒置。心肌酶谱：cTnI 0.85ng/ml（正常值<0.04ng/ml）。\" 对应辅助检查中：\"心电图（2024-01-15）：窦性心律，V1-V4导联ST段压低0.1-0.2mV，T波倒置。心肌酶谱（2024-01-15）：cTnI 0.85ng/ml，CK-MB 45U/L。\"",
+      "suggestion": "(1)继续保持现病史中提及的院外或急诊检查在辅助检查部分完整抄录的做法\n(2)确保后续新增检查如冠脉造影结果及时补充至辅助检查栏目",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": true,\n  \"findings\": \"现病史中提到的急诊心电图和心肌酶谱检查在辅助检查章节中均有完整记录，包括检查时间、项目名称和结果，符合质控要求。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"急诊心电图示：V1-V4导联ST段压低0.1-0.2mV，T波倒置。心肌酶谱：cTnI 0.85ng/ml（正常值<0.04ng/ml）。\\\" 对应辅助检查中：\\\"心电图（2024-01-15）：窦性心律，V1-V4导联ST段压低0.1-0.2mV，T波倒置。心肌酶谱（2024-01-15）：cTnI 0.85ng/ml，CK-MB 45U/L。\\\"\",\n  \"suggestion\": \"(1)继续保持现病史中提及的院外或急诊检查在辅助检查部分完整抄录的做法\\n(2)确保后续新增检查如冠脉造影结果及时补充至辅助检查栏目\",\n  \"confidence\": 0.9\n}",
+      "metadata": {
+        "tokens_used": 2373,
+        "api_time": 9.60515832901001
+      }
+    },
+    {
+      "ruleId": "LX-008",
+      "ruleName": "入院记录-检查结果未记录",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "现病史中提到的急诊心电图和心肌酶谱检查均在辅助检查章节中有对应记录，且包含具体时间和结果描述。其他既往病史中提及的疾病（如高血压、糖尿病）无需强制要求在辅助检查中体现相关检查结果，除非明确提到曾进行特定检查。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "现病史原文：'急诊心电图示：V1-V4导联ST段压低0.1-0.2mV，T波倒置。心肌酶谱：cTnI 0.85ng/ml（正常值<0.04ng/ml）。'\n辅助检查原文：\n'心电图（2024-01-15）：窦性心律，V1-V4导联ST段压低0.1-0.2mV，T波倒置。\n心肌酶谱（2024-01-15）：cTnI 0.85ng/ml，CK-MB 45U/L。'\n上述两项检查在辅助检查章节中均有完整记录，包括时间与结果，符合LX-008规则要求。",
+      "suggestion": "(1) 继续保持对现病史中提及的院外或急诊检查在辅助检查章节中完整记录的做法；(2) 确保后续补充检查（如冠脉造影）结果回报后及时补充至辅助检查章节；(3) 对于未来类似病例，若提及“外院检查未见异常”等表述，也应尽量注明检查项目、时间和机构信息以增强完整性。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": true,\n  \"findings\": \"现病史中提到的急诊心电图和心肌酶谱检查均在辅助检查章节中有对应记录，且包含具体时间和结果描述。其他既往病史中提及的疾病（如高血压、糖尿病）无需强制要求在辅助检查中体现相关检查结果，除非明确提到曾进行特定检查。\",\n  \"issues\": [],\n  \"evidence\": \"现病史原文：'急诊心电图示：V1-V4导联ST段压低0.1-0.2mV，T波倒置。心肌酶谱：cTnI 0.85ng/ml（正常值<0.04ng/ml）。'\\n辅助检查原文：\\n'心电图（2024-01-15）：窦性心律，V1-V4导联ST段压低0.1-0.2mV，T波倒置。\\n心肌酶谱（2024-01-15）：cTnI 0.85ng/ml，CK-MB 45U/L。'\\n上述两项检查在辅助检查章节中均有完整记录，包括时间与结果，符合LX-008规则要求。\",\n  \"suggestion\": \"(1) 继续保持对现病史中提及的院外或急诊检查在辅助检查章节中完整记录的做法；(2) 确保后续补充检查（如冠脉造影）结果回报后及时补充至辅助检查章节；(3) 对于未来类似病例，若提及“外院检查未见异常”等表述，也应尽量注明检查项目、时间和机构信息以增强完整性。\",\n  \"confidence\": 0.9\n}",
+      "metadata": {
+        "tokens_used": 2667,
+        "api_time": 16.414697408676147
+      }
+    },
+    {
+      "ruleId": "LX-009",
+      "ruleName": "入院记录缺初步诊断",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "入院诊断遗漏了现病史和既往史中提及的重要慢性疾病，如高血压和糖尿病未在初步诊断中充分体现主次顺序；心功能不全诊断依据不足，仅凭体征和LVEF 45%尚需进一步明确。次要诊断存在漏诊风险。",
+      "issues": [
+        {
+          "description": "次要诊断遗漏",
+          "evidence": "现病史和既往史提到高血压、糖尿病，但入院诊断中未充分反映其控制情况及并发症风险。"
+        },
+        {
+          "description": "心功能分级依据不足",
+          "evidence": "诊断‘心功能II级’缺乏症状描述支持，仅凭LVEF和水肿不足以明确NYHA分级。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"高血压病史10年，最高血压180/100mmHg，平时口服'硝苯地平缓释片'控制，血压控制尚可。\"；记载：\"2型糖尿病病史5年，口服'二甲双胍'控制，血糖控制一般。\"；记载：\"双下肢轻度凹陷性水肿。\"；记载：\"超声心动图...LVEF 45%\"；记载：\"入院诊断：...心功能不全 心功能II级（NYHA分级）\"。上述内容显示慢性病存在但未在诊断中体现管理难度与并发症关联，且心功能分级缺乏活动耐量描述。",
+      "suggestion": "(1) 在入院诊断中补充高血压病3级极高危组的完整表述，并强调靶器官损害风险\n(2) 明确2型糖尿病是否伴有并发症（如糖尿病心脏病或肾病），建议增加‘糖尿病伴心血管风险’或相应靶器官评估\n(3) 若使用NYHA II级诊断，应在现病史中补充患者日常活动受限的具体表现（如步行距离、爬楼层数等）\n(4) 建议将‘心功能不全’细化为‘射血分数降低的心力衰竭（HFrEF）待进一步评估’或结合临床证据调整诊断表述",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "{\n  \"is_compliant\": false,\n  \"findings\": \"入院诊断遗漏了现病史和既往史中提及的重要慢性疾病，如高血压和糖尿病未在初步诊断中充分体现主次顺序；心功能不全诊断依据不足，仅凭体征和LVEF 45%尚需进一步明确。次要诊断存在漏诊风险。\",\n  \"issues\": [\n    {\n      \"description\": \"次要诊断遗漏\",\n      \"evidence\": \"现病史和既往史提到高血压、糖尿病，但入院诊断中未充分反映其控制情况及并发症风险。\"\n    },\n    {\n      \"description\": \"心功能分级依据不足\",\n      \"evidence\": \"诊断‘心功能II级’缺乏症状描述支持，仅凭LVEF和水肿不足以明确NYHA分级。\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"高血压病史10年，最高血压180/100mmHg，平时口服'硝苯地平缓释片'控制，血压控制尚可。\\\"；记载：\\\"2型糖尿病病史5年，口服'二甲双胍'控制，血糖控制一般。\\\"；记载：\\\"双下肢轻度凹陷性水肿。\\\"；记载：\\\"超声心动图...LVEF 45%\\\"；记载：\\\"入院诊断：...心功能不全 心功能II级（NYHA分级）\\\"。上述内容显示慢性病存在但未在诊断中体现管理难度与并发症关联，且心功能分级缺乏活动耐量描述。\",\n  \"suggestion\": \"(1) 在入院诊断中补充高血压病3级极高危组的完整表述，并强调靶器官损害风险\\n(2) 明确2型糖尿病是否伴有并发症（如糖尿病心脏病或肾病），建议增加‘糖尿病伴心血管风险’或相应靶器官评估\\n(3) 若使用NYHA II级诊断，应在现病史中补充患者日常活动受限的具体表现（如步行距离、爬楼层数等）\\n(4) 建议将‘心功能不全’细化为‘射血分数降低的心力衰竭（HFrEF）待进一步评估’或结合临床证据调整诊断表述\",\n  \"confidence\": 0.85\n}",
+      "metadata": {
+        "tokens_used": 2576,
+        "api_time": 13.740651845932007
+      }
+    }
+  ],
+  "payload": null,
+  "metadata": {
+    "trigger": "batch_test_ui"
+  },
+  "created_at": "2025-11-10T06:40:46.586182+00:00"
+}

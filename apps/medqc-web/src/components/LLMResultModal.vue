@@ -258,10 +258,47 @@ import {
   getDocumentCategory
 } from '@/utils/documentTypeUtils'
 
+interface LLMAnalysisMeta {
+  provider?: string
+  model?: string
+  endpoint?: string
+  tokensUsed?: number
+  processingTime?: number
+}
+
+interface TreeNodeData {
+  key: string
+  title: string
+  confidence?: number
+  type: DocumentType
+  document: ExtractedDocument
+  isLeaf: true
+}
+
+interface CategoryTreeNode {
+  key: string
+  title: string
+  icon: string
+  children: TreeNodeData[]
+  isLeaf: false
+  selectable: false
+}
+
 interface Props {
   visible: boolean
-  data: Record<string, unknown>
-  result: Record<string, unknown>
+  data?: Partial<{
+    documents: ExtractedDocument[]
+    patientName?: string
+    department?: string
+    patientAge?: number
+    patientGender?: string
+    primaryDiagnosis?: string
+    secondaryDiagnosis?: string[]
+    majorSurgery?: string
+    confidence?: number
+    content?: string
+  }> | null
+  result?: LLMAnalysisMeta | null
   originalText?: string
 }
 
@@ -297,7 +334,7 @@ const confidencePct = computed(() => {
 })
 const savedPct = computed(() => {
   try {
-    const text = props.data?.content || ''
+    const text = typeof props.data?.content === 'string' ? props.data!.content : ''
     const baseline = (text ? Math.round(text.length/4) : 0) + 1000
     const used = tokensUsed.value || 0
     if (baseline <= 0) return null
@@ -306,32 +343,33 @@ const savedPct = computed(() => {
 })
 
 // 构建树形数据
-const treeData = computed(() => {
-  const documents = props.data?.documents || []
+const treeData = computed<(CategoryTreeNode)[]>(() => {
+  const documents = Array.isArray(props.data?.documents) ? props.data!.documents : []
 
   // 按分类分组文书
-  const groupedDocs = new Map()
+  const groupedDocs = new Map<string, TreeNodeData[]>()
 
   documents.forEach((doc: ExtractedDocument, index: number) => {
-    const category = getDocumentCategory(doc.type)
+    const docType = resolveDocumentType(doc)
+    const category = getDocumentCategory(docType)
     if (!groupedDocs.has(category)) {
       groupedDocs.set(category, [])
     }
     groupedDocs.get(category).push({
       key: doc.id || `doc_${index}`,
-      title: doc.title || getDocumentTypeLabel(doc.type),
+      title: doc.title || getDocumentTypeLabel(docType),
       confidence: doc.confidence,
-      type: doc.type,
+      type: docType,
       document: doc,
       isLeaf: true
     })
   })
 
   // 构建树形结构
-  const treeNodes = []
+  const treeNodes: CategoryTreeNode[] = []
 
   // 定义分类顺序和标签
-  const categoryOrder = [
+  const categoryOrder: Array<{ key: string; label: string; icon: string }> = [
     { key: 'admission_record', label: '入院记录', icon: 'FileTextOutlined' },
     { key: 'progress_note', label: '病程记录', icon: 'EditOutlined' },
     { key: 'operation_record', label: '手术记录', icon: 'ScissorOutlined' },
@@ -358,18 +396,27 @@ const treeData = computed(() => {
 })
 
 // 监听数据变化，自动选择第一个文书
-watch(() => props.data, (newData) => {
-  if (newData?.documents?.length > 0) {
-    const firstDoc = newData.documents[0]
-    const firstKey = firstDoc.id || 'doc_0'
-    selectedKeys.value = [firstKey]
-    selectedDocument.value = firstDoc
+watch(
+  () => props.data?.documents,
+  (docs) => {
+    const list = Array.isArray(docs) ? docs : []
+    if (list.length > 0) {
+      const firstDoc = list[0]
+      const firstKey = firstDoc.id || 'doc_0'
+      selectedKeys.value = [firstKey]
+      selectedDocument.value = firstDoc
 
-    // 展开所有分类节点
-    const categoryKeys = ['admission_record', 'progress_note', 'operation_record', 'discharge_record', 'auxiliary_examination', 'informed_consent']
-    expandedKeys.value = categoryKeys
-  }
-}, { immediate: true })
+      // 展开所有分类节点
+      const categoryKeys = ['admission_record', 'progress_note', 'operation_record', 'discharge_record', 'auxiliary_examination', 'informed_consent']
+      expandedKeys.value = categoryKeys
+    } else {
+      selectedKeys.value = []
+      selectedDocument.value = null
+      expandedKeys.value = []
+    }
+  },
+  { immediate: true }
+)
 
 // 方法
 const handleClose = () => {
@@ -408,6 +455,10 @@ const getCategoryIcon = (iconName: string) => {
     SafetyOutlined
   }
   return iconMap[iconName] || FolderOutlined
+}
+
+const resolveDocumentType = (doc: ExtractedDocument): DocumentType => {
+  return (doc.type as DocumentType) || DocumentType.PROGRESS_NOTE
 }
 
 const getDocumentIcon = (type: DocumentType) => {

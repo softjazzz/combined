@@ -53,9 +53,30 @@ async def models(request: Request, provider_id: str | None = Query(default=None)
 
     # 静态回退
     fallback_models = [
-        {"provider": "alibaba", "id": "qwen2.5-14b-instruct", "model_code": "qwen2.5-14b-instruct", "model_name": "Qwen2.5-14B-Instruct"},
-        {"provider": "openai", "id": "gpt-4o-mini", "model_code": "gpt-4o-mini", "model_name": "GPT-4o-mini"},
-        {"provider": "deepseek", "id": "deepseek-chat", "model_code": "deepseek-chat", "model_name": "DeepSeek-Chat"},
+        {
+            "provider": "alibaba",
+            "id": "qwen2.5-14b-instruct",
+            "model_code": "qwen2.5-14b-instruct",
+            "model_name": "Qwen2.5-14B-Instruct"
+        },
+        {
+            "provider": "alibaba",
+            "id": "qwen3-30b-a3b-instruct-2507",
+            "model_code": "qwen3-30b-a3b-instruct-2507",
+            "model_name": "Qwen3-30B-A3B Instruct (2507)"
+        },
+        {
+            "provider": "openai",
+            "id": "gpt-4o-mini",
+            "model_code": "gpt-4o-mini",
+            "model_name": "GPT-4o-mini"
+        },
+        {
+            "provider": "deepseek",
+            "id": "deepseek-chat",
+            "model_code": "deepseek-chat",
+            "model_name": "DeepSeek-Chat"
+        },
     ]
     return success_response(
         data=fallback_models,

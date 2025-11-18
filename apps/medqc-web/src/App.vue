@@ -1,14 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-
-const authStore = useAuthStore()
-
-// 应用初始化
-onMounted(async () => {
-  // 检查用户认证状态
-  await authStore.initialize()
-})
+// 认证初始化由路由守卫处理，不需要在这里调用
+// 这样可以避免在访问demo页面等不需要认证的页面时触发403错误
 </script>
 
 <template>

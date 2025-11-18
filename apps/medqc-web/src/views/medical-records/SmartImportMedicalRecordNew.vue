@@ -237,41 +237,47 @@
       <!-- 文件解析内容预览 -->
       <div v-if="currentFile && currentFile.parsed && currentFile.parseResult" class="mt-4 border-t-2 border-blue-100/70 pt-4">
         <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-sky-100/40 via-blue-100/30 to-indigo-100/40">
-          <a-card size="small" title="📋 解析内容预览" class="rounded-2xl shadow-md ring-1 ring-slate-200/70">
+          <a-card size="small" class="rounded-2xl shadow-md ring-1 ring-slate-200/70">
+            <template #title>
+              <div class="card-title-with-icon">
+                <FileTextOutlined class="card-title-with-icon__icon" />
+                <span>解析内容预览</span>
+              </div>
+            </template>
 
-          <template #extra>
-            <a-space>
-              <a-tag v-if="currentFile.imported" color="success" class="shadow-sm">
-                <CheckCircleOutlined />
-                已导入数据库
-              </a-tag>
-              <a-tag v-else color="geekblue" class="shadow-sm">
-                <CheckCircleOutlined />
-                解析完成
-              </a-tag>
-              <a-button
-                v-if="!currentFile.imported"
-                size="small"
-                @click="smartImportToDatabase"
-                :loading="importing"
-                type="primary"
-                class="hover:shadow"
-              >
-                <template #icon><DatabaseOutlined /></template>
-                智能导入数据库
-              </a-button>
-              <a-button
-                v-if="currentFile.imported"
-                size="small"
-                type="default"
-                class="hover:shadow"
-                @click="viewImportResult"
-              >
-                <template #icon><EyeOutlined /></template>
-                查看导入结果
-              </a-button>
-            </a-space>
-          </template>
+            <template #extra>
+              <a-space>
+                <a-tag v-if="currentFile.imported" color="success" class="shadow-sm">
+                  <CheckCircleOutlined />
+                  已导入数据库
+                </a-tag>
+                <a-tag v-else color="geekblue" class="shadow-sm">
+                  <CheckCircleOutlined />
+                  解析完成
+                </a-tag>
+                <a-button
+                  v-if="!currentFile.imported"
+                  size="small"
+                  @click="smartImportToDatabase"
+                  :loading="importing"
+                  type="primary"
+                  class="hover:shadow"
+                >
+                  <template #icon><DatabaseOutlined /></template>
+                  智能导入数据库
+                </a-button>
+                <a-button
+                  v-if="currentFile.imported"
+                  size="small"
+                  type="default"
+                  class="hover:shadow"
+                  @click="viewImportResult"
+                >
+                  <template #icon><EyeOutlined /></template>
+                  查看导入结果
+                </a-button>
+              </a-space>
+            </template>
 
           <!-- 解析统计信息 -->
           <div class="parse-stats mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -301,14 +307,26 @@
           <!-- 解析内容 -->
           <div class="parsed-content-display">
             <a-collapse>
-              <a-collapse-panel key="content" header="📄 提取的文本内容" class="border border-blue-200 rounded-xl">
+              <a-collapse-panel key="content" class="border border-blue-200 rounded-xl">
+                <template #header>
+                  <div class="collapse-header">
+                    <FileTextOutlined class="collapse-header__icon" />
+                    <span>提取的文本内容</span>
+                  </div>
+                </template>
                 <div class="max-h-96 overflow-y-auto bg-gray-50 border rounded p-4">
                   <pre class="content-text font-sans text-[13px] leading-6 text-gray-800 whitespace-pre-wrap break-words m-0">{{ currentFile.parseResult.content || '无内容' }}</pre>
                 </div>
               </a-collapse-panel>
 
               <!-- PDF原文预览 (仅PDF文件) -->
-              <a-collapse-panel v-if="currentFile.type === 'application/pdf' && currentFile.previewUrl" key="pdf" header="📖 PDF原文预览" class="border border-blue-200 rounded-xl">
+              <a-collapse-panel v-if="currentFile.type === 'application/pdf' && currentFile.previewUrl" key="pdf" class="border border-blue-200 rounded-xl">
+                <template #header>
+                  <div class="collapse-header">
+                    <FilePdfOutlined class="collapse-header__icon" />
+                    <span>PDF原文预览</span>
+                  </div>
+                </template>
                 <div class="bg-gray-50 p-4 rounded-md border">
                   <div class="mb-2 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
                     <a-space>
@@ -340,14 +358,20 @@
               </a-collapse-panel>
             </a-collapse>
           </div>
-        </a-card>
+          </a-card>
         </div>
       </div>
 
       <!-- 导入结果展示 -->
       <div v-if="importResult" class="mt-4">
         <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-green-100/60 via-emerald-100/50 to-teal-100/60">
-          <a-card size="small" title="🎉 智能导入成功" class="rounded-2xl shadow-md ring-1 ring-emerald-200/60">
+          <a-card size="small" class="rounded-2xl shadow-md ring-1 ring-emerald-200/60">
+            <template #title>
+              <div class="card-title-with-icon">
+                <TrophyOutlined class="card-title-with-icon__icon success" />
+                <span>智能导入成功</span>
+              </div>
+            </template>
             <template #extra>
               <a-space>
                 <a-tag color="success">
@@ -924,6 +948,9 @@ const parseAllFiles = async () => {
 
     if (successCount > 0) {
       message.success(`批量解析完成: 成功 ${successCount} 个，失败 ${failCount} 个`)
+    } else {
+      message.error('批量解析失败，请检查文件格式和网络连接')
+    }
   } else {
     message.error('批量解析失败，请检查文件格式和网络连接')
   }

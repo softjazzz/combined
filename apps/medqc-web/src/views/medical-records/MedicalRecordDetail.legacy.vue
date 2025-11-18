@@ -1880,7 +1880,7 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
 
     console.log('📤 发送质控评估请求:', JSON.stringify(evaluationRequest, null, 2))
 
-    const response = await fetch(`${API_BASE_URL}/api/qc/sichuan/evaluate`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/qc/sichuan/evaluate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

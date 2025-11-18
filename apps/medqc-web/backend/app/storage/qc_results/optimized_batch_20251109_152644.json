@@ -1,0 +1,241 @@
+{
+  "mode": "optimized_batch",
+  "document_type": "入院记录",
+  "document_id": "test_1762701931994",
+  "rule_ids": [
+    "LX-001",
+    "LX-002",
+    "LX-003",
+    "LX-004",
+    "LX-005",
+    "LX-006",
+    "LX-007",
+    "LX-008",
+    "LX-009"
+  ],
+  "medical_text_length": 684,
+  "stats": {
+    "total": 9,
+    "compliant": 6,
+    "passed": 4,
+    "notApplicable": 2,
+    "issues": 3,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 13802,
+    "totalTime": 71.96390986442566
+  },
+  "results": null,
+  "payload": {
+    "document_id": "test_1762701931994",
+    "evaluation_summary": {
+      "total_rules": 9,
+      "compliant_rules": 6,
+      "not_applicable": 2,
+      "issues_found": 3,
+      "compliance_rate": 66.67,
+      "overall_grade": "C",
+      "critical_violations": 3,
+      "model": "qwen3-235b-a22b-instruct-2507"
+    },
+    "evaluation_results": [
+      {
+        "rule_id": "LX-001",
+        "rule_name": "主诉书写不规范或不能导出第一诊断",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "主诉中‘体检发现肺部结节1周’与现病史及入院诊断‘右肺占位性病变’逻辑一致，持续时间匹配，症状/体征来源清晰，未发现主诉书写不规范或无法导出第一诊断的问题。",
+        "evidence": "主诉记载：\"体检发现肺部结节1周。\"；现病史记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\"；入院诊断为：\"右肺占位性病变\"。",
+        "suggestion": "(1)继续保持主诉与现病史、诊断之间的时间和逻辑一致性；(2)若后续明确病理诊断（如肺癌），应及时在病程中补充诊断修正依据；(3)建议在出院前对主诉是否仍能导出最终诊断进行回顾性核对。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1859,
+          "api_time": 7.133462429046631
+        }
+      },
+      {
+        "rule_id": "LX-002",
+        "rule_name": "入院记录-现病史缺少一般情况",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "现病史缺少发病时间或起病缓急的描述，未提及患者的一般情况（如饮食、睡眠、精神状态等），虽有主要症状的间接说明，但整体记录不完整，不符合LX-002规则要求。",
+        "evidence": "记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\" 此段落中未提及症状出现的时间节点或起病方式（如急性/慢性），亦未描述患者近期内饮食、睡眠、体重变化、体力及精神状态等一般情况。",
+        "suggestion": "(1) 补充肺部结节是否为首次发现，若非首次，应记录既往发现时间及变化情况；(2) 明确患者近期是否有体重下降、乏力等症状，补充饮食、睡眠、精神状态等一般情况描述；(3) 如确无相关症状，也应注明‘患者自述近期饮食、睡眠可，二便正常，体力及精神状态良好’以完善记录；(4) 建议在现病史开头增加起病特征描述，例如‘本次为体检偶然发现肺部结节，无明显诱因，起病隐匿’。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 2030,
+          "api_time": 10.69194746017456
+        }
+      },
+      {
+        "rule_id": "LX-003",
+        "rule_name": "入院记录-婴幼儿个人史缺少喂养史",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "findings": "病历不属于婴幼儿范围（年龄 44 岁 > 7 岁）",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "applicability": {
+          "is_applicable": false,
+          "reason": "病历不属于婴幼儿范围（年龄 44 岁 > 7 岁）",
+          "method": "lx003_age_guard"
+        },
+        "evidence_verified": true,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-004",
+        "rule_name": "入院记录-专科检查缺失",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "患者入院科室为呼吸与危重症医学科，属于内科系统，非规则适用的外科或神经内科。根据补充说明，本规则不适用于该科室病历，因此无需进行专科检查的质控。",
+        "evidence": "记载：'患者信息：张伟，男，44岁，入院科室：呼吸与危重症医学科，病区：呼吸内一科。'；记载：'主诉：体检发现肺部结节1周。'；记载：'体格检查：T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。'",
+        "suggestion": "(1) 本规则仅适用于外科、神经内科，当前病历属于呼吸内科，无需执行专科查体内容要求\n(2) 对于非适用科室，可忽略该质控规则提醒\n(3) 若后续涉及多科收治或转科情况，应根据实际主管科室判断是否需要补充相应专科查体",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1914,
+          "api_time": 10.882168292999268
+        }
+      },
+      {
+        "rule_id": "LX-005",
+        "rule_name": "入院记录-体格检查缺生命体征-血压",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "患者为44岁成人，非儿科患者，体格检查中已记录血压值BP 125/78 mmHg，符合质控要求。",
+        "evidence": "记载：\"体格检查：T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。\"",
+        "suggestion": "(1) 继续保持在体格检查中完整记录血压数值的做法，确保生命体征信息齐全\n(2) 建议在后续病程记录中动态监测血压变化，尤其在术前评估时重点关注",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1896,
+          "api_time": 5.682798147201538
+        }
+      },
+      {
+        "rule_id": "LX-006",
+        "rule_name": "入院记录-7岁以上儿科患者体格检查缺生命体征-血压",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "findings": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "applicability": {
+          "is_applicable": false,
+          "reason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+          "method": "lx006_age_guard"
+        },
+        "evidence_verified": true,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-007",
+        "rule_name": "入院记录缺辅助检查",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "现病史中提到的外院胸部CT检查已在辅助检查章节中完整记录，包括检查时间、部位、结果描述，信息一致且准确。",
+        "evidence": "记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\"；记载：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\"",
+        "suggestion": "(1)继续保持在现病史中提及的院外检查项目在辅助检查部分完整记录的做法\n(2)确保今后所有院外检查均标注检查机构和具体日期\n(3)若存在多个院外检查结果，应逐一列明并保持内容对应",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1742,
+          "api_time": 11.435795307159424
+        }
+      },
+      {
+        "rule_id": "LX-008",
+        "rule_name": "入院记录-检查结果未记录",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "现病史中提及外院胸部CT发现肺结节，辅助检查虽引用该检查但未完整记录检查结果，仅简要描述，存在结果记录不全问题。",
+        "evidence": "现病史记载：'患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。' 辅助检查记载：'胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大'。对比发现，辅助检查部分虽包含基本描述，但未完整体现原始报告中的位置、大小、密度、形态、边缘特征等关键要素，抄写不完整且缺乏标准化表述。",
+        "suggestion": "(1) 补充外院胸部CT的完整影像学描述，包括结节的具体位置（如右肺下叶基底段）、大小（长径、短径）、密度（纯磨玻璃或混合性）、形态、边缘（光滑或分叶）、有无空泡征、胸膜牵拉等细节；(2) 注明影像号及检查机构名称；(3) 若有影像胶片或电子图像，应注明‘已阅外院影像’并由主治医师确认；(4) 建议在辅助检查部分以引述方式完整呈现原报告结论，避免简化摘要导致信息丢失。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1922,
+          "api_time": 13.333807229995728
+        }
+      },
+      {
+        "rule_id": "LX-009",
+        "rule_name": "入院记录缺初步诊断",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "要点3：次要诊断有重要遗漏。既往史中虽未提慢性病，但现病史提示患者无症状且体检发现结节，入院诊断仅列‘右肺占位性病变’过于笼统，未体现对性质的初步判断（如疑似早期肺癌或肺结节待查），影响诊疗路径定义。",
+        "evidence": "主诉：'体检发现肺部结节1周。' 现病史：'行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。' 入院诊断：'右肺占位性病变'",
+        "suggestion": "(1) 将入院诊断修改为更精准的表述，如'肺结节待查：磨玻璃结节（右肺下叶）'；(2) 可补充'疑似早期肺癌？'作为考虑之一，以反映影像学特点和临床思维；(3) 若倾向于良性可能，应注明'良性结节待排'，确保诊断体现疾病性质评估；(4) 建议在诊断中避免使用'占位性病变'这类非特异性术语，尤其当影像特征较典型时。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 2439,
+          "api_time": 12.80393099784851
+        }
+      }
+    ],
+    "performance_metrics": {
+      "processing_time": 71.96390986442566,
+      "token_usage": 13802,
+      "estimated_cost": 0.027604
+    },
+    "optimization_metrics": {
+      "token_savings_rate": 0.8,
+      "estimated_original_tokens": 69010,
+      "actual_tokens_saved": 55208,
+      "cost_savings": 0.110416
+    }
+  },
+  "metadata": {
+    "trigger": "quick_qc_ui",
+    "prompt_mode": "plan_a"
+  },
+  "saved_at": "2025-11-09T15:26:44.040372+00:00"
+}

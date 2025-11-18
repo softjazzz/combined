@@ -11,12 +11,18 @@ from ..core.response import success_response, paginated_response, get_trace_id, 
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
+from ..core.permissions import (
+    require_permission,
+    ResourceType,
+    PermissionAction,
+)
 
 
 router = APIRouter(prefix="/api/v1/records", tags=["records"])
 
 
 @router.get("")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_medical_records(
     request: Request,
     keyword: Optional[str] = None,
@@ -27,6 +33,7 @@ async def get_medical_records(
     sort_order: Optional[str] = None,
     page: int = 1,
     page_size: int = 10,
+    current_user: dict = Depends(get_current_user),
 ):
     """获取病案记录列表（支持分页、筛选、排序）"""
     supabase = get_supabase()
@@ -35,8 +42,45 @@ async def get_medical_records(
         if supabase:
             # Use our custom REST client or supabase-py, executed异步以避免阻塞
             # 默认按创建时间倒序排列（最新的在前面）
-            response = supabase.table(settings.RECORDS_TABLE).select('*').order('created_at', {'ascending': False}).execute()  # type: ignore[attr-defined]
+            # 同时查询关联的文档数据
+            response = supabase.table(settings.RECORDS_TABLE).select(
+                '*'
+            ).order('created_at', {'ascending': False}).execute()  # type: ignore[attr-defined]
             records = list(response.data or [])
+
+            # 🚀 优化：一次性查询所有文档，避免N+1查询问题
+            if records:
+                try:
+                    # 收集所有记录ID
+                    record_ids = [record['id'] for record in records]
+
+                    # 一次性查询所有文档（使用 IN 查询）
+                    # 注意：Supabase REST API 使用 .in_() 方法
+                    all_docs_response = supabase.table(settings.DOCUMENTS_TABLE).select(
+                        '*'  # 选择所有字段，确保包含 content
+                    ).in_('record_id', record_ids).order('sort_order').execute()
+
+                    all_documents = all_docs_response.data or []
+                    print(f"✅ 一次性加载了 {len(all_documents)} 个文档")
+
+                    # 按 record_id 分组文档
+                    docs_by_record = {}
+                    for doc in all_documents:
+                        record_id = doc.get('record_id')
+                        if record_id not in docs_by_record:
+                            docs_by_record[record_id] = []
+                        docs_by_record[record_id].append(doc)
+
+                    # 将文档分配给对应的记录
+                    for record in records:
+                        record['documents'] = docs_by_record.get(record['id'], [])
+                        print(f"  📄 记录 {record['id']}: {len(record['documents'])} 个文档")
+
+                except Exception as doc_error:
+                    print(f"⚠️ 批量加载文档失败: {doc_error}")
+                    # 降级：为每条记录设置空文档列表
+                    for record in records:
+                        record['documents'] = []
         else:
             # Fallback to in-memory records when Supabase is not configured
             records = list(medical_records_db.values())
@@ -88,6 +132,7 @@ async def get_medical_records(
 
 
 @router.get("/{record_id}", response_model=MedicalRecordResponse)
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_medical_record(record_id: str, current_user: dict = Depends(get_current_user)):
     record = medical_records_db.get(record_id)
     if not record:
@@ -96,6 +141,7 @@ async def get_medical_record(record_id: str, current_user: dict = Depends(get_cu
 
 
 @router.post("")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.CREATE)
 async def create_medical_record(
     patient_name: str = Form(...),
     patient_age: int = Form(...),
@@ -129,6 +175,7 @@ async def create_medical_record(
 
 
 @router.put("/{record_id}", response_model=MedicalRecordResponse)
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
 async def update_medical_record(
     record_id: str,
     patient_name: Optional[str] = Form(None),
@@ -167,6 +214,7 @@ async def update_medical_record(
 
 
 @router.delete("/{record_id}")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.DELETE)
 async def delete_medical_record(
     request: Request,
     record_id: str,

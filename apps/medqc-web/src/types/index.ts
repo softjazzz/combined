@@ -1,5 +1,5 @@
-import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { MedicalRecord, QCResult, QCRule, UserRole } from './supabase'
+import type { User as AuthUser } from './auth'
 
 // 重新导出auth类型
 export * from './auth'
@@ -8,12 +8,7 @@ export * from './auth'
 export * from './api'
 
 // 用户相关类型
-export interface User extends SupabaseUser {
-  roles?: string[]
-  hospital_id?: string
-  department?: string
-  display_name?: string
-}
+export type User = AuthUser
 
 // API响应通用格式（已废弃，请使用 api.ts 中的类型）
 // @deprecated 使用 ApiSuccessResponse 或 ApiErrorResponse 替代
@@ -242,6 +237,8 @@ export interface RouteMeta {
   hidden?: boolean
   keepAlive?: boolean
   breadcrumb?: BreadcrumbItem[]
+  requiresAuth?: boolean  // 是否需要认证（默认true）
+  allowDemo?: boolean     // 是否允许演示模式访问（通过?demo=true参数）
 }
 
 // 导出格式

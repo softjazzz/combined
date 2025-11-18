@@ -42,9 +42,10 @@ export async function analyzeRecord(
     try {
       // 3. 调用DeepSeek进行分析
       const analysisResult = await callDeepSeekAnalysis(record.content)
+      analysisResult.recordId = recordId
 
       // 4. 保存分析结果到数据库
-      const qcResult = await saveQCResult(recordId, analysisResult)
+      await saveQCResult(recordId, analysisResult)
 
       // 5. 更新医疗记录状态和评分
       await updateMedicalRecord(recordId, {
@@ -293,30 +294,40 @@ ${content}
  * 保存质控结果到数据库
  */
 async function saveQCResult(
-  recordId: string, 
+  recordId: string,
   analysisResult: QCAnalysisResult
-): Promise<QCResultRow> { try {
+): Promise<QCResultRow> {
+  try {
+    const issuesPayload: Record<string, unknown> = {
+      items: analysisResult.ruleResults
+    }
+
+    const suggestionsPayload: Record<string, unknown> = {
+      list: analysisResult.suggestions
+    }
+
     const insertData: QCResultInsert = {
       record_id: recordId,
-      analysis_result: analysisResult,
-      overall_score: analysisResult.overallScore,
-      completeness_score: analysisResult.categoryScores.completeness,
-      consistency_score: analysisResult.categoryScores.consistency,
-      rationality_score: analysisResult.categoryScores.rationality,
-      timeliness_score: analysisResult.categoryScores.timeliness,
+      score: analysisResult.overallScore,
+      ai_score: analysisResult.categoryScores.completeness,
+      rule_score: analysisResult.categoryScores.consistency,
       grade: analysisResult.grade,
-      issues:  [], // 从suggestions中提取
-      suggestions: analysisResult.suggestions,
-      ai_model: 'deepseek-v3',
-      analysis_time_ms: analysisResult.analysisTime,
+      issues: issuesPayload,
+      suggestions: suggestionsPayload,
+      category_scores: analysisResult.categoryScores as Record<string, unknown>,
       confidence_score: 0.95,
       rule_version: '1.0',
-      created_at: new Date().toISOString()
+      analysis_time: String(analysisResult.analysisTime),
+      raw_analysis: JSON.stringify(analysisResult),
+      summary: JSON.stringify(analysisResult.summary),
+      is_reviewed: false,
+      reviewer_id: null,
+      review_notes: null
     }
 
     const { data, error } = await supabase
       .from(TABLES.QC_RESULTS)
-      .insert(insertData)
+      .upsert(insertData, { onConflict: 'record_id' })
       .select()
       .single()
 
@@ -334,28 +345,69 @@ async function saveQCResult(
 /**
  * 转换数据库行为QCAnalysisResult类型
  */
-function convertRowToQCResult(row: QCResultRow): QCAnalysisResult { return {
+function convertRowToQCResult(row: QCResultRow): QCAnalysisResult {
+  const categoryScoresRecord = (row.category_scores ?? {}) as Record<string, unknown>
+  const parseCategoryScore = (key: string): number => {
+    const value = categoryScoresRecord[key]
+    return typeof value === 'number' ? value : 0
+  }
+
+  const issuesSource = row.issues as Record<string, unknown> | null
+  const issueList = Array.isArray((issuesSource as any)?.items)
+    ? ((issuesSource as any).items as any[])
+    : Array.isArray(issuesSource)
+      ? (issuesSource as any[])
+      : []
+
+  const suggestionsSource = row.suggestions as Record<string, unknown> | null
+  const suggestionList = Array.isArray((suggestionsSource as any)?.list)
+    ? ((suggestionsSource as any).list as string[])
+    : Array.isArray(suggestionsSource)
+      ? (suggestionsSource as string[])
+      : []
+
+  const summary = typeof row.summary === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(row.summary) as QCAnalysisResult['summary']
+        } catch {
+          return undefined
+        }
+      })()
+    : undefined
+
+  const rawAnalysis = typeof row.raw_analysis === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(row.raw_analysis) as Partial<QCAnalysisResult>
+        } catch {
+          return undefined
+        }
+      })()
+    : undefined
+
+  return {
     recordId: row.record_id,
-    overallScore: row.overall_score,
-    grade: row.grade,
+    overallScore: typeof row.score === 'number' ? row.score : rawAnalysis?.overallScore || 0,
+    grade: row.grade || rawAnalysis?.grade || 'C',
     status: 'completed',
-    ruleResults:  [], // 简化实现
+    ruleResults: Array.isArray(rawAnalysis?.ruleResults) ? rawAnalysis!.ruleResults : [],
     categoryScores: {
-      completeness: row.completeness_score,
-      consistency: row.consistency_score,
-      rationality: row.rationality_score,
-      timeliness: row.timeliness_score
+      completeness: parseCategoryScore('completeness'),
+      consistency: parseCategoryScore('consistency'),
+      rationality: parseCategoryScore('rationality'),
+      timeliness: parseCategoryScore('timeliness')
     },
-    summary: {
+    summary: summary || {
       totalRules: 18,
-      violatedRules: row.issues.length,
-      criticalIssues: Math.min(row.issues.length, 2),
-      majorIssues: Math.max(0, row.issues.length - 2),
-      minorIssues: 0
+      violatedRules: issueList.length,
+      criticalIssues: issueList.filter(item => item?.severity === 'critical').length,
+      majorIssues: issueList.filter(item => item?.severity === 'major').length,
+      minorIssues: issueList.filter(item => item?.severity === 'minor').length
     },
-    suggestions: row.suggestions,
-    analysisTime: row.analysis_time_ms,
-    createdAt: row.created_at
+    suggestions: suggestionList.map(String),
+    analysisTime: Number(row.analysis_time ?? rawAnalysis?.analysisTime ?? 0) || 0,
+    createdAt: row.analysis_time ?? rawAnalysis?.createdAt ?? new Date().toISOString()
   }
 }
 

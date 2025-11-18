@@ -384,7 +384,7 @@ const refreshConfigs = async () => {
 
 const loadProviders = async () => {
   try {
-    const response = await fetch('/api/llm/providers')
+    const response = await fetch('/api/v1/llm/providers')
     const data = await response.json()
     providers.value = data.providers || []
   } catch (error) {
@@ -394,7 +394,7 @@ const loadProviders = async () => {
 
 const loadModels = async () => {
   try {
-    const response = await fetch('/api/llm/models')
+    const response = await fetch('/api/v1/llm/models')
     const data = await response.json()
     models.value = data.models || []
   } catch (error) {

@@ -98,6 +98,27 @@ export interface QualityControlRule {
   logicOperator: 'AND' | 'OR'
   createTime: string
   updateTime: string
+  // 扩展属性（从数据库映射）
+  name?: string
+  description?: string
+  category?: string
+  ruleType?: string
+  severity?: string
+  maxScore?: number
+  weight?: number
+  isActive?: boolean
+  checkLogic?: Record<string, unknown>
+  promptTemplate?: string
+  version?: string
+  ruleCode?: string
+  applicable_documents?: string[]  // 适用的文书类型列表
+  // 四川规则特有字段
+  complexity?: '高复杂度' | '中复杂度' | '低复杂度' | string
+  defect_level?: '严重缺陷' | '一般缺陷' | '轻微缺陷' | string
+  requires_rag?: boolean
+  requires_cot?: boolean
+  medical_domain?: string
+  score_deduction?: number
 }
 
 export interface QualityControlCondition {
@@ -186,6 +207,7 @@ export interface RecordDocumentInfo {
   title?: string
   type?: string
   created_at?: string
+  content?: string
 }
 
 // 质控通知模型
@@ -259,6 +281,8 @@ export interface QCResult {
   issues: QCIssue[]
   suggestions: QCSuggestion[]
   ruleResults: QCRuleResult[]
+  // 兼容历史/其他组件可能使用的 snake_case 字段
+  rule_results?: any
   analysisSteps?: AnalysisStep[]
   metadata?: QCResultMetadata
 }
@@ -297,6 +321,10 @@ export interface QCRuleResult {
   details: string
   executionTime: number
   confidence: number
+  // 扩展字段：用于“不通过”规则的可视化展示
+  evidence?: string
+  location?: string
+  suggestion?: string
 }
 
 // 分析步骤模型

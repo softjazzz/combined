@@ -1,87 +1,122 @@
 <template>
   <div class="page-container min-h-screen bg-gray-50 p-2 lg:p-3">
-    <!-- 页面头部 - 更紧凑 -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
-        <div class="flex-1">
-          <div class="flex items-center space-x-2 mb-0.5">
-            <div class="p-1 bg-blue-100 rounded-md">
-              <SettingOutlined class="text-base text-blue-600" />
-            </div>
-            <h1 class="text-lg lg:text-xl font-bold text-gray-900">
-              质控规则管理
-            </h1>
+    <!-- 页面头部 + Tab 导航 -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 lg:p-4 mb-3">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="flex flex-1 items-start gap-3">
+          <div class="p-2 bg-blue-100 rounded-md">
+            <SettingOutlined class="text-lg text-blue-600" />
           </div>
-          <p class="text-gray-600 text-xs">
-            统一管理传统质控规则和语义质控规则，支持规则创建、编辑、测试和版本管理
-          </p>
+          <div class="space-y-1">
+            <h1 class="text-xl font-bold text-gray-900">质控规则管理</h1>
+            <p class="text-sm text-gray-600 leading-relaxed">
+              {{ activeTabDescription }}
+            </p>
+          </div>
         </div>
-        <div class="flex flex-wrap gap-1.5" v-if="activeTab === 'traditional'">
+        <!-- 通用操作按钮区域 - 所有标签页都显示 -->
+        <div class="flex flex-wrap gap-1.5">
+          <!-- LLM 设置按钮 - 所有标签页都显示 -->
           <a-button
-            @click="refreshRules"
-            :loading="loading"
-            size="small"
-            class="flex items-center space-x-1"
+            @click="showLLMSettings"
+            size="large"
+            class="llm-settings-button"
           >
-            <template #icon><ReloadOutlined /></template>
-            <span>刷新</span>
+            <template #icon><ApiOutlined /></template>
+            <span>LLM 设置</span>
           </a-button>
-          <a-button
-            @click="importRules"
-            size="small"
-            class="flex items-center space-x-1"
-          >
-            <template #icon><ImportOutlined /></template>
-            <span>导入规则</span>
-          </a-button>
-          <a-button
-            type="primary"
-            ghost
-            @click="showCustomRuleModal"
-            size="small"
-            class="flex items-center space-x-1 border-blue-600 text-blue-600"
-          >
-            <template #icon><ThunderboltOutlined /></template>
-            <span>新增自定义质控点</span>
-          </a-button>
-          <a-button
-            type="primary"
-            @click="showCreateModal"
-            size="small"
-            class="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700"
-          >
-            <template #icon><PlusOutlined /></template>
-            <span>新增规则</span>
-          </a-button>
+
+          <!-- 传统规则标签页特有的操作按钮 -->
+          <template v-if="activeTab === 'traditional'">
+            <a-button
+              @click="refreshRules"
+              :loading="loading"
+              size="small"
+              class="flex items-center space-x-1"
+            >
+              <template #icon><ReloadOutlined /></template>
+              <span>刷新</span>
+            </a-button>
+            <a-button
+              @click="importRules"
+              size="small"
+              class="flex items-center space-x-1"
+            >
+              <template #icon><ImportOutlined /></template>
+              <span>导入规则</span>
+            </a-button>
+            <a-button
+              type="primary"
+              ghost
+              @click="showCustomRuleModal"
+              size="small"
+              class="flex items-center space-x-1 border-blue-600 text-blue-600"
+            >
+              <template #icon><ThunderboltOutlined /></template>
+              <span>新增自定义质控点</span>
+            </a-button>
+            <a-button
+              type="primary"
+              @click="showCreateModal"
+              size="small"
+              class="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700"
+            >
+              <template #icon><PlusOutlined /></template>
+              <span>新增规则</span>
+            </a-button>
+          </template>
         </div>
       </div>
-    </div>
 
-    <!-- 标签页导航 - 更紧凑 -->
-    <a-tabs
-      v-model:activeKey="activeTab"
-      type="card"
-      class="rules-tabs compact-tabs mb-2"
-      @change="handleTabChange"
-      size="small"
-    >
-      <a-tab-pane key="traditional" tab="传统质控规则">
-        <template #tab>
-          <span class="text-xs">
-            <SettingOutlined />
-            传统质控规则
-          </span>
-        </template>
-      </a-tab-pane>
-      <a-tab-pane key="semantic" tab="语义质控规则">
-        <template #tab>
-          <span class="text-xs">
-            <BranchesOutlined />
-            语义质控规则
-          </span>
-        </template>
-      </a-tab-pane>
-    </a-tabs>
+      <a-tabs
+        v-model:activeKey="activeTab"
+        type="card"
+        class="rules-tabs compact-tabs mt-3"
+        @change="handleTabChange"
+        size="small"
+      >
+        <a-tab-pane key="semantic" tab="四川省质控规则">
+          <template #tab>
+            <span class="qc-tab-title">
+              <BranchesOutlined />
+              四川省质控规则
+            </span>
+          </template>
+        </a-tab-pane>
+        <a-tab-pane key="custom" tab="泸县33条规则">
+          <template #tab>
+            <span class="qc-tab-title">
+              <AppstoreOutlined />
+              泸县33条规则
+            </span>
+          </template>
+        </a-tab-pane>
+        <a-tab-pane key="lx_legacy" tab="泸县存量质控规则">
+          <template #tab>
+            <span class="qc-tab-title">
+              <AppstoreOutlined />
+              泸县存量质控规则
+            </span>
+          </template>
+        </a-tab-pane>
+        <a-tab-pane key="department" tab="科室规则管理">
+          <template #tab>
+            <span class="qc-tab-title">
+              <ApartmentOutlined />
+              科室规则管理
+            </span>
+          </template>
+        </a-tab-pane>
+        <a-tab-pane key="traditional" tab="传统质控规则">
+          <template #tab>
+            <span class="qc-tab-title">
+              <SettingOutlined />
+              传统质控规则
+            </span>
+          </template>
+        </a-tab-pane>
+      </a-tabs>
+    </div>
 
     <!-- 标签页内容 -->
     <div class="tab-content">
@@ -493,9 +528,24 @@
         </div>
         </div>
 
-      <!-- 语义质控规则标签页 -->
+      <!-- 四川省质控规则标签页 -->
       <div v-else-if="activeTab === 'semantic'">
-        <SemanticRulesView />
+        <SemanticRulesView :show-header="false" />
+      </div>
+
+      <!-- 泸县33条规则标签页 -->
+      <div v-else-if="activeTab === 'custom'">
+        <CustomRulesManager />
+      </div>
+
+      <!-- 泸县存量质控规则标签页 -->
+      <div v-else-if="activeTab === 'lx_legacy'">
+        <CustomRulesManager mode="lx-legacy" />
+      </div>
+
+      <!-- 科室规则管理标签页 -->
+      <div v-else-if="activeTab === 'department'">
+        <DepartmentRulesTab />
       </div>
     </div>
 
@@ -598,8 +648,8 @@
           <a-col :span="8">
             <a-form-item label="规则类型" name="rule_type">
               <a-select v-model:value="formData.rule_type" placeholder="选择规则类型">
-                <a-select-option value="objective">客观规则</a-select-option>
-                <a-select-option value="subjective">主观规则</a-select-option>
+                <a-select-option value="logical">逻辑规则</a-select-option>
+                <a-select-option value="semantic">语义规则</a-select-option>
                 <a-select-option value="hybrid">混合规则</a-select-option>
               </a-select>
             </a-form-item>
@@ -671,11 +721,28 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- LLM 设置抽屉 -->
+    <a-drawer
+      v-model:open="llmSettingsVisible"
+      title="LLM 配置"
+      width="80%"
+      placement="right"
+      :destroyOnClose="true"
+    >
+      <template #extra>
+        <a-space>
+          <a-button @click="llmSettingsVisible = false">关闭</a-button>
+        </a-space>
+      </template>
+      <LLMApiConfig />
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, type Ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
@@ -690,12 +757,18 @@ import {
   TagsOutlined,
   SettingOutlined,
   BranchesOutlined,
+  ApartmentOutlined,
+  AppstoreOutlined,
   SearchOutlined,
   StopOutlined,
   DeleteOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  ApiOutlined
 } from '@ant-design/icons-vue'
 import SemanticRulesView from './SemanticRulesView.vue'
+import DepartmentRulesTab from '@/components/rules/DepartmentRulesTab.vue'
+import CustomRulesManager from '@/components/CustomRulesManager.vue'
+import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { DocumentCategoryService } from '@/services/document-category-service'
 import { DocumentCategory } from '@/types/medical'
 import { RulesService } from '@/services/rules-service'
@@ -719,8 +792,8 @@ const RULES_CONFIG = {
     minor: { label: '轻微', color: 'blue' }
   },
   types: {
-    objective: { label: '客观规则', color: 'cyan' },
-    subjective: { label: '主观规则', color: 'magenta' },
+    logical: { label: '逻辑规则', color: 'cyan' },
+    semantic: { label: '语义规则', color: 'magenta' },
     hybrid: { label: '混合规则', color: 'geekblue' }
   }
 }
@@ -734,7 +807,7 @@ interface QCRule {
   primary_document_category?: DocumentCategory
   document_categories?: DocumentCategory[]
   category: 'completeness' | 'consistency' | 'rationality' | 'timeliness'
-  rule_type: 'objective' | 'subjective' | 'hybrid'
+  rule_type: 'logical' | 'semantic' | 'hybrid'
   severity: 'critical' | 'major' | 'minor'
   max_score: number
   weight: number
@@ -747,8 +820,19 @@ interface QCRule {
   updating?: boolean
 }
 
+// 路由
+const route = useRoute()
+const router = useRouter()
+
 // 响应式数据
-const activeTab = ref('traditional') // 默认显示传统质控规则
+const activeTab = ref('semantic') // 默认显示四川省质控规则
+const TAB_DESCRIPTIONS: Record<string, string> = {
+  semantic: '四川省住院病历语义质控规则：支持规则管理、导入与语义质控评估。',
+  custom: '泸县33条质控规则：维护本地自定义质控点，支持批量评估与测试。',
+  department: '科室级规则管理：配置覆盖策略、科室维度的质控规则及状态。',
+  traditional: '传统质控规则：统一创建、导入、维护医院通用质控规则，并支持测试。'
+}
+const activeTabDescription = computed(() => TAB_DESCRIPTIONS[activeTab.value] || TAB_DESCRIPTIONS.traditional)
 const loading = ref(false)
 type ResolvedRule = EnhancedQCRule & {
   resolvedPrimary?: DocumentCategory
@@ -814,6 +898,9 @@ const loadDocumentCategoryOptions = async () => {
   }
 }
 
+// LLM 设置相关
+const llmSettingsVisible = ref(false)
+
 // 模态框相关
 const modalVisible = ref(false)
 const modalLoading = ref(false)
@@ -831,7 +918,7 @@ const formData = reactive({
   primary_document_category: '' as DocumentCategory | '',
   document_categories: [] as DocumentCategory[],
   category: 'completeness' as const,
-  rule_type: 'objective' as const,
+  rule_type: 'logical' as const,
   severity: 'minor' as const,
   max_score: 0,
   weight: 1.0,
@@ -1056,8 +1143,8 @@ const columns: TableColumnsType = [
     key: 'rule_type',
     width: 70,
     filters: [
-      { text: '客观规则', value: 'objective' },
-      { text: '主观规则', value: 'subjective' },
+      { text: '逻辑规则', value: 'logical' },
+      { text: '语义规则', value: 'semantic' },
       { text: '混合规则', value: 'hybrid' }
     ]
   },
@@ -1090,12 +1177,12 @@ const columns: TableColumnsType = [
 ]
 
 // 行选择配置
-const rowSelection: TableProps['rowSelection'] = {
+const rowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   }
-}
+}))
 // 让表头“文书类别”筛选项跟随选项变化而更新
 // 暂时禁用表格列筛选器的动态更新，只使用顶部筛选器
 // watch(documentCategoryOptions, (opts) => {
@@ -1211,7 +1298,7 @@ const mockRules: QCRule[] = [
     description: '检查入院记录是否包含必要的基本信息，包括患者基本信息、主诉、现病史、既往史等',
     primary_document_category: 'admission_record',
     category: 'completeness',
-    rule_type: 'objective',
+    rule_type: 'logical',
     severity: 'critical',
     max_score: 0,
     weight: 2.0,
@@ -1252,7 +1339,7 @@ const mockRules: QCRule[] = [
     description: '检查药物使用是否符合适应症，剂量是否合理，是否存在禁忌症',
     primary_document_category: 'progress_note',
     category: 'rationality',
-    rule_type: 'subjective',
+    rule_type: 'semantic',
     severity: 'critical',
     max_score: 0,
     weight: 3.0,
@@ -1274,7 +1361,7 @@ const mockRules: QCRule[] = [
     description: '检查手术记录是否在规定时间内完成，确保医疗文书的及时性',
     primary_document_category: 'operation_record',
     category: 'timeliness',
-    rule_type: 'objective',
+    rule_type: 'logical',
     severity: 'major',
     max_score: 3,
     weight: 1.0,
@@ -1295,7 +1382,7 @@ const mockRules: QCRule[] = [
     description: '检查病程记录是否按规定频次记录，内容是否完整',
     primary_document_category: 'progress_note',
     category: 'completeness',
-    rule_type: 'objective',
+    rule_type: 'logical',
     severity: 'minor',
     max_score: 2,
     weight: 1.0,
@@ -1562,6 +1649,11 @@ const reloadRulesSafely = async () => {
   }
 }
 
+// LLM 设置相关方法
+const showLLMSettings = () => {
+  llmSettingsVisible.value = true
+}
+
 // 事件处理
 const handleTabChange = (key: string) => {
   activeTab.value = key
@@ -1585,7 +1677,8 @@ const refreshRules = async () => {
 }
 
 const handleSearch = () => {
-  // 搜索逻辑已在计算属性中处理
+  pagination.current = 1
+  reloadRulesSafely()
 }
 
 const handleFilter = () => {
@@ -1679,10 +1772,11 @@ const batchDelete = async () => {
   }
 }
 
-const handleTableChange: TableProps['onChange'] = (pag: unknown) => {
+const handleTableChange: TableProps['onChange'] = (pag) => {
   if (pag) {
     pagination.current = pag.current || 1
-    pagination.pageSize = pag.pageSize || 10
+    pagination.pageSize = pag.pageSize || pagination.pageSize
+    reloadRulesSafely()
   }
 }
 
@@ -1700,7 +1794,7 @@ const showCustomRuleModal = () => {
   isCustomRule.value = true
   modalTitle.value = '新增自定义质控点'
   resetFormData()
-  formData.rule_type = 'subjective'
+  formData.rule_type = 'semantic'
   modalVisible.value = true
 }
 
@@ -1845,7 +1939,7 @@ const resetFormData = () => {
     primary_document_category: '' as DocumentCategory | '',
     document_categories: [] as DocumentCategory[],
     category: 'completeness',
-    rule_type: 'objective',
+    rule_type: 'logical',
     severity: 'minor',
     max_score: 0,
     weight: 1.0,
@@ -1935,6 +2029,12 @@ const exportRules = async () => {
 
 // 生命周期
 onMounted(async () => {
+  // 从 query 参数中读取标签页
+  const tabFromQuery = route.query.tab as string
+  if (tabFromQuery && ['traditional', 'semantic', 'department'].includes(tabFromQuery)) {
+    activeTab.value = tabFromQuery
+  }
+
   try {
     await loadDocumentCategoryOptions()
     await loadRules()
@@ -1946,6 +2046,13 @@ onMounted(async () => {
     // 确保不显示任何可能不一致的数据
     documentCategoryOptions.value = []
     rules.value = []
+  }
+})
+
+// 监听标签页切换，更新 URL query 参数
+watch(activeTab, (newTab) => {
+  if (route.query.tab !== newTab) {
+    router.replace({ query: { ...route.query, tab: newTab } })
   }
 })
 </script>
@@ -1969,16 +2076,50 @@ onMounted(async () => {
 
 :deep(.rules-tabs .ant-tabs-tab) {
   @apply px-3 py-1;
-  font-size: 12px !important;
-  font-weight: 500 !important;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  margin-right: 8px;
+}
+
+:deep(.rules-tabs .ant-tabs-tab:hover) {
+  background: #f0f7ff;
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12);
 }
 
 :deep(.rules-tabs .ant-tabs-tab-active) {
-  @apply font-semibold;
+  background: #ffffff;
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 3px 12px rgba(59, 130, 246, 0.18);
+}
+
+:deep(.rules-tabs .ant-tabs-tab .ant-tabs-tab-btn) {
+  display: flex;
+  align-items: center;
+  font-size: 16px !important;
+  font-weight: 700 !important;
 }
 
 :deep(.rules-tabs .ant-tabs-tab .anticon) {
   @apply mr-1;
+  font-size: 16px;
+}
+
+/* 自定义Tab标题（覆盖之前的 text-xs 小号样式） */
+:deep(.qc-tab-title) {
+  font-size: 16px !important;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 确保图标随字号放大 */
+:deep(.qc-tab-title .anticon) {
+  font-size: 1.1em;
 }
 
 .tab-content {
@@ -2394,6 +2535,39 @@ onMounted(async () => {
   font-size: 13px !important;
   height: 30px !important;
   padding: 4px 14px !important;
+}
+
+/* LLM 设置按钮 - 大尺寸突出显示 */
+.llm-settings-button {
+  height: 48px !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  padding: 0 24px !important;
+  border-radius: 20px !important;
+  border: 2px solid #3b82f6 !important;
+  color: #3b82f6 !important;
+  background: white !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15) !important;
+  transition: all 0.3s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.llm-settings-button:hover {
+  background: #3b82f6 !important;
+  color: white !important;
+  border-color: #3b82f6 !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3) !important;
+}
+
+.llm-settings-button :deep(.anticon) {
+  font-size: 18px !important;
+}
+
+.llm-settings-button span {
+  font-weight: 500 !important;
 }
 
 /* 统一输入框尺寸 - 调小筛选区域输入框 */

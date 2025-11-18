@@ -240,9 +240,9 @@
             </a-tab-pane>
 
             <a-tab-pane key="suggestions" tab="改进建议">
-              <div v-if="notification.qcResult.suggestions && notification.qcResult.suggestions.length > 0" class="suggestions-section">
+              <div v-if="structuredSuggestions.length > 0" class="suggestions-section">
                 <a-list
-                  :data-source="notification.qcResult.suggestions"
+                  :data-source="structuredSuggestions"
                   :pagination="{ pageSize: 5, size: 'small' }"
                 >
                   <template #renderItem="{ item, index }">
@@ -254,15 +254,22 @@
                           </a-avatar>
                         </template>
                         <template #title>
-                          <span class="suggestion-title">建议 {{ index + 1 }}</span>
+                          <span class="suggestion-title">
+                            建议 {{ index + 1 }}<span v-if="item.title"> · {{ item.title }}</span>
+                          </span>
                         </template>
                         <template #description>
                           <div class="suggestion-content">
-                            <p>{{ item.description }}</p>
-                            <div v-if="item.priority" class="suggestion-priority">
+                            <ol class="list-decimal list-inside space-y-1 text-sm text-gray-700">
+                              <li v-for="(step, stepIndex) in item.steps" :key="stepIndex">
+                                {{ step }}
+                              </li>
+                            </ol>
+                            <div class="suggestion-priority" v-if="item.priority || item.category">
                               <a-tag :color="getPriorityColor(item.priority)">
                                 {{ getPriorityText(item.priority) }}
                               </a-tag>
+                              <a-tag v-if="item.category" color="blue">{{ item.category }}</a-tag>
                             </div>
                           </div>
                         </template>
@@ -403,6 +410,7 @@ import {
   ScanOutlined
 } from '@ant-design/icons-vue'
 import type { QCNotification } from '@/types/quality-control'
+import { structureSuggestions } from '@/utils/suggestionFormatter'
 
 // Props
 const props = defineProps<{
@@ -430,6 +438,12 @@ const modalTitle = computed(() => {
   return `质控通知详情 - ${props.notification.type === 'error' ? '错误' :
     props.notification.type === 'warning' ? '警告' :
     props.notification.type === 'info' ? '信息' : '成功'}`
+})
+
+const structuredSuggestions = computed(() => {
+  const suggestions = props.notification?.qcResult?.suggestions
+  if (!suggestions || suggestions.length === 0) return []
+  return structureSuggestions(suggestions)
 })
 
 // 方法

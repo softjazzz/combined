@@ -1,7 +1,7 @@
 <template>
-  <div class="semantic-rules-view min-h-screen bg-gray-50 p-3 lg:p-4">
+  <div :class="['semantic-rules-view', showHeader ? 'min-h-screen bg-gray-50 p-3 lg:p-4' : '']">
     <!-- 页面头部 -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+    <div v-if="showHeader" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div class="flex-1">
           <div class="flex items-center space-x-2 mb-1">
@@ -39,74 +39,6 @@
           >
             <template #icon><ImportOutlined /></template>
             <span>导入规则</span>
-          </a-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 快速筛选区域 -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-base font-semibold text-gray-900">快速筛选</h2>
-        <a-button
-          size="small"
-          @click="clearFilters"
-          class="text-gray-500 hover:text-gray-700"
-        >
-          <template #icon><ClearOutlined /></template>
-          清空筛选
-        </a-button>
-      </div>
-      
-      <div class="flex items-center gap-2 flex-wrap mb-3">
-        <span class="text-sm font-semibold text-gray-800">规则类型：</span>
-        <div
-          :class="['filter-tag', { 'filter-tag-active': !ruleTypeFilter }]"
-          @click="quickFilter('all')"
-        >
-          <span class="filter-tag-text">全部类型</span>
-          <span class="filter-tag-count">({{ totalRules }})</span>
-        </div>
-        <div
-          :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'semantic' }]"
-          @click="quickFilter('semantic')"
-        >
-          <span class="filter-tag-text">语义规则</span>
-        </div>
-        <div
-          :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'logical' }]"
-          @click="quickFilter('logical')"
-        >
-          <span class="filter-tag-text">逻辑规则</span>
-        </div>
-        <div
-          :class="['filter-tag', { 'filter-tag-active': ruleTypeFilter === 'hybrid' }]"
-          @click="quickFilter('hybrid')"
-        >
-          <span class="filter-tag-text">混合规则</span>
-        </div>
-        <div
-          :class="['filter-tag filter-tag-danger', { 'filter-tag-danger-active': severityFilter === 'critical' }]"
-          @click="quickFilterSeverity('critical')"
-        >
-          <span class="filter-tag-text">严重缺陷</span>
-        </div>
-        <div
-          :class="['filter-tag filter-tag-success', { 'filter-tag-success-active': statusFilter === 'active' }]"
-          @click="quickFilterStatus('active')"
-        >
-          <span class="filter-tag-text">已启用</span>
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="ml-auto flex items-center gap-2 flex-shrink-0">
-          <a-button type="primary" size="small" @click="applyFilters" class="bg-blue-600 hover:bg-blue-700">
-            <template #icon><SearchOutlined /></template>
-            查询
-          </a-button>
-          <a-button size="small" @click="clearFilters">
-            <template #icon><ClearOutlined /></template>
-            重置
           </a-button>
         </div>
       </div>
@@ -233,6 +165,15 @@ import {
 import SemanticRulesManager from '../../components/SemanticRulesManager.vue'
 import { semanticRulesService } from '../../services/semantic-rules-service'
 
+const props = defineProps({
+  showHeader: {
+    type: Boolean,
+    default: true
+  }
+})
+
+const showHeader = computed(() => props.showHeader)
+
 // 响应式数据
 const loading = ref(false)
 const showSystemOverview = ref(false)
@@ -243,11 +184,6 @@ const llmStatus = ref({
   provider: '',
   model: ''
 })
-
-// 筛选条件
-const ruleTypeFilter = ref(undefined)
-const severityFilter = ref(undefined)
-const statusFilter = ref(undefined)
 
 // 系统特性列表
 const systemFeatures = [
@@ -288,45 +224,6 @@ const openImportRules = () => {
   message.info('导入规则功能开发中...')
 }
 
-const quickFilter = (type) => {
-  if (type === 'all') {
-    ruleTypeFilter.value = undefined
-  } else {
-    ruleTypeFilter.value = type
-  }
-  applyFilters()
-}
-
-const quickFilterSeverity = (severity) => {
-  if (severityFilter.value === severity) {
-    severityFilter.value = undefined
-  } else {
-    severityFilter.value = severity
-  }
-  applyFilters()
-}
-
-const quickFilterStatus = (status) => {
-  if (statusFilter.value === status) {
-    statusFilter.value = undefined
-  } else {
-    statusFilter.value = status
-  }
-  applyFilters()
-}
-
-const applyFilters = () => {
-  // 这里可以触发 SemanticRulesManager 组件的筛选
-  message.info('筛选功能将与规则管理组件集成')
-}
-
-const clearFilters = () => {
-  ruleTypeFilter.value = undefined
-  severityFilter.value = undefined
-  statusFilter.value = undefined
-  applyFilters()
-}
-
 const refreshData = async () => {
   loading.value = true
   try {
@@ -344,7 +241,7 @@ const refreshData = async () => {
 
     // 获取规则总数（后端 page_size 最大为 200）
     // 使用相对路径以兼容 Vite 开发代理和生产环境反向代理
-    const rulesResponse = await fetch(`/api/semantic-rules?page=1&page_size=200`)
+    const rulesResponse = await fetch(`/api/v1/semantic-rules?page=1&page_size=200`)
     if (rulesResponse.ok) {
       const data = await rulesResponse.json()
       if (data.success && engineStats.value) {

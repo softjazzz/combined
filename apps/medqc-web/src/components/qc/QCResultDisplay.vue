@@ -190,9 +190,13 @@
                       {{ getPriorityLabel(suggestion.priority) }}
                     </a-tag>
                   </div>
-                  <ol class="text-sm text-slate-300 mb-2 list-decimal list-inside space-y-1 marker:text-amber-400">
+                  <ol
+                    v-if="suggestion.steps.length > 0"
+                    class="text-sm text-slate-300 mb-2 list-decimal list-inside space-y-1 marker:text-amber-400"
+                  >
                     <li v-for="(step, index) in suggestion.steps" :key="index">{{ step }}</li>
                   </ol>
+                  <p v-else class="text-sm text-slate-300 mb-2">{{ suggestion.description }}</p>
                   <div class="text-xs text-yellow-400 flex items-center gap-1">
                     <TagOutlined />
                     {{ suggestion.category }}

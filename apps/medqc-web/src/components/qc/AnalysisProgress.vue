@@ -15,7 +15,22 @@
             <div class="text-sm font-medium" :class="getStatusColor(status)">
               {{ getStatusLabel(status) }}
             </div>
+            <a-button size="small" type="link" @click="showDebugInfo = !showDebugInfo">
+              {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
+            </a-button>
           </div>
+        </div>
+
+        <!-- 调试信息面板（进度） -->
+        <div v-if="showDebugInfo" class="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 mb-4">
+          <div class="text-sky-300 font-medium mb-2">📊 进度调试信息</div>
+          <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify({
+            status,
+            currentStep,
+            totalSteps,
+            overallProgress,
+            steps: analysisSteps.map(s => ({ id: s.id, name: s.name, status: s.status, progress: s.progress, duration: s.duration }))
+          }, null, 2) }}</pre>
         </div>
 
         <!-- 总进度条 -->
@@ -24,8 +39,8 @@
             <span class="text-sm text-slate-300">总体进度</span>
             <span class="text-sm font-medium text-slate-200">{{ overallProgress }}%</span>
           </div>
-          <a-progress 
-            :percent="overallProgress" 
+          <a-progress
+            :percent="overallProgress"
             :show-info="false"
             :stroke-color="getProgressColor(status)"
             stroke-width="8"
@@ -70,12 +85,12 @@
           >
             <div class="flex items-center gap-4">
               <!-- 步骤图标 -->
-              <div 
+              <div
                 class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
                 :class="getStepIconClass(step.status, index)"
               >
-                <component 
-                  :is="getStepIcon(step.status)" 
+                <component
+                  :is="getStepIcon(step.status)"
                   class="text-sm"
                   :class="{ 'animate-spin': step.status === 'running' }"
                 />
@@ -86,8 +101,8 @@
                 <div class="flex items-center justify-between mb-2">
                   <h5 class="font-medium text-slate-100">{{ step.name }}</h5>
                   <div class="flex items-center gap-2">
-                    <a-tag 
-                      :color="getStepStatusColor(step.status)" 
+                    <a-tag
+                      :color="getStepStatusColor(step.status)"
                       size="small"
                       class="step-status-tag"
                     >
@@ -108,8 +123,8 @@
                     <span class="text-xs text-slate-400">{{ step.current_task || '处理中...' }}</span>
                     <span class="text-xs text-slate-400">{{ step.progress }}%</span>
                   </div>
-                  <a-progress 
-                    :percent="step.progress" 
+                  <a-progress
+                    :percent="step.progress"
                     :show-info="false"
                     :stroke-color="getStepProgressColor(step.status)"
                     size="small"
@@ -160,12 +175,12 @@
             实时日志
           </h4>
           <div class="flex items-center gap-2">
-            <a-switch 
-              v-model:checked="autoScroll" 
+            <a-switch
+              v-model:checked="autoScroll"
               size="small"
             />
             <span class="text-xs text-slate-400">自动滚动</span>
-            <a-button 
+            <a-button
               size="small"
               @click="clearLogs"
               class="bg-slate-700/50 border-slate-600/50 text-slate-300"
@@ -176,7 +191,7 @@
           </div>
         </div>
 
-        <div 
+        <div
           ref="logContainer"
           class="log-container h-64 overflow-y-auto p-4 rounded-lg bg-slate-900/50 border border-slate-600/30 font-mono text-sm"
         >
@@ -189,7 +204,7 @@
             <span class="text-xs text-slate-500 flex-shrink-0 w-20">
               {{ formatTime(log.timestamp) }}
             </span>
-            <span 
+            <span
               class="text-xs flex-shrink-0 w-12"
               :class="getLogLevelColor(log.level)"
             >
@@ -202,7 +217,7 @@
 
       <!-- 操作按钮 -->
       <div class="flex items-center justify-center gap-4">
-        <a-button 
+        <a-button
           v-if="status === 'running'"
           @click="pauseAnalysis"
           class="bg-amber-500/20 border-amber-400/30 text-amber-300 hover:bg-amber-500/30"
@@ -210,7 +225,7 @@
           <PauseCircleOutlined />
           暂停分析
         </a-button>
-        <a-button 
+        <a-button
           v-if="status === 'paused'"
           @click="resumeAnalysis"
           class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30"
@@ -218,7 +233,7 @@
           <PlayCircleOutlined />
           继续分析
         </a-button>
-        <a-button 
+        <a-button
           v-if="status === 'running' || status === 'paused'"
           @click="stopAnalysis"
           danger
@@ -227,7 +242,7 @@
           <StopOutlined />
           停止分析
         </a-button>
-        <a-button 
+        <a-button
           v-if="status === 'completed' || status === 'failed'"
           @click="restartAnalysis"
           type="primary"
@@ -276,12 +291,16 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'analysis-completed': [result: unknown]
   'analysis-failed': [error: string]
+
+
   'analysis-paused': []
   'analysis-resumed': []
   'analysis-stopped': []
 }>()
 
 // 状态
+const showDebugInfo = ref(false)
+
 const status = ref<'idle' | 'running' | 'paused' | 'completed' | 'failed'>('idle')
 const currentStep = ref(0)
 const totalSteps = ref(5)
@@ -371,7 +390,7 @@ const startAnalysis = () => {
   status.value = 'running'
   currentStep.value = 1
   overallProgress.value = 0
-  
+
   // 重置步骤状态
   analysisSteps.value.forEach(step => {
     step.status = 'pending'
@@ -381,14 +400,14 @@ const startAnalysis = () => {
     step.details = null
     step.error = ''
   })
-  
+
   addLog('info', '开始质控分析...')
   simulateAnalysis()
 }
 
 const simulateAnalysis = () => {
   let stepIndex = 0
-  
+
   const processStep = () => {
     if (stepIndex >= analysisSteps.value.length) {
       // 分析完成
@@ -398,13 +417,13 @@ const simulateAnalysis = () => {
       emit('analysis-completed', { /* 分析结果 */ })
       return
     }
-    
+
     const step = analysisSteps.value[stepIndex]
     step.status = 'running'
     currentStep.value = stepIndex + 1
-    
+
     addLog('info', `开始执行: ${step.name}`)
-    
+
     // 模拟步骤进度
     let progress = 0
     const stepTimer = setInterval(() => {
@@ -412,28 +431,28 @@ const simulateAnalysis = () => {
         clearInterval(stepTimer)
         return
       }
-      
+
       progress += Math.random() * 15
       if (progress > 100) progress = 100
-      
+
       step.progress = Math.floor(progress)
       step.current_task = getRandomTask(step.name)
-      
+
       // 更新总体进度
       const completedSteps = stepIndex
       const currentStepProgress = progress / 100
       overallProgress.value = Math.floor(((completedSteps + currentStepProgress) / totalSteps.value) * 100)
-      
+
       // 更新统计数据
       processedRecords.value = Math.floor((overallProgress.value / 100) * totalRecords.value)
       completedAnalyses.value = Math.floor(processedRecords.value * 0.8)
       foundIssues.value = Math.floor(processedRecords.value * 0.15)
-      
+
       // 添加随机日志
       if (Math.random() < 0.3) {
         addLog('debug', `${step.name}: ${step.current_task}`)
       }
-      
+
       if (progress >= 100) {
         clearInterval(stepTimer)
         step.status = 'completed'
@@ -444,15 +463,15 @@ const simulateAnalysis = () => {
           warnings: Math.floor(Math.random() * 8),
           time_remaining: `${Math.floor(Math.random() * 5) + 1}分钟`
         }
-        
+
         addLog('info', `完成: ${step.name} (${step.duration}秒)`)
-        
+
         stepIndex++
         setTimeout(processStep, 1000)
       }
     }, 500)
   }
-  
+
   processStep()
 }
 
@@ -489,7 +508,7 @@ const getRandomTask = (stepName: string) => {
       '保存分析数据...'
     ]
   }
-  
+
   const stepTasks = tasks[stepName as keyof typeof tasks] || ['处理中...']
   return stepTasks[Math.floor(Math.random() * stepTasks.length)]
 }
@@ -500,12 +519,12 @@ const addLog = (level: 'info' | 'warn' | 'error' | 'debug', message: string) => 
     level,
     message
   })
-  
+
   // 限制日志数量
   if (logs.value.length > 100) {
     logs.value.shift()
   }
-  
+
   // 自动滚动到底部
   if (autoScroll.value) {
     nextTick(() => {
@@ -770,15 +789,15 @@ defineExpose({ startAnalysis,
   .grid-cols-2.md\\:grid-cols-4 {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .grid-cols-2.md\\:grid-cols-4.gap-3 {
     grid-template-columns: 1fr;
   }
-  
+
   .step-item {
     padding: 1rem;
   }
-  
+
   .log-container {
     height: 12rem;
   }

@@ -2,20 +2,34 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, status, Query, Request
+from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
 from ..storage.memory import qc_results_db, qc_rules_db
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
+from ..core.security import get_current_user
+from ..core.permissions import (
+    require_permission,
+    require_role,
+    require_admin,
+    ResourceType,
+    PermissionAction,
+    UserRole,
+)
 
 router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
 
 
 @router.post("/analyze/batch")
-async def analyze_batch(request: Request, payload: Dict[str, Any]):
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
+async def analyze_batch(
+    request: Request,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_user)
+):
     """批量分析病案记录"""
     started = []
     records_payload: List[Dict[str, Any]] = payload.get("records", [])
@@ -47,10 +61,12 @@ async def analyze_batch(request: Request, payload: Dict[str, Any]):
 
 
 @router.post("/analyze/{record_id}")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.ANALYZE)
 async def analyze_record(
     request: Request,
     record_id: str,
-    payload: Optional[Dict[str, Any]] = None
+    payload: Optional[Dict[str, Any]] = None,
+    current_user: dict = Depends(get_current_user)
 ):
     """分析单个病案记录"""
     request_payload = dict(payload or {})
@@ -71,7 +87,8 @@ async def analyze_record(
 
 
 @router.get("/result/{record_id}", response_model=QCResult)
-async def get_result(record_id: str):
+@require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
+async def get_result(record_id: str, current_user: dict = Depends(get_current_user)):
     """获取质控结果"""
     res = qc_results_db.get(record_id)
     if not res:
@@ -100,6 +117,7 @@ async def get_progress(request: Request, analysis_id: str):
 
 
 @router.get("/rules")
+@require_permission(ResourceType.QC_RULES, PermissionAction.READ)
 async def list_rules(
     request: Request,
     keyword: Optional[str] = Query(None, description="搜索关键词"),
@@ -109,7 +127,8 @@ async def list_rules(
     severity: Optional[str] = Query(None, description="严重程度"),
     is_active: Optional[bool] = Query(None, description="是否激活"),
     page: int = Query(1, ge=1, description="页码"),
-    limit: int = Query(20, ge=1, le=100, description="每页数量")
+    limit: int = Query(20, ge=1, le=100, description="每页数量"),
+    current_user: dict = Depends(get_current_user)
 ):
     """获取质控规则列表，支持文书类别筛选。
     - 首选使用 Supabase 后端筛选；
@@ -138,8 +157,13 @@ async def list_rules(
             query = query.eq('category', category)
         if document_category:
             if hasattr(query, 'or_'):
+                # Migration 006: 优先使用 applicable_documents 字段
                 query = query.or_(
-                    f"primary_document_category.eq.{document_category},document_categories.cs.{{{document_category}}}"
+                    f"applicable_documents.cs.{{{document_category}}},"
+                    f"applicable_documents.is.null,"
+                    f"applicable_documents.eq.{{}},"
+                    f"primary_document_category.eq.{document_category},"
+                    f"document_categories.cs.{{{document_category}}}"
                 )
         if rule_type:
             query = query.eq('rule_type', rule_type)
@@ -290,7 +314,8 @@ async def get_document_category_config(request: Request):
         )
 
 @router.post("/rules", response_model=QCRule)
-async def create_rule(rule: QCRule):
+@require_role([UserRole.ADMIN, UserRole.QC_MANAGER])
+async def create_rule(rule: QCRule, current_user: dict = Depends(get_current_user)):
     """创建质控规则"""
     if rule.id in qc_rules_db:
         raise HTTPException(
@@ -302,7 +327,8 @@ async def create_rule(rule: QCRule):
 
 
 @router.put("/rules/{rule_id}", response_model=QCRule)
-async def update_rule(rule_id: str, rule: QCRule):
+@require_role([UserRole.ADMIN, UserRole.QC_MANAGER])
+async def update_rule(rule_id: str, rule: QCRule, current_user: dict = Depends(get_current_user)):
     """更新质控规则"""
     if rule_id not in qc_rules_db:
         raise HTTPException(
@@ -314,7 +340,8 @@ async def update_rule(rule_id: str, rule: QCRule):
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_rule(request: Request, rule_id: str):
+@require_admin()
+async def delete_rule(request: Request, rule_id: str, current_user: dict = Depends(get_current_user)):
     """删除质控规则"""
     if rule_id not in qc_rules_db:
         raise HTTPException(

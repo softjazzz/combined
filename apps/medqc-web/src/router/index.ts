@@ -130,7 +130,7 @@ const routes: RouteRecordRaw[] = [
       },
 
 
-      // 质控规则管理路由（统一的标签页版本）
+      // 质控规则管理路由（统一的标签页版本，包含传统规则、语义规则和科室规则）
       {
         path: 'rules',
         name: 'Rules',
@@ -138,7 +138,26 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控规则管理',
           icon: 'SettingOutlined',
-          permission: ['admin']
+          permission: ['admin', 'qc_manager']
+        }
+      },
+      {
+        path: 'rules/docs',
+        name: 'RuleDocs',
+        component: () => import('@/views/rules/RuleDocView.vue'),
+        meta: {
+          title: '质控规则说明',
+          icon: 'FileTextOutlined',
+          permission: ['admin', 'qc_manager'],
+          hidden: true
+        }
+      },
+      // 科室级质控规则管理路由（重定向到统一的规则管理页面）
+      {
+        path: 'department-rules',
+        redirect: '/dashboard/rules?tab=department',
+        meta: {
+          hidden: true // 隐藏在菜单中，已整合到主规则管理页面
         }
       },
       // 质控集成测试路由
@@ -162,6 +181,30 @@ const routes: RouteRecordRaw[] = [
           icon: 'BranchesOutlined',
           permission: ['admin'],
           hidden: true // 隐藏在菜单中，因为现在集成到主规则管理页面
+        }
+      },
+      // 自定义质控规则管理路由（泸县33条规则）
+      {
+        path: 'custom-rules',
+        name: 'CustomRules',
+        component: () => import('@/components/CustomRulesManager.vue'),
+        meta: {
+          title: '自定义质控规则',
+          icon: 'AppstoreOutlined',
+          permission: ['admin', 'qc_manager']
+        }
+      },
+      // 批量质控评估路由
+      {
+        path: 'custom-rules/batch-test',
+        name: 'BatchRuleTest',
+        component: () => import('@/components/BatchRuleTest.vue'),
+        meta: {
+          title: '批量质控评估',
+          icon: 'CheckSquareOutlined',
+          hidden: true,
+          permission: ['admin', 'qc_manager'],
+          allowDemo: true  // 允许演示模式访问（通过?demo=true参数）
         }
       },
       // 质控点管理路由
@@ -216,6 +259,28 @@ const routes: RouteRecordRaw[] = [
           icon: 'ExperimentOutlined',
           permission: ['admin'],
           description: '完整的LLM质控演示系统，包含规则应用、通知提醒和申诉功能'
+        }
+      },
+      {
+        path: 'llm-qc-demo-new',
+        name: 'LLMQCDemoEnhancedNew',
+        component: () => import('@/views/demo/LLMQCDemoEnhancedNew.vue'),
+        meta: {
+          title: 'LLM质控演示新版（测试）',
+          icon: 'ExperimentOutlined',
+          permission: ['admin'],
+          description: '重构后的LLM质控演示系统 - P0测试版'
+        }
+      },
+      {
+        path: 'sichuan-qc-demo',
+        name: 'SichuanQCDemo',
+        component: () => import('@/views/demo/SichuanQCDemo.vue'),
+        meta: {
+          title: '四川质控引擎演示',
+          icon: 'ThunderboltOutlined',
+          permission: ['admin'],
+          description: '基于阿里云百炼 LLM 的四川质控引擎演示，展示首次病程记录质控分析'
         }
       },
       {
@@ -472,6 +537,78 @@ const routes: RouteRecordRaw[] = [
           permission: ['admin', 'qc_manager']
         }
       },
+      // DRG/DIP 模块路由
+      {
+        path: 'drg',
+        name: 'DRG',
+        redirect: '/dashboard/drg/index',
+        meta: {
+          title: 'DRG/DIP',
+          icon: 'MedicineBoxOutlined',
+          permission: ['admin', 'qc_manager', 'coder', 'reviewer']
+        },
+        children: [
+          {
+            path: 'index',
+            name: 'DRGIndex',
+            component: () => import('@/views/drg/Index.vue'),
+            meta: {
+              title: 'DRG 首页',
+              icon: 'HomeOutlined'
+            }
+          },
+          {
+            path: 'coding',
+            name: 'CodingAssistant',
+            component: () => import('@/views/drg/CodingAssistant.vue'),
+            meta: {
+              title: '编码辅助',
+              icon: 'EditOutlined',
+              description: 'ICD 编码推荐和校验'
+            }
+          },
+          {
+            path: 'coding/:admissionId',
+            name: 'CodingDetail',
+            component: () => import('@/views/drg/CodingDetail.vue'),
+            meta: {
+              title: '编码详情',
+              hidden: true
+            }
+          },
+          {
+            path: 'grouping',
+            name: 'GroupingPredict',
+            component: () => import('@/views/drg/GroupingPredict.vue'),
+            meta: {
+              title: 'DRG 分组',
+              icon: 'ClusterOutlined',
+              description: 'DRG 入组预测和费用分析'
+            }
+          },
+          {
+            path: 'monitor',
+            name: 'MonitorDashboard',
+            component: () => import('@/views/drg/MonitorDashboard.vue'),
+            meta: {
+              title: '事中监控',
+              icon: 'DashboardOutlined',
+              description: '实时预警和编码建议'
+            }
+          },
+          {
+            path: 'analysis',
+            name: 'DRGAnalysis',
+            component: () => import('@/views/drg/Analysis.vue'),
+            meta: {
+              title: '事后分析',
+              icon: 'BarChartOutlined',
+              description: 'DRG 绩效统计和盈亏分析',
+              permission: ['admin', 'qc_manager']
+            }
+          }
+        ]
+      },
       {
         path: 'settings',
         name: 'Settings',
@@ -490,6 +627,43 @@ const routes: RouteRecordRaw[] = [
           title: 'API测试',
           icon: 'ApiOutlined',
           hidden: true // 隐藏在菜单中，仅用于调试
+        }
+      }
+    ]
+  },
+  // 演示页面路由 (无需登录)
+  {
+    path: '/demo/lx33',
+    component: () => import('@/layouts/SimpleLayout.vue'),
+    meta: {
+      requiresAuth: false
+    },
+    children: [
+      {
+        path: '',
+        name: 'LX33Demo',
+        component: () => import('@/views/demo/LX33DemoView.vue'),
+        meta: {
+          requiresAuth: false,
+          title: '泸县33条质控规则演示'
+        }
+      },
+      {
+        path: 'feedbacks',
+        name: 'LX33Feedbacks',
+        component: () => import('@/views/demo/FeedbacksView.vue'),
+        meta: {
+          requiresAuth: false,
+          title: '反馈记录'
+        }
+      },
+      {
+        path: 'create',
+        name: 'LX33CreateRule',
+        component: () => import('@/views/demo/LX33CreateRuleView.vue'),
+        meta: {
+          requiresAuth: false,
+          title: 'AI智能创建质控规则'
         }
       }
     ]
@@ -520,6 +694,20 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  // 检查是否为演示模式（通过URL参数 ?demo=true）
+  const isDemoMode = to.query.demo === 'true'
+  const allowDemo = to.meta.allowDemo === true
+
+  // 如果是演示模式且路由允许演示访问，跳过认证检查
+  if (isDemoMode && allowDemo) {
+    // 设置页面标题
+    if (to.meta.title) {
+      document.title = `${to.meta.title} - 大模型病案质控系统`
+    }
+    next()
+    return
+  }
 
   // 检查是否需要认证
   if (to.meta.requiresAuth !== false) {

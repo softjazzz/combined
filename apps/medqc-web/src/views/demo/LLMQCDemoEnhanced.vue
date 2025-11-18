@@ -13,7 +13,53 @@
           </p>
         </div>
 
-        <!-- 演示控制面板 -->
+        <!-- 右侧精简操作：仅保留“更多”菜单，减少首屏干扰 -->
+        <div class="header-actions">
+          <a-dropdown>
+            <template #overlay>
+              <a-menu @click="handleMenuAction">
+                <a-menu-item key="export">
+                  <DownloadOutlined />
+                  导出演示数据
+                </a-menu-item>
+                <a-menu-item key="import">
+                  <UploadOutlined />
+                  导入演示数据
+                </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item key="clear">
+                  <DeleteOutlined />
+                  清除保存状态
+                </a-menu-item>
+                <a-menu-item key="config">
+                  <SettingOutlined />
+                  演示配置
+                </a-menu-item>
+              </a-menu>
+            </template>
+            <a-button size="small">
+              <MoreOutlined />
+              更多
+            </a-button>
+          </a-dropdown>
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- 统计卡片 / 日志 / 性能监控 已移动到页面下方折叠区，默认收起，减少首屏干扰 -->
+
+    <!-- 演示配置模态框 - 使用子组件 -->
+    <DemoConfigModal
+      v-model:open="showConfigModal"
+      v-model:config="demoConfig"
+    />
+
+    <!-- 原有的内容继续... -->
+    <div class="demo-content-placeholder">
+      <!-- 这里保留原有的步骤导航和其他内容 -->
+      <div v-if="false" class="legacy-controls">
         <div class="demo-controls">
           <a-space wrap>
             <a-button
@@ -118,7 +164,7 @@
       <!-- 进度条 -->
       <div class="progress-section" v-if="demoStore.isRunning || demoStore.progress > 0">
         <a-progress
-          :percent="demoStore.demoProgress"
+          :percent="demoStore.progress"
           :status="demoStore.error ? 'exception' : 'active'"
           :stroke-color="getProgressColor()"
         />
@@ -141,15 +187,13 @@
       </div>
     </div>
 
-    <!-- 顶部状态栏 -->
+    <!-- 顶部状态栏（精简：仅在“加载中/失败”时显示，成功时不显示） -->
     <div class="status-bar">
-      <!-- 数据库连接状态 -->
       <a-alert
         v-if="demoStore.isLoadingData"
         message="正在自动连接数据库..."
         type="info"
         show-icon
-        banner
       >
         <template #icon>
           <LoadingOutlined spin />
@@ -160,24 +204,10 @@
         message="数据库连接失败，已自动切换到本地模拟数据"
         type="warning"
         show-icon
-        banner
       >
         <template #action>
           <a-button size="small" @click="handleRefreshData" :loading="demoStore.isLoadingData">
             重试连接
-          </a-button>
-        </template>
-      </a-alert>
-      <a-alert
-        v-else
-        message="已自动连接到数据库，使用真实数据"
-        type="success"
-        show-icon
-        banner
-      >
-        <template #action>
-          <a-button size="small" @click="handleRefreshData" :loading="demoStore.isLoadingData">
-            刷新数据
           </a-button>
         </template>
       </a-alert>
@@ -226,13 +256,12 @@
           </div>
         </div>
 
-        <!-- 条件引导提示 -->
-        <div class="readiness-alert">
+        <!-- 条件引导提示（在非“测试对象”步骤时显示，且使用非 banner 样式，更克制） -->
+        <div class="readiness-alert" v-if="demoStore.currentStep !== 'target'">
           <a-alert
             :type="readinessAlert.type"
             :message="readinessAlert.message"
             show-icon
-            banner
           />
           <div class="readiness-actions" style="margin-top: 8px;">
             <a-space>
@@ -266,39 +295,100 @@
         <div class="content-area">
           <!-- 测试对象选择 -->
           <div v-if="demoStore.currentStep === 'target'" class="step-content">
-            <a-result
-              :status="demoStore.testRecord && (demoStore.selectedDocumentList?.length||0) > 0 ? 'success' : 'info'"
-              :title="demoStore.testRecord && (demoStore.selectedDocumentList?.length||0) > 0 ? '已选择测试对象' : '请选择测试对象（病历 + 文书）'"
-            >
-              <template #subTitle>
-                <div v-if="demoStore.testRecord && (demoStore.selectedDocumentList?.length||0) > 0">
-                  {{ demoStore.testRecord.patient_name }} · {{ demoStore.selectedDocumentList.length>1 ? `已选${demoStore.selectedDocumentList.length}份文书` : (demoStore.selectedDocumentList[0]?.title || '文书') }}
-                </div>
-                <div v-else>点击下方按钮打开选择器</div>
-              </template>
-              <template #extra>
-                <a-space>
-                  <a-button type="primary" @click="showTargetPicker = true">选择病历与文书</a-button>
-                  <a-button v-if="demoStore.testRecord && (demoStore.selectedDocumentList?.length||0) > 0" @click="demoStore.currentStep = 'rules' as any">前往规则配置</a-button>
-                </a-space>
-              </template>
-            </a-result>
+            <!-- 快速开始提示 -->
+            <a-alert
+              v-if="!demoStore.testRecord"
+              message="快速开始"
+              description="点击下方按钮快速加载预置示例，或手动选择病历与文书"
+              type="info"
+              show-icon
+              class="mb-4"
+            />
+
+            <!-- 已选病历信息卡片 -->
+            <MedicalRecordInfoCard
+              v-if="demoStore.testRecord && demoStore.currentRecordInfo"
+              :record-info="demoStore.currentRecordInfo"
+              :document-info="demoStore.currentDocumentInfo"
+              class="mb-4"
+            />
+
+            <!-- 操作按钮 -->
+            <a-space direction="vertical" style="width: 100%" :size="16">
+              <a-button
+                v-if="!demoStore.testRecord"
+                type="primary"
+                size="large"
+                block
+                @click="handleQuickStart"
+              >
+                <ThunderboltOutlined />
+                快速开始（加载预置示例）
+              </a-button>
+
+              <a-button
+                size="large"
+                block
+                @click="showTargetPicker = true"
+              >
+                <FileSearchOutlined />
+                {{ demoStore.testRecord ? '重新选择病历与文书' : '手动选择病历与文书' }}
+              </a-button>
+
+              <!-- 已选择病历时仍可一键重置并加载预置示例 -->
+              <a-button
+                v-if="demoStore.testRecord"
+                danger
+                block
+                @click="handleQuickStart(true)"
+              >
+                <ThunderboltOutlined />
+                重置并快速开始
+              </a-button>
+
+              <a-button
+                v-if="demoStore.testRecord && (demoStore.selectedDocumentList?.length||0) > 0"
+                type="primary"
+                size="large"
+                block
+                @click="demoStore.currentStep = 'rules' as any"
+              >
+                <RightOutlined />
+                前往规则配置
+              </a-button>
+            </a-space>
           </div>
 
           <!-- 规则配置 -->
           <div v-else-if="demoStore.currentStep === 'rules'" class="step-content">
             <QCRulesDemoPanel
               :selected-rules="demoStore.selectedRules"
-              :available-rules="demoStore.availableRules"
+              :available-rules="demoStore.applicableRules"
               :test-record="demoStore.testRecord"
               :selected-documents="demoStore.selectedDocumentList"
               @rules-updated="handleRulesUpdated"
+              @start-analysis="handleStartDemo"
             />
           </div>
 
           <!-- 运行与结果（合并原分析/完成等） -->
           <div v-else class="step-content">
+            <!-- 有结果：显示总结 + 违规列表 -->
+            <template v-if="demoStore.analysisResult">
+              <QCResultSummary :result="demoStore.analysisResult" />
+              <ViolationsList class="mt-4" :violations="demoStore.analysisResult.violations || []" />
+            </template>
+
+            <!-- 无结果且未运行：显示空态提示 -->
+            <EmptyResultState
+              v-else-if="!demoStore.isRunning"
+              @start-analysis="handleStartDemo"
+              @go-back="demoStore.currentStep = 'rules'"
+            />
+
+            <!-- 分析中或有结果：显示分析面板 -->
             <QCAnalysisDemoPanel
+              v-if="demoStore.isRunning || demoStore.analysisResult"
               :analysis-steps="demoStore.analysisSteps"
               :analysis-result="demoStore.analysisResult"
               :is-running="demoStore.isRunning"
@@ -313,6 +403,42 @@
         </div>
       </div>
     </div>
+
+    <!-- 折叠区：统计/日志/性能（默认收起，减少首屏信息量） -->
+    <div class="mt-4">
+      <a-collapse :default-active-key="[]">
+        <a-collapse-panel key="stats" header="统计与进度">
+          <StatisticsCards
+            :selected-rules-count="demoStore.selectedRulesCount"
+            :total-rules-count="demoStore.totalRulesCount"
+            :analysis-completed-count="demoStore.analysisCompletedCount"
+            :total-records-count="demoStore.totalRecordsCount"
+            :unread-notifications-count="demoStore.unreadNotificationsCount"
+            :total-notifications-count="demoStore.totalNotificationsCount"
+            :pending-appeals-count="demoStore.pendingAppealsCount"
+            :total-appeals-count="demoStore.totalAppealsCount"
+            :average-q-c-score="demoStore.averageQCScore"
+            :is-running="demoStore.isRunning"
+            :start-time="demoStore.demoStartTime"
+          />
+        </a-collapse-panel>
+        <a-collapse-panel key="logs" header="演示日志">
+          <EnhancedLogPanel :logs="demoStore.demoLogs" @clear="demoStore.clearDemoLogs" />
+        </a-collapse-panel>
+        <a-collapse-panel key="perf" header="性能监控">
+          <PerformanceMonitor
+            v-if="demoStore.performanceMonitorEnabled"
+            :step-timings="demoStore.stepTimings"
+            :api-calls="demoStore.apiCalls"
+            :memory-info="demoStore.memoryInfo"
+            @export="handlePerformanceExport"
+            @reset="demoStore.resetPerformanceData"
+          />
+          <a-alert v-else type="info" message="默认不启用性能监控，可通过菜单开启后查看" show-icon />
+        </a-collapse-panel>
+      </a-collapse>
+    </div>
+
 
     <!-- 通知模态框 -->
     <QCNotificationModal
@@ -337,6 +463,8 @@
     >
       <a-form layout="vertical">
         <a-form-item label="自动推进">
+
+
           <a-switch
             v-model:checked="configForm.autoAdvance"
             checked-children="开启"
@@ -385,6 +513,16 @@
       style="display: none"
       @change="handleFileImport"
     />
+
+    <!-- 暂停遮罩 -->
+    <PauseOverlay
+      :visible="demoStore.isPaused"
+      :current-step="demoStore.currentStep"
+      :progress="demoStore.progress"
+      :pause-start-time="demoStore.pauseStartTime"
+      @resume="demoStore.togglePause"
+      @stop="handleStopDemo"
+    />
   </div>
 </template>
 
@@ -406,8 +544,22 @@ import {
   DownloadOutlined,
   UploadOutlined,
   DeleteOutlined,
-  LoadingOutlined
+  LoadingOutlined,
+  ThunderboltOutlined,
+  FileSearchOutlined
 } from '@ant-design/icons-vue'
+
+import QCResultSummary from '@/components/demo/QCResultSummary.vue'
+import ViolationsList from '@/components/demo/ViolationsList.vue'
+
+// 导入新的子组件（精简：移除顶部 DemoControls/StepProgress）
+import DemoConfigModal from '@/components/demo/DemoConfigModal.vue'
+import PauseOverlay from '@/components/demo/PauseOverlay.vue'
+import StatisticsCards from '@/components/demo/StatisticsCards.vue'
+import EnhancedLogPanel from '@/components/demo/EnhancedLogPanel.vue'
+import PerformanceMonitor from '@/components/demo/PerformanceMonitor.vue'
+import MedicalRecordInfoCard from '@/components/demo/MedicalRecordInfoCard.vue'
+import EmptyResultState from '@/components/demo/EmptyResultState.vue'
 
 import { useQCDemoStore } from '@/stores/qcDemo'
 import type { QualityControlRule, Appeal } from '@/types/quality-control'
@@ -428,7 +580,20 @@ const showConfigModal = ref(false)
 const fileInputRef = ref<HTMLInputElement>()
 const showTargetPicker = ref(false)
 
-// 配置表单数据
+// 演示配置（用于 DemoConfigModal）
+const demoConfig = ref({
+  autoAdvance: true,
+  stepDelay: 1000,
+  showLogs: true,
+  simulateDelay: true,
+  debugMode: false,
+  autoNotifications: true,
+  notificationInterval: 3,
+  persistState: true,
+  stateExpiryHours: 24
+})
+
+// 配置表单数据（保留旧的，用于兼容）
 const configForm = ref({
   autoAdvance: false,
   stepDelay: 3,
@@ -560,7 +725,19 @@ const onTargetPicked = ({ record, document }: { record: unknown; document: { id:
 
 // 事件处理函数
 const handleRulesUpdated = (rules: QualityControlRule[]) => {
+  const previousCount = demoStore.selectedRules.length
   demoStore.selectedRules = rules
+
+  // 如果是首次选择规则（从0到有规则），且已选择测试对象，提示可以开始分析
+  if (previousCount === 0 && rules.length > 0) {
+    if (demoStore.testRecord && demoStore.selectedDocument) {
+      setTimeout(() => {
+        message.success(`✅ 已选择 ${rules.length} 条规则，条件已满足，可以点击"开始分析"`, 3)
+      }, 300)
+    } else {
+      message.info(`已选择 ${rules.length} 条规则`, 2)
+    }
+  }
 }
 
 const handleAnalysisComplete = () => {
@@ -569,28 +746,82 @@ const handleAnalysisComplete = () => {
 
 
 
-// 选择病历+文书回调（供 RecordDocumentPicker 使用）
-const onTargetPicked = async ({ record, document, documents }: { record: unknown; document: { id: string; title?: string; type?: string; created_at?: string } | null; documents: Array<{ id: string; title?: string; type?: string; created_at?: string }> }) => {
+// 快速开始 - 加载预置示例（支持可选重置）
+const handleQuickStart = async (reset = false) => {
   try {
-    // 设置选择的记录和文档
-    demoStore.testRecord = record as any
-    demoStore.setSelectedDocument(documents && documents.length > 0 ? documents : (document ? [document] : []))
+    if (reset) {
+      // 清除保存状态并重置演示
+      await demoStore.clearSavedState()
+      await demoStore.resetDemoState()
+    }
 
-    const count = documents?.length || (document ? 1 : 0)
-    const docLabel = count > 1 ? `已选${count}份文书` : (document?.title || '文书')
-    message.success(`已选择：${record.patient_name} · ${docLabel}`)
+    const examples = demoStore.getPresetExamples()
+    if (examples.length === 0) {
+      message.warning('暂无预置示例')
+      return
+    }
 
-    // 自动启动质控演示
-    console.log('🚀 自动启动质控演示...')
-    await demoStore.startDemo()
-    message.success('质控演示已开始！', 2)
+    // 加载第一个预置示例（使用 key 而不是 id）
+    demoStore.loadPresetExample(examples[0].key)
+    message.success(`✅ 已加载预置示例：${examples[0].title}`, 3)
+
+    // 自动跳转到下一步（规则配置）
+    setTimeout(() => {
+      if (demoStore.currentStep === 'target') {
+        demoStore.currentStep = 'rules'
+        message.info('📋 已自动进入"规则配置"步骤，请选择质控规则', 3)
+      }
+    }, 300)
 
   } catch (error) {
-    console.error('启动质控演示失败:', error)
-    message.error('启动质控演示失败，请重试')
+    console.error('快速开始失败:', error)
+    message.error('加载预置示例失败，请重试')
   }
 }
 
+// 选择病历+文书回调（供 RecordDocumentPicker 使用）
+const onTargetPicked = async ({ record, document, documents }: any) => {
+  try {
+    // 设置选择的记录和文档
+    if (record) {
+      demoStore.testRecord = record
+    }
+
+    if (documents && documents.length > 0) {
+      demoStore.setSelectedDocument(documents)
+    } else if (document) {
+      demoStore.setSelectedDocument([document])
+    }
+
+    const count = documents?.length || (document ? 1 : 0)
+    const docLabel = count > 1 ? `已选${count}份文书` : (document?.title || '文书')
+    const patientName = record?.patient_name || '病历'
+    message.success(`✅ 已选择：${patientName} · ${docLabel}`)
+
+    // 自动跳转到下一步（规则配置）
+    if (demoStore.currentStep === 'target') {
+      demoStore.currentStep = 'rules'
+      message.info('📋 已自动进入"规则配置"步骤，请选择质控规则', 3)
+    }
+
+    // 如果已经选择了规则，提示可以开始分析
+    if (demoStore.selectedRules.length > 0) {
+      setTimeout(() => {
+        message.success('✨ 条件已满足，可以点击"开始分析"按钮', 3)
+      }, 500)
+    }
+
+  } catch (error) {
+    console.error('选择测试对象失败:', error)
+    message.error('选择测试对象失败，请重试')
+  }
+}
+
+
+// 性能监控导出处理
+const handlePerformanceExport = () => {
+  console.log('性能数据已导出')
+}
 
 const handleNotificationModalAction = (action: string, notification?: unknown) => {
   console.log('通知模态框操作:', action, notification)
@@ -720,13 +951,7 @@ const handleMenuAction = async ({ key }: { key: string }) => {
       break
 
     case 'config':
-      // 加载当前配置
-      configForm.value = {
-        autoAdvance: demoStore.demoConfig.autoAdvance,
-        stepDelay: demoStore.demoConfig.stepDelay / 1000, // 转换为秒
-        showDetailedLogs: true,
-        enableSimulationDelay: true
-      }
+      // 打开配置模态框（使用新的 DemoConfigModal 组件）
       showConfigModal.value = true
       break
   }
@@ -768,8 +993,51 @@ const handleConfigSave = async () => {
 
 // 生命周期
 onMounted(async () => {
-  // 清除旧的本地存储状态（临时调试）
-  localStorage.removeItem('qc-demo-state')
+  // 检查 URL 参数
+  const urlParams = new URLSearchParams(window.location.search)
+  const forceClear = urlParams.get('clear') === 'true'
+
+  // 首次访问体验：自动清除旧状态并给出引导提示（一次性）
+  const FIRST_VISIT_KEY = 'llm_qc_demo_layout_v2_seen'
+  const isFirstVisit = !localStorage.getItem(FIRST_VISIT_KEY)
+
+  if (isFirstVisit || forceClear) {
+    // 清理旧状态
+    await demoStore.clearSavedState()
+    await demoStore.resetDemoState()
+
+    // 标记已访问（除非是强制清除）
+    if (!forceClear) {
+      localStorage.setItem(FIRST_VISIT_KEY, '1')
+    }
+
+    // 回到步骤1，确保看到快速开始入口
+    demoStore.currentStep = 'target'
+
+    // 显示引导提示
+    message.info('欢迎使用：点击“快速开始”加载预置示例，或“手动选择”自定义测试对象', 5)
+  } else {
+    // 非首次访问：检查状态是否过期（超过24小时）
+    const savedState = localStorage.getItem('qc-demo-state')
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState)
+        const savedTime = new Date(state.timestamp).getTime()
+        const now = Date.now()
+        const hoursPassed = (now - savedTime) / (1000 * 60 * 60)
+
+        if (hoursPassed > 24) {
+          localStorage.removeItem('qc-demo-state')
+          console.log('[LLM质控演示] 状态已过期（超过24小时），已清除')
+        } else {
+          console.log(`[LLM质控演示] 恢复保存的状态（${hoursPassed.toFixed(1)}小时前）`)
+        }
+      } catch (error) {
+        console.error('[LLM质控演示] 解析保存状态失败，清除无效数据', error)
+        localStorage.removeItem('qc-demo-state')
+      }
+    }
+  }
 
   console.log('[LLM质控演示] 页面加载，开始自动初始化...')
 
@@ -1020,5 +1288,33 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
+
+/* Tighten header typography and spacing */
+.llm-qc-demo-enhanced .demo-header {
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+.llm-qc-demo-enhanced .header-content {
+  margin-bottom: 8px;
+}
+.llm-qc-demo-enhanced .title-section .demo-title {
+  font-size: 22px;
+  line-height: 1.2;
+  margin: 0 0 4px 0;
+}
+.llm-qc-demo-enhanced .title-section .demo-description {
+  font-size: 13px;
+  line-height: 1.35;
+  color: #666;
+  margin: 0;
+}
+
+/* Compress progress section spacing */
+.llm-qc-demo-enhanced .progress-section {
+  margin: 8px 0;
+}
+.llm-qc-demo-enhanced .progress-section .progress-steps {
+  margin-top: 8px;
+}
 
 </style>

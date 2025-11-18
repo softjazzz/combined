@@ -5,7 +5,7 @@
 
 import { supabase, TABLES } from '@/lib/supabase'
 import { ApiWrapper } from '@/utils/api-wrapper'
-import type { ApiResponse } from '@/types'
+import type { ApiResponse } from '@/utils/api-wrapper'
 import type { Database } from '@/types/database'
 
 type UnstructuredDocument = Database['public']['Tables']['unstructured_medical_documents']['Row']

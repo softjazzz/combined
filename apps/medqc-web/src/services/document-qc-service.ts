@@ -3,6 +3,8 @@
  * 处理文档保存时的自动质控分析
  */
 
+import { resolveApiBaseUrl, extractApiData } from '@/utils/api-helpers'
+
 export interface QCTaskStatus {
   task_id: string
   status: 'pending' | 'completed' | 'failed'
@@ -56,12 +58,17 @@ export interface DocumentUpdateResponse {
 }
 
 class DocumentQCService {
-  private baseURL: string
+  private readonly baseURL: string
 
   constructor() {
-    this.baseURL = window.location.hostname === 'localhost' 
-      ? 'http://localhost:8001' 
-      : 'http://124.220.6.136:8001'
+    this.baseURL = resolveApiBaseUrl()
+  }
+
+  private buildUrl(path: string): string {
+    if (!path.startsWith('/')) {
+      return `${this.baseURL}${path}`
+    }
+    return `${this.baseURL}${path}`
   }
 
   /**
@@ -72,7 +79,7 @@ class DocumentQCService {
     updates: DocumentUpdateRequest
   ): Promise<DocumentUpdateResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/api/medical-documents/${documentId}`, {
+      const response = await fetch(this.buildUrl(`/api/medical-documents/${documentId}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -84,7 +91,8 @@ class DocumentQCService {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      return await response.json()
+      const raw = await response.json()
+      return extractApiData<DocumentUpdateResponse>(raw, '更新文档失败')
     } catch (error) {
       console.error('更新文档失败:', error)
       throw error
@@ -96,7 +104,7 @@ class DocumentQCService {
    */
   async getQCTaskStatus(taskId: string): Promise<QCTaskStatus> {
     try {
-      const response = await fetch(`${this.baseURL}/api/qc-tasks/${taskId}`, {
+      const response = await fetch(this.buildUrl(`/api/qc-tasks/${taskId}`), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -107,7 +115,8 @@ class DocumentQCService {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      return await response.json()
+      const raw = await response.json()
+      return extractApiData<QCTaskStatus>(raw, '获取质控任务状态失败')
     } catch (error) {
       console.error('获取质控任务状态失败:', error)
       throw error
@@ -122,7 +131,7 @@ class DocumentQCService {
     ruleCodes: string[] = ['POC_001', 'POC_002']
   ): Promise<BatchQCResult> {
     try {
-      const response = await fetch(`${this.baseURL}/api/medical-records/${recordId}/batch-qc-analysis`, {
+      const response = await fetch(this.buildUrl(`/api/medical-records/${recordId}/batch-qc-analysis`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -136,7 +145,8 @@ class DocumentQCService {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      return await response.json()
+      const raw = await response.json()
+      return extractApiData<BatchQCResult>(raw, '批量质控分析失败')
     } catch (error) {
       console.error('批量质控分析失败:', error)
       throw error

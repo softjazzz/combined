@@ -145,6 +145,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import type { Component } from 'vue'
 import { CloseOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 
@@ -153,7 +154,7 @@ interface BatchAction {
   key: string
   label: string
   shortLabel?: string
-  icon?: Record<string, unknown>
+  icon?: Component
   type?: 'primary' | 'default' | 'dashed' | 'link' | 'text'
   danger?: boolean
   requireConfirm?: boolean
@@ -161,7 +162,7 @@ interface BatchAction {
   confirmContent?: string
   minSelection?: number
   maxSelection?: number
-  validator?: (items[]) => boolean | string
+  validator?: (items: unknown[]) => boolean | string
 }
 
 // 进度详情
@@ -179,7 +180,7 @@ interface ResultDetail {
 
 // Props 定义
 interface Props {
-  selectedItems[]
+  selectedItems: unknown[]
   totalItems?: number
   actions: BatchAction[]
   isMobile?: boolean
@@ -187,6 +188,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  selectedItems: () => [] as unknown[],
   totalItems: 0,
   isMobile: false,
   maxConcurrency: 5
@@ -194,9 +196,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits 定义
 const emit = defineEmits<{
-  'update:selectedItems': [items[]]
+  'update:selectedItems': [unknown[]]
   'select-all': [selected: boolean]
-  'execute-action': [action: BatchAction, items[]]
+  'execute-action': [action: BatchAction, unknown[]]
 }>()
 
 // 响应式数据
@@ -249,7 +251,7 @@ const handleSelectAll = (e) => {
 }
 
 const clearSelection = () => {
-  emit('update: selectedItems', : unknown[])
+  emit('update:selectedItems', [] as unknown[])
 }
 
 const canExecuteAction = (action: BatchAction): boolean => {

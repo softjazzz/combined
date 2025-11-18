@@ -70,7 +70,7 @@ export class SemanticRulesService {
   // ------------------- CRUD & Import/Export -------------------
 
   async create(rule: Partial<SemanticRuleDefinition>) {
-    const res = await fetch(`${this.baseURL}/api/semantic-rules`, {
+    const res = await fetch(`${this.baseURL}/api/v1/semantic-rules`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(rule)
@@ -81,7 +81,7 @@ export class SemanticRulesService {
   }
 
   async update(ruleId: string, patch: Partial<SemanticRuleDefinition>) {
-    const res = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}`, {
+    const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/${ruleId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
@@ -92,7 +92,7 @@ export class SemanticRulesService {
   }
 
   async remove(ruleId: string) {
-    const res = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}`, {
+    const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/${ruleId}`, {
       method: 'DELETE'
     })
     if (!res.ok) throw new Error('删除规则失败')
@@ -101,7 +101,7 @@ export class SemanticRulesService {
   }
 
   async import(rules: Partial<SemanticRuleDefinition>[]) {
-    const res = await fetch(`${this.baseURL}/api/semantic-rules/import`, {
+    const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ rules })
@@ -112,7 +112,7 @@ export class SemanticRulesService {
   }
 
   async export() {
-    const res = await fetch(`${this.baseURL}/api/semantic-rules/export`)
+    const res = await fetch(`${this.baseURL}/api/v1/semantic-rules/export`)
     if (!res.ok) throw new Error('导出规则失败')
     const data = await res.json()
     return (data.rules || []) as SemanticRuleDefinition[]
@@ -127,7 +127,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/${ruleId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -201,7 +201,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules/${ruleId}/execute`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/${ruleId}/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,7 +244,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules/batch-execute`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/batch-execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -284,7 +284,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules/custom`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/custom`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -320,7 +320,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules/stats`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/stats`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -360,7 +360,7 @@ export class SemanticRulesService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${this.baseURL}/api/semantic-rules/validate-llm`, {
+      const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/validate-llm`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

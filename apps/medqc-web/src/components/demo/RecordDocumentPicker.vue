@@ -232,14 +232,14 @@ async function loadSichuanRules() {
   isLoadingSichuanRules.value = true
   try {
     const base = (import.meta as any).env?.VITE_API_BASE_URL || ''
-    // 优先使用“规则管理页”同源接口 /api/semantic-rules，字段与管理页一致，包含 applicable_documents
+    // 优先使用"规则管理页"同源接口 /api/v1/semantic-rules，字段与管理页一致，包含 applicable_documents
     const candidates = [
-      `${base}/api/semantic-rules`,
-      '/api/semantic-rules',
-      `${base}/api/qc/sichuan/rules`,
-      '/api/qc/sichuan/rules',
-      `${location.protocol}//${location.hostname}:8001/api/semantic-rules`,
-      `${location.protocol}//${location.hostname}:8001/api/qc/sichuan/rules`
+      `${base}/api/v1/semantic-rules`,
+      '/api/v1/semantic-rules',
+      `${base}/api/v1/qc/sichuan/rules`,
+      '/api/v1/qc/sichuan/rules',
+      `${location.protocol}//${location.hostname}:8001/api/v1/semantic-rules`,
+      `${location.protocol}//${location.hostname}:8001/api/v1/qc/sichuan/rules`
     ]
 
     let data: unknown = null

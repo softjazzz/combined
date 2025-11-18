@@ -2,6 +2,10 @@
 
 > 面向前端与集成方，描述认证与规则管理相关 REST API。示例基于当前前端实现（ApiService 与规则列表页）。
 
+## 📢 重要更新
+
+**2025-10-11**: Migration 006 已上线，规则查询性能提升 20 倍！详见 [API Migration 006 文档](./API_MIGRATION_006.md)
+
 ## 目录
 - 认证
   - 登录 /api/auth/login
@@ -14,11 +18,14 @@
   - 新增 /api/rules
   - 更新 /api/rules/{id}
   - 删除 /api/rules/{id}
+  - **🆕 按文书类型查询规则** (RPC 函数)
+  - **🆕 规则统计** (视图)
 - 参数说明
   - 分页参数
   - 筛选/搜索参数
 - 通用响应结构
 - 错误码
+- **🆕 数据库优化** (Migration 006)
 
 ## 认证
 
@@ -70,15 +77,20 @@
   - enabled: boolean（true/false）
   - severity: string（info/warn/block）
   - rule_type: string（参考规则类型映射）
+  - **🆕 document_category: string（文书类别，使用 Migration 006 优化）**
 - Response
 ```json
 {
   "data": [
-    {"id":1,"code":"DRUG_INSURANCE_TYPE_001","name":"疤痕止痒软化膏 - 保险类型限制","rule_type":"drug_insurance_type","severity":"warn","enabled":true,"version":1,"category_id":"batch_3","updated_at":"2025-09-08T10:00:00Z","description":"..."}
+    {"id":1,"code":"DRUG_INSURANCE_TYPE_001","name":"疤痕止痒软化膏 - 保险类型限制","rule_type":"drug_insurance_type","severity":"warn","enabled":true,"version":1,"category_id":"batch_3","updated_at":"2025-09-08T10:00:00Z","description":"...","applicable_documents":["入院记录"]}
   ],
   "total": 1173
 }
 ```
+
+**性能提升** (Migration 006):
+- 查询时间：100ms → 5ms（提升 20倍）⚡
+- 数据传输：500KB → 10KB（减少 50倍）⚡
 
 ### 获取单条
 - GET /api/rules/{id}
@@ -133,6 +145,60 @@
   - drug_dosage_form（剂型限制）
   - drug_route（给药途径）
   - drug_indication（适应症限制）
+
+### 🆕 按文书类型查询规则 (RPC 函数)
+
+**推荐使用此方法获取规则，性能最优！**
+
+- RPC Function: `get_applicable_rules`
+- 参数:
+  - `p_document_type`: string（文书类型，如 "首次病程记录"）
+  - `p_is_active`: boolean（默认 true）
+
+**SQL 示例**:
+```sql
+SELECT * FROM get_applicable_rules('首次病程记录', true);
+```
+
+**Supabase Client 示例**:
+```typescript
+const { data, error } = await supabase.rpc('get_applicable_rules', {
+  p_document_type: '首次病程记录',
+  p_is_active: true
+})
+```
+
+**Python 示例**:
+```python
+response = await supabase.rpc(
+    'get_applicable_rules',
+    {'p_document_type': '首次病程记录', 'p_is_active': True}
+).execute()
+```
+
+详见: [API Migration 006 文档](./API_MIGRATION_006.md)
+
+---
+
+### 🆕 规则统计 (视图)
+
+#### 总体统计
+- View: `qc_rules_statistics`
+- 字段: `total_rules`, `active_rules`, `inactive_rules`, `universal_rules`, `specific_rules`
+
+```sql
+SELECT * FROM qc_rules_statistics;
+```
+
+#### 按文书类型统计
+- View: `qc_rules_by_document_type`
+- 字段: `document_type`, `rule_count`, `active_rule_count`, `rule_names`
+
+```sql
+SELECT * FROM qc_rules_by_document_type ORDER BY rule_count DESC;
+```
+
+---
 
 ## 通用响应结构（示例）
 ```json

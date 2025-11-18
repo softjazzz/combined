@@ -128,8 +128,60 @@
           <span class="text-white font-semibold ml-3 drop-shadow-sm">统计分析</span>
         </a-menu-item>
 
-        <!-- 质控规则管理 - 仅admin可见 -->
-        <a-menu-item key="/dashboard/rules" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+        <!-- DRG/DIP -->
+        <a-sub-menu key="/dashboard/drg" class="menu-item menu-item-primary mb-3 mx-2">
+          <template #icon>
+            <div class="w-10 h-10 bg-gradient-to-br from-emerald-500/30 to-teal-600/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-emerald-300/30">
+              <MedicineBoxOutlined class="text-emerald-100 text-lg drop-shadow-sm" />
+            </div>
+          </template>
+          <template #title>
+            <span class="text-white font-semibold ml-3 drop-shadow-sm">DRG/DIP</span>
+          </template>
+          <a-menu-item key="/dashboard/drg/index" class="menu-item-secondary ml-6 mb-2 rounded-xl">
+            <template #icon>
+              <div class="w-7 h-7 bg-gradient-to-br from-emerald-400/20 to-emerald-500/10 rounded-lg flex items-center justify-center shadow-md border border-emerald-300/20">
+                <HomeOutlined class="text-emerald-100 text-sm" />
+              </div>
+            </template>
+            <span class="text-blue-50 ml-3 font-medium">DRG 首页</span>
+          </a-menu-item>
+          <a-menu-item key="/dashboard/drg/coding" class="menu-item-secondary ml-6 mb-2 rounded-xl">
+            <template #icon>
+              <div class="w-7 h-7 bg-gradient-to-br from-cyan-400/20 to-cyan-500/10 rounded-lg flex items-center justify-center shadow-md border border-cyan-300/20">
+                <FileTextOutlined class="text-cyan-100 text-sm" />
+              </div>
+            </template>
+            <span class="text-blue-50 ml-3 font-medium">编码辅助</span>
+          </a-menu-item>
+          <a-menu-item key="/dashboard/drg/grouping" class="menu-item-secondary ml-6 mb-2 rounded-xl">
+            <template #icon>
+              <div class="w-7 h-7 bg-gradient-to-br from-blue-400/20 to-blue-500/10 rounded-lg flex items-center justify-center shadow-md border border-blue-300/20">
+                <BranchesOutlined class="text-blue-100 text-sm" />
+              </div>
+            </template>
+            <span class="text-blue-50 ml-3 font-medium">分组预测</span>
+          </a-menu-item>
+          <a-menu-item key="/dashboard/drg/monitor" class="menu-item-secondary ml-6 mb-2 rounded-xl">
+            <template #icon>
+              <div class="w-7 h-7 bg-gradient-to-br from-amber-400/20 to-amber-500/10 rounded-lg flex items-center justify-center shadow-md border border-amber-300/20">
+                <RadarChartOutlined class="text-amber-100 text-sm" />
+              </div>
+            </template>
+            <span class="text-blue-50 ml-3 font-medium">事中监控</span>
+          </a-menu-item>
+          <a-menu-item key="/dashboard/drg/analysis" class="menu-item-secondary ml-6 mb-2 rounded-xl">
+            <template #icon>
+              <div class="w-7 h-7 bg-gradient-to-br from-violet-400/20 to-violet-500/10 rounded-lg flex items-center justify-center shadow-md border border-violet-300/20">
+                <BarChartOutlined class="text-violet-100 text-sm" />
+              </div>
+            </template>
+            <span class="text-blue-50 ml-3 font-medium">事后分析</span>
+          </a-menu-item>
+        </a-sub-menu>
+
+        <!-- 质控规则管理 - admin和qc_manager可见（包含传统规则、语义规则和科室规则） -->
+        <a-menu-item key="/dashboard/rules" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
           <template #icon>
             <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
               <SettingOutlined class="text-white text-lg drop-shadow-sm" />
@@ -176,6 +228,16 @@
             </div>
           </template>
           <span class="text-white font-semibold ml-3 drop-shadow-sm">LLM质控演示增强版</span>
+        </a-menu-item>
+
+        <!-- LLM质控演示新版（P1开发中） - 仅admin可见 -->
+        <a-menu-item key="/dashboard/llm-qc-demo-new" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+          <template #icon>
+            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500/30 to-purple-600/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-indigo-300/30">
+              <ExperimentOutlined class="text-indigo-100 text-lg drop-shadow-sm" />
+            </div>
+          </template>
+          <span class="text-white font-semibold ml-3 drop-shadow-sm">LLM质控演示新版</span>
         </a-menu-item>
         </a-menu>
       </div>
@@ -352,13 +414,35 @@ const breadcrumbItems = computed(() => {
       case 'llm-qc-demo-enhanced':
         items.push({ title: 'LLM质控演示增强版', path: null })
         break
+      case 'llm-qc-demo-new':
+        items.push({ title: 'LLM质控演示新版', path: null })
+        break
+      case 'drg':
+        items.push({ title: 'DRG/DIP', path: '/dashboard/drg' })
+        if (pathSegments.length > 2) {
+          if (pathSegments[2] === 'index') {
+            items.push({ title: 'DRG 首页', path: null })
+          } else if (pathSegments[2] === 'coding') {
+            items.push({ title: '编码辅助', path: null })
+            if (pathSegments.length > 3) {
+              items.push({ title: '编码详情', path: null })
+            }
+          } else if (pathSegments[2] === 'grouping') {
+            items.push({ title: '分组预测', path: null })
+          } else if (pathSegments[2] === 'monitor') {
+            items.push({ title: '事中监控', path: null })
+          } else if (pathSegments[2] === 'analysis') {
+            items.push({ title: '事后分析', path: null })
+          }
+        }
+        break
       default:
         items.push({ title: '仪表板', path: null })
     }
   } else {
     items.push({ title: '仪表板', path: null })
   }
-  
+
   return items
 })
 

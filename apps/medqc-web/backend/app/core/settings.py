@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     SICHUAN_API_KEY: Optional[str] = None
     SICHUAN_MODEL: str = "qwen2.5-14b-instruct"
     SICHUAN_TIMEOUT_SECONDS: int = 120
+    # Content truncation settings
+    SICHUAN_ENABLE_TRUNCATE: bool = False  # 禁用截断（模型支持128K上下文）
+    SICHUAN_MAX_CONTENT_LENGTH: int = 100000  # 最大内容长度（字符数）
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
