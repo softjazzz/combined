@@ -131,7 +131,7 @@
       </div>
 
       <!-- 改进建议 -->
-      <div v-if="analysisResult.suggestions.length > 0" class="suggestions-section">
+      <div v-if="structuredAnalysisSuggestions.length > 0" class="suggestions-section">
         <h4 class="section-title">
           <i class="fas fa-lightbulb"></i>
           改进建议
@@ -139,17 +139,22 @@
         
         <div class="suggestions-list">
           <div 
-            v-for="(suggestion, index) in analysisResult.suggestions" 
-            :key="index"
+            v-for="(suggestion, index) in structuredAnalysisSuggestions" 
+            :key="suggestion.id || index"
             class="suggestion-item"
           >
             <div class="suggestion-content">
               <i class="fas fa-arrow-right"></i>
-              {{ suggestion }}
+              <div class="suggestion-steps">
+                <div v-if="suggestion.title" class="suggestion-title">{{ suggestion.title }}</div>
+                <ol class="pl-5 list-decimal space-y-1">
+                  <li v-for="(step, index) in suggestion.steps" :key="index">{{ step }}</li>
+                </ol>
+              </div>
             </div>
             <button 
               class="apply-suggestion-btn"
-              @click="$emit('apply-suggestion', suggestion)"
+              @click="$emit('apply-suggestion', suggestion.description || suggestion.steps.join(' '))"
               title="应用建议"
             >
               <i class="fas fa-magic"></i>
@@ -203,6 +208,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { QCAnalysisResult } from '@/api/medical-records'
+import { structureSuggestions } from '@/utils/suggestionFormatter'
 
 // Props
 interface Props {
@@ -254,6 +260,23 @@ const formatTimestamp = (timestamp: string): string => {
     second: '2-digit'
   })
 }
+
+const structuredAnalysisSuggestions = computed(() => {
+  const suggestions = props.analysisResult?.suggestions || []
+  if (suggestions.length === 0) return []
+  if (typeof suggestions[0] === 'string') {
+    const normalized = (suggestions as string[]).map((desc, idx) => ({
+      id: `suggestion-${idx}`,
+      title: '',
+      description: desc,
+      category: '',
+      priority: 'medium' as const,
+      actionRequired: false
+    }))
+    return structureSuggestions(normalized as any)
+  }
+  return structureSuggestions(suggestions as any)
+})
 </script>
 
 <style scoped>

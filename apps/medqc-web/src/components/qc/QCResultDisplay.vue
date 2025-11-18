@@ -169,8 +169,8 @@
 
           <div class="space-y-3">
             <div
-              v-for="suggestion in result.suggestions"
-              :key="suggestion.id"
+              v-for="(suggestion, index) in structuredSuggestions"
+              :key="suggestion.id || index"
               class="p-4 rounded-lg bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 hover:border-yellow-500/40 transition-all duration-200"
             >
               <div class="flex items-start gap-3">
@@ -190,7 +190,9 @@
                       {{ getPriorityLabel(suggestion.priority) }}
                     </a-tag>
                   </div>
-                  <p class="text-sm text-slate-300 mb-2">{{ suggestion.description }}</p>
+                  <ol class="text-sm text-slate-300 mb-2 list-decimal list-inside space-y-1 marker:text-amber-400">
+                    <li v-for="(step, index) in suggestion.steps" :key="index">{{ step }}</li>
+                  </ol>
                   <div class="text-xs text-yellow-400 flex items-center gap-1">
                     <TagOutlined />
                     {{ suggestion.category }}
@@ -267,6 +269,7 @@ import {
   EnvironmentOutlined
 } from '@ant-design/icons-vue'
 import type { QCResult, QCIssue } from '@/types'
+import { structureSuggestions } from '@/utils/suggestionFormatter'
 
 // Props
 interface Props {
@@ -296,6 +299,8 @@ const filteredIssues = computed(() => {
   }
   return props.result.issues.filter(issue => issue.severity === issueFilter.value)
 })
+
+const structuredSuggestions = computed(() => structureSuggestions(props.result.suggestions))
 
 // 方法
 const filterIssues = () => {
