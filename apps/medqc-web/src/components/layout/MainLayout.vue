@@ -1,243 +1,164 @@
 <template>
-  <a-layout class="min-h-screen bg-gray-50">
+  <a-layout class="min-h-screen">
     <!-- 侧边栏 -->
     <a-layout-sider
       v-model:collapsed="collapsed"
       collapsible
-      class="sidebar-container shadow-2xl border-r border-blue-200/50 relative overflow-hidden"
-      :style="{
-        background: 'linear-gradient(180deg, #3b82f6 0%, #1e40af 50%, #1d4ed8 100%)'
-      }"
-      width="280"
+      class="sidebar-container shadow-xl relative overflow-hidden border-none bg-slate-900"
+      theme="dark"
+      width="260"
     >
-      <!-- 背景装饰元素 -->
-      <div class="absolute inset-0 pointer-events-none">
-        <!-- 渐变光晕 -->
-        <div class="absolute -top-20 -right-20 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
-        <div class="absolute top-1/3 -left-10 w-32 h-32 bg-cyan-400/10 rounded-full blur-2xl"></div>
-        <div class="absolute bottom-20 -right-16 w-36 h-36 bg-indigo-300/8 rounded-full blur-2xl"></div>
-
-        <!-- 医疗十字装饰 -->
-        <div class="absolute top-16 right-8 w-3 h-3 opacity-10">
-          <div class="absolute inset-0 bg-white transform rotate-45"></div>
-          <div class="absolute top-1 left-1 w-1 h-1 bg-blue-600"></div>
-        </div>
-        <div class="absolute bottom-32 left-6 w-2 h-2 opacity-10">
-          <div class="absolute inset-0 bg-white transform rotate-45"></div>
-        </div>
-
-        <!-- 微妙的网格纹理 -->
-        <div class="absolute inset-0 opacity-[0.02]" style="background-image: linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px); background-size: 20px 20px;"></div>
-      </div>
       <!-- Logo区域 -->
-      <div class="logo-container relative p-6 text-center border-b border-white/20 backdrop-blur-sm">
-        <!-- Logo背景光效 -->
-        <div class="absolute inset-0 bg-gradient-to-r from-white/5 to-transparent"></div>
-
-        <div class="relative flex items-center justify-center">
-          <div class="w-12 h-12 bg-gradient-to-br from-white/25 to-white/10 rounded-2xl flex items-center justify-center mr-4 shadow-lg backdrop-blur-sm border border-white/20" v-if="!collapsed">
-            <MedicineBoxOutlined class="text-2xl text-white drop-shadow-sm" />
+      <div class="logo-container relative px-4 py-5 flex items-center justify-center transition-all duration-300 border-b border-slate-800" :class="collapsed ? 'px-2' : 'px-6'">
+        <div class="flex items-center gap-3 overflow-hidden whitespace-nowrap">
+          <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 transition-all duration-300">
+             <MedicineBoxOutlined class="text-white text-xl" />
           </div>
-          <div class="w-10 h-10 bg-gradient-to-br from-white/25 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20" v-else>
-            <MedicineBoxOutlined class="text-xl text-white drop-shadow-sm" />
-          </div>
-          <div v-if="!collapsed" class="text-left">
-            <div class="text-white font-bold text-xl leading-tight drop-shadow-sm">
-              医疗质控系统
-            </div>
-            <div class="text-blue-100 text-sm mt-1 font-medium">
-              AI-Powered QC Platform
-            </div>
+          <div v-if="!collapsed" class="flex flex-col transition-all duration-300 opacity-100">
+            <span class="text-white font-bold text-lg leading-tight tracking-tight">病案质控系统</span>
+            <span class="text-slate-400 text-xs font-medium tracking-wide">AI-Powered QC Platform</span>
           </div>
         </div>
       </div>
 
       <!-- 导航菜单 -->
-      <div class="relative z-10">
+      <div class="flex-1 overflow-y-auto py-4 custom-scrollbar">
         <a-menu
           v-model:selectedKeys="selectedKeys"
           mode="inline"
           theme="dark"
-          class="bg-transparent border-0 px-4 py-6 menu-container"
-          style="background: transparent !important;"
+          class="border-none px-3 space-y-1 bg-slate-900"
           @select="handleMenuSelect"
+          :openKeys="['/dashboard/records', '/dashboard/drg']"
         >
-        <!-- 病案质控 -->
-        <a-sub-menu key="/dashboard/records" class="menu-item menu-item-primary mb-3 mx-2">
+        <!-- 仪表板 -->
+        <a-menu-item key="/dashboard" class="menu-item-base">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <FileTextOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+            <DashboardOutlined />
+          </template>
+          <span class="font-medium">仪表板</span>
+        </a-menu-item>
+
+        <!-- 病案质控 -->
+        <a-sub-menu key="/dashboard/records" class="menu-item-base">
+          <template #icon>
+            <FileTextOutlined />
           </template>
           <template #title>
-            <span class="text-white font-semibold ml-3 drop-shadow-sm">病案质控</span>
+            <span class="font-medium">病案质控</span>
           </template>
-          <a-menu-item key="/dashboard/records/running" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-blue-400/20 to-blue-500/10 rounded-lg flex items-center justify-center shadow-md border border-blue-300/20">
-                <PlayCircleOutlined class="text-blue-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">运行病历</span>
+          <a-menu-item key="/dashboard/records/running">
+            <template #icon><PlayCircleOutlined /></template>
+            <span>运行病历</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/records/final" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-green-400/20 to-green-500/10 rounded-lg flex items-center justify-center shadow-md border border-green-300/20">
-                <CheckCircleOutlined class="text-green-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">终末病历</span>
+          <a-menu-item key="/dashboard/records/final">
+             <template #icon><CheckCircleOutlined /></template>
+            <span>终末病历</span>
           </a-menu-item>
         </a-sub-menu>
 
         <!-- 任务管理 -->
-        <a-sub-menu key="/dashboard/tasks" class="menu-item menu-item-primary mb-3 mx-2">
+        <a-sub-menu key="/dashboard/tasks" class="menu-item-base">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <ProjectOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+             <ProjectOutlined />
           </template>
           <template #title>
-            <span class="text-white font-semibold ml-3 drop-shadow-sm">任务管理</span>
+            <span class="font-medium">任务管理</span>
           </template>
-          <a-menu-item key="/dashboard/tasks/my" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-purple-400/20 to-purple-500/10 rounded-lg flex items-center justify-center shadow-md border border-purple-300/20">
-                <UserOutlined class="text-purple-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">我的任务</span>
+          <a-menu-item key="/dashboard/tasks/my">
+             <template #icon><UserOutlined /></template>
+            <span>我的任务</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/tasks/all" class="menu-item-secondary ml-6 mb-2 rounded-xl" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-orange-400/20 to-orange-500/10 rounded-lg flex items-center justify-center shadow-md border border-orange-300/20">
-                <TeamOutlined class="text-orange-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">全部任务</span>
+          <a-menu-item key="/dashboard/tasks/all" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
+             <template #icon><TeamOutlined /></template>
+            <span>全部任务</span>
           </a-menu-item>
         </a-sub-menu>
 
         <!-- 统计分析 -->
-        <a-menu-item key="/dashboard/statistics" class="menu-item menu-item-primary mb-3 mx-2">
+        <a-menu-item key="/dashboard/statistics" class="menu-item-base">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <BarChartOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+            <BarChartOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">统计分析</span>
+          <span class="font-medium">统计分析</span>
         </a-menu-item>
 
         <!-- DRG/DIP -->
-        <a-sub-menu key="/dashboard/drg" class="menu-item menu-item-primary mb-3 mx-2">
+        <a-sub-menu key="/dashboard/drg" class="menu-item-base">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-emerald-500/30 to-teal-600/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-emerald-300/30">
-              <MedicineBoxOutlined class="text-emerald-100 text-lg drop-shadow-sm" />
-            </div>
+            <MedicineBoxOutlined />
           </template>
           <template #title>
-            <span class="text-white font-semibold ml-3 drop-shadow-sm">DRG/DIP</span>
+            <span class="font-medium">DRG/DIP</span>
           </template>
-          <a-menu-item key="/dashboard/drg/index" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-emerald-400/20 to-emerald-500/10 rounded-lg flex items-center justify-center shadow-md border border-emerald-300/20">
-                <HomeOutlined class="text-emerald-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">DRG 首页</span>
+          <a-menu-item key="/dashboard/drg/index">
+             <template #icon><HomeOutlined /></template>
+            <span>DRG 首页</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/drg/coding" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-cyan-400/20 to-cyan-500/10 rounded-lg flex items-center justify-center shadow-md border border-cyan-300/20">
-                <FileTextOutlined class="text-cyan-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">编码辅助</span>
+          <a-menu-item key="/dashboard/drg/coding">
+             <template #icon><FileTextOutlined /></template>
+            <span>编码辅助</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/drg/grouping" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-blue-400/20 to-blue-500/10 rounded-lg flex items-center justify-center shadow-md border border-blue-300/20">
-                <BranchesOutlined class="text-blue-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">分组预测</span>
+          <a-menu-item key="/dashboard/drg/grouping">
+             <template #icon><BranchesOutlined /></template>
+            <span>分组预测</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/drg/monitor" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-amber-400/20 to-amber-500/10 rounded-lg flex items-center justify-center shadow-md border border-amber-300/20">
-                <RadarChartOutlined class="text-amber-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">事中监控</span>
+          <a-menu-item key="/dashboard/drg/monitor">
+             <template #icon><RadarChartOutlined /></template>
+            <span>事中监控</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/drg/analysis" class="menu-item-secondary ml-6 mb-2 rounded-xl">
-            <template #icon>
-              <div class="w-7 h-7 bg-gradient-to-br from-violet-400/20 to-violet-500/10 rounded-lg flex items-center justify-center shadow-md border border-violet-300/20">
-                <BarChartOutlined class="text-violet-100 text-sm" />
-              </div>
-            </template>
-            <span class="text-blue-50 ml-3 font-medium">事后分析</span>
+          <a-menu-item key="/dashboard/drg/analysis">
+             <template #icon><BarChartOutlined /></template>
+            <span>事后分析</span>
           </a-menu-item>
         </a-sub-menu>
 
-        <!-- 质控规则管理 - admin和qc_manager可见（包含传统规则、语义规则和科室规则） -->
-        <a-menu-item key="/dashboard/rules" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
+        <!-- 质控规则管理 -->
+        <a-menu-item key="/dashboard/rules" class="menu-item-base" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <SettingOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+            <SettingOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">质控规则管理</span>
+          <span class="font-medium">质控规则管理</span>
         </a-menu-item>
 
         <!-- 测试病历管理 -->
-        <a-menu-item key="/dashboard/medical-records" class="menu-item menu-item-primary mb-3 mx-2">
+        <a-menu-item key="/dashboard/medical-records" class="menu-item-base">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <FileTextOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+            <FileTextOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">测试病历管理</span>
+          <span class="font-medium">测试病历管理</span>
         </a-menu-item>
 
-        <!-- 数据权限配置 - 仅admin可见 -->
-        <a-menu-item key="/dashboard/permissions" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+        <!-- 数据权限配置 -->
+        <a-menu-item key="/dashboard/permissions" class="menu-item-base" v-if="authStore.hasRole('admin')">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <SafetyCertificateOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+            <SafetyCertificateOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">数据权限配置</span>
+          <span class="font-medium">数据权限配置</span>
         </a-menu-item>
 
-        <!-- 系统设置 - 仅admin可见 -->
-        <a-menu-item key="/dashboard/settings" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+        <!-- 系统设置 -->
+        <a-menu-item key="/dashboard/settings" class="menu-item-base" v-if="authStore.hasRole('admin')">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-white/20 to-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
-              <SettingOutlined class="text-white text-lg drop-shadow-sm" />
-            </div>
+            <SettingOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">系统设置</span>
+          <span class="font-medium">系统设置</span>
         </a-menu-item>
 
-        <!-- 新的LLM质控演示增强版 - 仅admin可见 -->
-        <a-menu-item key="/dashboard/llm-qc-demo-enhanced" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+        <!-- LLM质控演示增强版 -->
+        <a-menu-item key="/dashboard/llm-qc-demo-enhanced" class="menu-item-base" v-if="authStore.hasRole('admin')">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-purple-500/30 to-blue-600/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-purple-300/30">
-              <ExperimentOutlined class="text-purple-100 text-lg drop-shadow-sm" />
-            </div>
+            <ExperimentOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">LLM质控演示增强版</span>
+          <span class="font-medium">LLM质控演示增强版</span>
         </a-menu-item>
 
-        <!-- LLM质控演示新版（P1开发中） - 仅admin可见 -->
-        <a-menu-item key="/dashboard/llm-qc-demo-new" class="menu-item menu-item-primary mb-3 mx-2" v-if="authStore.hasRole('admin')">
+        <!-- LLM质控演示新版 -->
+        <a-menu-item key="/dashboard/llm-qc-demo-new" class="menu-item-base" v-if="authStore.hasRole('admin')">
           <template #icon>
-            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500/30 to-purple-600/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-indigo-300/30">
-              <ExperimentOutlined class="text-indigo-100 text-lg drop-shadow-sm" />
-            </div>
+            <ExperimentOutlined />
           </template>
-          <span class="text-white font-semibold ml-3 drop-shadow-sm">LLM质控演示新版</span>
+          <span class="font-medium">LLM质控演示新版</span>
         </a-menu-item>
         </a-menu>
       </div>
@@ -245,69 +166,97 @@
 
     <!-- 主内容区域 -->
     <a-layout>
-      <!-- 顶部导航栏 -->
-      <a-layout-header class="header bg-white shadow-sm border-b border-gray-100 px-6 flex items-center justify-between h-16">
+      <!-- 顶部导航栏 (极简白风格) -->
+      <a-layout-header class="header bg-white/90 backdrop-blur-sm sticky top-0 z-20 shadow-sm border-b border-slate-200/60 px-6 flex items-center justify-between h-16 transition-all duration-300">
         <div class="flex items-center">
           <a-button
             type="text"
             @click="collapsed = !collapsed"
-            class="trigger hover:bg-blue-50 text-blue-600 border-0"
+            class="trigger hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-0 mr-4 rounded-lg w-9 h-9 flex items-center justify-center transition-colors"
           >
-            <MenuUnfoldOutlined v-if="collapsed" />
-            <MenuFoldOutlined v-else />
+            <MenuUnfoldOutlined v-if="collapsed" class="text-lg" />
+            <MenuFoldOutlined v-else class="text-lg" />
           </a-button>
 
-          <!-- 面包屑 -->
-          <a-breadcrumb class="ml-6">
+          <!-- 面包屑 (胶囊风格) -->
+          <a-breadcrumb class="hidden md:flex items-center">
             <a-breadcrumb-item>
-              <HomeOutlined class="text-blue-500" />
+              <router-link to="/dashboard" class="flex items-center text-slate-400 hover:text-blue-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-50">
+                <HomeOutlined class="text-base" />
+              </router-link>
             </a-breadcrumb-item>
             <a-breadcrumb-item v-for="item in breadcrumbItems" :key="item.path">
-              <router-link v-if="item.path" :to="item.path" class="text-gray-600 hover:text-blue-600">
+              <router-link v-if="item.path" :to="item.path" class="text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium px-2 py-1 rounded-md hover:bg-slate-50">
                 {{ item.title }}
               </router-link>
-              <span v-else class="text-gray-800 font-medium">{{ item.title }}</span>
+              <span v-else class="text-slate-800 font-semibold text-sm px-2 py-1">{{ item.title }}</span>
             </a-breadcrumb-item>
           </a-breadcrumb>
         </div>
 
         <!-- 右侧用户信息 -->
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-3">
           <!-- 通知 -->
-          <a-badge :count="5" class="mr-2">
-            <a-button type="text" shape="circle" size="large" class="hover:bg-blue-50 text-gray-600 hover:text-blue-600">
-              <BellOutlined />
-            </a-button>
-          </a-badge>
+          <a-popover placement="bottomRight" trigger="click">
+            <template #content>
+              <div class="w-72 p-2">
+                <div class="flex justify-between items-center mb-2 px-2">
+                  <span class="font-bold text-slate-700">通知中心</span>
+                  <span class="text-xs text-blue-600 cursor-pointer">全部已读</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors flex gap-3 items-start">
+                    <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
+                    <div>
+                      <div class="text-sm text-slate-700 font-medium">系统升级通知</div>
+                      <div class="text-xs text-slate-400 mt-0.5">系统将于今晚进行维护升级...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <a-badge count="5" :numberStyle="{ backgroundColor: '#ef4444', boxShadow: '0 0 0 1px #fff' }" class="cursor-pointer">
+              <div class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
+                <BellOutlined class="text-xl" />
+              </div>
+            </a-badge>
+          </a-popover>
+
+          <div class="w-px h-6 bg-slate-200 mx-2"></div>
 
           <!-- 用户头像和菜单 -->
-          <a-dropdown>
-            <div class="flex items-center cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors duration-200">
-              <a-avatar :size="36" class="mr-3 bg-blue-500">
-                <template #icon>
-                  <UserOutlined />
-                </template>
+          <a-dropdown :trigger="['click']">
+            <div class="flex items-center cursor-pointer hover:bg-slate-100 p-1.5 pr-3 rounded-full transition-all duration-200 group select-none">
+              <a-avatar :size="36" class="mr-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white">
+                <template #icon><UserOutlined /></template>
               </a-avatar>
-              <div class="flex flex-col">
-                <span class="text-sm font-semibold text-gray-800">{{ authStore.userName }}</span>
-                <span class="text-xs text-gray-500">{{ authStore.userRoles?.[0] }}</span>
+              <div class="flex flex-col mr-1 hidden sm:flex">
+                <span class="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors">{{ authStore.userName }}</span>
+                <span class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{{ authStore.userRoles?.[0] || 'User' }}</span>
               </div>
-              <DownOutlined class="ml-3 text-xs text-gray-400" />
+              <DownOutlined class="ml-2 text-xs text-slate-400 group-hover:text-slate-600 transition-colors" />
             </div>
             <template #overlay>
-              <a-menu>
-                <a-menu-item key="profile">
+              <a-menu class="min-w-[180px] p-2 rounded-2xl border border-slate-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]">
+                <div class="px-3 py-2 mb-1">
+                  <div class="text-xs text-slate-400">Signed in as</div>
+                  <div class="font-bold text-slate-700 truncate">
+                    {{ authStore.user?.email || 'user@example.com' }}
+                  </div>
+                </div>
+                <div class="h-px bg-slate-100 my-1"></div>
+                <a-menu-item key="profile" class="rounded-lg mb-1 !py-2">
                   <UserOutlined />
-                  <span>个人中心</span>
+                  <span class="ml-2 font-medium">个人中心</span>
                 </a-menu-item>
-                <a-menu-item key="settings">
+                <a-menu-item key="settings" class="rounded-lg mb-1 !py-2">
                   <SettingOutlined />
-                  <span>账户设置</span>
+                  <span class="ml-2 font-medium">账户设置</span>
                 </a-menu-item>
-                <a-menu-divider />
-                <a-menu-item key="logout" @click="handleLogout">
+                <div class="h-px bg-slate-100 my-1"></div>
+                <a-menu-item key="logout" @click="handleLogout" class="rounded-lg !text-red-500 hover:!bg-red-50 hover:!text-red-600 !py-2">
                   <LogoutOutlined />
-                  <span>退出登录</span>
+                  <span class="ml-2 font-medium">退出登录</span>
                 </a-menu-item>
               </a-menu>
             </template>
@@ -315,11 +264,13 @@
         </div>
       </a-layout-header>
 
-      <!-- 内容区域 -->
-      <a-layout-content class="bg-gray-50 p-8">
-        <div class="bg-white rounded-xl shadow-sm min-h-full border border-gray-100">
-          <router-view />
-        </div>
+      <!-- 内容区域 (移除原有内层卡片，由页面自行控制布局) -->
+      <a-layout-content class="bg-slate-100 overflow-x-hidden">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </a-layout-content>
     </a-layout>
   </a-layout>
@@ -356,9 +307,6 @@ import {
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-
-// 开发环境检测
-const isDevelopment = import.meta.env.DEV
 
 // 响应式数据
 const collapsed = ref(false)
@@ -467,312 +415,80 @@ watch(
 </script>
 
 <style scoped>
-/* 侧边栏容器样式 */
-.sidebar-container {
-  position: relative;
-  overflow: hidden;
+/* Ant Design 菜单样式重写 */
+:deep(.ant-menu-dark) {
+  background: transparent !important;
 }
 
-.sidebar-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%, rgba(255,255,255,0.05) 100%);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Logo区域样式 */
-.logo-container {
-  position: relative;
-  z-index: 10;
-}
-
-/* 菜单容器样式 */
-.menu-container {
-  position: relative;
-  z-index: 10;
-}
-
-/* 一级菜单项样式 */
-.menu-item-primary {
-  margin: 8px 0;
-  border-radius: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-.menu-item-primary::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  border-radius: 16px;
-}
-
-.menu-item-primary:hover::before {
-  opacity: 1;
-}
-
-.menu-item-primary:hover {
-  background: rgba(255, 255, 255, 0.15) !important;
-  transform: translateX(4px) scale(1.02);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-/* 二级菜单项样式 */
-.menu-item-secondary {
+/* 菜单项通用样式 */
+:deep(.ant-menu-item),
+:deep(.ant-menu-submenu-title) {
+  border-radius: 8px;
   margin: 4px 0;
-  border-radius: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  background: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  color: #94a3b8; /* Slate-400 */
+  transition: all 0.2s ease;
+  height: 42px !important;
+  line-height: 42px !important;
 }
 
-.menu-item-secondary:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
-  transform: translateX(6px) scale(1.03);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.15);
+/* 菜单项悬停 */
+:deep(.ant-menu-item:hover),
+:deep(.ant-menu-submenu-title:hover) {
+  color: #fff !important;
+  background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
-/* 选中状态样式 */
-.menu-item.ant-menu-item-selected,
-.menu-item.ant-menu-submenu-selected {
-  background: rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(255, 255, 255, 0.2);
-  transform: translateX(4px);
+/* 菜单项选中 */
+:deep(.ant-menu-item-selected) {
+  background-color: #2563eb !important; /* Blue-600 */
+  color: #fff !important;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
-.menu-item-secondary.ant-menu-item-selected {
-  background: rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15), 0 0 0 2px rgba(255, 255, 255, 0.25);
-  transform: translateX(6px);
+/* 选中项高亮条 (移除右侧条，改用整体背景) */
+:deep(.ant-menu-item-selected::after) {
+  display: none;
+}
+
+/* 子菜单容器 */
+:deep(.ant-menu-sub.ant-menu-inline) {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 子菜单项缩进 */
+:deep(.ant-menu-inline .ant-menu-item) {
+  padding-left: 48px !important;
+}
+
+/* 图标样式 */
+:deep(.anticon) {
+  font-size: 18px;
+  vertical-align: middle;
+}
+
+/* 滚动条 */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155; /* Slate-700 */
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569; /* Slate-600 */
 }
 
 /* 头部样式 */
 .header {
   height: 64px;
   line-height: 64px;
-  padding: 0 32px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.trigger {
-  font-size: 18px;
-  line-height: 64px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: 8px;
-}
-
-.trigger:hover {
-  color: #3b82f6;
-  background-color: #eff6ff;
-}
-
-/* Ant Design 菜单样式覆盖 */
-:deep(.ant-menu-dark) {
-  background: transparent !important;
-}
-
-:deep(.ant-menu-dark .ant-menu-item) {
-  color: rgba(255, 255, 255, 0.95);
-  font-weight: 500;
-  border-radius: 16px;
-  margin: 8px 0;
-  height: auto;
-  line-height: 1.4;
-  padding: 12px 16px;
-}
-
-:deep(.ant-menu-dark .ant-menu-item:hover) {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.15) !important;
-}
-
-:deep(.ant-menu-dark .ant-menu-item-selected) {
-  background: rgba(255, 255, 255, 0.25) !important;
-  color: #fff;
-}
-
-:deep(.ant-menu-dark .ant-menu-submenu-title) {
-  color: rgba(255, 255, 255, 0.95);
-  font-weight: 600;
-  border-radius: 16px;
-  margin: 8px 0;
-  height: auto;
-  line-height: 1.4;
-  padding: 12px 16px;
-}
-
-:deep(.ant-menu-dark .ant-menu-submenu-title:hover) {
-  background: rgba(255, 255, 255, 0.15) !important;
-  color: #fff;
-}
-
-:deep(.ant-menu-dark .ant-menu-submenu-open > .ant-menu-submenu-title) {
-  background: rgba(255, 255, 255, 0.15) !important;
-  color: #fff;
-}
-
-/* 二级菜单容器样式 */
-:deep(.ant-menu-dark .ant-menu-sub) {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
-  backdrop-filter: blur(20px);
-  border-radius: 12px !important;
-  margin: 8px 0;
-  padding: 8px 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 20px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  position: relative;
-  isolation: isolate;
-  /* 确保毛玻璃效果严格限制在容器内 */
-  -webkit-backdrop-filter: blur(20px);
-  contain: layout style paint;
-  /* 强制应用圆角到所有角 */
-  -webkit-border-radius: 12px !important;
-  -moz-border-radius: 12px !important;
-  /* 确保圆角不被子元素影响 */
-  border-top-left-radius: 12px !important;
-  border-top-right-radius: 12px !important;
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 12px !important;
-}
-
-/* 为二级菜单容器添加伪元素来增强边界控制 */
-:deep(.ant-menu-dark .ant-menu-sub::before) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: 12px !important;
-  background: inherit;
-  backdrop-filter: inherit;
-  -webkit-backdrop-filter: inherit;
-  z-index: -1;
-  /* 强制应用圆角 */
-  -webkit-border-radius: 12px !important;
-  -moz-border-radius: 12px !important;
-  border-top-left-radius: 12px !important;
-  border-top-right-radius: 12px !important;
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 12px !important;
-}
-
-:deep(.ant-menu-dark .ant-menu-sub .ant-menu-item) {
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-  border-radius: 10px;
-  margin: 4px 8px;
-  height: auto;
-  line-height: 1.4;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-  position: relative;
-}
-
-:deep(.ant-menu-dark .ant-menu-sub .ant-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: #fff;
-  transform: translateX(2px);
-  /* 确保悬停时不会超出容器边界 */
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
-:deep(.ant-menu-dark .ant-menu-sub .ant-menu-item-selected) {
-  background: rgba(255, 255, 255, 0.2) !important;
-  color: #fff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
-
-/* 菜单项图标样式 */
-:deep(.ant-menu-item .anticon),
-:deep(.ant-menu-submenu-title .anticon) {
-  font-size: 16px;
-  margin-right: 12px;
-}
-
-/* 移除默认的选中指示器 */
-:deep(.ant-menu-dark .ant-menu-item-selected::after),
-:deep(.ant-menu-dark .ant-menu-submenu-selected::after) {
-  display: none;
-}
-
-/* 强制覆盖Ant Design的默认样式，确保圆角显示 */
-:deep(.ant-menu-sub.ant-menu-inline) {
-  border-radius: 12px !important;
-  -webkit-border-radius: 12px !important;
-  -moz-border-radius: 12px !important;
-  overflow: hidden !important;
-}
-
-/* 针对特定的Ant Design类名进行样式覆盖 */
-:deep(.ant-menu-inline .ant-menu-sub) {
-  border-radius: 12px !important;
-  -webkit-border-radius: 12px !important;
-  -moz-border-radius: 12px !important;
-  overflow: hidden !important;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .menu-item-primary:hover,
-  .menu-item-secondary:hover {
-    transform: none;
-  }
-
-  /* 移动端禁用毛玻璃效果以提升性能 */
-  :deep(.ant-menu-dark .ant-menu-sub) {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    background: rgba(255, 255, 255, 0.12) !important;
-  }
-}
-
-/* 浏览器兼容性处理 */
-@supports not (backdrop-filter: blur(20px)) {
-  :deep(.ant-menu-dark .ant-menu-sub) {
-    background: rgba(255, 255, 255, 0.15) !important;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-/* 动画关键帧 */
-@keyframes menuItemGlow {
-  0% {
-    box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-  }
-  100% {
-    box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
-  }
-}
-
-.menu-item-primary.ant-menu-item-selected,
-.menu-item-primary.ant-menu-submenu-selected {
-  animation: menuItemGlow 2s ease-in-out infinite;
 }
 </style>

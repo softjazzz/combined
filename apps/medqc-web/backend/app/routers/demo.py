@@ -1011,3 +1011,38 @@ async def get_demo_latest_qc_result(request: Request):
             message=f"获取最新演示质控结果失败: {str(e)}",
             trace_id=get_trace_id(request)
         )
+
+
+# ==================== 病案首页与医保清单自动生成 Demo ====================
+
+
+@router.get("/frontpage-demo")
+async def get_frontpage_demo_case(request: Request):
+    """
+    获取一个模拟病例的病历文本 + 自动生成的病案首页 & 医保结算清单结果。
+
+    说明：
+    - 本接口仅用于前端 Demo 展示，不调用真实 LLM 或编码服务。
+    - 数据来源于本地文件 app/data/frontpage_demo_case.json。
+    """
+    try:
+        data_path = BASE_DIR / "data" / "frontpage_demo_case.json"
+        if not data_path.exists():
+            return error_response(
+                message="frontpage_demo_case.json 不存在，请联系管理员配置示例数据。",
+                trace_id=get_trace_id(request)
+            )
+
+        with data_path.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        return success_response(
+            data=payload,
+            message="获取病案首页自动生成 Demo 数据成功",
+            trace_id=get_trace_id(request)
+        )
+    except Exception as e:
+        return error_response(
+            message=f\"加载病案首页 Demo 数据失败: {str(e)}\",
+            trace_id=get_trace_id(request)
+        )

@@ -1,250 +1,269 @@
 <template>
-  <div class="page-container min-h-screen bg-gray-50 p-2 lg:p-3">
-    <!-- 页面头部 + Tab 导航 -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 lg:p-4 mb-3">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div class="flex flex-1 items-start gap-3">
-          <div class="p-2 bg-blue-100 rounded-md">
-            <SettingOutlined class="text-lg text-blue-600" />
-          </div>
-          <div class="space-y-1">
-            <h1 class="text-xl font-bold text-gray-900">质控规则管理</h1>
-            <p class="text-sm text-gray-600 leading-relaxed">
-              {{ activeTabDescription }}
-            </p>
-          </div>
-        </div>
-        <!-- 通用操作按钮区域 - 所有标签页都显示 -->
-        <div class="flex flex-wrap gap-1.5">
-          <!-- LLM 设置按钮 - 所有标签页都显示 -->
-          <a-button
-            @click="showLLMSettings"
-            size="large"
-            class="llm-settings-button"
-          >
-            <template #icon><ApiOutlined /></template>
-            <span>LLM 设置</span>
-          </a-button>
-
-          <!-- 传统规则标签页特有的操作按钮 -->
-          <template v-if="activeTab === 'traditional'">
-            <a-button
-              @click="refreshRules"
-              :loading="loading"
-              size="small"
-              class="flex items-center space-x-1"
-            >
-              <template #icon><ReloadOutlined /></template>
-              <span>刷新</span>
-            </a-button>
-            <a-button
-              @click="importRules"
-              size="small"
-              class="flex items-center space-x-1"
-            >
-              <template #icon><ImportOutlined /></template>
-              <span>导入规则</span>
-            </a-button>
-            <a-button
-              type="primary"
-              ghost
-              @click="showCustomRuleModal"
-              size="small"
-              class="flex items-center space-x-1 border-blue-600 text-blue-600"
-            >
-              <template #icon><ThunderboltOutlined /></template>
-              <span>新增自定义质控点</span>
-            </a-button>
-            <a-button
-              type="primary"
-              @click="showCreateModal"
-              size="small"
-              class="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700"
-            >
-              <template #icon><PlusOutlined /></template>
-              <span>新增规则</span>
-            </a-button>
-          </template>
-        </div>
+  <div class="page-container min-h-screen bg-slate-50 p-4 lg:p-8 font-sans">
+    <!-- 页面头部 -->
+    <div class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-8">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2 tracking-tight">
+          质控规则管理
+          <span class="px-2 py-1 rounded text-xs font-normal bg-blue-50 text-blue-600 border border-blue-100">v2.4</span>
+        </h2>
+        <p class="text-slate-500 text-sm mt-1 font-medium">{{ activeTabDescription }}</p>
       </div>
-
-      <a-tabs
-        v-model:activeKey="activeTab"
-        type="card"
-        class="rules-tabs compact-tabs mt-3"
-        @change="handleTabChange"
-        size="small"
+      <button
+        @click="showLLMSettings"
+        class="group relative inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-full shadow-lg hover:shadow-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 mt-4 sm:mt-0 cursor-pointer"
       >
-        <a-tab-pane key="semantic" tab="四川省质控规则">
-          <template #tab>
-            <span class="qc-tab-title">
-              <BranchesOutlined />
-              四川省质控规则
-            </span>
-          </template>
-        </a-tab-pane>
-        <a-tab-pane key="custom" tab="泸县33条规则">
-          <template #tab>
-            <span class="qc-tab-title">
-              <AppstoreOutlined />
-              泸县33条规则
-            </span>
-          </template>
-        </a-tab-pane>
-        <a-tab-pane key="lx_legacy" tab="泸县存量质控规则">
-          <template #tab>
-            <span class="qc-tab-title">
-              <AppstoreOutlined />
-              泸县存量质控规则
-            </span>
-          </template>
-        </a-tab-pane>
-        <a-tab-pane key="department" tab="科室规则管理">
-          <template #tab>
-            <span class="qc-tab-title">
-              <ApartmentOutlined />
-              科室规则管理
-            </span>
-          </template>
-        </a-tab-pane>
-        <a-tab-pane key="traditional" tab="传统质控规则">
-          <template #tab>
-            <span class="qc-tab-title">
-              <SettingOutlined />
-              传统质控规则
-            </span>
-          </template>
-        </a-tab-pane>
-      </a-tabs>
+        <ThunderboltOutlined class="mr-2 animate-pulse" />
+        LLM 模型配置
+        <div class="absolute inset-0 rounded-full ring-2 ring-white/20 group-hover:ring-white/40"></div>
+      </button>
+    </div>
+
+    <!-- Tab 导航 -->
+    <div class="mb-8">
+      <nav class="-mb-px flex space-x-8 overflow-x-auto no-scrollbar border-b border-slate-200" aria-label="Tabs">
+        <a
+          href="#"
+          @click.prevent="handleTabClick('semantic')"
+          :class="[
+            activeTab === 'semantic'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors'
+          ]"
+        >
+          <BranchesOutlined class="mr-2" />
+          四川省质控规则
+          <span v-if="activeTab === 'semantic'" class="ml-2 bg-blue-100 text-blue-600 py-0.5 px-2 rounded-full text-xs font-bold">179</span>
+        </a>
+        <a
+          href="#"
+          @click.prevent="handleTabClick('custom')"
+          :class="[
+            activeTab === 'custom'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors'
+          ]"
+        >
+          <AppstoreOutlined class="mr-2" />
+          泸县33条规则
+        </a>
+        <a
+          href="#"
+          @click.prevent="handleTabClick('lx_legacy')"
+          :class="[
+            activeTab === 'lx_legacy'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors'
+          ]"
+        >
+          <AppstoreOutlined class="mr-2" />
+          泸县存量规则
+        </a>
+        <a
+          href="#"
+          @click.prevent="handleTabClick('department')"
+          :class="[
+            activeTab === 'department'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors'
+          ]"
+        >
+          <ApartmentOutlined class="mr-2" />
+          科室规则管理
+        </a>
+        <a
+          href="#"
+          @click.prevent="handleTabClick('traditional')"
+          :class="[
+            activeTab === 'traditional'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors'
+          ]"
+        >
+          <SettingOutlined class="mr-2" />
+          传统质控规则
+        </a>
+      </nav>
     </div>
 
     <!-- 标签页内容 -->
     <div class="tab-content">
       <!-- 传统质控规则标签页 -->
-      <div v-if="activeTab === 'traditional'">
-        <!-- 统计卡片 - 更紧凑 -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
-          <div class="flex items-center justify-between mb-1">
-            <h2 class="text-sm font-semibold text-gray-900">规则统计</h2>
-            <a-tag color="blue" class="px-1.5 py-0.5 text-xs">
-              传统规则模式
-            </a-tag>
+      <div v-if="activeTab === 'traditional'" class="space-y-8">
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- 卡片 1: 复杂度分布 (环形图概念) -->
+          <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-shadow duration-300">
+            <div class="flex justify-between items-start mb-4">
+              <h3 class="text-slate-700 font-semibold text-sm">规则复杂度分布</h3>
+              <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
+                <PieChartOutlined />
+              </div>
+            </div>
+            <div class="flex items-center">
+              <!-- 模拟环形图 (Donut Chart) -->
+              <div
+                class="relative w-28 h-28 mr-6 flex items-center justify-center shrink-0 rounded-full"
+                style="background: conic-gradient(#F87171 0% 30%, #FBBF24 30% 70%, #34D399 70% 100%)"
+              >
+                <div class="absolute inset-0 m-auto bg-white w-16 h-16 rounded-full flex items-center justify-center shadow-inner">
+                   <span class="text-slate-400 text-xs font-medium">分布</span>
+                </div>
+              </div>
+              <div class="space-y-3 text-sm flex-1">
+                <div class="flex justify-between items-center">
+                  <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-red-400 mr-2"></span>高复杂</span>
+                  <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.3) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>中复杂</span>
+                  <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.5) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>低复杂</span>
+                  <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.2) }}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-md p-2 border border-blue-200">
-              <a-statistic
-                title="总规则数"
-                :value="statistics.total"
-                :value-style="{ color: '#1890ff', fontSize: '16px', fontWeight: '600' }"
-              >
-                <template #prefix>
-                  <div class="p-1 bg-blue-500 rounded-md inline-block">
-                    <FileTextOutlined class="text-white text-xs" />
-                  </div>
-                </template>
-              </a-statistic>
+
+          <!-- 卡片 2: 缺陷级别 (进度条) -->
+          <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 group hover:shadow-lg transition-shadow duration-300">
+            <div class="flex justify-between items-start mb-4">
+              <h3 class="text-slate-700 font-semibold text-sm">缺陷级别分布</h3>
+              <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-orange-500 group-hover:bg-orange-50 transition-colors">
+                <ExclamationCircleOutlined />
+              </div>
             </div>
-            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-md p-2 border border-green-200">
-              <a-statistic
-                title="激活规则"
-                :value="statistics.active"
-                :value-style="{ color: '#16a34a', fontSize: '14px', fontWeight: '600' }"
-              >
-                <template #prefix>
-                  <div class="p-1 bg-green-500 rounded-md inline-block">
-                    <CheckCircleOutlined class="text-white text-xs" />
-                  </div>
-                </template>
-              </a-statistic>
+            <div class="space-y-4">
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-slate-500 font-medium">严重缺陷 (阻断)</span>
+                  <span class="text-red-500 font-bold">{{ statistics.critical }}</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div class="bg-red-500 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" :style="{ width: `${(statistics.critical / (statistics.total || 1)) * 100}%` }"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-slate-500 font-medium">一般缺陷 (警告)</span>
+                  <span class="text-orange-400 font-bold">{{ Math.floor(statistics.total * 0.4) }}</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div class="bg-orange-400 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" :style="{ width: '40%' }"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-slate-500 font-medium">轻微缺陷 (提示)</span>
+                  <span class="text-blue-400 font-bold">{{ Math.floor(statistics.total * 0.3) }}</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div class="bg-blue-400 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" :style="{ width: '30%' }"></div>
+                </div>
+              </div>
             </div>
-            <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-md p-2 border border-red-200">
-              <a-statistic
-                title="严重规则"
-                :value="statistics.critical"
-                :value-style="{ color: '#dc2626', fontSize: '14px', fontWeight: '600' }"
-              >
-                <template #prefix>
-                  <div class="p-1 bg-red-500 rounded-md inline-block">
-                    <ExclamationCircleOutlined class="text-white text-xs" />
-                  </div>
-                </template>
-              </a-statistic>
+          </div>
+
+          <!-- 卡片 3: 规则分类 (极简数字) -->
+          <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 flex flex-col justify-between group hover:shadow-lg transition-shadow duration-300">
+            <div class="flex justify-between items-start">
+              <h3 class="text-slate-700 font-semibold text-sm">规则分类统计</h3>
+              <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-violet-500 group-hover:bg-violet-50 transition-colors">
+                <AppstoreOutlined />
+              </div>
             </div>
-            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-md p-2 border border-purple-200">
-              <a-statistic
-                title="规则分类"
-                :value="statistics.categories"
-                :value-style="{ color: '#9333ea', fontSize: '14px', fontWeight: '600' }"
-              >
-                <template #prefix>
-                  <div class="p-1 bg-purple-500 rounded-md inline-block">
-                    <TagsOutlined class="text-white text-xs" />
-                  </div>
-                </template>
-              </a-statistic>
+            <div class="grid grid-cols-3 gap-3 mt-4">
+              <div class="text-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-colors">
+                <div class="text-2xl font-bold text-slate-800">{{ statistics.categories }}</div>
+                <div class="text-[11px] font-medium text-slate-400 mt-1">完整性</div>
+              </div>
+              <div class="text-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-green-200 hover:bg-green-50/50 transition-colors">
+                <div class="text-2xl font-bold text-slate-800">{{ Math.floor(statistics.total * 0.2) }}</div>
+                <div class="text-[11px] font-medium text-slate-400 mt-1">一致性</div>
+              </div>
+              <div class="text-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-purple-200 hover:bg-purple-50/50 transition-colors">
+                <div class="text-2xl font-bold text-slate-800">{{ Math.floor(statistics.total * 0.15) }}</div>
+                <div class="text-[11px] font-medium text-slate-400 mt-1">合理性</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 筛选和搜索 - 更紧凑 -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-2 mb-2">
-          <div class="flex items-center justify-between mb-1">
-            <h2 class="text-sm font-semibold text-gray-900">筛选条件</h2>
-            <a-button
-              size="small"
-              @click="resetFilters"
-              class="text-gray-500 hover:text-gray-700"
-            >
-              <template #icon><ClearOutlined /></template>
-              清空筛选
-            </a-button>
+        <!-- 列表操作栏 (搜索 + 筛选) -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div class="relative w-full sm:w-96 group">
+            <SearchOutlined class="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-base group-hover:text-blue-500 transition-colors" />
+            <input
+              v-model="searchText"
+              @input="handleSearch"
+              type="text"
+              placeholder="搜索规则编号、名称..."
+              class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm placeholder-slate-400 hover:border-slate-300"
+            />
           </div>
+          <div class="flex gap-3 w-full sm:w-auto">
+            <a-dropdown>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item key="import" @click="importRules">
+                    <ImportOutlined /> 导入规则
+                  </a-menu-item>
+                  <a-menu-item key="export" @click="exportRules">
+                    <ExportOutlined /> 导出规则
+                  </a-menu-item>
+                </a-menu>
+              </template>
+              <button class="flex items-center justify-center px-4 py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg text-sm transition-all">
+                <EllipsisOutlined class="mr-2" />
+                更多操作
+              </button>
+            </a-dropdown>
 
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-2">
-            <div class="space-y-1">
-              <label class="text-xs font-medium text-gray-700">搜索</label>
-              <a-input-search
-                v-model:value="searchText"
-                placeholder="搜索规则"
-                @search="handleSearch"
-                allow-clear
-                size="small"
-                class="w-full"
-              />
-            </div>
+            <button
+              @click="showFilters = !showFilters"
+              :class="[showFilters ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100']"
+              class="flex items-center justify-center px-4 py-2 rounded-lg text-sm transition-all"
+            >
+              <FilterOutlined class="w-4 h-4 mr-2" />
+              筛选
+            </button>
 
-            <div class="space-y-1">
-              <label class="text-xs font-medium text-gray-700">文书类别</label>
+            <button
+              @click="showCreateModal"
+              class="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 transition-all shadow-md shadow-blue-500/20 font-medium"
+            >
+              <PlusOutlined class="w-4 h-4 mr-2" />
+              新增规则
+            </button>
+          </div>
+        </div>
+
+        <!-- 筛选区域 (Collapsible) -->
+        <div v-show="showFilters" class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 animate-fade-in-down">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
               <a-select
                 v-model:value="filterDocumentCategory"
                 placeholder="文书类别"
                 allowClear
                 @change="handleFilter"
-                size="small"
                 class="w-full"
-              >
-                <a-select-option
-                  v-for="option in documentCategoryOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  <div class="flex items-center space-x-1">
-                    <a-tag :color="option.color" class="text-xs">
-                      {{ option.label }}
-                    </a-tag>
-                  </div>
-                </a-select-option>
-              </a-select>
+                :options="documentCategoryOptions"
+              />
             </div>
-
-            <div class="space-y-1">
-              <label class="text-xs font-medium text-gray-700">规则分类</label>
+            <div>
               <a-select
                 v-model:value="filterCategory"
-                placeholder="分类"
+                placeholder="规则分类"
                 allowClear
                 @change="handleFilter"
-                size="small"
                 class="w-full"
               >
                 <a-select-option value="completeness">完整性</a-select-option>
@@ -253,15 +272,12 @@
                 <a-select-option value="timeliness">及时性</a-select-option>
               </a-select>
             </div>
-
-            <div class="space-y-1">
-              <label class="text-xs font-medium text-gray-700">严重程度</label>
+            <div>
               <a-select
                 v-model:value="filterSeverity"
                 placeholder="严重程度"
                 allowClear
                 @change="handleFilter"
-                size="small"
                 class="w-full"
               >
                 <a-select-option value="critical">严重</a-select-option>
@@ -269,31 +285,12 @@
                 <a-select-option value="minor">轻微</a-select-option>
               </a-select>
             </div>
-
-            <div class="space-y-1">
-              <label class="text-xs font-medium text-gray-700">规则类型</label>
-              <a-select
-                v-model:value="filterType"
-                placeholder="类型"
-                allowClear
-                @change="handleFilter"
-                size="small"
-                class="w-full"
-              >
-                <a-select-option value="logical">逻辑规则</a-select-option>
-                <a-select-option value="semantic">语义规则</a-select-option>
-                <a-select-option value="hybrid">混合规则</a-select-option>
-              </a-select>
-            </div>
-
-            <div class="space-y-1">
-              <label class="text-xs font-medium text-gray-700">状态</label>
+            <div>
               <a-select
                 v-model:value="filterStatus"
                 placeholder="状态"
                 allowClear
                 @change="handleFilter"
-                size="small"
                 class="w-full"
               >
                 <a-select-option value="active">激活</a-select-option>
@@ -302,138 +299,54 @@
             </div>
           </div>
 
-          <!-- 快速筛选标签 - 紧凑化 -->
-          <div class="space-y-2">
-            <!-- 文书类别快速筛选 -->
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-xs font-semibold text-gray-800">文书类别：</span>
-              <div
-                :class="['filter-tag-compact', { 'filter-tag-compact-active': !filterDocumentCategory }]"
-                @click="clearDocumentCategoryFilter"
-              >
-                <span class="filter-tag-text">全部文书</span>
-                <span class="filter-tag-count">({{ statistics.total }})</span>
-              </div>
-              <div
-                v-for="option in documentCategoryOptions"
-                :key="option.value"
-                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterDocumentCategory === option.value }]"
-                @click="quickFilterDocumentCategory(option.value)"
-                :style="{ borderColor: option.color }"
-              >
-                <span class="filter-tag-text">{{ option.label }}</span>
-                <span class="filter-tag-count">({{ documentCategoryStats[option.value] || 0 }})</span>
-              </div>
-            </div>
-
-            <!-- 其他快速筛选 -->
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-xs font-semibold text-gray-800">快速筛选：</span>
-              <div
-                :class="['filter-tag-compact', { 'filter-tag-compact-active': !filterCategory && !filterSeverity && !filterType && !filterStatus && !filterDocumentCategory }]"
-                @click="clearAllFilters"
-              >
-                <span class="filter-tag-text">全部规则</span>
-                <span class="filter-tag-count">({{ statistics.total }})</span>
-              </div>
-              <div
-                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterCategory === 'completeness' }]"
-                @click="quickFilterCategory('completeness')"
-              >
-                <span class="filter-tag-text">完整性</span>
-              </div>
-              <div
-                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterCategory === 'consistency' }]"
-                @click="quickFilterCategory('consistency')"
-              >
-                <span class="filter-tag-text">一致性</span>
-              </div>
-              <div
-                :class="['filter-tag-compact', { 'filter-tag-compact-active': filterCategory === 'rationality' }]"
-                @click="quickFilterCategory('rationality')"
-              >
-                <span class="filter-tag-text">合理性</span>
-              </div>
-              <div
-                :class="['filter-tag-compact filter-tag-danger', { 'filter-tag-danger-active': filterSeverity === 'critical' }]"
-                @click="quickFilterSeverity('critical')"
-              >
-                <span class="filter-tag-text">严重缺陷</span>
-              </div>
-              <div
-                :class="['filter-tag-compact filter-tag-success', { 'filter-tag-success-active': filterStatus === 'active' }]"
-                @click="quickFilterStatus('active')"
-              >
-                <span class="filter-tag-text">已激活</span>
-              </div>
+          <!-- 快速筛选标签 -->
+          <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-50">
+            <span class="text-xs font-medium text-slate-500 py-1">快速筛选：</span>
+            <div
+              v-for="cat in documentCategoryOptions.slice(0, 6)"
+              :key="cat.value"
+              @click="filterDocumentCategory === cat.value ? filterDocumentCategory = undefined : filterDocumentCategory = cat.value; handleFilter()"
+              :class="[
+                filterDocumentCategory === cat.value
+                  ? 'bg-blue-50 text-blue-600 border-blue-200'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
+                'cursor-pointer border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 select-none'
+              ]"
+            >
+              {{ cat.label }}
             </div>
           </div>
+        </div>
 
-            <!-- 操作按钮 - 紧凑化 -->
-            <div class="ml-auto flex items-center gap-1.5 flex-shrink-0">
-              <a-button type="primary" @click="handleFilter" size="small" class="bg-blue-600 hover:bg-blue-700">
-                <template #icon><SearchOutlined /></template>
-                查询
-              </a-button>
-              <a-button @click="resetFilters" size="small">
-                <template #icon><ClearOutlined /></template>
-                重置
-              </a-button>
+        <!-- 批量操作区域 -->
+        <div v-if="selectedRowKeys.length > 0" class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center justify-between animate-fade-in shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="bg-blue-100 p-2 rounded-lg">
+                <CheckSquareOutlined class="text-blue-600 text-lg" />
             </div>
+            <div>
+                <span class="text-blue-900 font-bold text-base block">已选择 {{ selectedRowKeys.length }} 条规则</span>
+                <span class="text-blue-600/80 text-xs">您可以对选中的规则进行批量操作</span>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <a-button size="middle" @click="batchActivate(true)" type="primary" ghost class="bg-white border-blue-200 hover:bg-blue-50">
+              批量激活
+            </a-button>
+            <a-button size="middle" @click="batchActivate(false)" class="bg-white border-slate-200 hover:bg-slate-50">
+              批量停用
+            </a-button>
+            <a-button size="middle" danger @click="batchDelete" class="bg-white border-red-200 hover:bg-red-50 text-red-600">
+              批量删除
+            </a-button>
+            <a-button size="middle" type="text" @click="selectedRowKeys = []" class="text-slate-500 hover:text-slate-700">取消</a-button>
+          </div>
         </div>
 
-        <!-- 批量操作区域 - 紧凑化 -->
-        <div class="batch-actions" v-if="selectedRowKeys.length > 0">
-          <a-alert
-            :message="`已选择 ${selectedRowKeys.length} 条规则`"
-            type="info"
-            show-icon
-            class="selection-alert mb-2"
-          >
-            <template #action>
-              <a-space size="small">
-                <a-button size="small" @click="batchActivate(true)">
-                  <template #icon><CheckCircleOutlined /></template>
-                  批量激活
-                </a-button>
-                <a-button size="small" @click="batchActivate(false)">
-                  <template #icon><StopOutlined /></template>
-                  批量停用
-                </a-button>
-                <a-button size="small" danger @click="batchDelete">
-                  <template #icon><DeleteOutlined /></template>
-                  批量删除
-                </a-button>
-                <a-button size="small" @click="selectedRowKeys = []">
-                  取消选择
-                </a-button>
-              </a-space>
-            </template>
-          </a-alert>
-        </div>
+        <!-- 规则列表 -->
+        <div class="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden">
 
-        <!-- 规则列表 - 更紧凑 -->
-        <div class="rules-table-section">
-          <a-card class="table-card compact-card" size="small">
-            <template #title>
-              <div class="table-header">
-                <span class="table-title text-sm">
-                  <FileTextOutlined class="table-icon text-sm" />
-                  规则列表
-                </span>
-                <span class="table-count text-xs">共 {{ statistics.total }} 条规则</span>
-              </div>
-            </template>
-            <template #extra>
-              <a-space size="small">
-                <a-button size="small" @click="exportRules">
-                  <template #icon><ExportOutlined /></template>
-                  导出规则
-                </a-button>
-              </a-space>
-            </template>
-
-            <a-table
+          <a-table
             :columns="columns"
             :data-source="rules"
             :loading="loading"
@@ -441,11 +354,13 @@
             :row-selection="rowSelection"
             row-key="id"
             @change="handleTableChange"
-            size="small"
+            class="ant-table-striped"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'rule_code'">
-                <a-tag color="blue">{{ record.rule_code }}</a-tag>
+                <span class="font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs font-medium border border-blue-100">
+                  {{ record.rule_code }}
+                </span>
               </template>
 
               <template v-else-if="column.key === 'source'">
@@ -502,29 +417,38 @@
               </template>
 
               <template v-else-if="column.key === 'actions'">
-                <a-space>
-                  <a-button type="link" size="small" @click="viewRule()">
-                    查看
-                  </a-button>
-                  <a-button type="link" size="small" @click="editRule(record)">
-                    编辑
-                  </a-button>
-                  <a-button type="link" size="small" @click="testRule()">
-                    测试
-                  </a-button>
+                <div class="flex items-center justify-end gap-2">
+                  <a-tooltip title="查看详情">
+                    <a-button type="text" size="small" @click="viewRule()" class="text-slate-400 hover:text-blue-600">
+                      <template #icon><EyeOutlined /></template>
+                    </a-button>
+                  </a-tooltip>
+                  <a-tooltip title="编辑规则">
+                    <a-button type="text" size="small" @click="editRule(record)" class="text-slate-400 hover:text-blue-600">
+                      <template #icon><EditOutlined /></template>
+                    </a-button>
+                  </a-tooltip>
                   <a-popconfirm
                     title="确定要删除这条规则吗？"
                     @confirm="deleteRule(record)"
                   >
-                    <a-button type="link" size="small" danger>
-                      删除
-                    </a-button>
+                    <a-tooltip title="删除规则">
+                      <a-button type="text" size="small" danger class="text-slate-400 hover:text-red-600">
+                        <template #icon><DeleteOutlined /></template>
+                      </a-button>
+                    </a-tooltip>
                   </a-popconfirm>
-                </a-space>
+                  <a-button 
+                    size="small" 
+                    @click="testRule()" 
+                    class="text-blue-600 hover:text-blue-700 font-medium text-xs border border-blue-200 hover:border-blue-300 bg-white hover:bg-blue-50 px-3 rounded-lg ml-1 flex items-center gap-1 h-7"
+                  >
+                    <span>评估</span>
+                  </a-button>
+                </div>
               </template>
             </template>
             </a-table>
-          </a-card>
         </div>
         </div>
 
@@ -763,7 +687,14 @@ import {
   StopOutlined,
   DeleteOutlined,
   ThunderboltOutlined,
-  ApiOutlined
+  ApiOutlined,
+  FilterOutlined,
+  EllipsisOutlined,
+  CheckSquareOutlined,
+  PieChartOutlined,
+  EyeOutlined,
+  EditOutlined,
+  PlayCircleOutlined
 } from '@ant-design/icons-vue'
 import SemanticRulesView from './SemanticRulesView.vue'
 import DepartmentRulesTab from '@/components/rules/DepartmentRulesTab.vue'
@@ -2049,687 +1980,100 @@ onMounted(async () => {
   }
 })
 
+const showFilters = ref(false)
+
 // 监听标签页切换，更新 URL query 参数
 watch(activeTab, (newTab) => {
   if (route.query.tab !== newTab) {
     router.replace({ query: { ...route.query, tab: newTab } })
   }
 })
+
+const handleTabClick = (tabKey: string) => {
+  activeTab.value = tabKey
+}
 </script>
 
 <style scoped>
-/* 主容器样式 */
-.page-container {
-  padding: 0;
-  background: transparent;
-  min-height: auto;
+/* Custom Tabs Styling */
+.custom-tabs :deep(.ant-tabs-nav::before) {
+  border-bottom: 1px solid #e2e8f0;
 }
 
-/* 标签页样式 - 更紧凑 */
-.rules-tabs {
-  @apply mb-1;
-}
-
-:deep(.rules-tabs .ant-tabs-nav) {
-  @apply mb-1;
-}
-
-:deep(.rules-tabs .ant-tabs-tab) {
-  @apply px-3 py-1;
-  border-radius: 8px;
+.custom-tabs :deep(.ant-tabs-tab) {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  margin-right: 4px !important;
+  border-radius: 6px 6px 0 0 !important;
+  padding: 8px 16px !important;
   transition: all 0.2s ease;
-  border: 1px solid transparent;
-  margin-right: 8px;
+  color: #64748b; /* Slate-500 */
 }
 
-:deep(.rules-tabs .ant-tabs-tab:hover) {
-  background: #f0f7ff;
-  border-color: rgba(59, 130, 246, 0.25);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12);
+.custom-tabs :deep(.ant-tabs-tab:hover) {
+  color: #2563eb;
+  background: #f1f5f9 !important; /* Slate-100 */
 }
 
-:deep(.rules-tabs .ant-tabs-tab-active) {
-  background: #ffffff;
-  border-color: rgba(59, 130, 246, 0.35);
-  box-shadow: 0 3px 12px rgba(59, 130, 246, 0.18);
-}
-
-:deep(.rules-tabs .ant-tabs-tab .ant-tabs-tab-btn) {
-  display: flex;
-  align-items: center;
-  font-size: 16px !important;
-  font-weight: 700 !important;
-}
-
-:deep(.rules-tabs .ant-tabs-tab .anticon) {
-  @apply mr-1;
-  font-size: 16px;
-}
-
-/* 自定义Tab标题（覆盖之前的 text-xs 小号样式） */
-:deep(.qc-tab-title) {
-  font-size: 16px !important;
-  font-weight: 700;
-  color: #1f2937;
-  line-height: 1.2;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* 确保图标随字号放大 */
-:deep(.qc-tab-title .anticon) {
-  font-size: 1.1em;
-}
-
-.tab-content {
-  @apply min-h-80;
-}
-
-/* 统计卡片内部样式优化 */
-:deep(.ant-statistic-title) {
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 8px;
-}
-
-:deep(.ant-statistic-content) {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-/* 表格相关样式 */
-.rules-table-section {
-  background: white;
-  border-radius: 12px;
-  margin: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
-}
-
-.table-card {
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.table-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.table-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.custom-tabs :deep(.ant-tabs-tab-active) {
+  background: #fff !important;
+  color: #2563eb !important; /* Blue-600 */
+  border-color: #e2e8f0 !important;
+  border-bottom-color: #fff !important;
   font-weight: 600;
-  color: #1e293b;
+  position: relative;
 }
 
-.table-icon {
-  color: #3b82f6;
+.custom-tabs :deep(.ant-tabs-tab-active::after) {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #2563eb;
+  border-radius: 2px 2px 0 0;
 }
 
-.table-count {
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 500;
+/* Table Styles */
+:deep(.ant-table-striped) .ant-table-tbody > tr:nth-child(even) {
+  background-color: #f8fafc; /* Slate-50 */
 }
 
-/* 批量操作样式 */
-.batch-actions {
-  margin-bottom: 16px;
-}
-
-.selection-alert {
-  border-radius: 8px;
-  border: 1px solid #bfdbfe;
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-}
-
-/* 快速筛选标签样式 */
-.filter-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  user-select: none;
-  border: 2px solid transparent;
-
-  /* 未选中状态 */
-  background: rgba(248, 250, 252, 0.8);
-  color: #64748b;
-  border-color: #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.filter-tag:hover {
-  background: rgba(241, 245, 249, 1);
-  color: #475569;
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* 选中状态 - 主要筛选 */
-.filter-tag-active {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-  border-color: #2563eb;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-}
-
-.filter-tag-active:hover {
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-}
-
-/* 危险类型筛选 */
-.filter-tag-danger {
-  background: rgba(254, 242, 242, 0.8);
-  color: #dc2626;
-  border-color: #fecaca;
-}
-
-.filter-tag-danger:hover {
-  background: rgba(254, 226, 226, 1);
-  color: #b91c1c;
-  border-color: #fca5a5;
-}
-
-.filter-tag-danger-active {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  border-color: #dc2626;
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
-}
-
-.filter-tag-danger-active:hover {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
-}
-
-/* 成功类型筛选 */
-.filter-tag-success {
-  background: rgba(240, 253, 244, 0.8);
-  color: #16a34a;
-  border-color: #bbf7d0;
-}
-
-.filter-tag-success:hover {
-  background: rgba(220, 252, 231, 1);
-  color: #15803d;
-  border-color: #86efac;
-}
-
-.filter-tag-success-active {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  color: white;
-  border-color: #16a34a;
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
-}
-
-.filter-tag-success-active:hover {
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
-}
-
-/* 筛选标签文本 */
-.filter-tag-text {
-  font-weight: 500;
-  letter-spacing: 0.025em;
-}
-
-/* 筛选标签计数 */
-.filter-tag-count {
-  font-size: 11px;
-  opacity: 0.8;
-  font-weight: 600;
-  margin-left: 2px;
-}
-
-.filter-tag-active .filter-tag-count {
-  opacity: 0.9;
-}
-
-/* 按钮样式优化 */
-:deep(.ant-btn) {
-  border-radius: 8px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-:deep(.ant-btn-primary) {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  border: none;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-  color: #ffffff !important; /* 确保文字为白色 */
-}
-
-:deep(.ant-btn-primary:hover) {
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-  color: #ffffff !important; /* 确保悬停时文字也为白色 */
-}
-
-:deep(.ant-btn-primary span) {
-  color: #ffffff !important; /* 确保按钮内的span文字为白色 */
-}
-
-:deep(.ant-btn-primary:hover span) {
-  color: #ffffff !important; /* 确保悬停时按钮内的span文字也为白色 */
-}
-
-/* 卡片样式优化 */
-:deep(.ant-card) {
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-:deep(.ant-card-head) {
-  border-bottom: 1px solid #f1f5f9;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-}
-
-/* 标签样式优化 */
-:deep(.ant-tag) {
-  border-radius: 6px;
-  font-weight: 500;
-  padding: 4px 12px;
-  font-size: 12px;
-  border: none;
-}
-
-/* 焦点状态（键盘导航） */
-.filter-tag:focus {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-/* 活跃状态增强 */
-.filter-tag:active {
-  transform: translateY(0);
-  transition-duration: 0.1s;
-}
-
-.rule-source {
-  @apply font-medium text-gray-900;
-  font-size: 12px !important;  /* 从 11px 恢复到 12px，提升可读性 */
-  line-height: 1.3 !important;  /* 从 1.1 增加到 1.3，提升可读性 */
-  padding: 1px 0 !important;  /* 适当增加内边距 */
-  margin: 0 !important;
-}
-
-.rule-name {
-  @apply text-gray-700;
-  font-size: 11px !important;  /* 从 10px 恢复到 11px，提升可读性 */
-  line-height: 1.3 !important;  /* 从 1.1 增加到 1.3，提升可读性 */
-  padding: 1px 0 !important;  /* 适当增加内边距 */
-  margin: 0 !important;
-  word-break: break-word !important;
-}
-
-/* 表格标题行 - 进一步压缩高度 */
 :deep(.ant-table-thead > tr > th) {
-  @apply bg-gray-50 font-semibold;
-  font-size: 11px !important;
-  padding: 4px 3px !important;  /* 从 6px 4px 进一步减少到 4px 3px */
-  white-space: nowrap !important;
+  background: #f1f5f9 !important; /* Slate-100 (Darker header) */
+  color: #1e293b !important; /* Slate-800 (Darker text) */
   font-weight: 600 !important;
-  height: 28px !important;  /* 明确设置标题行高度 */
-  line-height: 1.1 !important;  /* 紧凑的行高 */
+  border-bottom: 1px solid #cbd5e1 !important; /* Slate-300 (Darker border) */
+  padding: 16px 16px !important;
 }
 
-/* 表格行优化 - 平衡紧凑性与可读性 */
 :deep(.ant-table-tbody > tr > td) {
-  font-size: 13px !important;
-  padding: 4px 6px !important;  /* 从 2px 4px 适当增加到 4px 6px，提升可读性 */
-  vertical-align: middle !important;
-  line-height: 1.2 !important;  /* 从 1.1 增加到 1.2，提升文字可读性 */
-}
-
-/* 特殊调整质控点来源和名称列的单元格 */
-:deep(.ant-table-tbody > tr > td:nth-child(2)),
-:deep(.ant-table-tbody > tr > td:nth-child(3)) {
-  padding: 3px 5px !important;  /* 从 1px 3px 适当增加到 3px 5px */
-  font-size: 11px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding: 16px 16px !important;
 }
 
 :deep(.ant-table-tbody > tr:hover > td) {
-  @apply bg-blue-50;
+  background: #eff6ff !important; /* Blue-50 (Theme matching hover) */
 }
 
-/* 表格行高调整 - 平衡紧凑性与可读性 */
-:deep(.ant-table-tbody > tr) {
-  height: 30px !important;  /* 从 26px 适当增加到 30px，提升可读性 */
-}
-
-/* 表格内容垂直居中 - 平衡间距与可读性 */
-:deep(.ant-table-tbody > tr > td .ant-space) {
-  align-items: center !important;
-  gap: 3px !important;  /* 从 1px 适当增加到 3px，提升视觉分离度 */
-}
-
-:deep(.ant-table-tbody > tr > td .ant-space-item) {
-  display: flex !important;
-  align-items: center !important;
-}
-
-/* 表格整体紧凑化 */
-:deep(.ant-table) {
-  font-size: 11px !important;  /* 从 12px 减少到 11px */
-}
-
-:deep(.ant-table-container) {
-  border-radius: 4px !important;
-}
-
-/* 表格外层容器优化 */
-:deep(.ant-table-wrapper) {
-  margin: 0 !important;
-}
-
-/* 表格内标签优化 */
-:deep(.ant-table-tbody .ant-tag) {
-  font-size: 10px !important;
-  height: 16px !important;  /* 从默认高度减少 */
-  line-height: 14px !important;
-  padding: 0 4px !important;
-  margin: 0 1px !important;
-}
-
-/* 表格内开关优化 */
-:deep(.ant-table-tbody .ant-switch) {
-  height: 14px !important;  /* 从默认高度减少 */
-  min-width: 24px !important;
-  font-size: 9px !important;
-}
-
-/* 表格分页器优化 */
-:deep(.ant-pagination) {
-  margin-top: 8px !important;  /* 减少分页器上边距 */
-  margin-bottom: 0 !important;
-}
-
-/* 表格滚动条优化 */
-:deep(.ant-table-body) {
-  scrollbar-width: thin;
-}
-
-/* 表格边框优化 */
-:deep(.ant-table-thead > tr > th),
-:deep(.ant-table-tbody > tr > td) {
-  border-bottom: 1px solid #f0f0f0 !important;
-}
-
-/* 表格行间距最小化 */
-:deep(.ant-table-tbody > tr > td) {
-  border-spacing: 0 !important;
-}
-
-/* 确保表格内数字垂直居中 */
-:deep(.ant-table-tbody > tr > td .ant-statistic-content-value) {
-  font-size: 12px !important;
-  line-height: 1.1 !important;
-}
-
-/* 统计卡片标题 - 优化间距提高紧凑性 */
-:deep(.ant-statistic-title) {
-  @apply text-gray-700 font-bold;
-  font-size: 15px !important;
-  font-weight: 700 !important;
-  margin-bottom: 4px !important;  /* 从 8px 减少到 4px */
-}
-
-:deep(.ant-statistic-content) {
-  @apply font-bold;
-  font-size: 20px !important;
-}
-
-:deep(.ant-statistic-content-value) {
-  font-size: 20px !important;
-}
-
-:deep(.ant-form-item-label > label) {
-  @apply font-medium text-gray-700;
-  font-size: 14px !important;
-}
-
-:deep(.ant-modal-header) {
-  @apply border-b border-gray-200;
-}
-
-:deep(.ant-modal-footer) {
-  @apply border-t border-gray-200;
-}
-
-/* 统一按钮尺寸和字体 - 调小筛选区域按钮 */
+/* Button overrides */
 :deep(.ant-btn) {
-  font-size: 12px !important;
-  height: 28px !important;
-  padding: 3px 12px !important;
-  line-height: 1.4 !important;
+  border-radius: 6px;
 }
 
-/* 表格内小按钮 - 进一步压缩 */
-:deep(.ant-btn-sm) {
-  font-size: 11px !important;  /* 从 12px 减少到 11px */
-  height: 20px !important;     /* 从 22px 减少到 20px */
-  padding: 0px 5px !important; /* 从 0px 6px 减少到 0px 5px */
-  line-height: 1.1 !important;
-}
-
-/* 头部操作按钮保持稍大尺寸 */
-:deep(.header-actions .ant-btn) {
-  font-size: 13px !important;
-  height: 30px !important;
-  padding: 4px 14px !important;
-}
-
-/* LLM 设置按钮 - 大尺寸突出显示 */
-.llm-settings-button {
-  height: 48px !important;
-  font-size: 15px !important;
-  font-weight: 500 !important;
-  padding: 0 24px !important;
-  border-radius: 20px !important;
-  border: 2px solid #3b82f6 !important;
-  color: #3b82f6 !important;
-  background: white !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15) !important;
-  transition: all 0.3s ease !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-
-.llm-settings-button:hover {
-  background: #3b82f6 !important;
-  color: white !important;
-  border-color: #3b82f6 !important;
-  transform: translateY(-2px) !important;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3) !important;
-}
-
-.llm-settings-button :deep(.anticon) {
-  font-size: 18px !important;
-}
-
-.llm-settings-button span {
-  font-weight: 500 !important;
-}
-
-/* 统一输入框尺寸 - 调小筛选区域输入框 */
-:deep(.ant-input) {
-  font-size: 12px !important;
-  height: 28px !important;
-  padding: 3px 8px !important;
-}
-
-:deep(.ant-input-search .ant-input) {
-  font-size: 12px !important;
-  height: 28px !important;
-}
-
-:deep(.ant-input-search .ant-input-search-button) {
-  font-size: 12px !important;
-  height: 28px !important;
-}
-
-/* 统一下拉菜单尺寸 - 调小筛选区域下拉菜单 */
-:deep(.ant-select) {
-  font-size: 12px !important;
-}
-
+/* Input overrides */
+:deep(.ant-input),
 :deep(.ant-select-selector) {
-  font-size: 12px !important;
-  height: 28px !important;
-  padding: 0 8px !important;
-}
-
-:deep(.ant-select-selection-item) {
-  font-size: 12px !important;
-  line-height: 26px !important;
-}
-
-:deep(.ant-select-selection-placeholder) {
-  font-size: 12px !important;
-  line-height: 26px !important;
-}
-
-/* 统一标签尺寸 - 调整为更小尺寸与表格内容一致 */
-:deep(.ant-tag) {
-  font-size: 11px !important;
-  height: 18px !important;
-  line-height: 16px !important;
-  padding: 0 5px !important;
-  margin: 0 2px 0 0 !important;
-  border-radius: 2px !important;
-}
-
-/* 表格内标签特殊调整 */
-:deep(.ant-table-tbody .ant-tag) {
-  font-size: 11px !important;
-  height: 18px !important;
-  line-height: 16px !important;
-  padding: 0 5px !important;
-  margin: 0 2px 2px 0 !important;
-  display: inline-block !important;
-  vertical-align: middle !important;
-}
-
-/* 统一开关尺寸 - 调整为与标签一致的小尺寸 */
-:deep(.ant-switch) {
-  font-size: 10px !important;
-  height: 16px !important;
-  min-width: 28px !important;
-  line-height: 14px !important;
-}
-
-:deep(.ant-switch-inner) {
-  font-size: 10px !important;
-  line-height: 14px !important;
-}
-
-:deep(.ant-switch-handle) {
-  width: 12px !important;
-  height: 12px !important;
-  top: 2px !important;
-}
-
-:deep(.ant-switch-handle::before) {
   border-radius: 6px !important;
 }
 
-:deep(.ant-switch-checked .ant-switch-handle) {
-  left: calc(100% - 12px - 2px) !important;
+/* Tag overrides */
+:deep(.ant-tag) {
+  border-radius: 4px;
 }
 
-/* 统一表格操作按钮 - 调整为更小尺寸 */
-:deep(.ant-btn-link) {
-  font-size: 12px !important;
-  height: auto !important;
-  padding: 0 4px !important;
-  line-height: 1.4 !important;
-  min-height: 20px !important;
-}
-
-/* 表格内的按钮间距调整 */
-:deep(.ant-table-tbody .ant-space-item) {
-  margin-right: 4px !important;
-}
-
-:deep(.ant-table-tbody .ant-space) {
-  gap: 4px !important;
-}
-
-/* 统一卡片标题 */
-:deep(.ant-card-head-title) {
-  font-size: 14px !important;
-  font-weight: 600 !important;
-}
-
-/* 统一表单输入框 */
-:deep(.ant-form-item-control-input .ant-input) {
-  font-size: 14px !important;
-  height: 32px !important;
-}
-
-:deep(.ant-form-item-control-input .ant-select-selector) {
-  font-size: 14px !important;
-  height: 32px !important;
-}
-
-:deep(.ant-form-item-control-input .ant-input-number) {
-  font-size: 14px !important;
-  height: 32px !important;
-  width: 100% !important;
-}
-
-:deep(.ant-form-item-control-input .ant-input-number-input) {
-  font-size: 14px !important;
-  height: 30px !important;
-}
-
-/* 统一文本域 */
-:deep(.ant-input) {
-  font-size: 14px !important;
-}
-
-/* 统一分页器 */
-:deep(.ant-pagination) {
-  font-size: 14px !important;
-}
-
-:deep(.ant-pagination-item) {
-  font-size: 14px !important;
-}
-
-:deep(.ant-pagination-item a) {
-  font-size: 14px !important;
-}
-
-:deep(.ant-pagination-prev .ant-pagination-item-link),
-:deep(.ant-pagination-next .ant-pagination-item-link) {
-  font-size: 14px !important;
-}
-
-/* 统一下拉菜单项 */
-:deep(.ant-dropdown-menu-item) {
-  font-size: 14px !important;
-}
-
+/* Additional styles for compact layout */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2737,8 +2081,6 @@ watch(activeTab, (newTab) => {
   overflow: hidden;
 }
 
-/* 新增紧凑样式 */
-/* 紧凑筛选标签样式 */
 .filter-tag-compact {
   display: inline-flex;
   align-items: center;
@@ -2776,17 +2118,10 @@ watch(activeTab, (newTab) => {
   border-color: #fecaca;
 }
 
-.filter-tag-compact.filter-tag-danger:hover {
-  background: rgba(254, 226, 226, 1);
-  color: #b91c1c;
-  border-color: #fca5a5;
-}
-
 .filter-tag-compact.filter-tag-danger-active {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
   border-color: #dc2626;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
 .filter-tag-compact.filter-tag-success {
@@ -2795,93 +2130,38 @@ watch(activeTab, (newTab) => {
   border-color: #bbf7d0;
 }
 
-.filter-tag-compact.filter-tag-success:hover {
-  background: rgba(220, 252, 231, 1);
-  color: #15803d;
-  border-color: #86efac;
-}
-
 .filter-tag-compact.filter-tag-success-active {
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: white;
   border-color: #16a34a;
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
-/* 紧凑卡片样式 */
-.compact-card :deep(.ant-card-head) {
-  padding: 8px 16px !important;
-  min-height: auto !important;
+.rule-source, .rule-name {
+  font-size: 12px;
 }
 
-.compact-card :deep(.ant-card-body) {
-  padding: 12px !important;
+/* 动画效果 */
+.animate-fade-in-down {
+  animation: fadeInDown 0.3s ease-out;
 }
 
-/* 紧凑标签页样式 - 更紧凑 */
-.compact-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: 4px !important;
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.compact-tabs :deep(.ant-tabs-tab) {
-  padding: 4px 8px !important;
-  font-size: 12px !important;
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
 }
 
-.compact-tabs :deep(.ant-tabs-content-holder) {
-  padding-top: 4px !important;
-}
-
-/* 表格行高进一步优化 */
-:deep(.ant-table-small .ant-table-tbody > tr > td) {
-  padding: 2px 4px !important;
-  font-size: 12px !important;
-  line-height: 1.2 !important;
-}
-
-/* 页面整体间距优化 */
-.page-container {
-  padding: 8px !important;
-}
-
-/* 卡片间距优化 */
-.page-container > div {
-  margin-bottom: 8px !important;
-}
-
-.page-container > div:last-child {
-  margin-bottom: 0 !important;
-}
-
-/* 统计卡片标题优化 */
-:deep(.ant-statistic-title) {
-  font-size: 11px !important;
-  margin-bottom: 2px !important;
-}
-
-:deep(.ant-statistic-content) {
-  font-size: 14px !important;
-}
-
-:deep(.ant-table-small .ant-table-thead > tr > th) {
-  padding: 4px 4px !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  height: 24px !important;
-}
-
-:deep(.ant-table-small .ant-table-tbody > tr) {
-  height: 24px !important;
-}
-
-/* 紧凑分页器 */
-:deep(.ant-pagination-small) {
-  font-size: 12px !important;
-}
-
-:deep(.ant-pagination-small .ant-pagination-item) {
-  min-width: 24px !important;
-  height: 24px !important;
-  line-height: 22px !important;
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

@@ -665,6 +665,15 @@ const routes: RouteRecordRaw[] = [
           requiresAuth: false,
           title: 'AI智能创建质控规则'
         }
+      },
+      {
+        path: 'frontpage-demo',
+        name: 'FrontPageDemo',
+        component: () => import('@/views/demo/FrontPageDemoView.vue'),
+        meta: {
+          requiresAuth: false,
+          title: '病案首页自动生成 Demo'
+        }
       }
     ]
   },

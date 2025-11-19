@@ -22,7 +22,9 @@ import {
   UploadOutlined,
   FileSearchOutlined,
   SettingOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  AppstoreOutlined,
+  BulbOutlined
 } from '@ant-design/icons-vue'
 
 // 状态管理
@@ -304,292 +306,233 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div data-testid="dashboard-container" class="min-h-screen bg-gray-50 relative">
-    <!-- 医疗主题背景装饰 -->
-    <div class="absolute inset-0 pointer-events-none overflow-hidden">
-      <!-- 医疗蓝色渐变背景 -->
-      <div class="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-gradient-to-br from-blue-100/40 via-cyan-50/30 to-green-50/20 blur-3xl"></div>
-      <div class="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-gradient-to-tr from-green-100/30 via-blue-50/20 to-indigo-50/30 blur-3xl"></div>
-
-      <!-- 医疗十字图案 -->
-      <div class="absolute top-20 right-20 w-8 h-8 opacity-5">
-        <div class="absolute inset-0 bg-blue-500 rounded-sm transform rotate-45"></div>
-        <div class="absolute top-2 left-2 w-4 h-4 bg-white rounded-sm"></div>
+  <div class="min-h-screen bg-[#F8FAFC] p-4 lg:p-8 font-sans">
+    <!-- 顶部欢迎 Banner -->
+    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-lg mb-8">
+      <div class="absolute top-0 right-0 w-full h-full overflow-hidden pointer-events-none">
+        <div class="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+        <div class="absolute top-1/2 right-10 w-64 h-64 bg-blue-400/20 rounded-full blur-2xl"></div>
       </div>
-      <div class="absolute bottom-32 left-32 w-6 h-6 opacity-5">
-        <div class="absolute inset-0 bg-green-500 rounded-sm transform rotate-45"></div>
-        <div class="absolute top-1.5 left-1.5 w-3 h-3 bg-white rounded-sm"></div>
+      
+      <div class="relative z-10 px-8 py-10 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div>
+          <div class="flex items-center gap-3 mb-2">
+            <span class="px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-xs font-medium border border-white/10">
+              {{ getCurrentDateTime() }}
+            </span>
+            <span class="px-3 py-1 rounded-full bg-green-400/20 text-green-100 text-xs font-medium border border-green-400/20 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+              系统运行正常
+            </span>
+          </div>
+          <h1 class="text-3xl font-bold tracking-tight mb-2">
+            {{ getGreeting() }}，{{ authStore.userName }}
+          </h1>
+          <p class="text-blue-100 text-base max-w-xl">
+            欢迎回到医疗质控平台。今日共有 <span class="text-white font-bold">{{ stats.todayUploads }}</span> 份新病历等待处理，系统已自动完成 <span class="text-white font-bold">{{ stats.completedRecords }}</span> 份病历的质控分析。
+          </p>
+        </div>
+        
+        <div class="flex items-center gap-4">
+          <button 
+            @click="refreshData"
+            class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-medium transition-all duration-200 border border-white/10 flex items-center gap-2"
+          >
+            <ReloadOutlined :class="{ 'animate-spin': refreshing }" />
+            <span>刷新数据</span>
+          </button>
+          <button 
+            @click="handleQuickAction('analyze')"
+            class="px-6 py-2.5 rounded-xl bg-white text-blue-600 hover:bg-blue-50 font-bold shadow-lg shadow-blue-900/20 transition-all duration-200 flex items-center gap-2 transform hover:scale-105 active:scale-95"
+          >
+            <ThunderboltOutlined />
+            <span>开始质控</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- 主内容区域 -->
-    <div class="relative z-10 p-8">
-      <!-- 顶部欢迎区域 -->
-      <div class="mb-8">
-        <div class="bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 text-white p-8 rounded-2xl shadow-lg mb-8">
-          <div class="flex justify-between items-start">
-            <div>
-              <div class="flex items-center gap-4 mb-4">
-                <div class="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                  <RobotOutlined class="text-2xl text-white" />
-                </div>
-                <div>
-                  <h1 class="text-4xl font-bold mb-2">
-                    {{ getGreeting() }}，{{ authStore.userName }}！
-                  </h1>
-                  <p class="text-blue-100 text-lg">
-                    医疗AI质控系统 · {{ authStore.userDepartment || '全院' }}数据概览
-                  </p>
-                  <div class="flex items-center mt-2 text-blue-200">
-                    <ClockCircleOutlined class="mr-2" />
-                    <span>{{ getCurrentDateTime() }}</span>
-                  </div>
-                </div>
-              </div>
+    <!-- 核心指标卡片 (Bento Grid) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div v-for="(card, index) in dashboardCards.slice(0, 4)" :key="card.title" 
+        class="group bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden"
+      >
+        <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-transparent to-slate-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+        
+        <div class="relative z-10">
+          <div class="flex justify-between items-start mb-4">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center" :style="{ backgroundColor: `${card.color}15` }">
+              <component :is="card.icon" :style="{ color: card.color, fontSize: '24px' }" />
             </div>
-            <div class="flex space-x-4">
-              <a-button
-                @click="refreshData"
-                :loading="refreshing"
-                data-testid="refresh-button"
-                size="large"
-                class="h-12 px-6 bg-white/10 border-white/30 text-white hover:bg-white/20 hover:border-white/50 backdrop-blur-sm"
-              >
-                <ReloadOutlined />
-                刷新数据
-              </a-button>
-              <a-button
-                type="primary"
-                size="large"
-                class="h-12 px-6 bg-white/20 border-white/30 text-white hover:bg-white/30 hover:border-white/50 backdrop-blur-sm"
-              >
-                <PlusOutlined />
-                新增病案
-              </a-button>
+            <div v-if="card.change" class="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg bg-slate-50">
+              <component :is="getTrendIcon(card.change.type)" :class="getTrendClass(card.change.type)" />
+              <span :class="getTrendClass(card.change.type)">{{ card.change.value }}%</span>
             </div>
-        </div>
-      </div>
-
-      <!-- 统计卡片网格 -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-        <div
-          v-for="card in dashboardCards"
-          :key="card.title"
-          data-testid="stat-card"
-          class="group relative"
-        >
-          <!-- 卡片主体 -->
-          <div class="relative rounded-2xl bg-white shadow-lg hover:shadow-xl border border-gray-100 p-6 hover:border-blue-200 transition-all duration-300 cursor-pointer group-hover:scale-105">
-            <div class="flex items-start justify-between mb-4">
-              <div
-                class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm"
-                :style="{ background: `linear-gradient(135deg, ${card.color}15, ${card.color}25)` }"
-              >
-                <component
-                  :is="card.icon"
-                  :style="{ color: card.color }"
-                  class="text-2xl"
-                />
-              </div>
-              <div v-if="card.change" class="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg">
-                <component
-                  :is="getTrendIcon(card.change.type)"
-                  :class="getTrendClass(card.change.type)"
-                  data-testid="trend-icon"
-                  class="text-xs"
-                />
-                <span :class="getTrendClass(card.change.type)" class="text-xs font-semibold">
-                  {{ card.change.value }}%
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <p class="text-gray-600 text-sm mb-2 font-medium">{{ card.title }}</p>
-              <p class="text-3xl font-bold text-gray-800 mb-1">{{ card.value }}</p>
-              <p class="text-gray-500 text-xs">较上周</p>
-            </div>
+          </div>
+          
+          <div class="space-y-1">
+            <div class="text-slate-500 text-sm font-medium">{{ card.title }}</div>
+            <div class="text-2xl font-bold text-slate-800 tracking-tight">{{ card.value }}</div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- 主要内容区域 -->
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <!-- 左侧：质控趋势分析 -->
-        <div class="xl:col-span-2">
-          <!-- 质控趋势图表卡片 -->
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-8 hover:shadow-xl transition-shadow duration-300">
-            <div class="flex items-center justify-between mb-6">
-              <div class="flex items-center gap-4">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/20 flex items-center justify-center">
-                  <BarChartOutlined class="text-blue-600 text-xl" />
-                </div>
-                <div>
-                  <h3 class="text-xl font-bold text-gray-800">质控趋势分析</h3>
-                  <p class="text-gray-600 text-sm">AI驱动的实时质控数据分析</p>
-                </div>
-              </div>
-              <a-select
-                v-model:value="selectedPeriod"
-                style="width: 140px"
-                data-testid="period-select"
-                size="large"
-                class="custom-select"
-                :options="[
-                  { value: 'week', label: '近一周' },
-                  { value: 'month', label: '近一月' },
-                  { value: 'quarter', label: '近三月' },
-                  { value: 'year', label: '近一年' }
+    <!-- 主要内容区域 (Grid Layout) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- 左侧主栏 (8 cols) -->
+      <div class="lg:col-span-8 space-y-8">
+        
+        <!-- 趋势图表 -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <BarChartOutlined class="text-blue-500" />
+                质控趋势分析
+              </h3>
+              <p class="text-slate-400 text-xs mt-1">过去一段时间的质控评分与病历数量趋势</p>
+            </div>
+            <div class="flex bg-slate-100 rounded-lg p-1">
+              <button 
+                v-for="period in ['week', 'month', 'quarter']" 
+                :key="period"
+                @click="selectedPeriod = period"
+                :class="[
+                  'px-3 py-1 text-xs font-medium rounded-md transition-all',
+                  selectedPeriod === period ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 ]"
-              />
-            </div>
-
-            <div class="bg-gray-50 rounded-xl p-6 border border-gray-100">
-              <QCTrendChart
-                :period="selectedPeriod"
-                :height="320"
-                :auto-refresh="true"
-              />
+              >
+                {{ period === 'week' ? '周' : period === 'month' ? '月' : '季' }}
+              </button>
             </div>
           </div>
+          <div class="h-80">
+            <QCTrendChart :period="selectedPeriod" :height="320" :auto-refresh="true" />
+          </div>
+        </div>
 
-          <!-- AI质控洞察 -->
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 hover:shadow-xl transition-shadow duration-300">
-            <div class="flex items-center gap-4 mb-6">
-              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/20 flex items-center justify-center">
-                <ThunderboltOutlined class="text-green-600 text-xl" />
-              </div>
-              <div>
-                <h3 class="text-xl font-bold text-gray-800">AI质控洞察</h3>
-                <p class="text-gray-600 text-sm">智能分析与建议</p>
-              </div>
-            </div>
-
-            <div class="space-y-4">
-              <div class="bg-green-50 border border-green-200 rounded-xl p-4">
-                <div class="flex items-start gap-3">
-                  <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <CheckCircleOutlined class="text-green-600 text-lg" />
-                  </div>
-                  <div>
-                    <h4 class="text-gray-800 font-semibold mb-2">质控通过率提升</h4>
-                    <p class="text-gray-600 text-sm">本周质控通过率较上周提升3.2%，主要改善在病程记录完整性方面</p>
-                  </div>
+        <!-- 最新活动列表 -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <ClockCircleOutlined class="text-blue-500" />
+              最近动态
+            </h3>
+            <button class="text-blue-600 text-sm font-medium hover:text-blue-700 transition-colors">查看全部</button>
+          </div>
+          <div class="space-y-4">
+            <div v-for="(activity, index) in recentActivities" :key="activity.id" class="flex items-start gap-4 group">
+              <div class="relative">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center z-10 relative" :style="{ backgroundColor: `${activity.color}15` }">
+                  <component :is="activity.icon" :style="{ color: activity.color }" />
                 </div>
+                <div v-if="index !== recentActivities.length - 1" class="absolute top-10 left-1/2 -translate-x-1/2 w-0.5 h-full bg-slate-100 -z-0"></div>
               </div>
-
-              <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div class="flex items-start gap-3">
-                  <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                    <EyeOutlined class="text-amber-600 text-lg" />
-                  </div>
+              <div class="flex-1 pb-4 border-b border-slate-50 group-last:border-0">
+                <div class="flex justify-between items-start">
                   <div>
-                    <h4 class="text-gray-800 font-semibold mb-2">关注重点</h4>
-                    <p class="text-gray-600 text-sm">内科病案中诊断一致性问题较为突出，建议加强相关培训</p>
+                    <h4 class="text-sm font-bold text-slate-800">{{ activity.title }}</h4>
+                    <p class="text-slate-500 text-xs mt-1">{{ activity.description }}</p>
                   </div>
-                </div>
-              </div>
-
-              <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div class="flex items-start gap-3">
-                  <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <StarOutlined class="text-blue-600 text-lg" />
-                  </div>
-                  <div>
-                    <h4 class="text-gray-800 font-semibold mb-2">优化建议</h4>
-                    <p class="text-gray-600 text-sm">建议启用新的AI辅助诊断模块，预计可提升诊断准确率15%</p>
-                  </div>
-                  </div>
+                  <span class="text-xs text-slate-400 whitespace-nowrap">{{ activity.time }}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 右侧：快捷操作和活动 -->
-        <div class="space-y-8">
-          <!-- 快捷操作 -->
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow duration-300">
-            <div class="flex items-center gap-4 mb-6">
-              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/20 flex items-center justify-center">
-                <ThunderboltOutlined class="text-indigo-600 text-xl" />
-              </div>
-              <div>
-                <h3 class="text-xl font-bold text-gray-800">快捷操作</h3>
-                <p class="text-gray-600 text-sm">常用功能快速入口</p>
-              </div>
-            </div>
+      </div>
 
-            <div class="grid grid-cols-2 gap-4">
-              <button
-                v-for="action in quickActions"
-                :key="action.action"
-                :data-testid="`quick-action-${action.action}`"
-                data-testid="quick-action"
-                @click="handleQuickAction(action.action)"
-                class="group/btn relative p-4 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-blue-300 transition-all duration-300 hover:shadow-md"
-              >
-                <div class="flex flex-col items-center gap-3">
-                  <div
-                    class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 group-hover/btn:scale-110"
-                    :style="{ background: `linear-gradient(135deg, ${action.color}15, ${action.color}25)` }"
-                  >
-                    <component
-                      :is="action.icon"
-                      :style="{ color: action.color }"
-                      class="text-xl"
-                    />
-                  </div>
-                  <span class="text-sm text-gray-700 group-hover/btn:text-gray-900 font-medium transition-colors duration-300">
-                    {{ action.title }}
-                  </span>
-                </div>
-              </button>
+      <!-- 右侧边栏 (4 cols) -->
+      <div class="lg:col-span-4 space-y-8">
+        
+        <!-- AI 智能洞察 -->
+        <div class="bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 shadow-sm p-6">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <RobotOutlined class="text-xl" />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-800">AI 智能洞察</h3>
+              <p class="text-xs text-indigo-600 font-medium">基于大模型的实时分析</p>
             </div>
           </div>
-
-          <!-- 最新活动 -->
-          <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow duration-300">
-            <div class="flex items-center justify-between mb-6">
-              <div class="flex items-center gap-4">
-                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/20 flex items-center justify-center">
-                  <SafetyCertificateOutlined class="text-purple-600 text-xl" />
-                </div>
+          
+          <div class="space-y-3">
+            <div class="bg-white p-4 rounded-xl border border-indigo-50 shadow-sm">
+              <div class="flex items-start gap-3">
+                <CheckCircleOutlined class="text-green-500 mt-1" />
                 <div>
-                  <h3 class="text-xl font-bold text-gray-800">最新活动</h3>
-                  <p class="text-gray-600 text-sm">系统动态与通知</p>
+                  <h4 class="text-sm font-bold text-slate-700">质控通过率提升</h4>
+                  <p class="text-xs text-slate-500 mt-1 leading-relaxed">本周质控通过率较上周提升 3.2%，主要改善在病程记录完整性方面。</p>
                 </div>
               </div>
-              <button class="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors duration-300">
-                查看全部
-              </button>
+            </div>
+            
+            <div class="bg-white p-4 rounded-xl border border-indigo-50 shadow-sm">
+              <div class="flex items-start gap-3">
+                <ExclamationCircleOutlined class="text-amber-500 mt-1" />
+                <div>
+                  <h4 class="text-sm font-bold text-slate-700">关注重点</h4>
+                  <p class="text-xs text-slate-500 mt-1 leading-relaxed">内科病案中诊断一致性问题较为突出，建议加强相关培训。</p>
+                </div>
+              </div>
             </div>
 
-            <div class="space-y-4">
-              <div
-                v-for="activity in recentActivities"
-                :key="activity.id"
-                class="flex items-start gap-4 p-4 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-100 hover:border-gray-200 transition-all duration-300"
-              >
-                <div
-                  class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                  :style="{ background: `linear-gradient(135deg, ${activity.color}15, ${activity.color}25)` }"
-                >
-                  <component
-                    :is="activity.icon"
-                    :style="{ color: activity.color }"
-                    class="text-lg"
-                  />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h5 class="text-gray-800 font-semibold mb-1 truncate">{{ activity.title }}</h5>
-                  <p class="text-gray-600 text-sm mb-2 line-clamp-2">{{ activity.description }}</p>
-                  <span class="text-gray-500 text-xs">{{ activity.time }}</span>
+            <div class="bg-white p-4 rounded-xl border border-indigo-50 shadow-sm">
+              <div class="flex items-start gap-3">
+                <BulbOutlined class="text-blue-500 mt-1" />
+                <div>
+                  <h4 class="text-sm font-bold text-slate-700">优化建议</h4>
+                  <p class="text-xs text-slate-500 mt-1 leading-relaxed">建议启用新的AI辅助诊断模块，预计可提升诊断准确率15%。</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        <!-- 快捷入口 -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <h3 class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <AppstoreOutlined class="text-blue-500" />
+            快捷功能
+          </h3>
+          <div class="grid grid-cols-2 gap-4">
+            <button 
+              v-for="action in quickActions" 
+              :key="action.action"
+              @click="handleQuickAction(action.action)"
+              class="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all duration-200 group"
+            >
+              <div class="w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-transform group-hover:scale-110 bg-white shadow-sm">
+                <component :is="action.icon" :style="{ color: action.color }" class="text-lg" />
+              </div>
+              <span class="text-xs font-medium text-slate-600 group-hover:text-blue-600">{{ action.title }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 部门分布 (Optional) -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <h3 class="text-lg font-bold text-slate-800 mb-4">病案来源分布</h3>
+          <div class="space-y-3">
+            <div v-for="dept in departmentData" :key="dept.name" class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full" :style="{ backgroundColor: dept.color }"></div>
+                <span class="text-xs text-slate-600">{{ dept.name }}</span>
+              </div>
+              <div class="flex items-center gap-2 w-1/2">
+                <div class="h-1.5 rounded-full bg-slate-100 flex-1 overflow-hidden">
+                  <div class="h-full rounded-full" :style="{ width: `${dept.value}%`, backgroundColor: dept.color }"></div>
+                </div>
+                <span class="text-xs font-bold text-slate-700 w-6 text-right">{{ dept.value }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>

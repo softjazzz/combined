@@ -1,164 +1,201 @@
 <template>
-  <div class="lx33-demo-view">
-    <!-- 反馈统计面板 -->
-    <a-card class="stats-panel" :loading="loadingStats">
-      <template #title>
-        <span><BarChartOutlined /> 反馈统计 (最近30天)</span>
-      </template>
-      <a-row :gutter="24">
-        <a-col :span="4">
-          <a-statistic
-            title="总反馈数"
-            :value="stats.total_feedbacks"
-            :value-style="{ color: '#1890ff' }"
-          >
-            <template #prefix>
-              <MessageOutlined />
-            </template>
-          </a-statistic>
-        </a-col>
-        <a-col :span="5">
-          <a-statistic
-            title="正确反馈"
-            :value="stats.correct_feedbacks"
-            :suffix="`(${(stats.accuracy_rate * 100).toFixed(0)}%)`"
-            :value-style="{ color: '#52c41a' }"
-          >
-            <template #prefix>
-              <CheckCircleOutlined />
-            </template>
-          </a-statistic>
-        </a-col>
-        <a-col :span="5">
-          <a-statistic
-            title="错误反馈"
-            :value="stats.incorrect_feedbacks"
-            :suffix="`(${((1 - stats.accuracy_rate) * 100).toFixed(0)}%)`"
-            :value-style="{ color: '#ff4d4f' }"
-          >
-            <template #prefix>
-              <CloseCircleOutlined />
-            </template>
-          </a-statistic>
-        </a-col>
-        <a-col :span="5">
-          <div class="stat-item">
-            <div class="stat-label">最高准确率规则</div>
-            <div class="stat-value best-rule">
-              {{ stats.best_rule || '-' }}
+  <div class="lx33-demo-view min-h-screen bg-slate-50/80 relative overflow-hidden p-6 lg:p-8">
+    <!-- 背景装饰：极淡的点阵 -->
+    <div class="absolute inset-0 pointer-events-none" style="background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 32px 32px; opacity: 0.25;"></div>
+    
+    <div class="relative z-10">
+      <!-- 1. 页面头部 & 全局操作 -->
+      <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+              <MedicineBoxOutlined class="text-xl" />
             </div>
-          </div>
-        </a-col>
-        <a-col :span="5">
-          <div class="stat-item">
-            <div class="stat-label">最低准确率规则</div>
-            <div class="stat-value worst-rule">
-              {{ stats.worst_rule || '-' }}
-            </div>
-          </div>
-        </a-col>
-      </a-row>
-    </a-card>
+            泸县33条质控规则测试
+          </h1>
+          <p class="text-slate-500 mt-2 text-sm ml-1">基于真实病历数据的 AI 质控规则验证与评估中心</p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button 
+            @click="ruleDocModalVisible = true"
+            class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+          >
+            <FileTextOutlined class="mr-2" /> 规则说明
+          </button>
+          <button 
+            @click="showFeedbacksPage"
+            class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+          >
+            <HistoryOutlined class="mr-2" /> 反馈记录
+          </button>
+          <button 
+            @click="exportFeedbacks"
+            class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+          >
+            <ExportOutlined class="mr-2" /> 导出数据
+          </button>
+          <button 
+            @click="showCreateRulePage"
+            class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+          >
+            <ThunderboltOutlined class="mr-2" /> AI 创建规则
+          </button>
+          <!-- 主操作按钮：纯净医疗蓝 -->
+          <button 
+            @click="showBatchTestModal = true"
+            class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/25 hover:-translate-y-0.5 transition-all text-sm font-bold flex items-center shadow-md ml-2"
+          >
+            <PlayCircleOutlined class="mr-2" /> 批量质控评估
+          </button>
+        </div>
+      </header>
 
-    <!-- 页面操作栏 -->
-    <a-card class="action-bar">
-      <a-space size="large">
-        <a-button
-          type="primary"
-          size="large"
-          class="batch-eval-button"
-          @click="showBatchTestModal = true"
+      <!-- 2. 核心指标卡片 (KPI Cards) - 纯净风格 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- 卡片 1 -->
+        <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
+          <div class="flex justify-between items-center">
+            <div>
+              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">总反馈数</div>
+              <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">{{ stats.total_feedbacks }}</div>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+              <MessageOutlined class="text-xl" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 2 -->
+        <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
+          <div class="flex justify-between items-center">
+            <div>
+              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">正确反馈</div>
+              <div class="flex items-baseline gap-3">
+                <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">{{ stats.correct_feedbacks }}</div>
+                <div class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  {{ (stats.accuracy_rate * 100).toFixed(0) }}% 准确率
+                </div>
+              </div>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-50 transition-colors">
+              <CheckCircleOutlined class="text-xl" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片 3 -->
+        <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
+          <div class="flex justify-between items-center">
+            <div>
+              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">错误反馈</div>
+              <div class="flex items-baseline gap-3">
+                <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">{{ stats.incorrect_feedbacks }}</div>
+                <div class="text-xs font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">
+                  {{ ((1 - stats.accuracy_rate) * 100).toFixed(0) }}% 错误率
+                </div>
+              </div>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-50 transition-colors">
+              <CloseCircleOutlined class="text-xl" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 规则列表表格 -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <!-- 表格头部工具栏 -->
+        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+            <AppstoreOutlined class="text-blue-500" />
+            规则列表
+          </h3>
+          <span class="text-slate-500 text-xs font-medium bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-sm">
+            共 {{ displayRules.length }} 条规则
+          </span>
+        </div>
+        
+        <a-table
+          :dataSource="displayRules"
+          :columns="columns"
+          :pagination="{
+            defaultPageSize: 33,
+            pageSize: 33,
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '33', '50'],
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条`
+          }"
+          class="modern-table"
+          :scroll="{ x: 1000 }"
         >
-          <template #icon><CheckSquareOutlined /></template>
-          批量质控评估
-        </a-button>
-        <a-button type="primary" @click="ruleDocModalVisible = true">
-          <FileTextOutlined /> 质控点说明
-        </a-button>
-        <a-button type="primary" @click="showFeedbacksPage">
-          <HistoryOutlined /> 查看反馈记录
-        </a-button>
-        <a-button @click="exportFeedbacks">
-          <ExportOutlined /> 导出反馈数据
-        </a-button>
-        <a-button type="primary" ghost @click="showCreateRulePage">
-          <ThunderboltOutlined /> AI智能创建规则
-        </a-button>
-      </a-space>
-    </a-card>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-slate-400 font-mono text-xs">{{ String(record._index || index + 1).padStart(2, '0') }}</span>
+            </template>
 
-    <!-- 规则列表表格 -->
-    <a-card title="泸县33条质控规则列表" :loading="loadingRules" class="rules-list-card">
-      <template #extra>
-        <span class="rule-count">共 {{ displayRules.length }} 条规则</span>
-      </template>
+            <template v-if="column.key === 'rule_id'">
+              <span class="font-mono text-blue-700 font-medium bg-blue-50/50 px-2 py-0.5 rounded text-xs border border-blue-100/50">{{ record.rule_id || record.rule_code }}</span>
+            </template>
 
-      <a-table
-        :dataSource="displayRules"
-        :columns="columns"
-        :pagination="{
-          defaultPageSize: 33,
-          pageSize: 33,
-          showSizeChanger: true,
-          pageSizeOptions: ['10', '20', '33', '50'],
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条规则`
-        }"
-        class="rules-table"
-        :scroll="{ x: 1000 }"
-      >
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'index'">
-            {{ record._index || index + 1 }}
+            <template v-if="column.key === 'name'">
+              <div class="flex flex-col">
+                <span class="font-medium text-slate-700 group-hover:text-blue-700 transition-colors">{{ record.name }}</span>
+                <span class="text-xs text-slate-400 truncate max-w-[240px]" :title="record.description">{{ record.description }}</span>
+              </div>
+            </template>
+
+            <template v-if="column.key === 'category'">
+              <span class="text-slate-600 text-xs font-medium">
+                {{ record.category }}
+              </span>
+            </template>
+
+            <template v-if="column.key === 'complexity'">
+              <div class="flex items-center gap-1.5">
+                <div class="w-1.5 h-1.5 rounded-full" :class="{
+                  'bg-rose-500': record.complexity === '高复杂度',
+                  'bg-amber-500': record.complexity === '中复杂度',
+                  'bg-emerald-500': record.complexity === '低复杂度'
+                }"></div>
+                <span class="text-xs text-slate-600">{{ record.complexity }}</span>
+              </div>
+            </template>
+
+            <template v-if="column.key === 'defect_level'">
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="{
+                'bg-rose-50 text-rose-600': record.defect_level === 'critical' || record.defect_level === '严重缺陷',
+                'bg-amber-50 text-amber-600': record.defect_level === 'major' || record.defect_level === '一般缺陷',
+                'bg-slate-100 text-slate-500': record.defect_level === 'minor' || record.defect_level === '轻微缺陷'
+              }">
+                {{ getDefectLevelText(record.defect_level) }}
+              </span>
+            </template>
+
+            <template v-if="column.key === 'source'">
+              <span class="text-xs" :class="record.source === 'ai_generated' ? 'text-indigo-600 font-medium' : 'text-slate-400'">
+                {{ getSourceText(record.source) }}
+              </span>
+            </template>
+
+            <template v-if="column.key === 'actions'">
+              <div class="flex gap-2">
+                <a-tooltip title="查看详情">
+                  <button @click="viewRuleDetail(record)" class="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all">
+                    <EyeOutlined class="text-sm" />
+                  </button>
+                </a-tooltip>
+                <a-tooltip title="执行质控评估">
+                  <button @click="handleEvaluate(record)" class="w-7 h-7 rounded-md flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all">
+                    <PlayCircleOutlined class="text-sm" />
+                  </button>
+                </a-tooltip>
+              </div>
+            </template>
           </template>
-
-          <template v-if="column.key === 'rule_id'">
-            <a-tag color="blue">{{ record.rule_id || record.rule_code }}</a-tag>
-          </template>
-
-          <template v-if="column.key === 'name'">
-            <a-tooltip :title="record.description">
-              <span class="rule-name">{{ record.name }}</span>
-            </a-tooltip>
-          </template>
-
-          <template v-if="column.key === 'category'">
-            <a-tag :color="getCategoryColor(record.category)">
-              {{ record.category }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'complexity'">
-            <a-tag :color="getComplexityColor(record.complexity)">
-              {{ record.complexity }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'defect_level'">
-            <a-tag :color="getDefectLevelColor(record.defect_level)">
-              {{ getDefectLevelText(record.defect_level) }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'source'">
-            <a-tag :color="getSourceColor(record.source)">
-              {{ getSourceText(record.source) }}
-            </a-tag>
-          </template>
-
-          <template v-if="column.key === 'actions'">
-            <a-space>
-              <a-button size="small" @click="viewRuleDetail(record)">
-                详情
-              </a-button>
-              <a-button size="small" type="primary" @click="handleEvaluate(record)">
-                质控评估
-              </a-button>
-            </a-space>
-          </template>
-        </template>
-      </a-table>
-    </a-card>
+        </a-table>
+      </div>
+    </div>
 
     <!-- 批量评估弹窗 -->
     <BatchEvaluationModal
@@ -177,51 +214,43 @@
     <!-- 规则详情弹窗 -->
     <a-modal
       v-model:open="detailModalVisible"
-      :title="`规则详情 · ${selectedRule?.rule_id || selectedRule?.rule_code || ''}`"
-      width="800px"
+      :title="null"
       :footer="null"
+      width="600px"
+      class="modern-modal"
     >
-      <div v-if="selectedRule" class="rule-detail">
-        <a-descriptions :column="1" bordered size="small">
-          <a-descriptions-item label="规则编号">
-            {{ selectedRule.rule_id || selectedRule.rule_code }}
-          </a-descriptions-item>
-          <a-descriptions-item label="规则名称">
-            {{ selectedRule.name }}
-          </a-descriptions-item>
-          <a-descriptions-item label="规则描述">
-            {{ selectedRule.description }}
-          </a-descriptions-item>
-          <a-descriptions-item label="文书类别">
-            <a-tag :color="getCategoryColor(selectedRule.category)">
-              {{ selectedRule.category }}
-            </a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="复杂度">
-            <a-tag :color="getComplexityColor(selectedRule.complexity)">
-              {{ selectedRule.complexity }}
-            </a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="缺陷级别">
-            <a-tag :color="getDefectLevelColor(selectedRule.defect_level)">
-              {{ getDefectLevelText(selectedRule.defect_level) }}
-            </a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="扣分" v-if="selectedRule.score_deduction || selectedRule.deduction_score">
-            {{ selectedRule.score_deduction || selectedRule.deduction_score }} 分
-          </a-descriptions-item>
-          <a-descriptions-item label="适用文书" v-if="selectedRule.applicable_documents?.length">
-            <a-space :size="4" wrap>
-              <a-tag
-                v-for="(doc, index) in selectedRule.applicable_documents"
-                :key="index"
-                color="blue"
-              >
-                {{ doc }}
-              </a-tag>
-            </a-space>
-          </a-descriptions-item>
-        </a-descriptions>
+      <div v-if="selectedRule" class="p-2">
+         <div class="flex items-center gap-3 mb-6">
+           <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+             <FileTextOutlined />
+           </div>
+           <div>
+             <div class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-0.5">{{ selectedRule.rule_id || selectedRule.rule_code }}</div>
+             <h3 class="text-lg font-bold text-slate-800">{{ selectedRule.name }}</h3>
+           </div>
+         </div>
+         
+         <div class="space-y-4">
+           <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+             <div class="text-xs text-slate-400 font-medium mb-2">规则描述</div>
+             <div class="text-slate-700 text-sm leading-relaxed">{{ selectedRule.description }}</div>
+           </div>
+           
+           <div class="grid grid-cols-2 gap-4">
+             <div class="p-3 border border-slate-100 rounded-xl">
+               <div class="text-xs text-slate-400 mb-1">文书类别</div>
+               <div class="font-medium text-slate-700">{{ selectedRule.category }}</div>
+             </div>
+             <div class="p-3 border border-slate-100 rounded-xl">
+               <div class="text-xs text-slate-400 mb-1">缺陷级别</div>
+               <div class="font-medium" :class="{
+                  'text-red-600': selectedRule.defect_level === 'critical',
+                  'text-orange-500': selectedRule.defect_level === 'major',
+                  'text-green-600': selectedRule.defect_level === 'minor'
+               }">{{ getDefectLevelText(selectedRule.defect_level) }}</div>
+             </div>
+           </div>
+         </div>
       </div>
     </a-modal>
 
@@ -231,6 +260,7 @@
       title="质控点说明（规则逻辑总览）"
       width="90%"
       :footer="null"
+      wrapClassName="rule-doc-modal"
     >
       <a-table
         :dataSource="ruleDocRows"
@@ -242,25 +272,49 @@
           pageSizeOptions: ['10', '20', '33', '50'],
           showTotal: (total) => `共 ${total} 条质控点`
         }"
-        size="small"
+        size="middle"
         rowKey="rule_id"
+        :scroll="{ y: 600 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_id'">
-            <a-tag color="blue">{{ record.rule_id }}</a-tag>
+            <a-tag :color="record.rule_id.includes('LX-') ? 'blue' : 'cyan'" class="font-medium">
+              {{ record.rule_id }}
+            </a-tag>
           </template>
           <template v-else-if="column.key === 'name'">
-            <span class="rule-name">{{ record.name }}</span>
+            <div class="flex items-start gap-2">
+              <FileTextOutlined class="mt-1 text-blue-500" />
+              <span class="font-bold text-slate-700">{{ record.name }}</span>
+            </div>
           </template>
           <template v-else-if="column.key === 'description'">
-            <a-typography-paragraph :ellipsis="{ rows: 3, expandable: true }">
+            <div class="text-slate-600 leading-relaxed whitespace-pre-wrap text-sm">
               {{ record.description }}
-            </a-typography-paragraph>
+            </div>
           </template>
           <template v-else-if="column.key === 'check_points'">
-            <a-typography-paragraph :ellipsis="{ rows: 5, expandable: true }">
-              {{ record.check_points || '（提示词中未单独标注【检查要点】）' }}
-            </a-typography-paragraph>
+            <div class="text-slate-600 leading-relaxed text-sm">
+              <template v-if="record.check_points">
+                <!-- 尝试简单解析序号，如果没有序号则直接显示 -->
+                <div v-if="record.check_points.match(/\d+\./)" class="space-y-1">
+                  <div 
+                    v-for="(point, idx) in record.check_points.split(/(?=\d+\.)/).filter(p => p.trim())" 
+                    :key="idx"
+                    class="flex gap-2"
+                  >
+                    <span class="flex-shrink-0 text-blue-500 font-medium mt-0.5">
+                      {{ point.match(/^\d+\./)?.[0] }}
+                    </span>
+                    <span>{{ point.replace(/^\d+\./, '').trim() }}</span>
+                  </div>
+                </div>
+                <div v-else class="whitespace-pre-wrap">
+                  {{ record.check_points }}
+                </div>
+              </template>
+              <span v-else class="text-slate-400 italic">（提示词中未单独标注【检查要点】）</span>
+            </div>
           </template>
         </template>
       </a-table>
@@ -656,131 +710,70 @@ onMounted(() => {
 
 <style scoped lang="less">
 .lx33-demo-view {
-  .stats-panel {
-    margin-bottom: 24px;
-
-    .stat-item {
-      .stat-label {
-        font-size: 14px;
-        color: rgba(0, 0, 0, 0.45);
-        margin-bottom: 8px;
-      }
-
-      .stat-value {
-        font-size: 20px;
-        font-weight: 500;
-
-        &.best-rule {
-          color: #52c41a;
-        }
-
-        &.worst-rule {
-          color: #ff4d4f;
-        }
-      }
-    }
-  }
-
-  .action-bar {
-    margin-bottom: 24px;
-
-    :deep(.batch-eval-button) {
-      background: linear-gradient(135deg, #ff9f43, #ff6b81);
-      border: none;
-      box-shadow: 0 8px 16px rgba(255, 107, 129, 0.35);
+  /* 表格样式优化 */
+  .modern-table {
+    :deep(.ant-table-thead > tr > th) {
+      background: transparent;
+      color: #64748b;
       font-weight: 600;
-      letter-spacing: 0.5px;
-      padding: 0 28px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.25s ease-out;
-
-      .anticon {
-        font-size: 16px;
-      }
-
-      &:hover {
-        background: linear-gradient(135deg, #ffa94d, #ff4b6b);
-        box-shadow: 0 10px 24px rgba(255, 107, 129, 0.5);
-        transform: translateY(-1px);
-      }
-
-      &:active {
-        transform: translateY(0);
-        box-shadow: 0 4px 12px rgba(255, 107, 129, 0.4);
-      }
-
-      /* 轻微呼吸动画，让按钮更醒目但不过于晃眼 */
-      animation: batch-eval-pulse 2.4s ease-in-out infinite;
+      font-size: 13px;
+      padding: 16px 24px;
+      border-bottom: 1px solid #f1f5f9;
     }
 
-    @keyframes batch-eval-pulse {
-      0% {
-        transform: translateY(0);
-        box-shadow: 0 8px 16px rgba(255, 107, 129, 0.35);
-      }
-      50% {
-        transform: translateY(-1px);
-        box-shadow: 0 12px 26px rgba(255, 107, 129, 0.55);
-      }
-      100% {
-        transform: translateY(0);
-        box-shadow: 0 8px 16px rgba(255, 107, 129, 0.35);
-      }
+    :deep(.ant-table-tbody > tr > td) {
+      padding: 16px 24px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    :deep(.ant-table-tbody > tr:hover > td) {
+      background: #f8fafc;
     }
   }
 
-  .rules-list-card {
-    .rule-count {
-      font-size: 14px;
-      color: rgba(0, 0, 0, 0.65);
-    }
-
-    .rules-table {
-      :deep(.rule-name) {
-        color: rgba(0, 0, 0, 0.85);
-        font-weight: 500;
-      }
-
-      :deep(.th-enlarge) {
-        font-weight: 600;
-        font-size: 14px;
-      }
-
-      // 表格行悬停效果增强
-      :deep(.ant-table-tbody > tr) {
-        transition: all 0.2s ease-in-out;
-        cursor: pointer;
-
-        &:hover {
-          background: linear-gradient(90deg, #e6f7ff 0%, #f0f9ff 100%) !important;
-          box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
-          transform: translateY(-1px);
-
-          td {
-            background: transparent !important;
-          }
-        }
-
-        &:active {
-          transform: translateY(0);
-        }
-      }
-    }
-  }
-
-  .rule-detail {
-    :deep(.ant-descriptions-item-label) {
-      font-weight: 500;
-    }
-  }
-
+  /* 规则文档表格样式 */
   .rule-doc-table {
     :deep(.ant-table-thead > tr > th) {
-      font-size: 15px;
+      background-color: #f8fafc;
+      color: #334155;
+      font-size: 14px;
       font-weight: 600;
+      padding: 16px 16px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    :deep(.ant-table-tbody > tr > td) {
+      padding: 16px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: top;
+    }
+
+    :deep(.ant-table-tbody > tr:nth-child(even) > td) {
+      background-color: #f8fafc;
+    }
+
+    :deep(.ant-table-tbody > tr:hover > td) {
+      background-color: #eff6ff !important;
     }
   }
+}
+
+/* 全局 Modal 样式覆盖 (为了让 Modal 更干净) */
+:global(.modern-modal .ant-modal-content),
+:global(.rule-doc-modal .ant-modal-content) {
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+:global(.modern-modal .ant-modal-header),
+:global(.rule-doc-modal .ant-modal-header) {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+:global(.batch-test-modal .ant-modal-content) {
+  border-radius: 16px;
+  overflow: hidden;
 }
 </style>
