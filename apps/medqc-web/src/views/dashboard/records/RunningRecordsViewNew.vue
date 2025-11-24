@@ -1,357 +1,250 @@
 <template>
-  <div class="running-records-page bg-gray-50 min-h-screen">
-    <!-- 页面头部 -->
-    <div class="page-header bg-white border-b border-gray-200">
-      <!-- 面包屑导航 -->
-      <div class="breadcrumb-container px-6 py-3 bg-gray-50 border-b border-gray-100">
-        <a-breadcrumb class="text-sm">
-          <a-breadcrumb-item>
-            <HomeOutlined class="mr-1" />
-            <router-link to="/dashboard" class="text-gray-600 hover:text-blue-600">首页</router-link>
-          </a-breadcrumb-item>
-          <a-breadcrumb-item>
-            <FileTextOutlined class="mr-1" />
-            <span class="text-gray-600">病案质控</span>
-          </a-breadcrumb-item>
-          <a-breadcrumb-item>
-            <PlayCircleOutlined class="mr-1" />
-            <span class="text-gray-900 font-medium">运行病历</span>
-          </a-breadcrumb-item>
-        </a-breadcrumb>
+  <div class="running-records-page min-h-screen bg-slate-50/50 p-6">
+    <!-- 1. 顶部 KPI 概览卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+        <div>
+          <div class="text-slate-500 text-xs font-medium mb-1">今日待审核</div>
+          <div class="text-2xl font-bold text-slate-800 font-mono">24</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <ClockCircleOutlined class="text-lg" />
+        </div>
+      </div>
+      
+      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+        <div>
+          <div class="text-slate-500 text-xs font-medium mb-1">高风险病历</div>
+          <div class="text-2xl font-bold text-rose-600 font-mono">3</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <AlertOutlined class="text-lg" />
+        </div>
       </div>
 
-      <!-- 页面标题区域 -->
-      <div class="title-container px-6 py-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center">
-            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-              <PlayCircleOutlined class="text-blue-600 text-lg" />
-            </div>
-            <div>
-              <h1 class="text-xl font-semibold text-gray-900 mb-0">运行病历</h1>
-              <p class="text-sm text-gray-500 mt-1">实时监控运行中的病历质控状态</p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-2">
-            <a-badge :count="12" :offset="[10, 0]">
-              <a-button type="text" size="small" class="text-gray-500">
-                <BellOutlined />
-              </a-button>
-            </a-badge>
-            <a-button type="text" size="small" class="text-gray-500">
-              <QuestionCircleOutlined />
-            </a-button>
-          </div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+        <div>
+          <div class="text-slate-500 text-xs font-medium mb-1">审核通过率</div>
+          <div class="text-2xl font-bold text-emerald-600 font-mono">94.2%</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <CheckCircleOutlined class="text-lg" />
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+        <div>
+          <div class="text-slate-500 text-xs font-medium mb-1">平均质控时长</div>
+          <div class="text-2xl font-bold text-indigo-600 font-mono">1.2h</div>
+        </div>
+        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+          <ThunderboltOutlined class="text-lg" />
         </div>
       </div>
     </div>
 
-    <!-- 主要内容区域 -->
-    <div class="content-container p-6">
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-        <!-- 查询条件区域 -->
-        <div class="query-section px-6 py-4 border-b border-gray-100">
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <!-- 时间周期查询 -->
-            <div class="query-item">
-              <label class="block text-sm font-medium text-gray-700 mb-2">时间周期</label>
-              <a-select
-                v-model:value="queryConditions.timeRange"
-                placeholder="选择时间周期"
-                class="w-full"
-                size="middle"
-                @change="handleTimeRangeChange"
-              >
-                <a-select-option value="all">全部</a-select-option>
-                <a-select-option value="recent7">近7日</a-select-option>
-                <a-select-option value="month">月</a-select-option>
-                <a-select-option value="quarter">季度</a-select-option>
-                <a-select-option value="year">年</a-select-option>
-                <a-select-option value="custom">自定义周期</a-select-option>
-              </a-select>
-              <a-range-picker
-                v-if="queryConditions.timeRange === 'custom'"
-                v-model:value="customTimeRange"
-                class="w-full mt-2"
-                size="middle"
-                @change="handleCustomTimeChange"
-              />
-            </div>
-
-            <!-- 评分标准查询 -->
-            <div class="query-item">
-              <label class="block text-sm font-medium text-gray-700 mb-2">评分标准</label>
-              <a-select
-                v-model:value="queryConditions.scoringStandard"
-                placeholder="选择评分标准"
-                class="w-full"
-                size="middle"
-                @change="handleQuery"
-              >
-                <a-select-option value="all">全部</a-select-option>
-                <a-select-option value="standard1">标准评分1</a-select-option>
-                <a-select-option value="standard2">标准评分2</a-select-option>
-                <a-select-option value="standard3">标准评分3</a-select-option>
-              </a-select>
-            </div>
-
-            <!-- 病历信息查询 -->
-            <div class="query-item">
-              <label class="block text-sm font-medium text-gray-700 mb-2">病历信息</label>
-              <a-input-group compact>
-                <a-select
-                  v-model:value="queryConditions.searchType"
-                  style="width: 35%"
-                  size="middle"
-                >
-                  <a-select-option value="registrationNo">登记号</a-select-option>
-                  <a-select-option value="serialNo">流水号</a-select-option>
-                  <a-select-option value="caseNo">病案号</a-select-option>
-                  <a-select-option value="patientName">患者姓名</a-select-option>
-                  <a-select-option value="doctorName">临床医生</a-select-option>
-                </a-select>
-                <a-input
-                  v-model:value="queryConditions.searchValue"
-                  style="width: 65%"
-                  placeholder="输入查询内容"
-                  size="middle"
-                  @press-enter="handleQuery"
-                >
-                  <template #suffix>
-                    <SearchOutlined @click="handleQuery" class="cursor-pointer text-gray-400 hover:text-blue-500" />
-                  </template>
-                </a-input>
-              </a-input-group>
-            </div>
+    <!-- 2. 主内容区：工具栏 + 表格 -->
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]">
+      
+      <!-- 工具栏 Header -->
+      <div class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <!-- 左侧：搜索与筛选 -->
+        <div class="flex items-center gap-3 flex-1">
+          <div class="relative">
+             <a-input
+              v-model:value="queryConditions.searchValue"
+              placeholder="搜索病案号/姓名/医生..."
+              class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
+              @press-enter="handleQuery"
+            >
+            </a-input>
+            <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
-        </div>
-
-        <!-- 筛选条件区域 -->
-        <div class="filter-section px-6 py-4 bg-gray-50 border-b border-gray-100">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center space-x-3">
-              <span class="text-sm font-medium text-gray-700">筛选条件</span>
-              
-              <!-- 快捷筛选 -->
-              <a-dropdown placement="bottomLeft">
-                <a-button size="small" class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300">
-                  <FilterOutlined class="mr-1" />
-                  快捷筛选
-                  <DownOutlined class="ml-1 text-xs" />
-                </a-button>
-                <template #overlay>
-                  <a-menu @click="handleQuickFilter" class="min-w-[160px]">
-                    <a-menu-item v-for="template in filterTemplates" :key="template.id" class="text-sm">
-                      <template #icon>
-                        <TagOutlined class="text-xs" />
-                      </template>
-                      {{ template.name }}
-                    </a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
-
-              <a-button size="small" type="primary" @click="showFilterModal = true" class="bg-blue-600 border-blue-600">
-                <PlusOutlined class="mr-1" />
-                新建筛选
-              </a-button>
-
-              <a-button size="small" @click="showFilterModal = true" class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300">
-                <EditOutlined class="mr-1" />
-                修改筛选
-              </a-button>
-
-              <a-button size="small" @click="handleResetFilter" class="border-gray-300 text-gray-600 hover:text-red-600 hover:border-red-300">
-                <ClearOutlined class="mr-1" />
-                重置筛选
-              </a-button>
-            </div>
-
-            <div class="flex items-center space-x-3">
-              <span class="text-sm text-gray-500">{{ currentView === 'defects' ? '缺陷列表' : '病历列表' }}</span>
-              <a-switch
-                v-model:checked="currentView"
-                checked-value="records"
-                un-checked-value="defects"
-                size="small"
-                @change="handleViewChange"
-              >
-                <template #checkedChildren>
-                  <FileTextOutlined class="text-xs" />
-                </template>
-                <template #unCheckedChildren>
-                  <ExclamationCircleOutlined class="text-xs" />
-                </template>
-              </a-switch>
-            </div>
-          </div>
-
-          <!-- 当前筛选条件显示 -->
-          <div class="filter-tags-container">
-            <div class="flex flex-wrap gap-2" v-if="activeFilterConditions.length > 0">
-              <a-tag
-                v-for="(condition, index) in activeFilterConditions"
-                :key="index"
-                closable
-                @close="removeFilterCondition(index)"
-                color="blue"
-                class="px-2 py-1 text-xs"
-              >
-                <span class="font-medium">{{ condition.label }}</span>: {{ condition.value }}
-              </a-tag>
-            </div>
-            <div v-else class="text-xs text-gray-400 py-1">
-              暂无筛选条件，点击上方按钮添加筛选条件
-            </div>
-          </div>
-        </div>
-
-        <!-- 操作按钮区域 -->
-        <div class="action-section px-6 py-4 border-b border-gray-100">
-          <div class="flex items-center justify-between">
-            <!-- 左侧批量操作 -->
-            <div class="flex items-center space-x-3">
-              <div class="flex items-center space-x-2" v-if="selectedRowKeys.length > 0">
-                <span class="text-sm text-gray-600">已选择 {{ selectedRowKeys.length }} 项</span>
-                <a-divider type="vertical" class="mx-2" />
-              </div>
-              
-              <!-- 批量操作按钮 -->
-              <a-button
-                v-if="selectedRowKeys.length > 0"
-                type="primary"
-                size="small"
-                @click="handleBatchUrge"
-                :disabled="!canBatchUrge"
-                class="bg-blue-600 border-blue-600"
-              >
-                <SendOutlined class="mr-1" />
-                批量催办 ({{ selectedRowKeys.length }})
-              </a-button>
-
-              <a-button
-                v-if="selectedRowKeys.length > 0 && currentView === 'records'"
-                size="small"
-                @click="handleBatchRecheck"
-                class="border-orange-300 text-orange-600 hover:text-orange-700 hover:border-orange-400"
-              >
-                <ReloadOutlined class="mr-1" />
-                批量重新质控
-              </a-button>
-
-              <a-button
-                v-if="selectedRowKeys.length > 0 && currentView === 'records'"
-                size="small"
-                @click="handleBatchPass"
-                class="border-green-300 text-green-600 hover:text-green-700 hover:border-green-400"
-              >
-                <CheckOutlined class="mr-1" />
-                批量通过
-              </a-button>
-
-              <!-- 无选择时的提示 -->
-              <div v-if="selectedRowKeys.length === 0" class="text-sm text-gray-400">
-                请选择需要操作的记录
-              </div>
-            </div>
-
-            <!-- 右侧功能按钮 -->
-            <div class="flex items-center space-x-2">
-              <a-button 
-                size="small" 
-                @click="handleExportAll" 
-                :loading="exportLoading"
-                class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
-              >
-                <DownloadOutlined class="mr-1" />
-                导出全部列表
-              </a-button>
-
-              <a-button
-                v-if="currentView === 'records'"
-                size="small"
-                @click="handleExportQCDetails"
-                :loading="exportLoading"
-                class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
-              >
-                <FileExcelOutlined class="mr-1" />
-                导出质控详情
-              </a-button>
-
-              <a-button 
-                size="small" 
-                @click="handleRefresh" 
-                :loading="loading"
-                class="border-gray-300 text-gray-600 hover:text-green-600 hover:border-green-300"
-              >
-                <ReloadOutlined class="mr-1" />
-                刷新
-              </a-button>
-
-              <!-- 自定义列设置 -->
-              <a-button 
-                size="small" 
-                @click="showColumnSettings = true"
-                class="border-gray-300 text-gray-600 hover:text-purple-600 hover:border-purple-300"
-              >
-                <SettingOutlined />
-              </a-button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 数据列表区域 -->
-        <div class="data-section p-6">
-          <a-table
-            :columns="recordColumns"
-            :data-source="records"
-            :loading="loading"
-            :pagination="pagination"
-            :row-selection="rowSelection"
-            @change="handleTableChange"
-            row-key="id"
-            size="small"
+          
+          <a-select
+            v-model:value="queryConditions.timeRange"
+            class="w-32 custom-select"
+            placeholder="时间周期"
+            :bordered="false"
           >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'registrationNo'">
-                <a @click="handleViewDetail(record)" class="text-blue-600 hover:text-blue-800">
-                  {{ record.registrationNo }}
-                </a>
-              </template>
-              <template v-if="column.key === 'serialNo'">
-                <a @click="handleViewDetail(record)" class="text-blue-600 hover:text-blue-800">
-                  {{ record.serialNo }}
-                </a>
-              </template>
-              <template v-if="column.key === 'caseNo'">
-                <a @click="handleViewDetail(record)" class="text-blue-600 hover:text-blue-800">
-                  {{ record.caseNo }}
-                </a>
-              </template>
-              <template v-if="column.key === 'auditStatus'">
-                <a-tag :color="getAuditStatusColor(record.auditStatus)">
-                  {{ getAuditStatusText(record.auditStatus) }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'action'">
-                <div class="flex space-x-1">
-                  <a-button type="link" size="small" @click="handleViewDetail(record)">
-                    详情
-                  </a-button>
-                  <a-button
-                    v-if="!record.isUrgent"
-                    type="link"
-                    size="small"
-                    @click="handleUrgeRecord(record)"
-                  >
-                    催办
-                  </a-button>
-                </div>
-              </template>
-            </template>
-          </a-table>
+             <a-select-option value="all">全部时间</a-select-option>
+             <a-select-option value="recent7">近7日</a-select-option>
+             <a-select-option value="month">本月</a-select-option>
+          </a-select>
+
+          <a-select
+            v-model:value="queryConditions.status"
+            class="w-32 custom-select"
+            placeholder="审核状态"
+            :bordered="false"
+          >
+             <a-select-option value="all">全部状态</a-select-option>
+             <a-select-option value="pending">待审核</a-select-option>
+             <a-select-option value="reviewing">审核中</a-select-option>
+          </a-select>
+          
+          <div class="h-6 w-px bg-slate-200 mx-1"></div>
+
+          <a-button type="text" class="text-slate-500 hover:text-blue-600 !flex items-center gap-1" @click="showFilterModal = true">
+            <FilterOutlined /> 筛选
+          </a-button>
+        </div>
+
+        <!-- 右侧：操作按钮 -->
+        <div class="flex items-center gap-3">
+           <div class="flex bg-slate-100 p-1 rounded-lg">
+              <button 
+                @click="currentView = 'records'"
+                class="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                :class="currentView === 'records' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+              >
+                <FileTextOutlined class="mr-1" />列表
+              </button>
+              <button 
+                @click="currentView = 'defects'"
+                class="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                :class="currentView === 'defects' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+              >
+                <ExclamationCircleOutlined class="mr-1" />缺陷
+              </button>
+           </div>
+
+           <a-button type="primary" class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9">
+             <PlusOutlined /> 新建任务
+           </a-button>
+           
+           <a-tooltip title="刷新数据">
+             <a-button class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center" @click="handleRefresh">
+               <ReloadOutlined :spin="loading" />
+             </a-button>
+           </a-tooltip>
         </div>
       </div>
+
+      <!-- 表格区域 -->
+      <div class="flex-1 overflow-hidden px-6 py-2">
+        <a-table
+          :columns="recordColumns"
+          :data-source="records"
+          :loading="loading"
+          :pagination="pagination"
+          :row-selection="rowSelection"
+          @change="handleTableChange"
+          row-key="id"
+          class="modern-table h-full"
+          :scroll="{ y: 'calc(100vh - 320px)' }"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'caseInfo'">
+              <div class="flex flex-col">
+                <div class="flex items-center gap-2">
+                   <span class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer" @click="handleViewDetail(record)">{{ record.caseNo }}</span>
+                   <a-tag v-if="record.isUrgent" color="error" class="!rounded-md !text-[10px] !px-1 !mr-0">急</a-tag>
+                </div>
+                <div class="text-xs text-slate-400 mt-0.5">{{ record.registrationNo }}</div>
+              </div>
+            </template>
+            
+            <template v-if="column.key === 'patientInfo'">
+               <div class="flex items-center gap-2">
+                 <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
+                   {{ record.patientName.charAt(0) }}
+                 </div>
+                 <div>
+                   <div class="text-sm font-medium text-slate-700">{{ record.patientName }}</div>
+                   <div class="text-xs text-slate-400">{{ record.patientAge }}岁 / {{ record.patientGender }}</div>
+                 </div>
+               </div>
+            </template>
+
+            <template v-if="column.key === 'doctorInfo'">
+              <div class="text-sm text-slate-700">{{ record.doctorName }}</div>
+              <div class="text-xs text-slate-400">{{ record.department }}</div>
+            </template>
+
+            <template v-if="column.key === 'auditStatus'">
+              <span 
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
+                :class="{
+                  'bg-amber-50 text-amber-600 border-amber-100': record.auditStatus === 'pending',
+                  'bg-blue-50 text-blue-600 border-blue-100': record.auditStatus === 'reviewing',
+                  'bg-emerald-50 text-emerald-600 border-emerald-100': record.auditStatus === 'approved',
+                  'bg-rose-50 text-rose-600 border-rose-100': record.auditStatus === 'rejected'
+                }"
+              >
+                <span class="w-1.5 h-1.5 rounded-full" :class="{
+                  'bg-amber-500': record.auditStatus === 'pending',
+                  'bg-blue-500': record.auditStatus === 'reviewing',
+                  'bg-emerald-500': record.auditStatus === 'approved',
+                  'bg-rose-500': record.auditStatus === 'rejected'
+                }"></span>
+                {{ getAuditStatusText(record.auditStatus) }}
+              </span>
+            </template>
+            
+            <template v-if="column.key === 'score'">
+               <div class="flex items-center gap-2">
+                 <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
+                 <a-progress 
+                   :percent="record.score" 
+                   :show-info="false" 
+                   :stroke-color="getScoreColor(record.score)" 
+                   size="small" 
+                   class="w-16"
+                 />
+               </div>
+            </template>
+
+            <template v-if="column.key === 'action'">
+              <div class="flex items-center gap-1">
+                <a-tooltip title="查看详情">
+                  <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-all" @click="handleViewDetail(record)">
+                    <EyeOutlined />
+                  </button>
+                </a-tooltip>
+                <a-tooltip title="催办" v-if="!record.isUrgent && record.auditStatus === 'pending'">
+                  <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-all" @click="handleUrgeRecord(record)">
+                    <SendOutlined />
+                  </button>
+                </a-tooltip>
+                <a-tooltip title="更多操作">
+                   <a-dropdown>
+                      <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all">
+                        <MoreOutlined />
+                      </button>
+                      <template #overlay>
+                        <a-menu>
+                          <a-menu-item key="1"><FilePdfOutlined /> 导出报告</a-menu-item>
+                          <a-menu-item key="2" class="!text-rose-500"><DeleteOutlined /> 删除记录</a-menu-item>
+                        </a-menu>
+                      </template>
+                   </a-dropdown>
+                </a-tooltip>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+      
+      <!-- 底部批量操作栏 (有选中时显示) -->
+      <transition name="slide-up">
+        <div v-if="selectedRowKeys.length > 0" class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50">
+           <span class="text-sm font-medium">已选择 <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
+           <div class="h-4 w-px bg-slate-600"></div>
+           <div class="flex items-center gap-2">
+             <button class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium transition-colors flex items-center gap-2" @click="handleBatchUrge">
+               <SendOutlined /> 批量催办
+             </button>
+             <button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2" @click="handleBatchPass">
+               <CheckOutlined /> 批量通过
+             </button>
+             <button class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2" @click="selectedRowKeys = []">
+               <CloseOutlined />
+             </button>
+           </div>
+        </div>
+      </transition>
+
     </div>
   </div>
 </template>
@@ -361,55 +254,36 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
-  DownOutlined,
-  DownloadOutlined,
   ReloadOutlined,
-  SettingOutlined,
-  HomeOutlined,
-  FileTextOutlined,
-  PlayCircleOutlined,
-  BellOutlined,
-  QuestionCircleOutlined,
   FilterOutlined,
-  TagOutlined,
   PlusOutlined,
-  EditOutlined,
-  ClearOutlined,
+  ClockCircleOutlined,
+  AlertOutlined,
+  CheckCircleOutlined,
+  ThunderboltOutlined,
+  FileTextOutlined,
   ExclamationCircleOutlined,
+  EyeOutlined,
   SendOutlined,
+  MoreOutlined,
+  FilePdfOutlined,
+  DeleteOutlined,
   CheckOutlined,
-  FileExcelOutlined
+  CloseOutlined
 } from '@ant-design/icons-vue'
 
 // 响应式数据
 const loading = ref(false)
-const exportLoading = ref(false)
 const showFilterModal = ref(false)
-const showColumnSettings = ref(false)
 const currentView = ref('records')
 const selectedRowKeys = ref<string[]>([])
-const customTimeRange = ref()
 
 // 查询条件
 const queryConditions = reactive({
-  timeRange: 'all',
-  scoringStandard: 'all',
-  searchType: 'registrationNo',
+  timeRange: 'recent7',
+  status: undefined,
   searchValue: ''
 })
-
-// 筛选条件
-const activeFilterConditions = ref([
-  { label: '科室', value: '内科' },
-  { label: '状态', value: '待审核' }
-])
-
-const filterTemplates = ref([
-  { id: 1, name: '今日待审核' },
-  { id: 2, name: '本周超时' },
-  { id: 3, name: '高风险病历' },
-  { id: 4, name: '重点科室' }
-])
 
 // 表格数据
 const records = ref([
@@ -419,23 +293,80 @@ const records = ref([
     serialNo: 'S2024001',
     caseNo: 'C2024001',
     patientName: '张三',
+    patientAge: 45,
+    patientGender: '男',
     doctorName: '李医生',
-    department: '内科',
+    department: '心内科',
     auditStatus: 'pending',
+    score: 85,
+    isUrgent: true
+  },
+  {
+    id: '2',
+    registrationNo: 'R2024002',
+    serialNo: 'S2024002',
+    caseNo: 'C2024002',
+    patientName: '李四',
+    patientAge: 32,
+    patientGender: '女',
+    doctorName: '王医生',
+    department: '消化内科',
+    auditStatus: 'reviewing',
+    score: 92,
+    isUrgent: false
+  },
+  {
+    id: '3',
+    registrationNo: 'R2024003',
+    serialNo: 'S2024003',
+    caseNo: 'C2024003',
+    patientName: '王五',
+    patientAge: 67,
+    patientGender: '男',
+    doctorName: '赵医生',
+    department: '呼吸内科',
+    auditStatus: 'approved',
+    score: 98,
+    isUrgent: false
+  },
+  {
+    id: '4',
+    registrationNo: 'R2024004',
+    serialNo: 'S2024004',
+    caseNo: 'C2024004',
+    patientName: '赵六',
+    patientAge: 28,
+    patientGender: '女',
+    doctorName: '钱医生',
+    department: '妇产科',
+    auditStatus: 'rejected',
+    score: 55,
+    isUrgent: false
+  },
+  {
+    id: '5',
+    registrationNo: 'R2024005',
+    serialNo: 'S2024005',
+    caseNo: 'C2024005',
+    patientName: '孙七',
+    patientAge: 55,
+    patientGender: '男',
+    doctorName: '孙医生',
+    department: '骨科',
+    auditStatus: 'pending',
+    score: 78,
     isUrgent: false
   }
 ])
 
 // 表格列配置
 const recordColumns = [
-  { title: '登记号', dataIndex: 'registrationNo', key: 'registrationNo', width: 120 },
-  { title: '流水号', dataIndex: 'serialNo', key: 'serialNo', width: 120 },
-  { title: '病案号', dataIndex: 'caseNo', key: 'caseNo', width: 120 },
-  { title: '患者姓名', dataIndex: 'patientName', key: 'patientName', width: 100 },
-  { title: '临床医生', dataIndex: 'doctorName', key: 'doctorName', width: 100 },
-  { title: '科室', dataIndex: 'department', key: 'department', width: 100 },
-  { title: '审核状态', dataIndex: 'auditStatus', key: 'auditStatus', width: 100 },
-  { title: '操作', key: 'action', width: 120, fixed: 'right' }
+  { title: '病案信息', key: 'caseInfo', width: 140 },
+  { title: '患者', key: 'patientInfo', width: 180 },
+  { title: '科室/医生', key: 'doctorInfo', width: 160 },
+  { title: '状态', key: 'auditStatus', width: 120 },
+  { title: '质控评分', key: 'score', width: 160 },
+  { title: '操作', key: 'action', width: 140, align: 'right' }
 ]
 
 // 分页配置
@@ -445,89 +376,24 @@ const pagination = reactive({
   total: 100,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number, range: [number, number]) =>
-    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+  showTotal: (total: number) => `共 ${total} 条`
 })
 
 // 行选择配置
 const rowSelection = computed(() => ({
-  selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
-  },
-  getCheckboxProps: (record: unknown) => ({
-    disabled: record.disabled
-  })
+  }
 }))
 
-// 计算属性
-const canBatchUrge = computed(() => {
-  return selectedRowKeys.value.length > 0
-})
-
 // 方法
-const handleTimeRangeChange = (value: string) => {
-  console.log('Time range changed:', value)
-  handleQuery()
-}
-
-const handleCustomTimeChange = (dates) => {
-  console.log('Custom time range:', dates)
-  handleQuery()
-}
-
 const handleQuery = () => {
   loading.value = true
-  // 模拟查询
   setTimeout(() => {
     loading.value = false
     message.success('查询完成')
-  }, 1000)
-}
-
-const handleQuickFilter = ({ key }: { key: string }) => {
-  console.log('Quick filter:', key)
-  message.info('应用快捷筛选')
-}
-
-const handleResetFilter = () => {
-  activeFilterConditions.value = []
-  message.info('筛选条件已重置')
-}
-
-const removeFilterCondition = (index: number) => {
-  activeFilterConditions.value.splice(index, 1)
-}
-
-const handleViewChange = (checked: boolean) => {
-  console.log('View changed:', checked)
-}
-
-const handleBatchUrge = () => {
-  message.info(`批量催办 ${selectedRowKeys.value.length} 条记录`)
-}
-
-const handleBatchRecheck = () => {
-  message.info(`批量重新质控 ${selectedRowKeys.value.length} 条记录`)
-}
-
-const handleBatchPass = () => {
-  message.info(`批量通过 ${selectedRowKeys.value.length} 条记录`)
-}
-
-const handleExportAll = () => {
-  exportLoading.value = true
-  setTimeout(() => {
-    exportLoading.value = false
-    message.success('导出完成')
-  }, 2000)
-}
-
-const handleExportQCDetails = () => {
-  exportLoading.value = true
-  setTimeout(() => {
-    exportLoading.value = false
-    message.success('质控详情导出完成')
-  }, 2000)
+  }, 500)
 }
 
 const handleRefresh = () => {
@@ -535,236 +401,117 @@ const handleRefresh = () => {
   setTimeout(() => {
     loading.value = false
     message.success('刷新完成')
-  }, 1000)
+  }, 500)
 }
 
-const handleTableChange = (pag, filters: unknown,  sorter: unknown) => {
+const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
   handleQuery()
 }
 
-const handleViewDetail = (record) => {
-  console.log('View detail:', record)
-  message.info('查看详情')
+const handleViewDetail = (record: any) => {
+  message.info(`查看病案: ${record.caseNo}`)
 }
 
-const handleUrgeRecord = (record) => {
-  console.log('Urge record:', record)
-  message.info('催办成功')
+const handleUrgeRecord = (record: any) => {
+  message.success(`已发送催办提醒: ${record.doctorName}`)
 }
 
-const getAuditStatusColor = (status: string) => {
-  const colorMap: Record<string, string> = {
-    pending: 'orange',
-    approved: 'green',
-    rejected: 'red',
-    reviewing: 'blue'
-  }
-  return colorMap[status] || 'default'
+const handleBatchUrge = () => {
+  message.success(`批量催办 ${selectedRowKeys.value.length} 条记录`)
+  selectedRowKeys.value = []
+}
+
+const handleBatchPass = () => {
+  message.success(`批量通过 ${selectedRowKeys.value.length} 条记录`)
+  selectedRowKeys.value = []
 }
 
 const getAuditStatusText = (status: string) => {
   const textMap: Record<string, string> = {
     pending: '待审核',
     approved: '已通过',
-    rejected: '已拒绝',
+    rejected: '已驳回',
     reviewing: '审核中'
   }
-  return textMap[status] || '未知'
+  return textMap[status] || status
 }
 
-// 生命周期
+const getScoreColor = (score: number) => {
+  if (score >= 90) return '#10b981' // emerald-500
+  if (score >= 80) return '#3b82f6' // blue-500
+  if (score >= 60) return '#f59e0b' // amber-500
+  return '#f43f5e' // rose-500
+}
+
 onMounted(() => {
   handleQuery()
 })
 </script>
 
 <style scoped>
-/* 页面整体布局 */
-.running-records-page {
-  background-color: #f8fafc;
-}
-
-/* 页面头部样式 */
-.page-header {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.breadcrumb-container {
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-}
-
-.title-container {
-  background: white;
-}
-
-/* 内容区域样式 */
-.content-container {
-  padding: 24px;
-}
-
-/* 查询条件区域 */
-.query-section {
-  background: white;
-}
-
-.query-item label {
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 8px;
-}
-
-/* 筛选条件区域 */
-.filter-section {
-  background: #f9fafb;
-  border-top: 1px solid #f3f4f6;
-}
-
-.filter-tags-container {
-  min-height: 32px;
+/* 胶囊选择器样式覆盖 */
+:deep(.custom-select .ant-select-selector) {
+  background-color: #f8fafc !important;
+  border-radius: 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  height: 34px !important;
   display: flex;
   align-items: center;
+  transition: all 0.2s;
 }
 
-/* 操作按钮区域 */
-.action-section {
-  background: white;
-  border-top: 1px solid #f3f4f6;
+:deep(.custom-select:hover .ant-select-selector) {
+  border-color: #60a5fa !important; /* blue-400 */
+  background-color: #ffffff !important;
 }
 
-/* 表格样式 */
-:deep(.ant-table-thead > tr > th) {
-  background-color: #f8fafc;
-  border-bottom: 1px solid #e5e7eb;
-  font-weight: 600;
-  color: #374151;
+:deep(.custom-select .ant-select-selection-placeholder) {
+  color: #94a3b8;
+  font-size: 13px;
 }
 
-:deep(.ant-table-tbody > tr > td) {
-  border-bottom: 1px solid #f3f4f6;
-}
-
-:deep(.ant-table-tbody > tr:hover > td) {
-  background-color: #f8fafc;
-}
-
-/* 按钮样式增强 */
-:deep(.ant-btn-sm) {
-  height: 28px;
-  padding: 0 12px;
-  font-size: 12px;
-  border-radius: 6px;
+:deep(.custom-select .ant-select-selection-item) {
+  color: #475569;
+  font-size: 13px;
   font-weight: 500;
 }
 
-:deep(.ant-btn-primary) {
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.15);
-}
-
-/* 选择器样式 */
-:deep(.ant-select-selector) {
-  border-radius: 6px;
-  border-color: #d1d5db;
-}
-
-:deep(.ant-select-focused .ant-select-selector) {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-:deep(.ant-input) {
-  border-radius: 6px;
-  border-color: #d1d5db;
-}
-
-:deep(.ant-input:focus) {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-/* 标签样式 */
-:deep(.ant-tag) {
-  border-radius: 4px;
-  font-size: 12px;
-  line-height: 20px;
-}
-
-/* 面包屑样式 */
-:deep(.ant-breadcrumb) {
+/* 现代表格样式 */
+.modern-table :deep(.ant-table-thead > tr > th) {
+  background: transparent;
+  border-bottom: 1px solid #f1f5f9;
+  color: #64748b;
+  font-weight: 600;
   font-size: 13px;
+  padding: 12px 16px;
 }
 
-:deep(.ant-breadcrumb-link) {
-  color: #6b7280;
-  text-decoration: none;
-  transition: color 0.2s ease;
+.modern-table :deep(.ant-table-tbody > tr > td) {
+  padding: 16px 16px;
+  border-bottom: 1px solid #f8fafc;
+  transition: background-color 0.2s;
 }
 
-:deep(.ant-breadcrumb-link:hover) {
-  color: #3b82f6;
+.modern-table :deep(.ant-table-tbody > tr:hover > td) {
+  background-color: #f8fafc !important;
 }
 
-/* 开关样式 */
-:deep(.ant-switch-small) {
-  min-width: 36px;
-  height: 18px;
+/* 分页样式微调 */
+.modern-table :deep(.ant-pagination) {
+  margin: 16px 0;
 }
 
-/* 下拉菜单样式 */
-:deep(.ant-dropdown-menu) {
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+/* 动画 */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease-out;
 }
 
-:deep(.ant-dropdown-menu-item) {
-  padding: 8px 16px;
-  font-size: 13px;
-}
-
-/* 响应式设计 */
-@media (max-width: 1024px) {
-  .content-container {
-    padding: 16px;
-  }
-
-  .query-section .grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .filter-section .flex {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .action-section .flex {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-}
-
-@media (max-width: 768px) {
-  .title-container .flex {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .breadcrumb-container {
-    padding: 12px 16px;
-  }
-
-  .title-container {
-    padding: 16px;
-  }
-
-  .query-section,
-  .filter-section,
-  .action-section {
-    padding: 16px;
-  }
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 20px);
 }
 </style>

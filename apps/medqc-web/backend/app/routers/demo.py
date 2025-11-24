@@ -1043,6 +1043,6 @@ async def get_frontpage_demo_case(request: Request):
         )
     except Exception as e:
         return error_response(
-            message=f\"加载病案首页 Demo 数据失败: {str(e)}\",
+            message=f"加载病案首页 Demo 数据失败: {str(e)}",
             trace_id=get_trace_id(request)
         )

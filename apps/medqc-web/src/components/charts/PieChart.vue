@@ -56,7 +56,7 @@ const props = defineProps({
   },
   radius: {
     type: Array as unknown as PropType<[string, string]>,
-    default: (): [string, string] => ['40%', '70%']
+    default: (): [string, string] => ['35%', '55%'] // 减小默认半径
   }
 })
 
@@ -82,7 +82,7 @@ const chartOption = computed(() => {
     },
     tooltip: {
       trigger: 'item',
-      formatter: (params: unknown) => {
+      formatter: (params: any) => {
         const percentage = params.percent || 0
         return `
           <div style="font-weight: bold; margin-bottom: 8px;">${params.name}</div>
@@ -98,21 +98,22 @@ const chartOption = computed(() => {
       }
     },
     legend: {
-      type: 'scroll',
-      orient: 'vertical',
-      right: 10,
-      top: 'middle',
+      bottom: 0,
+      left: 'center',
+      orient: 'horizontal',
       textStyle: {
-        fontSize: 12
+        fontSize: 11
       },
-      data: props.data.map(item => item.name)
+      data: props.data.map(item => item.name),
+      itemWidth: 12,
+      itemHeight: 12
     },
     series: [
       {
         name: props.title,
         type: 'pie',
         radius: props.radius,
-        center: ['40%', '50%'],
+        center: ['50%', '45%'], // 向上偏移，给底部图例留空间
         data: seriesData,
         emphasis: {
           itemStyle: {
@@ -121,22 +122,25 @@ const chartOption = computed(() => {
             shadowColor: 'rgba(0, 0, 0, 0.5)'
           }
         },
+        avoidLabelOverlap: true,
         label: {
           show: true,
           position: 'outside',
-          formatter: (params: unknown) => {
+          formatter: (params: any) => {
             if (props.showPercentage) {
               return `${params.name}\n${params.percent}%`
             }
             return params.name
           },
           fontSize: 11,
-          color: '#666'
+          color: '#666',
+          overflow: 'none',
+          padding: [0, -4] // 稍微减小padding
         },
         labelLine: {
           show: true,
           length: 15,
-          length2: 10,
+          length2: 20, // 进一步增加第二段长度
           smooth: true
         },
         animationType: 'scale',
@@ -150,6 +154,6 @@ const chartOption = computed(() => {
 
 <style scoped>
 .chart-container {
-  @apply w-full;
+  @apply w-full h-full;
 }
-</style> 
+</style>

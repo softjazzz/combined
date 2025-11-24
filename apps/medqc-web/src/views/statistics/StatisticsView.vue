@@ -1,173 +1,203 @@
 <template>
-  <div class="page-container">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <h1 class="page-title">统计分析</h1>
-      <div class="header-actions">
-        <a-space>
-          <a-select v-model:value="selectedPeriod" @change="onPeriodChange" style="width: 120px">
-            <a-select-option value="week">最近一周</a-select-option>
-            <a-select-option value="month">最近一月</a-select-option>
-            <a-select-option value="quarter">最近一季</a-select-option>
+  <div class="min-h-screen bg-slate-50/50 p-6 lg:p-8 font-sans relative overflow-x-hidden">
+    <!-- Background Gradients -->
+    <div class="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50/50 via-slate-50/30 to-transparent pointer-events-none z-0"></div>
+    <div class="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-gradient-to-br from-blue-100/20 to-purple-100/20 rounded-full blur-3xl pointer-events-none z-0"></div>
+
+    <div class="relative z-10 max-w-[1920px] mx-auto">
+      <!-- Page Header -->
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800 tracking-tight">统计分析</h1>
+          <p class="text-slate-500 text-sm mt-1">全方位的质控数据监控与效能分析看板</p>
+        </div>
+        <div class="flex items-center gap-3 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
+          <a-select v-model:value="selectedPeriod" @change="onPeriodChange" class="w-32" :bordered="false">
+             <a-select-option value="week">最近一周</a-select-option>
+             <a-select-option value="month">最近一月</a-select-option>
+             <a-select-option value="quarter">最近一季</a-select-option>
           </a-select>
-          <a-button type="primary" :icon="h(ReloadOutlined)" @click="refreshData" :loading="loading">
-            刷新数据
+          <div class="w-px h-4 bg-slate-200"></div>
+          <a-button type="text" :icon="h(ReloadOutlined)" @click="refreshData" :loading="loading" class="!text-slate-600 hover:!text-blue-600">
+            刷新
           </a-button>
-          <a-button :icon="h(DownloadOutlined)" @click="exportReport" :loading="exporting">
-        导出报表
-      </a-button>
-        </a-space>
+          <a-button type="primary" :icon="h(DownloadOutlined)" @click="exportReport" :loading="exporting" class="!bg-slate-900 !border-slate-900 hover:!bg-blue-600 hover:!border-blue-600 !rounded-lg !font-medium !shadow-md !shadow-slate-200">
+            导出报表
+          </a-button>
+        </div>
       </div>
-    </div>
-    
-    <!-- 统计概览卡片 -->
-    <div class="stats-overview mb-6">
-      <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="8" :lg="6" v-for="card in overviewCards" :key="card.title">
-          <a-card class="stats-card">
-            <div class="stats-card-content">
-              <div class="stats-icon" :style="{ backgroundColor: card.color + '20' }">
-                <component :is="getIcon(card.icon)" :style="{ color: card.color }" />
-              </div>
-              <div class="stats-info">
-                <div class="stats-title">{{ card.title }}</div>
-                <div class="stats-value">{{ card.value }}</div>
-                <div class="stats-change" :class="card.change?.type">
-                  <component :is="card.change?.type === 'increase' ? ArrowUpOutlined : ArrowDownOutlined" />
-                  {{ card.change?.value }}%
-                </div>
-              </div>
+      
+      <!-- Stats Overview Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div 
+          v-for="card in overviewCards" 
+          :key="card.title"
+          class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-100 transition-all duration-300 group"
+        >
+          <div class="flex items-start justify-between mb-3">
+             <div class="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" :style="{ backgroundColor: card.color + '15' }">
+                <component :is="getIcon(card.icon)" class="text-lg" :style="{ color: card.color }" />
+             </div>
+             <div 
+               class="text-xs font-medium px-1.5 py-0.5 rounded flex items-center gap-0.5"
+               :class="card.change?.type === 'increase' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'"
+             >
+                <component :is="card.change?.type === 'increase' ? ArrowUpOutlined : ArrowDownOutlined" class="text-[10px]" />
+                {{ card.change?.value }}%
+             </div>
+          </div>
+          <div>
+             <div class="text-slate-500 text-xs font-medium mb-1">{{ card.title }}</div>
+             <div class="text-xl font-bold text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors">
+               {{ card.value }}
+             </div>
+          </div>
+        </div>
       </div>
-    </a-card>
-        </a-col>
-      </a-row>
-    </div>
 
-    <!-- 图表区域 -->
-    <div class="charts-section">
-      <a-row :gutter="[24, 24]">
-        <!-- 趋势分析 -->
-        <a-col :xs="24" :lg="16">
-          <a-card title="质控趋势分析" class="chart-card">
-            <template #extra>
-              <a-space>
-                <a-radio-group v-model:value="trendType" @change="onTrendTypeChange" size="small">
-                  <a-radio-button value="all">全部</a-radio-button>
-                  <a-radio-button value="score">评分</a-radio-button>
-                  <a-radio-button value="count">数量</a-radio-button>
-                </a-radio-group>
-              </a-space>
-            </template>
-            <div v-if="loading" class="loading-container">
-              <a-spin size="large" />
-            </div>
-            <LineChart
-              v-else
-              :data="trendData"
-              title=""
-              height="350px"
-              :show-data-zoom="trendData.length > 10"
-            />
-          </a-card>
-        </a-col>
+      <!-- Charts Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Trend Analysis (Full Width) -->
+        <div class="lg:col-span-12 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <div class="flex items-center justify-between mb-6">
+             <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+               <span class="w-1 h-4 bg-blue-600 rounded-full"></span>
+               质控趋势分析
+             </h3>
+             <a-radio-group v-model:value="trendType" @change="onTrendTypeChange" size="small" button-style="solid">
+                <a-radio-button value="all">综合</a-radio-button>
+                <a-radio-button value="score">评分</a-radio-button>
+                <a-radio-button value="count">数量</a-radio-button>
+             </a-radio-group>
+          </div>
+          <div class="h-[360px] w-full bg-slate-50/50 rounded-xl border border-slate-50 p-4">
+             <div v-if="loading" class="flex items-center justify-center h-full text-slate-400">
+               <a-spin />
+             </div>
+             <LineChart
+               v-else
+               :data="trendData"
+               title=""
+               height="100%"
+               :show-data-zoom="trendData.length > 10"
+             />
+          </div>
+        </div>
 
-        <!-- 总体评分仪表盘 -->
-        <a-col :xs="24" :lg="8">
-          <a-card title="总体评分" class="chart-card">
-            <div v-if="loading" class="loading-container">
-              <a-spin size="large" />
-            </div>
-            <GaugeChart
-              v-else
-              :value="overview.averageScore"
-              title=""
-              height="350px"
-            />
-          </a-card>
-        </a-col>
+        <!-- Row 2: Department Stats & Score Distribution -->
+        <div class="lg:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+           <!-- Department Contrast -->
+           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span class="w-1 h-4 bg-indigo-600 rounded-full"></span>
+                  部门对比分析
+                </h3>
+                <a-select v-model:value="departmentChartType" @change="onDepartmentChartTypeChange" size="small" class="w-24">
+                  <a-select-option value="recordCount">病案数</a-select-option>
+                  <a-select-option value="averageScore">评分</a-select-option>
+                  <a-select-option value="passRate">通过率</a-select-option>
+                </a-select>
+              </div>
+              <div class="h-[300px]">
+                <BarChart
+                  v-if="!loading"
+                  :data="departmentStats"
+                  :type="departmentChartType"
+                  title=""
+                  height="100%"
+                />
+                <a-spin v-else class="flex justify-center items-center h-full" />
+              </div>
+           </div>
 
-        <!-- 部门对比 -->
-        <a-col :xs="24" :lg="12">
-          <a-card title="部门对比分析" class="chart-card">
-            <template #extra>
-              <a-select v-model:value="departmentChartType" @change="onDepartmentChartTypeChange" size="small" style="width: 100px">
-                <a-select-option value="recordCount">病案数</a-select-option>
-                <a-select-option value="averageScore">评分</a-select-option>
-                <a-select-option value="passRate">通过率</a-select-option>
-              </a-select>
-            </template>
-            <div v-if="loading" class="loading-container">
-              <a-spin size="large" />
-            </div>
-            <BarChart
-              v-else
-              :data="departmentStats"
-              :type="departmentChartType"
-              title=""
-              height="350px"
-            />
-          </a-card>
-        </a-col>
+           <!-- Score Distribution -->
+           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <h3 class="text-base font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <span class="w-1 h-4 bg-emerald-600 rounded-full"></span>
+                评分分布
+              </h3>
+              <div class="h-[300px]">
+                <PieChart
+                   v-if="!loading"
+                  :data="scoreDistributionData"
+                  title=""
+                  height="100%"
+                />
+                <a-spin v-else class="flex justify-center items-center h-full" />
+              </div>
+           </div>
+        </div>
 
-        <!-- 评分分布 -->
-        <a-col :xs="24" :lg="12">
-          <a-card title="评分分布" class="chart-card">
-            <div v-if="loading" class="loading-container">
-              <a-spin size="large" />
-            </div>
-            <PieChart
-              v-else
-              :data="scoreDistributionData"
-              title=""
-              height="350px"
-            />
-          </a-card>
-        </a-col>
+         <!-- Row 3: Issue Stats & Detail Table -->
+        <div class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
+           <!-- Issue Stats -->
+           <div class="lg:col-span-1 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <h3 class="text-base font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <span class="w-1 h-4 bg-orange-500 rounded-full"></span>
+                问题类型统计
+              </h3>
+              <div class="h-[300px]">
+                <PieChart
+                   v-if="!loading"
+                  :data="issueStatsData"
+                  title=""
+                  height="100%"
+                  :radius="['40%', '70%']"
+                />
+                <a-spin v-else class="flex justify-center items-center h-full" />
+              </div>
+           </div>
 
-        <!-- 问题类型统计 -->
-        <a-col :xs="24" :lg="12">
-          <a-card title="问题类型统计" class="chart-card">
-            <div v-if="loading" class="loading-container">
-              <a-spin size="large" />
-            </div>
-            <PieChart
-              v-else
-              :data="issueStatsData"
-              title=""
-              height="350px"
-              :radius="['30%', '60%']"
-            />
-          </a-card>
-        </a-col>
-
-        <!-- 详细统计表格 -->
-        <a-col :xs="24" :lg="12">
-          <a-card title="部门详细统计" class="chart-card">
-            <a-table
-              :columns="tableColumns"
-              :data-source="departmentStats"
-              :pagination="false"
-              size="small"
-              :loading="loading"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'averageScore'">
-                  <a-progress
-                    :percent="record.averageScore"
-                    :stroke-color="record.averageScore >= 80 ? '#52c41a' : record.averageScore >= 60 ? '#faad14' : '#ff4d4f'"
-                    size="small"
-                  />
+           <!-- Detail Table -->
+           <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+              <div class="flex items-center justify-between mb-6">
+                 <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                   <span class="w-1 h-4 bg-slate-600 rounded-full"></span>
+                   部门详细统计
+                 </h3>
+                 <a-button type="link" size="small" class="!text-slate-500 hover:!text-blue-600">查看更多</a-button>
+              </div>
+              <a-table
+                :columns="tableColumns"
+                :data-source="departmentStats"
+                :pagination="{ pageSize: 5 }"
+                size="middle"
+                :loading="loading"
+                class="ant-table-modern"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'averageScore'">
+                    <div class="flex items-center gap-2">
+                       <span class="font-mono font-medium text-slate-700">{{ record.averageScore }}</span>
+                       <div class="flex-1 min-w-[60px]">
+                         <a-progress
+                          :percent="record.averageScore"
+                          :stroke-color="record.averageScore >= 80 ? '#10b981' : record.averageScore >= 60 ? '#f59e0b' : '#ef4444'"
+                          :show-info="false"
+                          size="small"
+                          class="!m-0"
+                        />
+                       </div>
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'passRate'">
+                    <span 
+                      class="px-2 py-0.5 rounded-full text-xs font-bold"
+                      :class="record.passRate >= 80 ? 'bg-emerald-50 text-emerald-600' : record.passRate >= 60 ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-600'"
+                    >
+                      {{ record.passRate }}%
+                    </span>
+                  </template>
+                  <template v-else-if="column.key === 'department'">
+                    <span class="font-medium text-slate-700">{{ record.department }}</span>
+                  </template>
                 </template>
-                <template v-else-if="column.key === 'passRate'">
-                  <a-tag :color="record.passRate >= 80 ? 'green' : record.passRate >= 60 ? 'orange' : 'red'">
-                    {{ record.passRate }}%
-                  </a-tag>
-                </template>
-              </template>
-            </a-table>
-          </a-card>
-        </a-col>
-      </a-row>
+              </a-table>
+           </div>
+        </div>
+
+      </div>
     </div>
   </div>
 </template>
@@ -190,7 +220,7 @@ import {
 import LineChart from '@/components/charts/LineChart.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
-import GaugeChart from '@/components/charts/GaugeChart.vue'
+// Removed GaugeChart import as it's no longer used
 import {
   getStatisticsOverview,
   getTrendData,
@@ -322,14 +352,14 @@ const tableColumns = [
     title: '病案数',
     dataIndex: 'recordCount',
     key: 'recordCount',
-    width: 80,
+    width: 100,
     sorter: (a: DepartmentStats, b: DepartmentStats) => a.recordCount - b.recordCount
   },
   {
     title: '平均评分',
     dataIndex: 'averageScore',
     key: 'averageScore',
-    width: 120,
+    width: 150,
     sorter: (a: DepartmentStats, b: DepartmentStats) => a.averageScore - b.averageScore
   },
   {
@@ -438,82 +468,24 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container {
-  @apply p-6;
+.font-sans {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-.page-header {
-  @apply flex items-center justify-between mb-6;
+:deep(.ant-table-modern) .ant-table-thead > tr > th {
+  background: transparent;
+  border-bottom: 1px solid #f1f5f9;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 12px;
 }
 
-.page-title {
-  @apply text-2xl font-bold text-gray-900;
+:deep(.ant-table-modern) .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f8fafc;
+  padding: 12px 8px;
 }
 
-.header-actions {
-  @apply flex items-center gap-4;
+:deep(.ant-table-modern) .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
 }
-
-.stats-overview {
-  @apply mb-6;
-}
-
-.stats-card {
-  @apply h-full transition-all duration-200 hover:shadow-lg;
-}
-
-.stats-card-content {
-  @apply flex items-center;
-}
-
-.stats-icon {
-  @apply w-12 h-12 rounded-lg flex items-center justify-center mr-4;
-}
-
-.stats-info {
-  @apply flex-1;
-}
-
-.stats-title {
-  @apply text-gray-600 text-sm mb-1;
-}
-
-.stats-value {
-  @apply text-2xl font-bold text-gray-900 mb-1;
-}
-
-.stats-change {
-  @apply text-sm flex items-center gap-1;
-}
-
-.stats-change.increase {
-  @apply text-green-600;
-}
-
-.stats-change.decrease {
-  @apply text-red-600;
-}
-
-.charts-section {
-  @apply space-y-6;
-}
-
-.chart-card {
-  @apply h-full;
-}
-
-.loading-container {
-  @apply flex items-center justify-center h-80;
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .page-header {
-    @apply flex-col items-start gap-4;
-  }
-  
-  .header-actions {
-    @apply w-full justify-end;
-  }
-}
-</style> 
+</style>

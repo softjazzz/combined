@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
-质控概念验证服务
-用于验证语义规则引擎与现有系统的集成可行性
+质控概念验证服务（PoC）
+
+用途：
+- 用于验证语义规则引擎与现有系统的集成可行性；
+- 主要配合 `_archived_entry_points/main_api.py` 使用，不再作为正式质控实现的一部分。
+
+注意：
+- 当前项目的正式质控服务位于 `app/services/qc_service.py` 和 `app/services/sichuan_qc_service.py`；
+- 新功能开发应优先基于 `app/` 下的模块化服务，本文件仅保留为历史参考和实验用例。
 """
 
 import json
@@ -34,9 +41,10 @@ class RealLLMClient:
                 self.api_key = api_key or config.get('api_key_encrypted', '')
                 self.model = model or config.get('model_code', 'qwen2.5-14b-instruct')
             else:
-                # 回退到默认配置
+                # 回退到默认配置（仅用于本地 PoC 调试，不应在生产环境中依赖）
                 self.api_endpoint = api_endpoint or 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-                self.api_key = api_key or 'sk-f1fa15b00fb042a9a80943a40e142daf'
+                # 不再在代码中硬编码真实密钥，改为占位符，实际使用时需通过环境变量或数据库配置提供
+                self.api_key = api_key or os.getenv('DASHSCOPE_API_KEY', '')
                 self.model = model or 'qwen2.5-14b-instruct'
         else:
             self.api_endpoint = api_endpoint

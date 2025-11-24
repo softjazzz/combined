@@ -8,15 +8,25 @@ import requests
 import json
 import time
 import sys
+import os
 from typing import List, Dict, Any
 from datetime import datetime
 
-# 源数据库（海外 Supabase）
-SOURCE_URL = "https://dgsdkdbjpucyawnyfbdu.supabase.co"
-SOURCE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRnc2RrZGJqcHVjeWF3bnlmYmR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjA4NjI4NywiZXhwIjoyMDcxNjYyMjg3fQ.DKVfet4m99w-eQayUt-C_mNfJyQhGf3Oobr8L5VMUVQ"
+# 源/目标数据库配置改为从环境变量读取，避免在代码中硬编码敏感信息。
+# 必填环境变量：
+#   SOURCE_SUPABASE_URL
+#   SOURCE_SUPABASE_SERVICE_KEY
+#   TARGET_SUPABASE_URL
+#
+# 如需在本地快速使用，可在 .env 或命令行中临时设置：
+#   export SOURCE_SUPABASE_URL="https://xxx.supabase.co"
+#   export SOURCE_SUPABASE_SERVICE_KEY="service-role-key"
+#   export TARGET_SUPABASE_URL="https://yyy.supabase.opentrust.net"
+SOURCE_URL = os.environ.get("SOURCE_SUPABASE_URL") or ""
+SOURCE_SERVICE_KEY = os.environ.get("SOURCE_SUPABASE_SERVICE_KEY") or ""
 
-# 目标数据库（阿里云 Supabase）
-TARGET_URL = "https://sbp-a41klzf2d6lvsjoj.supabase.opentrust.net"
+# 目标数据库（例如阿里云 Supabase）
+TARGET_URL = os.environ.get("TARGET_SUPABASE_URL") or ""
 
 # 推荐的迁移顺序（先迁移无外键或被依赖的表）
 TABLE_ORDER = [
@@ -299,6 +309,18 @@ def main():
     print_colored("=" * 70, Colors.BLUE)
     print_colored("🚀 Supabase 数据库完整迁移工具 (REST API 方式)", Colors.BLUE)
     print_colored("=" * 70, Colors.BLUE)
+
+    # 基本配置校验，避免在缺少必要环境变量时进行网络请求
+    if not SOURCE_URL or not SOURCE_SERVICE_KEY or not TARGET_URL:
+        print_colored("\n❌ 缺少必要配置，请先设置以下环境变量：", Colors.RED)
+        print("  - SOURCE_SUPABASE_URL")
+        print("  - SOURCE_SUPABASE_SERVICE_KEY")
+        print("  - TARGET_SUPABASE_URL")
+        print("\n示例：")
+        print('  export SOURCE_SUPABASE_URL="https://xxx.supabase.co"')
+        print('  export SOURCE_SUPABASE_SERVICE_KEY="service-role-key"')
+        print('  export TARGET_SUPABASE_URL="https://yyy.supabase.opentrust.net"')
+        return
     
     print(f"\n源数据库: {SOURCE_URL}")
     print(f"目标数据库: {TARGET_URL}")

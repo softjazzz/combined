@@ -1,8 +1,12 @@
 """
-DEPRECATED: Legacy experimental entrypoint kept for reference.
-Please use `app/main.py` (uvicorn app.main:app) for running the backend.
+DEPRECATED: Legacy experimental entrypoint kept for reference ONLY.
+
+⚠️ 当前项目的正式后端入口为:
+    uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+本文件仅保留历史审核模块示例代码，不再作为默认启动方式使用。
 """
-# 主FastAPI应用（Legacy）
+# 主 FastAPI 应用（Legacy/experimental）
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -368,15 +372,21 @@ if settings.DEBUG:
             "environment": getattr(settings, 'ENVIRONMENT', 'development')
         }
 
-if __name__ == "__main__":
-    import uvicorn
-    
-    # 开发环境启动配置
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info",
-        access_log=True
+if __name__ == "__main__":  # pragma: no cover
+    # 为避免误用，直接在命令行提示正确的后端入口。
+    import textwrap
+
+    warning = textwrap.dedent(
+        """
+        ⚠️ 当前文件 apps/medqc-web/backend/main.py 已标记为 Legacy/Deprecated。
+
+        请使用新的模块化后端入口启动服务：
+
+            cd apps/medqc-web/backend
+            export JWT_SECRET=dev-secret  # 或配置到 .env
+            uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+        如确有需要调试本 Legacy 应用，请手动修改代码后再运行 uvicorn。
+        """
     )
+    print(warning)

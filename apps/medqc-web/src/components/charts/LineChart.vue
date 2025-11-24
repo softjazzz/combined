@@ -17,7 +17,8 @@ import {
   TooltipComponent,
   LegendComponent,
   GridComponent,
-  DataZoomComponent
+  DataZoomComponent,
+  GraphicComponent
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
@@ -30,6 +31,7 @@ use([
   LegendComponent,
   GridComponent,
   DataZoomComponent,
+  GraphicComponent,
   CanvasRenderer
 ])
 
@@ -263,6 +265,6 @@ const chartOption = computed(() => {
 
 <style scoped>
 .chart-container {
-  @apply w-full;
+  @apply w-full h-full;
 }
 </style> 

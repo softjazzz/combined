@@ -4,7 +4,6 @@ from .settings import get_settings
 import logging
 import os
 import httpx
-import ssl
 import urllib3
 from anyio import to_thread
 
@@ -18,13 +17,17 @@ except Exception:
 ALLOW_INSECURE_SSL = False
 if _settings is not None:
     env = str(getattr(_settings, "ENV", "development")).lower()
-    ALLOW_INSECURE_SSL = env != "production" or (os.getenv("ALLOW_INSECURE_SSL", "false").lower() == "true")
+    # 仅在本地/开发环境，且显式开启时，放宽对自签名证书的告警。
+    # 不再通过修改全局 SSL 上下文来关闭验证，避免影响进程内其他 HTTPS 请求。
+    ALLOW_INSECURE_SSL = env in ("local", "development") and (
+        os.getenv("ALLOW_INSECURE_SSL", "false").lower() == "true"
+    )
 else:
-    ALLOW_INSECURE_SSL = True
+    # 无法读取设置时，保持保守策略：不自动放宽 SSL 校验
+    ALLOW_INSECURE_SSL = False
 
 if ALLOW_INSECURE_SSL:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    ssl._create_default_https_context = ssl._create_unverified_context
 
 try:  # Optional import for constructing ClientOptions when create_client has incompatibility
     from supabase.lib.client_options import ClientOptions  # type: ignore
@@ -241,7 +244,12 @@ def get_supabase() -> Optional[Client]:
                         if self._limit is not None and not self._range:
                             params["limit"] = str(self._limit)
                         url = f"{self.base_url}/rest/v1/{self.table}"
-                        async with httpx.AsyncClient(timeout=30) as c:  # 异步请求
+                        # trust_env=False 避免继承系统 SOCKS/HTTP 代理配置，避免触发 socksio 依赖
+                        async with httpx.AsyncClient(
+                            timeout=30,
+                            verify=not ALLOW_INSECURE_SSL,
+                            trust_env=False,
+                        ) as c:  # 异步请求
                             if self._method == "GET":
                                 r = await c.get(url, headers=self._headers(), params=params)
                             elif self._method == "POST":
@@ -319,7 +327,11 @@ def get_supabase() -> Optional[Client]:
                         if self._limit is not None and not self._range:
                             params["limit"] = str(self._limit)
                         url = f"{self.base_url}/rest/v1/{self.table}"
-                        with httpx.Client(timeout=30) as c:
+                        with httpx.Client(
+                            timeout=30,
+                            verify=not ALLOW_INSECURE_SSL,
+                            trust_env=False,
+                        ) as c:
                             if self._method == "GET":
                                 r = c.get(url, headers=self._headers(), params=params)
                             elif self._method == "POST":
@@ -370,7 +382,11 @@ def get_supabase() -> Optional[Client]:
                                 "Content-Type": "application/json",
                                 "Accept": "application/json",
                             }
-                            with httpx.Client(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                            with httpx.Client(
+                                verify=not ALLOW_INSECURE_SSL,
+                                timeout=30.0,
+                                trust_env=False,
+                            ) as client:
                                 r = client.post(url, json=self.params, headers=headers)
                                 r.raise_for_status()
                                 data = r.json() if r.text else None
@@ -384,7 +400,11 @@ def get_supabase() -> Optional[Client]:
                                 "Content-Type": "application/json",
                                 "Accept": "application/json",
                             }
-                            async with httpx.AsyncClient(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                            async with httpx.AsyncClient(
+                                verify=not ALLOW_INSECURE_SSL,
+                                timeout=30.0,
+                                trust_env=False,
+                            ) as client:
                                 r = await client.post(url, json=self.params, headers=headers)
                                 r.raise_for_status()
                                 data = r.json() if r.text else None
@@ -414,7 +434,11 @@ def get_supabase() -> Optional[Client]:
                                     "Content-Type": "application/json",
                                     "Accept": "application/json",
                                 }
-                                with httpx.Client(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                                with httpx.Client(
+                                    verify=not ALLOW_INSECURE_SSL,
+                                    timeout=30.0,
+                                    trust_env=False,
+                                ) as client:
                                     r = client.post(url, json=payload, headers=headers)
                                     try:
                                         r.raise_for_status()
@@ -433,7 +457,11 @@ def get_supabase() -> Optional[Client]:
                                     "Content-Type": "application/json",
                                     "Accept": "application/json",
                                 }
-                                async with httpx.AsyncClient(verify=not ALLOW_INSECURE_SSL, timeout=30.0) as client:
+                                async with httpx.AsyncClient(
+                                    verify=not ALLOW_INSECURE_SSL,
+                                    timeout=30.0,
+                                    trust_env=False,
+                                ) as client:
                                     r = await client.post(url, json=payload, headers=headers)
                                     try:
                                         r.raise_for_status()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, List
 from ..core.settings import get_settings
 
@@ -35,6 +35,8 @@ class UserResponse(UserBase):
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra='ignore')  # 忽略额外字段
+    
     email: EmailStr
     password: str
     role: Optional[str] = None

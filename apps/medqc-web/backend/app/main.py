@@ -34,6 +34,7 @@ from .routers import appeals as appeals_router
 from .routers import remediation as remediation_router
 from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
+from .routers import frontpage as frontpage_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -217,6 +218,8 @@ def create_app() -> FastAPI:
     app.include_router(department_qc_rules_router.router)
     # Demo page for LX33 rules (no auth required)
     app.include_router(demo_router.router)
+    # Front page auto-generation (demo + future real extraction)
+    app.include_router(frontpage_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

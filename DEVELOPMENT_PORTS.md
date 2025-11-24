@@ -13,7 +13,7 @@
 ### 后端服务
 | 服务名称 | 端口 | 用途 | 访问地址 |
 |---------|------|------|----------|
-| medqc-api | 8000 | 医疗质控API服务 | http://localhost:8000 |
+| medqc-api | 8001 | 医疗质控API服务 | http://localhost:8001 |
 | yibao-api | 8008 | 医保质控API服务 | http://localhost:8008 |
 
 ### 数据库服务
@@ -52,14 +52,13 @@ export default defineConfig({
 ```
 
 ### 2. FastAPI配置 (后端)
-```python
-# apps/medqc-web/backend/main.py
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+```bash
+# MedQC 新版后端（推荐）
+cd apps/medqc-web/backend
+export JWT_SECRET=dev-secret
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
-# apps/yibao-web/backend/main.py
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8008, reload=True)
+# YiBao 后端（保持原端口 8008，如有需要可参见其 README）
 ```
 
 ## 🚨 端口冲突处理

@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.options("/login")
-async def login_options():
+async def login_options(request: Request):
     return success_response(data={}, message="OK", trace_id=get_trace_id(request))
 
 

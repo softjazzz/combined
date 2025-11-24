@@ -50,9 +50,9 @@ export default defineConfig({
         changeOrigin: true,
         secure: false
       },
-      // 其余历史接口保持指向原有 medqc 后端
+      // 所有 API 接口都转发到后端服务（端口 8001）
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         secure: false
         // 不需要rewrite，因为前端代码已经使用 /api/v1/* 路径

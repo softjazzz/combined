@@ -55,7 +55,26 @@
              <template #icon><CheckCircleOutlined /></template>
             <span>终末病历</span>
           </a-menu-item>
+          <a-menu-item
+            key="/dashboard/frontpage-demo"
+            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+          >
+            <template #icon><FileTextOutlined /></template>
+            <span>首页自动生成（Demo）</span>
+          </a-menu-item>
         </a-sub-menu>
+
+        <!-- 质控规则管理（与病案质控平级，紧挨其下） -->
+        <a-menu-item
+          key="/dashboard/rules"
+          class="menu-item-base"
+          v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+        >
+          <template #icon>
+            <SettingOutlined />
+          </template>
+          <span class="font-medium">质控规则管理</span>
+        </a-menu-item>
 
         <!-- 任务管理 -->
         <a-sub-menu key="/dashboard/tasks" class="menu-item-base">
@@ -112,14 +131,6 @@
             <span>事后分析</span>
           </a-menu-item>
         </a-sub-menu>
-
-        <!-- 质控规则管理 -->
-        <a-menu-item key="/dashboard/rules" class="menu-item-base" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
-          <template #icon>
-            <SettingOutlined />
-          </template>
-          <span class="font-medium">质控规则管理</span>
-        </a-menu-item>
 
         <!-- 测试病历管理 -->
         <a-menu-item key="/dashboard/medical-records" class="menu-item-base">

@@ -131,12 +131,12 @@ start_backend() {
         log_success "后端服务启动成功"
         log_info "API地址: http://localhost:8001"
         log_info "API文档: http://localhost:8001/docs"
-        log_info "健康检查: http://localhost:8001/api/health"
+        log_info "健康检查: http://localhost:8001/api/v1/health"
         log_info "日志文件: $BACKEND_ROOT/backend.log"
         
         # 测试健康检查
         sleep 2
-        if curl -s http://localhost:8001/api/health >/dev/null 2>&1; then
+        if curl -s http://localhost:8001/api/v1/health >/dev/null 2>&1; then
             log_success "后端健康检查通过"
         else
             log_warning "后端健康检查失败，请查看日志"
@@ -197,7 +197,7 @@ check_status() {
     fi
     
     if check_port 8001; then
-        if curl -s http://localhost:8001/api/health >/dev/null 2>&1; then
+        if curl -s http://localhost:8001/api/v1/health >/dev/null 2>&1; then
             echo -e "后端健康检查: ${GREEN}通过${NC}"
         else
             echo -e "后端健康检查: ${RED}失败${NC}"

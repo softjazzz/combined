@@ -203,6 +203,6 @@ const chartOption = computed(() => {
 
 <style scoped>
 .chart-container {
-  @apply w-full;
+  @apply w-full h-full;
 }
 </style> 

@@ -74,7 +74,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'records/running',
         name: 'RunningRecords',
-        component: () => import('@/views/dashboard/records/RunningRecordsView.vue'),
+        component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
         meta: {
           title: '运行病历',
           icon: 'PlayCircleOutlined'
@@ -87,6 +87,16 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '终末病历',
           icon: 'CheckCircleOutlined'
+        }
+      },
+      {
+        path: 'frontpage-demo',
+        name: 'FrontPageAutoDemo',
+        component: () => import('@/views/demo/FrontPageDemoView.vue'),
+        meta: {
+          title: '首页自动生成（Demo）',
+          icon: 'FileTextOutlined',
+          permission: ['admin', 'qc_manager']
         }
       },
       {

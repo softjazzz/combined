@@ -149,7 +149,7 @@ pnpm clean            # 清理端口
 |---------|------|------|----------|
 | medqc-web | 3000 | 医疗质控系统前端 | http://localhost:3000 |
 | yibao-web | 3008 | 医保质控系统前端 | http://localhost:3008 |
-| medqc-api | 8000 | 医疗质控API服务 | http://localhost:8000 |
+| medqc-api | 8001 | 医疗质控API服务 | http://localhost:8001 |
 | yibao-api | 8008 | 医保质控API服务 | http://localhost:8008 |
 
 详细的端口分配和配置说明见 [DEVELOPMENT_PORTS.md](DEVELOPMENT_PORTS.md)。
