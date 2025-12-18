@@ -5,9 +5,15 @@ PRD 3.3 - 事中监控
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from loguru import logger
+try:
+    from loguru import logger
+except Exception:
+    import logging
+
+    logger = logging.getLogger(__name__)
 from typing import Optional
 
+from app.config import settings
 from app.models.schemas import (
     DRGPredictRequest,
     DRGPredictionResponse,
@@ -17,14 +23,30 @@ from app.models.schemas import (
     CodingSuggestionItem,
     HandleSuggestionRequest,
     HandleSuggestionResponse,
+    HandleAlertRequest,
+    HandleAlertResponse,
     DRGAlertsRequest,
     DRGAlertsResponse,
     DRGAlertItem
 )
 from app.services.drg_grouper import drg_grouper
 from app.services.database import db_service
+from app.services.demo_data_store import get_demo_store
+from app.services.demo_store import demo_store
 
 router = APIRouter(prefix="/drg", tags=["DRG分组"])
+
+
+@router.get(
+    "/demo/story-cases",
+    summary="获取演示故事病例",
+    description="DEMO 模式：返回固定的演示病例列表，便于前端一键跳转演示"
+)
+async def get_demo_story_cases():
+    if not settings.DEMO_MODE:
+        return {"cases": []}
+    store = get_demo_store()
+    return store.get_story_cases()
 
 
 @router.post(
@@ -60,41 +82,89 @@ async def predict_drg_grouping(request: DRGPredictRequest):
     try:
         logger.info(f"接收 DRG 分组预测请求: {request.admission_id}")
 
-        # 1. 获取病案首页数据
-        case_front_page = await db_service.get_case_front_page(request.admission_id)
+        if settings.DEMO_MODE:
+            store = get_demo_store()
 
-        if not case_front_page:
-            raise HTTPException(
-                status_code=404,
-                detail=f"未找到住院号 {request.admission_id} 的病案首页"
+            case_front_page = store.get_case_detail(request.admission_id)
+            if not case_front_page:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"未找到住院号 {request.admission_id} 的病案首页"
+                )
+
+            primary_diagnosis = case_front_page['primary_diagnosis_code']
+            secondary_diagnoses = [d['code'] for d in (case_front_page.get('secondary_diagnoses') or [])]
+            procedure_codes = [p['code'] for p in (case_front_page.get('procedures') or [])]
+            if case_front_page.get('main_procedure_code'):
+                procedure_codes.insert(0, case_front_page['main_procedure_code'])
+
+            result = await drg_grouper.group(
+                primary_diagnosis=primary_diagnosis,
+                secondary_diagnoses=secondary_diagnoses,
+                procedures=procedure_codes,
+                patient_age=case_front_page.get('patient_age', 50),
+                patient_gender=case_front_page.get('patient_gender', 'M'),
+                total_hospital_days=case_front_page.get('total_hospital_days'),
+                discharge_status=case_front_page.get('discharge_status')
             )
 
+            store.append_grouping_history(request.admission_id, result)
+            await _check_and_create_alerts_demo(
+                store=store,
+                admission_id=request.admission_id,
+                drg_result=result,
+                case_data=case_front_page
+            )
+
+            return DRGPredictionResponse(
+                data=result,
+                message="分组成功"
+            )
+
+        # 1. 获取病案首页数据（DB 优先，空/失败时使用演示数据兜底）
+        case_front_page = await db_service.get_case_front_page(request.admission_id)
+        demo_case = None
+
+        if not case_front_page:
+            demo_case = demo_store.get_case_front_page_detail(request.admission_id)
+            if not demo_case:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"未找到住院号 {request.admission_id} 的病案首页"
+                )
+
         # 2. 获取次诊断和手术操作
-        front_page_id = case_front_page['front_page_id']
-        diagnoses = await db_service.get_case_diagnoses(front_page_id)
-        procedures = await db_service.get_case_procedures(front_page_id)
+        if case_front_page:
+            front_page_id = case_front_page['front_page_id']
+            diagnoses = await db_service.get_case_diagnoses(front_page_id)
+            procedures = await db_service.get_case_procedures(front_page_id)
+            primary_diagnosis = case_front_page['primary_diagnosis_code']
+            secondary_diagnoses = [d['diagnosis_code'] for d in diagnoses]
+            procedure_codes = [p['procedure_code'] for p in procedures]
+            if case_front_page.get('main_procedure_code'):
+                procedure_codes.insert(0, case_front_page['main_procedure_code'])
+        else:
+            # demo_case 的 secondary_diagnoses/procedures 已是 {code,name,...} 格式
+            primary_diagnosis = demo_case['primary_diagnosis_code']
+            secondary_diagnoses = [d['code'] for d in demo_case.get('secondary_diagnoses', []) if d.get('code')]
+            procedure_codes = [p['code'] for p in demo_case.get('procedures', []) if p.get('code')]
+            if demo_case.get('main_procedure_code'):
+                procedure_codes.insert(0, demo_case['main_procedure_code'])
 
-        # 3. 准备分组参数
-        primary_diagnosis = case_front_page['primary_diagnosis_code']
-        secondary_diagnoses = [d['diagnosis_code'] for d in diagnoses]
-        procedure_codes = [p['procedure_code'] for p in procedures]
-
-        # 添加主手术操作
-        if case_front_page.get('main_procedure_code'):
-            procedure_codes.insert(0, case_front_page['main_procedure_code'])
+        case_data = case_front_page or demo_case or {}
 
         # 4. 调用 DRG 分组引擎
         result = await drg_grouper.group(
             primary_diagnosis=primary_diagnosis,
             secondary_diagnoses=secondary_diagnoses,
             procedures=procedure_codes,
-            patient_age=case_front_page.get('patient_age', 50),
-            patient_gender=case_front_page.get('patient_gender', 'M'),
-            total_hospital_days=case_front_page.get('total_hospital_days'),
-            discharge_status=case_front_page.get('discharge_status')
+            patient_age=case_data.get('patient_age', 50),
+            patient_gender=case_data.get('patient_gender', 'M'),
+            total_hospital_days=case_data.get('total_hospital_days'),
+            discharge_status=case_data.get('discharge_status')
         )
 
-        # 5. 保存分组结果到数据库
+        # 5. 保存分组结果到数据库（如 DB 不可用，写入演示 store）
         grouping_id = await db_service.save_drg_grouping(
             admission_id=request.admission_id,
             region=request.region,
@@ -107,13 +177,26 @@ async def predict_drg_grouping(request: DRGPredictRequest):
             grouping_logic=result['grouping_logic']
         )
 
+        if grouping_id is None:
+            demo_store.save_grouping_history(
+                admission_id=request.admission_id,
+                item={
+                    'drg_code': result['drg_code'],
+                    'drg_name': result['drg_name'],
+                    'weight': result['weight'],
+                    'baseline_payment': result['baseline_payment'],
+                    'actual_cost': (case_front_page or demo_case or {}).get('total_cost'),
+                    'profit_margin': None,
+                }
+            )
+
         logger.info(f"DRG 分组成功: {result['drg_code']}, grouping_id={grouping_id}")
 
         # 6. 检查是否需要触发预警
         await _check_and_create_alerts(
             admission_id=request.admission_id,
             drg_result=result,
-            case_data=case_front_page
+            case_data=case_front_page or demo_case
         )
 
         return DRGPredictionResponse(
@@ -150,7 +233,18 @@ async def get_grouping_history(admission_id: str):
     try:
         logger.info(f"查询 DRG 分组历史: {admission_id}")
 
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            records = store.get_grouping_history(admission_id)
+            history_items = [DRGGroupingHistoryItem(**record) for record in records]
+            return DRGGroupingHistoryResponse(
+                history=history_items,
+                total=len(history_items)
+            )
+
         records = await db_service.get_drg_grouping_history(admission_id)
+        if not records:
+            records = demo_store.get_grouping_history(admission_id)
 
         history_items = [
             DRGGroupingHistoryItem(**record) for record in records
@@ -163,6 +257,58 @@ async def get_grouping_history(admission_id: str):
 
     except Exception as e:
         logger.error(f"查询分组历史失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+
+@router.get(
+    "/suggestions",
+    response_model=CodingSuggestionsResponse,
+    summary="获取编码建议列表（可按条件过滤）",
+    description="获取编码建议列表，支持按住院号/状态过滤"
+)
+async def list_coding_suggestions(
+    admission_id: Optional[str] = Query(None, description="住院号（可选）"),
+    status: Optional[str] = Query(None, description="建议状态：pending/accepted/rejected"),
+    limit: int = Query(50, ge=1, le=200, description="返回数量")
+):
+    try:
+        logger.info(f"查询编码建议列表: admission_id={admission_id}, 状态={status}, limit={limit}")
+
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            suggestions = store.list_suggestions(
+                admission_id=admission_id,
+                status=status,
+                limit=limit
+            )
+            suggestion_items = [CodingSuggestionItem(**s) for s in suggestions]
+            return CodingSuggestionsResponse(
+                suggestions=suggestion_items,
+                total=len(suggestion_items)
+            )
+
+        suggestions = await db_service.list_coding_suggestions(
+            admission_id=admission_id,
+            status=status,
+            limit=limit
+        )
+
+        if not suggestions:
+            suggestions = demo_store.list_coding_suggestions(
+                admission_id=admission_id,
+                status=status,
+                limit=limit
+            )
+
+        suggestion_items = [CodingSuggestionItem(**s) for s in suggestions]
+
+        return CodingSuggestionsResponse(
+            suggestions=suggestion_items,
+            total=len(suggestion_items)
+        )
+
+    except Exception as e:
+        logger.error(f"查询编码建议列表失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
 
 
@@ -192,7 +338,27 @@ async def get_coding_suggestions(
     try:
         logger.info(f"查询编码建议: {admission_id}, 状态: {status}")
 
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            suggestions = store.list_suggestions(
+                admission_id=admission_id,
+                status=status,
+                limit=200
+            )
+            suggestion_items = [CodingSuggestionItem(**s) for s in suggestions]
+            return CodingSuggestionsResponse(
+                suggestions=suggestion_items,
+                total=len(suggestion_items)
+            )
+
         suggestions = await db_service.get_coding_suggestions(admission_id, status)
+
+        if not suggestions:
+            suggestions = demo_store.list_coding_suggestions(
+                admission_id=admission_id,
+                status=status,
+                limit=50
+            )
 
         suggestion_items = [
             CodingSuggestionItem(**s) for s in suggestions
@@ -232,6 +398,22 @@ async def handle_coding_suggestion(request: HandleSuggestionRequest):
     try:
         logger.info(f"处理编码建议: {request.suggestion_id}, 操作: {request.action}")
 
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            status = 'accepted' if request.action == 'accept' else 'rejected'
+            success = store.update_suggestion_status(
+                suggestion_id=request.suggestion_id,
+                status=status,
+                handled_by=request.handled_by
+            )
+            if not success:
+                raise HTTPException(status_code=404, detail="建议未找到或更新失败")
+            message = "建议已接受" if request.action == 'accept' else "建议已拒绝"
+            return HandleSuggestionResponse(
+                success=True,
+                message=message
+            )
+
         # 更新建议状态
         status = 'accepted' if request.action == 'accept' else 'rejected'
         success = await db_service.update_suggestion_status(
@@ -239,6 +421,13 @@ async def handle_coding_suggestion(request: HandleSuggestionRequest):
             status=status,
             handled_by=request.handled_by
         )
+
+        if not success:
+            success = demo_store.update_suggestion_status(
+                suggestion_id=request.suggestion_id,
+                status=status,
+                handled_by=request.handled_by
+            )
 
         if not success:
             raise HTTPException(status_code=404, detail="建议未找到或更新失败")
@@ -292,12 +481,34 @@ async def get_drg_alerts(
     try:
         logger.info(f"查询 DRG 预警: admission_id={admission_id}, level={alert_level}")
 
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            alerts = store.list_alerts(
+                admission_id=admission_id,
+                alert_level=alert_level,
+                status=status,
+                limit=limit
+            )
+            alert_items = [DRGAlertItem(**alert) for alert in alerts]
+            return DRGAlertsResponse(
+                alerts=alert_items,
+                total=len(alert_items)
+            )
+
         alerts = await db_service.get_drg_alerts(
             admission_id=admission_id,
             alert_level=alert_level,
             status=status,
             limit=limit
         )
+
+        if not alerts:
+            alerts = demo_store.list_alerts(
+                admission_id=admission_id,
+                alert_level=alert_level,
+                status=status,
+                limit=limit
+            )
 
         alert_items = [
             DRGAlertItem(**alert) for alert in alerts
@@ -311,6 +522,64 @@ async def get_drg_alerts(
     except Exception as e:
         logger.error(f"查询 DRG 预警失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+
+@router.post(
+    "/alerts/handle",
+    response_model=HandleAlertResponse,
+    summary="处理 DRG 预警",
+    description="确认或关闭 DRG 预警"
+)
+async def handle_drg_alert(request: HandleAlertRequest):
+    try:
+        logger.info(f"处理 DRG 预警: {request.alert_id}, 操作: {request.action}")
+
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            status = 'acknowledged' if request.action == 'acknowledge' else 'resolved'
+            success = store.update_alert_status(
+                alert_id=request.alert_id,
+                status=status,
+                handled_by=request.handled_by
+            )
+            if not success:
+                raise HTTPException(status_code=404, detail="预警未找到或更新失败")
+            message = "预警已确认" if request.action == 'acknowledge' else "预警已关闭"
+            return HandleAlertResponse(
+                success=True,
+                message=message
+            )
+
+        status = 'acknowledged' if request.action == 'acknowledge' else 'resolved'
+
+        success = await db_service.update_alert_status(
+            alert_id=request.alert_id,
+            status=status,
+            handled_by=request.handled_by
+        )
+
+        if not success:
+            success = demo_store.update_alert_status(
+                alert_id=request.alert_id,
+                status=status,
+                handled_by=request.handled_by
+            )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="预警未找到或更新失败")
+
+        message = "预警已确认" if request.action == 'acknowledge' else "预警已关闭"
+
+        return HandleAlertResponse(
+            success=True,
+            message=message
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"处理 DRG 预警失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
 
 
 # ============================================
@@ -331,7 +600,7 @@ async def _check_and_create_alerts(
             cost_rate = (actual / baseline) * 100 if baseline > 0 else 0
 
             if cost_rate > 120:
-                await db_service.save_drg_alert(
+                alert_id = await db_service.save_drg_alert(
                     admission_id=admission_id,
                     alert_type='cost_overrun',
                     alert_level='critical',
@@ -339,8 +608,17 @@ async def _check_and_create_alerts(
                     metric_value=cost_rate,
                     threshold_value=100.0
                 )
+                if alert_id is None:
+                    demo_store.save_drg_alert(
+                        admission_id=admission_id,
+                        alert_type='cost_overrun',
+                        alert_level='critical',
+                        message=f"费用超标严重，费用消耗率 {cost_rate:.1f}%",
+                        metric_value=cost_rate,
+                        threshold_value=100.0
+                    )
             elif cost_rate > 100:
-                await db_service.save_drg_alert(
+                alert_id = await db_service.save_drg_alert(
                     admission_id=admission_id,
                     alert_type='cost_overrun',
                     alert_level='warning',
@@ -348,6 +626,15 @@ async def _check_and_create_alerts(
                     metric_value=cost_rate,
                     threshold_value=100.0
                 )
+                if alert_id is None:
+                    demo_store.save_drg_alert(
+                        admission_id=admission_id,
+                        alert_type='cost_overrun',
+                        alert_level='warning',
+                        message=f"费用超标，费用消耗率 {cost_rate:.1f}%",
+                        metric_value=cost_rate,
+                        threshold_value=100.0
+                    )
 
         # 2. 检查住院日预警
         if case_data.get('total_hospital_days'):
@@ -356,7 +643,90 @@ async def _check_and_create_alerts(
 
             if actual_los > expected_max:
                 days_over = actual_los - expected_max
-                await db_service.save_drg_alert(
+                alert_id = await db_service.save_drg_alert(
+                    admission_id=admission_id,
+                    alert_type='los_long',
+                    alert_level='warning' if days_over <= 5 else 'critical',
+                    message=f"住院日超标 {days_over} 天，当前 {actual_los} 天，预期最多 {expected_max} 天",
+                    metric_value=float(actual_los),
+                    threshold_value=float(expected_max)
+                )
+                if alert_id is None:
+                    demo_store.save_drg_alert(
+                        admission_id=admission_id,
+                        alert_type='los_long',
+                        alert_level='warning' if days_over <= 5 else 'critical',
+                        message=f"住院日超标 {days_over} 天，当前 {actual_los} 天，预期最多 {expected_max} 天",
+                        metric_value=float(actual_los),
+                        threshold_value=float(expected_max)
+                    )
+
+        # 3. 检查高风险预警
+        if drg_result['risk_level'] == 'high':
+            alert_id = await db_service.save_drg_alert(
+                admission_id=admission_id,
+                alert_type='profit_loss',
+                alert_level='warning',
+                message=f"高风险病例，建议关注费用控制",
+                metric_value=None,
+                threshold_value=None
+            )
+            if alert_id is None:
+                demo_store.save_drg_alert(
+                    admission_id=admission_id,
+                    alert_type='profit_loss',
+                    alert_level='warning',
+                    message=f"高风险病例，建议关注费用控制",
+                    metric_value=None,
+                    threshold_value=None
+                )
+
+        logger.info(f"预警检查完成: {admission_id}")
+
+    except Exception as e:
+        logger.error(f"创建预警失败: {str(e)}")
+        # 不抛出异常，避免影响主流程
+
+
+async def _check_and_create_alerts_demo(
+    store,
+    admission_id: str,
+    drg_result: dict,
+    case_data: dict
+):
+    """DEMO 模式下检查并创建预警（写入 DemoDataStore）。"""
+    try:
+        if case_data.get('total_cost'):
+            baseline = drg_result['baseline_payment']
+            actual = case_data['total_cost']
+            cost_rate = (actual / baseline) * 100 if baseline > 0 else 0
+
+            if cost_rate > 120:
+                store.create_alert(
+                    admission_id=admission_id,
+                    alert_type='cost_overrun',
+                    alert_level='critical',
+                    message=f"费用超标严重，费用消耗率 {cost_rate:.1f}%",
+                    metric_value=float(cost_rate),
+                    threshold_value=100.0
+                )
+            elif cost_rate > 100:
+                store.create_alert(
+                    admission_id=admission_id,
+                    alert_type='cost_overrun',
+                    alert_level='warning',
+                    message=f"费用超标，费用消耗率 {cost_rate:.1f}%",
+                    metric_value=float(cost_rate),
+                    threshold_value=100.0
+                )
+
+        if case_data.get('total_hospital_days') and drg_result.get('expected_los'):
+            actual_los = case_data['total_hospital_days']
+            expected_max = drg_result['expected_los']['max']
+
+            if actual_los > expected_max:
+                days_over = actual_los - expected_max
+                store.create_alert(
                     admission_id=admission_id,
                     alert_type='los_long',
                     alert_level='warning' if days_over <= 5 else 'critical',
@@ -365,9 +735,8 @@ async def _check_and_create_alerts(
                     threshold_value=float(expected_max)
                 )
 
-        # 3. 检查高风险预警
-        if drg_result['risk_level'] == 'high':
-            await db_service.save_drg_alert(
+        if drg_result.get('risk_level') == 'high':
+            store.create_alert(
                 admission_id=admission_id,
                 alert_type='profit_loss',
                 alert_level='warning',
@@ -376,8 +745,7 @@ async def _check_and_create_alerts(
                 threshold_value=None
             )
 
-        logger.info(f"预警检查完成: {admission_id}")
+        logger.info(f"[DEMO] 预警检查完成: {admission_id}")
 
     except Exception as e:
-        logger.error(f"创建预警失败: {str(e)}")
-        # 不抛出异常，避免影响主流程
+        logger.error(f"[DEMO] 创建预警失败: {str(e)}")

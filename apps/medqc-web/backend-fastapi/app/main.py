@@ -6,12 +6,32 @@ DRG/DIP 系统后端服务
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from loguru import logger
 import sys
 import time
 
+try:
+    from loguru import logger
+except Exception:
+    import logging
+
+    logger = logging.getLogger("drg")
+    if not logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    def _noop(*args, **kwargs):
+        return None
+
+    logger.remove = _noop
+    logger.add = _noop
+
 from app.config import settings
-from app.api import coding, drg, auth
+from app.api import coding, drg, auth, case_front_page
 
 # ============================================
 # 配置日志
@@ -147,6 +167,12 @@ app.include_router(
     drg.router,
     prefix=settings.API_V1_PREFIX,
     tags=["DRG分组"]
+)
+
+app.include_router(
+    case_front_page.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["病案首页"]
 )
 
 # ============================================

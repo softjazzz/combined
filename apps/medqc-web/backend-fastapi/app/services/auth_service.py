@@ -6,7 +6,12 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
-from loguru import logger
+try:
+    from loguru import logger
+except Exception:
+    import logging
+
+    logger = logging.getLogger(__name__)
 
 from app.services.database import db_service
 from app.schemas.auth import LoginRequest, UserResponse
@@ -31,7 +36,14 @@ class AuthService:
     @classmethod
     def verify_password(cls, plain_password: str, hashed_password: str) -> bool:
         """验证密码"""
-        return cls.hash_password(plain_password) == hashed_password
+        # 兼容开发阶段不同存储方式：
+        # - users.password 为 sha256(hex)
+        # - users.password 为明文（仅开发/测试）
+        if not hashed_password:
+            return False
+        if len(hashed_password) == 64 and all(c in '0123456789abcdef' for c in hashed_password.lower()):
+            return cls.hash_password(plain_password) == hashed_password
+        return plain_password == hashed_password
 
     @classmethod
     def create_access_token(cls, data: dict) -> str:
@@ -113,10 +125,28 @@ class AuthService:
             "admin@medqc.com": {
                 "id": "test-admin-001",
                 "email": "admin@medqc.com",
-                "password": "admin123",  # 明文密码，仅用于测试
+                "password": "admin888",  # 明文密码，仅用于测试
                 "display_name": "管理员",
                 "roles": ["admin"],
                 "department": "信息科",
+                "hospital_id": "hospital-001"
+            },
+            "qc@medqc.com": {
+                "id": "test-qc-001",
+                "email": "qc@medqc.com",
+                "password": "qc123456",
+                "display_name": "质控管理员",
+                "roles": ["qc_manager"],
+                "department": "质控科",
+                "hospital_id": "hospital-001"
+            },
+            "doctor@medqc.com": {
+                "id": "test-doctor-001",
+                "email": "doctor@medqc.com",
+                "password": "doctor123",
+                "display_name": "临床医生",
+                "roles": ["doctor"],
+                "department": "内科",
                 "hospital_id": "hospital-001"
             },
             "coder@medqc.com": {
@@ -169,6 +199,22 @@ class AuthService:
                 "display_name": "管理员",
                 "roles": ["admin"],
                 "department": "信息科",
+                "hospital_id": "hospital-001"
+            },
+            "test-qc-001": {
+                "id": "test-qc-001",
+                "email": "qc@medqc.com",
+                "display_name": "质控管理员",
+                "roles": ["qc_manager"],
+                "department": "质控科",
+                "hospital_id": "hospital-001"
+            },
+            "test-doctor-001": {
+                "id": "test-doctor-001",
+                "email": "doctor@medqc.com",
+                "display_name": "临床医生",
+                "roles": ["doctor"],
+                "department": "内科",
                 "hospital_id": "hospital-001"
             },
             "test-coder-001": {

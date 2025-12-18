@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000"]
 
     # Supabase 配置
-    SUPABASE_URL: str
-    SUPABASE_KEY: str  # service_role key for backend
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None  # service_role key for backend
 
     # LLM 配置（DeepSeek）
-    DEEPSEEK_API_KEY: str
+    DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_API_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     DEEPSEEK_MODEL: str = "deepseek-v3"
 
@@ -34,6 +34,11 @@ class Settings(BaseSettings):
 
     # 日志配置
     LOG_LEVEL: str = "INFO"
+
+    # Demo 配置
+    DEMO_MODE: bool = False
+    DEMO_SEED: int = 20250101
+    DEMO_SIZE: int = 200
 
     class Config:
         env_file = ".env"

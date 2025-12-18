@@ -4,9 +4,19 @@ LLM 服务封装
 """
 
 import json
+import httpx
 from typing import List, Optional, Dict, Any
-from openai import OpenAI
-from loguru import logger
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
+
+try:
+    from loguru import logger
+except Exception:
+    import logging
+
+    logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.models.schemas import ICDSuggestion, ValidationWarning
@@ -17,10 +27,14 @@ class LLMService:
 
     def __init__(self):
         """初始化 OpenAI 客户端（兼容 DeepSeek API）"""
-        self.client = OpenAI(
-            api_key=settings.DEEPSEEK_API_KEY,
-            base_url=settings.DEEPSEEK_API_URL
-        )
+        self.client = None
+        if OpenAI and settings.DEEPSEEK_API_KEY:
+            http_client = httpx.Client(trust_env=False)
+            self.client = OpenAI(
+                api_key=settings.DEEPSEEK_API_KEY,
+                base_url=settings.DEEPSEEK_API_URL,
+                http_client=http_client
+            )
         self.model = settings.DEEPSEEK_MODEL
 
     async def suggest_icd_codes(
@@ -43,6 +57,15 @@ class LLMService:
             ICD 编码推荐列表
         """
         try:
+            if not self.client:
+                return [
+                    ICDSuggestion(
+                        code="MOCK.001",
+                        name=f"（演示）{diagnosis_name}",
+                        confidence=0.75,
+                        note="未配置 LLM Key，返回演示结果"
+                    )
+                ]
             # 构建系统提示
             system_prompt = self._build_coding_system_prompt(category)
 
@@ -107,6 +130,15 @@ class LLMService:
             校验警告列表
         """
         try:
+            if not self.client:
+                return [
+                    ValidationWarning(
+                        type='missing_diagnosis',
+                        message='（演示）建议补充完善次诊断/合并症编码，以提升分组准确性',
+                        evidence='（演示）病历摘要：...（未配置 LLM Key）',
+                        severity='info'
+                    )
+                ]
             # 构建系统提示
             system_prompt = """你是一位经验丰富的病案编码质控专家。
 你的任务是检查病案编码的完整性和准确性。

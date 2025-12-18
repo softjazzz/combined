@@ -3,7 +3,12 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Header
 from typing import Optional
-from loguru import logger
+try:
+    from loguru import logger
+except Exception:
+    import logging
+
+    logger = logging.getLogger(__name__)
 
 from app.schemas.auth import LoginRequest, LoginResponse, UserResponse
 from app.services.auth_service import AuthService

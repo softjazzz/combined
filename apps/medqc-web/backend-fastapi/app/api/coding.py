@@ -4,8 +4,14 @@ PRD 3.2.1 - 编码智能辅助
 """
 
 from fastapi import APIRouter, HTTPException
-from loguru import logger
+try:
+    from loguru import logger
+except Exception:
+    import logging
 
+    logger = logging.getLogger(__name__)
+
+from app.config import settings
 from app.models.schemas import (
     CodingSuggestRequest,
     CodingSuggestResponse,
@@ -17,6 +23,7 @@ from app.models.schemas import (
 )
 from app.services.llm_service import llm_service
 from app.services.database import db_service
+from app.services.demo_data_store import get_demo_store
 
 router = APIRouter(prefix="/coding", tags=["编码辅助"])
 
@@ -48,6 +55,18 @@ async def suggest_coding(request: CodingSuggestRequest):
     """
     try:
         logger.info(f"接收编码推荐请求: {request.diagnosis_name}")
+
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            candidates = store.suggest_icd(
+                name=request.diagnosis_name,
+                category=request.category,
+                top_k=3
+            )
+            return CodingSuggestResponse(
+                candidates=candidates,
+                total=len(candidates)
+            )
 
         # 调用 LLM 服务
         suggestions = await llm_service.suggest_icd_codes(
@@ -110,6 +129,41 @@ async def validate_coding(request: CodingValidateRequest):
     """
     try:
         logger.info(f"接收编码校验请求: {request.admission_id}")
+
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            # 使用 LLMService 的 mock/fallback warnings（若未配置 key 会自动返回演示警告）
+            warnings = await llm_service.validate_coding(
+                primary_diagnosis={
+                    'code': request.primary_diagnosis.code,
+                    'name': request.primary_diagnosis.name
+                },
+                secondary_diagnoses=[
+                    {'code': d.code, 'name': d.name}
+                    for d in request.secondary_diagnoses
+                ],
+                procedures=[
+                    {'code': p.code, 'name': p.name}
+                    for p in request.procedures
+                ],
+                medical_record=None
+            )
+
+            # Demo 冲突：给出少量确定性冲突文本，增强演示效果
+            conflicts = []
+            if request.primary_diagnosis.code.startswith('I21') and not request.procedures:
+                conflicts.append('（演示）急性心肌梗死常需核对是否实施冠脉介入/造影等操作编码')
+            if len(request.secondary_diagnoses) >= 3:
+                conflicts.append('（演示）次诊断较多，建议核对主次诊断排序与合并症标记')
+
+            has_errors = any(w.severity == 'error' for w in warnings)
+            is_valid = (not has_errors) and len(conflicts) == 0
+
+            return ValidationResult(
+                is_valid=is_valid,
+                warnings=warnings,
+                conflicts=conflicts
+            )
 
         # 准备数据
         primary_diag_dict = {
@@ -198,6 +252,23 @@ async def search_icd_codes(
     try:
         logger.info(f"ICD 编码搜索: {keyword}, 类型: {category}")
 
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            results = store.search_icd(keyword=keyword, category=category, limit=limit)
+            icd_codes = [
+                ICDCode(
+                    code=item['code'],
+                    name=item['name'],
+                    category=item.get('category'),
+                    notes=item.get('notes')
+                )
+                for item in results
+            ]
+            return ICDSearchResponse(
+                results=icd_codes,
+                total=len(icd_codes)
+            )
+
         # 调用数据库服务
         if category == 'diagnosis':
             results = await db_service.search_icd10_codes(keyword, limit)
@@ -244,6 +315,18 @@ async def get_icd_code_detail(code: str, category: str = "diagnosis"):
     """
     try:
         logger.info(f"获取 ICD 编码详情: {code}")
+
+        if settings.DEMO_MODE:
+            store = get_demo_store()
+            result = store.get_icd_by_code(code=code, category=category)
+            if not result:
+                raise HTTPException(status_code=404, detail=f"编码 {code} 未找到")
+            return ICDCode(
+                code=result['code'],
+                name=result['name'],
+                category=result.get('category'),
+                notes=result.get('notes')
+            )
 
         result = await db_service.get_icd_code_by_code(code, category)
 

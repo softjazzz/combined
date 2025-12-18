@@ -153,6 +153,7 @@ class DRGGroupingHistoryResponse(BaseModel):
 
 class CodingSuggestionItem(BaseModel):
     """编码优化建议"""
+    admission_id: str
     suggestion_id: int
     suggestion_type: Literal['missing_diagnosis', 'procedure_missing', 'complication_marking', 'logic_conflict']
     diagnosis_code: Optional[str] = None
@@ -183,8 +184,22 @@ class HandleSuggestionResponse(BaseModel):
     message: str
 
 
+class HandleAlertRequest(BaseModel):
+    """处理 DRG 预警请求"""
+    alert_id: int
+    action: Literal['acknowledge', 'resolve']
+    handled_by: str = Field(..., description="处理人ID")
+
+
+class HandleAlertResponse(BaseModel):
+    """处理 DRG 预警响应"""
+    success: bool
+    message: str
+
+
 class DRGAlertItem(BaseModel):
     """DRG 预警项"""
+    admission_id: str
     alert_id: int
     alert_type: Literal['cost_overrun', 'los_long', 'coding_abnormal', 'profit_loss']
     alert_level: Literal['info', 'warning', 'critical']

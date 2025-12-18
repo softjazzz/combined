@@ -4,7 +4,12 @@ OpenDRG 分组引擎封装
 """
 
 from typing import Dict, Any, List, Optional, Tuple
-from loguru import logger
+try:
+    from loguru import logger
+except Exception:
+    import logging
+
+    logger = logging.getLogger(__name__)
 
 from app.config import settings
 
