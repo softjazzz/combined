@@ -5,11 +5,15 @@
 
 import type {
   CaseFrontPage,
-  CaseFrontPageDiagnosis,
-  CaseFrontPageProcedure
-} from '../data/drg/mock-case-front-page'
-import type { DRGGrouping, CodingSuggestion, DRGAlert } from '../data/drg/mock-drg-grouping'
-import type { ICDCode } from '../data/drg/mock-icd-codes'
+  CodingSuggestResponse,
+  CodingSuggestionsResponse,
+  DRGAlertsResponse,
+  DRGGroupingHistoryItem,
+  DRGGroupingResult,
+  ICDSearchResponse,
+  ValidationResult
+} from '@/types/drg'
+import type { AnalysisDimension, AnalysisDataResponse } from '@/types/drg-analysis'
 
 // Mock 数据导入（开发阶段使用）
 import {
@@ -21,9 +25,9 @@ import {
 
 import {
   mockDRGGroupings,
+  mockCodingSuggestions,
+  mockDRGAlerts,
   getLatestGroupingByAdmissionId,
-  getSuggestionsByAdmissionId,
-  getAlertsByAdmissionId
 } from '../data/drg/mock-drg-grouping'
 
 import {
@@ -32,44 +36,12 @@ import {
   searchICD9Procedures
 } from '../data/drg/mock-icd-codes'
 
+import { mockAnalysisData } from '../data/drg/mock-analysis'
+
 // 配置：是否使用 Mock 数据
-const USE_MOCK_DATA = import.meta.env.VITE_USE_DRG_MOCK === 'true' || true // 默认使用 Mock
+const USE_MOCK_DATA = (import.meta as any).env?.VITE_USE_DRG_MOCK !== 'false' // 默认使用 Mock；设置为 "false" 可切到真实 API
 
-// ==================== 类型定义 ====================
-
-export interface ICDSuggestion {
-  code: string
-  name: string
-  confidence: number
-  note: string | null
-}
-
-export interface ValidationResult {
-  is_valid: boolean
-  warnings: Array<{
-    type: string
-    message: string
-    evidence?: string
-    severity: 'info' | 'warning' | 'error'
-  }>
-  conflicts: Array<{
-    type: string
-    message: string
-  }>
-}
-
-export interface DRGPredictionResult {
-  adrg_code: string
-  adrg_name: string
-  drg_code: string
-  drg_name: string
-  weight: number
-  baseline_payment: number
-  expected_los: { min: number; max: number }
-  confidence: number
-  risk_level: 'low' | 'medium' | 'high'
-  grouping_logic: string
-}
+const API_V1_PREFIX = '/api/v1'
 
 // ==================== 病案首页相关 API ====================
 
@@ -81,8 +53,7 @@ export async function getCaseFrontPages(): Promise<CaseFrontPage[]> {
     return Promise.resolve(mockCaseFrontPages)
   }
 
-  // TODO: 调用真实 API
-  const response = await fetch('/api/v1/case-front-page')
+  const response = await fetch(`${API_V1_PREFIX}/case-front-page`)
   return response.json()
 }
 
@@ -91,11 +62,31 @@ export async function getCaseFrontPages(): Promise<CaseFrontPage[]> {
  */
 export async function getCaseFrontPageDetail(admissionId: string) {
   if (USE_MOCK_DATA) {
-    return Promise.resolve(getCaseFrontPageByAdmissionId(admissionId))
+    const frontPage = getCaseFrontPageByAdmissionId(admissionId)
+    if (!frontPage) return Promise.resolve(null)
+
+    const diagnoses = getDiagnosesByFrontPageId(frontPage.front_page_id).map(d => ({
+      code: d.diagnosis_code,
+      name: d.diagnosis_name,
+      sequence: d.sequence,
+      is_complication: d.is_complication
+    }))
+
+    const procedures = getProceduresByFrontPageId(frontPage.front_page_id).map(p => ({
+      code: p.procedure_code,
+      name: p.procedure_name,
+      sequence: p.sequence,
+      procedure_date: p.procedure_date
+    }))
+
+    return Promise.resolve({
+      ...frontPage,
+      secondary_diagnoses: diagnoses,
+      procedures
+    })
   }
 
-  // TODO: 调用真实 API
-  const response = await fetch(`/api/v1/case-front-page/${admissionId}`)
+  const response = await fetch(`${API_V1_PREFIX}/case-front-page/${admissionId}`)
   return response.json()
 }
 
@@ -112,8 +103,7 @@ export async function saveCaseFrontPage(data: Partial<CaseFrontPage>): Promise<C
     } as CaseFrontPage)
   }
 
-  // TODO: 调用真实 API
-  const response = await fetch('/api/v1/case-front-page', {
+  const response = await fetch(`${API_V1_PREFIX}/case-front-page`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -131,28 +121,26 @@ export async function suggestCoding(params: {
   diagnosis_name: string
   context?: string
   category: 'diagnosis' | 'procedure'
-}): Promise<ICDSuggestion[]> {
+}): Promise<CodingSuggestResponse> {
   if (USE_MOCK_DATA) {
     // Mock: 使用本地模拟函数
     const suggestions = suggestICDCodes(params.diagnosis_name)
-    return Promise.resolve(
-      suggestions.map(s => ({
-        code: s.code,
-        name: s.name,
-        confidence: s.confidence,
-        note: s.notes
-      }))
-    )
+    const candidates = suggestions.map(s => ({
+      code: s.code,
+      name: s.name,
+      confidence: s.confidence,
+      note: s.notes
+    }))
+    return Promise.resolve({ candidates, total: candidates.length })
   }
 
-  // TODO: 调用真实 FastAPI
-  const response = await fetch('/api/v1/coding/suggest', {
+  const response = await fetch(`${API_V1_PREFIX}/coding/suggest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params)
   })
   const data = await response.json()
-  return data.candidates
+  return data
 }
 
 /**
@@ -181,8 +169,7 @@ export async function validateCoding(params: {
     })
   }
 
-  // TODO: 调用真实 FastAPI
-  const response = await fetch('/api/v1/coding/validate', {
+  const response = await fetch(`${API_V1_PREFIX}/coding/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params)
@@ -194,19 +181,22 @@ export async function validateCoding(params: {
  * 搜索 ICD 编码库
  */
 export async function searchICDCodes(params: {
-  query: string
-  type: 'diagnosis' | 'procedure'
-}): Promise<ICDCode[]> {
+  keyword: string
+  category: 'diagnosis' | 'procedure'
+  limit?: number
+}): Promise<ICDSearchResponse> {
   if (USE_MOCK_DATA) {
-    return Promise.resolve(
-      params.type === 'diagnosis'
-        ? searchICD10Codes(params.query)
-        : searchICD9Procedures(params.query)
-    )
+    const results =
+      params.category === 'diagnosis'
+        ? searchICD10Codes(params.keyword)
+        : searchICD9Procedures(params.keyword)
+    const limited = typeof params.limit === 'number' ? results.slice(0, params.limit) : results
+    return Promise.resolve({ results: limited, total: limited.length })
   }
 
-  // TODO: 调用真实 API
-  const response = await fetch(`/api/v1/icd/search?query=${params.query}&type=${params.type}`)
+  const response = await fetch(
+    `${API_V1_PREFIX}/coding/search?keyword=${encodeURIComponent(params.keyword)}&category=${params.category}&limit=${params.limit ?? 20}`
+  )
   return response.json()
 }
 
@@ -219,7 +209,7 @@ export async function searchICDCodes(params: {
 export async function predictDRGGrouping(params: {
   admission_id: string
   region?: string
-}): Promise<DRGPredictionResult> {
+}): Promise<DRGGroupingResult> {
   if (USE_MOCK_DATA) {
     // Mock: 返回模拟的分组结果
     const grouping = getLatestGroupingByAdmissionId(params.admission_id)
@@ -238,11 +228,29 @@ export async function predictDRGGrouping(params: {
       confidence: 0.89,
       risk_level: 'high',
       grouping_logic: `主诊断${grouping.adrg_code} + 合并症`
-    })
+    } as any)
   }
 
-  // TODO: 调用真实 FastAPI（调用 OpenDRG）
-  const response = await fetch('/api/v1/drg/predict', {
+  const response = await fetch(`${API_V1_PREFIX}/drg/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  })
+  const data = await response.json()
+  return data.data
+}
+
+/**
+ * DIP 入组预测
+ */
+export async function predictDIPGrouping(params: import('@/types/drg').DIPPredictRequest): Promise<import('@/types/drg').DIPGroupingResult> {
+  if (USE_MOCK_DATA) {
+    // Mock logic if needed, or throw error saying Mock not supported for DIP yet
+    throw new Error('DIP Mock mode not implemented in frontend, please use real API')
+    // Or return a mock object
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/dip/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params)
@@ -254,16 +262,29 @@ export async function predictDRGGrouping(params: {
 /**
  * 获取分组历史记录
  */
-export async function getGroupingHistory(admissionId: string): Promise<DRGGrouping[]> {
+export async function getGroupingHistory(admissionId: string): Promise<DRGGroupingHistoryItem[]> {
   if (USE_MOCK_DATA) {
     return Promise.resolve(
-      mockDRGGroupings.filter(g => g.admission_id === admissionId)
+      mockDRGGroupings
+        .filter(g => g.admission_id === admissionId)
+        .map(g => ({
+          grouping_id: g.grouping_id,
+          drg_code: g.drg_code,
+          drg_name: g.drg_name,
+          weight: g.weight,
+          baseline_payment: g.baseline_payment,
+          actual_cost: g.actual_cost,
+          profit_margin: g.profit_margin,
+          version: g.version,
+          is_latest: g.is_latest,
+          grouped_at: g.grouped_at
+        })) as any
     )
   }
 
-  // TODO: 调用真实 API
-  const response = await fetch(`/api/v1/drg/grouping/${admissionId}/history`)
-  return response.json()
+  const response = await fetch(`${API_V1_PREFIX}/drg/grouping/${admissionId}/history`)
+  const data = await response.json()
+  return data.history
 }
 
 // ==================== 编码建议相关 API ====================
@@ -271,13 +292,29 @@ export async function getGroupingHistory(admissionId: string): Promise<DRGGroupi
 /**
  * 获取编码优化建议
  */
-export async function getCodingSuggestions(admissionId: string): Promise<CodingSuggestion[]> {
+export async function getCodingSuggestions(params?: {
+  admission_id?: string
+  status?: 'pending' | 'accepted' | 'rejected'
+  limit?: number
+}): Promise<CodingSuggestionsResponse> {
   if (USE_MOCK_DATA) {
-    return Promise.resolve(getSuggestionsByAdmissionId(admissionId))
+    let suggestions = [...mockCodingSuggestions]
+    if (params?.admission_id) {
+      suggestions = suggestions.filter(s => s.admission_id === params.admission_id)
+    }
+    if (params?.status) {
+      suggestions = suggestions.filter(s => s.status === params.status)
+    }
+    const limited = typeof params?.limit === 'number' ? suggestions.slice(0, params.limit) : suggestions
+    return Promise.resolve({ suggestions: limited as any, total: limited.length })
   }
 
-  // TODO: 调用真实 API
-  const response = await fetch(`/api/v1/coding/suggestions/${admissionId}`)
+  const qs = new URLSearchParams()
+  if (params?.admission_id) qs.set('admission_id', params.admission_id)
+  if (params?.status) qs.set('status', params.status)
+  if (typeof params?.limit === 'number') qs.set('limit', String(params.limit))
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/suggestions${qs.toString() ? `?${qs.toString()}` : ''}`)
   return response.json()
 }
 
@@ -287,15 +324,21 @@ export async function getCodingSuggestions(admissionId: string): Promise<CodingS
 export async function handleCodingSuggestion(params: {
   suggestion_id: number
   action: 'accept' | 'reject'
+  handled_by?: string
 }): Promise<void> {
   if (USE_MOCK_DATA) {
     console.log('[Mock] 处理编码建议:', params)
     return Promise.resolve()
   }
 
-  // TODO: 调用真实 API
-  await fetch(`/api/v1/coding/suggestions/${params.suggestion_id}/${params.action}`, {
-    method: 'POST'
+  await fetch(`${API_V1_PREFIX}/drg/suggestions/handle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      suggestion_id: params.suggestion_id,
+      action: params.action,
+      handled_by: params.handled_by || 'current_user'
+    })
   })
 }
 
@@ -305,19 +348,82 @@ export async function handleCodingSuggestion(params: {
  * 获取预警列表
  */
 export async function getDRGAlerts(params?: {
+  admission_id?: string
+  alert_level?: 'info' | 'warning' | 'critical'
   status?: 'pending' | 'acknowledged' | 'resolved'
-}): Promise<DRGAlert[]> {
+  limit?: number
+}): Promise<DRGAlertsResponse> {
   if (USE_MOCK_DATA) {
     let alerts = [...mockDRGAlerts]
+    if (params?.admission_id) {
+      alerts = alerts.filter(a => a.admission_id === params.admission_id)
+    }
+    if (params?.alert_level) {
+      alerts = alerts.filter(a => a.alert_level === params.alert_level)
+    }
     if (params?.status) {
       alerts = alerts.filter(a => a.status === params.status)
     }
-    return Promise.resolve(alerts)
+    const limited = typeof params?.limit === 'number' ? alerts.slice(0, params.limit) : alerts
+    return Promise.resolve({ alerts: limited as any, total: limited.length })
   }
 
-  // TODO: 调用真实 API
-  const queryString = params?.status ? `?status=${params.status}` : ''
-  const response = await fetch(`/api/v1/drg/alerts${queryString}`)
+  const qs = new URLSearchParams()
+  if (params?.admission_id) qs.set('admission_id', params.admission_id)
+  if (params?.alert_level) qs.set('alert_level', params.alert_level)
+  if (params?.status) qs.set('status', params.status)
+  if (typeof params?.limit === 'number') qs.set('limit', String(params.limit))
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/alerts${qs.toString() ? `?${qs.toString()}` : ''}`)
+  return response.json()
+}
+
+export async function handleDRGAlert(params: {
+  alert_id: number
+  action: 'acknowledge' | 'resolve'
+  handled_by?: string
+}): Promise<void> {
+  if (USE_MOCK_DATA) {
+    console.log('[Mock] 处理预警:', params)
+    return Promise.resolve()
+  }
+
+  const res = await fetch(`${API_V1_PREFIX}/drg/alerts/handle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      alert_id: params.alert_id,
+      action: params.action,
+      handled_by: params.handled_by || 'current_user'
+    })
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `handleDRGAlert failed: ${res.status}`)
+  }
+}
+
+// ==================== 统计分析 API ====================
+
+export async function getAnalysisData(params: {
+  dimension: AnalysisDimension
+  startDate: string
+  endDate: string
+  filterId?: string // 科室ID/医生ID等
+}): Promise<AnalysisDataResponse> {
+  if (USE_MOCK_DATA) {
+    return Promise.resolve(mockAnalysisData(params.dimension))
+  }
+
+  const qs = new URLSearchParams({
+    dimension: params.dimension,
+    start_date: params.startDate,
+    end_date: params.endDate
+  })
+  if (params.filterId) qs.set('filter_id', params.filterId)
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/analysis?${qs.toString()}`)
   return response.json()
 }
 
@@ -335,7 +441,9 @@ export const drgApi = {
   searchICDCodes,
 
   // DRG 分组
+  // DRG/DIP 分组
   predictDRGGrouping,
+  predictDIPGrouping,
   getGroupingHistory,
 
   // 编码建议
@@ -343,7 +451,11 @@ export const drgApi = {
   handleCodingSuggestion,
 
   // 监控预警
-  getDRGAlerts
+  getDRGAlerts,
+  handleDRGAlert,
+
+  // 统计分析
+  getAnalysisData
 }
 
 export default drgApi

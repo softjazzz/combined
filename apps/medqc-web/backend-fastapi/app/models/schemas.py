@@ -3,7 +3,7 @@ Pydantic 数据模型
 定义所有 API 的请求和响应结构
 """
 
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -145,6 +145,40 @@ class DRGGroupingHistoryResponse(BaseModel):
     """DRG 分组历史响应"""
     history: List[DRGGroupingHistoryItem]
     total: int
+
+
+# ============================================
+# 3.2.3 DIP 分组 - 请求和响应
+# ============================================
+
+class DIPPredictRequest(BaseModel):
+    """DIP 入组预测请求"""
+    admission_id: Optional[str] = Field(None, description="住院ID")
+    city_name: str = Field(..., description="城市名称")
+    pdx_code: str = Field(..., description="主诊断编码")
+    adx_code: Optional[str] = Field(None, description="次诊断编码（分号分隔）")
+    proc_code: Optional[str] = Field(None, description="手术编码（分号分隔）")
+    patient_gender: str = Field(..., description="性别 女/男")
+    patient_age: int = Field(..., description="年龄")
+    los: int = Field(..., description="住院天数")
+    total_fee: float = Field(0, description="总费用")
+
+
+class DIPGroupingResult(BaseModel):
+    """DIP 分组结果"""
+    dip_code: str = Field(..., description="DIP 编码")
+    dip_name: str = Field(..., description="DIP 名称")
+    dip_type: str = Field(..., description="DIP 类型 (如: 核心病种)")
+    diag_code: Optional[str] = Field(None, description="诊断编码")
+    proc_code: Optional[str] = Field(None, description="手术编码")
+    grouping_path: Optional[str] = Field(None, description="分组路径/验证结果")
+
+
+class DIPPredictionResponse(BaseModel):
+    """DIP 入组预测响应"""
+    data: DIPGroupingResult
+    message: str = "分组成功"
+
 
 
 # ============================================
@@ -297,3 +331,124 @@ class ErrorResponse(BaseModel):
     success: bool = False
     error: str
     detail: Optional[str] = None
+
+# ============================================
+# 3.4 影子分组 - 请求和响应
+# ============================================
+
+class ShadowGroupingBaseline(BaseModel):
+    """影子分组基准信息"""
+    primary_diagnosis: str
+    secondary_diagnoses: List[str]
+    procedures: List[str] = []
+    patient_age: int
+    patient_gender: str
+    total_hospital_days: Optional[int] = None
+
+
+class SecondaryDiagnosisChange(BaseModel):
+    """次诊断变更"""
+    from_code: Optional[str] = None  # 如果是替换，指定原编码
+    to_code: str  # 目标编码
+
+
+class ShadowGroupingCandidate(BaseModel):
+    """影子分组候选方案"""
+    id: str = Field(..., description="建议ID")
+    add_secondary_diagnoses: List[str] = Field(default_factory=list, description="新增次诊断")
+    replace_secondary_diagnoses: List[SecondaryDiagnosisChange] = Field(default_factory=list, description="替换次诊断")
+    add_procedures: List[str] = Field(default_factory=list, description="新增手术")
+    eligible: bool = Field(True, description="是否符合试算条件")
+
+
+class ShadowGroupingBatchRequest(BaseModel):
+    """影子分组批处理请求"""
+    request_id: str
+    baseline: ShadowGroupingBaseline
+    candidates: List[ShadowGroupingCandidate]
+    options: Optional[dict] = Field(default_factory=dict, description="配置项: max_candidates, include_rw")
+
+
+class ShadowGroupingResultData(BaseModel):
+    """影子分组结果数据"""
+    drg: str
+    adrg: Optional[str] = None
+    drg_name: Optional[str] = None
+    rw: Optional[float] = None  # 可选，暂不强制要求
+
+
+class ShadowGroupingResultItem(BaseModel):
+    """单条影子分组结果"""
+    id: str
+    status: Literal['computed', 'skipped', 'error']
+    with_candidate: Optional[ShadowGroupingResultData] = None
+    drg_change_type: Literal['base_to_cc', 'cc_to_mcc', 'no_change', 'drg_changed', 'error']
+    rw_delta: Optional[float] = None
+    impact_description: Optional[str] = None
+    notes: List[str] = Field(default_factory=list)
+    error_message: Optional[str] = None
+
+
+class ShadowGroupingBatchResponse(BaseModel):
+    """影子分组批处理响应"""
+    baseline: ShadowGroupingResultData
+    results: List[ShadowGroupingResultItem]
+
+
+# ============================================
+# 3.5 编码完整性分析 (Layer A/B) - 模型定义
+# ============================================
+
+class Evidence(BaseModel):
+    """证据片段"""
+    source: str = Field(..., description="来源文档，如 admission_note")
+    text: str = Field(..., description="原文片段")
+    start: Optional[int] = None
+    end: Optional[int] = None
+    evidence_type: Literal['explicit_statement', 'lab_indicator', 'medication_indicator', 'procedure_indicator']
+    strength: Literal['strong', 'medium', 'weak']
+
+
+class ClinicalEntity(BaseModel):
+    """临床实体"""
+    text: str
+    category: Literal['diagnosis', 'procedure', 'indicator']
+    evidence: Evidence
+
+
+class ExtractionResult(BaseModel):
+    """Layer A 抽取结果"""
+    explicit_diagnoses: List[ClinicalEntity] = []
+    clinical_indicators: List[ClinicalEntity] = []
+    procedure_mentions: List[ClinicalEntity] = []
+
+
+class CodingGap(BaseModel):
+    """编码差距/建议"""
+    id: str
+    category: Literal['diagnosis', 'procedure']
+    subtype: Literal['missing_code', 'code_refinement', 'needs_doc_update']
+    action: Literal['add_code', 'needs_doc_update', 'ignore']
+    risk_level: Literal['low', 'medium', 'high']
+    target_code: Optional[str] = None
+    target_name: str
+    confidence: float
+    evidence: List[Evidence]
+    justification_points: List[str]
+    required_documentation: List[str] = []
+    # 关联的影子分组结果 (可选)
+    shadow_grouping: Optional[ShadowGroupingResultItem] = None
+
+
+class CodingCompletenessResponse(BaseModel):
+    """完整性分析响应"""
+    structure_extraction: ExtractionResult
+    suggestions: List[CodingGap]
+
+
+class CodingCompletenessAnalysisRequest(BaseModel):
+    """完整性分析请求"""
+    medical_record: str = Field(..., description="病历文本(入院记录/病程记录/出院小结)")
+    current_data: Dict[str, Any] = Field(..., description="当前已编码数据(主诊断/次诊断/手术)")
+
+

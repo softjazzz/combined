@@ -408,6 +408,9 @@
                 </div>
                 <a-empty v-else description="暂无首页数据" />
               </a-tab-pane>
+              <a-tab-pane key="hm" tab="HM 模板版">
+                <HmFrontpagePreview :draft="frontpage" />
+              </a-tab-pane>
             </a-tabs>
           </a-card>
         </a-col>
@@ -420,6 +423,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { FileTextOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
 
 interface DemoCase {
   case_id: string

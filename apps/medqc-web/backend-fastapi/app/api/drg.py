@@ -82,7 +82,7 @@ async def predict_drg_grouping(request: DRGPredictRequest):
     try:
         logger.info(f"接收 DRG 分组预测请求: {request.admission_id}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
 
             case_front_page = store.get_case_detail(request.admission_id)
@@ -126,12 +126,15 @@ async def predict_drg_grouping(request: DRGPredictRequest):
         demo_case = None
 
         if not case_front_page:
-            demo_case = demo_store.get_case_front_page_detail(request.admission_id)
+            store = get_demo_store()
+            demo_case = store.get_case_detail(request.admission_id)
             if not demo_case:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"未找到住院号 {request.admission_id} 的病案首页"
-                )
+                demo_case = demo_store.get_case_front_page_detail(request.admission_id)
+                if not demo_case:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"未找到住院号 {request.admission_id} 的病案首页"
+                    )
 
         # 2. 获取次诊断和手术操作
         if case_front_page:
@@ -178,17 +181,8 @@ async def predict_drg_grouping(request: DRGPredictRequest):
         )
 
         if grouping_id is None:
-            demo_store.save_grouping_history(
-                admission_id=request.admission_id,
-                item={
-                    'drg_code': result['drg_code'],
-                    'drg_name': result['drg_name'],
-                    'weight': result['weight'],
-                    'baseline_payment': result['baseline_payment'],
-                    'actual_cost': (case_front_page or demo_case or {}).get('total_cost'),
-                    'profit_margin': None,
-                }
-            )
+            store = get_demo_store()
+            store.append_grouping_history(request.admission_id, result)
 
         logger.info(f"DRG 分组成功: {result['drg_code']}, grouping_id={grouping_id}")
 
@@ -209,6 +203,23 @@ async def predict_drg_grouping(request: DRGPredictRequest):
     except Exception as e:
         logger.error(f"DRG 分组失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"分组失败: {str(e)}")
+
+
+@router.get(
+    "/code-info/{code}",
+    summary="查询编码详细信息",
+    description="查询 ICD 编码的 ADRG/MDC 映射关系（调用外部 API）"
+)
+async def get_code_info(
+    code: str,
+    city: Optional[str] = Query("四川省", description="城市名称")
+):
+    try:
+        logger.info(f"查询编码详情: {code}, city={city}")
+        return await drg_grouper.lookup_code_info(code, city)
+    except Exception as e:
+        logger.error(f"查询编码详情失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
@@ -233,7 +244,7 @@ async def get_grouping_history(admission_id: str):
     try:
         logger.info(f"查询 DRG 分组历史: {admission_id}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
             records = store.get_grouping_history(admission_id)
             history_items = [DRGGroupingHistoryItem(**record) for record in records]
@@ -244,7 +255,8 @@ async def get_grouping_history(admission_id: str):
 
         records = await db_service.get_drg_grouping_history(admission_id)
         if not records:
-            records = demo_store.get_grouping_history(admission_id)
+            store = get_demo_store()
+            records = store.get_grouping_history(admission_id)
 
         history_items = [
             DRGGroupingHistoryItem(**record) for record in records
@@ -274,7 +286,7 @@ async def list_coding_suggestions(
     try:
         logger.info(f"查询编码建议列表: admission_id={admission_id}, 状态={status}, limit={limit}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
             suggestions = store.list_suggestions(
                 admission_id=admission_id,
@@ -294,7 +306,8 @@ async def list_coding_suggestions(
         )
 
         if not suggestions:
-            suggestions = demo_store.list_coding_suggestions(
+            store = get_demo_store()
+            suggestions = store.list_suggestions(
                 admission_id=admission_id,
                 status=status,
                 limit=limit
@@ -338,7 +351,7 @@ async def get_coding_suggestions(
     try:
         logger.info(f"查询编码建议: {admission_id}, 状态: {status}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
             suggestions = store.list_suggestions(
                 admission_id=admission_id,
@@ -354,7 +367,8 @@ async def get_coding_suggestions(
         suggestions = await db_service.get_coding_suggestions(admission_id, status)
 
         if not suggestions:
-            suggestions = demo_store.list_coding_suggestions(
+            store = get_demo_store()
+            suggestions = store.list_suggestions(
                 admission_id=admission_id,
                 status=status,
                 limit=50
@@ -398,7 +412,7 @@ async def handle_coding_suggestion(request: HandleSuggestionRequest):
     try:
         logger.info(f"处理编码建议: {request.suggestion_id}, 操作: {request.action}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
             status = 'accepted' if request.action == 'accept' else 'rejected'
             success = store.update_suggestion_status(
@@ -423,7 +437,8 @@ async def handle_coding_suggestion(request: HandleSuggestionRequest):
         )
 
         if not success:
-            success = demo_store.update_suggestion_status(
+            store = get_demo_store()
+            success = store.update_suggestion_status(
                 suggestion_id=request.suggestion_id,
                 status=status,
                 handled_by=request.handled_by
@@ -481,7 +496,7 @@ async def get_drg_alerts(
     try:
         logger.info(f"查询 DRG 预警: admission_id={admission_id}, level={alert_level}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
             alerts = store.list_alerts(
                 admission_id=admission_id,
@@ -503,7 +518,8 @@ async def get_drg_alerts(
         )
 
         if not alerts:
-            alerts = demo_store.list_alerts(
+            store = get_demo_store()
+            alerts = store.list_alerts(
                 admission_id=admission_id,
                 alert_level=alert_level,
                 status=status,
@@ -534,7 +550,7 @@ async def handle_drg_alert(request: HandleAlertRequest):
     try:
         logger.info(f"处理 DRG 预警: {request.alert_id}, 操作: {request.action}")
 
-        if settings.DEMO_MODE:
+        if settings.DEMO_MODE or getattr(db_service, 'client', None) is None:
             store = get_demo_store()
             status = 'acknowledged' if request.action == 'acknowledge' else 'resolved'
             success = store.update_alert_status(
@@ -559,7 +575,8 @@ async def handle_drg_alert(request: HandleAlertRequest):
         )
 
         if not success:
-            success = demo_store.update_alert_status(
+            store = get_demo_store()
+            success = store.update_alert_status(
                 alert_id=request.alert_id,
                 status=status,
                 handled_by=request.handled_by
@@ -609,12 +626,13 @@ async def _check_and_create_alerts(
                     threshold_value=100.0
                 )
                 if alert_id is None:
-                    demo_store.save_drg_alert(
+                    store = get_demo_store()
+                    store.create_alert(
                         admission_id=admission_id,
                         alert_type='cost_overrun',
                         alert_level='critical',
                         message=f"费用超标严重，费用消耗率 {cost_rate:.1f}%",
-                        metric_value=cost_rate,
+                        metric_value=float(cost_rate),
                         threshold_value=100.0
                     )
             elif cost_rate > 100:
@@ -627,12 +645,13 @@ async def _check_and_create_alerts(
                     threshold_value=100.0
                 )
                 if alert_id is None:
-                    demo_store.save_drg_alert(
+                    store = get_demo_store()
+                    store.create_alert(
                         admission_id=admission_id,
                         alert_type='cost_overrun',
                         alert_level='warning',
                         message=f"费用超标，费用消耗率 {cost_rate:.1f}%",
-                        metric_value=cost_rate,
+                        metric_value=float(cost_rate),
                         threshold_value=100.0
                     )
 
@@ -652,7 +671,8 @@ async def _check_and_create_alerts(
                     threshold_value=float(expected_max)
                 )
                 if alert_id is None:
-                    demo_store.save_drg_alert(
+                    store = get_demo_store()
+                    store.create_alert(
                         admission_id=admission_id,
                         alert_type='los_long',
                         alert_level='warning' if days_over <= 5 else 'critical',
@@ -672,7 +692,8 @@ async def _check_and_create_alerts(
                 threshold_value=None
             )
             if alert_id is None:
-                demo_store.save_drg_alert(
+                store = get_demo_store()
+                store.create_alert(
                     admission_id=admission_id,
                     alert_type='profit_loss',
                     alert_level='warning',

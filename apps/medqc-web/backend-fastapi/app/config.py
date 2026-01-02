@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     OPENDRG_DEFAULT_REGION: str = "sichuan"
     OPENDRG_BASE_PAYMENT: float = 14655.0  # 四川省 2024 年基准支付标准（元）
 
+    # 外部 API 集成
+    DRG_API_URL: str = "https://medchat.fun/api/drg-grouping"
+    CODE_INFO_API_URL: str = "https://medchat.fun/api/find-info-by-code"
+    DIP_API_URL: str = "https://medchat.fun/api/dip-grouping"
+    DRG_API_MODE: str = "mock"  # mock, remote
+
     # 日志配置
     LOG_LEVEL: str = "INFO"
 

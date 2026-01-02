@@ -114,11 +114,7 @@
           <FileTextOutlined />
           <span class="hidden sm:inline ml-1">规则说明</span>
         </button>
-        <button class="modern-btn-ghost" @click="goToBatchTest">
-          <CheckSquareOutlined />
-          <span class="hidden sm:inline ml-1">批量评估</span>
-        </button>
-        <button class="modern-btn-primary" @click="showQCEvaluation = true">
+        <button class="modern-btn-primary" @click="goToBatchTest">
           <PlayCircleOutlined class="mr-1" />
           开始质控评估
         </button>

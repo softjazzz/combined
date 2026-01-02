@@ -180,6 +180,15 @@ export const severityColor: Record<Severity, string> = {
 }
 
 /**
+ * 预警级别文本映射
+ */
+export const alertLevelMap: Record<AlertLevel, string> = {
+  info: '一般',
+  warning: '重要',
+  critical: '严重'
+}
+
+/**
  * 预警级别颜色映射
  */
 export const alertLevelColor: Record<AlertLevel, string> = {

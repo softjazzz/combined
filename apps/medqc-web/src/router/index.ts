@@ -555,6 +555,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'DRG/DIP',
           icon: 'MedicineBoxOutlined',
+          allowDemo: true,
           permission: ['admin', 'qc_manager', 'coder', 'reviewer']
         },
         children: [
@@ -604,6 +605,16 @@ const routes: RouteRecordRaw[] = [
               title: '事中监控',
               icon: 'DashboardOutlined',
               description: '实时预警和编码建议'
+            }
+          },
+          {
+            path: 'fee-monitoring',
+            name: 'FeeMonitoring',
+            component: () => import('@/views/drg/FeeMonitoring.vue'),
+            meta: {
+              title: '付费监测',
+              icon: 'DollarOutlined',
+              description: '费用监测与未入组修正建议'
             }
           },
           {
@@ -686,6 +697,15 @@ const routes: RouteRecordRaw[] = [
         }
       }
     ]
+  },
+  {
+    path: '/demo/clinical-workstation',
+    name: 'ClinicalWorkstationDemo',
+    component: () => import('@/views/demo/ClinicalWorkstationDemoView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: '临床工作站 Demo'
+    }
   },
   {
     path: '/:pathMatch(.*)*',

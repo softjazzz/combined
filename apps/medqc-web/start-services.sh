@@ -13,9 +13,13 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 项目路径
-PROJECT_ROOT="/home/ubuntu/coding/health-qc-monorepo"
-MEDQC_ROOT="$PROJECT_ROOT/apps/medqc-web"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MEDQC_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$MEDQC_ROOT/../.." && pwd)"
 BACKEND_ROOT="$MEDQC_ROOT/backend"
+
+FRONTEND_PID_FILE="$MEDQC_ROOT/frontend.pid"
+BACKEND_PID_FILE="$BACKEND_ROOT/backend.pid"
 
 # 日志函数
 log_info() {
@@ -79,12 +83,17 @@ start_frontend() {
         sleep 2
     fi
     
-    # 进入项目根目录
-    cd "$PROJECT_ROOT"
-    
+    # 进入前端目录
+    cd "$MEDQC_ROOT"
+
+    if [ ! -d "$MEDQC_ROOT/node_modules" ]; then
+        log_warning "未发现 node_modules，可能需要先执行: pnpm install"
+    fi
+
     # 启动前端
-    log_info "执行: pnpm dev:medqc"
-    nohup pnpm dev:medqc > "$MEDQC_ROOT/frontend.log" 2>&1 &
+    log_info "执行: pnpm dev --host 0.0.0.0 --port 3000"
+    nohup pnpm dev --host 0.0.0.0 --port 3000 > "$MEDQC_ROOT/frontend.log" 2>&1 &
+    echo $! > "$FRONTEND_PID_FILE"
     
     # 等待启动
     if wait_for_port 3000 "前端服务"; then
@@ -109,22 +118,22 @@ start_backend() {
     fi
     
     # 检查虚拟环境
-    if [ ! -d "$BACKEND_ROOT/venv" ]; then
-        log_error "虚拟环境不存在: $BACKEND_ROOT/venv"
-        log_info "请先创建虚拟环境: python3 -m venv venv"
+    if [ ! -x "$BACKEND_ROOT/.venv/bin/python" ]; then
+        log_error "虚拟环境不存在: $BACKEND_ROOT/.venv"
+        log_info "请先创建虚拟环境并安装依赖: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
         return 1
     fi
     
     # 进入后端目录
     cd "$BACKEND_ROOT"
     
-    # 激活虚拟环境并启动服务
-    log_info "激活虚拟环境并启动后端服务..."
+    # 启动后端服务
+    log_info "启动后端服务..."
     nohup bash -c "
-        source venv/bin/activate && \
-        export JWT_SECRET=dev-secret && \
-        uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+        if [ -z \"\$JWT_SECRET\" ]; then export JWT_SECRET=dev-secret; fi && \
+        .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
     " > "$BACKEND_ROOT/backend.log" 2>&1 &
+    echo $! > "$BACKEND_PID_FILE"
     
     # 等待启动
     if wait_for_port 8001 "后端服务"; then
@@ -152,12 +161,22 @@ stop_services() {
     log_info "停止所有服务..."
     
     # 停止前端
+    if [ -f "$FRONTEND_PID_FILE" ]; then
+        log_info "停止前端服务 (PID: $(cat "$FRONTEND_PID_FILE"))..."
+        kill "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null || true
+        rm -f "$FRONTEND_PID_FILE"
+    fi
     if check_port 3000; then
         log_info "停止前端服务 (端口 3000)..."
         pkill -f "vite.*3000" 2>/dev/null || true
     fi
     
     # 停止后端
+    if [ -f "$BACKEND_PID_FILE" ]; then
+        log_info "停止后端服务 (PID: $(cat "$BACKEND_PID_FILE"))..."
+        kill "$(cat "$BACKEND_PID_FILE")" 2>/dev/null || true
+        rm -f "$BACKEND_PID_FILE"
+    fi
     if check_port 8001; then
         log_info "停止后端服务 (端口 8001)..."
         pkill -f "uvicorn.*8001" 2>/dev/null || true

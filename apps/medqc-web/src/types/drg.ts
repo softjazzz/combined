@@ -144,6 +144,19 @@ export interface DRGGroupingResult {
   grouping_logic?: string
 }
 
+/** DIP 分组结果 */
+export interface DIPGroupingResult {
+  dip_code: string
+  dip_name: string
+  dip_type: string
+  diag_code?: string
+  proc_code?: string
+  grouping_path?: string
+  // 为了兼容 DRGResultCard，我们需要映射一些字段或在组件中处理
+  weight?: number // DIP might have points, map to weight
+  baseline_payment?: number
+}
+
 /** DRG 分组历史记录 */
 export interface DRGGroupingHistoryItem {
   grouping_id: number
@@ -161,6 +174,7 @@ export interface DRGGroupingHistoryItem {
 /** 编码建议 */
 export interface CodingSuggestionItem {
   suggestion_id: number
+  admission_id: string
   suggestion_type: SuggestionType
   diagnosis_code?: string
   diagnosis_name?: string
@@ -174,6 +188,7 @@ export interface CodingSuggestionItem {
 /** DRG 预警 */
 export interface DRGAlertItem {
   alert_id: number
+  admission_id: string
   alert_type: AlertType
   alert_level: AlertLevel
   message: string
@@ -201,6 +216,18 @@ export interface CodingValidateRequest {
 export interface DRGPredictRequest {
   admission_id: string
   region?: string
+}
+
+export interface DIPPredictRequest {
+  admission_id?: string
+  city_name: string
+  pdx_code: string
+  adx_code?: string
+  proc_code?: string
+  patient_gender: string
+  patient_age: number
+  los: number
+  total_fee: number
 }
 
 export interface HandleSuggestionRequest {
@@ -243,5 +270,9 @@ export interface DRGAlertsResponse {
 
 export interface HandleSuggestionResponse {
   success: boolean
+  message: string
+}
+export interface DIPPredictionResponse {
+  data: DIPGroupingResult
   message: string
 }

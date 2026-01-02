@@ -34,18 +34,11 @@
           >
             <ExportOutlined class="mr-2" /> 导出数据
           </button>
-          <button 
+          <button
             @click="showCreateRulePage"
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
           >
             <ThunderboltOutlined class="mr-2" /> AI 创建规则
-          </button>
-          <!-- 主操作按钮：纯净医疗蓝 -->
-          <button 
-            @click="showBatchTestModal = true"
-            class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/25 hover:-translate-y-0.5 transition-all text-sm font-bold flex items-center shadow-md ml-2"
-          >
-            <PlayCircleOutlined class="mr-2" /> 批量质控评估
           </button>
         </div>
       </header>
@@ -185,8 +178,8 @@
                     <EyeOutlined class="text-sm" />
                   </button>
                 </a-tooltip>
-                <a-tooltip title="执行质控评估">
-                  <button @click="handleEvaluate(record)" class="w-7 h-7 rounded-md flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all">
+                <a-tooltip title="开始质控评估">
+                  <button @click="showBatchTestModal = true" class="w-7 h-7 rounded-md flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all">
                     <PlayCircleOutlined class="text-sm" />
                   </button>
                 </a-tooltip>

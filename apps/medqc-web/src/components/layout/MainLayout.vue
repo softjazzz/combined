@@ -126,51 +126,65 @@
              <template #icon><RadarChartOutlined /></template>
             <span>事中监控</span>
           </a-menu-item>
+          <a-menu-item key="/dashboard/drg/fee-monitoring">
+             <template #icon><DollarOutlined /></template>
+            <span>付费监测</span>
+          </a-menu-item>
           <a-menu-item key="/dashboard/drg/analysis">
              <template #icon><BarChartOutlined /></template>
             <span>事后分析</span>
           </a-menu-item>
         </a-sub-menu>
 
-        <!-- 测试病历管理 -->
-        <a-menu-item key="/dashboard/medical-records" class="menu-item-base">
+        <!-- 系统管理（与 DRG/DIP 平级） -->
+        <a-sub-menu key="/dashboard/system" class="menu-item-base">
           <template #icon>
-            <FileTextOutlined />
+            <ToolOutlined />
           </template>
-          <span class="font-medium">测试病历管理</span>
-        </a-menu-item>
+          <template #title>
+            <span class="font-medium">系统管理</span>
+          </template>
 
-        <!-- 数据权限配置 -->
-        <a-menu-item key="/dashboard/permissions" class="menu-item-base" v-if="authStore.hasRole('admin')">
-          <template #icon>
-            <SafetyCertificateOutlined />
-          </template>
-          <span class="font-medium">数据权限配置</span>
-        </a-menu-item>
+          <!-- 测试病历管理 -->
+          <a-menu-item key="/dashboard/medical-records">
+            <template #icon>
+              <FileTextOutlined />
+            </template>
+            <span>测试病历管理</span>
+          </a-menu-item>
 
-        <!-- 系统设置 -->
-        <a-menu-item key="/dashboard/settings" class="menu-item-base" v-if="authStore.hasRole('admin')">
-          <template #icon>
-            <SettingOutlined />
-          </template>
-          <span class="font-medium">系统设置</span>
-        </a-menu-item>
+          <!-- 数据权限配置 -->
+          <a-menu-item key="/dashboard/permissions" v-if="authStore.hasRole('admin')">
+            <template #icon>
+              <SafetyCertificateOutlined />
+            </template>
+            <span>数据权限配置</span>
+          </a-menu-item>
 
-        <!-- LLM质控演示增强版 -->
-        <a-menu-item key="/dashboard/llm-qc-demo-enhanced" class="menu-item-base" v-if="authStore.hasRole('admin')">
-          <template #icon>
-            <ExperimentOutlined />
-          </template>
-          <span class="font-medium">LLM质控演示增强版</span>
-        </a-menu-item>
+          <!-- 系统设置 -->
+          <a-menu-item key="/dashboard/settings" v-if="authStore.hasRole('admin')">
+            <template #icon>
+              <SettingOutlined />
+            </template>
+            <span>系统设置</span>
+          </a-menu-item>
 
-        <!-- LLM质控演示新版 -->
-        <a-menu-item key="/dashboard/llm-qc-demo-new" class="menu-item-base" v-if="authStore.hasRole('admin')">
-          <template #icon>
-            <ExperimentOutlined />
-          </template>
-          <span class="font-medium">LLM质控演示新版</span>
-        </a-menu-item>
+          <!-- LLM质控演示增强版 -->
+          <a-menu-item key="/dashboard/llm-qc-demo-enhanced" v-if="authStore.hasRole('admin')">
+            <template #icon>
+              <ExperimentOutlined />
+            </template>
+            <span>LLM质控演示增强版</span>
+          </a-menu-item>
+
+          <!-- LLM质控演示新版 -->
+          <a-menu-item key="/dashboard/llm-qc-demo-new" v-if="authStore.hasRole('admin')">
+            <template #icon>
+              <ExperimentOutlined />
+            </template>
+            <span>LLM质控演示新版</span>
+          </a-menu-item>
+        </a-sub-menu>
         </a-menu>
       </div>
     </a-layout-sider>
@@ -308,6 +322,7 @@ import {
   LogoutOutlined,
   MedicineBoxOutlined,
   BranchesOutlined,
+  DollarOutlined,
   ExperimentOutlined,
   PlayCircleOutlined,
   CheckCircleOutlined,
@@ -390,6 +405,8 @@ const breadcrumbItems = computed(() => {
             items.push({ title: '分组预测', path: null })
           } else if (pathSegments[2] === 'monitor') {
             items.push({ title: '事中监控', path: null })
+          } else if (pathSegments[2] === 'fee-monitoring') {
+            items.push({ title: '付费监测', path: null })
           } else if (pathSegments[2] === 'analysis') {
             items.push({ title: '事后分析', path: null })
           }

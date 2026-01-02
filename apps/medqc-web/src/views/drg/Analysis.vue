@@ -7,34 +7,53 @@
     />
 
     <div class="content-wrapper">
-      <!-- 时间范围选择 -->
+      <!-- 维度与时间筛选 -->
       <a-card :bordered="false" style="margin-bottom: 16px">
-        <a-space>
-          <span>统计时间范围：</span>
-          <a-range-picker
-            v-model:value="dateRange"
-            :format="dateFormat"
-            :placeholder="['开始日期', '结束日期']"
-            @change="loadAnalysisData"
-          />
-          <a-button type="primary" @click="loadAnalysisData">
-            <ReloadOutlined />
-            刷新数据
-          </a-button>
-        </a-space>
+        <a-row justify="space-between" align="middle">
+          <a-col>
+            <a-space size="large">
+              <span style="font-weight: bold; margin-right: 8px">分析维度:</span>
+              <a-radio-group v-model:value="dimension" button-style="solid" @change="loadAnalysisData">
+                <a-radio-button value="hospital">全院概览</a-radio-button>
+                <a-radio-button value="department">科室分析</a-radio-button>
+                <a-radio-button value="doctor">医生绩效</a-radio-button>
+                <a-radio-button value="drg">DRG组分析</a-radio-button>
+              </a-radio-group>
+            </a-space>
+          </a-col>
+          <a-col>
+            <a-space>
+              <span>统计时间：</span>
+              <a-range-picker
+                v-model:value="dateRange"
+                :format="dateFormat"
+                :allow-clear="false"
+                @change="loadAnalysisData"
+              />
+              <a-button @click="handleExport" :loading="exporting">
+                <template #icon><DownloadOutlined /></template>
+                导出报表
+              </a-button>
+              <a-button type="primary" :loading="loading" @click="loadAnalysisData">
+                <template #icon><ReloadOutlined /></template>
+                刷新
+              </a-button>
+            </a-space>
+          </a-col>
+        </a-row>
       </a-card>
 
       <!-- 统计概览卡片 -->
       <a-row :gutter="16" style="margin-bottom: 16px">
         <a-col :span="6">
-          <a-card>
+          <a-card :loading="loading">
             <a-statistic title="总病例数" :value="statistics.totalCases" suffix="例">
               <template #prefix><FileTextOutlined style="color: #1890ff" /></template>
             </a-statistic>
           </a-card>
         </a-col>
         <a-col :span="6">
-          <a-card>
+          <a-card :loading="loading">
             <a-statistic
               title="总盈余"
               :value="statistics.totalProfit"
@@ -49,14 +68,14 @@
           </a-card>
         </a-col>
         <a-col :span="6">
-          <a-card>
+          <a-card :loading="loading">
             <a-statistic title="平均费用消耗率" :value="statistics.avgCostRate" suffix="%" :precision="1">
               <template #prefix><DollarOutlined style="color: #faad14" /></template>
             </a-statistic>
           </a-card>
         </a-col>
         <a-col :span="6">
-          <a-card>
+          <a-card :loading="loading">
             <a-statistic title="DRG 分组数" :value="statistics.drgGroupCount" suffix="组">
               <template #prefix><AppstoreOutlined style="color: #52c41a" /></template>
             </a-statistic>
@@ -68,42 +87,55 @@
       <a-row :gutter="16" style="margin-bottom: 16px">
         <!-- DRG 分布饼图 -->
         <a-col :span="12">
-          <a-card title="DRG 分组分布" :bordered="false">
-            <div ref="drgDistributionChart" style="width: 100%; height: 400px"></div>
+          <a-card title="DRG 分组分布" :bordered="false" :loading="loading">
+            <div style="width: 100%; height: 400px">
+              <v-chart class="chart" :option="drgDistributionOption" autoresize />
+            </div>
           </a-card>
         </a-col>
 
         <!-- 盈亏分析柱状图 -->
         <a-col :span="12">
-          <a-card title="TOP10 DRG 盈亏分析" :bordered="false">
-            <div ref="profitAnalysisChart" style="width: 100%; height: 400px"></div>
+          <a-card title="费用构成分析" :bordered="false" :loading="loading">
+            <div style="width: 100%; height: 400px">
+              <v-chart class="chart" :option="profitAnalysisOption" autoresize />
+            </div>
           </a-card>
         </a-col>
       </a-row>
 
       <!-- 费用消耗率趋势 -->
-      <a-card title="费用消耗率趋势" :bordered="false" style="margin-bottom: 16px">
-        <div ref="costRateTrendChart" style="width: 100%; height: 300px"></div>
+      <a-card title="效能指标趋势" :bordered="false" style="margin-bottom: 16px" :loading="loading">
+        <div style="width: 100%; height: 300px">
+          <v-chart class="chart" :option="costRateTrendOption" autoresize />
+        </div>
       </a-card>
 
-      <!-- 科室绩效排名 -->
-      <a-card title="科室绩效排名" :bordered="false">
+      <!-- 详细数据表格 -->
+      <a-card :title="tableTitle" :bordered="false">
+        <template #extra>
+          <a-button type="link" size="small" @click="handleExport">
+            <DownloadOutlined /> 导出Excel
+          </a-button>
+        </template>
         <a-table
-          :columns="departmentColumns"
-          :data-source="departmentPerformance"
+          :columns="dynamicColumns"
+          :data-source="tableData"
           :loading="loading"
-          :pagination="{ pageSize: 10 }"
-          row-key="department"
+          :pagination="{ pageSize: 10, showSizeChanger: true }"
+          row-key="id"
         >
-          <template #profitMargin="{ record }">
-            <span :style="{ color: record.profitMargin >= 0 ? '#3f8600' : '#cf1322' }">
-              {{ formatCurrency(record.profitMargin) }}
+          <template #profit="{ record }">
+            <span :style="{ color: record.profit >= 0 ? '#3f8600' : '#cf1322' }">
+              {{ formatCurrency(record.profit) }}
             </span>
           </template>
           <template #costRate="{ record }">
             <a-progress
-              :percent="record.costRate"
-              :status="record.costRate > 120 ? 'exception' : record.costRate > 100 ? 'normal' : 'success'"
+              :percent="Math.min(record.costRate * 100, 100)"
+              :format="() => (record.costRate * 100).toFixed(1) + '%'"
+              :status="record.costRate > 1.2 ? 'exception' : record.costRate > 1.0 ? 'normal' : 'success'"
+              size="small"
             />
           </template>
         </a-table>
@@ -113,32 +145,64 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 import {
   FileTextOutlined,
   DollarOutlined,
   AppstoreOutlined,
   RiseOutlined,
   FallOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  DownloadOutlined
 } from '@ant-design/icons-vue'
-import * as echarts from 'echarts'
+import { exportToExcel } from '@/utils/export'
+
+// ECharts imports
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { PieChart, BarChart, LineChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  MarkLineComponent
+} from 'echarts/components'
+import VChart from 'vue-echarts'
 import type { EChartsOption } from 'echarts'
+
 import { formatCurrency, getChartColor } from '@/utils/drg'
 import { drgApi } from '@/api/drg'
+import type { AnalysisDimension, AnalysisTableItem } from '@/types/drg-analysis'
+
+// Register ECharts components
+use([
+  CanvasRenderer,
+  PieChart,
+  BarChart,
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  MarkLineComponent
+])
 
 /** 日期范围格式 */
 const dateFormat = 'YYYY-MM-DD'
 
+/** 选择的维度 */
+const dimension = ref<AnalysisDimension>('hospital')
+
 /** 选择的日期范围 */
-const dateRange = ref<[Dayjs, Dayjs] | null>(null)
+const dateRange = ref<[Dayjs, Dayjs]>([dayjs().subtract(30, 'day'), dayjs()])
 
 /** 加载状态 */
 const loading = ref(false)
 
-/** 统计数据 */
+/** 统计概览数据 */
 const statistics = reactive({
   totalCases: 0,
   totalProfit: 0,
@@ -146,467 +210,211 @@ const statistics = reactive({
   drgGroupCount: 0
 })
 
-/** ECharts 实例 */
-const drgDistributionChart = ref<HTMLElement>()
-const profitAnalysisChart = ref<HTMLElement>()
-const costRateTrendChart = ref<HTMLElement>()
-let drgDistributionChartInstance: echarts.ECharts | null = null
-let profitAnalysisChartInstance: echarts.ECharts | null = null
-let costRateTrendChartInstance: echarts.ECharts | null = null
+/** 表格数据 */
+const tableData = ref<AnalysisTableItem[]>([])
 
-/** DRG 分布数据 */
-interface DRGDistributionItem {
-  drg_code: string
-  drg_name: string
-  case_count: number
-  percentage: number
-}
-const drgDistribution = ref<DRGDistributionItem[]>([])
+/** 图表配置 */
+const drgDistributionOption = ref<EChartsOption>({})
+const profitAnalysisOption = ref<EChartsOption>({})
+const costRateTrendOption = ref<EChartsOption>({})
 
-/** 盈亏分析数据 */
-interface ProfitAnalysisItem {
-  drg_code: string
-  drg_name: string
-  total_profit: number
-  case_count: number
-  avg_profit: number
-}
-const profitAnalysis = ref<ProfitAnalysisItem[]>([])
-
-/** 费用消耗率趋势数据 */
-interface CostRateTrendItem {
-  date: string
-  cost_rate: number
-}
-const costRateTrend = ref<CostRateTrendItem[]>([])
-
-/** 科室绩效数据 */
-interface DepartmentPerformanceItem {
-  department: string
-  caseCount: number
-  totalRevenue: number
-  totalCost: number
-  profitMargin: number
-  costRate: number
-}
-const departmentPerformance = ref<DepartmentPerformanceItem[]>([])
-
-/** 科室绩效表格列定义 */
-const departmentColumns = [
-  { title: '科室', dataIndex: 'department', width: 150 },
-  { title: '病例数', dataIndex: 'caseCount', width: 100, sorter: (a: any, b: any) => a.caseCount - b.caseCount },
-  {
-    title: '总收入',
-    dataIndex: 'totalRevenue',
-    width: 150,
-    customRender: ({ text }: any) => formatCurrency(text),
-    sorter: (a: any, b: any) => a.totalRevenue - b.totalRevenue
-  },
-  {
-    title: '总成本',
-    dataIndex: 'totalCost',
-    width: 150,
-    customRender: ({ text }: any) => formatCurrency(text),
-    sorter: (a: any, b: any) => a.totalCost - b.totalCost
-  },
-  {
-    title: '盈亏',
-    dataIndex: 'profitMargin',
-    width: 150,
-    slots: { customRender: 'profitMargin' },
-    sorter: (a: any, b: any) => a.profitMargin - b.profitMargin
-  },
-  {
-    title: '费用消耗率',
-    dataIndex: 'costRate',
-    width: 200,
-    slots: { customRender: 'costRate' },
-    sorter: (a: any, b: any) => a.costRate - b.costRate
+/** 表格标题 */
+const tableTitle = computed(() => {
+  const map: Record<AnalysisDimension, string> = {
+    hospital: '科室绩效排名',
+    department: '科室明细数据',
+    doctor: '医生绩效排名',
+    drg: 'DRG组详细数据'
   }
-]
+  return map[dimension.value]
+})
 
-/** 初始化 DRG 分布饼图 */
-const initDRGDistributionChart = () => {
-  if (!drgDistributionChart.value) return
-
-  drgDistributionChartInstance = echarts.init(drgDistributionChart.value)
-
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      right: 10,
-      top: 'center',
-      type: 'scroll'
-    },
-    series: [
-      {
-        name: 'DRG 分组',
-        type: 'pie',
-        radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 10,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: {
-          show: false,
-          position: 'center'
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 20,
-            fontWeight: 'bold'
-          }
-        },
-        labelLine: {
-          show: false
-        },
-        data: []
-      }
-    ]
+/** 动态表格列定义 */
+const dynamicColumns = computed(() => {
+  const nameTitleMap: Record<AnalysisDimension, string> = {
+    hospital: '科室名称',
+    department: '项目名称',
+    doctor: '医生姓名',
+    drg: 'DRG组名称'
   }
 
-  drgDistributionChartInstance.setOption(option)
-}
-
-/** 更新 DRG 分布饼图数据 */
-const updateDRGDistributionChart = () => {
-  if (!drgDistributionChartInstance) return
-
-  const data = drgDistribution.value.map((item, index) => ({
-    name: `${item.drg_code} ${item.drg_name}`,
-    value: item.case_count,
-    itemStyle: { color: getChartColor(index) }
-  }))
-
-  drgDistributionChartInstance.setOption({
-    series: [{ data }]
-  })
-}
-
-/** 初始化盈亏分析柱状图 */
-const initProfitAnalysisChart = () => {
-  if (!profitAnalysisChart.value) return
-
-  profitAnalysisChartInstance = echarts.init(profitAnalysisChart.value)
-
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      },
-      formatter: (params: any) => {
-        const item = params[0]
-        return `${item.name}<br/>总盈亏: ${formatCurrency(item.value)}`
-      }
+  return [
+    { title: nameTitleMap[dimension.value], dataIndex: 'name', width: 180 },
+    { title: '入组病例数', dataIndex: 'caseCount', width: 120, sorter: (a: any, b: any) => a.caseCount - b.caseCount },
+    { title: 'CMI值', dataIndex: 'cmi', width: 100, sorter: (a: any, b: any) => a.cmi - b.cmi },
+    { 
+      title: '总收入', 
+      dataIndex: 'totalRevenue', 
+      width: 150, 
+      customRender: ({ text }: any) => formatCurrency(text),
+      sorter: (a: any, b: any) => a.totalRevenue - b.totalRevenue 
     },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
+    { 
+      title: '总成本', 
+      dataIndex: 'totalCost', 
+      width: 150, 
+      customRender: ({ text }: any) => formatCurrency(text),
+      sorter: (a: any, b: any) => a.totalCost - b.totalCost 
     },
-    xAxis: {
-      type: 'category',
-      data: [],
-      axisLabel: {
-        rotate: 45,
-        interval: 0
-      }
+    { 
+      title: '盈亏金额', 
+      dataIndex: 'profit', 
+      width: 150, 
+      slots: { customRender: 'profit' },
+      sorter: (a: any, b: any) => a.profit - b.profit 
     },
-    yAxis: {
-      type: 'value',
-      name: '盈亏金额(元)',
-      axisLabel: {
-        formatter: (value: number) => {
-          if (Math.abs(value) >= 10000) {
-            return `${(value / 10000).toFixed(1)}万`
-          }
-          return value.toString()
-        }
-      }
-    },
-    series: [
-      {
-        name: '盈亏',
-        type: 'bar',
-        data: [],
-        itemStyle: {
-          color: (params: any) => {
-            return params.value >= 0 ? '#3f8600' : '#cf1322'
-          }
-        }
-      }
-    ]
+    { 
+      title: '费用消耗指数', 
+      dataIndex: 'costRate', 
+      width: 220, 
+      slots: { customRender: 'costRate' },
+      sorter: (a: any, b: any) => a.costRate - b.costRate 
+    }
+  ]
+})
+
+// ================== 导出逻辑 ==================
+
+const exporting = ref(false)
+
+const handleExport = async () => {
+  if (tableData.value.length === 0) {
+    message.warning('暂无数据可导出')
+    return
   }
 
-  profitAnalysisChartInstance.setOption(option)
+  exporting.value = true
+  try {
+    // 构建导出文件名
+    const dateStr = dateRange.value.map((d: any) => d.format('YYYYMMDD')).join('-')
+    const fileName = `DRG统计分析_${dimension.value}_${dateStr}`
+    
+    // 构建表头映射
+    const headerMap: Record<string, string> = {
+      name: dynamicColumns.value[0].title as string,
+      caseCount: '总病例数',
+      cmi: 'CMI值',
+      totalRevenue: '总收入(元)',
+      totalCost: '总成本(元)',
+      profit: '盈亏金额(元)',
+      costRate: '费用消耗指数'
+    }
+
+    exportToExcel(tableData.value, fileName, '分析报表', headerMap)
+    message.success('导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    message.error('导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
-/** 更新盈亏分析柱状图数据 */
-const updateProfitAnalysisChart = () => {
-  if (!profitAnalysisChartInstance) return
+// ================== 图表更新逻辑 ==================
 
-  const xData = profitAnalysis.value.map(item => `${item.drg_code}\n${item.drg_name}`)
-  const yData = profitAnalysis.value.map(item => item.total_profit)
-
-  profitAnalysisChartInstance.setOption({
-    xAxis: { data: xData },
-    series: [{ data: yData }]
-  })
+const updateDRGDistributionChart = (data: { name: string; value: number }[]) => {
+  drgDistributionOption.value = {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { type: 'scroll', orient: 'vertical', right: 10, top: 20, bottom: 20 },
+    series: [{
+      name: '分布',
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['30%', '50%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+      label: { show: false, position: 'center' },
+      emphasis: { label: { show: true, fontSize: 18, fontWeight: 'bold' } },
+      data: data.map((item, idx) => ({ ...item, itemStyle: { color: getChartColor(idx) } }))
+    }]
+  }
 }
 
-/** 初始化费用消耗率趋势折线图 */
-const initCostRateTrendChart = () => {
-  if (!costRateTrendChart.value) return
+const updateCostCompositionChart = (data: { name: string; value: number }[]) => {
+  profitAnalysisOption.value = {
+    tooltip: { trigger: 'item', formatter: '{b}: {c}%' },
+    xAxis: { type: 'category', data: data.map(i => i.name) },
+    yAxis: { type: 'value', name: '占比(%)' },
+    series: [{
+      data: data.map(i => i.value),
+      type: 'bar',
+      itemStyle: { color: '#1890ff', borderRadius: [4, 4, 0, 0] },
+      label: { show: true, position: 'top', formatter: '{c}%' }
+    }]
+  }
+}
 
-  costRateTrendChartInstance = echarts.init(costRateTrendChart.value)
-
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      formatter: (params: any) => {
-        const item = params[0]
-        return `${item.name}<br/>费用消耗率: ${item.value}%`
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: []
-    },
-    yAxis: {
-      type: 'value',
-      name: '费用消耗率(%)',
-      axisLabel: {
-        formatter: '{value}%'
-      }
-    },
-    visualMap: {
-      show: false,
-      pieces: [
-        { lte: 100, color: '#3f8600' },
-        { gt: 100, lte: 120, color: '#faad14' },
-        { gt: 120, color: '#cf1322' }
-      ],
-      outOfRange: {
-        color: '#999'
-      }
-    },
+const updateTrendChart = (trends: { cost: any[]; cmi: any[] }) => {
+  const dates = trends.cost.map(i => i.date)
+  
+  costRateTrendOption.value = {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['费用消耗指数', 'CMI值'] },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', boundaryGap: false, data: dates },
+    yAxis: [
+      { type: 'value', name: '费用消耗指数', min: 0.5, max: 1.5 },
+      { type: 'value', name: 'CMI值', min: 0 }
+    ],
     series: [
       {
-        name: '费用消耗率',
+        name: '费用消耗指数',
         type: 'line',
+        data: trends.cost.map(i => i.value),
         smooth: true,
-        data: [],
-        markLine: {
-          data: [
-            { yAxis: 100, label: { formatter: '基准线' }, lineStyle: { color: '#3f8600' } }
-          ]
-        },
-        areaStyle: {
-          opacity: 0.3
-        }
+        markLine: { data: [{ yAxis: 1, name: '基准线' }] }
+      },
+      {
+        name: 'CMI值',
+        type: 'line',
+        yAxisIndex: 1,
+        data: trends.cmi.map(i => i.value),
+        smooth: true,
+        itemStyle: { color: '#faad14' }
       }
     ]
   }
-
-  costRateTrendChartInstance.setOption(option)
 }
 
-/** 更新费用消耗率趋势折线图数据 */
-const updateCostRateTrendChart = () => {
-  if (!costRateTrendChartInstance) return
+// ================== 数据加载 ==================
 
-  const xData = costRateTrend.value.map(item => item.date)
-  const yData = costRateTrend.value.map(item => item.cost_rate)
-
-  costRateTrendChartInstance.setOption({
-    xAxis: { data: xData },
-    series: [{ data: yData }]
-  })
-}
-
-/** 加载分析数据 */
 const loadAnalysisData = async () => {
   loading.value = true
   try {
-    // 模拟数据（实际应调用后端 API）
-    // TODO: 待后端 API 实现后替换为真实调用
-
-    // 统计概览
-    statistics.totalCases = 1250
-    statistics.totalProfit = 3250000
-    statistics.avgCostRate = 95.8
-    statistics.drgGroupCount = 45
-
-    // DRG 分布（TOP 10）
-    drgDistribution.value = [
-      { drg_code: 'FB19', drg_name: '急性心肌梗死伴严重并发症', case_count: 156, percentage: 12.48 },
-      { drg_code: 'IR15', drg_name: '肺炎伴合并症', case_count: 132, percentage: 10.56 },
-      { drg_code: 'EB13', drg_name: '脑梗死伴合并症', case_count: 98, percentage: 7.84 },
-      { drg_code: 'JR25', drg_name: '肠梗阻手术', case_count: 87, percentage: 6.96 },
-      { drg_code: 'IB13', drg_name: 'COPD伴感染', case_count: 76, percentage: 6.08 },
-      { drg_code: 'GB19', drg_name: '胆囊炎手术', case_count: 65, percentage: 5.2 },
-      { drg_code: 'RB11', drg_name: '泌尿系感染', case_count: 54, percentage: 4.32 },
-      { drg_code: 'HB11', drg_name: '高血压并发症', case_count: 43, percentage: 3.44 },
-      { drg_code: 'KC25', drg_name: '骨折手术', case_count: 38, percentage: 3.04 },
-      { drg_code: '其他', drg_name: '', case_count: 501, percentage: 40.08 }
-    ]
-
-    // 盈亏分析（TOP 10）
-    profitAnalysis.value = [
-      { drg_code: 'FB19', drg_name: '心肌梗死', total_profit: 850000, case_count: 156, avg_profit: 5448.72 },
-      { drg_code: 'IR15', drg_name: '肺炎', total_profit: 420000, case_count: 132, avg_profit: 3181.82 },
-      { drg_code: 'EB13', drg_name: '脑梗死', total_profit: 650000, case_count: 98, avg_profit: 6632.65 },
-      { drg_code: 'JR25', drg_name: '肠梗阻', total_profit: -120000, case_count: 87, avg_profit: -1379.31 },
-      { drg_code: 'IB13', drg_name: 'COPD', total_profit: 180000, case_count: 76, avg_profit: 2368.42 },
-      { drg_code: 'GB19', drg_name: '胆囊炎', total_profit: 320000, case_count: 65, avg_profit: 4923.08 },
-      { drg_code: 'RB11', drg_name: '泌尿系感染', total_profit: 95000, case_count: 54, avg_profit: 1759.26 },
-      { drg_code: 'HB11', drg_name: '高血压', total_profit: -85000, case_count: 43, avg_profit: -1976.74 },
-      { drg_code: 'KC25', drg_name: '骨折', total_profit: 450000, case_count: 38, avg_profit: 11842.11 },
-      { drg_code: 'MD31', drg_name: '糖尿病', total_profit: 220000, case_count: 32, avg_profit: 6875.0 }
-    ]
-
-    // 费用消耗率趋势（最近30天）
-    const today = new Date()
-    costRateTrend.value = []
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(today)
-      date.setDate(date.getDate() - i)
-      const dateStr = date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-      const baseRate = 95 + Math.sin(i / 5) * 10 + (Math.random() - 0.5) * 5
-      costRateTrend.value.push({
-        date: dateStr,
-        cost_rate: parseFloat(baseRate.toFixed(1))
-      })
+    const params = {
+      dimension: dimension.value,
+      startDate: dateRange.value[0].format(dateFormat),
+      endDate: dateRange.value[1].format(dateFormat)
     }
 
-    // 科室绩效
-    departmentPerformance.value = [
-      {
-        department: '心内科',
-        caseCount: 245,
-        totalRevenue: 8500000,
-        totalCost: 7200000,
-        profitMargin: 1300000,
-        costRate: 84.7
-      },
-      {
-        department: '神经内科',
-        caseCount: 198,
-        totalRevenue: 6800000,
-        totalCost: 6500000,
-        profitMargin: 300000,
-        costRate: 95.6
-      },
-      {
-        department: '呼吸内科',
-        caseCount: 187,
-        totalRevenue: 5200000,
-        totalCost: 4800000,
-        profitMargin: 400000,
-        costRate: 92.3
-      },
-      {
-        department: '普外科',
-        caseCount: 156,
-        totalRevenue: 7200000,
-        totalCost: 6000000,
-        profitMargin: 1200000,
-        costRate: 83.3
-      },
-      {
-        department: '骨科',
-        caseCount: 142,
-        totalRevenue: 9800000,
-        totalCost: 8200000,
-        profitMargin: 1600000,
-        costRate: 83.7
-      },
-      {
-        department: '消化内科',
-        caseCount: 128,
-        totalRevenue: 3800000,
-        totalCost: 3600000,
-        profitMargin: 200000,
-        costRate: 94.7
-      },
-      {
-        department: '泌尿外科',
-        caseCount: 95,
-        totalRevenue: 4200000,
-        totalCost: 4500000,
-        profitMargin: -300000,
-        costRate: 107.1
-      },
-      {
-        department: '肾内科',
-        caseCount: 78,
-        totalRevenue: 2800000,
-        totalCost: 3200000,
-        profitMargin: -500000,
-        costRate: 114.3
-      }
-    ].sort((a, b) => b.profitMargin - a.profitMargin)
+    const res = await drgApi.getAnalysisData(params)
+
+    // 更新概览
+    statistics.totalCases = res.overview.totalCases
+    statistics.totalProfit = res.overview.totalProfit
+    statistics.avgCostRate = res.overview.avgCostRate * 100 // 转百分比
+    statistics.drgGroupCount = res.overview.drgGroupCount
 
     // 更新图表
-    await nextTick()
-    updateDRGDistributionChart()
-    updateProfitAnalysisChart()
-    updateCostRateTrendChart()
+    updateDRGDistributionChart(res.distribution.drg)
+    updateCostCompositionChart(res.distribution.cost)
+    updateTrendChart(res.trends)
 
-    message.success('数据加载成功')
+    // 更新表格
+    tableData.value = res.tableData
+
+    message.success('数据更新成功')
   } catch (error) {
     console.error('加载分析数据失败:', error)
-    message.error('加载数据失败')
+    message.error('数据加载失败')
   } finally {
     loading.value = false
   }
 }
 
-/** 窗口尺寸变化时调整图表大小 */
-const handleResize = () => {
-  drgDistributionChartInstance?.resize()
-  profitAnalysisChartInstance?.resize()
-  costRateTrendChartInstance?.resize()
-}
-
 onMounted(async () => {
-  // 初始化图表
   await nextTick()
-  initDRGDistributionChart()
-  initProfitAnalysisChart()
-  initCostRateTrendChart()
-
-  // 加载数据
   loadAnalysisData()
-
-  // 监听窗口尺寸变化
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  // 销毁图表实例
-  drgDistributionChartInstance?.dispose()
-  profitAnalysisChartInstance?.dispose()
-  costRateTrendChartInstance?.dispose()
-
-  // 移除事件监听
-  window.removeEventListener('resize', handleResize)
 })
 </script>
 
@@ -614,6 +422,13 @@ onUnmounted(() => {
 .drg-analysis {
   .content-wrapper {
     padding: 16px;
+    background-color: #f0f2f5;
+    min-height: calc(100vh - 64px);
+  }
+  
+  .chart {
+    height: 100%;
+    width: 100%;
   }
 }
 </style>

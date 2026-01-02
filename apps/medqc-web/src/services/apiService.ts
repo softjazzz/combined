@@ -1,8 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
-import type { 
-  ApiResponse, 
-  LoginRequest, 
+import type {
+  ApiResponse,
+  LoginRequest,
   LoginResponse,
   RegisterRequest,
   User,
@@ -18,6 +18,10 @@ import type {
   MedicalRecordDocumentPayload
 } from '@/types'
 import type { RecordDocumentInfo } from '@/types/quality-control'
+import { mockLogin, mockGetCurrentUser, mockRegister, mockRefreshToken } from '@/data/mock-auth'
+
+// Mock 配置
+const USE_AUTH_MOCK = import.meta.env.VITE_USE_AUTH_MOCK !== 'false' // 默认启用 Mock
 
 // API基础配置
 const ENV_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined
@@ -45,7 +49,7 @@ function computeBaseURL(): string {
         base = 'http://127.0.0.1:8001'
       }
     }
-  } catch {}
+  } catch { }
   return base
 }
 
@@ -108,24 +112,24 @@ class TokenManager {
 
 // 请求拦截器
 apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
-    const token = TokenManager.getToken()
-    if (token && !TokenManager.isTokenExpired(token)) {
-      config.headers = config.headers || {}
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    
-    // 添加请求ID用于调试
+  const token = TokenManager.getToken()
+  if (token && !TokenManager.isTokenExpired(token)) {
     config.headers = config.headers || {}
-    config.headers['X-Request-ID'] = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-      headers: config.headers,
-      data: config.data,
-      params: config.params
-    })
-    
-    return config
-  },
+    config.headers.Authorization = `Bearer ${token}`
+  }
+
+  // 添加请求ID用于调试
+  config.headers = config.headers || {}
+  config.headers['X-Request-ID'] = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+  console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+    headers: config.headers,
+    data: config.data,
+    params: config.params
+  })
+
+  return config
+},
   (error: unknown) => {
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
@@ -134,12 +138,12 @@ apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
 
 // 响应拦截器
 apiClient.interceptors.response.use((response: AxiosResponse) => {
-    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-      status: response.status,
-      data: response.data
-    })
-    return response
-  },
+  console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+    status: response.status,
+    data: response.data
+  })
+  return response
+},
   async (error: unknown) => {
     const originalRequest = error.config
 
@@ -211,7 +215,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
     const data = error.response?.data || {}
     const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'
     const traceId = data.traceId
-    
+
     // 根据状态码显示不同的错误信息
     switch (error.response?.status) {
       case 400:
@@ -257,7 +261,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
 // API服务类
 export class ApiService {
   // ==================== 用户认证相关API (B1任务 - 9个接口) ====================
-  
+
   /**
    * 用户登录
    */
@@ -267,12 +271,40 @@ export class ApiService {
         email: credentials.email,
         role: credentials.role,
         roleType: typeof credentials.role,
-        fullCredentials: credentials
+        fullCredentials: credentials,
+        useMock: USE_AUTH_MOCK
       })
 
+      // Mock 模式
+      if (USE_AUTH_MOCK) {
+        console.log('🎭 使用 Mock 认证')
+        const mockResponse = mockLogin(credentials.email, credentials.password)
+
+        if (!mockResponse) {
+          return {
+            success: false,
+            error: '用户名或密码错误',
+            data: null
+          }
+        }
+
+        // 保存token
+        TokenManager.setToken(mockResponse.access_token)
+        TokenManager.setRefreshToken(mockResponse.refresh_token)
+
+        console.log('✅ Mock 登录成功:', mockResponse.user.display_name)
+
+        return {
+          success: true,
+          data: mockResponse,
+          message: '登录成功'
+        }
+      }
+
+      // 真实 API 模式
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials)
       console.log('📡 ApiService.login 收到响应:', response.data)
-      
+
       // 保存token
       if (response.data.access_token) {
         TokenManager.setToken(response.data.access_token)
@@ -280,7 +312,7 @@ export class ApiService {
       if (response.data.refresh_token) {
         TokenManager.setRefreshToken(response.data.refresh_token)
       }
-      
+
       return {
         success: true,
         data: response.data,
@@ -320,6 +352,33 @@ export class ApiService {
    */
   static async getCurrentUser(): Promise<ApiResponse<User>> {
     try {
+      // Mock 模式
+      if (USE_AUTH_MOCK) {
+        const token = TokenManager.getToken()
+        if (!token) {
+          return {
+            success: false,
+            error: '未登录',
+            data: null
+          }
+        }
+
+        const mockUser = mockGetCurrentUser(token)
+        if (!mockUser) {
+          return {
+            success: false,
+            error: '无效的token',
+            data: null
+          }
+        }
+
+        return {
+          success: true,
+          data: mockUser
+        }
+      }
+
+      // 真实 API 模式
       const response = await apiClient.get<User>('/api/v1/auth/me')
       return {
         success: true,

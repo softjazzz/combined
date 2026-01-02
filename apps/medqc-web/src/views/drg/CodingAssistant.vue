@@ -71,11 +71,13 @@
 
       <!-- 病案列表 -->
       <a-card :bordered="false" style="margin-top: 16px">
+        <TableSkeleton v-if="loading" :rows="10" :columns="8" />
         <a-table
+          v-else
           :columns="columns"
           :data-source="dataSource"
-          :loading="loading"
           :pagination="pagination"
+          :scroll="{ x: 1300 }"
           @change="handleTableChange"
           row-key="front_page_id"
         >
@@ -131,6 +133,7 @@ import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import { drgApi } from '@/api/drg'
 import StatusTag from '@/components/drg/StatusTag.vue'
+import TableSkeleton from '@/components/common/TableSkeleton.vue'
 import { getGenderText } from '@/utils/drg'
 import type { CaseFrontPage } from '@/types/drg'
 import type { TableProps } from 'ant-design-vue'

@@ -1,0 +1,460 @@
+{
+  "success": true,
+  "result": [
+    {
+      "statusOut": 1,
+      "LOS": 12,
+      "ICU": 0,
+      "sex": 2,
+      "age": 30,
+      "bornWt": 0,
+      "PDX": "J18.900",
+      "ADX1": "NA",
+      "ADX2": "NA",
+      "ADX3": "NA",
+      "ADX4": "NA",
+      "ADX5": "NA",
+      "ADX6": "NA",
+      "ADX7": "NA",
+      "ADX8": "NA",
+      "ADX9": "NA",
+      "ADX10": "NA",
+      "ADX11": "NA",
+      "ADX12": "NA",
+      "ADX13": "NA",
+      "ADX14": "NA",
+      "ADX15": "NA",
+      "PROC1": "null",
+      "PROC2": "null",
+      "PROC3": "null",
+      "PROC4": "null",
+      "PROC5": "null",
+      "PROC6": "null",
+      "PROC7": "null",
+      "PROC8": "null",
+      "LYFS": 1,
+      "SJZYTS": 12,
+      "PROCs": "null",
+      "dipcode": "J18.9-null"
+    }
+  ],
+  "rule_source": "全国版",
+  "grouping_path": {
+    "status": "success",
+    "data_summary": {
+      "PDX": "J18.900",
+      "ADXs": "",
+      "PROCs": "17.91350",
+      "PROC1": "null",
+      "Age": 30,
+      "Sex": 2
+    },
+    "dip_info_expected": {
+      "code": "J18.9-null",
+      "pdx_rule": "J18.9",
+      "proc_rule": "BSZL",
+      "type": "核心内科组"
+    },
+    "dip_info_actual": {
+      "code": "J18.9-null",
+      "type": "核心内科组",
+      "pdx_rule": "J18.9",
+      "proc_rule": "BSZL"
+    },
+    "check_steps": {
+      "类型检查": {
+        "status": "success",
+        "message": "类型检查通过：预期 [核心内科组]，实际情况 (不存在主手术) 一致"
+      },
+      "主诊断检查": {
+        "status": "success",
+        "message": "主诊断检查通过：主诊断 [J18.900] 匹配预期主诊规则 [J18.9]"
+      },
+      "操作组检查": {
+        "status": "info",
+        "message": "操作组检查：预期为内科组，跳过。"
+      },
+      "最终分组对比": {
+        "status": "success",
+        "message": "最终分组对比通过：实际 [J18.9-null] 与预期 [J18.9-null] 一致"
+      }
+    },
+    "final_outcome": "验证通过：分组结果 J18.9-null 与预期一致"
+  },
+  "dip_catalogue_info": {},
+  "reference_grouping": {
+    "pdx_related": [
+      {
+        "dip_code": "J18.0-33.2302",
+        "dip_name": "未特指的支气管肺炎-电子支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.0",
+        "proc_code": "33.2302",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.0-33.2400x002",
+        "dip_name": "未特指的支气管肺炎-支气管镜下诊断性支气管肺泡灌洗[BAL]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.0",
+        "proc_code": "33.2400x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.0-33.2403",
+        "dip_name": "未特指的支气管肺炎-纤维支气管镜检查伴肺泡灌洗术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.0",
+        "proc_code": "33.2403",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.0-null",
+        "dip_name": "未特指的支气管肺炎-保守治疗",
+        "dip_type": "核心病种",
+        "diag_code": "J18.0",
+        "proc_code": "null",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.1-33.2302",
+        "dip_name": "未特指的大叶性肺炎-电子支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.1",
+        "proc_code": "33.2302",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.1-33.2400x002",
+        "dip_name": "未特指的大叶性肺炎-支气管镜下诊断性支气管肺泡灌洗[BAL]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.1",
+        "proc_code": "33.2400x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.1-33.2403",
+        "dip_name": "未特指的大叶性肺炎-纤维支气管镜检查伴肺泡灌洗术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.1",
+        "proc_code": "33.2403",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.1-null",
+        "dip_name": "未特指的大叶性肺炎-保守治疗",
+        "dip_type": "核心病种",
+        "diag_code": "J18.1",
+        "proc_code": "null",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.2-null",
+        "dip_name": "未特指的坠积性肺炎-保守治疗",
+        "dip_type": "核心病种",
+        "diag_code": "J18.2",
+        "proc_code": "null",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-33.2200x002",
+        "dip_name": "其他病原体未特指的肺炎-荧光支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "33.2200x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-33.2200x003",
+        "dip_name": "其他病原体未特指的肺炎-纤维支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "33.2200x003",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-33.2302",
+        "dip_name": "其他病原体未特指的肺炎-电子支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "33.2302",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-33.2400x002",
+        "dip_name": "其他病原体未特指的肺炎-支气管镜下诊断性支气管肺泡灌洗[BAL]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "33.2400x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-33.2403",
+        "dip_name": "其他病原体未特指的肺炎-纤维支气管镜检查伴肺泡灌洗术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "33.2403",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-34.0401",
+        "dip_name": "其他病原体未特指的肺炎-胸腔闭式引流术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "34.0401",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-34.9101",
+        "dip_name": "其他病原体未特指的肺炎-胸腔穿刺抽液术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "34.9101",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-93.9000",
+        "dip_name": "其他病原体未特指的肺炎-无创机械性通气",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "93.9000",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-93.9000x002",
+        "dip_name": "其他病原体未特指的肺炎-无创呼吸机辅助通气(双水平气道正压",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "93.9000x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-93.9001",
+        "dip_name": "其他病原体未特指的肺炎-持续性气道正压通气（CPAP）",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "93.9001",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-96.7101",
+        "dip_name": "其他病原体未特指的肺炎-呼吸机治疗[小于96小时]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "96.7101",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-96.7201",
+        "dip_name": "其他病原体未特指的肺炎-呼吸机治疗[大于等于96小时]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "96.7201",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.8-null",
+        "dip_name": "其他病原体未特指的肺炎-保守治疗",
+        "dip_type": "核心病种",
+        "diag_code": "J18.8",
+        "proc_code": "null",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2200x002",
+        "dip_name": "未特指的肺炎-荧光支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2200x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2200x003",
+        "dip_name": "未特指的肺炎-纤维支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2200x003",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2302",
+        "dip_name": "未特指的肺炎-电子支气管镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2302",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2400x001",
+        "dip_name": "未特指的肺炎-支气管镜下支气管活检",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2400x001",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2400x002",
+        "dip_name": "未特指的肺炎-支气管镜下诊断性支气管肺泡灌洗[BAL]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2400x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2403",
+        "dip_name": "未特指的肺炎-纤维支气管镜检查伴肺泡灌洗术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2403",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2405",
+        "dip_name": "未特指的肺炎-气管镜刷检术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2405",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2600x002",
+        "dip_name": "未特指的肺炎-经皮针吸肺活检",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2600x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-33.2700x001",
+        "dip_name": "未特指的肺炎-支气管镜下肺活检",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "33.2700x001",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-34.0401",
+        "dip_name": "未特指的肺炎-胸腔闭式引流术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "34.0401",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-34.9100x001",
+        "dip_name": "未特指的肺炎-经皮胸膜病损穿刺定位术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "34.9100x001",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-34.9101",
+        "dip_name": "未特指的肺炎-胸腔穿刺抽液术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "34.9101",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-34.9103",
+        "dip_name": "未特指的肺炎-超声引导下胸腔穿刺术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "34.9103",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-44.1401",
+        "dip_name": "未特指的肺炎-胃镜下活组织检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "44.1401",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-45.1300x004",
+        "dip_name": "未特指的肺炎-胃-十二指肠镜检查",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "45.1300x004",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-88.5500",
+        "dip_name": "未特指的肺炎-单根导管的冠状动脉造影术",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "88.5500",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-93.9000",
+        "dip_name": "未特指的肺炎-无创机械性通气",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "93.9000",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-93.9000x002",
+        "dip_name": "未特指的肺炎-无创呼吸机辅助通气(双水平气道正压",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "93.9000x002",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-93.9000x003",
+        "dip_name": "未特指的肺炎-无创呼吸机辅助通气(高频通气[HFPPV])",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "93.9000x003",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-93.9001",
+        "dip_name": "未特指的肺炎-持续性气道正压通气（CPAP）",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "93.9001",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-96.7101",
+        "dip_name": "未特指的肺炎-呼吸机治疗[小于96小时]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "96.7101",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-96.7201",
+        "dip_name": "未特指的肺炎-呼吸机治疗[大于等于96小时]",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "96.7201",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-99.6000",
+        "dip_name": "未特指的肺炎-心肺复苏",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "99.6000",
+        "year": 2025
+      },
+      {
+        "dip_code": "J18.9-null",
+        "dip_name": "未特指的肺炎-保守治疗",
+        "dip_type": "核心病种",
+        "diag_code": "J18.9",
+        "proc_code": "null",
+        "year": 2025
+      }
+    ],
+    "proc_related": {},
+    "message": "主诊断相关: 46条, 操作相关: 0条（全国版参考数据）",
+    "display_mode": "basic"
+  }
+}

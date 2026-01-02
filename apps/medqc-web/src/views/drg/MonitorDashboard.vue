@@ -39,44 +39,27 @@
         </a-col>
       </a-row>
 
-      <!-- 预警列表 -->
-      <a-card title="DRG 预警" :bordered="false" style="margin-bottom: 16px">
-        <template #extra>
-          <a-space>
-            <a-select v-model:value="alertFilters.level" placeholder="预警级别" style="width: 120px" allowClear @change="loadAlerts">
-              <a-select-option value="">全部</a-select-option>
-              <a-select-option value="info">信息</a-select-option>
-              <a-select-option value="warning">警告</a-select-option>
-              <a-select-option value="critical">严重</a-select-option>
-            </a-select>
-            <a-button @click="loadAlerts"><ReloadOutlined /></a-button>
-          </a-space>
-        </template>
+      <!-- 趋势图表 -->
+      <a-row :gutter="16" style="margin-bottom: 16px">
+        <a-col :span="12">
+          <a-card title="CMI 实时趋势 (近7日)" :bordered="false">
+             <div class="chart-container">
+               <v-chart class="chart" :option="cmiChartOption" autoresize />
+             </div>
+          </a-card>
+        </a-col>
+        <a-col :span="12">
+          <a-card title="费用消耗指数 (标杆值 < 1.0)" :bordered="false">
+             <div class="chart-container">
+               <v-chart class="chart" :option="costChartOption" autoresize />
+             </div>
+          </a-card>
+        </a-col>
+      </a-row>
 
-        <a-table
-          :columns="alertColumns"
-          :data-source="alerts"
-          :loading="loadingAlerts"
-          :pagination="{ pageSize: 10 }"
-          row-key="alert_id"
-        >
-          <template #alertLevel="{ record }">
-            <StatusTag type="alert" :value="record.alert_level" />
-          </template>
-          <template #alertType="{ record }">
-            <a-tag>{{ alertTypeMap[record.alert_type] }}</a-tag>
-          </template>
-          <template #metric="{ record }">
-            <span v-if="record.metric_value">
-              {{ record.metric_value.toFixed(1) }}
-              <span v-if="record.threshold_value">/ {{ record.threshold_value.toFixed(1) }}</span>
-            </span>
-            <span v-else>-</span>
-          </template>
-          <template #time="{ record }">
-            {{ formatDateTime(record.triggered_at) }}
-          </template>
-        </a-table>
+      <!-- 预警列表 -->
+      <a-card :bordered="false" style="margin-bottom: 16px" :bodyStyle="{ padding: 0 }">
+        <DRGAlertList @update:stats="updateAlertStats" />
       </a-card>
 
       <!-- 编码建议列表 -->
@@ -89,7 +72,7 @@
           :columns="suggestionColumns"
           :data-source="suggestions"
           :loading="loadingSuggestions"
-          :pagination="{ pageSize: 10 }"
+          :pagination="{ pageSize: 5 }"
           row-key="suggestion_id"
         >
           <template #type="{ record }">
@@ -120,6 +103,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent, TitleComponent, MarkLineComponent } from 'echarts/components'
+import VChart from 'vue-echarts'
 import {
   WarningOutlined,
   ExclamationCircleOutlined,
@@ -129,32 +117,78 @@ import {
 } from '@ant-design/icons-vue'
 import { drgApi } from '@/api/drg'
 import StatusTag from '@/components/drg/StatusTag.vue'
-import { alertTypeMap, suggestionTypeMap, formatDateTime } from '@/utils/drg'
-import type { DRGAlertItem, CodingSuggestionItem } from '@/types/drg'
+import DRGAlertList from '@/components/drg/DRGAlertList.vue'
+import { suggestionTypeMap } from '@/utils/drg'
+import type { CodingSuggestionItem } from '@/types/drg'
+
+// 注册 ECharts 组件
+use([
+  CanvasRenderer,
+  LineChart,
+  BarChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  MarkLineComponent
+])
 
 /** 统计数据 */
 const statistics = reactive({
   totalAlerts: 0,
   criticalAlerts: 0,
   pendingSuggestions: 0,
-  todayNew: 0
+  todayNew: 12 // Mock value
 })
 
-/** 预警列表 */
-const alerts = ref<DRGAlertItem[]>([])
-const loadingAlerts = ref(false)
-const alertFilters = reactive({
-  level: ''
+// 图表配置 - CMI
+const cmiChartOption = ref({
+  tooltip: { trigger: 'axis' },
+  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  },
+  yAxis: { type: 'value', min: 0.8 },
+  series: [
+    {
+      name: 'CMI',
+      type: 'line',
+      smooth: true,
+      data: [1.02, 1.05, 1.03, 1.08, 1.12, 1.10, 1.15],
+      itemStyle: { color: '#1890ff' },
+      areaStyle: { color: '#e6f7ff' }
+    }
+  ]
 })
 
-const alertColumns = [
-  { title: '预警级别', dataIndex: 'alert_level', width: 100, slots: { customRender: 'alertLevel' } },
-  { title: '预警类型', dataIndex: 'alert_type', width: 120, slots: { customRender: 'alertType' } },
-  { title: '住院号', dataIndex: 'admission_id', width: 150 },
-  { title: '预警信息', dataIndex: 'message' },
-  { title: '指标值', dataIndex: 'metric', width: 120, slots: { customRender: 'metric' } },
-  { title: '触发时间', dataIndex: 'time', width: 150, slots: { customRender: 'time' } }
-]
+// 图表配置 - 费用
+const costChartOption = ref({
+  tooltip: { trigger: 'axis' },
+  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: ['心内科', '呼吸科', '骨科', '普外科', '神经内科']
+  },
+  yAxis: { type: 'value', max: 1.5 },
+  series: [
+    {
+      name: '费用消耗指数',
+      type: 'bar',
+      barWidth: '40%',
+      data: [0.92, 0.98, 1.05, 0.88, 1.02],
+      itemStyle: {
+        color: (params: any) => {
+          return params.value > 1 ? '#ff4d4f' : '#52c41a'
+        }
+      },
+       markLine: {
+        data: [{ yAxis: 1.0, name: '标杆', lineStyle: { color: '#faad14', type: 'dashed' } }]
+      }
+    }
+  ]
+})
 
 /** 编码建议列表 */
 const suggestions = ref<CodingSuggestionItem[]>([])
@@ -168,29 +202,19 @@ const suggestionColumns = [
   { title: '操作', key: 'action', width: 150, slots: { customRender: 'action' } }
 ]
 
-/** 加载预警 */
-const loadAlerts = async () => {
-  loadingAlerts.value = true
-  try {
-    const response = await drgApi.getDRGAlerts({
-      alert_level: alertFilters.level || undefined,
-      limit: 50
-    })
-    alerts.value = response.alerts
-    statistics.totalAlerts = response.total
-    statistics.criticalAlerts = response.alerts.filter(a => a.alert_level === 'critical').length
-  } catch (error) {
-    console.error('加载预警失败:', error)
-  } finally {
-    loadingAlerts.value = false
-  }
+const updateAlertStats = (total: number, critical: number) => {
+  statistics.totalAlerts = total
+  statistics.criticalAlerts = critical
 }
 
 /** 加载建议 */
 const loadSuggestions = async () => {
   loadingSuggestions.value = true
   try {
-    const response = await drgApi.getCodingSuggestions('', 'pending')
+    const response = await drgApi.getCodingSuggestions({
+      status: 'pending',
+      limit: 50
+    })
     suggestions.value = response.suggestions
     statistics.pendingSuggestions = response.suggestions.filter(s => s.status === 'pending').length
   } catch (error) {
@@ -206,7 +230,7 @@ const handleSuggestion = async (suggestionId: number, action: 'accept' | 'reject
     await drgApi.handleCodingSuggestion({
       suggestion_id: suggestionId,
       action,
-      handled_by: 'current_user' // TODO: 从用户信息获取
+      handled_by: 'current_user' 
     })
     message.success(action === 'accept' ? '已接受建议' : '已拒绝建议')
     loadSuggestions()
@@ -217,7 +241,6 @@ const handleSuggestion = async (suggestionId: number, action: 'accept' | 'reject
 }
 
 onMounted(() => {
-  loadAlerts()
   loadSuggestions()
 })
 </script>
@@ -226,6 +249,16 @@ onMounted(() => {
 .monitor-dashboard {
   .content-wrapper {
     padding: 16px;
+  }
+  
+  .chart-container {
+    height: 300px;
+    width: 100%;
+    
+    .chart {
+      height: 100%;
+      width: 100%;
+    }
   }
 }
 </style>

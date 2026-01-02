@@ -35,6 +35,8 @@ from .routers import remediation as remediation_router
 from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
 from .routers import frontpage as frontpage_router
+from .routers import drg as drg_router
+from .routers import case_front_page as case_front_page_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -220,6 +222,9 @@ def create_app() -> FastAPI:
     app.include_router(demo_router.router)
     # Front page auto-generation (demo + future real extraction)
     app.include_router(frontpage_router.router)
+    # DRG/DIP demo APIs (to support DRG pages in web)
+    app.include_router(case_front_page_router.router)
+    app.include_router(drg_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
@@ -237,8 +242,9 @@ def create_app() -> FastAPI:
         """应用启动时初始化四川质控服务"""
         logger.info("🚀 应用启动中...")
         try:
-            await qc_sichuan_router.init_qc_service()
-            logger.info("✅ 四川质控服务初始化完成")
+            # NOTE: do not block server startup on external/service initialization.
+            # qc_sichuan service will be lazily initialized on first use.
+            logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")
         except Exception as exc:
             logger.error(f"❌ 四川质控服务初始化失败: {exc}")
 

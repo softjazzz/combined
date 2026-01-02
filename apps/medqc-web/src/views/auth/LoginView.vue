@@ -70,9 +70,9 @@ const handleForgotPassword = () => {
 
 const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
   const demoAccounts = {
-    admin: { email: 'admin@medqc.com', password: 'admin888' },
-    qc_manager: { email: 'qc@medqc.com', password: 'qc123456' },
-    doctor: { email: 'doctor@medqc.com', password: 'doctor123' }
+    admin: { email: 'admin@hospital.com', password: 'admin123' },
+    qc_manager: { email: 'coder@hospital.com', password: 'coder123' },
+    doctor: { email: 'doctor@hospital.com', password: 'doctor123' }
   } as const
 
   const account = demoAccounts[role]
@@ -234,14 +234,14 @@ const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
                         <div class="w-8 h-8 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">Admin</div>
                         <div>
                            <div class="text-sm text-slate-200 font-medium">系统管理员</div>
-                           <div class="text-[10px] text-slate-500">全权限</div>
+                           <div class="text-[10px] text-slate-500">admin@hospital.com / admin123</div>
                         </div>
                       </button>
                       <button @click="handleDemoLogin('qc_manager')" class="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-transparent hover:border-indigo-500/30 transition-all group text-left">
                         <div class="w-8 h-8 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">QC</div>
                         <div>
-                           <div class="text-sm text-slate-200 font-medium">质控主管</div>
-                           <div class="text-[10px] text-slate-500">质控管理权限</div>
+                           <div class="text-sm text-slate-200 font-medium">病案编码员</div>
+                           <div class="text-[10px] text-slate-500">coder@hospital.com / coder123</div>
                         </div>
                       </button>
                     </div>

@@ -45,10 +45,18 @@ class DatabaseService:
             self.client = None
             return
 
-        self.client = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_KEY
-        )
+        try:
+            self.client = create_client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_KEY
+            )
+        except TypeError as e:
+            # 处理特定环境下的代理参数错误
+            logger.warning(f"Supabase 初始化失败 (代理参数兼容性问题): {e}")
+            self.client = None
+        except Exception as e:
+            logger.error(f"Supabase 初始化异常: {e}")
+            self.client = None
 
     def _available(self) -> bool:
         return self.client is not None
