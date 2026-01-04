@@ -598,6 +598,26 @@ const routes: RouteRecordRaw[] = [
             }
           },
           {
+            path: 'config',
+            name: 'GrouperConfig',
+            component: () => import('@/views/drg/GrouperConfig.vue'),
+            meta: {
+              title: '分组器配置',
+              icon: 'SettingOutlined',
+              description: '分组规则与参数配置'
+            }
+          },
+          {
+            path: 'settlement',
+            name: 'SettlementForm',
+            component: () => import('@/views/drg/SettlementForm.vue'),
+            meta: {
+              title: '医保结算清单',
+              icon: 'FileProtectOutlined',
+              description: '医保结算清单填报与质控'
+            }
+          },
+          {
             path: 'monitor',
             name: 'MonitorDashboard',
             component: () => import('@/views/drg/MonitorDashboard.vue'),

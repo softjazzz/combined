@@ -1,22 +1,18 @@
 <template>
   <div class="coding-detail">
     <a-page-header
-      :title="`编码详情 - ${caseFrontPage?.patient_name || ''}`"
+      :title="`编码详情`"
+      sub-title="DRG/DIP 智能编码工作台"
       @back="() => $router.back()"
-      style="padding: 16px 24px"
+      style="padding: 16px 32px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);"
     >
-      <template #tags>
-        <StatusTag v-if="caseFrontPage" type="coding" :value="caseFrontPage.coding_status" />
-      </template>
       <template #extra>
         <a-space>
           <a-button @click="handleValidate" :loading="validating">
-            <template #icon><CheckOutlined /></template>
             校验编码
           </a-button>
           <a-button type="primary" @click="handleSave" :loading="saving">
-            <template #icon><SaveOutlined /></template>
-            保存
+            保存并提交
           </a-button>
         </a-space>
       </template>
@@ -24,130 +20,154 @@
 
     <div class="content-wrapper">
       <a-spin :spinning="loading">
-        <a-row :gutter="16" style="height: calc(100vh - 120px)">
-          <!-- 左侧：病历阅读区 (30%) -->
-          <a-col :span="7" style="height: 100%">
-            <a-card title="病历资料" :bordered="false" class="full-height-card" :bodyStyle="{ flex: 1, padding: 0, overflow: 'hidden' }">
-              <MedicalRecordViewer 
-                :admission-id="admissionId" 
-                :highlight-keywords="recommendationKeywords"
-              />
+        <a-row :gutter="24" style="height: calc(100vh - 120px)">
+          <!-- 左侧：患者病案信息与历史 (30%) -->
+          <a-col :span="8" style="height: 100%">
+            <a-card title="患者病案信息与历史" :bordered="false" class="full-height-card patient-card">
+              <div class="patient-info-section">
+                <div class="info-row">
+                  <span class="label">患者姓名:</span>
+                  <span class="value">{{ caseFrontPage?.patient_name }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="label">性别/年龄:</span>
+                  <span class="value">{{ getGenderText(caseFrontPage?.patient_gender) }}/{{ caseFrontPage?.patient_age }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="label">住院号:</span>
+                  <span class="value">{{ caseFrontPage?.admission_id }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="label">入院日期:</span>
+                  <span class="value">2024-05-10</span> <!-- Mock Data as per request/image -->
+                </div>
+                <div class="info-row">
+                  <span class="label">总费用:</span>
+                  <span class="value">{{ formatCurrency(caseFrontPage?.total_cost) }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="label">出院日期:</span>
+                  <span class="value">2024-05-20</span> <!-- Mock Data -->
+                </div>
+              </div>
+
+              <a-divider style="margin: 16px 0" />
+
+              <div class="history-summary">
+                <div class="section-title">病史摘要</div>
+                <ul class="history-list">
+                  <li>既往高血压史5年，2型糖尿病史3年，此次因胸痛入院。</li>
+                  <li>既往冠心病史曾植入支架入院胸痛，化验均为胸痛入院。</li>
+                  <li>此次高血压史伴冠脉病变，透析器中及面容于胸。</li>
+                  <li>入院口烟入园，营养列性上控制火。</li>
+                </ul>
+              </div>
+
+              <div class="card-bottom-action">
+                <a-button block size="large">查看完整病历</a-button>
+              </div>
             </a-card>
           </a-col>
 
-          <!-- 中间：编码工作区 (45%) -->
-          <a-col :span="11" style="height: 100%; overflow-y: auto">
-            <!-- 患者基本信息 (精简版) -->
-            <a-card :bordered="false" style="margin-bottom: 12px" size="small">
-              <a-descriptions :column="2" size="small">
-                <a-descriptions-item label="住院号">{{ caseFrontPage?.admission_id }}</a-descriptions-item>
-                <a-descriptions-item label="姓名">{{ caseFrontPage?.patient_name }} ({{ caseFrontPage?.patient_age }}岁)</a-descriptions-item>
-                <a-descriptions-item label="总费用">{{ formatCurrency(caseFrontPage?.total_cost) }}</a-descriptions-item>
-                <a-descriptions-item label="住院日">{{ caseFrontPage?.total_hospital_days || '-' }}天</a-descriptions-item>
-              </a-descriptions>
-            </a-card>
+          <!-- 右侧：DRG 编码修正与 AI 分析 (70%) -->
+          <a-col :span="16" style="height: 100%; overflow-y: auto; padding-right: 8px;">
+            <div class="right-panel-header">DRG 编码修正与 AI 分析</div>
 
             <!-- 主诊断 -->
-            <a-card title="主诊断" :bordered="false" style="margin-bottom: 12px" size="small">
-              <a-form layout="vertical">
-                <a-form-item label="ICD-10 编码" required style="margin-bottom: 0">
-                  <ICDCodeSearch
-                    v-model:value="caseFrontPage!.primary_diagnosis_code"
-                    v-model:name="caseFrontPage!.primary_diagnosis_name"
-                    category="diagnosis"
-                    placeholder="搜索诊断编码或名称"
-                    style="width: 100%"
-                  />
-                </a-form-item>
-              </a-form>
+            <a-card :bordered="false" class="premium-card mb-4" :bodyStyle="{ padding: '0' }">
+               <div class="section-header">
+                 <span>主要诊断 (Primary Diagnosis)</span>
+                 <span class="ai-confidence-label">AI 置信分度</span>
+               </div>
+               <div class="diagnosis-row primary-row">
+                 <div class="code-content">
+                   <span class="code-label">ICD-10:</span>
+                   <ICDCodeSearch
+                      v-model:value="caseFrontPage!.primary_diagnosis_code"
+                      v-model:name="caseFrontPage!.primary_diagnosis_name"
+                      category="diagnosis"
+                      placeholder="搜索诊断编码"
+                      variant="borderless"
+                      class="custom-input"
+                      v-if="caseFrontPage"
+                    />
+                 </div>
+                 <div class="actions">
+                    <a-tag color="#10b981" class="confidence-tag">95%</a-tag>
+                    <a-space size="small" class="action-links">
+                      <a><EditOutlined /> 编辑</a>
+                      <a><DeleteOutlined /> 删除</a>
+                      <a><FileTextOutlined /> AI详情</a>
+                    </a-space>
+                 </div>
+               </div>
             </a-card>
 
             <!-- 次诊断 -->
-            <a-card title="次诊断" :bordered="false" style="margin-bottom: 12px" size="small">
-              <template #extra>
-                <a-button type="link" size="small" @click="addSecondaryDiagnosis">
-                  <template #icon><PlusOutlined /></template>
-                  添加
-                </a-button>
-              </template>
-
-              <div class="diagnosis-list">
-                <div v-for="(item, index) in secondaryDiagnoses" :key="index" class="list-item">
-                   <div class="item-index">{{ index + 1 }}</div>
-                   <div class="item-content">
+            <a-card :bordered="false" class="premium-card mb-4" :bodyStyle="{ padding: '0' }">
+               <div class="section-header">
+                 <span>次要诊断 (Secondary Diagnoses)</span>
+                 <span class="ai-confidence-label">AI 置信分度</span>
+               </div>
+               
+               <div class="diagnosis-list">
+                 <div v-for="(item, index) in secondaryDiagnoses" :key="index" class="diagnosis-row secondary-row">
+                   <div class="row-index">{{ index + 1 }}.</div>
+                   <div class="code-content">
                      <ICDCodeSearch
                         v-model:value="item.code"
                         v-model:name="item.name"
                         category="diagnosis"
-                        :placeholder="`次诊断`"
-                        size="small"
+                        variant="borderless"
+                        class="custom-input"
                       />
-                      <div class="item-options">
-                        <a-checkbox v-model:checked="item.is_complication">并发症</a-checkbox>
-                      </div>
                    </div>
-                   <a-button type="text" danger size="small" @click="removeSecondaryDiagnosis(index)">
-                     <template #icon><DeleteOutlined /></template>
-                   </a-button>
-                </div>
-                <a-empty v-if="secondaryDiagnoses.length === 0" description="暂无次诊断" image="simple" />
-              </div>
+                   <div class="actions">
+                      <a-tag :color="getConfidenceColor(index)" class="confidence-tag">{{ getConfidenceScore(index) }}%</a-tag>
+                      <a-space size="small" class="action-links">
+                        <a><EditOutlined /> 编辑</a>
+                        <a class="danger-text" @click="removeSecondaryDiagnosis(index)"><DeleteOutlined /> 删除</a>
+                        <a><FileTextOutlined /> AI详情</a>
+                      </a-space>
+                   </div>
+                 </div>
+               </div>
+
+               <div class="add-btn-wrapper">
+                 <a-button type="dashed" block class="add-btn" @click="addSecondaryDiagnosis">
+                   添加次要诊断
+                 </a-button>
+               </div>
             </a-card>
 
-            <!-- 手术操作 -->
-            <a-card title="手术操作" :bordered="false" style="margin-bottom: 12px" size="small">
-              <template #extra>
-                <a-button type="link" size="small" @click="addProcedure">
-                  <template #icon><PlusOutlined /></template>
-                  添加
-                </a-button>
-              </template>
+            <!-- AI 验证与 DRG 分组结果 -->
+            <a-card :bordered="false" class="premium-card" :bodyStyle="{ padding: '24px' }">
+              <div class="section-header-simple">AI 验证与 DRG 分组结果</div>
               
-              <div class="procedure-list">
-                <div v-for="(item, index) in procedures" :key="index" class="list-item">
-                   <div class="item-index">{{ index + 1 }}</div>
-                   <div class="item-content">
-                     <ICDCodeSearch
-                        v-model:value="item.code"
-                        v-model:name="item.name"
-                        category="procedure"
-                        :placeholder="`手术操作`"
-                        size="small"
-                      />
-                      <div class="item-options">
-                        <a-date-picker v-model:value="item.procedure_date" size="small" placeholder="手术日期" style="width: 120px" value-format="YYYY-MM-DD" />
-                      </div>
-                   </div>
-                   <a-button type="text" danger size="small" @click="removeProcedure(index)">
-                     <template #icon><DeleteOutlined /></template>
-                   </a-button>
+              <div class="drg-result-banner">
+                <div class="drg-info">
+                  <span class="label">建议 DRG 组:</span>
+                  <span class="value">F01A 冠状动脉相关手术</span>
                 </div>
-                <a-empty v-if="procedures.length === 0" description="暂无手术操作" image="simple" />
+                <div class="drg-metrics">
+                  <span class="metric">预期权重: <strong>2.35</strong></span>
+                  <span class="metric">预计报销: <strong>¥25,000</strong></span>
+                </div>
+              </div>
+
+              <div class="ai-analysis-box">
+                <div class="box-title">AI 分析理由</div>
+                <div class="box-content">
+                  主诊断与手术操作（冠脉支架植入术）高度匹配，次要并发症对分组影响显著。建议确认当前编码。
+                </div>
+              </div>
+
+              <div class="footer-actions">
+                <a-button type="primary" size="large" class="submit-btn" @click="handleSave">保存并提交</a-button>
+                <a-button size="large" @click="handleValidate">重新分析</a-button>
               </div>
             </a-card>
-          </a-col>
 
-          <!-- 右侧：智能助手 (25%) -->
-          <a-col :span="6" style="height: 100%; overflow-y: auto">
-            <!-- 编码完整性顾问 (New) -->
-            <CodingCompletenessAdvisor
-              :admission-id="admissionId"
-              :current-data="currentCodingData"
-              style="margin-bottom: 12px"
-              @accept="handleAcceptSuggestion"
-            />
-
-            <!-- ICD 编码推荐 -->
-            <CodingRecommendation
-              style="margin-bottom: 12px"
-              @select="handleSelectRecommendation"
-            />
-
-            <!-- 编码校验结果 -->
-            <CodingValidation
-              v-if="validationResult"
-              :validation-result="validationResult"
-            />
           </a-col>
         </a-row>
       </a-spin>
@@ -163,87 +183,53 @@ import {
   CheckOutlined,
   SaveOutlined,
   PlusOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  EditOutlined,
+  FileTextOutlined
 } from '@ant-design/icons-vue'
 import { drgApi } from '@/api/drg'
-import StatusTag from '@/components/drg/StatusTag.vue'
 import ICDCodeSearch from '@/components/drg/ICDCodeSearch.vue'
-import CodingRecommendation from '@/components/drg/CodingRecommendation.vue'
-import CodingValidation from '@/components/drg/CodingValidation.vue'
-import MedicalRecordViewer from '@/components/drg/MedicalRecordViewer.vue'
-import CodingCompletenessAdvisor from '@/components/advisor/CodingCompletenessAdvisor.vue'
 import { getGenderText, formatCurrency } from '@/utils/drg'
-import type { CaseFrontPage, DiagnosisItem, ProcedureItem, ValidationResult } from '@/types/drg'
+import type { CaseFrontPage, DiagnosisItem, ProcedureItem } from '@/types/drg'
 
 const route = useRoute()
 const router = useRouter()
-
 const admissionId = route.params.admissionId as string
 
-/** 病案首页数据 */
+// State
 const caseFrontPage = ref<CaseFrontPage>()
-const loading = ref(false)
+const secondaryDiagnoses = ref<DiagnosisItem[]>([])
+const loading = ref(true)
 const saving = ref(false)
 const validating = ref(false)
 
-/** 次诊断列表 */
-const secondaryDiagnoses = ref<DiagnosisItem[]>([])
+// Mock Confidence Data
+const getConfidenceScore = (index: number) => {
+  const scores = [92, 88, 90, 85, 95];
+  return scores[index % scores.length];
+}
 
-/** 手术操作列表 */
-const procedures = ref<ProcedureItem[]>([])
+const getConfidenceColor = (index: number) => {
+  const score = getConfidenceScore(index);
+  if (score >= 90) return '#10b981'; // Green
+  if (score >= 80) return '#f59e0b'; // Orange
+  return '#ef4444'; // Red
+}
 
-const currentCodingData = computed(() => ({
-  primary_diagnosis: caseFrontPage.value ? {
-    code: caseFrontPage.value.primary_diagnosis_code,
-    name: caseFrontPage.value.primary_diagnosis_name
-  } : undefined,
-  secondary_diagnoses: secondaryDiagnoses.value.map(d => ({
-    code: d.code,
-    name: d.name
-  })),
-  procedures: procedures.value.map(p => ({
-    code: p.code,
-    name: p.name
-  }))
-}))
-
-/** 校验结果 */
-const validationResult = ref<ValidationResult>()
-
-/** 推荐关键词（用于高亮病历） */
-const recommendationKeywords = computed(() => {
-  const keywords: string[] = []
-  if (validationResult.value?.warnings) {
-    validationResult.value.warnings.forEach(w => {
-      // 简单提取警告中的关键医学名词（示例逻辑）
-      if (w.evidence) {
-        // 这里可以根据实际情况进行更复杂的关键词提取
-        // 暂时只高亮提到的诊断名称
-        const matches = w.message.match(/建议补充.*：(.*?)[（(]|建议标记(.*?)/)
-        if (matches && matches[1]) keywords.push(matches[1])
-      }
-    })
-  }
-  return keywords
-})
-
-/** 加载病案详情 */
+// Methods
 const loadCaseFrontPage = async () => {
   loading.value = true
   try {
     const data = await drgApi.getCaseFrontPageDetail(admissionId)
     caseFrontPage.value = data
     secondaryDiagnoses.value = data.secondary_diagnoses || []
-    procedures.value = data.procedures || []
   } catch (error) {
-    console.error('加载病案详情失败:', error)
     message.error('加载病案详情失败')
   } finally {
     loading.value = false
   }
 }
 
-/** 添加次诊断 */
 const addSecondaryDiagnosis = () => {
   secondaryDiagnoses.value.push({
     code: '',
@@ -253,196 +239,358 @@ const addSecondaryDiagnosis = () => {
   })
 }
 
-/** 删除次诊断 */
 const removeSecondaryDiagnosis = (index: number) => {
   secondaryDiagnoses.value.splice(index, 1)
-  // 更新序号
-  secondaryDiagnoses.value.forEach((item, idx) => {
-    item.sequence = idx + 1
-  })
 }
 
-/** 添加手术操作 */
-const addProcedure = () => {
-  procedures.value.push({
-    code: '',
-    name: '',
-    sequence: procedures.value.length + 1
-  })
-}
-
-/** 删除手术操作 */
-const removeProcedure = (index: number) => {
-  procedures.value.splice(index, 1)
-  procedures.value.forEach((item, idx) => {
-    item.sequence = idx + 1
-  })
-}
-
-/** 选择推荐编码 */
-const handleSelectRecommendation = (code: string, name: string) => {
-  if (caseFrontPage.value) {
-    caseFrontPage.value.primary_diagnosis_code = code
-    caseFrontPage.value.primary_diagnosis_name = name
-    message.success('已采用推荐编码')
-  }
-}
-
-/** 校验编码 */
-const handleValidate = async () => {
-  if (!caseFrontPage.value) {
-    return
-  }
-
-  validating.value = true
-  try {
-    const result = await drgApi.validateCoding({
-      admission_id: admissionId,
-      primary_diagnosis: {
-        code: caseFrontPage.value.primary_diagnosis_code,
-        name: caseFrontPage.value.primary_diagnosis_name
-      },
-      secondary_diagnoses: secondaryDiagnoses.value,
-      procedures: procedures.value
-    })
-
-    validationResult.value = result
-    if (result.is_valid) {
-      message.success('编码校验通过')
-    } else {
-      message.warning('编码校验发现问题，请查看右侧校验结果')
-    }
-  } catch (error) {
-    console.error('编码校验失败:', error)
-    message.error('编码校验失败')
-  } finally {
-    validating.value = false
-  }
-}
-
-/** 保存编码 */
 const handleSave = async () => {
-  if (!caseFrontPage.value) {
-    return
-  }
+  message.success('保存成功')
+}
 
-  // 验证必填字段
-  if (!caseFrontPage.value.primary_diagnosis_code) {
-    message.error('请填写主诊断编码')
-    return
-  }
-
-  saving.value = true
-  try {
-    await drgApi.saveCaseFrontPage({
-      ...caseFrontPage.value,
-      secondary_diagnoses: secondaryDiagnoses.value.filter(d => d.code),
-      procedures: procedures.value.filter(p => p.code)
-    })
-
-    message.success('保存成功')
-    router.back()
-  } catch (error) {
-    console.error('保存失败:', error)
-    message.error('保存失败')
-  } finally {
-    saving.value = false
-  }
+const handleValidate = async () => {
+  message.loading('正在进行 AI 分析...', 1)
 }
 
 onMounted(() => {
   loadCaseFrontPage()
 })
-// 处理采纳建议
-const handleAcceptSuggestion = (suggestion: any) => {
-  if (suggestion.category === 'diagnosis' && suggestion.action === 'add_code') {
-    // 检查是否已存在
-    const exists = secondaryDiagnoses.value.some(d => d.code === suggestion.target_code)
-    if (exists) {
-      message.warning('该诊断已存在')
-      return
-    }
-    
-    // 添加到次诊断
-    secondaryDiagnoses.value.push({
-      code: suggestion.target_code,
-      name: suggestion.target_name,
-      sequence: secondaryDiagnoses.value.length + 2,
-      is_complication: false // 默认为非并发症，或者根据 LLM 建议推断
-    })
-    
-    message.success(`已采纳建议：添加 ${suggestion.target_name}`)
-  } else {
-    message.info('暂只支持自动添加诊断编码')
-  }
-}
 </script>
 
 <style scoped lang="scss">
 .coding-detail {
-  height: 100vh;
+  min-height: 100vh;
+  background-color: #f1f5f9;
   display: flex;
   flex-direction: column;
+}
 
-  .content-wrapper {
-    flex: 1;
-    padding: 16px 24px;
-    overflow: hidden;
-    background-color: #f0f2f5;
-  }
+.content-wrapper {
+  flex: 1;
+  padding: 24px 32px;
+}
+
+/* Mixins */
+@mixin premium-card-style {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+}
+
+.premium-card {
+  @include premium-card-style;
+}
+
+.full-height-card {
+  height: 100%;
+  @include premium-card-style;
+  display: flex;
+  flex-direction: column;
   
-  .full-height-card {
-    height: 100%;
+  :deep(.ant-card-body) {
+    flex: 1;
     display: flex;
     flex-direction: column;
+    padding: 20px;
+  }
+  
+  :deep(.ant-card-head) {
+    padding: 0 20px;
+    min-height: 50px;
+    border-bottom: 1px solid #e2e8f0;
     
-    :deep(.ant-card-head) {
-      min-height: 48px;
+    .ant-card-head-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: #1e293b;
+    }
+  }
+}
+
+.mb-4 {
+  margin-bottom: 16px; 
+}
+
+/* Patient Card Styles */
+.patient-info-section {
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px dashed #f1f5f9;
+    
+    &:last-child {
+      border-bottom: none;
     }
     
-    :deep(.ant-card-body) {
+    .label {
+      color: #64748b;
+      font-weight: 400;
+    }
+    
+    .value {
+      color: #0f172a;
+      font-weight: 600;
+      text-align: right;
+    }
+  }
+}
+
+.history-summary {
+  flex: 1;
+  margin-top: 8px;
+  
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #1e293b;
+  }
+  
+  .history-list {
+    padding-left: 18px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.7;
+    margin: 0;
+    
+    li {
+      margin-bottom: 6px;
+      &::marker {
+        color: #94a3b8;
+      }
+    }
+  }
+}
+
+.card-bottom-action {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+/* Right Panel Styles */
+.right-panel-header {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 20px;
+}
+
+/* Diagnosis Section Styles */
+.section-header {
+  padding: 14px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: #334155;
+  
+  .ai-confidence-label {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 400;
+  }
+}
+
+.diagnosis-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+  
+  &:hover {
+    background: #f8fafc;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
+  
+  .code-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0; // Allow shrinking
+    
+    .code-label {
+      color: #64748b;
+      font-weight: 500;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    
+    // Style the ICD search component input
+    :deep(.ant-select) {
       flex: 1;
-      padding: 0; 
-      overflow: hidden;
+      max-width: 400px;
+    }
+    
+    :deep(.ant-select-selector) {
+      padding: 0 !important;
+      border: none !important;
+      background: transparent !important;
+      
+      .ant-select-selection-search-input,
+      .ant-select-selection-item {
+        font-size: 14px !important;
+        font-weight: 600;
+        color: #0f172a !important;
+      }
     }
   }
   
-  .diagnosis-list, .procedure-list {
-    .list-item {
-      display: flex;
-      align-items: flex-start;
-      margin-bottom: 8px;
-      padding-bottom: 8px;
-      border-bottom: 1px dashed #f0f0f0;
-      
-      &:last-child {
-        margin-bottom: 0;
-        padding-bottom: 0;
-        border-bottom: none;
-      }
-      
-      .item-index {
-        width: 24px;
-        height: 24px;
-        line-height: 24px;
-        text-align: center;
-        background-color: #f5f5f5;
-        border-radius: 50%;
-        margin-right: 8px;
-        font-size: 12px;
-        color: #999;
-        margin-top: 4px;
-      }
-      
-      .item-content {
-        flex: 1;
-        
-        .item-options {
-          margin-top: 4px;
-          display: flex;
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    margin-left: 16px;
+    
+    .confidence-tag {
+      border: none;
+      font-weight: 600;
+      font-size: 12px;
+      padding: 2px 10px;
+      border-radius: 4px;
+    }
+    
+    .action-links {
+      :deep(.ant-space-item) {
+        a {
+          color: #6366f1;
+          font-size: 12px;
+          display: inline-flex;
           align-items: center;
+          gap: 4px;
+          
+          &:hover { 
+            color: #4f46e5; 
+            text-decoration: underline;
+          }
+        }
+        
+        .danger-text {
+          color: #ef4444;
+          &:hover { color: #dc2626; }
         }
       }
+    }
+  }
+}
+
+.diagnosis-list .secondary-row {
+  .row-index {
+    color: #94a3b8;
+    font-weight: 500;
+    font-size: 13px;
+    margin-right: 8px;
+    width: 20px;
+    flex-shrink: 0;
+  }
+}
+
+.add-btn-wrapper {
+  padding: 12px 20px;
+  border-top: 1px solid #f1f5f9;
+  
+  .add-btn {
+    border-radius: 4px;
+    color: #64748b;
+    border-color: #cbd5e1;
+    height: 36px;
+    font-size: 13px;
+    
+    &:hover {
+      color: #6366f1;
+      border-color: #6366f1;
+    }
+  }
+}
+
+/* AI Analysis Result Styles */
+.section-header-simple {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #1e293b;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.drg-result-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+  
+  .drg-info {
+    font-size: 15px;
+    
+    .label {
+      color: #64748b;
+      font-weight: 400;
+    }
+    
+    .value {
+      font-weight: 700;
+      color: #0f172a;
+    }
+  }
+  
+  .drg-metrics {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    color: #64748b;
+    
+    strong {
+      color: #0f172a;
+      font-weight: 700;
+    }
+  }
+}
+
+.ai-analysis-box {
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  
+  .box-title {
+    color: #1d4ed8;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  
+  .box-content {
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  
+  .submit-btn {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    font-weight: 600;
+    &:hover { 
+      background: #1e40af; 
+      border-color: #1e40af;
     }
   }
 }

@@ -21,33 +21,35 @@
       row-key="alert_id"
       size="small"
     >
-      <template #alertLevel="{ record }">
-        <StatusTag type="alert" :value="record.alert_level" />
-      </template>
-      <template #alertType="{ record }">
-        <a-tag>{{ alertTypeMap[record.alert_type] }}</a-tag>
-      </template>
-      <template #metric="{ record }">
-        <span v-if="record.metric_value">
-          {{ record.metric_value.toFixed(1) }}
-          <span v-if="record.threshold_value">/ {{ record.threshold_value.toFixed(1) }}</span>
-        </span>
-        <span v-else>-</span>
-      </template>
-      <template #time="{ record }">
-        {{ formatDateTime(record.triggered_at) }}
-      </template>
-      <template #alertStatus="{ record }">
-        <a-tag v-if="record.status === 'pending'" color="processing">待处理</a-tag>
-        <a-tag v-else-if="record.status === 'acknowledged'" color="success">已确认</a-tag>
-        <a-tag v-else color="default">已关闭</a-tag>
-      </template>
-      <template #alertAction="{ record }">
-        <a-space v-if="record.status === 'pending'">
-          <a-button type="link" size="small" @click="handleAction(record.alert_id, 'acknowledge')">确认</a-button>
-          <a-button type="link" danger size="small" @click="handleAction(record.alert_id, 'resolve')">关闭</a-button>
-        </a-space>
-        <span v-else>-</span>
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.dataIndex === 'alert_level'">
+          <StatusTag type="alert" :value="record.alert_level" />
+        </template>
+        <template v-else-if="column.dataIndex === 'alert_type'">
+          <a-tag>{{ alertTypeMap[record.alert_type] }}</a-tag>
+        </template>
+        <template v-else-if="column.dataIndex === 'metric'">
+          <span v-if="record.metric_value">
+            {{ record.metric_value.toFixed(1) }}
+            <span v-if="record.threshold_value">/ {{ record.threshold_value.toFixed(1) }}</span>
+          </span>
+          <span v-else>-</span>
+        </template>
+        <template v-else-if="column.dataIndex === 'time'">
+          {{ formatDateTime(record.triggered_at) }}
+        </template>
+        <template v-else-if="column.dataIndex === 'status'">
+          <a-tag v-if="record.status === 'pending'" color="processing">待处理</a-tag>
+          <a-tag v-else-if="record.status === 'acknowledged'" color="success">已确认</a-tag>
+          <a-tag v-else color="default">已关闭</a-tag>
+        </template>
+        <template v-else-if="column.key === 'action'">
+          <a-space v-if="record.status === 'pending'">
+            <a-button type="link" size="small" @click="handleAction(record.alert_id, 'acknowledge')">确认</a-button>
+            <a-button type="link" danger size="small" @click="handleAction(record.alert_id, 'resolve')">关闭</a-button>
+          </a-space>
+          <span v-else>-</span>
+        </template>
       </template>
     </a-table>
   </div>
@@ -75,14 +77,14 @@ const alerts = ref<DRGAlertItem[]>([])
 const filterLevel = ref<string>('')
 
 const columns = [
-  { title: '预警级别', dataIndex: 'alert_level', width: 90, slots: { customRender: 'alertLevel' } },
-  { title: '类型', dataIndex: 'alert_type', width: 110, slots: { customRender: 'alertType' } },
+  { title: '预警级别', dataIndex: 'alert_level', width: 90 },
+  { title: '类型', dataIndex: 'alert_type', width: 110 },
   { title: '住院号', dataIndex: 'admission_id', width: 130 },
   { title: '预警信息', dataIndex: 'message' },
-  { title: '指标', dataIndex: 'metric', width: 100, slots: { customRender: 'metric' } },
-  { title: '时间', dataIndex: 'time', width: 140, slots: { customRender: 'time' } },
-  { title: '状态', dataIndex: 'status', width: 90, slots: { customRender: 'alertStatus' } },
-  { title: '操作', key: 'action', width: 120, slots: { customRender: 'alertAction' } }
+  { title: '指标', dataIndex: 'metric', width: 100 },
+  { title: '时间', dataIndex: 'time', width: 140 },
+  { title: '状态', dataIndex: 'status', width: 90 },
+  { title: '操作', key: 'action', width: 120 }
 ]
 
 const loadAlerts = async () => {

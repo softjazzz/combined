@@ -1,63 +1,520 @@
 from __future__ import annotations
 
 """
-病案首页自动生成服务（骨架实现）
+病案首页自动生成服务（LLM 抽取版）
 
-当前版本：
-- 不调用真实 LLM，仅使用已有 demo JSON 数据构造 FrontPageDraft
-- 作为 /api/v1/frontpage/auto-generate-draft 的后端支撑
-
-后续可以在此文件中逐步接入：
-- 文书获取逻辑（根据 visit_id 调用 records / medical_documents API）
-- LLM 抽取逻辑（按模块拆 prompt，生成 FrontPageDraft）
+功能：
+- 从 visit_id 获取全病历文书（当前为 mock，后续接入真实 EMR）
+- 调用 LLM 分步抽取各模块字段（患者信息、住院信息、诊断、手术等）
+- 返回结构化的 FrontPageDraft
 """
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
+import logging
 
 from ..schemas.frontpage import FrontPageDraft
+from ..core.settings import get_settings
+from ..core.http import safe_post_json
+
+logger = logging.getLogger(__name__)
+
+
+class FrontPageLLMClient:
+    """病案首页抽取专用 LLM 客户端"""
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        if config:
+            self.api_endpoint: Optional[str] = config.get("api_endpoint")
+            self.api_key: Optional[str] = config.get("api_key")
+            self.model: str = config.get("model", "qwen-max")
+            self.timeout_seconds: int = config.get("timeout_seconds", 60)
+            custom_params = config.get("custom_parameters", {})
+            self.temperature: float = custom_params.get("temperature", 0.1)
+            self.max_tokens: int = custom_params.get("max_tokens", 4000)
+        else:
+            s = get_settings()
+            self.api_endpoint = str(s.SICHUAN_API_ENDPOINT) if s.SICHUAN_API_ENDPOINT else None
+            self.api_key = s.SICHUAN_API_KEY
+            self.model = s.SICHUAN_MODEL
+            self.timeout_seconds = 60
+            self.temperature = 0.1
+            self.max_tokens = 4000
+
+        logger.info(f"FrontPageLLMClient 初始化: model={self.model}")
+
+    async def generate(self, system_prompt: str, user_prompt: str) -> str:
+        """调用 LLM 生成响应"""
+        if not (self.api_endpoint and self.api_key):
+            logger.warning("LLM 未配置，返回空响应")
+            return ""
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "stream": False,
+        }
+
+        try:
+            result = await safe_post_json(
+                url=f"{self.api_endpoint}/chat/completions",
+                headers=headers,
+                payload=payload,
+                timeout_seconds=self.timeout_seconds,
+            )
+            choices = result.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+            return ""
+        except Exception as e:
+            logger.error(f"LLM 调用失败: {e}")
+            raise
+
+
+# ============================================================================
+# Prompt 模板
+# ============================================================================
+
+SYSTEM_PROMPT = """你是一位专业的病案信息提取专家，擅长从病历文书中提取结构化信息。
+请严格按照要求的 JSON 格式输出，不要添加任何额外说明。"""
+
+BASIC_INFO_PROMPT = """从以下病历中提取患者基本信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "patient_name": "姓名",
+  "gender": "1=男, 2=女",
+  "gender_text": "男/女",
+  "birth_date": "YYYY-MM-DD",
+  "age_years": 年龄数字,
+  "nationality": "国籍",
+  "ethnicity": "民族",
+  "marital_status": "1=未婚, 2=已婚, 3=丧偶, 4=离婚, 9=其他",
+  "marital_status_text": "婚姻状况文本",
+  "id_number": "身份证号",
+  "occupation": "职业",
+  "current_address": "现住址",
+  "contact_name": "联系人姓名",
+  "contact_relation": "联系人关系",
+  "contact_phone": "联系人电话"
+}}
+```
+
+直接输出 JSON，不要添加说明："""
+
+HOSPITALIZATION_PROMPT = """从以下病历中提取住院相关信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "hospital_name": "医院名称",
+  "admission_times_in_hospital": 第几次住院(数字),
+  "medical_record_no": "病案号",
+  "payment_method_text": "医疗付费方式",
+  "admission_way_text": "入院途径",
+  "admission_dept": "入院科别",
+  "admission_ward": "入院病房",
+  "admission_datetime": "YYYY-MM-DD HH:MM:SS",
+  "discharge_dept": "出院科别",
+  "discharge_ward": "出院病房",
+  "discharge_datetime": "YYYY-MM-DD HH:MM:SS",
+  "actual_hospital_days": 住院天数(数字)
+}}
+```
+
+直接输出 JSON，不要添加说明："""
+
+DIAGNOSES_PROMPT = """从以下病历中提取诊断信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "ed_diagnosis_texts": ["门/急诊诊断1", "门/急诊诊断2"],
+  "discharge_main_diagnosis_text": "出院主要诊断",
+  "discharge_other_diagnoses_texts": ["其他诊断1", "其他诊断2"],
+  "admission_condition": "1=有, 2=临床未确定, 3=情况不明, 4=无"
+}}
+```
+
+直接输出 JSON，不要添加说明："""
+
+PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "main_procedure_text": "主要手术名称",
+  "main_procedure_date": "YYYY-MM-DD",
+  "main_procedure_level": "手术级别",
+  "surgeon_name": "术者姓名",
+  "assistant1_name": "I助姓名",
+  "assistant2_name": "II助姓名",
+  "anesthesia_method": "麻醉方式",
+  "anesthetist_name": "麻醉医师姓名",
+  "incision_healing_grade": "切口愈合等级"
+}}
+```
+
+如果没有手术记录，所有字段返回 null。
+直接输出 JSON，不要添加说明："""
+
+OTHER_MEDICAL_INFO_PROMPT = """从以下病历中提取其他医疗信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "pathology_text": "病理诊断",
+  "pathology_no": "病理号",
+  "drug_allergy_flag": "1=无, 2=有",
+  "drug_allergy_drugs": ["过敏药物1", "过敏药物2"],
+  "abo_blood_type": "A/B/O/AB/不详/未查",
+  "rh_blood_type": "1=阴, 2=阳, 3=不详, 4=未查",
+  "rh_blood_type_text": "Rh血型文本",
+  "ventilation_hours": 机械通气小时数,
+  "icu_type": "ICU类型",
+  "icu_enter_time": "进入ICU时间",
+  "icu_leave_time": "退出ICU时间"
+}}
+```
+
+直接输出 JSON，不要添加说明："""
+
+STAFF_PROMPT = """从以下病历中提取医护人员信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "dept_director": "科主任",
+  "chief_physician": "主任(副主任)医师",
+  "attending_physician": "主治医师",
+  "resident_physician": "住院医师",
+  "responsible_nurse": "责任护士",
+  "coder": "编码员"
+}}
+```
+
+直接输出 JSON，不要添加说明："""
+
+
+# ============================================================================
+# F4: 入院病情推理 Prompt
+# ============================================================================
+
+ADMISSION_CONDITION_PROMPT = """你是一位资深病案编码专家，请根据《住院病案首页填写说明》附件2的标准，推理每个出院诊断的入院病情。
+
+【入院病情分类标准】
+| 代码 | 名称 | 判定依据 |
+|-----|------|---------|
+| 1 | 有 | 入院时已明确诊断（入院记录或初步诊断中有此诊断，且无"？"、"疑"等不确定标记） |
+| 2 | 临床未确定 | 入院时为疑诊（诊断带"？"、"待排"、"可疑"、"待查"等标记） |
+| 3 | 情况不明 | 窗口期或潜伏期疾病（如乙肝窗口期、肺炎潜伏期等，入院时无法判断） |
+| 4 | 无 | 住院期间新发生（入院记录完全无此诊断，在病程记录中首次出现的新发疾病） |
+
+【病历内容】
+{medical_text}
+
+【出院诊断列表】
+{diagnoses_text}
+
+【任务】
+对每个出院诊断，判断其入院病情代码（1-4），并给出推理依据。
+
+【输出格式】
+```json
+{{
+  "results": [
+    {{
+      "diagnosis": "出院诊断名称",
+      "admission_condition": 1,
+      "reasoning": "在入院记录初步诊断中明确记录为'急性心肌梗死'，无疑诊标记"
+    }},
+    {{
+      "diagnosis": "术后心力衰竭",
+      "admission_condition": 4,
+      "reasoning": "入院记录无此诊断，在第5天病程记录中首次出现术后心衰表现"
+    }}
+  ]
+}}
+```
+
+直接输出 JSON："""
 
 
 class FrontPageExtractionService:
-    """病案首页抽取服务（仅骨架 + demo 数据）"""
+    """病案首页抽取服务（LLM 版）"""
 
-    def __init__(self, base_dir: Optional[Path] = None) -> None:
-        # base_dir 指向 backend/app 目录，用于定位 data/frontpage_demo_case.json
+    def __init__(self, base_dir: Optional[Path] = None, llm_config: Optional[Dict[str, Any]] = None) -> None:
         if base_dir is None:
             base_dir = Path(__file__).resolve().parent.parent
         self.base_dir = base_dir
         self.demo_data_path = self.base_dir / "data" / "frontpage_demo_case.json"
+        self.llm_client = FrontPageLLMClient(llm_config)
+        self._use_llm = bool(self.llm_client.api_endpoint and self.llm_client.api_key)
+        logger.info(f"FrontPageExtractionService 初始化: use_llm={self._use_llm}")
 
     async def generate_draft_from_visit(self, visit_id: str) -> FrontPageDraft:
         """
-        根据住院 ID 生成首页草稿（当前版本：直接返回 demo 数据）
-
-        说明：
-        - 目前不解析真实病历，仅作为接口骨架和前端联调使用。
-        - 后续可在此处：
-          1. 根据 visit_id 拉取全病历文书；
-          2. 调用 LLM 抽取各模块字段；
-          3. 组装为 FrontPageDraft 返回。
+        根据住院 ID 生成首页草稿
+        
+        - 如果 LLM 已配置，调用 LLM 抽取
+        - 否则回退到 demo 数据
         """
-        return await self._load_demo_frontpage()
+        # 获取病历文本（当前为 demo，后续接入真实 EMR）
+        medical_text = await self._get_medical_text(visit_id)
+        
+        if self._use_llm and medical_text:
+            try:
+                return await self._extract_with_llm(medical_text)
+            except Exception as e:
+                logger.error(f"LLM 抽取失败，回退到 demo 数据: {e}")
+                return await self._load_demo_frontpage()
+        else:
+            return await self._load_demo_frontpage()
 
     async def generate_draft_from_documents(
         self, documents: List[Dict[str, Any]]
     ) -> FrontPageDraft:
-        """
-        根据传入的文书列表生成首页草稿（当前版本：忽略文书，返回 demo 数据）
+        """根据传入的文书列表生成首页草稿"""
+        # 合并文书内容
+        medical_text = "\n\n".join(
+            f"【{doc.get('type', '未知文书')}】\n{doc.get('content', '')}"
+            for doc in documents
+        )
+        
+        if self._use_llm and medical_text:
+            try:
+                return await self._extract_with_llm(medical_text)
+            except Exception as e:
+                logger.error(f"LLM 抽取失败，回退到 demo 数据: {e}")
+                return await self._load_demo_frontpage()
+        else:
+            return await self._load_demo_frontpage()
 
-        说明：
-        - 参数保留为 future use，方便后续直接对接真实文书。
+    async def _get_medical_text(self, visit_id: str) -> str:
+        """获取病历全文（当前为 demo，后续接入真实 EMR）"""
+        # TODO: 根据 visit_id 从 EMR 系统获取病历文书
+        if self.demo_data_path.exists():
+            with self.demo_data_path.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+            return payload.get("medical_text", "")
+        return ""
+
+    async def _extract_with_llm(self, medical_text: str) -> FrontPageDraft:
+        """使用 LLM 分步抽取各模块信息"""
+        logger.info("开始 LLM 分步抽取病案首页信息...")
+        
+        # 并行抽取各模块（可优化为并发）
+        basic_info = await self._extract_json(BASIC_INFO_PROMPT.format(medical_text=medical_text))
+        hospitalization = await self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text))
+        diagnoses = await self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text))
+        procedures = await self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text))
+        other_medical = await self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text))
+        staff = await self._extract_json(STAFF_PROMPT.format(medical_text=medical_text))
+        
+        # F4: 入院病情推理（在诊断提取完成后执行）
+        if diagnoses:
+            diagnoses = await self._infer_admission_conditions(medical_text, diagnoses)
+        
+        # F5/F7: ICD 编码推荐（诊断和手术）
+        if diagnoses:
+            diagnoses = await self._suggest_diagnosis_codes(diagnoses)
+        if procedures:
+            procedures = await self._suggest_procedure_codes(procedures)
+        
+        # 组装 FrontPageDraft
+        frontpage_data = {
+            "basic_info": basic_info or {},
+            "hospitalization": hospitalization or {},
+            "diagnoses": diagnoses or {},
+            "procedures": procedures or {},
+            "other_medical_info": other_medical or {},
+            "staff": staff or {},
+            "costs": {"total_cost": None, "self_paid": None, "categories": {}},  # 费用信息通常从 HIS 获取
+            "evidence": {},
+            "confidence": {},
+        }
+        
+        logger.info("LLM 抽取完成，构建 FrontPageDraft")
+        return FrontPageDraft.model_validate(frontpage_data)
+
+    async def _extract_json(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """调用 LLM 并解析 JSON 响应"""
+        try:
+            response = await self.llm_client.generate(SYSTEM_PROMPT, prompt)
+            return self._parse_json_response(response)
+        except Exception as e:
+            logger.error(f"LLM 抽取失败: {e}")
+            return None
+
+    def _parse_json_response(self, response: str) -> Optional[Dict[str, Any]]:
+        """解析 LLM 返回的 JSON"""
+        if not response:
+            return None
+        
+        # 尝试提取 JSON 块
+        import re
+        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # 尝试直接解析
+            json_start = response.find('{')
+            json_end = response.rfind('}')
+            if json_start != -1 and json_end != -1:
+                json_str = response[json_start:json_end + 1]
+            else:
+                return None
+        
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON 解析失败: {e}")
+            return None
+
+    async def _infer_admission_conditions(
+        self, medical_text: str, diagnoses: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        _ = documents  # 占位，避免未使用变量告警
-        return await self._load_demo_frontpage()
+        F4: 入院病情推理
+        
+        对每个出院诊断推理其入院病情代码（1-4）
+        """
+        # 构建诊断列表文本
+        all_diagnoses = []
+        
+        main_diag = diagnoses.get("discharge_main_diagnosis_text")
+        if main_diag:
+            all_diagnoses.append(f"1. 主要诊断: {main_diag}")
+        
+        other_diags = diagnoses.get("discharge_other_diagnoses_texts", [])
+        if other_diags:
+            for i, diag in enumerate(other_diags, start=2):
+                all_diagnoses.append(f"{i}. 其他诊断: {diag}")
+        
+        if not all_diagnoses:
+            logger.info("无出院诊断，跳过入院病情推理")
+            return diagnoses
+        
+        diagnoses_text = "\n".join(all_diagnoses)
+        
+        # 调用 LLM 推理
+        prompt = ADMISSION_CONDITION_PROMPT.format(
+            medical_text=medical_text,
+            diagnoses_text=diagnoses_text
+        )
+        
+        try:
+            response = await self.llm_client.generate(SYSTEM_PROMPT, prompt)
+            result = self._parse_json_response(response)
+            
+            if result and "results" in result:
+                # 提取主诊断的入院病情
+                for item in result["results"]:
+                    if item.get("diagnosis") == main_diag or "主要诊断" in item.get("diagnosis", ""):
+                        diagnoses["admission_condition"] = str(item.get("admission_condition", ""))
+                        diagnoses["admission_condition_reasoning"] = item.get("reasoning", "")
+                        break
+                
+                # 可选：存储所有诊断的入院病情推理结果
+                diagnoses["_admission_condition_details"] = result["results"]
+                logger.info(f"入院病情推理完成，共处理 {len(result['results'])} 个诊断")
+            else:
+                logger.warning("入院病情推理结果解析失败")
+                
+        except Exception as e:
+            logger.error(f"入院病情推理失败: {e}")
+        
+        return diagnoses
+
+    async def _suggest_diagnosis_codes(self, diagnoses: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        F5: 为诊断推荐 ICD-10 编码
+        """
+        from .icd_coding_service import get_icd_coding_service
+        icd_service = get_icd_coding_service()
+        
+        main_diag = diagnoses.get("discharge_main_diagnosis_text")
+        if main_diag:
+            suggestions = await icd_service.suggest_diagnosis_codes(main_diag, top_k=3)
+            if suggestions:
+                diagnoses["discharge_main_icd_suggestions"] = suggestions
+                # 自动填入最高置信度的编码
+                diagnoses["discharge_main_icd"] = suggestions[0].get("code")
+                logger.info(f"主诊断编码推荐: {main_diag} -> {suggestions[0].get('code')}")
+        
+        # 其他诊断编码推荐
+        other_diags = diagnoses.get("discharge_other_diagnoses_texts", [])
+        if other_diags:
+            other_icd_suggestions = []
+            other_icds = []
+            for diag in other_diags:
+                if diag:
+                    suggestions = await icd_service.suggest_diagnosis_codes(diag, top_k=1)
+                    if suggestions:
+                        other_icd_suggestions.append({
+                            "diagnosis": diag,
+                            "suggestions": suggestions
+                        })
+                        other_icds.append(suggestions[0].get("code"))
+                    else:
+                        other_icds.append(None)
+                else:
+                    other_icds.append(None)
+            
+            diagnoses["discharge_other_icd_suggestions"] = other_icd_suggestions
+            diagnoses["discharge_other_icds"] = other_icds
+        
+        return diagnoses
+
+    async def _suggest_procedure_codes(self, procedures: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        F7: 为手术推荐 ICD-9-CM-3 编码
+        """
+        from .icd_coding_service import get_icd_coding_service
+        icd_service = get_icd_coding_service()
+        
+        main_proc = procedures.get("main_procedure_text")
+        if main_proc:
+            suggestions = await icd_service.suggest_procedure_codes(main_proc, top_k=3)
+            if suggestions:
+                procedures["main_procedure_code_suggestions"] = suggestions
+                # 自动填入最高置信度的编码
+                procedures["main_procedure_code"] = suggestions[0].get("code")
+                logger.info(f"主手术编码推荐: {main_proc} -> {suggestions[0].get('code')}")
+        
+        return procedures
 
     async def _load_demo_frontpage(self) -> FrontPageDraft:
-        """
-        从 demo JSON 文件加载 FrontPageDraft
-        """
+        """从 demo JSON 文件加载 FrontPageDraft（回退方案）"""
         if not self.demo_data_path.exists():
             raise FileNotFoundError(
                 f"示例数据文件不存在: {self.demo_data_path}，请确认 frontpage_demo_case.json 是否存在。"
@@ -70,8 +527,7 @@ class FrontPageExtractionService:
         if not raw_frontpage:
             raise ValueError("示例数据中缺少 frontpage 字段")
 
-        # 兼容 demo JSON 中的 diagnosis_and_procedures 结构，
-        # 将其拆分为 FrontPageDraft 需要的 diagnoses + procedures 两块。
+        # 兼容 demo JSON 中的 diagnosis_and_procedures 结构
         diag_proc = raw_frontpage.get("diagnosis_and_procedures") or {}
 
         # 诊断部分
@@ -105,7 +561,6 @@ class FrontPageExtractionService:
             "incision_healing_grade": main_proc.get("incision_healing_grade"),
         }
 
-        # 将拆分后的结构合并回 frontpage 数据，用于 Pydantic 验证
         frontpage_data = {
             **raw_frontpage,
             "diagnoses": diagnoses,
@@ -115,5 +570,5 @@ class FrontPageExtractionService:
         return FrontPageDraft.model_validate(frontpage_data)
 
 
-# 提供一个单例风格的访问方式，方便在路由中复用
+# 提供单例风格的访问方式
 default_frontpage_service = FrontPageExtractionService()

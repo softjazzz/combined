@@ -4,9 +4,10 @@
       title="编码辅助"
       sub-title="ICD 编码推荐和校验"
       @back="() => $router.back()"
+      class="page-header"
     >
       <template #extra>
-        <a-button type="primary" @click="refreshList">
+        <a-button type="primary" @click="refreshList" class="refresh-btn">
           <template #icon><ReloadOutlined /></template>
           刷新
         </a-button>
@@ -15,12 +16,12 @@
 
     <div class="content-wrapper">
       <!-- 筛选条件 -->
-      <a-card class="filter-card" :bordered="false">
-        <a-form layout="inline">
+      <div class="filter-bar">
+        <a-form layout="inline" class="filter-form">
           <a-form-item label="编码状态">
             <a-select
               v-model:value="filters.codingStatus"
-              style="width: 150px"
+              style="width: 140px"
               placeholder="全部"
               allowClear
               @change="handleFilterChange"
@@ -35,7 +36,7 @@
           <a-form-item label="审核状态">
             <a-select
               v-model:value="filters.reviewStatus"
-              style="width: 150px"
+              style="width: 140px"
               placeholder="全部"
               allowClear
               @change="handleFilterChange"
@@ -51,7 +52,7 @@
             <a-input
               v-model:value="filters.patientName"
               placeholder="输入患者姓名"
-              style="width: 150px"
+              style="width: 140px"
               allowClear
               @change="handleFilterChange"
             />
@@ -61,67 +62,80 @@
             <a-input
               v-model:value="filters.admissionId"
               placeholder="输入住院号"
-              style="width: 180px"
+              style="width: 160px"
               allowClear
               @change="handleFilterChange"
             />
           </a-form-item>
         </a-form>
-      </a-card>
+      </div>
 
       <!-- 病案列表 -->
-      <a-card :bordered="false" style="margin-top: 16px">
+      <div class="table-card">
         <TableSkeleton v-if="loading" :rows="10" :columns="8" />
         <a-table
           v-else
           :columns="columns"
           :data-source="dataSource"
           :pagination="pagination"
-          :scroll="{ x: 1300 }"
+          :scroll="{ x: 1200 }"
           @change="handleTableChange"
           row-key="front_page_id"
+          class="premium-table"
         >
-          <!-- 患者信息 -->
-          <template #patient="{ record }">
-            <div>
-              <div><strong>{{ record.patient_name }}</strong></div>
-              <div style="color: #999; font-size: 12px">
-                {{ getGenderText(record.patient_gender) }} / {{ record.patient_age }}岁
+          <template #bodyCell="{ column, record }">
+            <!-- 患者信息 -->
+            <template v-if="column.dataIndex === 'patient'">
+              <div class="patient-cell">
+                <div class="patient-name">{{ record.patient_name }}</div>
+                <div class="patient-meta">
+                  {{ getGenderText(record.patient_gender) }} / {{ record.patient_age }}岁
+                </div>
               </div>
-            </div>
-          </template>
+            </template>
 
-          <!-- 主诊断 -->
-          <template #diagnosis="{ record }">
-            <div>
-              <a-tag color="blue">{{ record.primary_diagnosis_code }}</a-tag>
-              <div style="margin-top: 4px">{{ record.primary_diagnosis_name }}</div>
-            </div>
-          </template>
+            <!-- 主诊断 -->
+            <template v-else-if="column.dataIndex === 'diagnosis'">
+              <div class="diagnosis-cell">
+                <a-tag color="blue" class="code-tag">{{ record.primary_diagnosis_code }}</a-tag>
+                <div class="diagnosis-name">{{ record.primary_diagnosis_name }}</div>
+              </div>
+            </template>
 
-          <!-- 编码状态 -->
-          <template #codingStatus="{ record }">
-            <StatusTag type="coding" :value="record.coding_status" />
-          </template>
+            <!-- 住院天数 -->
+            <template v-else-if="column.dataIndex === 'total_hospital_days'">
+              <span class="days-text">{{ record.total_hospital_days ? `${record.total_hospital_days}天` : '-' }}</span>
+            </template>
 
-          <!-- 审核状态 -->
-          <template #reviewStatus="{ record }">
-            <StatusTag type="review" :value="record.review_status" />
-          </template>
+            <!-- 编码状态 -->
+            <template v-else-if="column.dataIndex === 'coding_status'">
+              <StatusTag type="coding" :value="record.coding_status" />
+            </template>
 
-          <!-- 操作 -->
-          <template #action="{ record }">
-            <a-space>
-              <a-button type="link" size="small" @click="goToDetail(record.admission_id)">
-                编码
-              </a-button>
-              <a-button type="link" size="small" v-if="record.coding_status === 'completed'">
-                审核
-              </a-button>
-            </a-space>
+            <!-- 审核状态 -->
+            <template v-else-if="column.dataIndex === 'review_status'">
+              <StatusTag type="review" :value="record.review_status" />
+            </template>
+
+            <!-- 编码员 -->
+            <template v-else-if="column.dataIndex === 'coder_id'">
+              <span class="coder-text">{{ record.coder_id || '-' }}</span>
+            </template>
+
+            <!-- 操作 -->
+            <template v-else-if="column.key === 'action'">
+              <a-space size="small">
+                <a-button type="link" size="small" class="action-link" @click="goToDetail(record.admission_id)">
+                  <EditOutlined /> 编码
+                </a-button>
+                <a-button type="link" size="small" class="action-link review-link" v-if="record.coding_status === 'completed'">
+                  <CheckCircleOutlined /> 审核
+                </a-button>
+              </a-space>
+            </template>
           </template>
         </a-table>
-      </a-card>
+      </div>
     </div>
   </div>
 </template>
@@ -130,7 +144,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { ReloadOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, EditOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
 import { drgApi } from '@/api/drg'
 import StatusTag from '@/components/drg/StatusTag.vue'
 import TableSkeleton from '@/components/common/TableSkeleton.vue'
@@ -140,7 +154,7 @@ import type { TableProps } from 'ant-design-vue'
 
 const router = useRouter()
 
-/** 表格列定义 */
+/** 表格列定义 - Updated to remove deprecated slots */
 const columns = [
   {
     title: '住院号',
@@ -151,45 +165,41 @@ const columns = [
   {
     title: '患者信息',
     dataIndex: 'patient',
-    width: 150,
-    slots: { customRender: 'patient' }
+    width: 140
   },
   {
     title: '主诊断',
     dataIndex: 'diagnosis',
-    width: 250,
-    slots: { customRender: 'diagnosis' }
+    width: 280
   },
   {
     title: '住院天数',
     dataIndex: 'total_hospital_days',
-    width: 100,
-    customRender: ({ text }: any) => text ? `${text}天` : '-'
+    width: 90,
+    align: 'center'
   },
   {
     title: '编码状态',
     dataIndex: 'coding_status',
     width: 100,
-    slots: { customRender: 'codingStatus' }
+    align: 'center'
   },
   {
     title: '审核状态',
     dataIndex: 'review_status',
     width: 100,
-    slots: { customRender: 'reviewStatus' }
+    align: 'center'
   },
   {
     title: '编码员',
     dataIndex: 'coder_id',
-    width: 120,
-    customRender: ({ text }: any) => text || '-'
+    width: 100
   },
   {
     title: '操作',
     key: 'action',
-    width: 150,
-    fixed: 'right',
-    slots: { customRender: 'action' }
+    width: 140,
+    fixed: 'right'
   }
 ]
 
@@ -280,14 +290,174 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .coding-assistant {
-  .content-wrapper {
-    padding: 16px;
-  }
+  min-height: 100vh;
+  background-color: #f1f5f9;
+}
 
-  .filter-card {
-    :deep(.ant-card-body) {
-      padding: 16px;
+.page-header {
+  background: #fff;
+  padding: 16px 32px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  
+  :deep(.ant-page-header-heading-title) {
+    font-weight: 700;
+    font-size: 18px;
+    color: #1e293b;
+  }
+  
+  :deep(.ant-page-header-heading-sub-title) {
+    color: #64748b;
+    font-size: 13px;
+  }
+  
+  .refresh-btn {
+    border-radius: 6px;
+    font-weight: 500;
+  }
+}
+
+.content-wrapper {
+  padding: 24px 32px;
+}
+
+.filter-bar {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+  
+  .filter-form {
+    :deep(.ant-form-item) {
+      margin-bottom: 0;
+      margin-right: 24px;
     }
+    
+    :deep(.ant-form-item-label > label) {
+      color: #64748b;
+      font-size: 13px;
+    }
+    
+    :deep(.ant-select-selector),
+    :deep(.ant-input) {
+      border-radius: 6px;
+      border-color: #e2e8f0;
+      
+      &:hover, &:focus {
+        border-color: #6366f1;
+      }
+    }
+  }
+}
+
+.table-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.premium-table {
+  :deep(.ant-table) {
+    font-size: 13px;
+  }
+  
+  :deep(.ant-table-thead > tr > th) {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 14px 16px;
+    font-size: 13px;
+  }
+  
+  :deep(.ant-table-tbody > tr > td) {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  
+  :deep(.ant-table-tbody > tr:hover > td) {
+    background: #f8fafc;
+  }
+  
+  :deep(.ant-table-tbody > tr:last-child > td) {
+    border-bottom: none;
+  }
+  
+  // Fixed columns styling
+  :deep(.ant-table-cell-fix-left),
+  :deep(.ant-table-cell-fix-right) {
+    background: #fff;
+  }
+  
+  :deep(.ant-table-tbody > tr:hover .ant-table-cell-fix-left),
+  :deep(.ant-table-tbody > tr:hover .ant-table-cell-fix-right) {
+    background: #f8fafc;
+  }
+}
+
+/* Cell Styles */
+.patient-cell {
+  .patient-name {
+    font-weight: 600;
+    color: #0f172a;
+    font-size: 14px;
+  }
+  
+  .patient-meta {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+}
+
+.diagnosis-cell {
+  .code-tag {
+    font-weight: 600;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  
+  .diagnosis-name {
+    margin-top: 4px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+}
+
+.days-text {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.coder-text {
+  color: #64748b;
+}
+
+.action-link {
+  color: #6366f1;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 0 4px;
+  
+  &:hover {
+    color: #4f46e5;
+  }
+  
+  :deep(.anticon) {
+    margin-right: 4px;
+  }
+}
+
+.review-link {
+  color: #10b981;
+  
+  &:hover {
+    color: #059669;
   }
 }
 </style>

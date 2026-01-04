@@ -99,3 +99,69 @@ async def auto_generate_frontpage_draft(
             trace_id=trace_id,
         )
 
+
+class ProfileAnalyzeRequest(BaseModel):
+    """医疗画像分析请求"""
+    visit_id: Optional[str] = None
+    medical_text: Optional[str] = None
+    frontpage_diagnoses: Optional[List[str]] = None
+    frontpage_procedures: Optional[List[str]] = None
+
+
+@router.post("/profile/analyze")
+async def analyze_medical_profile(
+    request: Request,
+    payload: ProfileAnalyzeRequest,
+):
+    """
+    F13：疾病诊断和手术操作画像分析
+    
+    功能：
+    1. 诊断时间轴提取
+    2. 手术闭环验证
+    3. 首页差异分析
+    
+    返回：
+    - diagnosis_timeline: 诊断时间轴
+    - surgery_verification: 手术验证结果
+    - discrepancies: 差异分析
+    """
+    from ..services.diagnosis_surgery_profiling_service import get_profiling_service
+    
+    trace_id = get_trace_id(request)
+    
+    try:
+        service = get_profiling_service()
+        
+        # 获取病历文本
+        medical_text = payload.medical_text
+        if not medical_text and payload.visit_id:
+            # 从 visit_id 获取病历（复用 frontpage service）
+            fp_service = get_frontpage_service()
+            medical_text = await fp_service._get_medical_text(payload.visit_id)
+        
+        if not medical_text:
+            return error_response(
+                error="需要提供 medical_text 或有效的 visit_id",
+                code="MISSING_MEDICAL_TEXT",
+                trace_id=trace_id,
+            )
+        
+        # 分析画像
+        profile = await service.analyze_medical_profile(
+            medical_text=medical_text,
+            frontpage_diagnoses=payload.frontpage_diagnoses,
+            frontpage_procedures=payload.frontpage_procedures,
+        )
+        
+        return success_response(
+            data=profile.to_dict(),
+            message="医疗画像分析完成",
+            trace_id=trace_id,
+        )
+    except Exception as exc:
+        return error_response(
+            error=f"医疗画像分析失败: {exc}",
+            code="PROFILE_ANALYZE_ERROR",
+            trace_id=trace_id,
+        )

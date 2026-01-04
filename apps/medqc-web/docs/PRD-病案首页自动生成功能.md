@@ -103,6 +103,7 @@
 | F10 | 费用信息汇总 | P1 | 低 | 2天 |
 | F11 | 病案首页导出（3种格式） | P0 | 中 | 4天 |
 | F12 | 前端编辑界面 | P0 | 中 | 5天 |
+| F13 | 疾病诊断和手术操作画像 | P0 | 高 | 5天 |
 
 ### 3.2 F1：患者基本信息自动提取
 
@@ -737,6 +738,89 @@ CREATE INDEX idx_extraction_tasks_status ON front_page_extraction_tasks(status);
 
 ---
 
+### 3.8 F13：疾病诊断和手术操作画像
+
+#### 3.8.1 功能描述
+
+基于医院整体电子病历，自动构建患者的“疾病诊断和手术操作画像”，通过可视化时间轴和闭环验证机制，辅助医生在书写首页时进行查漏补缺。
+
+#### 3.8.2 核心能力
+
+**1. 诊断发生发展时间轴**
+*   **目标**：清晰展示患者病情变化轨迹，防止漏填过程中的重要并发症。
+*   **逻辑**：
+    *   聚合全病历（入院记录、病程记录、检验检查、医嘱、出院记录）中的诊断实体。
+    *   提取每个诊断的“首次出现时间”、“确诊时间”和“转归状态”。
+    *   构建时间轴：`入院 -> 初步诊断 -> 检查确诊 -> 治疗/手术 -> 并发症 -> 出院诊断`。
+
+**2. 手术操作闭环验证**
+*   **目标**：解决“手术漏填”或“计划未做却误填”的问题。
+*   **逻辑**：
+    *   **计划源**：提取“术前小结”、“手术审批单”、“长期/临时医嘱”（如备皮、禁食）。
+    *   **执行源**：提取“手术记录”、“麻醉记录”、“手术护理记录”。
+    *   **验证状态**：
+        *   `MATCH`（匹配）：计划且执行 -> 自动填入。
+        *   `PLANNED_NOT_DONE`（计划未执行）：提示医生确认（可能是取消手术）。
+        *   `DONE_NOT_PLANNED`（执行无计划）：提示医生补充审批文书（属于质控缺陷）。
+
+**3. 首页书写差异分析**
+*   **目标**：实时校验首页已填内容与病历画像的一致性。
+*   **纠错类型**：
+    *   **漏填提醒**：病历画像中有明确依据（如手术记录已存），但这首页未填写。
+    *   **无据提醒**：首页填写了某诊断，但在病历文书中找不到支持依据。
+    *   **不一致提醒**：首页填写的手术时间与麻醉记录时间不符。
+
+#### 3.8.3 用户交互设计（画像面板）
+
+在首页编辑界面的侧边栏或独立弹窗通过“画像视图”展示：
+
+```
+[ 时间轴视图 ]
+2023-10-01 09:00 [入院] 初步诊断：急性阑尾炎？
+       ↓
+2023-10-01 10:30 [检查] B超提示：阑尾肿大
+       ↓
+2023-10-01 14:00 [手术] 腹腔镜下阑尾切除术 (验证通过: 手术记录+麻醉记录)
+       ↓
+2023-10-03 08:00 [查房] 发现切口红肿 (并发症线索) -> 首页建议补充: 切口感染
+       ↓
+2023-10-05 10:00 [出院] 出院诊断：急性阑尾炎
+```
+
+#### 3.8.4 输出数据结构
+
+```typescript
+interface MedicalProfile {
+  // 诊断时间轴
+  diagnosis_timeline: Array<{
+    diagnosis_name: string
+    first_mention_time: string
+    first_mention_source: string // 文书名称
+    status: "suspected" | "confirmed" | "ruled_out"
+    timeline_events: Array<{ time: string, event: string, source: string }>
+  }>
+
+  // 手术验证
+  surgery_verification: Array<{
+    surgery_name: string
+    plan_source?: string // 医嘱/通知单
+    execution_source?: string // 手术记录
+    verification_status: "verified" | "planned_only" | "executed_only"
+    execution_time?: string
+  }>
+  
+  // 差异分析
+  discrepancies: Array<{
+    type: "missing_in_frontpage" | "not_supported_by_record"
+    item_category: "diagnosis" | "procedure"
+    item_name: string
+    suggestion: string
+  }>
+}
+```
+
+---
+
 ## 8. 成功指标
 
 ### 8.1 业务指标
@@ -767,4 +851,5 @@ CREATE INDEX idx_extraction_tasks_status ON front_page_extraction_tasks(status);
 | 版本 | 日期 | 修改内容 | 修改人 |
 |-----|------|---------|--------|
 | v1.0 | 2025-01-19 | 初始版本 | - |
+| v1.1 | 2025-01-19 | 新增F13疾病诊断和手术操作画像 | Antigravity |
 

@@ -1,0 +1,73 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Medical Insurance Form</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom styles to mimic the printed form aesthetic */
+    input[type="text"], input[type="number"] {
+      background: transparent;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="number"]:focus {
+      outline: none;
+      border-bottom-color: #2563eb;
+      background: rgba(37, 99, 235, 0.05);
+    }
+    .form-input-line {
+      border-bottom: 1px solid #000;
+      padding-left: 0.25rem;
+      padding-right: 0.25rem;
+      text-align: center;
+    }
+    .print-border {
+      border: 2px solid #000;
+    }
+    .cell-border {
+      border: 1px solid #000;
+    }
+    /* Hide number spinners */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    @media print {
+      body {
+        background: white;
+      }
+      .no-print {
+        display: none;
+      }
+      .shadow-2xl {
+        box-shadow: none;
+      }
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "rxjs": "https://esm.sh/rxjs@^7.8.2?conditions=es2015",
+    "rxjs/operators": "https://esm.sh/rxjs@^7.8.2/operators?conditions=es2015",
+    "rxjs/ajax": "https://esm.sh/rxjs@^7.8.2/ajax?conditions=es2015",
+    "rxjs/webSocket": "https://esm.sh/rxjs@^7.8.2/webSocket?conditions=es2015",
+    "rxjs/testing": "https://esm.sh/rxjs@^7.8.2/testing?conditions=es2015",
+    "rxjs/fetch": "https://esm.sh/rxjs@^7.8.2/fetch?conditions=es2015",
+    "@angular/compiler": "https://esm.sh/@angular/compiler@^21.0.6?external=rxjs",
+    "@angular/platform-browser": "https://esm.sh/@angular/platform-browser@^21.0.6?external=rxjs",
+    "@angular/core": "https://esm.sh/@angular/core@^21.0.6?external=rxjs",
+    "@angular/common": "https://esm.sh/@angular/common@^21.0.6?external=rxjs",
+    "@angular/forms": "https://esm.sh/@angular/forms@^21.0.6?external=rxjs"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8 font-serif text-sm md:text-base text-gray-900">
+  <app-root></app-root>
+</body>
+</html>

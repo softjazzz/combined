@@ -30,10 +30,21 @@
                 :allow-clear="false"
                 @change="loadAnalysisData"
               />
-              <a-button @click="handleExport" :loading="exporting">
-                <template #icon><DownloadOutlined /></template>
-                导出报表
-              </a-button>
+              <a-dropdown>
+                <template #overlay>
+                  <a-menu @click="handleExportMenu">
+                    <a-menu-item key="excel">
+                      <FileExcelOutlined /> 导出 Excel
+                    </a-menu-item>
+                    <a-menu-item key="pdf">
+                      <FilePdfOutlined /> 导出 PDF 报告
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+                <a-button :loading="exporting">
+                  <DownloadOutlined /> 导出报表 <DownOutlined />
+                </a-button>
+              </a-dropdown>
               <a-button type="primary" :loading="loading" @click="loadAnalysisData">
                 <template #icon><ReloadOutlined /></template>
                 刷新
@@ -111,6 +122,24 @@
         </div>
       </a-card>
 
+      <!-- 医生绩效对比 (仅在医生维度显示) -->
+      <a-row v-if="dimension === 'doctor'" :gutter="16" style="margin-bottom: 16px">
+        <a-col :span="12">
+          <a-card title="医生绩效雷达图" :bordered="false" :loading="loading">
+            <div style="width: 100%; height: 380px">
+              <v-chart class="chart" :option="doctorRadarOption" autoresize />
+            </div>
+          </a-card>
+        </a-col>
+        <a-col :span="12">
+          <a-card title="医生 vs 科室平均对比" :bordered="false" :loading="loading">
+            <div style="width: 100%; height: 380px">
+              <v-chart class="chart" :option="doctorBenchmarkOption" autoresize />
+            </div>
+          </a-card>
+        </a-col>
+      </a-row>
+
       <!-- 详细数据表格 -->
       <a-card :title="tableTitle" :bordered="false">
         <template #extra>
@@ -155,14 +184,17 @@ import {
   RiseOutlined,
   FallOutlined,
   ReloadOutlined,
-  DownloadOutlined
+  DownloadOutlined,
+  DownOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined
 } from '@ant-design/icons-vue'
-import { exportToExcel } from '@/utils/export'
+import { exportToExcel, exportComprehensiveReport, type ExportFormat } from '@/utils/export'
 
 // ECharts imports
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, BarChart, LineChart } from 'echarts/charts'
+import { PieChart, BarChart, LineChart, RadarChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -183,6 +215,7 @@ use([
   PieChart,
   BarChart,
   LineChart,
+  RadarChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -217,6 +250,8 @@ const tableData = ref<AnalysisTableItem[]>([])
 const drgDistributionOption = ref<EChartsOption>({})
 const profitAnalysisOption = ref<EChartsOption>({})
 const costRateTrendOption = ref<EChartsOption>({})
+const doctorRadarOption = ref<EChartsOption>({})
+const doctorBenchmarkOption = ref<EChartsOption>({})
 
 /** 表格标题 */
 const tableTitle = computed(() => {
@@ -277,7 +312,19 @@ const dynamicColumns = computed(() => {
 
 const exporting = ref(false)
 
-const handleExport = async () => {
+const dimensionLabelMap: Record<string, string> = {
+  hospital: '全院概览',
+  department: '科室分析',
+  doctor: '医生绩效',
+  drg: 'DRG组分析'
+}
+
+const handleExportMenu = async (e: { key: string }) => {
+  const format = e.key as ExportFormat
+  await handleExport(format)
+}
+
+const handleExport = async (format: ExportFormat = 'excel') => {
   if (tableData.value.length === 0) {
     message.warning('暂无数据可导出')
     return
@@ -285,23 +332,38 @@ const handleExport = async () => {
 
   exporting.value = true
   try {
-    // 构建导出文件名
     const dateStr = dateRange.value.map((d: any) => d.format('YYYYMMDD')).join('-')
-    const fileName = `DRG统计分析_${dimension.value}_${dateStr}`
+    const title = 'DRG Analysis Report'
     
-    // 构建表头映射
-    const headerMap: Record<string, string> = {
-      name: dynamicColumns.value[0].title as string,
-      caseCount: '总病例数',
-      cmi: 'CMI值',
-      totalRevenue: '总收入(元)',
-      totalCost: '总成本(元)',
-      profit: '盈亏金额(元)',
-      costRate: '费用消耗指数'
-    }
+    // 构建表头配置
+    const tableHeaders = [
+      { key: 'name', label: dynamicColumns.value[0].title as string },
+      { key: 'caseCount', label: 'Case Count' },
+      { key: 'cmi', label: 'CMI' },
+      { key: 'totalRevenue', label: 'Total Revenue' },
+      { key: 'totalCost', label: 'Total Cost' },
+      { key: 'profit', label: 'Profit/Loss' },
+      { key: 'costRate', label: 'Cost Rate' }
+    ]
 
-    exportToExcel(tableData.value, fileName, '分析报表', headerMap)
-    message.success('导出成功')
+    // 构建概览数据
+    const overview = [
+      { label: 'Total Cases', value: statistics.totalCases },
+      { label: 'Total Profit', value: `¥${statistics.totalProfit.toLocaleString()}` },
+      { label: 'Avg Cost Rate', value: `${statistics.avgCostRate.toFixed(1)}%` },
+      { label: 'DRG Group Count', value: statistics.drgGroupCount }
+    ]
+
+    exportComprehensiveReport({
+      title,
+      dateRange: dateStr,
+      dimension: dimensionLabelMap[dimension.value] || dimension.value,
+      overview,
+      tableData: tableData.value,
+      tableHeaders
+    }, format)
+
+    message.success(`${format.toUpperCase()} 导出成功`)
   } catch (error) {
     console.error('导出失败:', error)
     message.error('导出失败')
@@ -376,6 +438,99 @@ const updateTrendChart = (trends: { cost: any[]; cmi: any[] }) => {
   }
 }
 
+// ================== 医生绩效对比图表 ==================
+
+const updateDoctorRadarChart = (doctorData: AnalysisTableItem[]) => {
+  // 取前5名医生进行对比
+  const topDoctors = doctorData.slice(0, 5)
+  
+  doctorRadarOption.value = {
+    tooltip: { trigger: 'item' },
+    legend: {
+      data: topDoctors.map(d => d.name),
+      bottom: 0
+    },
+    radar: {
+      indicator: [
+        { name: '病例数', max: Math.max(...doctorData.map(d => d.caseCount)) * 1.2 },
+        { name: 'CMI值', max: 3 },
+        { name: '费用控制', max: 100 },
+        { name: '盈利能力', max: 100 },
+        { name: '效率指数', max: 100 }
+      ],
+      center: ['50%', '45%'],
+      radius: 100
+    },
+    series: [{
+      type: 'radar',
+      data: topDoctors.map((d, idx) => ({
+        value: [
+          d.caseCount,
+          d.cmi,
+          Math.max(0, 100 - (d.costRate - 0.8) * 100),
+          Math.min(100, 50 + d.profit / 10000),
+          Math.max(0, 100 - Math.abs(d.costRate - 1) * 50)
+        ],
+        name: d.name,
+        areaStyle: { opacity: 0.2 },
+        itemStyle: { color: getChartColor(idx) }
+      }))
+    }]
+  }
+}
+
+const updateDoctorBenchmarkChart = (doctorData: AnalysisTableItem[]) => {
+  // 计算科室平均值
+  const avgCMI = doctorData.reduce((sum, d) => sum + d.cmi, 0) / doctorData.length
+  const avgCostRate = doctorData.reduce((sum, d) => sum + d.costRate, 0) / doctorData.length
+  const avgProfit = doctorData.reduce((sum, d) => sum + d.profit, 0) / doctorData.length
+
+  // 取前8名医生
+  const topDoctors = doctorData.slice(0, 8)
+
+  doctorBenchmarkOption.value = {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: ['医生CMI', '科室平均CMI'] },
+    grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: topDoctors.map(d => d.name),
+      axisLabel: { rotate: 30, fontSize: 11 }
+    },
+    yAxis: [
+      { type: 'value', name: 'CMI', min: 0, max: 3 },
+      { type: 'value', name: '盈亏(万)', position: 'right' }
+    ],
+    series: [
+      {
+        name: '医生CMI',
+        type: 'bar',
+        data: topDoctors.map(d => d.cmi),
+        itemStyle: { color: '#6366f1', borderRadius: [4, 4, 0, 0] }
+      },
+      {
+        name: '科室平均CMI',
+        type: 'line',
+        data: topDoctors.map(() => avgCMI.toFixed(2)),
+        itemStyle: { color: '#f59e0b' },
+        lineStyle: { type: 'dashed' }
+      },
+      {
+        name: '盈亏额',
+        type: 'bar',
+        yAxisIndex: 1,
+        data: topDoctors.map(d => (d.profit / 10000).toFixed(1)),
+        itemStyle: {
+          color: (params: any) => {
+            return params.data >= 0 ? '#10b981' : '#ef4444'
+          },
+          borderRadius: [4, 4, 0, 0]
+        }
+      }
+    ]
+  }
+}
+
 // ================== 数据加载 ==================
 
 const loadAnalysisData = async () => {
@@ -402,6 +557,12 @@ const loadAnalysisData = async () => {
 
     // 更新表格
     tableData.value = res.tableData
+
+    // 如果是医生维度，更新医生对比图表
+    if (dimension.value === 'doctor' && res.tableData.length > 0) {
+      updateDoctorRadarChart(res.tableData)
+      updateDoctorBenchmarkChart(res.tableData)
+    }
 
     message.success('数据更新成功')
   } catch (error) {
