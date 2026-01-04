@@ -18,7 +18,7 @@ from app.schemas.appeal import (
     AppealFilters, AppealStats
 )
 from app.services.appeal_service import appeal_service
-from app.services.auth_service import get_current_user
+from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/appeals", tags=["申诉管理"])
 

@@ -29,42 +29,45 @@ class HandleAlertRequest(BaseModel):
 
 @router.post("/predict")
 async def predict_drg_grouping(payload: DRGPredictRequest) -> Dict[str, Any]:
+    from ..services.drg_grouping_service import get_drg_grouping_service
+    
     store = get_demo_drg_store()
     case = store.get_case_detail(payload.admission_id)
     if not case:
         raise HTTPException(status_code=404, detail=f"未找到住院号 {payload.admission_id} 的病案首页")
 
-    # Produce deterministic, demo-friendly grouping result
+    # 从病案首页提取分组所需信息
+    primary_diagnosis = case.get("principal_diagnosis_code", "I10.x00")
+    secondary_diagnoses = case.get("secondary_diagnosis_codes", [])
+    procedures = case.get("procedure_codes", [])
+    patient_age = case.get("patient_age", 58)
+    patient_gender = case.get("patient_gender", "M")
+    los = case.get("hospital_days", 7)
     total_cost = float(case.get("total_cost") or 0.0)
-    # Baseline is a simple function of cost to produce different cost rates
-    baseline_payment = max(8000.0, round(total_cost / 0.92, 2))
-    weight = round(baseline_payment / 20000.0, 3)
-    actual_cost = total_cost
-    profit_margin = round((baseline_payment - actual_cost) / baseline_payment, 4) if baseline_payment else 0.0
-
-    drg_code = "FJ15"
-    drg_name = "呼吸系统疾病（演示）"
-    adrg_code = "FJ1"
-    adrg_name = "呼吸系统相关疾病（演示）"
-
-    result = {
-        "adrg_code": adrg_code,
-        "adrg_name": adrg_name,
-        "drg_code": drg_code,
-        "drg_name": drg_name,
-        "weight": float(weight),
-        "baseline_payment": float(baseline_payment),
-        "expected_los": {"min": 7, "max": 12},
-        "confidence": 0.86,
-        "risk_level": "high" if profit_margin < -0.1 else ("medium" if profit_margin < 0.05 else "low"),
-        "grouping_logic": "[DEMO] 基于主诊断与手术/并发症的简化入组规则",
-        "actual_cost": float(actual_cost),
-        "profit_margin": float(profit_margin),
-    }
-
+    
+    # 调用真实 DRG 分组 API
+    service = get_drg_grouping_service()
+    result = await service.group_drg(
+        primary_diagnosis=primary_diagnosis,
+        secondary_diagnoses=secondary_diagnoses,
+        procedures=procedures,
+        patient_age=patient_age,
+        patient_gender=patient_gender,
+        los=los,
+        city_name=payload.region or "四川省",
+        total_fee=total_cost
+    )
+    
+    # 计算盈亏
+    baseline_payment = result.get("baseline_payment", 0)
+    profit_margin = round((baseline_payment - total_cost) / baseline_payment, 4) if baseline_payment else 0.0
+    result["actual_cost"] = total_cost
+    result["profit_margin"] = profit_margin
+    
+    # 记录分组历史
     store.append_grouping_history(payload.admission_id, result)
 
-    return {"data": result, "message": "分组成功"}
+    return {"data": result, "message": "分组成功" if result.get("success") else "分组失败（降级模式）"}
 
 
 @router.get("/grouping/{admission_id}/history")

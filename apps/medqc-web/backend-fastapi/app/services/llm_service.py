@@ -473,5 +473,277 @@ class LLMService:
             prompt += f"- {e.text} (证据: {e.evidence.text})\n"
             
         return prompt
+
+    # ============================================
+    # 病案首页结构化提取
+    # ============================================
+
+    async def extract_frontpage_structured(
+        self,
+        medical_text: str
+    ) -> Dict[str, Any]:
+        """
+        从病历原文中提取病案首页结构化数据
+        
+        Args:
+            medical_text: 病历原文（入院记录、出院小结等）
+            
+        Returns:
+            结构化的病案首页数据（患者信息、诊断、手术操作）
+        """
+        try:
+            if not self.client:
+                logger.warning("LLM 客户端未初始化，返回空结果")
+                return {}
+
+            system_prompt = """你是一位专业的医疗文档结构化专家，精通病案首页填写规范。
+你的任务是从病历原文中提取以下结构化信息，用于填写病案首页。
+
+需要提取的信息：
+1. basic_info（患者基本信息）：
+   - patient_name: 患者姓名
+   - gender_text: 性别（男/女）
+   - age_years: 年龄（数字）
+   - id_number: 身份证号（如有）
+   - marital_status_text: 婚姻状况
+   - occupation: 职业
+   - current_address: 现住址
+
+2. hospitalization（住院信息）：
+   - admission_datetime: 入院日期时间
+   - discharge_datetime: 出院日期时间
+   - admission_dept: 入院科室
+   - discharge_dept: 出院科室
+   - actual_hospital_days: 实际住院天数
+
+3. diagnoses（诊断信息）：
+   - discharge_main_diagnosis_text: 出院主诊断名称
+   - discharge_main_icd: 主诊断ICD-10编码（如无法确定填"待编码"）
+   - discharge_other_diagnoses_texts: 其他诊断名称列表
+
+4. procedures（手术操作信息）：
+   - main_procedure_text: 主要手术/操作名称
+   - main_procedure_code: ICD-9-CM-3编码（如无法确定填"待编码"）
+   - main_procedure_date: 手术日期
+   - surgeon_name: 术者姓名
+
+提取原则：
+- 严格基于病历原文提取，如病历中未提及则填写 null
+- 诊断名称保持原文表述
+- ICD编码尽量给出推荐，不确定时填"待编码"
+- 年龄提取数字部分
+
+输出格式为 JSON，结构如上所述。"""
+
+            user_prompt = f"""请从以下病历原文中提取病案首页结构化数据：
+
+{medical_text}
+
+请按照系统提示的格式输出 JSON。"""
+
+            logger.info("LLM 病案首页结构化提取开始")
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            
+            logger.info(f"LLM 病案首页结构化提取完成: 主诊断={result.get('diagnoses', {}).get('discharge_main_diagnosis_text', 'N/A')}")
+            return result
+
+        except Exception as e:
+            logger.error(f"LLM 病案首页结构化提取失败: {str(e)}")
+            return {}
+
+    async def analyze_patient_profile(
+        self,
+        medical_text: str,
+        frontpage_diagnoses: List[str] = None,
+        frontpage_procedures: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        AI 患者画像分析
+        
+        从病历原文中提取：
+        - 诊断发生发展时间轴
+        - 生命体征趋势
+        - 化验检查结果分析
+        - 风险评估
+        - 人体部位标记
+        
+        Args:
+            medical_text: 病历原文
+            frontpage_diagnoses: 首页诊断列表（用于交叉验证）
+            frontpage_procedures: 首页手术列表（用于交叉验证）
+            
+        Returns:
+            患者画像分析结果
+        """
+        try:
+            if not self.client:
+                logger.warning("LLM 客户端未初始化，返回模拟数据")
+                return self._get_mock_profile_data()
+
+            system_prompt = """你是一位资深医疗数据分析师，擅长从病历中提取关键临床信息并进行深度分析。
+
+请从病历原文中提取以下信息，输出 JSON 格式：
+
+{
+  "diagnosis_timeline": [
+    {
+      "date": "日期或时间点",
+      "event": "诊断/症状/检查事件描述",
+      "type": "symptom|diagnosis|examination|treatment",
+      "severity": "mild|moderate|severe|critical"
+    }
+  ],
+  "vital_signs": {
+    "blood_pressure": {
+      "values": [{"time": "时间", "systolic": 收缩压, "diastolic": 舒张压}],
+      "trend": "stable|rising|falling|fluctuating",
+      "assessment": "评估说明"
+    },
+    "heart_rate": {
+      "values": [{"time": "时间", "value": 心率}],
+      "trend": "stable|rising|falling",
+      "assessment": "评估说明"
+    },
+    "temperature": {
+      "values": [{"time": "时间", "value": 体温}],
+      "assessment": "评估说明"
+    }
+  },
+  "lab_results": {
+    "blood_glucose": {"value": 数值, "unit": "mmol/L", "status": "normal|high|low"},
+    "cholesterol": {"value": 数值, "unit": "mmol/L", "status": "normal|high|low"},
+    "triglycerides": {"value": 数值, "unit": "mmol/L", "status": "normal|high|low"},
+    "creatinine": {"value": 数值, "unit": "μmol/L", "status": "normal|high|low"},
+    "ldl": {"value": 数值, "unit": "mmol/L", "status": "normal|high|low"}
+  },
+  "risk_assessment": {
+    "overall_risk_score": 0-100的风险评分,
+    "risk_level": "low|medium|high|critical",
+    "primary_risks": ["主要风险因素1", "主要风险因素2"],
+    "recommendations": ["建议1", "建议2"]
+  },
+  "body_markers": [
+    {
+      "region": "heart|lung|liver|kidney|brain|pancreas|stomach",
+      "condition": "诊断/问题描述",
+      "severity": "mild|moderate|severe",
+      "position": {"top": "百分比", "left": "百分比"}
+    }
+  ],
+  "discrepancies": [
+    {
+      "type": "missing|mismatch|incomplete",
+      "field": "存在问题的字段",
+      "description": "差异描述",
+      "suggestion": "修正建议"
+    }
+  ]
+}
+
+注意：
+- 如果病历中未提及某项检查，对应字段设为 null
+- 时间轴按时间顺序排列
+- 风险评分基于诊断严重程度、合并症数量、年龄等综合评估
+- body_markers 的 position 用于前端可视化定位"""
+
+            frontpage_info = ""
+            if frontpage_diagnoses:
+                frontpage_info += f"\n首页诊断列表：{', '.join(frontpage_diagnoses)}"
+            if frontpage_procedures:
+                frontpage_info += f"\n首页手术列表：{', '.join(frontpage_procedures)}"
+
+            user_prompt = f"""请对以下病历进行深度画像分析：
+
+{medical_text}
+{frontpage_info}
+
+请按照系统提示的 JSON 格式输出分析结果。"""
+
+            logger.info("LLM 患者画像分析开始")
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.2,
+                max_tokens=3000,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            
+            logger.info(f"LLM 患者画像分析完成: 时间轴事件数={len(result.get('diagnosis_timeline', []))}")
+            return result
+
+        except Exception as e:
+            logger.error(f"LLM 患者画像分析失败: {str(e)}")
+            return self._get_mock_profile_data()
+
+    def _get_mock_profile_data(self) -> Dict[str, Any]:
+        """返回模拟的患者画像数据"""
+        return {
+            "diagnosis_timeline": [
+                {"date": "2026-01-01 10:30", "event": "因胸闷心悸入院", "type": "symptom", "severity": "moderate"},
+                {"date": "2026-01-01 14:00", "event": "心电图检查示ST段改变", "type": "examination", "severity": "moderate"},
+                {"date": "2026-01-02 09:00", "event": "冠状动脉造影术", "type": "treatment", "severity": "moderate"},
+                {"date": "2026-01-02 15:00", "event": "确诊冠状动脉粥样硬化", "type": "diagnosis", "severity": "severe"}
+            ],
+            "vital_signs": {
+                "blood_pressure": {
+                    "values": [
+                        {"time": "08:00", "systolic": 135, "diastolic": 85},
+                        {"time": "12:00", "systolic": 138, "diastolic": 88},
+                        {"time": "16:00", "systolic": 142, "diastolic": 92},
+                        {"time": "20:00", "systolic": 140, "diastolic": 90}
+                    ],
+                    "trend": "fluctuating",
+                    "assessment": "血压控制欠佳，需调整降压方案"
+                },
+                "heart_rate": {
+                    "values": [
+                        {"time": "08:00", "value": 78},
+                        {"time": "12:00", "value": 82},
+                        {"time": "16:00", "value": 85},
+                        {"time": "20:00", "value": 80}
+                    ],
+                    "trend": "stable",
+                    "assessment": "心率在正常范围内"
+                }
+            },
+            "lab_results": {
+                "blood_glucose": {"value": 7.8, "unit": "mmol/L", "status": "high"},
+                "cholesterol": {"value": 6.2, "unit": "mmol/L", "status": "high"},
+                "triglycerides": {"value": 2.8, "unit": "mmol/L", "status": "high"},
+                "creatinine": {"value": 95, "unit": "μmol/L", "status": "normal"},
+                "ldl": {"value": 3.5, "unit": "mmol/L", "status": "high"}
+            },
+            "risk_assessment": {
+                "overall_risk_score": 85,
+                "risk_level": "high",
+                "primary_risks": ["高血压控制不良", "血糖偏高", "血脂异常", "冠心病"],
+                "recommendations": ["调整降压药物", "强化血糖管理", "他汀类药物治疗", "定期心脏随访"]
+            },
+            "body_markers": [
+                {"region": "heart", "condition": "冠状动脉粥样硬化", "severity": "severe", "position": {"top": "32%", "left": "52%"}},
+                {"region": "pancreas", "condition": "糖代谢异常", "severity": "moderate", "position": {"top": "45%", "left": "55%"}}
+            ],
+            "discrepancies": []
+        }
+
+
 # 全局 LLM 服务实例
 llm_service = LLMService()

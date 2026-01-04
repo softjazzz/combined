@@ -19,7 +19,7 @@ from app.schemas.rectification import (
     TaskFilters, TaskStats
 )
 from app.services.rectification_service import rectification_service
-from app.services.auth_service import get_current_user
+from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/rectifications", tags=["整改管理"])
 

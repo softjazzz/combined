@@ -27,8 +27,8 @@ class AutoGenerateFrontPageRequest(BaseModel):
     """
     病案首页自动生成请求
 
-    - visit_id 与 documents 至少提供一个
-    - 当前骨架版本仅使用 demo 数据，不解析真实文书
+    - visit_id、documents、medical_text 至少提供一个
+    - 优先级：medical_text > documents > visit_id
     """
 
     visit_id: Optional[str] = Field(
@@ -37,10 +37,13 @@ class AutoGenerateFrontPageRequest(BaseModel):
     documents: Optional[List[FrontPageDocument]] = Field(
         default=None, description="可选：直接传入文书列表，用于调试"
     )
+    medical_text: Optional[str] = Field(
+        default=None, description="可选：直接传入病历全文进行提取"
+    )
 
     def ensure_valid(self) -> None:
-        if not self.visit_id and not self.documents:
-            raise ValueError("visit_id 和 documents 至少需要提供一个")
+        if not self.visit_id and not self.documents and not self.medical_text:
+            raise ValueError("visit_id、documents、medical_text 至少需要提供一个")
 
 
 def get_frontpage_service() -> FrontPageExtractionService:
@@ -76,8 +79,11 @@ async def auto_generate_frontpage_draft(
         )
 
     try:
-        if payload.documents:
-            draft: FrontPageDraft = await service.generate_draft_from_documents(
+        if payload.medical_text:
+            # 直接从传入的病历文本提取
+            draft: FrontPageDraft = await service.extract_from_text(payload.medical_text)
+        elif payload.documents:
+            draft = await service.generate_draft_from_documents(
                 [doc.model_dump() for doc in payload.documents]
             )
         else:
@@ -85,8 +91,8 @@ async def auto_generate_frontpage_draft(
             draft = await service.generate_draft_from_visit(payload.visit_id or "demo")
 
         return success_response(
-            data={"frontpage": draft.model_dump()},  # visit 结构后续可补充
-            message="自动生成病案首页草稿成功（demo 数据）",
+            data={"frontpage": draft.model_dump()},
+            message="自动生成病案首页草稿成功",
             trace_id=trace_id,
         )
     except HTTPException:

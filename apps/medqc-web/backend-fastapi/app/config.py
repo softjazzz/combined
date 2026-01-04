@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # LLM 配置（DeepSeek）
     DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_API_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    DEEPSEEK_MODEL: str = "deepseek-v3"
+    DEEPSEEK_MODEL: str = "qwen3-next-80b-a3b-instruct"
 
     # OpenDRG 配置
     OPENDRG_DEFAULT_REGION: str = "sichuan"

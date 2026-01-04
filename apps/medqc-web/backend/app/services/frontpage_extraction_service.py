@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
 import logging
+import asyncio
 
 from ..schemas.frontpage import FrontPageDraft
 from ..core.settings import get_settings
@@ -319,6 +320,31 @@ class FrontPageExtractionService:
         else:
             return await self._load_demo_frontpage()
 
+    async def extract_from_text(self, medical_text: str) -> FrontPageDraft:
+        """
+        直接从病历文本提取病案首页信息
+        
+        Args:
+            medical_text: 病历全文
+            
+        Returns:
+            FrontPageDraft: 提取的首页草稿
+        """
+        if not medical_text or not medical_text.strip():
+            logger.warning("传入的病历文本为空，回退到 demo 数据")
+            return await self._load_demo_frontpage()
+        
+        if self._use_llm:
+            try:
+                logger.info(f"开始从文本提取首页信息，文本长度: {len(medical_text)}")
+                return await self._extract_with_llm(medical_text)
+            except Exception as e:
+                logger.error(f"LLM 抽取失败: {e}")
+                raise
+        else:
+            logger.warning("LLM 未配置，回退到 demo 数据")
+            return await self._load_demo_frontpage()
+
     async def _get_medical_text(self, visit_id: str) -> str:
         """获取病历全文（当前为 demo，后续接入真实 EMR）"""
         # TODO: 根据 visit_id 从 EMR 系统获取病历文书
@@ -332,13 +358,32 @@ class FrontPageExtractionService:
         """使用 LLM 分步抽取各模块信息"""
         logger.info("开始 LLM 分步抽取病案首页信息...")
         
-        # 并行抽取各模块（可优化为并发）
-        basic_info = await self._extract_json(BASIC_INFO_PROMPT.format(medical_text=medical_text))
-        hospitalization = await self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text))
-        diagnoses = await self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text))
-        procedures = await self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text))
-        other_medical = await self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text))
-        staff = await self._extract_json(STAFF_PROMPT.format(medical_text=medical_text))
+        # 并行抽取各模块
+        try:
+            results = await asyncio.gather(
+                self._extract_json(BASIC_INFO_PROMPT.format(medical_text=medical_text)),
+                self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text)),
+                self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text)),
+                self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text)),
+                self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
+                self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
+                return_exceptions=True
+            )
+            
+            # 处理结果，过滤异常
+            processed_results = []
+            for i, res in enumerate(results):
+                if isinstance(res, Exception):
+                    logger.error(f"模块 {i} 抽取失败: {res}")
+                    processed_results.append(None)
+                else:
+                    processed_results.append(res)
+                    
+            basic_info, hospitalization, diagnoses, procedures, other_medical, staff = processed_results
+            
+        except Exception as e:
+            logger.error(f"并行抽取发生严重错误: {e}")
+            raise e
         
         # F4: 入院病情推理（在诊断提取完成后执行）
         if diagnoses:

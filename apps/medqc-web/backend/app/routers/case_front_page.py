@@ -32,3 +32,32 @@ async def upsert_case_front_page(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     store = get_demo_drg_store()
     return store.upsert_case(admission_id=admission_id, patch=payload)
+
+
+from pydantic import BaseModel
+
+class ExtractCodingRequest(BaseModel):
+    medical_text: str
+    patient_age: int = 0
+    patient_gender: str = "M"
+
+@router.post("/extract-coding")
+async def extract_coding(payload: ExtractCodingRequest) -> Dict[str, Any]:
+    from ..services.external_coding_service import get_external_coding_service
+    
+    service = get_external_coding_service()
+    
+    try:
+        result = await service.extract_coding(
+            medical_text=payload.medical_text,
+            patient_context={
+                "age": payload.patient_age,
+                "gender": payload.patient_gender
+            }
+        )
+        return {
+            "success": True,
+            "data": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
