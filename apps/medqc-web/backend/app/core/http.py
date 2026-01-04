@@ -39,7 +39,8 @@ async def safe_post_json(url: str, headers: Dict[str, str], payload: Dict[str, A
     if not _is_allowed_host(host):
         raise ValueError(f"Outbound host not in allowlist: {host}")
 
-    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+    # 显式禁用环境代理，避免 SOCKS 代理导致的 socksio 包缺失问题
+    async with httpx.AsyncClient(timeout=timeout_seconds, trust_env=False) as client:
         resp = await client.post(url, headers=headers, json=payload)
         # 不直接 raise，尽量返回上游的 JSON 错误体，供调用方包装
         try:

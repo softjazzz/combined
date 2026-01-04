@@ -411,6 +411,23 @@
               <a-tab-pane key="hm" tab="HM 模板版">
                 <HmFrontpagePreview :draft="frontpage" />
               </a-tab-pane>
+              <a-tab-pane key="profile" tab="画像分析">
+                <div class="profile-actions" style="margin-bottom: 12px;">
+                  <a-button type="primary" @click="analyzeProfile" :loading="profileLoading" :disabled="!demoCase?.medical_text">
+                    <template #icon><ScanOutlined /></template>
+                    开始画像分析
+                  </a-button>
+                  <a-tag v-if="profile" color="green" style="margin-left: 8px;">分析完成</a-tag>
+                </div>
+                <DiagnosisSurgeryTimeline
+                  v-if="profile"
+                  :diagnosisTimeline="profile.diagnosis_timeline || []"
+                  :surgeryVerification="profile.surgery_verification || []"
+                  :discrepancies="profile.discrepancies || []"
+                  :loading="profileLoading"
+                />
+                <a-empty v-else description="点击上方按钮开始画像分析" />
+              </a-tab-pane>
             </a-tabs>
           </a-card>
         </a-col>
@@ -421,9 +438,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { FileTextOutlined } from '@ant-design/icons-vue'
+import { FileTextOutlined, ScanOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
+import DiagnosisSurgeryTimeline from '@/components/frontpage/DiagnosisSurgeryTimeline.vue'
 
 interface DemoCase {
   case_id: string
@@ -438,6 +456,52 @@ const demoCase = ref<DemoCase | null>(null)
 
 const frontpage = computed(() => demoCase.value?.frontpage || null)
 const insuranceClaim = computed(() => demoCase.value?.insurance_claim || null)
+
+// 画像分析相关
+const profile = ref<any>(null)
+const profileLoading = ref(false)
+
+const analyzeProfile = async () => {
+  if (!demoCase.value?.medical_text) {
+    message.warning('需要病历文本才能进行画像分析')
+    return
+  }
+  
+  profileLoading.value = true
+  try {
+    const response = await fetch('/api/v1/frontpage/profile/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        medical_text: demoCase.value.medical_text,
+        frontpage_diagnoses: frontpage.value?.diagnoses ? [
+          frontpage.value.diagnoses.discharge_main_diagnosis_text,
+          ...(frontpage.value.diagnoses.discharge_other_diagnoses_texts || [])
+        ].filter(Boolean) : [],
+        frontpage_procedures: frontpage.value?.procedures?.main_procedure_text 
+          ? [frontpage.value.procedures.main_procedure_text] 
+          : []
+      })
+    })
+    const data = await response.json()
+    if (data.success && data.data) {
+      profile.value = data.data
+      const issues = data.data.discrepancies?.length || 0
+      if (issues > 0) {
+        message.warning(`画像分析完成，发现 ${issues} 个差异需关注`)
+      } else {
+        message.success('画像分析完成')
+      }
+    } else {
+      message.error(data.error || '画像分析失败')
+    }
+  } catch (error) {
+    console.error('画像分析失败:', error)
+    message.error('画像分析失败')
+  } finally {
+    profileLoading.value = false
+  }
+}
 
 const loadDemoCase = async () => {
   loading.value = true

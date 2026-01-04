@@ -9,6 +9,10 @@
     >
       <template #extra>
         <a-space>
+          <a-button @click="showLoadModal = true" :loading="loading">
+            <template #icon><CloudDownloadOutlined /></template>
+            从病案导入
+          </a-button>
           <a-button @click="handleValidate">
             <template #icon><CheckCircleOutlined /></template>
             质控校验
@@ -581,6 +585,26 @@
         </a-col>
       </a-row>
     </div>
+
+    <!-- Load from Case Modal -->
+    <a-modal
+      v-model:open="showLoadModal"
+      title="从病案导入数据"
+      @ok="handleLoadFromCase"
+      :confirm-loading="loading"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="病案号 / 住院号">
+          <a-input v-model:value="loadCaseNumber" placeholder="请输入病案号" />
+        </a-form-item>
+        <a-alert
+          message="将从病案首页自动填充患者信息、诊断、手术等数据"
+          type="info"
+          show-icon
+          class="mt-2"
+        />
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
@@ -592,9 +616,12 @@ import {
   SaveOutlined,
   PrinterOutlined,
   CheckCircleOutlined,
-  CloseOutlined
+  CloseOutlined,
+  CloudDownloadOutlined
 } from '@ant-design/icons-vue'
 import type { SettlementForm, SettlementQCReport, OutpatientDiagnosisRow } from '@/types/settlement'
+import { validateSettlementForm, type QCContext } from '@/utils/settlementQC'
+import { drgApi } from '@/api/drg'
 
 // Form data
 const form = reactive<SettlementForm>({
@@ -789,8 +816,90 @@ const feeColumns = [
 
 // State
 const saving = ref(false)
+const loading = ref(false)
+const showLoadModal = ref(false)
+const loadCaseNumber = ref('')
 
 // Handlers
+const handleLoadFromCase = async () => {
+  if (!loadCaseNumber.value) {
+    message.warning('请输入病案号')
+    return
+  }
+  
+  loading.value = true
+  try {
+    const data = await drgApi.generateSettlementFromCase(loadCaseNumber.value)
+    
+    // 填充基本信息
+    Object.assign(form.basicInfo, data.basicInfo)
+    
+    // 填充住院信息
+    if (data.inpatientInfo) {
+      inpatientData.hospitalizationType = data.inpatientInfo.hospitalizationType as any
+      inpatientData.admissionRoute = data.inpatientInfo.admissionRoute as any
+      inpatientData.treatmentCategory = data.inpatientInfo.treatmentCategory as any
+      inpatientData.admissionDepartment = data.inpatientInfo.admissionDepartment || ''
+      inpatientData.dischargeDepartment = data.inpatientInfo.dischargeDepartment || ''
+      inpatientData.actualLOS = data.inpatientInfo.actualLOS
+      inpatientData.emergencyWestDiagnosis = data.inpatientInfo.emergencyWestDiagnosis || ''
+      inpatientData.emergencyTCMDiagnosis = data.inpatientInfo.emergencyTCMDiagnosis || ''
+      inpatientData.attendingPhysicianName = data.inpatientInfo.attendingPhysicianName || ''
+      inpatientData.attendingPhysicianCode = data.inpatientInfo.attendingPhysicianCode || ''
+      inpatientData.dischargeMethod = data.inpatientInfo.dischargeMethod as any
+      
+      // 填充诊断行
+      if (data.inpatientInfo.diagnosisRows && data.inpatientInfo.diagnosisRows.length > 0) {
+        diagnosisRows.value = data.inpatientInfo.diagnosisRows.map((d: any, i: number) => ({
+          id: i + 1,
+          westDiagnosis: d.westDiagnosis || '',
+          westCode: d.westCode || '',
+          admissionCondition: d.admissionCondition || '',
+          tcmDiagnosis: d.tcmDiagnosis || '',
+          tcmCode: d.tcmCode || ''
+        }))
+      }
+      
+      // 填充手术行
+      if (data.inpatientInfo.surgeryRows && data.inpatientInfo.surgeryRows.length > 0) {
+        surgeryRows.value = data.inpatientInfo.surgeryRows.map((s: any, i: number) => ({
+          id: i + 1,
+          name: s.name || '',
+          code: s.code || '',
+          date: s.date || '',
+          anesthesia: s.anesthesiaMethod || '',
+          surgeonName: s.surgeonName || '',
+          surgeonCode: s.surgeonCode || ''
+        }))
+      }
+      
+      // 设置日期
+      if (data.inpatientInfo.admissionTime) {
+        admissionTime.value = dayjs(data.inpatientInfo.admissionTime)
+      }
+      if (data.inpatientInfo.dischargeTime) {
+        dischargeTime.value = dayjs(data.inpatientInfo.dischargeTime)
+      }
+    }
+    
+    // 填充费用信息
+    if (data.feeInfo) {
+      feeData.businessSerialNumber = data.feeInfo.businessSerialNumber || ''
+      feeData.invoiceCode = data.feeInfo.invoiceCode || ''
+      feeData.invoiceNumber = data.feeInfo.invoiceNumber || ''
+      feeData.paymentMethod = data.feeInfo.paymentMethod || []
+    }
+    
+    showLoadModal.value = false
+    loadCaseNumber.value = ''
+    message.success('数据导入成功')
+  } catch (error: any) {
+    message.error(error.message || '导入失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 const handleSave = async () => {
   saving.value = true
   try {
@@ -807,15 +916,103 @@ const handlePrint = () => {
 
 const handleValidate = () => {
   qcVisible.value = true
-  // Mock validation
-  qcReport.errorCount = 2
-  qcReport.warningCount = 3
-  qcReport.results = [
-    { ruleId: 'QC001', field: '姓名', message: '姓名不能为空', severity: 'error', passed: false },
-    { ruleId: 'QC003', field: '主诊断代码', message: '请填写主诊断代码', severity: 'error', passed: false },
-    { ruleId: 'QC005', field: '住院天数', message: '住院天数与入出院日期不一致', severity: 'warning', passed: false }
-  ]
-  qcReport.isValid = qcReport.errorCount === 0
+  
+  // 构建完整的表单数据用于校验
+  const formData: SettlementForm = {
+    ...form,
+    inpatientInfo: {
+      hospitalizationType: inpatientData.hospitalizationType,
+      admissionRoute: inpatientData.admissionRoute,
+      treatmentCategory: inpatientData.treatmentCategory,
+      admissionTime: admissionTime.value?.format('YYYY-MM-DD HH:mm') || '',
+      admissionDepartment: inpatientData.admissionDepartment,
+      transferDepartment: inpatientData.transferDepartment,
+      dischargeTime: dischargeTime.value?.format('YYYY-MM-DD HH:mm') || '',
+      dischargeDepartment: inpatientData.dischargeDepartment,
+      actualLOS: inpatientData.actualLOS,
+      emergencyWestDiagnosis: inpatientData.emergencyWestDiagnosis,
+      emergencyWestCode: '',
+      emergencyTCMDiagnosis: inpatientData.emergencyTCMDiagnosis,
+      emergencyTCMCode: '',
+      diagnosisRows: diagnosisRows.value.map((r, i) => ({
+        id: i + 1,
+        westDiagnosis: r.westDiagnosis,
+        westCode: r.westCode,
+        admissionCondition: r.admissionCondition,
+        tcmDiagnosis: r.tcmDiagnosis,
+        tcmCode: r.tcmCode,
+        tcmAdmissionCondition: ''
+      })),
+      diagnosisCount: diagnosisRows.value.filter(r => r.westCode).length,
+      surgeryRows: surgeryRows.value.map((r, i) => ({
+        id: i + 1,
+        name: r.name,
+        code: r.code,
+        date: r.date,
+        anesthesiaMethod: r.anesthesia,
+        surgeonName: r.surgeonName,
+        surgeonCode: r.surgeonCode,
+        anesthesiologistName: '',
+        anesthesiologistCode: ''
+      })),
+      surgeryCount: surgeryRows.value.filter(r => r.code).length,
+      ventilatorDays: null,
+      ventilatorHours: null,
+      ventilatorMinutes: null,
+      comaBeforeAdmission: { days: null, hours: null, minutes: null },
+      comaAfterAdmission: { days: null, hours: null, minutes: null },
+      icuRows: [],
+      bloodType: '',
+      bloodVolume: '',
+      bloodUnit: '',
+      specialNursingDays: inpatientData.specialNursingDays,
+      level1NursingDays: inpatientData.level1NursingDays,
+      level2NursingDays: inpatientData.level2NursingDays,
+      level3NursingDays: inpatientData.level3NursingDays,
+      dischargeMethod: inpatientData.dischargeMethod,
+      transferInstitutionName: '',
+      transferInstitutionCode: '',
+      hasReadmissionPlan: null,
+      readmissionPurpose: '',
+      attendingPhysicianName: inpatientData.attendingPhysicianName,
+      attendingPhysicianCode: inpatientData.attendingPhysicianCode
+    },
+    feeInfo: {
+      businessSerialNumber: feeData.businessSerialNumber,
+      invoiceCode: feeData.invoiceCode,
+      invoiceNumber: feeData.invoiceNumber,
+      settlementPeriod: { start: '', end: '' },
+      feeItems: [],
+      totalAmount: { itemName: '合计', amount: null, classA: null, classB: null, selfPay: null, other: null },
+      fundPayments: fundPayItems.value.map(f => ({ itemName: f.name, amount: f.amount })),
+      personalSelfPay: feeData.personalSelfPay,
+      personalSelfExpense: feeData.personalSelfExpense,
+      personalAccountPay: feeData.personalAccountPay,
+      personalCashPay: feeData.personalCashPay,
+      paymentMethod: feeData.paymentMethod
+    }
+  }
+  
+  // 构建校验上下文
+  const context: QCContext = {
+    admissionTime: admissionTime.value ? admissionTime.value.toDate() : null,
+    dischargeTime: dischargeTime.value ? dischargeTime.value.toDate() : null
+  }
+  
+  // 执行校验
+  const report = validateSettlementForm(formData, context)
+  
+  // 更新 QC 报告
+  qcReport.errorCount = report.errorCount
+  qcReport.warningCount = report.warningCount
+  qcReport.results = report.results
+  qcReport.isValid = report.isValid
+  
+  if (report.isValid) {
+    message.success('校验通过，无错误')
+  } else {
+    message.warning(`发现 ${report.errorCount} 个错误，${report.warningCount} 个警告`)
+  }
 }
 </script>
 

@@ -93,7 +93,11 @@ export interface SurgeryRow {
     name: string                     // 手术及操作名称
     code: string                     // 手术及操作代码
     date: string                     // 手术及操作日期
+    startTime: string                // 手术开始时间
+    endTime: string                  // 手术结束时间
     anesthesiaMethod: string         // 麻醉方式
+    anesthesiaStartTime: string      // 麻醉开始时间
+    anesthesiaEndTime: string        // 麻醉结束时间
     surgeonName: string              // 术者医师姓名
     surgeonCode: string              // 术者医师代码
     anesthesiologistName: string     // 麻醉医师姓名
@@ -102,10 +106,18 @@ export interface SurgeryRow {
 
 export interface ICURow {
     id: number
-    type: string                     // 重症监护病房类型
+    icuType: string                  // 重症监护病房类型
     entryTime: string                // 进重症监护室时间
     exitTime: string                 // 出重症监护室时间
     totalHours: number | null        // 合计（小时）
+}
+
+// 输血记录
+export interface TransfusionRecord {
+    id: number
+    bloodType: string                // 输血品种
+    volume: number | null            // 输血量
+    unit: string                     // 输血计量单位
 }
 
 export interface SettlementInpatientInfo {
@@ -146,6 +158,7 @@ export interface SettlementInpatientInfo {
     ventilatorDays: number | null
     ventilatorHours: number | null
     ventilatorMinutes: number | null
+    ventilatorDuration: number | null  // 呼吸机使用时长(小时)
 
     // 昏迷时间
     comaBeforeAdmission: { days: number | null; hours: number | null; minutes: number | null }
@@ -153,8 +166,12 @@ export interface SettlementInpatientInfo {
 
     // ICU记录
     icuRows: ICURow[]
+    icuRecords: ICURow[]             // 别名，兼容QC规则
 
-    // 输血信息
+    // 输血记录
+    transfusionRecords: TransfusionRecord[]
+
+    // 输血信息 (legacy)
     bloodType: string                // 输血品种
     bloodVolume: string              // 输血量
     bloodUnit: string                // 输血计量单位
@@ -173,6 +190,10 @@ export interface SettlementInpatientInfo {
     // 再住院计划
     hasReadmissionPlan: 1 | 2 | null  // 1.无 2.有
     readmissionPurpose: string        // 目的
+
+    // 责任护士
+    primaryNurseName: string          // 责任护士姓名
+    primaryNurseCode: string          // 责任护士代码
 
     // 主诊医师
     attendingPhysicianName: string   // 主诊医师姓名

@@ -31,7 +31,7 @@ except Exception:
     logger.add = _noop
 
 from app.config import settings
-from app.api import coding, drg, dip, auth, case_front_page, advisor
+from app.api import coding, drg, dip, auth, case_front_page, advisor, appeal, rectification
 
 # ============================================
 # 配置日志
@@ -185,6 +185,18 @@ app.include_router(
     advisor.router,
     prefix=settings.API_V1_PREFIX,
     tags=["智能辅助"]
+)
+
+app.include_router(
+    appeal.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["申诉管理"]
+)
+
+app.include_router(
+    rectification.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["整改管理"]
 )
 
 # ============================================

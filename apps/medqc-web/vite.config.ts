@@ -46,13 +46,13 @@ export default defineConfig({
     proxy: {
       // DRG 相关接口需要转发到新的后端服务
       '/api/v1/drg': {
-        target: 'http://127.0.0.1:8001',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false
       },
-      // 所有 API 接口都转发到后端服务（端口 8001）
+      // 所有 API 接口都转发到后端服务（端口 8000）
       '/api': {
-        target: 'http://127.0.0.1:8001',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false
         // 不需要rewrite，因为前端代码已经使用 /api/v1/* 路径

@@ -138,6 +138,27 @@ const routes: RouteRecordRaw[] = [
           permission: ['admin', 'qc_manager']
         }
       },
+      // 质控流程相关路由
+      {
+        path: 'qc/appeals',
+        name: 'AppealList',
+        component: () => import('@/views/qc/AppealList.vue'),
+        meta: {
+          title: '质控申诉',
+          icon: 'MessageOutlined',
+          permission: ['admin', 'qc_manager', 'doctor']
+        }
+      },
+      {
+        path: 'qc/rectifications',
+        name: 'RectificationList',
+        component: () => import('@/views/qc/RectificationList.vue'),
+        meta: {
+          title: '整改任务',
+          icon: 'ToolOutlined',
+          permission: ['admin', 'qc_manager', 'doctor']
+        }
+      },
 
 
       // 质控规则管理路由（统一的标签页版本，包含传统规则、语义规则和科室规则）

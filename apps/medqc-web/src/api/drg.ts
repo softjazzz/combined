@@ -427,6 +427,215 @@ export async function getAnalysisData(params: {
   return response.json()
 }
 
+// ==================== 医保结算清单 API ====================
+
+import type { SettlementForm, SettlementBasicInfo } from '@/types/settlement'
+
+/**
+ * 根据病案号获取结算清单数据
+ * 如果不存在则从病案首页自动转换
+ */
+export async function getSettlementForm(caseNumber: string): Promise<SettlementForm | null> {
+  if (USE_MOCK_DATA) {
+    // Mock: 从病案首页数据转换
+    const caseFrontPage = getCaseFrontPageByAdmissionId(caseNumber)
+    if (!caseFrontPage) return null
+
+    return convertCaseFrontPageToSettlement(caseFrontPage)
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/settlement/${caseNumber}`)
+  if (!response.ok) {
+    if (response.status === 404) return null
+    throw new Error(`获取结算清单失败: ${response.status}`)
+  }
+  return response.json()
+}
+
+/**
+ * 保存结算清单
+ */
+export async function saveSettlementForm(data: SettlementForm): Promise<{ success: boolean; message: string }> {
+  if (USE_MOCK_DATA) {
+    console.log('[Mock] 保存结算清单:', data)
+    return Promise.resolve({ success: true, message: '保存成功' })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/settlement`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  return response.json()
+}
+
+/**
+ * 从病案首页自动生成结算清单草稿
+ */
+export async function generateSettlementFromCase(admissionId: string): Promise<SettlementForm> {
+  if (USE_MOCK_DATA) {
+    const caseFrontPage = getCaseFrontPageByAdmissionId(admissionId)
+    if (!caseFrontPage) {
+      throw new Error('病案首页不存在')
+    }
+    return convertCaseFrontPageToSettlement(caseFrontPage)
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/settlement/generate/${admissionId}`, {
+    method: 'POST'
+  })
+  return response.json()
+}
+
+/**
+ * 将病案首页数据转换为结算清单格式
+ * 兼容 CaseFrontPage 类型和 mock 数据
+ */
+function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
+  const diagnoses = getDiagnosesByFrontPageId(caseFrontPage.front_page_id)
+  const procedures = getProceduresByFrontPageId(caseFrontPage.front_page_id)
+
+  // 兼容两种数据结构
+  const patientName = caseFrontPage.patient_name || ''
+  const patientGender = caseFrontPage.patient_gender || caseFrontPage.gender
+  const patientAge = caseFrontPage.patient_age ?? caseFrontPage.age ?? null
+  const admissionDate = caseFrontPage.admission_date || ''
+  const dischargeDate = caseFrontPage.discharge_date || ''
+  const admissionDept = caseFrontPage.admission_department || ''
+  const dischargeDept = caseFrontPage.discharge_department || ''
+  const los = caseFrontPage.total_hospital_days ?? caseFrontPage.los ?? null
+  const primaryDxName = caseFrontPage.primary_diagnosis_name || ''
+  const primaryDxCode = caseFrontPage.primary_diagnosis_code || caseFrontPage.primary_diagnosis || ''
+  const attendingDoc = caseFrontPage.attending_physician || ''
+  const totalFee = caseFrontPage.total_cost ?? null
+
+  return {
+    basicInfo: {
+      institutionName: '泸州市人民医院',
+      institutionCode: 'H51050100001',
+      serialNumber: `SN${Date.now()}`,
+      insuranceNumber: caseFrontPage.patient_id || '',
+      caseNumber: caseFrontPage.admission_id,
+      settlementLevel: '三级甲等',
+      reportDate: new Date().toISOString().slice(0, 10),
+      patientName,
+      gender: patientGender === 'M' || patientGender === '男' ? 1 : patientGender === 'F' || patientGender === '女' ? 2 : null,
+      birthDate: '',
+      age: patientAge,
+      ageInDays: null,
+      nationality: '中国',
+      ethnicity: '汉族',
+      idCardType: '01',
+      idCardNumber: '',
+      occupation: '',
+      currentAddress: { province: '四川省', city: '泸州市', county: '', detail: '' },
+      workUnit: '',
+      workAddress: '',
+      workPhone: '',
+      workPostcode: '',
+      contactName: '',
+      contactRelation: '',
+      contactAddress: { province: '', city: '', county: '', detail: '' },
+      contactPhone: '',
+      insuranceType: '310', // 城镇职工
+      specialPersonType: '',
+      insuredArea: '泸州市',
+      newbornAdmissionType: '',
+      newbornBirthWeight: null,
+      newbornAdmissionWeight: null
+    },
+    outpatientInfo: {
+      department: admissionDept,
+      visitDate: '',
+      diagnosisRows: Array.from({ length: 3 }, (_, i) => ({
+        id: i + 1,
+        diagnosisName: '',
+        diagnosisCode: '',
+        procedureName: '',
+        procedureCode: ''
+      }))
+    },
+    inpatientInfo: {
+      hospitalizationType: 1,
+      admissionRoute: 2,
+      treatmentCategory: 1,
+      admissionTime: admissionDate,
+      admissionDepartment: admissionDept,
+      transferDepartment: '',
+      dischargeTime: dischargeDate,
+      dischargeDepartment: dischargeDept,
+      actualLOS: los,
+      emergencyWestDiagnosis: primaryDxName,
+      emergencyWestCode: primaryDxCode,
+      emergencyTCMDiagnosis: '',
+      emergencyTCMCode: '',
+      diagnosisRows: diagnoses.slice(0, 10).map((d: any, i: number) => ({
+        id: i + 1,
+        westDiagnosis: d.diagnosis_name,
+        westCode: d.diagnosis_code,
+        admissionCondition: '',
+        tcmDiagnosis: '',
+        tcmCode: '',
+        tcmAdmissionCondition: ''
+      })),
+      diagnosisCount: diagnoses.length,
+      surgeryRows: procedures.slice(0, 5).map((p: any, i: number) => ({
+        id: i + 1,
+        name: p.procedure_name,
+        code: p.procedure_code,
+        date: p.procedure_date || '',
+        anesthesiaMethod: '',
+        surgeonName: '',
+        surgeonCode: '',
+        anesthesiologistName: '',
+        anesthesiologistCode: ''
+      })),
+      surgeryCount: procedures.length,
+      ventilatorDays: null,
+      ventilatorHours: null,
+      ventilatorMinutes: null,
+      comaBeforeAdmission: { days: null, hours: null, minutes: null },
+      comaAfterAdmission: { days: null, hours: null, minutes: null },
+      icuRows: [],
+      bloodType: '',
+      bloodVolume: '',
+      bloodUnit: '',
+      specialNursingDays: null,
+      level1NursingDays: null,
+      level2NursingDays: null,
+      level3NursingDays: null,
+      dischargeMethod: 1,
+      transferInstitutionName: '',
+      transferInstitutionCode: '',
+      hasReadmissionPlan: 1,
+      readmissionPurpose: '',
+      attendingPhysicianName: attendingDoc,
+      attendingPhysicianCode: ''
+    },
+    feeInfo: {
+      businessSerialNumber: '',
+      invoiceCode: '',
+      invoiceNumber: '',
+      settlementPeriod: {
+        start: admissionDate,
+        end: dischargeDate
+      },
+      feeItems: [],
+      totalAmount: { itemName: '合计', amount: totalFee, classA: null, classB: null, selfPay: null, other: null },
+      fundPayments: [],
+      personalSelfPay: null,
+      personalSelfExpense: null,
+      personalAccountPay: null,
+      personalCashPay: null,
+      paymentMethod: [4] // 默认 DRG
+    },
+    reportingDepartment: '病案室',
+    reportingPerson: '',
+    insuranceAgency: '泸州市医疗保障局',
+    insuranceAgent: ''
+  }
+}
+
 // ==================== 导出配置 ====================
 
 export const drgApi = {
@@ -455,7 +664,12 @@ export const drgApi = {
   handleDRGAlert,
 
   // 统计分析
-  getAnalysisData
+  getAnalysisData,
+
+  // 医保结算清单
+  getSettlementForm,
+  saveSettlementForm,
+  generateSettlementFromCase
 }
 
 export default drgApi
