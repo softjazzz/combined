@@ -41,11 +41,27 @@ SICHUAN_MODEL=qwen2.5-14b-instruct
 
 ### 启动开发服务
 ```bash
-# 前端 (端口 3000)
-cd apps/medqc-web && npm run dev -- --port 3000
+# 前端 (端口 3000) - 交互模式
+cd apps/medqc-web && npm run dev -- --host --port 3000
 
-# 后端 (端口 8000)
-cd apps/medqc-web/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# 后端 (端口 8000) - 交互模式
+cd apps/medqc-web/backend-fastapi && ./start.sh
+```
+
+### 后台启动服务 (nohup)
+```bash
+# 前端后台启动 (端口 3000)
+cd apps/medqc-web && nohup npm run dev -- --host --port 3000 > frontend.log 2>&1 &
+
+# 后端后台启动 (端口 8000)
+cd apps/medqc-web/backend-fastapi && nohup ./start.sh > backend.log 2>&1 &
+
+# 检查服务状态
+lsof -i :3000 -i :8000
+
+# 停止服务
+kill $(lsof -t -i :3000) 2>/dev/null  # 停止前端
+kill $(lsof -t -i :8000) 2>/dev/null  # 停止后端
 ```
 
 ### 运行测试

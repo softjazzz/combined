@@ -249,9 +249,9 @@ async def startup_event():
     logger.info(f"📝 日志级别: {settings.LOG_LEVEL}")
     logger.info(f"🌍 CORS 允许源: {settings.CORS_ORIGINS}")
     logger.info(f"🗄️  Supabase URL: {settings.SUPABASE_URL}")
-    logger.info(f"🤖 LLM 模型: {settings.DEEPSEEK_MODEL}")
+    logger.info(f"🤖 LLM 模型: {settings.LLM_MODEL}")
     logger.info(f"🏥 DRG 地区: {settings.OPENDRG_DEFAULT_REGION}")
-    logger.info(f"📚 API 文档: http://localhost:8001/docs")
+    logger.info(f"📚 API 文档: http://localhost:8000/docs")
     logger.info("=" * 60)
 
 
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8001,
+        port=8000,
         reload=True,
         log_level="info"
     )

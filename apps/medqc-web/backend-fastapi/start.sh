@@ -56,12 +56,12 @@ echo "========================================="
 echo "✨ 启动 FastAPI 服务..."
 echo "========================================="
 echo ""
-echo "📚 API 文档: http://localhost:8001/docs"
-echo "📖 ReDoc: http://localhost:8001/redoc"
-echo "🔍 健康检查: http://localhost:8001/health"
+echo "📚 API 文档: http://localhost:8000/docs"
+echo "📖 ReDoc: http://localhost:8000/redoc"
+echo "🔍 健康检查: http://localhost:8000/health"
 echo ""
 echo "按 Ctrl+C 停止服务"
 echo ""
 
 # 启动服务
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

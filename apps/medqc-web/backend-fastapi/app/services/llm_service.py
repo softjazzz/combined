@@ -33,16 +33,16 @@ class LLMService:
     """LLM 服务类"""
 
     def __init__(self):
-        """初始化 OpenAI 客户端（兼容 DeepSeek API）"""
+        """初始化 OpenAI 客户端（兼容 OpenAI 格式 API）"""
         self.client = None
-        if OpenAI and settings.DEEPSEEK_API_KEY:
+        if OpenAI and settings.LLM_API_KEY:
             http_client = httpx.Client(trust_env=False)
             self.client = OpenAI(
-                api_key=settings.DEEPSEEK_API_KEY,
-                base_url=settings.DEEPSEEK_API_URL,
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_API_URL,
                 http_client=http_client
             )
-        self.model = settings.DEEPSEEK_MODEL
+        self.model = settings.LLM_MODEL
 
     async def suggest_icd_codes(
         self,
@@ -499,49 +499,211 @@ class LLMService:
             system_prompt = """你是一位专业的医疗文档结构化专家，精通病案首页填写规范。
 你的任务是从病历原文中提取以下结构化信息，用于填写病案首页。
 
-需要提取的信息：
+需要提取的信息（共7大类）：
+
 1. basic_info（患者基本信息）：
    - patient_name: 患者姓名
-   - gender_text: 性别（男/女）
-   - age_years: 年龄（数字）
-   - id_number: 身份证号（如有）
-   - marital_status_text: 婚姻状况
+   - gender: 性别编码（1=男，2=女）
+   - gender_text: 性别文本（男/女）
+   - birth_date: 出生日期（YYYY-MM-DD）
+   - age_years: 年龄（整数）
+   - nationality: 国籍
+   - ethnicity: 民族
+   - marital_status: 婚姻状况编码（1=未婚，2=已婚，3=丧偶，4=离婚，9=其他）
+   - marital_status_text: 婚姻状况文本
+   - id_number: 身份证号
    - occupation: 职业
    - current_address: 现住址
+   - contact_name: 联系人姓名
+   - contact_relation: 联系人关系
+   - contact_phone: 联系人电话
 
 2. hospitalization（住院信息）：
-   - admission_datetime: 入院日期时间
-   - discharge_datetime: 出院日期时间
-   - admission_dept: 入院科室
-   - discharge_dept: 出院科室
+   - hospital_name: 医疗机构名称
+   - admission_times_in_hospital: 本院第几次住院
+   - medical_record_no: 病案号
+   - payment_method: 医疗付费方式编码
+   - payment_method_text: 医疗付费方式文本（城镇职工医保/城镇居民医保/新农合/自费等）
+   - admission_way: 入院途径编码（1=急诊，2=门诊，3=转诊，4=其他）
+   - admission_way_text: 入院途径文本
+   - admission_dept: 入院科别
+   - admission_ward: 入院病房/病区
+   - admission_datetime: 入院日期时间（YYYY-MM-DD HH:MM:SS）
+   - discharge_dept: 出院科别
+   - discharge_ward: 出院病房/病区
+   - discharge_datetime: 出院日期时间（YYYY-MM-DD HH:MM:SS）
    - actual_hospital_days: 实际住院天数
 
 3. diagnoses（诊断信息）：
-   - discharge_main_diagnosis_text: 出院主诊断名称
-   - discharge_main_icd: 主诊断ICD-10编码（如无法确定填"待编码"）
-   - discharge_other_diagnoses_texts: 其他诊断名称列表
+   - ed_diagnosis_texts: 门/急诊诊断原文列表（数组）
+   
+   # 入院诊断（从入院记录中提取）
+   - admission_main_diagnosis_text: 入院主要诊断原文
+   - admission_main_icd: 入院主诊断ICD-10编码（如无法确定填"待编码"）
+   - admission_other_diagnoses_texts: 入院其他诊断原文列表（数组）
+   - admission_other_icds: 入院其他诊断ICD编码列表（数组，无法确定填"待编码"）
+   
+   # 出院诊断（从出院记录中提取）
+   - discharge_main_diagnosis_text: 出院主要诊断原文
+   - discharge_main_icd: 出院主诊断ICD-10编码（如无法确定填"待编码"）
+   - discharge_other_diagnoses_texts: 出院其他诊断原文列表（数组）
+   - discharge_other_icds: 出院其他诊断ICD编码列表（数组，无法确定填"待编码"）
+   
+   - admission_condition: 入院病情（1=有，2=临床未确定，3=情况不明，4=无）
 
-4. procedures（手术操作信息）：
-   - main_procedure_text: 主要手术/操作名称
-   - main_procedure_code: ICD-9-CM-3编码（如无法确定填"待编码"）
-   - main_procedure_date: 手术日期
+4. procedures（手术及操作信息）：
+   - main_procedure_text: 主要手术/操作名称原文
+   - main_procedure_code: 主要手术ICD-9-CM-3编码（无法确定填"待编码"）
+   - main_procedure_date: 主要手术日期（YYYY-MM-DD）
+   - main_procedure_level: 主要手术级别（一/二/三/四级）
    - surgeon_name: 术者姓名
+   - assistant1_name: I助姓名
+   - assistant2_name: II助姓名
+   - anesthesia_method: 麻醉方式（全麻/局麻/腰麻/硬膜外麻等）
+   - anesthetist_name: 麻醉医师姓名
+   - incision_healing_grade: 切口愈合等级（甲/乙/丙/其他）
+
+5. other_medical_info（其他医疗信息）：
+   - pathology_text: 病理诊断原文
+   - pathology_no: 病理号
+   - drug_allergy_flag: 药物过敏标志（1=无，2=有）
+   - drug_allergy_flag_text: 药物过敏标志文本
+   - drug_allergy_drugs: 过敏药物列表（数组）
+   - abo_blood_type: ABO血型（A/B/O/AB/不详/未查）
+   - rh_blood_type: Rh血型编码（1=阴，2=阳，3=不详，4=未查）
+   - rh_blood_type_text: Rh血型文本
+   - ventilation_hours: 机械通气总时长（小时，数字）
+   - icu_type: ICU类型
+   - icu_enter_time: 进入ICU时间
+   - icu_leave_time: 退出ICU时间
+
+6. staff（人员信息）：
+   - dept_director: 科主任
+   - chief_physician: 主任（副主任）医师
+   - attending_physician: 主治医师
+   - resident_physician: 住院医师
+   - responsible_nurse: 责任护士
+   - coder: 编码员
+
+7. costs（费用信息）：
+   - total_cost: 住院总费用（数字）
+   - self_paid: 自付金额（数字）
 
 提取原则：
-- 严格基于病历原文提取，如病历中未提及则填写 null
-- 诊断名称保持原文表述
+- 严格基于病历原文提取，如病历中未明确提及则填写 null
+- 诊断名称、手术名称保持原文表述，不要改写
 - ICD编码尽量给出推荐，不确定时填"待编码"
-- 年龄提取数字部分
+- 日期格式统一为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS
+- 数字字段（年龄、费用等）提取纯数字，不含单位
+- 列表类字段（数组）如无内容返回空数组 []
 
-输出格式为 JSON，结构如上所述。"""
+【重要】诊断字段填写规则：
+1. 入院诊断 vs 出院诊断：
+   - 如果病历中有"入院诊断"、"初步诊断"、"入院记录"、"目前诊断" → 填写到 admission_main_diagnosis_text / admission_other_diagnoses_texts
+   - 如果病历中有"出院诊断"、"出院小结"、"出院记录"、"最终诊断" → 填写到 discharge_main_diagnosis_text / discharge_other_diagnoses_texts
+   - 如果两种诊断都有，分别填写到对应字段
+   - 如果只有一种诊断类型，只填写对应的字段，另一个保持为 null
+
+2. 常见病历类型判断：
+   - "入院记录"、"首次病程记录" → 通常只有入院诊断
+   - "出院小结"、"出院记录" → 通常有出院诊断（可能也有入院诊断作为对比）
+   - 完整病历 → 可能同时包含入院诊断和出院诊断
+
+3. 诊断关键词识别：
+   - "初步诊断"、"入院诊断"、"目前诊断" → 入院诊断
+   - "出院诊断"、"最终诊断"、"确定诊断" → 出院诊断
+
+输出格式为 JSON，结构如上所述，包含7个顶级对象。"""
 
             user_prompt = f"""请从以下病历原文中提取病案首页结构化数据：
 
 {medical_text}
 
-请按照系统提示的格式输出 JSON。"""
+请按照系统提示的格式输出完整的 JSON，包含 basic_info、hospitalization、diagnoses、procedures、other_medical_info、staff、costs 七个部分。"""
 
             logger.info("LLM 病案首页结构化提取开始")
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=4000,
+                response_format={"type": "json_object"}
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            
+            logger.info(f"LLM 病案首页结构化提取完成: 主诊断={result.get('diagnoses', {}).get('discharge_main_diagnosis_text', 'N/A')}")
+            return result
+
+        except Exception as e:
+            logger.error(f"LLM 病案首页结构化提取失败: {str(e)}")
+            return {}
+
+    async def generate_icd_codes(
+        self,
+        diagnoses: List[str],
+        procedures: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        为诊断和手术名称生成 ICD 编码
+        
+        Args:
+            diagnoses: 诊断名称列表
+            procedures: 手术/操作名称列表
+            
+        Returns:
+            包含 diagnoses_with_codes 和 procedures_with_codes 的字典
+        """
+        try:
+            if not self.client:
+                logger.warning("LLM 客户端未初始化，返回空编码")
+                return {"diagnoses_with_codes": [], "procedures_with_codes": []}
+
+            if not diagnoses and not procedures:
+                return {"diagnoses_with_codes": [], "procedures_with_codes": []}
+
+            system_prompt = """你是一位专业的病案编码员，精通 ICD-10 诊断编码和 ICD-9-CM-3 手术操作编码。
+你的任务是为给定的诊断名称和手术名称生成对应的 ICD 编码。
+
+编码规则：
+1. 诊断使用 ICD-10 编码标准（中国临床版）
+2. 手术/操作使用 ICD-9-CM-3 编码标准
+3. 编码格式：主码.亚目（如 I10.x00, K61.001）
+4. 如果诊断可能对应多个编码，选择最匹配的一个
+5. 如果完全无法确定编码，填写 "待人工编码"
+
+输出 JSON 格式：
+{
+  "diagnoses_with_codes": [
+    {"name": "诊断名称", "icd_code": "I10.x00", "confidence": 0.95},
+    ...
+  ],
+  "procedures_with_codes": [
+    {"name": "手术名称", "icd_code": "88.55", "confidence": 0.90},
+    ...
+  ]
+}
+
+confidence 表示编码置信度（0-1），高于0.8表示高置信度。"""
+
+            diagnoses_list = diagnoses or []
+            procedures_list = procedures or []
+            
+            user_prompt = f"""请为以下诊断和手术生成 ICD 编码：
+
+诊断列表：
+{chr(10).join([f"- {d}" for d in diagnoses_list]) if diagnoses_list else "无"}
+
+手术/操作列表：
+{chr(10).join([f"- {p}" for p in procedures_list]) if procedures_list else "无"}
+
+请按 JSON 格式输出编码结果。"""
+
+            logger.info(f"LLM ICD 编码开始: {len(diagnoses_list)} 个诊断, {len(procedures_list)} 个手术")
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -556,12 +718,12 @@ class LLMService:
 
             result = json.loads(response.choices[0].message.content)
             
-            logger.info(f"LLM 病案首页结构化提取完成: 主诊断={result.get('diagnoses', {}).get('discharge_main_diagnosis_text', 'N/A')}")
+            logger.info(f"LLM ICD 编码完成: {len(result.get('diagnoses_with_codes', []))} 个诊断编码")
             return result
 
         except Exception as e:
-            logger.error(f"LLM 病案首页结构化提取失败: {str(e)}")
-            return {}
+            logger.error(f"LLM ICD 编码生成失败: {str(e)}")
+            return {"diagnoses_with_codes": [], "procedures_with_codes": []}
 
     async def analyze_patient_profile(
         self,

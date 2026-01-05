@@ -355,57 +355,128 @@ class FrontPageExtractionService:
         return ""
 
     async def _extract_with_llm(self, medical_text: str) -> FrontPageDraft:
-        """使用 LLM 分步抽取各模块信息"""
+        """使用 LLM 分步抽取各模块信息，并结合外部编码服务进行校验"""
         logger.info("开始 LLM 分步抽取病案首页信息...")
         
-        # 并行抽取各模块
+        # 1. 先提取基本信息（用于为外部编码服务提供上下文）
         try:
-            results = await asyncio.gather(
-                self._extract_json(BASIC_INFO_PROMPT.format(medical_text=medical_text)),
-                self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text)),
-                self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text)),
-                self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text)),
-                self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
-                self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
-                return_exceptions=True
-            )
+            logger.info("Step 1: 提取基本信息...")
+            basic_info = await self._extract_json(BASIC_INFO_PROMPT.format(medical_text=medical_text)) or {}
+        except Exception as e:
+            logger.error(f"基本信息提取失败: {e}")
+            basic_info = {}
+
+        # 准备患者上下文
+        patient_context = {
+            "gender": basic_info.get("gender_text", "未说明"),
+            "age": basic_info.get("age_years", 0)
+        }
+        
+        # 2. 并行抽取其他模块 + 外部编码服务
+        logger.info("Step 2: 并行提取其他模块及外部编码...")
+        from .external_coding_service import get_external_coding_service
+        ext_coding_service = get_external_coding_service()
+        
+        # 定义并行任务
+        tasks = {
+            "hospitalization": self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text)),
+            "diagnoses": self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text)),
+            "procedures": self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text)),
+            "other_medical": self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
+            "staff": self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
+            "coding_result": ext_coding_service.extract_coding(medical_text, patient_context)
+        }
+        
+        try:
+            # 执行所有任务
+            task_names = list(tasks.keys())
+            task_coroutines = list(tasks.values())
             
-            # 处理结果，过滤异常
-            processed_results = []
-            for i, res in enumerate(results):
-                if isinstance(res, Exception):
-                    logger.error(f"模块 {i} 抽取失败: {res}")
-                    processed_results.append(None)
-                else:
-                    processed_results.append(res)
-                    
-            basic_info, hospitalization, diagnoses, procedures, other_medical, staff = processed_results
+            results_list = await asyncio.gather(*task_coroutines, return_exceptions=True)
+            results = dict(zip(task_names, results_list))
             
+            # 处理结果
+            hospitalization = results.get("hospitalization") if not isinstance(results.get("hospitalization"), Exception) else {}
+            diagnoses = results.get("diagnoses") if not isinstance(results.get("diagnoses"), Exception) else {}
+            procedures = results.get("procedures") if not isinstance(results.get("procedures"), Exception) else {}
+            other_medical = results.get("other_medical") if not isinstance(results.get("other_medical"), Exception) else {}
+            staff = results.get("staff") if not isinstance(results.get("staff"), Exception) else {}
+            coding_result = results.get("coding_result") if not isinstance(results.get("coding_result"), Exception) else None
+            
+            if isinstance(results.get("coding_result"), Exception):
+                logger.warning(f"外部编码服务调用失败: {results.get('coding_result')}")
+            
+            # 初始化默认值
+            hospitalization = hospitalization or {}
+            diagnoses = diagnoses or {}
+            procedures = procedures or {}
+            other_medical = other_medical or {}
+            staff = staff or {}
+
         except Exception as e:
             logger.error(f"并行抽取发生严重错误: {e}")
             raise e
         
-        # F4: 入院病情推理（在诊断提取完成后执行）
+        # 3. 合并外部编码结果（如果成功）
+        validation_info = {}
+        if coding_result:
+            logger.info("合并外部编码服务结果...")
+            # 主诊断
+            if coding_result.get("principal_diagnosis"):
+                pd = coding_result["principal_diagnosis"]
+                diagnoses["discharge_main_diagnosis_text"] = pd.get("name")
+                diagnoses["discharge_main_icd"] = pd.get("code")
+                # 记录置信度
+                validation_info["principal_diagnosis_confidence"] = pd.get("confidence")
+            
+            # 其他诊断
+            if coding_result.get("secondary_diagnoses"):
+                sd_list = coding_result["secondary_diagnoses"]
+                diagnoses["discharge_other_diagnoses_texts"] = [d.get("name") for d in sd_list]
+                diagnoses["discharge_other_icds"] = [d.get("code") for d in sd_list]
+                
+            # 手术
+            if coding_result.get("principal_procedures"):
+                pp_list = coding_result["principal_procedures"]
+                if pp_list:
+                    main_proc = pp_list[0]
+                    procedures["main_procedure_text"] = main_proc.get("name")
+                    procedures["main_procedure_code"] = main_proc.get("code")
+                    
+                    # 其他手术
+                    if len(pp_list) > 1:
+                        procedures["other_procedures_texts"] = [p.get("name") for p in pp_list[1:]]
+                        procedures["other_procedures_codes"] = [p.get("code") for p in pp_list[1:]]
+            
+            # 校验警告
+            if coding_result.get("warnings"):
+                validation_info["warnings"] = coding_result["warnings"]
+                logger.info(f"捕获到 {len(coding_result['warnings'])} 条编码警告")
+
+        # F4: 入院病情推理（只在没有外部结果时使用 mock/LLM 推理，或者作为补充）
+        # 这里我们仍然运行它来获取 admission_condition
         if diagnoses:
             diagnoses = await self._infer_admission_conditions(medical_text, diagnoses)
         
-        # F5/F7: ICD 编码推荐（诊断和手术）
-        if diagnoses:
+        # F5/F7: ICD 编码推荐（如果在 step 3 中已经填充了编码，_suggest 方法内部应该检查是否存在）
+        # 我们修改一下逻辑：如果已经有 code 了，就不再重新 suggest，或者 suggest 作为补充
+        if diagnoses and not diagnoses.get("discharge_main_icd"):
             diagnoses = await self._suggest_diagnosis_codes(diagnoses)
-        if procedures:
+            
+        if procedures and not procedures.get("main_procedure_code"):
             procedures = await self._suggest_procedure_codes(procedures)
         
         # 组装 FrontPageDraft
         frontpage_data = {
-            "basic_info": basic_info or {},
-            "hospitalization": hospitalization or {},
-            "diagnoses": diagnoses or {},
-            "procedures": procedures or {},
-            "other_medical_info": other_medical or {},
-            "staff": staff or {},
-            "costs": {"total_cost": None, "self_paid": None, "categories": {}},  # 费用信息通常从 HIS 获取
+            "basic_info": basic_info,
+            "hospitalization": hospitalization,
+            "diagnoses": diagnoses,
+            "procedures": procedures,
+            "other_medical_info": other_medical,
+            "staff": staff,
+            "costs": {"total_cost": None, "self_paid": None, "categories": {}},
             "evidence": {},
-            "confidence": {},
+            "confidence": validation_info, # 将校验信息放入 confidence 字段
         }
         
         logger.info("LLM 抽取完成，构建 FrontPageDraft")

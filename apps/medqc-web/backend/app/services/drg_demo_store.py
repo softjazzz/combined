@@ -176,6 +176,59 @@ class DemoDRGStore:
 
             self._cases[admission_id] = record
 
+        # Manually seed demo_case_1 (Hypertension + Angiography)
+        self._cases["demo_case_1"] = {
+            "front_page_id": 999001,
+            "admission_id": "demo_case_1",
+            "patient_id": "PID_DEMO_01",
+            "patient_name": "张三",
+            "patient_age": 58,
+            "patient_gender": "M",
+            "primary_diagnosis_code": "I10.x00",
+            "primary_diagnosis_name": "高血压3级 极高危",
+            "secondary_diagnoses": [
+                {"code": "E11.900", "name": "2型糖尿病", "sequence": 2, "is_complication": True},
+                {"code": "I25.100", "name": "冠状动脉粥样硬化性心脏病", "sequence": 3, "is_complication": False},
+            ],
+            "procedures": [
+                {"code": "88.5500", "name": "冠状动脉造影术", "procedure_date": _utc_iso(base_dt), "sequence": 1}
+            ],
+            "main_procedure_code": "88.5500",
+            "main_procedure_name": "冠状动脉造影术",
+            "total_cost": 12580.50,
+            "hospital_days": 7,
+            "department": "心血管内科",
+            "coding_status": "completed",
+            "created_at": _utc_iso(base_dt),
+            "updated_at": _utc_iso(base_dt),
+        }
+
+        # Manually seed demo_case_2 (Anal Fistula)
+        self._cases["demo_case_2"] = {
+            "front_page_id": 999002,
+            "admission_id": "demo_case_2",
+            "patient_id": "PID_DEMO_02",
+            "patient_name": "张伟",
+            "patient_age": 44,
+            "patient_gender": "M",
+            "primary_diagnosis_code": "K60.301",
+            "primary_diagnosis_name": "肛瘘",
+            "secondary_diagnoses": [
+                {"code": "K61.001", "name": "肛周脓肿", "sequence": 2, "is_complication": False},
+            ],
+            "procedures": [
+                {"code": "49.1200", "name": "肛瘘切除术", "procedure_date": _utc_iso(base_dt), "sequence": 1}
+            ],
+            "main_procedure_code": "49.1200",
+            "main_procedure_name": "肛瘘切除术",
+            "total_cost": 8500.00,
+            "hospital_days": 5,
+            "department": "肛肠科",
+            "coding_status": "completed",
+            "created_at": _utc_iso(base_dt),
+            "updated_at": _utc_iso(base_dt),
+        }
+
         # Seed suggestions and alerts
         admission_ids = list(self._cases.keys())
         for _ in range(max(10, self.size // 3)):
@@ -185,6 +238,48 @@ class DemoDRGStore:
         for _ in range(max(10, self.size // 3)):
             admission_id = self._rand.choice(admission_ids)
             self._create_alert(admission_id)
+
+        # Manually seed suggestions for demo cases
+        # Case 1: Hypertension -> Suggest Heart Failure (Missing Diagnosis)
+        self._suggestions[99901] = {
+            "suggestion_id": 99901,
+            "admission_id": "demo_case_1",
+            "suggestion_type": "missing_diagnosis",
+            "diagnosis_code": "I50.900",
+            "diagnosis_name": "心力衰竭",
+            "message": "病程记录显示患者有'夜间阵发性呼吸困难'及'双下肢水肿'，且BNP升高，建议补充诊断：心力衰竭",
+            "evidence": "入院记录：患者诉夜间阵发性呼吸困难... 查体：双下肢轻度水肿...",
+            "severity": "warning",
+            "status": "pending",
+            "created_at": _utc_iso(base_dt + timedelta(days=1)),
+        }
+
+        # Case 2: Anal Fistula -> Suggest Complication marking logic
+        self._suggestions[99902] = {
+            "suggestion_id": 99902,
+            "admission_id": "demo_case_2",
+            "suggestion_type": "complication_marking",
+            "diagnosis_code": "K61.001",
+            "diagnosis_name": "肛周脓肿",
+            "message": "该诊断与主诊断存在因果关系，作为次诊断时建议不标记为并发症，以免影响DRG入组逻辑",
+            "evidence": "规则库检查：主诊(K60.3)与次诊(K61.0)同时存在...",
+            "severity": "info",
+            "status": "pending",
+            "created_at": _utc_iso(base_dt + timedelta(days=1)),
+        }
+
+        # Manually seed alerts for demo cases
+        self._alerts[88801] = {
+            "alert_id": 88801,
+            "admission_id": "demo_case_1",
+            "alert_type": "cost_overrun",
+            "alert_level": "warning",
+            "message": "当前费用消耗率已达 85%，冠脉造影耗材费用较高，请注意控制",
+            "metric_value": 0.85,
+            "threshold_value": 0.80,
+            "status": "pending",
+            "triggered_at": _utc_iso(base_dt + timedelta(days=5)),
+        }
 
         self.story_cases = StoryCases(
             high_risk_loss=admission_ids[0],

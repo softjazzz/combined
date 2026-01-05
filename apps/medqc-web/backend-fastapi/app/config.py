@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = None
     SUPABASE_KEY: Optional[str] = None  # service_role key for backend
 
-    # LLM 配置（DeepSeek）
-    DEEPSEEK_API_KEY: Optional[str] = None
-    DEEPSEEK_API_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    DEEPSEEK_MODEL: str = "qwen3-next-80b-a3b-instruct"
+    # LLM 配置
+    LLM_API_KEY: Optional[str] = None
+    LLM_API_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    LLM_MODEL: str = "qwen-plus"
 
     # OpenDRG 配置
     OPENDRG_DEFAULT_REGION: str = "sichuan"

@@ -33,14 +33,40 @@ class Settings(BaseSettings):
         "dashscope.aliyuncs.com",
     ]
 
-    # Sichuan QC API (configurable)
-    SICHUAN_API_ENDPOINT: Optional[AnyHttpUrl] = None  # e.g. https://dashscope.aliyuncs.com/compatible-mode/v1
-    SICHUAN_API_KEY: Optional[str] = None
-    SICHUAN_MODEL: str = "qwen2.5-14b-instruct"
-    SICHUAN_TIMEOUT_SECONDS: int = 120
+    # LLM API Configuration (unified naming)
+    LLM_API_ENDPOINT: Optional[AnyHttpUrl] = None  # e.g. https://dashscope.aliyuncs.com/compatible-mode/v1
+    LLM_API_KEY: Optional[str] = None
+    LLM_MODEL: str = "qwen3-next-80b-a3b-instruct"
+    LLM_TIMEOUT_SECONDS: int = 120
     # Content truncation settings
-    SICHUAN_ENABLE_TRUNCATE: bool = False  # 禁用截断（模型支持128K上下文）
-    SICHUAN_MAX_CONTENT_LENGTH: int = 100000  # 最大内容长度（字符数）
+    LLM_ENABLE_TRUNCATE: bool = False  # 禁用截断（模型支持128K上下文）
+    LLM_MAX_CONTENT_LENGTH: int = 100000  # 最大内容长度（字符数）
+
+    # Backward compatibility aliases (deprecated, use LLM_* instead)
+    @property
+    def SICHUAN_API_ENDPOINT(self) -> Optional[AnyHttpUrl]:
+        return self.LLM_API_ENDPOINT
+
+    @property
+    def SICHUAN_API_KEY(self) -> Optional[str]:
+        return self.LLM_API_KEY
+
+    @property
+    def SICHUAN_MODEL(self) -> str:
+        return self.LLM_MODEL
+
+    @property
+    def SICHUAN_TIMEOUT_SECONDS(self) -> int:
+        return self.LLM_TIMEOUT_SECONDS
+
+    @property
+    def SICHUAN_ENABLE_TRUNCATE(self) -> bool:
+        return self.LLM_ENABLE_TRUNCATE
+
+    @property
+    def SICHUAN_MAX_CONTENT_LENGTH(self) -> int:
+        return self.LLM_MAX_CONTENT_LENGTH
+
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

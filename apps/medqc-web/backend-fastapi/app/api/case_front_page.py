@@ -40,17 +40,16 @@ class ExtractCodingRequest(BaseModel):
 @router.post(
     "/extract",
     summary="从病历原文中提取结构化数据",
-    description="使用 LLM 从病历原文（入院记录、出院小结等）中提取病案首页结构化数据"
+    description="使用 LLM 从病历原文（入院记录、出院小结等）中提取病案首页结构化数据，并生成 ICD 编码"
 )
 async def extract_frontpage_from_text(request: ExtractFrontpageRequest) -> Dict[str, Any]:
     """
     从病历原文中提取病案首页结构化数据
     
-    Args:
-        request: 包含 medical_text 的请求体
-        
-    Returns:
-        结构化的病案首页数据
+    步骤：
+    1. LLM 提取结构化字段（姓名、诊断、手术等）
+    2. 为提取的诊断和手术生成 ICD 编码
+    3. 合并返回完整结果
     """
     try:
         if not request.medical_text or len(request.medical_text.strip()) < 50:
@@ -58,10 +57,96 @@ async def extract_frontpage_from_text(request: ExtractFrontpageRequest) -> Dict[
         
         logger.info(f"开始 LLM 结构化提取，文本长度: {len(request.medical_text)}")
         
+        # Step 1: LLM 结构化提取
         result = await llm_service.extract_frontpage_structured(request.medical_text)
         
         if not result:
             raise HTTPException(status_code=500, detail="LLM 结构化提取失败，请检查 LLM 服务配置")
+        
+        # Step 2: 从提取结果中获取诊断和手术名称
+        diagnoses_section = result.get("diagnoses", {})
+        procedures_section = result.get("procedures", {})
+        
+        # 收集入院诊断
+        admission_main_diag = diagnoses_section.get("admission_main_diagnosis_text")
+        admission_other_diags = diagnoses_section.get("admission_other_diagnoses_texts") or []
+        
+        # 收集出院诊断
+        discharge_main_diag = diagnoses_section.get("discharge_main_diagnosis_text")
+        discharge_other_diags = diagnoses_section.get("discharge_other_diagnoses_texts") or []
+        
+        # 合并所有诊断名称用于编码
+        all_diagnoses = []
+        if admission_main_diag:
+            all_diagnoses.append(admission_main_diag)
+        if admission_other_diags:
+            all_diagnoses.extend(admission_other_diags)
+        if discharge_main_diag:
+            all_diagnoses.append(discharge_main_diag)
+        if discharge_other_diags:
+            all_diagnoses.extend(discharge_other_diags)
+        
+        # 收集手术名称
+        all_procedures = []
+        main_proc = procedures_section.get("main_procedure_text")
+        if main_proc:
+            all_procedures.append(main_proc)
+        
+        # Step 3: 为诊断和手术生成 ICD 编码
+        if all_diagnoses or all_procedures:
+            logger.info(f"开始生成 ICD 编码: {len(all_diagnoses)} 个诊断 (入院: {1 if admission_main_diag else 0}+{len(admission_other_diags)}, 出院: {1 if discharge_main_diag else 0}+{len(discharge_other_diags)}), {len(all_procedures)} 个手术")
+            coding_result = await llm_service.generate_icd_codes(
+                diagnoses=all_diagnoses,
+                procedures=all_procedures
+            )
+            
+            # Step 4: 将编码合并回结果
+            diagnoses_with_codes = coding_result.get("diagnoses_with_codes", [])
+            procedures_with_codes = coding_result.get("procedures_with_codes", [])
+            
+            logger.info(f"编码结果: {len(diagnoses_with_codes)} 个诊断编码, {len(procedures_with_codes)} 个手术编码")
+            logger.debug(f"诊断编码详情: {diagnoses_with_codes}")
+            
+            # 辅助函数：根据诊断名称查找 ICD 编码
+            def find_icd_code(diagnosis_name: str) -> str:
+                for item in diagnoses_with_codes:
+                    if item.get("name") == diagnosis_name:
+                        return item.get("icd_code", "待编码")
+                return "待编码"
+            
+            # 更新入院主诊断编码
+            if admission_main_diag:
+                icd_code = find_icd_code(admission_main_diag)
+                result["diagnoses"]["admission_main_icd"] = icd_code
+                logger.info(f"入院主诊断编码: {admission_main_diag} -> {icd_code}")
+            
+            # 更新入院其他诊断编码
+            if admission_other_diags:
+                admission_other_icds = [find_icd_code(diag) for diag in admission_other_diags]
+                result["diagnoses"]["admission_other_icds"] = admission_other_icds
+                logger.info(f"入院其他诊断编码: {len(admission_other_icds)} 个")
+            
+            # 更新出院主诊断编码
+            if discharge_main_diag:
+                icd_code = find_icd_code(discharge_main_diag)
+                result["diagnoses"]["discharge_main_icd"] = icd_code
+                logger.info(f"出院主诊断编码: {discharge_main_diag} -> {icd_code}")
+            
+            # 更新出院其他诊断编码
+            if discharge_other_diags:
+                discharge_other_icds = [find_icd_code(diag) for diag in discharge_other_diags]
+                result["diagnoses"]["discharge_other_icds"] = discharge_other_icds
+                logger.info(f"出院其他诊断编码: {len(discharge_other_icds)} 个")
+            
+            # 更新手术编码
+            if procedures_with_codes and main_proc:
+                for item in procedures_with_codes:
+                    if item.get("name") == main_proc:
+                        result["procedures"]["main_procedure_code"] = item.get("icd_code", "待编码")
+                        break
+            
+            # 将完整编码结果附加到响应中
+            result["coding_details"] = coding_result
         
         return {
             "success": True,

@@ -168,7 +168,7 @@ class FrontPageDraft(BaseModel):
     evidence: Dict[str, str] = Field(
         default_factory=dict, description="字段对应的原文片段，便于人工复核"
     )
-    confidence: Dict[str, float] = Field(
-        default_factory=dict, description="字段级置信度 0-1"
+    confidence: Dict[str, Any] = Field(
+        default_factory=dict, description="字段级置信度及校验信息"
     )
 
