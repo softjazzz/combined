@@ -305,7 +305,7 @@ class SupabaseRealtimeManager {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(notification.title, {
         body: notification.summary || notification.content.substring(0, 100),
-        icon: '/favicon.ico',
+        icon: '/favicon.svg',
         tag: notification.id
       })
     }

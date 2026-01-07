@@ -12,6 +12,7 @@ export interface DemoCaseLike {
 
 export function useMedicalTextExtraction(options: {
   demoCase: Ref<DemoCaseLike | null>
+  onStartExtract?: () => void
   onExtracted?: () => void
 }) {
   const extracting = ref(false)
@@ -44,7 +45,7 @@ export function useMedicalTextExtraction(options: {
         // 入院诊断
         admission_main_diagnosis_text: fp.diagnoses?.admission_main_diagnosis_text || null,
         admission_main_icd: fp.diagnoses?.admission_main_icd || null,
-        admission_main_conn: fp.diagnoses?.admission_condition === 1 ? '有' : '-',
+        admission_main_conn: String(fp.diagnoses?.admission_condition ?? '') === '1' ? '有' : '-',
         admission_other_diagnoses_texts: fp.diagnoses?.admission_other_diagnoses_texts || [],
         admission_other_icds: fp.diagnoses?.admission_other_icds || [],
 
@@ -78,7 +79,7 @@ export function useMedicalTextExtraction(options: {
         others: []
       },
       quality: {
-        director: fp.staff?.director || '',
+        director: fp.staff?.dept_director || '',
         chief_doctor: fp.staff?.chief_physician || '',
         attending_doctor: fp.staff?.attending_physician || '',
         coder: 'AI 预编'
@@ -162,43 +163,182 @@ export function useMedicalTextExtraction(options: {
       return
     }
 
+    const medicalText = options.demoCase.value.medical_text
+
     extracting.value = true
+    options.onStartExtract?.()
+
     try {
-      const response = await fetch('/api/v1/case-front-page/extract', {
+      const tryNonStream = async (): Promise<boolean> => {
+        try {
+          const resp = await fetch('/api/v1/frontpage/auto-generate-draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ medical_text: medicalText })
+          })
+
+          const json = await resp.json().catch(() => null)
+          const fp = json?.data?.frontpage
+          if (!fp) return false
+
+          applyFrontpageResult(fp)
+          message.success('AI 病案首页提取完成')
+          options.onExtracted?.()
+          return true
+        } catch {
+          return false
+        }
+      }
+
+      // Prefer streaming endpoint so partial results can render as soon as each task finishes
+      const streamResponse = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          medical_text: options.demoCase.value.medical_text
-        })
+        body: JSON.stringify({ medical_text: medicalText })
       })
 
-      const data = await response.json()
+      if (streamResponse.ok && streamResponse.body) {
+        const reader = streamResponse.body.getReader()
+        const decoder = new TextDecoder('utf-8')
+        let buffer = ''
+        let notified = false
+        let hasDone = false
 
-      if (response.ok && data.success && data.data) {
-        const fp = data.data.frontpage || data.data
-        applyFrontpageResult(fp)
-
-        if (fp.confidence?.warnings?.length > 0) {
-          const count = fp.confidence.warnings.length
-          setTimeout(() => {
-            message.warning({
-              content: `发现 ${count} 条编码校验警告，请仔细核对诊断编码`,
-              duration: 5
-            })
-            console.warn('编码校验警告:', fp.confidence.warnings)
-          }, 500)
+        const emitFrontpageUpdate = (fp: any) => {
+          applyFrontpageResult(fp)
+          if (!notified) {
+            notified = true
+            options.onExtracted?.()
+          }
         }
 
-        message.success('AI 病案首页提取完成')
-        options.onExtracted?.()
+        try {
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, { stream: true })
+
+            let sepIndex: number
+            while ((sepIndex = buffer.indexOf('\n\n')) !== -1) {
+              const chunk = buffer.slice(0, sepIndex)
+              buffer = buffer.slice(sepIndex + 2)
+
+              const lines = chunk.split('\n')
+              let eventName = 'message'
+              const dataLines: string[] = []
+
+              for (const line of lines) {
+                if (line.startsWith('event:')) {
+                  eventName = line.slice('event:'.length).trim()
+                } else if (line.startsWith('data:')) {
+                  dataLines.push(line.slice('data:'.length).trim())
+                }
+              }
+
+              const dataText = dataLines.join('\n')
+              if (!dataText) continue
+
+              let payload: any = null
+              try {
+                payload = JSON.parse(dataText)
+              } catch {
+                payload = null
+              }
+
+              if (!payload) continue
+
+              if (eventName === 'update' || eventName === 'done') {
+                if (payload.frontpage) emitFrontpageUpdate(payload.frontpage)
+
+                if (eventName === 'done') {
+                  hasDone = true
+                  const fp = payload.frontpage
+                  if (fp?.confidence?.warnings?.length > 0) {
+                    const count = fp.confidence.warnings.length
+                    setTimeout(() => {
+                      message.warning({
+                        content: `发现 ${count} 条编码校验警告，请仔细核对诊断编码`,
+                        duration: 5
+                      })
+                      console.warn('编码校验警告:', fp.confidence.warnings)
+                    }, 500)
+                  }
+                  message.success('AI 病案首页提取完成')
+                  break
+                }
+              } else if (eventName === 'error') {
+                console.warn('LLM 流式提取失败:', payload.error || 'Unknown error')
+                try {
+                  await reader.cancel()
+                } catch {
+                  // ignore
+                }
+
+                if (await tryNonStream()) return
+
+                useMockFallback()
+                message.warning('LLM 服务暂不可用，已使用模拟数据')
+                options.onExtracted?.()
+                return
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('LLM 流式读取失败:', err)
+          if (await tryNonStream()) return
+
+          useMockFallback()
+          message.warning('网络请求失败，已使用模拟数据')
+          options.onExtracted?.()
+          return
+        } finally {
+          if (!hasDone) {
+            try {
+              await reader.cancel()
+            } catch {
+              // ignore
+            }
+          }
+        }
       } else {
-        console.warn('LLM 提取失败，使用模拟数据:', data.error || data.detail || 'Unknown error')
+        const rawText = await streamResponse.text().catch(() => '')
+        console.warn(
+          'LLM 流式提取失败:',
+          rawText || `${streamResponse.status} ${streamResponse.statusText}` || 'Unknown error'
+        )
+
+        if (await tryNonStream()) return
+
         useMockFallback()
         message.warning('LLM 服务暂不可用，已使用模拟数据')
         options.onExtracted?.()
       }
     } catch (error: any) {
       console.error('结构化提取失败:', error)
+      try {
+        const ok = await (async () => {
+          try {
+            const resp = await fetch('/api/v1/frontpage/auto-generate-draft', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ medical_text: medicalText })
+            })
+            const json = await resp.json().catch(() => null)
+            const fp = json?.data?.frontpage
+            if (!fp) return false
+            applyFrontpageResult(fp)
+            message.success('AI 病案首页提取完成')
+            options.onExtracted?.()
+            return true
+          } catch {
+            return false
+          }
+        })()
+        if (ok) return
+      } catch {
+        // ignore
+      }
       useMockFallback()
       message.warning('网络请求失败，已使用模拟数据')
       options.onExtracted?.()
@@ -212,4 +352,3 @@ export function useMedicalTextExtraction(options: {
     extractStructuredData
   }
 }
-

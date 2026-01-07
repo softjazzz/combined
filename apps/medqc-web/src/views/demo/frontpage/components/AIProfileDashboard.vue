@@ -1,9 +1,9 @@
 <template>
                     <div class="h-full">
-                       <div v-if="!profile" class="h-full flex flex-col items-center justify-center text-center p-6">
-                           <div class="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-2xl mb-4 flex items-center justify-center">
-                              <ScanOutlined class="text-3xl text-blue-500" />
-                           </div>
+	                       <div v-if="!profile" class="h-full flex flex-col items-center justify-start text-center p-6 pt-4">
+	                           <div class="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-2xl mb-4 flex items-center justify-center">
+	                              <ScanOutlined class="text-3xl text-blue-500" />
+	                           </div>
                            <h3 class="text-lg font-medium text-slate-800 dark:text-white mb-2">AI 深度画像分析</h3>
                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-xs">对病历全文进行深度阅读，构建诊断发生发展时间轴，验证手术闭环完整性，并自动发现首页填报差异。</p>
                            <button @click="analyzeProfile" :disabled="!medicalText" class="bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors">
@@ -453,7 +453,7 @@ const analyzeProfile = async () => {
 
   profileLoading.value = true
   try {
-    const response = await fetch('/api/v1/case-front-page/analyze-profile', {
+    const response = await fetch('/api/v1/frontpage/profile/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

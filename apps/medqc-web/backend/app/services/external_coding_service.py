@@ -4,11 +4,13 @@ import httpx
 import uuid
 import asyncio
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class ExternalCodingService:
     BASE_URL = "http://122.51.111.253:8002"
+    MAX_SECONDS = float(os.getenv("EXTERNAL_CODING_MAX_SECONDS", "25"))
     
     async def extract_coding(self, medical_text: str, patient_context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -21,12 +23,16 @@ class ExternalCodingService:
         Returns:
             Dict: 编码结果
         """
-        job_id = await self._submit_job(medical_text, patient_context)
-        if not job_id:
-            raise Exception("Failed to submit coding job")
-            
-        result = await self._poll_result(job_id)
-        return result
+        async def run():
+            job_id = await self._submit_job(medical_text, patient_context)
+            if not job_id:
+                raise Exception("Failed to submit coding job")
+            return await self._poll_result(job_id)
+
+        try:
+            return await asyncio.wait_for(run(), timeout=self.MAX_SECONDS)
+        except asyncio.TimeoutError as e:
+            raise TimeoutError("External coding service timed out") from e
 
     async def _submit_job(self, text: str, context: dict) -> Optional[str]:
         async with httpx.AsyncClient(trust_env=False) as client:
@@ -55,14 +61,14 @@ class ExternalCodingService:
                 logger.error(f"Error submitting job: {e}")
                 raise
 
-    async def _poll_result(self, job_id: str, max_retries: int = 15, interval: int = 2) -> Dict[str, Any]:
+    async def _poll_result(self, job_id: str, max_retries: int = 12, interval: int = 2) -> Dict[str, Any]:
         async with httpx.AsyncClient(trust_env=False) as client:
             for i in range(max_retries):
                 try:
                     await asyncio.sleep(interval)
                     resp = await client.get(
                         f"{self.BASE_URL}/api/v1/coding/jobs/{job_id}",
-                        timeout=10
+                        timeout=6
                     )
                     
                     if resp.status_code in (200, 422):

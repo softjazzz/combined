@@ -36,8 +36,8 @@
           <DownOutlined class="text-xs" />
         </button>
         <template #overlay>
-          <a-menu @click="handleTestCaseSelect">
-            <a-menu-item v-for="(testCase, index) in testCases" :key="index">
+          <a-menu>
+            <a-menu-item v-for="(testCase, index) in testCases" :key="String(index)" @click="() => emit('selectTestCase', index)">
               <div class="flex flex-col py-1">
                 <span class="font-medium">{{ testCase.name }}</span>
                 <span class="text-xs text-slate-400">{{ testCase.description }}</span>
@@ -68,11 +68,4 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'selectTestCase', index: number): void
 }>()
-
-const handleTestCaseSelect = ({ key }: { key: string }) => {
-  const index = parseInt(key, 10)
-  if (Number.isNaN(index)) return
-  if (index < 0 || index >= props.testCases.length) return
-  emit('selectTestCase', index)
-}
 </script>

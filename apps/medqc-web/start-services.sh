@@ -131,7 +131,11 @@ start_backend() {
     log_info "启动后端服务..."
     nohup bash -c "
         if [ -z \"\$JWT_SECRET\" ]; then export JWT_SECRET=dev-secret; fi && \
-        .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+        if [ \"\$BACKEND_RELOAD\" = \"1\" ]; then \
+          .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload; \
+        else \
+          .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001; \
+        fi
     " > "$BACKEND_ROOT/backend.log" 2>&1 &
     echo $! > "$BACKEND_PID_FILE"
     

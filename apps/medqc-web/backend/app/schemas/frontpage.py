@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FrontPageBasicInfo(BaseModel):
@@ -21,6 +21,15 @@ class FrontPageBasicInfo(BaseModel):
     contact_name: Optional[str] = Field(None, description="联系人姓名")
     contact_relation: Optional[str] = Field(None, description="联系人关系")
     contact_phone: Optional[str] = Field(None, description="联系人电话")
+
+    @field_validator("gender", "marital_status", mode="before")
+    @classmethod
+    def coerce_code_to_str(cls, value):
+        if value is None:
+            return value
+        if isinstance(value, (int, float)):
+            return str(int(value))
+        return value
 
 
 class FrontPageHospitalization(BaseModel):
@@ -74,6 +83,15 @@ class FrontPageDiagnoses(BaseModel):
         default=None,
         description="入院病情：1 有 2 临床未确定 3 情况不明 4 无",
     )
+
+    @field_validator("admission_condition", mode="before")
+    @classmethod
+    def coerce_code_to_str(cls, value):
+        if value is None:
+            return value
+        if isinstance(value, (int, float)):
+            return str(int(value))
+        return value
 
 
 class FrontPageProcedures(BaseModel):
@@ -133,6 +151,15 @@ class FrontPageOtherMedicalInfo(BaseModel):
         description="颅脑损伤患者昏迷信息（入院前/入院后小时数等），结构后续细化",
     )
 
+    @field_validator("drug_allergy_flag", "rh_blood_type", mode="before")
+    @classmethod
+    def coerce_code_to_str(cls, value):
+        if value is None:
+            return value
+        if isinstance(value, (int, float)):
+            return str(int(value))
+        return value
+
 
 class FrontPageStaff(BaseModel):
     """病案首页-人员信息"""
@@ -171,4 +198,3 @@ class FrontPageDraft(BaseModel):
     confidence: Dict[str, Any] = Field(
         default_factory=dict, description="字段级置信度及校验信息"
     )
-

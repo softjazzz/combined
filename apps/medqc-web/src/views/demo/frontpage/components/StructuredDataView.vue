@@ -105,7 +105,15 @@
               <td class="px-4 py-3">
                 <span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium dark:bg-blue-900/50 dark:text-blue-300">主要</span>
               </td>
-              <td class="px-4 py-3 font-mono" :class="isValidIcdCode(frontpage.diagnoses.admission_main_icd) ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 italic'">{{ frontpage.diagnoses.admission_main_icd || '待编码' }}</td>
+              <td class="px-4 py-3">
+                <input 
+                  type="text" 
+                  :value="frontpage.diagnoses.admission_main_icd || ''"
+                  @change="(e) => handleCodeChange('admission_main_icd', (e.target as HTMLInputElement).value)"
+                  placeholder="待编码"
+                  class="font-mono text-sm w-28 px-2 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </td>
               <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ frontpage.diagnoses.admission_main_diagnosis_text }}</td>
               <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ frontpage.diagnoses.admission_main_conn || '-' }}</td>
               <td class="px-4 py-3 text-center">
@@ -160,7 +168,15 @@
               <td class="px-4 py-3">
                 <span class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-medium dark:bg-green-900/50 dark:text-green-300">主要</span>
               </td>
-              <td class="px-4 py-3 font-mono" :class="isValidIcdCode(frontpage.diagnoses.discharge_main_icd) ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 italic'">{{ frontpage.diagnoses.discharge_main_icd || '待编码' }}</td>
+              <td class="px-4 py-3">
+                <input 
+                  type="text" 
+                  :value="frontpage.diagnoses.discharge_main_icd || ''"
+                  @change="(e) => handleCodeChange('discharge_main_icd', (e.target as HTMLInputElement).value)"
+                  placeholder="待编码"
+                  class="font-mono text-sm w-28 px-2 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 focus:border-green-500 focus:ring-1 focus:ring-green-500 outline-none"
+                />
+              </td>
               <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">{{ frontpage.diagnoses.discharge_main_diagnosis_text }}</td>
               <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ frontpage.diagnoses.discharge_main_conn || '-' }}</td>
               <td class="px-4 py-3 text-center">
@@ -234,6 +250,109 @@
         </table>
       </div>
     </div>
+
+    <!-- 4. Other Medical Info & Staff (Grid) -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <!-- Other Medical Info -->
+      <div class="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-5 border border-slate-100 dark:border-slate-700">
+        <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+          <HeartOutlined class="text-red-500" /> 其他医疗信息
+        </h4>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">药物过敏</div>
+            <div class="font-medium dark:text-slate-200">
+              <span v-if="frontpage.other_medical_info?.drug_allergy_flag === 1" class="text-green-600">无</span>
+              <span v-else-if="frontpage.other_medical_info?.drug_allergy_flag === 2" class="text-red-600">
+                有: {{ frontpage.other_medical_info?.drug_allergy_drugs?.join(', ') || '未知' }}
+              </span>
+              <span v-else>-</span>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">血型</div>
+            <div class="font-medium dark:text-slate-200">
+              {{ frontpage.other_medical_info?.abo_blood_type || '-' }}
+              <span v-if="frontpage.other_medical_info?.rh_blood_type_text"> (Rh{{ frontpage.other_medical_info?.rh_blood_type_text }})</span>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">离院方式</div>
+            <div class="font-medium dark:text-slate-200">{{ getDischargeMethodText(frontpage.other_medical_info?.discharge_method) }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">31天再住院计划</div>
+            <div class="font-medium dark:text-slate-200">
+              <span v-if="frontpage.other_medical_info?.readmission_plan === 1" class="text-orange-600">有</span>
+              <span v-else-if="frontpage.other_medical_info?.readmission_plan === 2" class="text-green-600">无</span>
+              <span v-else>-</span>
+            </div>
+          </div>
+          <div v-if="frontpage.other_medical_info?.pathology_text">
+            <div class="text-xs text-slate-500 dark:text-slate-400">病理诊断</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info?.pathology_text }}</div>
+          </div>
+          <div v-if="frontpage.other_medical_info?.pathology_no">
+            <div class="text-xs text-slate-500 dark:text-slate-400">病理号</div>
+            <div class="font-medium font-mono dark:text-slate-200">{{ frontpage.other_medical_info?.pathology_no }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Staff Info -->
+      <div class="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-5 border border-slate-100 dark:border-slate-700">
+        <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+          <TeamOutlined class="text-indigo-500" /> 人员信息
+        </h4>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">科主任</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.staff?.dept_director || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">主任/副主任医师</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.staff?.chief_physician || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">主治医师</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.staff?.attending_physician || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">住院医师</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.staff?.resident_physician || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">责任护士</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.staff?.responsible_nurse || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">编码员</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.staff?.coder || '-' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Costs Info -->
+    <div v-if="frontpage.costs?.total_cost" class="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl p-5 border border-emerald-100 dark:border-emerald-800/30">
+      <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+        <DollarOutlined class="text-emerald-600" /> 费用信息
+      </h4>
+      <div class="flex flex-wrap gap-6">
+        <div class="bg-white dark:bg-slate-800 rounded-lg px-4 py-3 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">住院总费用</div>
+          <div class="text-xl font-bold text-emerald-600 dark:text-emerald-400">¥ {{ formatNumber(frontpage.costs?.total_cost) }}</div>
+        </div>
+        <div v-if="frontpage.costs?.self_paid" class="bg-white dark:bg-slate-800 rounded-lg px-4 py-3 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">自付金额</div>
+          <div class="text-xl font-bold text-orange-600 dark:text-orange-400">¥ {{ formatNumber(frontpage.costs?.self_paid) }}</div>
+        </div>
+        <div v-if="frontpage.costs?.total_cost && frontpage.costs?.self_paid" class="bg-white dark:bg-slate-800 rounded-lg px-4 py-3 shadow-sm">
+          <div class="text-xs text-slate-500 dark:text-slate-400">医保支付</div>
+          <div class="text-xl font-bold text-blue-600 dark:text-blue-400">¥ {{ formatNumber(frontpage.costs?.total_cost - frontpage.costs?.self_paid) }}</div>
+        </div>
+      </div>
+    </div>
   </div>
   <!-- Empty state: needs extraction -->
   <div v-else class="h-full flex flex-col items-center justify-start text-center p-6 pt-4">
@@ -256,7 +375,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { HistoryOutlined, MedicineBoxOutlined, RobotOutlined, ScissorOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { HistoryOutlined, MedicineBoxOutlined, RobotOutlined, ScissorOutlined, ThunderboltOutlined, UserOutlined, HeartOutlined, TeamOutlined, DollarOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps<{
   extracting: boolean
@@ -264,9 +383,34 @@ const props = defineProps<{
   hasMedicalText: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'extract'): void
+  (e: 'codeChange', field: string, value: string): void
 }>()
+
+// 处理编码变更
+const handleCodeChange = (field: string, value: string) => {
+  emit('codeChange', field, value)
+}
+
+// 格式化数字
+const formatNumber = (num: number | null | undefined): string => {
+  if (num === null || num === undefined) return '-'
+  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// 离院方式映射
+const getDischargeMethodText = (code: number | null | undefined): string => {
+  const map: Record<number, string> = {
+    1: '医嘱离院',
+    2: '医嘱转院',
+    3: '医嘱转社区',
+    4: '非医嘱离院',
+    5: '死亡',
+    9: '其他'
+  }
+  return code ? map[code] || '-' : '-'
+}
 
 // 检查是否有入院诊断
 const hasAdmissionDiagnosis = computed(() => {

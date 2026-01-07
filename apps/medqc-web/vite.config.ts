@@ -44,19 +44,39 @@ export default defineConfig({
     strictPort: true, // 端口被占用时报错，不自动切换
 
     proxy: {
+      // 流式接口（SSE）需要长连接，单独关闭超时避免 502
+      '/api/v1/frontpage/auto-generate-draft-stream': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        timeout: 0,
+        proxyTimeout: 0,
+        configure: (proxy) => {
+          proxy.on('error', (err: any, req: any, res: any) => {
+            const url = req?.url || ''
+            const method = req?.method || ''
+            // eslint-disable-next-line no-console
+            console.error('[vite-proxy] error:', method, url, err?.code || '', err?.message || err)
+            if (res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' })
+            }
+            res?.end?.('Bad Gateway')
+          })
+        }
+      },
       // DRG 相关接口需要转发到新的后端服务
       '/api/v1/drg': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         secure: false
       },
-      // 所有 API 接口都转发到后端服务（端口 8000）
+      // 所有 API 接口都转发到后端服务（端口 8001）
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         secure: false,
-        timeout: 60000,
-        proxyTimeout: 60000
+        timeout: 180000,
+        proxyTimeout: 180000
         // 不需要rewrite，因为前端代码已经使用 /api/v1/* 路径
       }
     }

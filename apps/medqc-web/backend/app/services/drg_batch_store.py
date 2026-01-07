@@ -333,33 +333,43 @@ def drill_down(
             "mdc": "mdc"
         }
         
-        if dimension not in dimension_map:
-            return [], 0
-        
-        column = dimension_map[dimension]
-        
         # 构建 WHERE
-        where_clauses = [f"{column} = ?"]
-        params = [value]
+        where_clauses = []
+        params = []
+        
+        # 支持 'all' 维度，返回所有记录
+        if dimension != "all" and dimension in dimension_map:
+            column = dimension_map[dimension]
+            where_clauses.append(f"{column} = ?")
+            params.append(value)
+        elif dimension != "all":
+            return [], 0
         
         if batch_id:
             where_clauses.append("batch_id = ?")
             params.append(batch_id)
         
-        where_sql = " AND ".join(where_clauses)
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
         
         # 总数
         cursor.execute(f"SELECT COUNT(*) FROM drg_batch_records WHERE {where_sql}", params)
         total = cursor.fetchone()[0]
         
-        # 分页查询
-        offset = (page - 1) * per_page
-        cursor.execute(f'''
-            SELECT * FROM drg_batch_records 
-            WHERE {where_sql}
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        ''', params + [per_page, offset])
+        # 分页查询 (dimension='all' 时不分页)
+        if dimension == "all":
+            cursor.execute(f'''
+                SELECT * FROM drg_batch_records 
+                WHERE {where_sql}
+                ORDER BY created_at DESC
+            ''', params)
+        else:
+            offset = (page - 1) * per_page
+            cursor.execute(f'''
+                SELECT * FROM drg_batch_records 
+                WHERE {where_sql}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            ''', params + [per_page, offset])
         
         records = [dict(row) for row in cursor.fetchall()]
         
@@ -389,6 +399,16 @@ def get_batch_list() -> List[Dict]:
             }
             for r in cursor.fetchall()
         ]
+
+
+def get_drill_down(
+    batch_id: Optional[str] = None,
+    dimension: str = "all",
+    value: str = "all"
+) -> List[Dict]:
+    """获取钻取数据（简化接口，用于导出）"""
+    records, _ = drill_down(dimension, value, page=1, per_page=10000, batch_id=batch_id)
+    return records
 
 
 # 初始化数据库

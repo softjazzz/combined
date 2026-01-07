@@ -33,18 +33,49 @@
           
           <div class="my-2 border-t border-slate-100 dark:border-slate-700 mx-2"></div>
           
-          <a @click="currentView = 'monitoring'" :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', currentView === 'monitoring' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
-            <SafetyCertificateOutlined class="text-[20px]" />
-            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">事中监控</span>
-          </a>
-          <a @click="currentView = 'payment'" :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', currentView === 'payment' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
-            <DollarCircleOutlined class="text-[20px]" />
-            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">付费监测</span>
-          </a>
-          <a @click="currentView = 'analysis'" :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', currentView === 'analysis' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
-            <BarChartOutlined class="text-[20px]" />
-            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">事后分析</span>
-          </a>
+          <!-- DRG/DIP 折叠菜单组 -->
+          <div class="space-y-1">
+            <a @click="drgMenuExpanded = !drgMenuExpanded" :class="['flex items-center justify-between px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', ['pre-analysis', 'monitoring', 'payment', 'analysis'].includes(currentView) ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+              <div class="flex items-center gap-3">
+                <MedicineBoxOutlined class="text-[20px]" />
+                <span v-if="!isSidebarCollapsed" class="font-medium text-sm">DRG/DIP</span>
+              </div>
+              <DownOutlined v-if="!isSidebarCollapsed" :class="['text-xs transition-transform', drgMenuExpanded ? 'rotate-180' : '']" />
+            </a>
+            
+            <div v-show="drgMenuExpanded && !isSidebarCollapsed" class="pl-4 space-y-1">
+              <!-- 6.1 事前分析 -->
+              <a @click="currentView = 'pre-analysis'" :class="['flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group', currentView === 'pre-analysis' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+                <FileSearchOutlined class="text-[18px]" />
+                <span class="font-medium text-sm">事前分析</span>
+              </a>
+              
+              <!-- 6.2 事中分析 (可展开) -->
+              <div class="space-y-1">
+                <a @click="midAnalysisExpanded = !midAnalysisExpanded" :class="['flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer group', ['monitoring', 'payment'].includes(currentView) ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+                  <div class="flex items-center gap-3">
+                    <SafetyCertificateOutlined class="text-[18px]" />
+                    <span class="font-medium text-sm">事中分析</span>
+                  </div>
+                  <RightOutlined :class="['text-xs transition-transform', midAnalysisExpanded ? 'rotate-90' : '']" />
+                </a>
+                <div v-show="midAnalysisExpanded" class="pl-5 space-y-1">
+                  <a @click="currentView = 'monitoring'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer', currentView === 'monitoring' ? 'bg-blue-500 text-white shadow-sm' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400']">
+                    <span class="text-sm">事中监控</span>
+                  </a>
+                  <a @click="currentView = 'payment'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer', currentView === 'payment' ? 'bg-blue-500 text-white shadow-sm' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400']">
+                    <span class="text-sm">付费监测</span>
+                  </a>
+                </div>
+              </div>
+              
+              <!-- 6.3 事后分析 -->
+              <a @click="currentView = 'analysis'" :class="['flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group', currentView === 'analysis' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+                <BarChartOutlined class="text-[18px]" />
+                <span class="font-medium text-sm">事后分析</span>
+              </a>
+            </div>
+          </div>
           
           <div class="my-2 border-t border-slate-100 dark:border-slate-700 mx-2"></div>
 
@@ -80,7 +111,7 @@
       <!-- Content Area -->
       <div class="flex-1 overflow-hidden px-8 pb-8">
         <div v-if="currentView === 'workbench'" class="flex flex-col h-full w-full">
-          <div class="flex-1 flex min-h-[600px]" ref="containerRef">
+          <div class="flex-1 flex min-h-[1200px]" ref="containerRef">
           
 	          <!-- Left Column: Medical Record -->
 	          <div class="flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 transition-all duration-700" :style="{ width: isExpanded ? '0%' : leftPanelWidth + '%', opacity: isExpanded ? 0 : 1, paddingRight: isExpanded ? '0' : '' }">
@@ -123,7 +154,7 @@
             />
             
             <!-- Main Content Area -->
-            <div class="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col relative min-h-[900px]">
+            <div class="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col relative min-h-[1200px]">
               <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                 <h3 class="font-semibold text-slate-800 dark:text-white">{{ activeTabLabel }}</h3>
                 <button v-if="activeTab === 'structured' || activeTab === 'print'" class="text-blue-500 hover:text-blue-600 text-sm font-medium flex items-center gap-1">
@@ -131,27 +162,26 @@
                 </button>
               </div>
               
-              <div class="flex-1 p-6 relative overflow-hidden flex flex-col">
+              <div class="flex-1 p-6 relative overflow-auto flex flex-col">
                  <!-- Background Grid -->
                  <div class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))] pointer-events-none -z-0"></div>
                  
                  <div class="relative z-10 flex-1 overflow-y-auto custom-scrollbar">
                     
                     <!-- Content: Structured -->
-                    <StructuredDataView
-                      v-if="activeTab === 'structured'"
-                      :extracting="extracting"
-                      :frontpage="frontpage"
-                      :has-medical-text="!!demoCase?.medical_text"
-                      @extract="extractStructuredData"
-                    />
+	                    <StructuredDataView
+	                      v-if="activeTab === 'structured'"
+	                      :extracting="extracting"
+	                      :frontpage="frontpage"
+	                      :has-medical-text="!!demoCase?.medical_text"
+	                      @extract="extractStructuredData"
+	                    />
 
                     <!-- Content: AI Analysis -->
                     <AIProfileDashboard v-else-if="activeTab === 'profile'" :medical-text="demoCase?.medical_text" :frontpage="frontpage" @expand="onProfileExpand" />
                     <!-- Content: HM Template -->
                     <div v-else-if="activeTab === 'hm'" class="h-full">
-                      <HmFrontpagePreview v-if="frontpage" :draft="frontpage" class="h-full" />
-                      <div v-else class="flex items-center justify-center h-full text-slate-400">暂无数据</div>
+                      <HmFrontpagePreview :draft="frontpage" class="h-full" />
                     </div>
                     
 	                    <!-- Content: Insurance -->
@@ -207,6 +237,9 @@
 	        </div>
         </div>
 
+        <!-- 事前分析：自包含的完整功能 -->
+        <PreAnalysisView v-else-if="currentView === 'pre-analysis'" />
+
         <InProcessMonitoringView v-else-if="currentView === 'monitoring'" />
         <PaymentMonitoringView v-else-if="currentView === 'payment'" />
         <PostEventAnalysisView v-else-if="currentView === 'analysis'" :batchId="selectedBatchId" />
@@ -215,6 +248,7 @@
           :test-cases="testCases"
           @back="currentView = 'workbench'"
           @loadCase="handleLoadTestCase"
+          @createCase="handleCreateTestCase"
         />
         <ExcelUploadView
           v-else-if="currentView === 'upload'"
@@ -251,7 +285,11 @@ import {
   CloudUploadOutlined,
   QuestionCircleOutlined,
   SafetyCertificateOutlined,
-  DollarCircleOutlined
+  DollarCircleOutlined,
+  MedicineBoxOutlined,
+  DownOutlined,
+  RightOutlined,
+  FileSearchOutlined
 } from '@ant-design/icons-vue'
 	import { message } from 'ant-design-vue'
 	import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
@@ -265,9 +303,10 @@ import {
 		  PaymentMonitoringView,
 		  PostEventAnalysisView,
 		  TestCaseListView,
-		  ExcelUploadView
+		  ExcelUploadView,
+		  PreAnalysisView
 		} from '@/views/demo/frontpage/components'
-		import { useMedicalTextExtraction } from '@/views/demo/frontpage/composables'
+		import { useMedicalTextExtraction, useDRGGrouping } from '@/views/demo/frontpage/composables'
 
 // Basic Types
 interface DemoCase {
@@ -286,19 +325,32 @@ const demoCase = ref<DemoCase | null>(null)
 const isExpanded = ref(false)
 const isDark = ref(false)
 const isSidebarCollapsed = ref(false)
+const drgMenuExpanded = ref(true)
+const midAnalysisExpanded = ref(true)
 const selectedBatchId = ref<string | null>(null)
 
 const { extracting, extractStructuredData } = useMedicalTextExtraction({
   demoCase,
-  onExtracted: () => {
-    // Small delay for better visual flow, matching previous behavior
+  onStartExtract: () => {
+    // 开始提取 2 秒后即扩展页面，不等待提取完成
     setTimeout(() => {
       isExpanded.value = true
-    }, 500)
+    }, 2000)
+  },
+  onExtracted: () => {
+    // 提取完成的回调（可选：用于其他后续操作）
   }
 })
+
+// DRG Grouping
+const { drgLoading: drgGrouping, drgResult, performDRGGrouping: doDRGGrouping } = useDRGGrouping()
+const performDRGGrouping = () => {
+  if (demoCase.value?.case_id) {
+    doDRGGrouping(demoCase.value.case_id, frontpage.value?.insurance?.insurance_total_cost)
+  }
+}
 // Test Cases Data
-const testCases = [
+const testCases = ref([
   {
     name: '测试病历1',
     description: '高血压合并冠心病 - 简单病例',
@@ -391,7 +443,7 @@ T 36.5℃，P 78次/分，R 18次/分，BP 158/98mmHg
 床号：54
 住院号:350827`
   }
-]
+])
 
 // Resizable splitter state
 const leftPanelWidth = ref(55) // percentage
@@ -439,7 +491,7 @@ onUnmounted(() => {
 	const tabs = [
 	  { key: 'structured', label: '结构化结果' },
 	  { key: 'profile', label: 'AI 画像分析' },
-	  { key: 'hm', label: 'HM 模板' },
+	  { key: 'hm', label: '病案首页' },
 	  { key: 'insurance', label: '医保清单' }
 	]
 
@@ -455,23 +507,42 @@ const toggleDarkMode = () => {
   }
 }
 
-const loadDemoCase = async (caseIndex: number = 0) => {
-  loading.value = true
-  try {
-    // Get selected test case
-    const selectedCase = testCases[caseIndex]
-    if (!selectedCase) {
-      throw new Error('Invalid test case index')
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay for UX
-    
-    demoCase.value = {
-      case_id: `demo_case_${caseIndex + 1}`,
-      description: selectedCase.description,
-      medical_text: selectedCase.medical_text,
-      frontpage: null, // 不直接加载，需要用户点击"开始 AI 提取"
-      insurance_claim: null // 也延迟加载
+	const normalizeTestCaseIndex = (input: unknown) => {
+	  let idx = 0
+	  if (typeof input === 'number') {
+	    idx = input
+	  } else if (typeof input === 'string') {
+	    idx = Number.parseInt(input, 10)
+	  } else if (input && typeof input === 'object') {
+	    const maybe = input as any
+	    if (maybe.key != null) idx = Number.parseInt(String(maybe.key), 10)
+	    else if (maybe.index != null) idx = Number.parseInt(String(maybe.index), 10)
+	  }
+	
+	  if (!Number.isFinite(idx) || Number.isNaN(idx)) idx = 0
+	  const total = testCases.value.length
+	  if (total <= 0) return 0
+	  return Math.min(Math.max(0, idx), total - 1)
+	}
+	
+	const loadDemoCase = async (caseIndex: unknown = 0) => {
+	  loading.value = true
+	  try {
+	    // Get selected test case
+	    const index = normalizeTestCaseIndex(caseIndex)
+	    const selectedCase = testCases.value[index]
+	    if (!selectedCase) {
+	      throw new Error('Invalid test case index')
+	    }
+	    
+	    await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay for UX
+	    
+	    demoCase.value = {
+	      case_id: `demo_case_${index + 1}`,
+	      description: selectedCase.description,
+	      medical_text: selectedCase.medical_text,
+	      frontpage: null, // 不直接加载，需要用户点击"开始 AI 提取"
+	      insurance_claim: null // 也延迟加载
     }
     
     
@@ -515,6 +586,35 @@ const handleLoadTestCase = (caseIndex: number) => {
 const handleGoAnalysis = (batchId: string) => {
   selectedBatchId.value = batchId
   currentView.value = 'analysis'
+}
+
+// 创建新的测试病历
+const handleCreateTestCase = (data: { title: string; description: string; medical_text: string; type: string; createdAt: string }) => {
+  testCases.value.push({
+    name: data.title,
+    description: data.description,
+    medical_text: data.medical_text,
+    type: data.type,
+    createdAt: data.createdAt
+  })
+}
+
+// 编码变更处理 - 触发DRG重新分组
+const handleCodeChange = async (field: string, value: string) => {
+  if (!frontpage.value?.diagnoses) return
+  
+  // 更新本地数据
+  frontpage.value.diagnoses[field] = value
+  
+  // 显示提示并触发重新分组
+  message.loading('编码已更新，正在重新计算DRG分组...', 1)
+  
+  // 延迟触发DRG分组
+  setTimeout(() => {
+    if (demoCase.value?.admission_id) {
+      performDRGGrouping(demoCase.value.admission_id)
+    }
+  }, 500)
 }
 </script>
 

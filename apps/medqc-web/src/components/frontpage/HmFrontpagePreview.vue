@@ -8,11 +8,10 @@
         </a-typography-text>
       </a-space>
     </div>
-
-    <div v-if="srcdoc" class="frame-wrap">
+    
+    <div class="frame-wrap">
       <iframe ref="iframeRef" class="preview-frame" :srcdoc="srcdoc" />
     </div>
-    <a-empty v-else description="暂无首页数据" />
   </div>
 </template>
 
@@ -34,8 +33,9 @@ const props = defineProps<{
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 const srcdoc = computed(() => {
-  if (!props.draft) return ''
-  const valuesByDe = frontPageDraftToDeMap(props.draft)
+  // Always render the template, use empty object if no draft data
+  const draftData = props.draft || {}
+  const valuesByDe = frontPageDraftToDeMap(draftData)
   const filledBodyHtml = applyDeValuesToHmTemplateBody(templateBodyHtml, valuesByDe)
   return buildHmTemplateSrcdoc({ filledBodyHtml, contentsCss, printCss })
 })
@@ -71,13 +71,16 @@ function printIframe() {
 .frame-wrap {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #fff;
+  max-height: calc(100vh - 200px);
 }
 
 .preview-frame {
   width: 100%;
-  height: 520px;
+  min-height: 2500px;
+  height: auto;
   border: 0;
   background: #fff;
 }

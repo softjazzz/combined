@@ -10,7 +10,7 @@ from __future__ import annotations
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple
 import json
 import logging
 import asyncio
@@ -344,6 +344,210 @@ class FrontPageExtractionService:
         else:
             logger.warning("LLM 未配置，回退到 demo 数据")
             return await self._load_demo_frontpage()
+
+    async def extract_from_text_stream(
+        self, medical_text: str
+    ) -> AsyncGenerator[Tuple[str, Dict[str, Any]], None]:
+        """
+        逐步抽取首页信息，按模块产出结果（用于前端分批展示）。
+
+        Yields:
+            (event_name, payload) where payload contains partial `frontpage`.
+        """
+
+        def default_frontpage() -> Dict[str, Any]:
+            return {
+                "basic_info": {
+                    "patient_name": "",
+                    "gender": "0",
+                    "gender_text": "",
+                    "birth_date": "",
+                    "age_years": 0,
+                    "nationality": "",
+                    "ethnicity": "",
+                    "marital_status": "9",
+                    "marital_status_text": "",
+                    "id_number": "",
+                    "occupation": "",
+                    "current_address": "",
+                    "contact_name": "",
+                    "contact_relation": "",
+                    "contact_phone": "",
+                },
+                "hospitalization": {},
+                "diagnoses": {
+                    "ed_diagnosis_texts": [],
+                    "discharge_main_diagnosis_text": None,
+                    "discharge_other_diagnoses_texts": [],
+                    "ed_diagnosis_codes": None,
+                    "discharge_main_icd": None,
+                    "discharge_other_icds": None,
+                    "admission_condition": None,
+                },
+                "procedures": {},
+                "other_medical_info": {},
+                "staff": {},
+                "costs": {"total_cost": None, "self_paid": None, "categories": {}},
+                "evidence": {},
+                "confidence": {},
+            }
+
+        if not medical_text or not medical_text.strip():
+            demo = await self._load_demo_frontpage()
+            yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
+            return
+
+        if not self._use_llm:
+            demo = await self._load_demo_frontpage()
+            yield ("update", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
+            yield ("done", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
+            return
+
+        fp_data: Dict[str, Any] = default_frontpage()
+        validation_info: Dict[str, Any] = {}
+
+        logger.info("stream: Step 1: 提取基本信息...")
+        basic_info = await self._extract_json(BASIC_INFO_PROMPT.format(medical_text=medical_text)) or {}
+        fp_data["basic_info"] = {**fp_data["basic_info"], **basic_info}
+        yield ("update", {"module": "basic_info", "frontpage": fp_data})
+
+        patient_context = {
+            "gender": (basic_info or {}).get("gender_text", "未说明"),
+            "age": (basic_info or {}).get("age_years", 0),
+        }
+
+        logger.info("stream: Step 2: 并行提取其他模块及外部编码...")
+        from .external_coding_service import get_external_coding_service
+
+        ext_coding_service = get_external_coding_service()
+
+        async def run_named(name: str, coro):
+            try:
+                return name, await coro
+            except Exception as e:
+                return name, e
+
+        named_tasks: List[asyncio.Task] = [
+            asyncio.create_task(
+                run_named(
+                    "hospitalization",
+                    self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text)),
+                )
+            ),
+            asyncio.create_task(
+                run_named(
+                    "diagnoses",
+                    self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text)),
+                )
+            ),
+            asyncio.create_task(
+                run_named(
+                    "procedures",
+                    self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text)),
+                )
+            ),
+            asyncio.create_task(
+                run_named(
+                    "other_medical_info",
+                    self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
+                )
+            ),
+            asyncio.create_task(
+                run_named(
+                    "staff",
+                    self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
+                )
+            ),
+            asyncio.create_task(
+                run_named(
+                    "coding_result",
+                    ext_coding_service.extract_coding(medical_text, patient_context),
+                )
+            ),
+        ]
+
+        for finished in asyncio.as_completed(named_tasks):
+            name, result = await finished
+            if isinstance(result, Exception):
+                logger.warning(f"stream: task {name} failed: {result}")
+                result = None
+
+            if name == "coding_result":
+                coding_result = result or None
+                if coding_result:
+                    try:
+                        diagnoses = fp_data.get("diagnoses") or {}
+                        procedures = fp_data.get("procedures") or {}
+
+                        if coding_result.get("principal_diagnosis"):
+                            pd = coding_result["principal_diagnosis"]
+                            diagnoses["discharge_main_diagnosis_text"] = pd.get("name")
+                            diagnoses["discharge_main_icd"] = pd.get("code")
+                            validation_info["principal_diagnosis_confidence"] = pd.get("confidence")
+
+                        if coding_result.get("secondary_diagnoses"):
+                            sd_list = coding_result["secondary_diagnoses"]
+                            diagnoses["discharge_other_diagnoses_texts"] = [d.get("name") for d in sd_list]
+                            diagnoses["discharge_other_icds"] = [d.get("code") for d in sd_list]
+
+                        if coding_result.get("principal_procedures"):
+                            pp_list = coding_result["principal_procedures"]
+                            if pp_list:
+                                main_proc = pp_list[0]
+                                procedures["main_procedure_text"] = main_proc.get("name")
+                                procedures["main_procedure_code"] = main_proc.get("code")
+
+                        if coding_result.get("warnings"):
+                            validation_info["warnings"] = coding_result["warnings"]
+                            logger.info(f"stream: 捕获到 {len(coding_result['warnings'])} 条编码警告")
+
+                        fp_data["diagnoses"] = diagnoses
+                        fp_data["procedures"] = procedures
+                    except Exception as e:
+                        logger.warning(f"stream: merge coding result failed: {e}")
+
+                fp_data["confidence"] = {**fp_data.get("confidence", {}), **validation_info}
+                yield ("update", {"module": "confidence", "frontpage": fp_data})
+                continue
+
+            if isinstance(result, dict):
+                fp_data[name] = result
+            else:
+                fp_data[name] = fp_data.get(name) or {}
+
+            yield ("update", {"module": name, "frontpage": fp_data})
+
+        # Post-processing (may trigger extra LLM calls; still stream when finished)
+        try:
+            if fp_data.get("diagnoses"):
+                fp_data["diagnoses"] = await self._infer_admission_conditions(medical_text, fp_data["diagnoses"])
+                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+        except Exception as e:
+            logger.warning(f"stream: infer admission conditions failed: {e}")
+
+        try:
+            if fp_data.get("diagnoses") and not fp_data["diagnoses"].get("discharge_main_icd"):
+                fp_data["diagnoses"] = await self._suggest_diagnosis_codes(fp_data["diagnoses"])
+                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+        except Exception as e:
+            logger.warning(f"stream: suggest diagnosis codes failed: {e}")
+
+        try:
+            if fp_data.get("procedures") and not fp_data["procedures"].get("main_procedure_code"):
+                fp_data["procedures"] = await self._suggest_procedure_codes(fp_data["procedures"])
+                yield ("update", {"module": "procedures", "frontpage": fp_data})
+        except Exception as e:
+            logger.warning(f"stream: suggest procedure codes failed: {e}")
+
+        fp_data["confidence"] = {**fp_data.get("confidence", {}), **validation_info}
+
+        # Final validation (best effort)
+        try:
+            draft = FrontPageDraft.model_validate(fp_data)
+            yield ("done", {"frontpage": draft.model_dump()})
+        except Exception as e:
+            logger.warning(f"stream: final validation failed, returning raw frontpage: {e}")
+            yield ("done", {"frontpage": fp_data, "warning": str(e)})
 
     async def _get_medical_text(self, visit_id: str) -> str:
         """获取病历全文（当前为 demo，后续接入真实 EMR）"""

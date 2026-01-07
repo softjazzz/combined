@@ -12,8 +12,15 @@
     <div class="flex-1 flex gap-4 overflow-hidden">
       <!-- Left: Test Case List -->
       <div class="w-80 flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">病历列表</h3>
+          <button 
+            @click="showCreateModal = true"
+            class="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+          >
+            <PlusOutlined />
+            新建
+          </button>
         </div>
         
         <div class="flex-1 overflow-y-auto">
@@ -34,7 +41,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <div class="font-medium text-slate-800 dark:text-white mb-1">
-                  测试病历{{ index + 1 }}
+                  {{ testCase.title || `测试病历${index + 1}` }}
                 </div>
                 <div class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
                   {{ testCase.description }}
@@ -46,15 +53,27 @@
               </div>
             </div>
           </div>
+          
+          <!-- Empty state -->
+          <div v-if="testCases.length === 0" class="p-8 text-center text-slate-400">
+            <FileTextOutlined class="text-4xl mb-3" />
+            <p>暂无测试病历</p>
+            <button 
+              @click="showCreateModal = true"
+              class="mt-3 text-blue-500 hover:text-blue-600 text-sm"
+            >
+              点击创建第一个
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Right: Case Content -->
       <div class="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
-        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div v-if="selectedCase" class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div>
             <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              测试病历{{ selectedIndex + 1 }}
+              {{ selectedCase.title || `测试病历${selectedIndex + 1}` }}
             </h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
               {{ selectedCase?.description }}
@@ -78,7 +97,7 @@
           </div>
         </div>
         
-        <div class="flex-1 overflow-y-auto p-5">
+        <div v-if="selectedCase" class="flex-1 overflow-y-auto p-5">
           <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">病历原文</span>
@@ -118,8 +137,85 @@
             </div>
           </div>
         </div>
+        
+        <!-- Empty state for right panel -->
+        <div v-else class="flex-1 flex items-center justify-center text-slate-400">
+          <div class="text-center">
+            <FileTextOutlined class="text-5xl mb-3" />
+            <p>请选择或创建一个测试病历</p>
+          </div>
+        </div>
       </div>
     </div>
+    
+    <!-- Create Modal -->
+    <a-modal
+      v-model:open="showCreateModal"
+      title="创建测试病历"
+      :width="720"
+      :footer="null"
+      :destroyOnClose="true"
+    >
+      <div class="space-y-4 py-2">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            病历名称 <span class="text-red-500">*</span>
+          </label>
+          <a-input 
+            v-model:value="newCase.title" 
+            placeholder="例如：肺炎合并高血压病历"
+            size="large"
+          />
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            简要描述
+          </label>
+          <a-input 
+            v-model:value="newCase.description" 
+            placeholder="简要描述病历特点，便于识别"
+          />
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            病历类型
+          </label>
+          <a-select v-model:value="newCase.type" style="width: 100%">
+            <a-select-option value="住院病历">住院病历</a-select-option>
+            <a-select-option value="门诊病历">门诊病历</a-select-option>
+            <a-select-option value="急诊病历">急诊病历</a-select-option>
+            <a-select-option value="出院小结">出院小结</a-select-option>
+          </a-select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            病历原文 <span class="text-red-500">*</span>
+          </label>
+          <a-textarea 
+            v-model:value="newCase.medical_text" 
+            placeholder="粘贴或输入完整的病历原文内容..."
+            :rows="12"
+            :showCount="true"
+            :maxlength="50000"
+          />
+        </div>
+        
+        <div class="flex justify-end gap-3 pt-2">
+          <a-button @click="showCreateModal = false">取消</a-button>
+          <a-button 
+            type="primary" 
+            @click="createCase"
+            :disabled="!newCase.title || !newCase.medical_text"
+          >
+            <template #icon><PlusOutlined /></template>
+            创建病历
+          </a-button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -131,11 +227,13 @@ import {
   FileTextOutlined,
   ClockCircleOutlined,
   UploadOutlined,
-  CopyOutlined
+  CopyOutlined,
+  PlusOutlined
 } from '@ant-design/icons-vue'
 
 const props = defineProps<{
   testCases: Array<{
+    title?: string
     description: string
     medical_text: string
     type?: string
@@ -146,9 +244,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'back'): void
   (e: 'loadCase', index: number): void
+  (e: 'createCase', data: { title: string; description: string; medical_text: string; type: string; createdAt: string }): void
 }>()
 
 const selectedIndex = ref(0)
+const showCreateModal = ref(false)
+
+const newCase = ref({
+  title: '',
+  description: '',
+  medical_text: '',
+  type: '住院病历'
+})
 
 const selectedCase = computed(() => props.testCases[selectedIndex.value])
 
@@ -169,5 +276,34 @@ const copyContent = async () => {
   } catch (error) {
     message.error('复制失败')
   }
+}
+
+const createCase = () => {
+  if (!newCase.value.title?.trim()) {
+    message.warning('请输入病历名称')
+    return
+  }
+  if (!newCase.value.medical_text?.trim()) {
+    message.warning('请输入病历原文')
+    return
+  }
+  
+  emit('createCase', {
+    title: newCase.value.title.trim(),
+    description: newCase.value.description.trim() || newCase.value.title.trim(),
+    medical_text: newCase.value.medical_text.trim(),
+    type: newCase.value.type,
+    createdAt: new Date().toISOString()
+  })
+  
+  // Reset form
+  newCase.value = {
+    title: '',
+    description: '',
+    medical_text: '',
+    type: '住院病历'
+  }
+  showCreateModal.value = false
+  message.success('测试病历创建成功')
 }
 </script>

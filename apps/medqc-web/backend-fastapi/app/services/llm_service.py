@@ -475,154 +475,65 @@ class LLMService:
         return prompt
 
     # ============================================
-    # 病案首页结构化提取
+    # 病案首页结构化提取 - 分模块并行实现
     # ============================================
 
-    async def extract_frontpage_structured(
-        self,
-        medical_text: str
-    ) -> Dict[str, Any]:
-        """
-        从病历原文中提取病案首页结构化数据
+    async def _extract_patient_hospitalization(self, medical_text: str) -> Dict[str, Any]:
+        """模块1：提取患者基本信息和住院信息"""
+        if not self.client:
+            return {}
         
-        Args:
-            medical_text: 病历原文（入院记录、出院小结等）
-            
-        Returns:
-            结构化的病案首页数据（患者信息、诊断、手术操作）
-        """
+        system_prompt = """你是一位专业的医疗文档结构化专家。请从病历原文中提取患者基本信息和住院信息。
+
+【输出格式】JSON，包含 basic_info 和 hospitalization 两个顶级对象。
+
+【basic_info 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| patient_name | string | 患者姓名 | "张三" |
+| gender | string | 性别编码：1=男，2=女 | "1" |
+| gender_text | string | 性别文本 | "男" |
+| birth_date | string | 出生日期 YYYY-MM-DD | "1981-02-04" |
+| age_years | number | 年龄（岁） | 44 |
+| nationality | string | 国籍 | "中国" |
+| ethnicity | string | 民族 | "汉族" |
+| marital_status | string | 婚姻编码：1=未婚 2=已婚 3=丧偶 4=离婚 9=其他 | "2" |
+| marital_status_text | string | 婚姻文本 | "已婚" |
+| id_number | string | 身份证号18位 | "510521198102040018" |
+| occupation | string | 职业 | "农民" |
+| current_address | string | 现住址 | "泸州市..." |
+| contact_name | string | 联系人姓名 | "张伟" |
+| contact_relation | string | 与患者关系 | "本人" |
+| contact_phone | string | 联系人电话 | "13541593206" |
+
+【hospitalization 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| hospital_name | string | 医疗机构名称 | "泸县人民医院" |
+| medical_record_no | string | 住院号/病案号 | "350827" |
+| admission_times_in_hospital | number | 本院第几次住院 | 2 |
+| payment_method | string | 付费方式编码：1=城镇职工 2=城镇居民 3=新农合 4=贫困救助 5=商业保险 6=全公费 7=全自费 8=其他社保 9=其他 | "2" |
+| payment_method_text | string | 付费方式文本 | "城镇居民医保" |
+| admission_way | string | 入院途径编码：1=急诊 2=门诊 3=转诊 9=其他 | "2" |
+| admission_way_text | string | 入院途径文本 | "门诊" |
+| admission_dept | string | 入院科室 | "外二科" |
+| admission_ward | string | 入院病房 | "54床" |
+| admission_datetime | string | 入院时间 YYYY-MM-DD HH:mm | "2025-03-29 13:49" |
+| discharge_dept | string | 出院科室 | "外二科" |
+| discharge_ward | string | 出院病房 | "54床" |
+| discharge_datetime | string | 出院时间 YYYY-MM-DD HH:mm | "2025-04-02 10:00" |
+| actual_hospital_days | number | 实际住院天数 | 5 |
+| transfer_depts | string | 转科科别（用→连接） | "外一科→外二科" |
+
+【提取原则】
+1. 严格基于病历原文提取，未明确提及的字段填 null
+2. 日期格式统一为 YYYY-MM-DD 或 YYYY-MM-DD HH:mm
+3. 数字字段提取纯数字
+4. 编码字段同时提供编码和文本（如 gender + gender_text）"""
+
+        user_prompt = f"请从以下病历原文中提取患者基本信息和住院信息：\n\n{medical_text}"
+
         try:
-            if not self.client:
-                logger.warning("LLM 客户端未初始化，返回空结果")
-                return {}
-
-            system_prompt = """你是一位专业的医疗文档结构化专家，精通病案首页填写规范。
-你的任务是从病历原文中提取以下结构化信息，用于填写病案首页。
-
-需要提取的信息（共7大类）：
-
-1. basic_info（患者基本信息）：
-   - patient_name: 患者姓名
-   - gender: 性别编码（1=男，2=女）
-   - gender_text: 性别文本（男/女）
-   - birth_date: 出生日期（YYYY-MM-DD）
-   - age_years: 年龄（整数）
-   - nationality: 国籍
-   - ethnicity: 民族
-   - marital_status: 婚姻状况编码（1=未婚，2=已婚，3=丧偶，4=离婚，9=其他）
-   - marital_status_text: 婚姻状况文本
-   - id_number: 身份证号
-   - occupation: 职业
-   - current_address: 现住址
-   - contact_name: 联系人姓名
-   - contact_relation: 联系人关系
-   - contact_phone: 联系人电话
-
-2. hospitalization（住院信息）：
-   - hospital_name: 医疗机构名称
-   - admission_times_in_hospital: 本院第几次住院
-   - medical_record_no: 病案号
-   - payment_method: 医疗付费方式编码
-   - payment_method_text: 医疗付费方式文本（城镇职工医保/城镇居民医保/新农合/自费等）
-   - admission_way: 入院途径编码（1=急诊，2=门诊，3=转诊，4=其他）
-   - admission_way_text: 入院途径文本
-   - admission_dept: 入院科别
-   - admission_ward: 入院病房/病区
-   - admission_datetime: 入院日期时间（YYYY-MM-DD HH:MM:SS）
-   - discharge_dept: 出院科别
-   - discharge_ward: 出院病房/病区
-   - discharge_datetime: 出院日期时间（YYYY-MM-DD HH:MM:SS）
-   - actual_hospital_days: 实际住院天数
-
-3. diagnoses（诊断信息）：
-   - ed_diagnosis_texts: 门/急诊诊断原文列表（数组）
-   
-   # 入院诊断（从入院记录中提取）
-   - admission_main_diagnosis_text: 入院主要诊断原文
-   - admission_main_icd: 入院主诊断ICD-10编码（如无法确定填"待编码"）
-   - admission_other_diagnoses_texts: 入院其他诊断原文列表（数组）
-   - admission_other_icds: 入院其他诊断ICD编码列表（数组，无法确定填"待编码"）
-   
-   # 出院诊断（从出院记录中提取）
-   - discharge_main_diagnosis_text: 出院主要诊断原文
-   - discharge_main_icd: 出院主诊断ICD-10编码（如无法确定填"待编码"）
-   - discharge_other_diagnoses_texts: 出院其他诊断原文列表（数组）
-   - discharge_other_icds: 出院其他诊断ICD编码列表（数组，无法确定填"待编码"）
-   
-   - admission_condition: 入院病情（1=有，2=临床未确定，3=情况不明，4=无）
-
-4. procedures（手术及操作信息）：
-   - main_procedure_text: 主要手术/操作名称原文
-   - main_procedure_code: 主要手术ICD-9-CM-3编码（无法确定填"待编码"）
-   - main_procedure_date: 主要手术日期（YYYY-MM-DD）
-   - main_procedure_level: 主要手术级别（一/二/三/四级）
-   - surgeon_name: 术者姓名
-   - assistant1_name: I助姓名
-   - assistant2_name: II助姓名
-   - anesthesia_method: 麻醉方式（全麻/局麻/腰麻/硬膜外麻等）
-   - anesthetist_name: 麻醉医师姓名
-   - incision_healing_grade: 切口愈合等级（甲/乙/丙/其他）
-
-5. other_medical_info（其他医疗信息）：
-   - pathology_text: 病理诊断原文
-   - pathology_no: 病理号
-   - drug_allergy_flag: 药物过敏标志（1=无，2=有）
-   - drug_allergy_flag_text: 药物过敏标志文本
-   - drug_allergy_drugs: 过敏药物列表（数组）
-   - abo_blood_type: ABO血型（A/B/O/AB/不详/未查）
-   - rh_blood_type: Rh血型编码（1=阴，2=阳，3=不详，4=未查）
-   - rh_blood_type_text: Rh血型文本
-   - ventilation_hours: 机械通气总时长（小时，数字）
-   - icu_type: ICU类型
-   - icu_enter_time: 进入ICU时间
-   - icu_leave_time: 退出ICU时间
-
-6. staff（人员信息）：
-   - dept_director: 科主任
-   - chief_physician: 主任（副主任）医师
-   - attending_physician: 主治医师
-   - resident_physician: 住院医师
-   - responsible_nurse: 责任护士
-   - coder: 编码员
-
-7. costs（费用信息）：
-   - total_cost: 住院总费用（数字）
-   - self_paid: 自付金额（数字）
-
-提取原则：
-- 严格基于病历原文提取，如病历中未明确提及则填写 null
-- 诊断名称、手术名称保持原文表述，不要改写
-- ICD编码尽量给出推荐，不确定时填"待编码"
-- 日期格式统一为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS
-- 数字字段（年龄、费用等）提取纯数字，不含单位
-- 列表类字段（数组）如无内容返回空数组 []
-
-【重要】诊断字段填写规则：
-1. 入院诊断 vs 出院诊断：
-   - 如果病历中有"入院诊断"、"初步诊断"、"入院记录"、"目前诊断" → 填写到 admission_main_diagnosis_text / admission_other_diagnoses_texts
-   - 如果病历中有"出院诊断"、"出院小结"、"出院记录"、"最终诊断" → 填写到 discharge_main_diagnosis_text / discharge_other_diagnoses_texts
-   - 如果两种诊断都有，分别填写到对应字段
-   - 如果只有一种诊断类型，只填写对应的字段，另一个保持为 null
-
-2. 常见病历类型判断：
-   - "入院记录"、"首次病程记录" → 通常只有入院诊断
-   - "出院小结"、"出院记录" → 通常有出院诊断（可能也有入院诊断作为对比）
-   - 完整病历 → 可能同时包含入院诊断和出院诊断
-
-3. 诊断关键词识别：
-   - "初步诊断"、"入院诊断"、"目前诊断" → 入院诊断
-   - "出院诊断"、"最终诊断"、"确定诊断" → 出院诊断
-
-输出格式为 JSON，结构如上所述，包含7个顶级对象。"""
-
-            user_prompt = f"""请从以下病历原文中提取病案首页结构化数据：
-
-{medical_text}
-
-请按照系统提示的格式输出完整的 JSON，包含 basic_info、hospitalization、diagnoses、procedures、other_medical_info、staff、costs 七个部分。"""
-
-            logger.info("LLM 病案首页结构化提取开始")
-            
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -630,18 +541,255 @@ class LLMService:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=2000,
                 response_format={"type": "json_object"}
             )
-
             result = json.loads(response.choices[0].message.content)
-            
-            logger.info(f"LLM 病案首页结构化提取完成: 主诊断={result.get('diagnoses', {}).get('discharge_main_diagnosis_text', 'N/A')}")
+            logger.info("模块1（患者+住院信息）提取完成")
             return result
+        except Exception as e:
+            logger.error(f"模块1提取失败: {str(e)}")
+            return {}
+
+    async def _extract_diagnoses(self, medical_text: str) -> Dict[str, Any]:
+        """模块2：提取诊断信息"""
+        if not self.client:
+            return {}
+        
+        system_prompt = """你是一位专业的医疗文档结构化专家。请从病历原文中提取诊断信息。
+
+【输出格式】JSON，包含 diagnoses 一个顶级对象。
+
+【diagnoses 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| ed_diagnosis_texts | string[] | 门/急诊诊断名称列表 | ["肛周脓肿"] |
+| ed_diagnosis_codes | string[] | 门/急诊诊断编码列表 | ["K61.001"] |
+| admission_main_diagnosis_text | string | 入院主诊断名称 | "肛周脓肿" |
+| admission_main_icd | string | 入院主诊断ICD-10编码（无法确定填"待编码"） | "K61.001" |
+| admission_other_diagnoses_texts | string[] | 入院其他诊断名称列表 | ["甲状腺功能减退"] |
+| admission_other_icds | string[] | 入院其他诊断编码列表 | ["E03.900"] |
+| admission_condition | number | 入院病情：1=有 2=临床未确定 3=情况不明 4=无 | 1 |
+| discharge_main_diagnosis_text | string | 出院主诊断名称【首页主诊断】 | "高位复杂性肛瘘" |
+| discharge_main_icd | string | 出院主诊断ICD-10编码 | "K60.300" |
+| discharge_other_diagnoses_texts | string[] | 出院其他诊断名称列表 | ["肛周脓肿", "脂肪肝"] |
+| discharge_other_icds | string[] | 出院其他诊断编码列表 | ["K61.001", "K76.000"] |
+
+【诊断识别规则】
+1. "入院诊断"、"初步诊断"、"目前诊断" → 填写到 admission_* 字段
+2. "出院诊断"、"最终诊断"、"确定诊断"、"术后诊断" → 填写到 discharge_* 字段
+3. 如果只有一种诊断，尝试同时填写入院和出院诊断
+4. 诊断名称保持原文表述，不要改写
+5. ICD编码如无法确定，填"待编码"
+
+【重要】病案首页的主诊断取"出院主诊断"（discharge_main_diagnosis_text）"""
+
+        user_prompt = f"请从以下病历原文中提取诊断信息：\n\n{medical_text}"
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+            result = json.loads(response.choices[0].message.content)
+            logger.info("模块2（诊断信息）提取完成")
+            return result
+        except Exception as e:
+            logger.error(f"模块2提取失败: {str(e)}")
+            return {}
+
+    async def _extract_procedures_staff(self, medical_text: str) -> Dict[str, Any]:
+        """模块3：提取手术操作和人员信息"""
+        if not self.client:
+            return {}
+        
+        system_prompt = """你是一位专业的医疗文档结构化专家。请从病历原文中提取手术操作和人员信息。
+
+【输出格式】JSON，包含 procedures 和 staff 两个顶级对象。
+
+【procedures 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| main_procedure_text | string | 主要手术/操作名称 | "高位复杂性肛瘘切除术" |
+| main_procedure_code | string | 主要手术ICD-9-CM-3编码（无法确定填"待编码"） | "49.12" |
+| main_procedure_date | string | 手术日期 YYYY-MM-DD | "2025-03-31" |
+| main_procedure_level | string | 手术级别：1=一级 2=二级 3=三级 4=四级 | "3" |
+| surgeon_name | string | 术者姓名 | "王标" |
+| assistant1_name | string | I助姓名 | "孙治庆" |
+| assistant2_name | string | II助姓名 | null |
+| anesthesia_method | string | 麻醉方式 | "腰麻联合硬脊膜外腔阻滞麻醉" |
+| anesthetist_name | string | 麻醉医师姓名 | "刘杰" |
+| incision_healing_grade | string | 切口愈合等级（0=无切口/I/甲/I/乙/.../III/丙） | "I/甲" |
+| other_procedures | object[] | 其他手术操作列表 | [{"text":"...", "code":"...", "date":"..."}] |
+
+【staff 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| dept_director | string | 科主任 | "王飞" |
+| chief_physician | string | 主任/副主任医师 | "张云海" |
+| attending_physician | string | 主治医师 | "王标" |
+| resident_physician | string | 住院医师 | "冯军" |
+| responsible_nurse | string | 责任护士 | "高利萍" |
+| coder | string | 编码员 | null |
+| quality_control_physician | string | 质控医师 | null |
+| quality_control_nurse | string | 质控护士 | null |
+
+【提取原则】
+1. 手术名称保持原文表述，不要改写
+2. 日期格式统一为 YYYY-MM-DD
+3. 如无手术操作，procedures 各字段填 null
+4. 从"术前讨论"、"手术记录"等段落识别人员信息"""
+
+        user_prompt = f"请从以下病历原文中提取手术操作和人员信息：\n\n{medical_text}"
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+            result = json.loads(response.choices[0].message.content)
+            logger.info("模块3（手术+人员信息）提取完成")
+            return result
+        except Exception as e:
+            logger.error(f"模块3提取失败: {str(e)}")
+            return {}
+
+    async def _extract_other_medical_costs(self, medical_text: str) -> Dict[str, Any]:
+        """模块4：提取其他医疗信息和费用"""
+        if not self.client:
+            return {}
+        
+        system_prompt = """你是一位专业的医疗文档结构化专家。请从病历原文中提取其他医疗信息和费用信息。
+
+【输出格式】JSON，包含 other_medical_info 和 costs 两个顶级对象。
+
+【other_medical_info 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| pathology_no | string | 病理号 | "P2025001" |
+| pathology_text | string | 病理诊断名称 | "鳞状细胞癌" |
+| pathology_code | string | 病理诊断编码 | "M80703" |
+| drug_allergy_flag | number | 药物过敏标志：1=无 2=有 | 1 |
+| drug_allergy_flag_text | string | 药物过敏标志文本 | "无" |
+| drug_allergy_drugs | string[] | 过敏药物列表 | ["青霉素"] |
+| abo_blood_type | string | ABO血型：A/B/O/AB/不详/未查 | "O" |
+| rh_blood_type | string | Rh血型编码：1=阴 2=阳 3=不详 4=未查 | "2" |
+| rh_blood_type_text | string | Rh血型文本 | "阳性" |
+| autopsy | string | 死亡患者尸检：1=是 2=否，非死亡填"-" | "-" |
+| ventilation_hours | number | 机械通气总时长（小时） | 48 |
+| icu_type | string | ICU类型 | "综合ICU" |
+| icu_enter_time | string | 进入ICU时间 | "2025-03-31 14:00" |
+| icu_leave_time | string | 退出ICU时间 | "2025-04-01 10:00" |
+| discharge_method | number | 离院方式：1=医嘱离院 2=医嘱转院 3=转社区 4=非医嘱 5=死亡 9=其他 | 1 |
+| readmission_plan | number | 31天内再住院计划：1=有 2=无 | 2 |
+| readmission_purpose | string | 再住院目的 | "化疗" |
+
+【costs 字段定义】
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| total_cost | number | 住院总费用（元） | 8562.50 |
+| self_paid | number | 自付金额（元） | 1285.00 |
+
+【提取原则】
+1. 费用只提取 total_cost 和 self_paid，其他费用明细由 HIS 系统提供
+2. 费用提取纯数字，不含单位
+3. 药物过敏：如病历提到"否认过敏史"、"无药物过敏"，drug_allergy_flag 填 1
+4. 如病历未提及某字段，填 null"""
+
+        user_prompt = f"请从以下病历原文中提取其他医疗信息和费用信息：\n\n{medical_text}"
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+            result = json.loads(response.choices[0].message.content)
+            logger.info("模块4（其他信息+费用）提取完成")
+            return result
+        except Exception as e:
+            logger.error(f"模块4提取失败: {str(e)}")
+            return {}
+
+    async def extract_frontpage_structured(
+        self,
+        medical_text: str
+    ) -> Dict[str, Any]:
+        """
+        从病历原文中提取病案首页结构化数据（分模块并行提取）
+        
+        Args:
+            medical_text: 病历原文（入院记录、出院小结等）
+            
+        Returns:
+            结构化的病案首页数据（患者信息、诊断、手术操作等 7 大类）
+        """
+        import asyncio
+        
+        try:
+            if not self.client:
+                logger.warning("LLM 客户端未初始化，返回空结果")
+                return {}
+
+            logger.info("开始分模块并行提取病案首页数据...")
+            
+            # 并行执行 4 个提取模块
+            results = await asyncio.gather(
+                self._extract_patient_hospitalization(medical_text),
+                self._extract_diagnoses(medical_text),
+                self._extract_procedures_staff(medical_text),
+                self._extract_other_medical_costs(medical_text),
+                return_exceptions=True
+            )
+            
+            # 合并结果
+            merged = {}
+            module_names = ["患者+住院", "诊断", "手术+人员", "其他+费用"]
+            
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"模块 {module_names[i]} 提取异常: {str(result)}")
+                    continue
+                if isinstance(result, dict):
+                    merged.update(result)
+            
+            # 确保所有顶级键都存在
+            default_keys = ["basic_info", "hospitalization", "diagnoses", 
+                           "procedures", "other_medical_info", "staff", "costs"]
+            for key in default_keys:
+                if key not in merged:
+                    merged[key] = {}
+            
+            logger.info(f"病案首页结构化提取完成: 成功合并 {len([r for r in results if isinstance(r, dict)])} 个模块")
+            
+            # 日志输出关键信息
+            diagnoses = merged.get("diagnoses", {})
+            main_diag = diagnoses.get("discharge_main_diagnosis_text") or diagnoses.get("admission_main_diagnosis_text")
+            logger.info(f"主诊断: {main_diag or 'N/A'}")
+            
+            return merged
 
         except Exception as e:
             logger.error(f"LLM 病案首页结构化提取失败: {str(e)}")
             return {}
+
 
     async def generate_icd_codes(
         self,

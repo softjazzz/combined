@@ -1,6 +1,11 @@
 from typing import Any, Dict, List, Optional
 
+import asyncio
+import contextlib
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..core.response import success_response, error_response, get_trace_id
@@ -104,6 +109,87 @@ async def auto_generate_frontpage_draft(
             code="FRONTPAGE_GENERATE_ERROR",
             trace_id=trace_id,
         )
+
+
+@router.post("/auto-generate-draft-stream")
+async def auto_generate_frontpage_draft_stream(
+    request: Request,
+    payload: AutoGenerateFrontPageRequest,
+    service: FrontPageExtractionService = Depends(get_frontpage_service),
+):
+    """
+    自动生成病案首页草稿（流式分批返回）
+
+    返回 `text/event-stream`：
+    - event: update, data: {"module": "...", "frontpage": {...}}
+    - event: done, data: {"frontpage": {...}}
+    """
+    trace_id = get_trace_id(request)
+    try:
+        payload.ensure_valid()
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response(
+                error=str(ve), code="BAD_REQUEST", trace_id=trace_id
+            )["error"],
+        )
+
+    async def event_generator():
+        medical_text = payload.medical_text or ""
+        queue: asyncio.Queue = asyncio.Queue()
+        producer_task: Optional[asyncio.Task] = None
+
+        async def produce():
+            try:
+                async for event_name, data in service.extract_from_text_stream(medical_text):
+                    await queue.put((event_name, data))
+            except Exception as exc:
+                await queue.put(("error", {"success": False, "error": str(exc), "trace_id": trace_id}))
+            finally:
+                await queue.put(("__done__", None))
+
+        try:
+            # Flush headers/body immediately to avoid proxy idle timeouts
+            yield ": ping\n\n"
+
+            producer_task = asyncio.create_task(produce())
+
+            while True:
+                try:
+                    event_name, data = await asyncio.wait_for(queue.get(), timeout=10)
+                except asyncio.TimeoutError:
+                    # Keep the connection alive during long LLM calls
+                    yield ": ping\n\n"
+                    continue
+
+                if event_name == "__done__":
+                    break
+
+                if not isinstance(data, dict):
+                    data = {}
+
+                # Keep trace_id attached for debugging in devtools
+                if "trace_id" not in data:
+                    data["trace_id"] = trace_id
+
+                yield f"event: {event_name}\n"
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+        finally:
+            if producer_task is not None and not producer_task.done():
+                producer_task.cancel()
+                with contextlib.suppress(Exception):
+                    await producer_task
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Trace-Id": trace_id,
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 class ProfileAnalyzeRequest(BaseModel):
