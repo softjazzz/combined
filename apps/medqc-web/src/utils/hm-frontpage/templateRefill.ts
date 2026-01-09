@@ -59,6 +59,42 @@ export function buildHmTemplateSrcdoc(params: {
 }): string {
   const { filledBodyHtml, contentsCss, printCss } = params
 
+  // Custom CSS to make filled values more visible
+  const filledValuesCss = `
+    /* 让回填的值更加清晰可见 */
+    [data-hm-node="newtextbox"],
+    [data-hm-node="searchbox"],
+    [data-hm-node="timebox"],
+    [data-hm-node="textboxwidget"],
+    [data-hm-node="dropbox"],
+    span.new-textbox-content,
+    .new-textbox {
+      color: #1a1a1a !important;
+      font-weight: 500 !important;
+    }
+    
+    /* 移除占位符样式，使用实际文本样式 */
+    [_placeholdertext] {
+      color: #1a1a1a !important;
+    }
+    
+    /* 确保表格单元格中的文本清晰 */
+    td[data-hm-code], 
+    span[data-hm-code] {
+      color: #1a1a1a !important;
+    }
+    
+    /* 移除淡色背景，使用更清晰的样式 */
+    span[data-hm-node="textboxwidget"],
+    span[data-hm-node="newtextbox"],
+    span[data-hm-node="searchbox"],
+    span[data-hm-node="timebox"],
+    span[data-hm-node="dropbox"] {
+      background-color: transparent !important;
+      background-image: none !important;
+    }
+  `
+
   return `<!doctype html>
 <html>
   <head>
@@ -66,6 +102,7 @@ export function buildHmTemplateSrcdoc(params: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>${contentsCss}</style>
     <style>${printCss}</style>
+    <style>${filledValuesCss}</style>
   </head>
   ${filledBodyHtml}
 </html>`

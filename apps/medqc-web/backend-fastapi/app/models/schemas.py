@@ -167,8 +167,8 @@ class DIPPredictRequest(BaseModel):
 class DIPGroupingResult(BaseModel):
     """DIP 分组结果"""
     dip_code: str = Field(..., description="DIP 编码")
-    dip_name: str = Field(..., description="DIP 名称")
-    dip_type: str = Field(..., description="DIP 类型 (如: 核心病种)")
+    dip_name: Optional[str] = Field(default="未知分组", description="DIP 名称")
+    dip_type: Optional[str] = Field(default="未知类型", description="DIP 类型 (如: 核心病种)")
     diag_code: Optional[str] = Field(None, description="诊断编码")
     proc_code: Optional[str] = Field(None, description="手术编码")
     grouping_path: Optional[str] = Field(None, description="分组路径/验证结果")

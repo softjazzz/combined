@@ -15,7 +15,7 @@
  */
 
 // API配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
 
 // 接口类型定义
@@ -88,7 +88,7 @@ export class MedicalQcApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = endpoint.startsWith('http') ? endpoint : this.buildUrl(endpoint)
-    
+
     const defaultOptions: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ export class MedicalQcApiClient {
     }
 
     const response = await fetch(url, { ...defaultOptions, ...options })
-    
+
     if (!response.ok) {
       throw new Error(`API请求失败: ${response.status} ${response.statusText}`)
     }
@@ -131,7 +131,7 @@ export class MedicalQcApiClient {
   // 批量分析（如果后端支持）
   async batchAnalyze(requests: QCAnalysisRequest[]): Promise<QCAnalysisResponse[]> {
     const results: QCAnalysisResponse[] = []
-    
+
     // 并发处理，但限制并发数量
     const concurrency = 3
     for (let i = 0; i < requests.length; i += concurrency) {
@@ -140,7 +140,7 @@ export class MedicalQcApiClient {
       const batchResults = await Promise.all(batchPromises)
       results.push(...batchResults)
     }
-    
+
     return results
   }
 }

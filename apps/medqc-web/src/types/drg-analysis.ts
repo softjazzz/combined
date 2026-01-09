@@ -1,6 +1,6 @@
 
-/** 分析维度 */
-export type AnalysisDimension = 'hospital' | 'department' | 'doctor' | 'drg'
+/** 分析维度 - 五级层级 */
+export type AnalysisDimension = 'hospital' | 'department' | 'ward' | 'doctor' | 'drg'
 
 /** 统计概览数据 */
 export interface AnalysisOverview {
@@ -10,6 +10,10 @@ export interface AnalysisOverview {
     avgCostRate: number
     drgGroupCount: number
     cmi: number
+    // 低风险死亡率相关
+    lowRiskMortalityRate: number  // 低风险死亡率 (%)
+    lowRiskDeathCount: number     // 低风险死亡例数
+    lowRiskTotalCount: number     // 低风险组总例数
 }
 
 /** 趋势数据点 */

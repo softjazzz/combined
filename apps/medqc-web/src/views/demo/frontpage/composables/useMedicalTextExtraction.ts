@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import { ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, notification } from 'ant-design-vue'
 
 export interface DemoCaseLike {
   case_id: string
@@ -20,19 +20,22 @@ export function useMedicalTextExtraction(options: {
   const applyFrontpageResult = (fp: any) => {
     if (!options.demoCase.value) return
 
+    // Preserve all original backend fields and add transformed fields for backward compatibility
     options.demoCase.value.frontpage = {
+      // Spread all original backend data
+      ...fp,
+
+      // Override/enhance specific sections with both original and transformed field names
       basic_info: {
-        patient_name: fp.basic_info?.patient_name || '未识别',
-        gender_text: fp.basic_info?.gender_text || '未知',
-        age_years: fp.basic_info?.age_years || 0,
-        birth_date: fp.basic_info?.birth_date || '',
-        id_number: fp.basic_info?.id_number || '',
-        nationality: fp.basic_info?.nationality || '',
+        ...fp.basic_info,
+        // Transformed fields for backward compatibility
         native_place: fp.basic_info?.current_address || '',
         marriage: fp.basic_info?.marital_status_text || '',
         job: fp.basic_info?.occupation || ''
       },
       hospitalization: {
+        ...fp.hospitalization,
+        // Transformed fields for backward compatibility
         admission_date: fp.hospitalization?.admission_datetime || '',
         discharge_date: fp.hospitalization?.discharge_datetime || '',
         hospital_days: fp.hospitalization?.actual_hospital_days || 0,
@@ -42,21 +45,11 @@ export function useMedicalTextExtraction(options: {
         leaving_way: '医嘱离院'
       },
       diagnoses: {
-        // 入院诊断
-        admission_main_diagnosis_text: fp.diagnoses?.admission_main_diagnosis_text || null,
-        admission_main_icd: fp.diagnoses?.admission_main_icd || null,
+        ...fp.diagnoses,
+        // Transformed fields for backward compatibility
         admission_main_conn: String(fp.diagnoses?.admission_condition ?? '') === '1' ? '有' : '-',
-        admission_other_diagnoses_texts: fp.diagnoses?.admission_other_diagnoses_texts || [],
-        admission_other_icds: fp.diagnoses?.admission_other_icds || [],
-
-        // 出院诊断
-        discharge_main_diagnosis_text: fp.diagnoses?.discharge_main_diagnosis_text || null,
-        discharge_main_icd: fp.diagnoses?.discharge_main_icd || null,
         discharge_main_conn: '有',
-        discharge_other_diagnoses_texts: fp.diagnoses?.discharge_other_diagnoses_texts || [],
-        discharge_other_icds: fp.diagnoses?.discharge_other_icds || [],
-
-        // 向后兼容：保留旧的 discharge_other_diagnoses 数组格式
+        // Legacy format for other diagnoses
         discharge_other_diagnoses: (
           fp.diagnoses?.discharge_other_diagnoses_texts?.length > 0
             ? fp.diagnoses.discharge_other_diagnoses_texts
@@ -68,6 +61,8 @@ export function useMedicalTextExtraction(options: {
         }))
       },
       procedures: {
+        ...fp.procedures,
+        // Transformed format for StructuredDataView table display
         main: {
           name: fp.procedures?.main_procedure_text || '无',
           code: fp.procedures?.main_procedure_code || '',
@@ -78,6 +73,16 @@ export function useMedicalTextExtraction(options: {
         },
         others: []
       },
+      staff: {
+        ...fp.staff
+      },
+      costs: {
+        ...fp.costs
+      },
+      other_medical_info: {
+        ...fp.other_medical_info
+      },
+      // Transformed fields for backward compatibility
       quality: {
         director: fp.staff?.dept_director || '',
         chief_doctor: fp.staff?.chief_physician || '',
@@ -93,6 +98,42 @@ export function useMedicalTextExtraction(options: {
       fund_pay: fp.costs?.total_cost ? fp.costs.total_cost * 0.8 : 0,
       patient_pay: fp.costs?.self_paid || 0
     }
+
+    // ===== DRG 分组所需的额外字段 =====
+    // 映射到 DRG API 期望的格式
+    const frontpageForDRG = options.demoCase.value.frontpage as any
+
+    // 主诊断编码（DRG 分组必需）
+    frontpageForDRG.primary_diagnosis_code = fp.diagnoses?.discharge_main_icd || null
+    frontpageForDRG.primary_diagnosis_name = fp.diagnoses?.discharge_main_diagnosis_text || null
+
+    // 次要诊断（数组格式）
+    const otherTexts = fp.diagnoses?.discharge_other_diagnoses_texts || []
+    const otherCodes = fp.diagnoses?.discharge_other_icds || []
+    frontpageForDRG.secondary_diagnoses = otherTexts.map((name: string, idx: number) => ({
+      code: otherCodes[idx] || '待编码',
+      name: name
+    }))
+
+    // 主要手术/操作编码
+    frontpageForDRG.main_procedure_code = fp.procedures?.main_procedure_code || null
+    frontpageForDRG.main_procedure_name = fp.procedures?.main_procedure_text || null
+
+    // 其他手术操作
+    frontpageForDRG.procedures_list = (fp.procedures?.other_procedures || []).map((p: any) => ({
+      code: p.code || '待编码',
+      name: p.text || p.name || ''
+    }))
+
+    // 患者年龄和性别（DRG 分组需要）
+    frontpageForDRG.patient_age = fp.basic_info?.age_years || 0
+    frontpageForDRG.patient_gender = fp.basic_info?.gender === '1' ? 'M' : 'F'
+
+    // 住院天数
+    frontpageForDRG.total_hospital_days = fp.hospitalization?.actual_hospital_days || 0
+
+    // 实际费用（用于盈亏计算）
+    frontpageForDRG.total_cost = fp.costs?.total_cost || 0
   }
 
   const useMockFallback = () => {
@@ -168,177 +209,111 @@ export function useMedicalTextExtraction(options: {
     extracting.value = true
     options.onStartExtract?.()
 
+    // Track completed modules for progress display
+    const completedModules: string[] = []
+    const moduleNames: Record<string, string> = {
+      basic_info: '基本信息',
+      hospitalization: '住院信息',
+      diagnoses: '诊断信息',
+      procedures: '手术操作',
+      other_medical_info: '其他医疗信息',
+      staff: '人员信息',
+      costs: '费用信息',
+      coding_result: 'ICD 编码'
+    }
+
     try {
-      const tryNonStream = async (): Promise<boolean> => {
-        try {
-          const resp = await fetch('/api/v1/frontpage/auto-generate-draft', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ medical_text: medicalText })
-          })
-
-          const json = await resp.json().catch(() => null)
-          const fp = json?.data?.frontpage
-          if (!fp) return false
-
-          applyFrontpageResult(fp)
-          message.success('AI 病案首页提取完成')
-          options.onExtracted?.()
-          return true
-        } catch {
-          return false
-        }
-      }
-
-      // Prefer streaming endpoint so partial results can render as soon as each task finishes
-      const streamResponse = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
+      // Use SSE stream API for progressive display
+      const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ medical_text: medicalText })
       })
 
-      if (streamResponse.ok && streamResponse.body) {
-        const reader = streamResponse.body.getReader()
-        const decoder = new TextDecoder('utf-8')
-        let buffer = ''
-        let notified = false
-        let hasDone = false
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`)
+      }
 
-        const emitFrontpageUpdate = (fp: any) => {
-          applyFrontpageResult(fp)
-          if (!notified) {
-            notified = true
-            options.onExtracted?.()
-          }
-        }
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('No response body')
+      }
 
-        try {
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done) break
+      const decoder = new TextDecoder()
+      let buffer = ''
 
-            buffer += decoder.decode(value, { stream: true })
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-            let sepIndex: number
-            while ((sepIndex = buffer.indexOf('\n\n')) !== -1) {
-              const chunk = buffer.slice(0, sepIndex)
-              buffer = buffer.slice(sepIndex + 2)
+        buffer += decoder.decode(value, { stream: true })
 
-              const lines = chunk.split('\n')
-              let eventName = 'message'
-              const dataLines: string[] = []
+        // Parse SSE events from buffer
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line in buffer
 
-              for (const line of lines) {
-                if (line.startsWith('event:')) {
-                  eventName = line.slice('event:'.length).trim()
-                } else if (line.startsWith('data:')) {
-                  dataLines.push(line.slice('data:'.length).trim())
-                }
-              }
+        let eventType = ''
+        let eventData = ''
 
-              const dataText = dataLines.join('\n')
-              if (!dataText) continue
-
-              let payload: any = null
-              try {
-                payload = JSON.parse(dataText)
-              } catch {
-                payload = null
-              }
-
-              if (!payload) continue
-
-              if (eventName === 'update' || eventName === 'done') {
-                if (payload.frontpage) emitFrontpageUpdate(payload.frontpage)
-
-                if (eventName === 'done') {
-                  hasDone = true
-                  const fp = payload.frontpage
-                  if (fp?.confidence?.warnings?.length > 0) {
-                    const count = fp.confidence.warnings.length
-                    setTimeout(() => {
-                      message.warning({
-                        content: `发现 ${count} 条编码校验警告，请仔细核对诊断编码`,
-                        duration: 5
-                      })
-                      console.warn('编码校验警告:', fp.confidence.warnings)
-                    }, 500)
-                  }
-                  message.success('AI 病案首页提取完成')
-                  break
-                }
-              } else if (eventName === 'error') {
-                console.warn('LLM 流式提取失败:', payload.error || 'Unknown error')
-                try {
-                  await reader.cancel()
-                } catch {
-                  // ignore
-                }
-
-                if (await tryNonStream()) return
-
-                useMockFallback()
-                message.warning('LLM 服务暂不可用，已使用模拟数据')
-                options.onExtracted?.()
-                return
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('LLM 流式读取失败:', err)
-          if (await tryNonStream()) return
-
-          useMockFallback()
-          message.warning('网络请求失败，已使用模拟数据')
-          options.onExtracted?.()
-          return
-        } finally {
-          if (!hasDone) {
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim()
+          } else if (line.startsWith('data:')) {
+            eventData = line.slice(5).trim()
+          } else if (line === '' && eventType && eventData) {
+            // End of event, process it
             try {
-              await reader.cancel()
-            } catch {
-              // ignore
+              const parsed = JSON.parse(eventData)
+
+              if (eventType === 'update' && parsed.frontpage) {
+                // Progressive update - apply partial results immediately
+                applyFrontpageResult(parsed.frontpage)
+
+                // Track and show progress
+                if (parsed.module && !completedModules.includes(parsed.module)) {
+                  completedModules.push(parsed.module)
+                  const moduleName = moduleNames[parsed.module] || parsed.module
+                  console.log(`✓ ${moduleName} 提取完成`)
+                }
+              } else if (eventType === 'done' && parsed.frontpage) {
+                // Final complete result
+                applyFrontpageResult(parsed.frontpage)
+
+                // Check for warnings
+                if (parsed.frontpage.confidence?.warnings?.length > 0) {
+                  const count = parsed.frontpage.confidence.warnings.length
+                  setTimeout(() => {
+                    message.warning({
+                      content: `发现 ${count} 条编码校验警告，请仔细核对诊断编码`,
+                      duration: 5
+                    })
+                  }, 500)
+                }
+
+                // Show prominent completion notification
+                notification.success({
+                  message: '✅ AI 提取完成',
+                  description: `已成功提取 ${completedModules.length} 个模块的结构化数据，包括诊断编码和手术编码。`,
+                  duration: 5,
+                  placement: 'topRight'
+                })
+                options.onExtracted?.()
+              } else if (eventType === 'error') {
+                console.error('SSE error:', parsed)
+                throw new Error(parsed.error || 'Stream error')
+              }
+            } catch (parseError) {
+              console.warn('Failed to parse SSE data:', eventData, parseError)
             }
+
+            // Reset for next event
+            eventType = ''
+            eventData = ''
           }
         }
-      } else {
-        const rawText = await streamResponse.text().catch(() => '')
-        console.warn(
-          'LLM 流式提取失败:',
-          rawText || `${streamResponse.status} ${streamResponse.statusText}` || 'Unknown error'
-        )
-
-        if (await tryNonStream()) return
-
-        useMockFallback()
-        message.warning('LLM 服务暂不可用，已使用模拟数据')
-        options.onExtracted?.()
       }
     } catch (error: any) {
       console.error('结构化提取失败:', error)
-      try {
-        const ok = await (async () => {
-          try {
-            const resp = await fetch('/api/v1/frontpage/auto-generate-draft', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ medical_text: medicalText })
-            })
-            const json = await resp.json().catch(() => null)
-            const fp = json?.data?.frontpage
-            if (!fp) return false
-            applyFrontpageResult(fp)
-            message.success('AI 病案首页提取完成')
-            options.onExtracted?.()
-            return true
-          } catch {
-            return false
-          }
-        })()
-        if (ok) return
-      } catch {
-        // ignore
-      }
       useMockFallback()
       message.warning('网络请求失败，已使用模拟数据')
       options.onExtracted?.()

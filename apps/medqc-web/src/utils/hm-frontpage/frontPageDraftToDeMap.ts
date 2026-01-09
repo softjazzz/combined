@@ -119,6 +119,9 @@ export function frontPageDraftToDeMap(frontpageDraft: any): Record<string, DeVal
     'DE05.01.024.00.044': diag?.discharge_main_icd, // 出院西医诊断编码
     'DE09.00.104.00.002': diag?.admission_condition, // 入院病情代码
 
+    // 其他出院诊断（最多支持10个）
+    ...mapSecondaryDiagnoses(diag?.discharge_other_diagnoses_texts, diag?.discharge_other_icds),
+
     // 手术/操作
     'DE99.02.002.001': proc?.main_procedure_text, // 手术及操作名称_1
     'DE99.02.001.001': proc?.main_procedure_code, // 手术及操作编码_1
@@ -126,6 +129,9 @@ export function frontPageDraftToDeMap(frontpageDraft: any): Record<string, DeVal
     'DE99.02.004.001': coalesce(proc?.main_procedure_level, proc?.main_procedure_level_code), // 手术级别代码_1
     'DE99.02.010.001': coalesce(proc?.anesthesia_method, proc?.anesthesia_method_code), // 麻醉方式代码_1
     'DE99.02.009.001': coalesce(proc?.incision_healing_grade, proc?.incision_healing_grade_code), // 切口愈合等级代码_1
+
+    // 其他手术/操作（最多支持10个）
+    ...mapSecondaryProcedures(proc?.other_procedures),
 
     // 其他医疗信息
     'DE01.00.005.00': other?.pathology_no, // 病理号
@@ -139,12 +145,63 @@ export function frontPageDraftToDeMap(frontpageDraft: any): Record<string, DeVal
     'DE07.00.010.00': costs?.total_cost, // 住院总费用
     'DE07.00.001.00': costs?.self_paid, // 住院自付金额
 
-    // 人员/签名（演示用：将姓名填到“签名”字段）
+    // 人员/签名（演示用：将姓名填到"签名"字段）
     'DE02.01.039.00.119': staff?.dept_director, // 科主任签名
     'DE02.01.039.00.172': staff?.attending_physician, // 主治医师签名
     'DE02.01.039.00.171': staff?.resident_physician, // 住院医师签名
     'DE02.01.039.00.145': staff?.responsible_nurse, // 责任护士签名
     'DE02.01.039.00.126': staff?.coder // 编码员签名
   }
+}
+
+// 映射其他出院诊断（最多10个）
+function mapSecondaryDiagnoses(
+  texts: unknown,
+  codes: unknown
+): Record<string, DeValue> {
+  const result: Record<string, DeValue> = {}
+  if (!Array.isArray(texts)) return result
+
+  // HM 模板使用 DE05.10.138.XX 系列来表示其他诊断
+  // 格式：DE05.10.138.01, DE05.10.138.02, ... 表示诊断名称
+  // 格式：DE05.10.138.01.002, DE05.10.138.02.002, ... 表示诊断编码
+  for (let i = 0; i < Math.min(texts.length, 10); i++) {
+    const idx = String(i + 1).padStart(2, '0')
+    if (texts[i]) {
+      result[`DE05.10.138.${idx}`] = String(texts[i])
+    }
+    if (Array.isArray(codes) && codes[i]) {
+      result[`DE05.10.138.${idx}.002`] = String(codes[i])
+    }
+  }
+  return result
+}
+
+// 映射其他手术/操作（最多10个）
+function mapSecondaryProcedures(
+  procedures: unknown
+): Record<string, DeValue> {
+  const result: Record<string, DeValue> = {}
+  if (!Array.isArray(procedures)) return result
+
+  // HM 模板使用 DE99.02.XXX.YYY 系列来表示手术
+  // 格式：DE99.02.002.002, DE99.02.002.003, ... 表示手术名称
+  // 格式：DE99.02.001.002, DE99.02.001.003, ... 表示手术编码
+  for (let i = 0; i < Math.min(procedures.length, 10); i++) {
+    const proc = procedures[i]
+    if (!proc) continue
+    const idx = String(i + 2).padStart(3, '0') // 从002开始，因为001是主手术
+
+    if (proc.name || proc.text) {
+      result[`DE99.02.002.${idx}`] = proc.name || proc.text
+    }
+    if (proc.code) {
+      result[`DE99.02.001.${idx}`] = proc.code
+    }
+    if (proc.date) {
+      result[`DE99.02.003.${idx}`] = proc.date
+    }
+  }
+  return result
 }
 

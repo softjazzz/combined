@@ -15,7 +15,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">质量总数</div>
         <div class="flex items-baseline gap-1">
           <WarningOutlined class="text-yellow-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">2</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">6</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -24,7 +24,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">严重预警</div>
         <div class="flex items-baseline gap-1">
           <CloseCircleOutlined class="text-red-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">1</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">3</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -33,7 +33,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">待处理建议</div>
         <div class="flex items-baseline gap-1">
           <InfoCircleOutlined class="text-blue-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">1</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">8</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -42,7 +42,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">今日新增</div>
         <div class="flex items-baseline gap-1">
           <RiseOutlined class="text-green-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">12</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">15</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -129,11 +129,26 @@ let cmiChart: echarts.ECharts | null = null
 let costChart: echarts.ECharts | null = null
 
 const mockData = [
-  { id: 1, caseNo: '#2026010101', dept: '心内科', diagnosis: '冠心病', drg: 'FM19', ratio: 1.15, status: 'warning' },
-  { id: 2, caseNo: '#2026010102', dept: '呼吸科', diagnosis: '肺炎', drg: 'BW15', ratio: 0.92, status: 'normal' },
-  { id: 3, caseNo: '#2026010103', dept: '骨科', diagnosis: '股骨骨折', drg: 'IB19', ratio: 1.08, status: 'warning' },
-  { id: 4, caseNo: '#2026010104', dept: '普外科', diagnosis: '阑尾炎', drg: 'GD15', ratio: 0.85, status: 'normal' },
-  { id: 5, caseNo: '#2026010105', dept: '神经内科', diagnosis: '脑梗死', drg: 'BR23', ratio: 1.02, status: 'warning' }
+  // 严重预警 - 费用超标严重
+  { id: 1, caseNo: '#2026010101', dept: '心内科', diagnosis: '急性心肌梗死', drg: 'FM19', ratio: 1.35, status: 'warning', los: 12, estCost: 85000 },
+  { id: 2, caseNo: '#2026010108', dept: '神经外科', diagnosis: '颅内动脉瘤', drg: 'IC15', ratio: 1.28, status: 'warning', los: 18, estCost: 125000 },
+  { id: 3, caseNo: '#2026010115', dept: '骨科', diagnosis: '股骨颈骨折', drg: 'IB19', ratio: 1.22, status: 'warning', los: 15, estCost: 65000 },
+  
+  // 一般预警 - 轻度超标
+  { id: 4, caseNo: '#2026010103', dept: '骨科', diagnosis: '腰椎间盘突出', drg: 'EB13', ratio: 1.08, status: 'warning', los: 8, estCost: 38000 },
+  { id: 5, caseNo: '#2026010105', dept: '神经内科', diagnosis: '急性脑梗死', drg: 'BR23', ratio: 1.05, status: 'warning', los: 10, estCost: 42000 },
+  { id: 6, caseNo: '#2026010112', dept: '消化内科', diagnosis: '上消化道出血', drg: 'GD21', ratio: 1.03, status: 'warning', los: 7, estCost: 28000 },
+  
+  // 正常 - 费用控制良好
+  { id: 7, caseNo: '#2026010102', dept: '呼吸科', diagnosis: '社区获得性肺炎', drg: 'BW15', ratio: 0.92, status: 'normal', los: 6, estCost: 18000 },
+  { id: 8, caseNo: '#2026010104', dept: '普外科', diagnosis: '急性阑尾炎', drg: 'GD15', ratio: 0.85, status: 'normal', los: 4, estCost: 12000 },
+  { id: 9, caseNo: '#2026010106', dept: '泌尿外科', diagnosis: '肾结石', drg: 'KB19', ratio: 0.88, status: 'normal', los: 5, estCost: 22000 },
+  { id: 10, caseNo: '#2026010107', dept: '妇产科', diagnosis: '剖宫产', drg: 'MD15', ratio: 0.78, status: 'normal', los: 5, estCost: 15000 },
+  { id: 11, caseNo: '#2026010109', dept: '儿科', diagnosis: '支气管肺炎', drg: 'BP11', ratio: 0.82, status: 'normal', los: 4, estCost: 8500 },
+  { id: 12, caseNo: '#2026010110', dept: '肿瘤科', diagnosis: '肺癌化疗', drg: 'RA19', ratio: 0.95, status: 'normal', los: 6, estCost: 35000 },
+  { id: 13, caseNo: '#2026010111', dept: '心内科', diagnosis: '心律失常', drg: 'FM15', ratio: 0.91, status: 'normal', los: 5, estCost: 25000 },
+  { id: 14, caseNo: '#2026010113', dept: '呼吸科', diagnosis: '慢阻肺急性加重', drg: 'BW21', ratio: 0.89, status: 'normal', los: 7, estCost: 22000 },
+  { id: 15, caseNo: '#2026010114', dept: '内分泌科', diagnosis: '糖尿病酮症酸中毒', drg: 'KB15', ratio: 0.95, status: 'normal', los: 6, estCost: 18000 }
 ]
 
 onMounted(() => {
@@ -172,12 +187,12 @@ onMounted(() => {
   if (costChartRef.value) {
     costChart = echarts.init(costChartRef.value)
     costChart.setOption({
-      grid: { left: 50, right: 20, top: 40, bottom: 30 },
+      grid: { left: 60, right: 20, top: 40, bottom: 50 },
       xAxis: {
         type: 'category',
-        data: ['心内科', '呼吸科', '骨科', '普外科', '神经内科'],
+        data: ['心内科', '呼吸科', '骨科', '普外科', '神经内科', '神经外科', '消化内科', '泸尿外科'],
         axisLine: { lineStyle: { color: '#e2e8f0' } },
-        axisLabel: { color: '#94a3b8' }
+        axisLabel: { color: '#94a3b8', rotate: 15 }
       },
       yAxis: {
         type: 'value',
@@ -192,16 +207,19 @@ onMounted(() => {
           type: 'bar',
           data: [
             { value: 0.92, itemStyle: { color: '#22c55e' } },
+            { value: 0.89, itemStyle: { color: '#22c55e' } },
+            { value: 1.15, itemStyle: { color: '#ef4444' } },
+            { value: 0.85, itemStyle: { color: '#22c55e' } },
+            { value: 1.05, itemStyle: { color: '#ef4444' } },
+            { value: 1.28, itemStyle: { color: '#ef4444' } },
             { value: 0.95, itemStyle: { color: '#22c55e' } },
-            { value: 1.08, itemStyle: { color: '#ef4444' } },
-            { value: 0.88, itemStyle: { color: '#22c55e' } },
-            { value: 1.02, itemStyle: { color: '#ef4444' } }
+            { value: 0.88, itemStyle: { color: '#22c55e' } }
           ],
           barWidth: '40%'
         },
         {
           type: 'line',
-          data: [1, 1, 1, 1, 1],
+          data: [1, 1, 1, 1, 1, 1, 1, 1],
           lineStyle: { color: '#f59e0b', width: 2, type: 'dashed' },
           symbol: 'none',
           markLine: {

@@ -46,7 +46,7 @@ function computeBaseURL(): string {
       const isPrivateIPv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
       // 本地/内网环境强制指向本机后端，避免误用线上域名导致证书/跨域问题
       if (isLocalHost || isPrivateIPv4) {
-        base = 'http://127.0.0.1:8001'
+        base = 'http://127.0.0.1:8000'
       }
     }
   } catch { }

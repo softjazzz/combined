@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # LLM API Configuration (unified naming)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = None  # e.g. https://dashscope.aliyuncs.com/compatible-mode/v1
     LLM_API_KEY: Optional[str] = None
-    LLM_MODEL: str = "qwen3-next-80b-a3b-instruct"
+    LLM_MODEL: str = "qwen3-next-30b-a3b-instruct"
     LLM_TIMEOUT_SECONDS: int = 120
     # Content truncation settings
     LLM_ENABLE_TRUNCATE: bool = False  # 禁用截断（模型支持128K上下文）

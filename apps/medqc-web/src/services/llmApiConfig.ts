@@ -99,7 +99,7 @@ export const LLM_API_CONFIGS: Record<string, LLMApiConfig> = {
   local: {
     name: 'local',
     displayName: '本地部署模型',
-    endpoint: 'http://localhost:8001/v1/chat/completions',
+    endpoint: 'http://localhost:8000/v1/chat/completions',
     model: 'medical-llm',
     requiresApiKey: false,
     description: '本地部署的医疗专用模型，数据完全私有',
@@ -145,7 +145,7 @@ export class LLMApiConfigManager {
     }
 
     this.currentConfig = LLM_API_CONFIGS[configName]
-    
+
     if (apiKey) {
       this.apiKey = apiKey
     }
@@ -195,7 +195,7 @@ export class LLMApiConfigManager {
    * 根据特性筛选配置
    */
   static getConfigsByFeature(feature: string): LLMApiConfig[] {
-    return Object.values(LLM_API_CONFIGS).filter(config => 
+    return Object.values(LLM_API_CONFIGS).filter(config =>
       config.features.includes(feature)
     )
   }
@@ -221,7 +221,7 @@ export class LLMApiConfigManager {
  */
 export function createLLMService(configName: string, apiKey?: string) {
   const configManager = new LLMApiConfigManager(configName)
-  
+
   if (apiKey) {
     configManager.setApiKey(apiKey)
   }
@@ -232,7 +232,7 @@ export function createLLMService(configName: string, apiKey?: string) {
   }
 
   const config = configManager.getCurrentConfig()
-  
+
   // 动态导入LLMService避免循环依赖
   return import('./llmServiceNew').then(({ LLMService }) => {
     return new LLMService({
@@ -249,13 +249,13 @@ export function createLLMService(configName: string, apiKey?: string) {
 export const quickConfigs = {
   // 开发测试
   development: () => createLLMService('mock'),
-  
+
   // OpenAI GPT-4
   openai: (apiKey: string) => createLLMService('openai', apiKey),
-  
+
   // 百度文心一言
   baidu: (apiKey: string) => createLLMService('baidu', apiKey),
-  
+
   // 本地部署
   local: (endpoint?: string) => {
     const config = { ...LLM_API_CONFIGS.local }
@@ -432,7 +432,7 @@ export const ENHANCED_LLM_API_CONFIGS: Record<string, EnhancedLLMApiConfig> = {
   local: {
     name: 'local',
     displayName: '本地部署模型',
-    endpoint: 'http://localhost:8001/v1/chat/completions',
+    endpoint: 'http://localhost:8000/v1/chat/completions',
     defaultModel: 'medical-llm',
     availableModels: [
       {

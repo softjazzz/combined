@@ -31,19 +31,19 @@ interface PaginatedResponse<T> {
 }
 
 class UnifiedAPIClient {
-  private baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
-  
+  private baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`
-    
+
     const defaultHeaders = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.getAuthToken()}`
     }
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -51,30 +51,30 @@ class UnifiedAPIClient {
         ...options.headers
       }
     })
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
     }
-    
+
     const data = await response.json()
     return data.success ? data.data : data
   }
-  
+
   private getAuthToken(): string {
     // 从localStorage或其他地方获取认证令牌
     return localStorage.getItem('auth_token') || ''
   }
-  
+
   // ==================== 审核任务管理API ====================
-  
+
   async createAuditTask(request: CreateAuditTaskRequest): Promise<QCAuditTask> {
     return this.request<QCAuditTask>('/api/audit-tasks', {
       method: 'POST',
       body: JSON.stringify(request)
     })
   }
-  
+
   async getAuditTasks(params: {
     page?: number
     page_size?: number
@@ -85,21 +85,21 @@ class UnifiedAPIClient {
     search?: string
   } = {}): Promise<PaginatedResponse<QCAuditTask>> {
     const searchParams = new URLSearchParams()
-    Object.entries(params).forEach(([key,  value]) => {
+    Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined) {
         searchParams.append(key, String(value))
       }
     })
-    
+
     return this.request<PaginatedResponse<QCAuditTask>>(
       `/api/audit-tasks?${searchParams.toString()}`
     )
   }
-  
+
   async getAuditTask(taskId: string): Promise<QCAuditTask> {
     return this.request<QCAuditTask>(`/api/audit-tasks/${taskId}`)
   }
-  
+
   async getTaskItems(
     taskId: string,
     params: {
@@ -111,35 +111,35 @@ class UnifiedAPIClient {
     } = {}
   ): Promise<PaginatedResponse<QCAuditTaskItem>> {
     const searchParams = new URLSearchParams()
-    Object.entries(params).forEach(([key,  value]) => {
+    Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined) {
         searchParams.append(key, String(value))
       }
     })
-    
+
     return this.request<PaginatedResponse<QCAuditTaskItem>>(
       `/api/audit-tasks/${taskId}/items?${searchParams.toString()}`
     )
   }
-  
+
   async startAuditTask(taskId: string): Promise<QCAuditTask> {
     return this.request<QCAuditTask>(`/api/audit-tasks/${taskId}/start`, {
       method: 'POST'
     })
   }
-  
+
   async completeAuditTask(taskId: string): Promise<QCAuditTask> {
     return this.request<QCAuditTask>(`/api/audit-tasks/${taskId}/complete`, {
       method: 'POST'
     })
   }
-  
+
   async performIntelligentSampling(taskId: string): Promise<QCAuditTaskItem[]> {
     return this.request<QCAuditTaskItem[]>(`/api/audit-tasks/${taskId}/intelligent-sampling`, {
       method: 'POST'
     })
   }
-  
+
   async batchAssignReviewers(
     taskId: string,
     assignments: Record<string, string>
@@ -149,19 +149,19 @@ class UnifiedAPIClient {
       body: JSON.stringify(assignments)
     })
   }
-  
+
   async getTaskStatistics(taskId: string): Promise<unknown> {
     return this.request(`/api/audit-tasks/${taskId}/statistics`)
   }
-  
+
   async deleteAuditTask(taskId: string): Promise<void> {
     await this.request(`/api/audit-tasks/${taskId}`, {
       method: 'DELETE'
     })
   }
-  
+
   // ==================== AI辅助功能API ====================
-  
+
   async detectDefectsForTaskItem(
     taskItemId: string,
     analysisContext: DefectAnalysisContext
@@ -174,7 +174,7 @@ class UnifiedAPIClient {
       }
     )
   }
-  
+
   async batchDetectDefects(
     request: BatchAuditRequest,
     analysisContext: DefectAnalysisContext
@@ -190,7 +190,7 @@ class UnifiedAPIClient {
       }
     )
   }
-  
+
   async generateRectificationPlan(
     defectsData: unknown[],
     medicalRecordId: string,
@@ -205,7 +205,7 @@ class UnifiedAPIClient {
       })
     })
   }
-  
+
   async smartMedicalRecordAnalysis(
     medicalRecordId: string,
     analysisConfig: Record<string, unknown>
@@ -215,7 +215,7 @@ class UnifiedAPIClient {
       body: JSON.stringify(analysisConfig)
     })
   }
-  
+
   async predictQualityScore(
     medicalRecordId: string,
     predictionConfig: Record<string, unknown>
@@ -228,23 +228,23 @@ class UnifiedAPIClient {
       })
     })
   }
-  
+
   async getAIAnalysisHistory(
     taskItemId: string,
     limit: number = 10
   ): Promise<any[]> {
     return this.request(`/api/ai-assistance/analysis-history/${taskItemId}?limit=${limit}`)
   }
-  
+
   async submitAIFeedback(feedbackData: unknown): Promise<unknown> {
     return this.request('/api/ai-assistance/feedback', {
       method: 'POST',
       body: JSON.stringify(feedbackData)
     })
   }
-  
+
   // ==================== 消息通知API ====================
-  
+
   async sendNotification(
     notificationData: unknown,
     immediate: boolean = true
@@ -254,14 +254,14 @@ class UnifiedAPIClient {
       body: JSON.stringify(notificationData)
     })
   }
-  
+
   async batchSendNotifications(notificationsData: unknown[]): Promise<QCNotification[]> {
     return this.request<QCNotification[]>('/api/notifications/batch', {
       method: 'POST',
       body: JSON.stringify(notificationsData)
     })
   }
-  
+
   async getUserNotifications(params: {
     page?: number
     page_size?: number
@@ -271,7 +271,7 @@ class UnifiedAPIClient {
     unread_only?: boolean
   } = {}): Promise<PaginatedResponse<QCNotification>> {
     const searchParams = new URLSearchParams()
-    Object.entries(params).forEach(([key,  value]) => {
+    Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined) {
         if (Array.isArray(value)) {
           value.forEach(v => searchParams.append(key, v))
@@ -280,35 +280,35 @@ class UnifiedAPIClient {
         }
       }
     })
-    
+
     return this.request<PaginatedResponse<QCNotification>>(
       `/api/notifications?${searchParams.toString()}`
     )
   }
-  
+
   async markNotificationAsRead(notificationId: string): Promise<void> {
     await this.request(`/api/notifications/${notificationId}/read`, {
       method: 'PUT'
     })
   }
-  
+
   async markNotificationAsProcessed(notificationId: string): Promise<void> {
     await this.request(`/api/notifications/${notificationId}/processed`, {
       method: 'PUT'
     })
   }
-  
+
   async batchMarkAsRead(notificationIds: string[]): Promise<void> {
     await this.request('/api/notifications/batch-read', {
       method: 'POST',
       body: JSON.stringify(notificationIds)
     })
   }
-  
+
   async getNotificationStats(): Promise<unknown> {
     return this.request('/api/notifications/stats')
   }
-  
+
   async sendTestNotification(
     recipientId: string,
     messageType: string = 'system_announcement',
@@ -323,17 +323,17 @@ class UnifiedAPIClient {
       })
     })
   }
-  
+
   // ==================== 系统信息API ====================
-  
+
   async getSystemHealth(): Promise<unknown> {
     return this.request('/health')
   }
-  
+
   async getSystemInfo(): Promise<unknown> {
     return this.request('/api/system/info')
   }
-  
+
   async getSystemStats(): Promise<unknown> {
     return this.request('/api/system/stats')
   }

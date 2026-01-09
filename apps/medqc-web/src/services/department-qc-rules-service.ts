@@ -146,9 +146,9 @@ export class DepartmentQCRulesService {
 
   private constructor() {
     // 使用与主应用相同的 API 配置
-    const baseURL = import.meta.env.DEV 
+    const baseURL = import.meta.env.DEV
       ? '' // 开发环境使用代理
-      : (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8001')
+      : (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000')
 
     this.apiClient = axios.create({
       baseURL,

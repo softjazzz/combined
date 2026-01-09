@@ -8,7 +8,7 @@ import type { Database } from '@/types/supabase'
 
 // KAG API配置
 const KAG_API_CONFIG = {
-  baseUrl: 'http://localhost:8001',  // KAG API Gateway地址
+  baseUrl: 'http://localhost:8000',  // KAG API Gateway地址
   timeout: 30000,
   retryAttempts: 3
 }
@@ -114,7 +114,7 @@ export class KAGQCService {
   async analyzeMedicalRecord(request: KAGQCRequest): Promise<KAGQCResponse> {
     try {
       console.log('开始KAG质控分析:', request.recordId)
-      
+
       const response = await this.request('POST', '/api/qc/analyze', {
         record_id: request.recordId,
         content: request.content,
@@ -124,10 +124,10 @@ export class KAGQCService {
       })
 
       console.log('KAG质控分析完成:', response.analysisId)
-      
+
       // 保存结果到Supabase
       await this.saveQCResultToSupabase(response)
-      
+
       return response
     } catch (error) {
       console.error('KAG质控分析失败:', error)
@@ -141,7 +141,7 @@ export class KAGQCService {
   async batchAnalyzeMedicalRecords(request: KAGBatchRequest): Promise<string> {
     try {
       console.log('开始批量KAG质控分析:', request.records.length, '份病历')
-      
+
       const response = await this.request('POST', '/api/qc/batch-analyze', {
         records: request.records.map(r => ({
           record_id: r.recordId,
@@ -186,14 +186,14 @@ export class KAGQCService {
   async getBatchResults(batchId: string): Promise<KAGBatchResponse> {
     try {
       const response = await this.request('GET', `/api/qc/batch-results/${batchId}`)
-      
+
       // 保存批量结果到Supabase
       for (const result of response.results) {
         if (result.status === 'completed') {
           await this.saveQCResultToSupabase(result)
         }
       }
-      
+
       return response
     } catch (error) {
       console.error('获取批量结果失败:', error)
@@ -309,7 +309,7 @@ export class KAGQCService {
    */
   private async request(method: string, path: string, data?: unknown): Promise<unknown> {
     const url = `${this.baseUrl}${path}`
-    
+
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
         const options: RequestInit = {
@@ -336,11 +336,11 @@ export class KAGQCService {
         return responseData
       } catch (error) {
         console.error(`请求失败 (尝试 ${attempt}/${this.retryAttempts}):`, error)
-        
+
         if (attempt === this.retryAttempts) {
           throw error
         }
-        
+
         // 等待后重试
         await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
       }
@@ -387,22 +387,22 @@ export class KAGQCService {
   private generateItemScores(kagResult: KAGQCResponse): unknown[] {
     const categories = {
       'completeness': '完整性',
-      'consistency': '一致性', 
+      'consistency': '一致性',
       'rationality': '合理性',
       'timeliness': '时效性'
     }
 
     const itemScores: unknown[] = []
-    
+
     for (const [categoryKey, categoryName] of Object.entries(categories)) {
-      const categoryDefects = kagResult.defects.filter(d => 
+      const categoryDefects = kagResult.defects.filter(d =>
         d.ruleId.toLowerCase().includes(categoryKey)
       )
-      
+
       const totalDeduction = categoryDefects.reduce((sum, d) => sum + d.deductionScore, 0)
       const baseScore = 25 // 每个维度基础分25分
       const actualScore = Math.max(0, baseScore - totalDeduction)
-      
+
       itemScores.push({
         itemId: categoryKey,
         itemName: categoryName,
@@ -421,11 +421,11 @@ export class KAGQCService {
    */
   private extractStrengths(kagResult: KAGQCResponse): string[] {
     const strengths: string[] = []
-    
+
     if (kagResult.summary.totalScore >= 90) {
       strengths.push('整体质量优秀，达到甲级标准')
     }
-    
+
     if (kagResult.summary.defectsCount === 0) {
       strengths.push('未发现质控缺陷，病历书写规范')
     } else if (kagResult.summary.defectsCount <= 2) {
@@ -441,7 +441,7 @@ export class KAGQCService {
     if (!severityCount.critical) {
       strengths.push('无严重质控问题')
     }
-    
+
     if (!severityCount.major) {
       strengths.push('无重要质控问题')
     }

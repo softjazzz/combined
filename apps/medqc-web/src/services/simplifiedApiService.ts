@@ -5,15 +5,15 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
-import type { 
-  ApiResponse, 
-  LoginRequest, 
+import type {
+  ApiResponse,
+  LoginRequest,
   LoginResponse,
   User
 } from '@/types'
 
 // API基础配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const API_TIMEOUT = 30000 // 30秒超时
 
 // 创建axios实例
@@ -53,16 +53,16 @@ class TokenManager {
 
 // 请求拦截器
 apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
-    const token = TokenManager.getToken()
-    if (token && !TokenManager.isTokenExpired(token)) {
-      config.headers = config.headers || {}
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    
-    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`)
-    
-    return config
-  },
+  const token = TokenManager.getToken()
+  if (token && !TokenManager.isTokenExpired(token)) {
+    config.headers = config.headers || {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+
+  console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`)
+
+  return config
+},
   (error: unknown) => {
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
@@ -71,12 +71,12 @@ apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
 
 // 响应拦截器
 apiClient.interceptors.response.use((response: AxiosResponse) => {
-    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-      status: response.status,
-      data: response.data
-    })
-    return response
-  },
+  console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+    status: response.status,
+    data: response.data
+  })
+  return response
+},
   (error: unknown) => {
     console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
       status: error.response?.status,
@@ -100,21 +100,21 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
  * 只包含认证和工具类API
  */
 export class SimplifiedApiService {
-  
+
   // ==================== 认证相关API ====================
-  
+
   /**
    * 用户登录
    */
   static async login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials)
-      
+
       // 保存token
       if (response.data.access_token) {
         TokenManager.setToken(response.data.access_token)
       }
-      
+
       return {
         success: true,
         data: response.data,
@@ -200,13 +200,13 @@ export class SimplifiedApiService {
     try {
       const formData = new FormData()
       formData.append('content', content)
-      
+
       const response = await apiClient.post('/api/qc/analyze-demo', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
-      
+
       return {
         success: true,
         data: response.data.data,
@@ -229,13 +229,13 @@ export class SimplifiedApiService {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      
+
       const response = await apiClient.post('/api/files/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
-      
+
       return {
         success: true,
         data: response.data.data,

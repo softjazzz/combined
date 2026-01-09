@@ -225,6 +225,34 @@ STAFF_PROMPT = """从以下病历中提取医护人员信息。
 
 直接输出 JSON，不要添加说明："""
 
+COSTS_PROMPT = """从以下病历中提取费用信息。
+
+【病历内容】
+{medical_text}
+
+【输出格式】
+```json
+{{
+  "total_cost": 住院总费用(数字),
+  "self_paid": 自付金额(数字),
+  "categories": {{
+    "1": 综合医疗服务费,
+    "2": 诊断类费用,
+    "3": 治疗类费用,
+    "4": 康复类费用,
+    "5": 中医类费用,
+    "6": 西药类费用,
+    "7": 中药类费用,
+    "8": 血液和血液制品类费用,
+    "9": 耗材类费用,
+    "10": 其他类费用
+  }}
+}}
+```
+
+如果某项费用信息不存在，返回 null。只提取明确标注的费用数字。
+直接输出 JSON，不要添加说明："""
+
 
 # ============================================================================
 # F4: 入院病情推理 Prompt
@@ -427,39 +455,57 @@ class FrontPageExtractionService:
             except Exception as e:
                 return name, e
 
+        import time
+        task_start_times: Dict[str, float] = {}
+        
+        async def run_named_timed(name: str, coro: Coroutine) -> Tuple[str, Any]:
+            """Wrapper that tracks timing for each task."""
+            task_start_times[name] = time.time()
+            try:
+                result = await coro
+                return name, result
+            except Exception as e:
+                return name, e
+
         named_tasks: List[asyncio.Task] = [
             asyncio.create_task(
-                run_named(
+                run_named_timed(
                     "hospitalization",
                     self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text)),
                 )
             ),
             asyncio.create_task(
-                run_named(
+                run_named_timed(
                     "diagnoses",
                     self._extract_json(DIAGNOSES_PROMPT.format(medical_text=medical_text)),
                 )
             ),
             asyncio.create_task(
-                run_named(
+                run_named_timed(
                     "procedures",
                     self._extract_json(PROCEDURES_PROMPT.format(medical_text=medical_text)),
                 )
             ),
             asyncio.create_task(
-                run_named(
+                run_named_timed(
                     "other_medical_info",
                     self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
                 )
             ),
             asyncio.create_task(
-                run_named(
+                run_named_timed(
                     "staff",
                     self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
                 )
             ),
             asyncio.create_task(
-                run_named(
+                run_named_timed(
+                    "costs",
+                    self._extract_json(COSTS_PROMPT.format(medical_text=medical_text)),
+                )
+            ),
+            asyncio.create_task(
+                run_named_timed(
                     "coding_result",
                     ext_coding_service.extract_coding(medical_text, patient_context),
                 )
@@ -468,41 +514,54 @@ class FrontPageExtractionService:
 
         for finished in asyncio.as_completed(named_tasks):
             name, result = await finished
+            elapsed = time.time() - task_start_times.get(name, time.time())
+            logger.info(f"Task '{name}' completed in {elapsed:.2f}s")
+            
             if isinstance(result, Exception):
                 logger.warning(f"stream: task {name} failed: {result}")
                 result = None
 
             if name == "coding_result":
                 coding_result = result or None
+                logger.info(f"stream: coding_result received")
                 if coding_result:
                     try:
+                        # Extract coding_data from nested structure
+                        coding_data = coding_result.get("coding_data", coding_result)
                         diagnoses = fp_data.get("diagnoses") or {}
                         procedures = fp_data.get("procedures") or {}
+                        logger.info(f"stream: before merge, diagnoses keys: {list(diagnoses.keys())}")
 
-                        if coding_result.get("principal_diagnosis"):
-                            pd = coding_result["principal_diagnosis"]
+                        if coding_data.get("principal_diagnosis"):
+                            pd = coding_data["principal_diagnosis"]
                             diagnoses["discharge_main_diagnosis_text"] = pd.get("name")
                             diagnoses["discharge_main_icd"] = pd.get("code")
                             validation_info["principal_diagnosis_confidence"] = pd.get("confidence")
+                            logger.info(f"stream: merged principal diagnosis: {pd.get('name')} -> {pd.get('code')}")
 
-                        if coding_result.get("secondary_diagnoses"):
-                            sd_list = coding_result["secondary_diagnoses"]
+                        if coding_data.get("secondary_diagnoses"):
+                            sd_list = coding_data["secondary_diagnoses"]
                             diagnoses["discharge_other_diagnoses_texts"] = [d.get("name") for d in sd_list]
                             diagnoses["discharge_other_icds"] = [d.get("code") for d in sd_list]
+                            logger.info(f"stream: merged {len(sd_list)} secondary diagnoses")
 
-                        if coding_result.get("principal_procedures"):
-                            pp_list = coding_result["principal_procedures"]
+                        if coding_data.get("principal_procedures"):
+                            pp_list = coding_data["principal_procedures"]
                             if pp_list:
                                 main_proc = pp_list[0]
                                 procedures["main_procedure_text"] = main_proc.get("name")
                                 procedures["main_procedure_code"] = main_proc.get("code")
+                                logger.info(f"stream: merged principal procedure: {main_proc.get('name')} -> {main_proc.get('code')}")
 
-                        if coding_result.get("warnings"):
-                            validation_info["warnings"] = coding_result["warnings"]
-                            logger.info(f"stream: 捕获到 {len(coding_result['warnings'])} 条编码警告")
+                        if coding_result.get("warnings") or coding_data.get("warnings"):
+                            warnings = coding_result.get("warnings") or coding_data.get("warnings") or []
+                            if warnings:
+                                validation_info["warnings"] = warnings
+                                logger.info(f"stream: 捕获到 {len(warnings)} 条编码警告")
 
                         fp_data["diagnoses"] = diagnoses
                         fp_data["procedures"] = procedures
+                        logger.info(f"stream: after merge, discharge_main_icd = {diagnoses.get('discharge_main_icd')}")
                     except Exception as e:
                         logger.warning(f"stream: merge coding result failed: {e}")
 

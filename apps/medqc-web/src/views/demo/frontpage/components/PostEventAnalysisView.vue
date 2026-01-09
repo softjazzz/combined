@@ -9,6 +9,19 @@
       <span class="text-sm text-slate-400">基于大数据的病案质量分析与趋势预测</span>
     </div>
 
+    <!-- 五级层级维度选择 -->
+    <div class="flex items-center gap-4 mb-4 bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+      <span class="text-sm font-medium text-slate-600 dark:text-slate-400">分析维度:</span>
+      <a-radio-group v-model:value="analysisDimension" button-style="solid" size="small" @change="handleDimensionChange">
+        <a-radio-button value="hospital">全院概览</a-radio-button>
+        <a-radio-button value="department">科室分析</a-radio-button>
+        <a-radio-button value="ward">病区分析</a-radio-button>
+        <a-radio-button value="drg">DRG组分析</a-radio-button>
+        <a-radio-button value="doctor">医生绩效</a-radio-button>
+      </a-radio-group>
+      <span class="ml-auto text-xs text-slate-400">当前: {{ dimensionLabel }}</span>
+    </div>
+
     <!-- Time Range Selector -->
     <div class="flex items-center gap-4 mb-6">
       <div v-if="!batchId" class="text-orange-500 text-sm flex items-center gap-2">
@@ -43,7 +56,7 @@
     </div>
 
     <!-- KPI Cards -->
-    <div class="grid grid-cols-5 gap-4 mb-6">
+    <div class="grid grid-cols-6 gap-4 mb-6">
       <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">病案总数</div>
         <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.summary.total_records }}</div>
@@ -74,8 +87,19 @@
       
       <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">费用消耗指数</div>
-        <div class="text-2xl font-bold text-slate-800 dark:text-white">0.95</div>
+        <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.summary.cost_consumption_index?.toFixed(2) || '0.95' }}</div>
         <div class="text-xs text-green-600 mt-1">↓ 0.05</div>
+      </div>
+      
+      <!-- 低风险死亡率 KPI -->
+      <div :class="['rounded-xl p-4 border', stats.summary.low_risk_mortality_rate > 0.1 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700']">
+        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">低风险死亡率</div>
+        <div class="text-2xl font-bold" :class="stats.summary.low_risk_mortality_rate > 0.1 ? 'text-red-600' : 'text-slate-800 dark:text-white'">
+          {{ stats.summary.low_risk_mortality_rate?.toFixed(2) || '0.00' }}%
+        </div>
+        <div class="text-xs mt-1" :class="stats.summary.low_risk_mortality_rate > 0.1 ? 'text-red-500' : 'text-slate-400'">
+          {{ stats.summary.low_risk_death_count || 0 }}/{{ stats.summary.low_risk_total_count || 0 }} 例
+        </div>
       </div>
     </div>
 
@@ -83,13 +107,13 @@
     <div class="grid grid-cols-2 gap-4 mb-6">
       <!-- Quality Trend -->
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">质量趋势分析</h3>
+        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">{{ chartTitles.trend }}</h3>
         <div ref="qualityTrendRef" class="h-64"></div>
       </div>
       
       <!-- Department Comparison -->
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">科室对比分析</h3>
+        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">{{ chartTitles.comparison }}</h3>
         <div ref="deptComparisonRef" class="h-64"></div>
       </div>
 
@@ -104,6 +128,11 @@
         <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">费用结构分析</h3>
         <div ref="costStructureRef" class="h-64"></div>
       </div>
+    </div>
+
+    <!-- 超费原因分析 (新增) -->
+    <div class="grid grid-cols-2 gap-4 mb-6">
+      <OverCostAnalysisCard :batch-id="batchId" />
     </div>
 
     <!-- Issue Summary -->
@@ -148,10 +177,11 @@
 	</template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import * as echarts from 'echarts'
 import axios from 'axios'
 import DrillDownModal from './DrillDownModal.vue'
+import OverCostAnalysisCard from './OverCostAnalysisCard.vue'
 import {
   ArrowLeftOutlined,
   ExclamationCircleOutlined,
@@ -175,6 +205,114 @@ const costStructureRef = ref<HTMLElement | null>(null)
 
 const dateRange = ref<any>(null)
 const analysisType = ref('quality')
+const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'drg' | 'doctor'>('hospital')
+
+// 维度标签映射
+const dimensionLabelMap: Record<string, string> = {
+  hospital: '全院概览',
+  department: '科室分析',
+  ward: '病区分析',
+  drg: 'DRG组分析',
+  doctor: '医生绩效'
+}
+
+// 计算属性：当前维度名称
+const dimensionLabel = computed(() => dimensionLabelMap[analysisDimension.value])
+
+// 计算属性：图表标题根据维度变化
+const chartTitles = computed(() => {
+  const titles: Record<string, { trend: string; comparison: string }> = {
+    hospital: { trend: '全院质量趋势', comparison: '科室绩效对比' },
+    department: { trend: '科室质量趋势', comparison: '科室内病区对比' },
+    ward: { trend: '病区质量趋势', comparison: '病区绩效排名' },
+    drg: { trend: 'DRG组入组趋势', comparison: 'DRG组盈亏对比' },
+    doctor: { trend: '医生绩效趋势', comparison: '医生CMI对比' }
+  }
+  return titles[analysisDimension.value]
+})
+
+// 处理维度切换
+const handleDimensionChange = () => {
+  message.info(`切换到【${dimensionLabel.value}】维度，正在加载数据...`)
+  // 重新加载数据（如果有 batchId）
+  if (props.batchId) {
+    fetchStatistics()
+  } else {
+    // 演示模式：更新 mock 数据
+    updateMockDataForDimension()
+  }
+}
+
+// 根据维度更新 mock 数据
+const updateMockDataForDimension = () => {
+  const mockDataByDimension: Record<string, any[]> = {
+    // 全院概览 - 各科室数据
+    hospital: [
+      { dept_name: '心内科', total_profit: 125000, avg_cmi: 1.35, case_count: 328, cost_rate: 0.92 },
+      { dept_name: '骨科', total_profit: 98000, avg_cmi: 1.28, case_count: 256, cost_rate: 0.88 },
+      { dept_name: '神经外科', total_profit: 85000, avg_cmi: 1.52, case_count: 145, cost_rate: 0.85 },
+      { dept_name: '普外科', total_profit: 62000, avg_cmi: 1.15, case_count: 289, cost_rate: 0.95 },
+      { dept_name: '呼吸科', total_profit: -15000, avg_cmi: 0.98, case_count: 186, cost_rate: 1.08 },
+      { dept_name: '消化内科', total_profit: 45000, avg_cmi: 1.12, case_count: 167, cost_rate: 0.91 },
+      { dept_name: '泌尿外科', total_profit: 38000, avg_cmi: 1.22, case_count: 134, cost_rate: 0.89 },
+      { dept_name: '妇产科', total_profit: -8000, avg_cmi: 0.95, case_count: 215, cost_rate: 1.05 },
+      { dept_name: '儿科', total_profit: 22000, avg_cmi: 0.88, case_count: 198, cost_rate: 0.96 },
+      { dept_name: '肿瘤科', total_profit: 156000, avg_cmi: 1.68, case_count: 112, cost_rate: 0.82 }
+    ],
+    // 科室分析 - 项目/病种数据
+    department: [
+      { dept_name: '冠心病介入治疗', total_profit: 68000, avg_cmi: 1.85, case_count: 85, cost_rate: 0.78 },
+      { dept_name: '心力衰竭治疗', total_profit: 32000, avg_cmi: 1.25, case_count: 126, cost_rate: 0.92 },
+      { dept_name: '心律失常诊治', total_profit: 15000, avg_cmi: 1.15, case_count: 67, cost_rate: 0.95 },
+      { dept_name: '高血压管理', total_profit: -5000, avg_cmi: 0.85, case_count: 145, cost_rate: 1.06 },
+      { dept_name: '急性心梗溶栓', total_profit: 45000, avg_cmi: 1.95, case_count: 38, cost_rate: 0.75 },
+      { dept_name: '心脏瓣膜病', total_profit: 28000, avg_cmi: 1.42, case_count: 52, cost_rate: 0.88 },
+      { dept_name: '心包疾病', total_profit: 8000, avg_cmi: 1.08, case_count: 23, cost_rate: 0.94 },
+      { dept_name: '心肌病', total_profit: -12000, avg_cmi: 1.32, case_count: 35, cost_rate: 1.12 }
+    ],
+    // 病区分析 - 护理单元数据
+    ward: [
+      { dept_name: '心内一区', total_profit: 52000, avg_cmi: 1.28, case_count: 156, cost_rate: 0.89 },
+      { dept_name: '心内二区', total_profit: 38000, avg_cmi: 1.22, case_count: 142, cost_rate: 0.92 },
+      { dept_name: '心内CCU', total_profit: 85000, avg_cmi: 1.85, case_count: 68, cost_rate: 0.78 },
+      { dept_name: '骨科一区', total_profit: 45000, avg_cmi: 1.18, case_count: 128, cost_rate: 0.91 },
+      { dept_name: '骨科二区', total_profit: 32000, avg_cmi: 1.15, case_count: 118, cost_rate: 0.94 },
+      { dept_name: '神外ICU', total_profit: 68000, avg_cmi: 1.95, case_count: 45, cost_rate: 0.72 },
+      { dept_name: '普外一区', total_profit: 28000, avg_cmi: 1.12, case_count: 145, cost_rate: 0.95 },
+      { dept_name: '普外二区', total_profit: -8000, avg_cmi: 0.98, case_count: 132, cost_rate: 1.08 },
+      { dept_name: '呼吸病区', total_profit: -15000, avg_cmi: 0.95, case_count: 186, cost_rate: 1.12 },
+      { dept_name: '消化病区', total_profit: 22000, avg_cmi: 1.08, case_count: 167, cost_rate: 0.96 }
+    ],
+    // DRG组分析 - DRG编码数据
+    drg: [
+      { dept_name: 'FM19 心衰伴MCC', total_profit: 85000, avg_cmi: 1.85, case_count: 128, cost_rate: 0.82 },
+      { dept_name: 'FB15 心脏手术', total_profit: 125000, avg_cmi: 2.45, case_count: 65, cost_rate: 0.72 },
+      { dept_name: 'IC19 脑血管手术', total_profit: 98000, avg_cmi: 2.15, case_count: 78, cost_rate: 0.78 },
+      { dept_name: 'BR23 呼吸感染', total_profit: -25000, avg_cmi: 0.88, case_count: 186, cost_rate: 1.18 },
+      { dept_name: 'GD15 胃肠手术', total_profit: 45000, avg_cmi: 1.45, case_count: 95, cost_rate: 0.88 },
+      { dept_name: 'EB13 骨折固定', total_profit: 38000, avg_cmi: 1.28, case_count: 142, cost_rate: 0.91 },
+      { dept_name: 'KB19 肾脏手术', total_profit: 52000, avg_cmi: 1.65, case_count: 58, cost_rate: 0.85 },
+      { dept_name: 'RB11 肺炎', total_profit: -18000, avg_cmi: 0.92, case_count: 215, cost_rate: 1.15 },
+      { dept_name: 'HC15 肝胆手术', total_profit: 68000, avg_cmi: 1.78, case_count: 72, cost_rate: 0.82 },
+      { dept_name: 'MD23 妇科手术', total_profit: 22000, avg_cmi: 1.18, case_count: 98, cost_rate: 0.94 }
+    ],
+    // 医生绩效 - 主治医师数据
+    doctor: [
+      { dept_name: '张明华 主任医师', total_profit: 158000, avg_cmi: 1.68, case_count: 185, cost_rate: 0.78 },
+      { dept_name: '李建国 主任医师', total_profit: 125000, avg_cmi: 1.52, case_count: 168, cost_rate: 0.82 },
+      { dept_name: '王志强 副主任医师', total_profit: 98000, avg_cmi: 1.45, case_count: 156, cost_rate: 0.85 },
+      { dept_name: '刘伟 副主任医师', total_profit: 75000, avg_cmi: 1.32, case_count: 142, cost_rate: 0.88 },
+      { dept_name: '陈晓东 主治医师', total_profit: 52000, avg_cmi: 1.18, case_count: 128, cost_rate: 0.92 },
+      { dept_name: '赵敏 主治医师', total_profit: 38000, avg_cmi: 1.12, case_count: 118, cost_rate: 0.94 },
+      { dept_name: '孙丽华 主治医师', total_profit: -8000, avg_cmi: 0.95, case_count: 105, cost_rate: 1.08 },
+      { dept_name: '周军 主治医师', total_profit: 22000, avg_cmi: 1.05, case_count: 98, cost_rate: 0.96 },
+      { dept_name: '吴晓燕 住院医师', total_profit: -15000, avg_cmi: 0.88, case_count: 86, cost_rate: 1.15 },
+      { dept_name: '郑浩 住院医师', total_profit: 12000, avg_cmi: 0.98, case_count: 75, cost_rate: 0.98 }
+    ]
+  }
+  stats.value.department_stats = mockDataByDimension[analysisDimension.value] || []
+  updateCharts()
+}
 
 // Drill Down State
 const drillVisible = ref(false)
@@ -190,14 +328,18 @@ const stats = ref({
     avg_cmi: 0,
     total_weight: 0,
     total_fee: 0,
-    total_profit: 0
+    total_profit: 0,
+    cost_consumption_index: 0,
+    low_risk_mortality_rate: 0,
+    low_risk_death_count: 0,
+    low_risk_total_count: 0
   },
-  mdc_distribution: [],
-  drg_distribution: [], // Top 10 High Risk/Cost DRGs
-  department_stats: [],
-  doctor_stats: [],
-  daily_trends: [],
-  cost_structure: []
+  mdc_distribution: [] as any[],
+  drg_distribution: [] as any[], // Top 10 High Risk/Cost DRGs
+  department_stats: [] as any[],
+  doctor_stats: [] as any[],
+  daily_trends: [] as any[],
+  cost_structure: { drug: 0, material: 0, exam: 0, treatment: 0 }
 })
 
 let qualityChart: echarts.ECharts | null = null
@@ -379,7 +521,12 @@ const initMockCharts = () => {
            avg_cmi: 1.08,
            total_weight: 1540.5,
            total_fee: 5400000,
-           total_profit: 125000
+           total_profit: 125000,
+           cost_consumption_index: 0.95,
+           // 低风险死亡率数据
+           low_risk_mortality_rate: 0.08,
+           low_risk_death_count: 2,
+           low_risk_total_count: 2500
         },
         mdc_distribution: [
             { mdc: 'MDCA', count: 125 },

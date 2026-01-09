@@ -558,8 +558,8 @@ const importConfigs = async () => {
   importing.value = true
   try {
     const baseURL = window.location.hostname === 'localhost'
-      ? 'http://localhost:8001'
-      : 'http://124.220.6.136:8001'
+      ? 'http://localhost:8000'
+      : 'http://124.220.6.136:8000'
 
     for (const config of importData.value) {
       const response = await fetch(`${baseURL}/api/qc/llm-configs`, {
@@ -606,8 +606,8 @@ const runConfigTest = async () => {
   testing.value = true
   try {
     const baseURL = window.location.hostname === 'localhost'
-      ? 'http://localhost:8001'
-      : 'http://124.220.6.136:8001'
+      ? 'http://localhost:8000'
+      : 'http://124.220.6.136:8000'
 
     const startTime = Date.now()
     const response = await fetch(`${baseURL}/api/qc/llm-configs/test`, {

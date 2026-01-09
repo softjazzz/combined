@@ -63,19 +63,22 @@
             <h3 class="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <MedicineBoxOutlined class="text-blue-500" />
               诊断编码
+              <span class="text-xs text-slate-400 font-normal ml-auto">国临版 / 医保版</span>
             </h3>
             <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
               <template v-if="hasExtractedData">
                 <div v-if="mainDiagnosis" class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
                   <div class="flex items-center gap-2 mb-1">
                     <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded">主诊断</span>
-                    <span class="font-mono text-blue-600 dark:text-blue-400 text-sm font-medium">{{ mainDiagnosis.code || '待编码' }}</span>
+                    <span class="font-mono text-blue-600 dark:text-blue-400 text-xs font-medium">{{ mainDiagnosis.code || '待编码' }}</span>
+                    <span v-if="mainDiagnosis.mappedCode && mainDiagnosis.mappedCode !== mainDiagnosis.code" class="font-mono text-green-600 dark:text-green-400 text-xs">→ {{ mainDiagnosis.mappedCode }}</span>
                   </div>
                   <div class="text-slate-700 dark:text-slate-300 text-sm">{{ mainDiagnosis.text }}</div>
                 </div>
                 <div v-for="(diag, idx) in secondaryDiagnoses" :key="idx" class="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600">
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-mono text-slate-500 text-xs">{{ diag.code || '-' }}</span>
+                    <span v-if="diag.mappedCode && diag.mappedCode !== diag.code" class="font-mono text-green-600 dark:text-green-400 text-xs">→ {{ diag.mappedCode }}</span>
                     <span class="text-slate-600 dark:text-slate-400 text-sm truncate">{{ diag.text }}</span>
                   </div>
                 </div>
@@ -117,31 +120,42 @@
           </div>
         </div>
 
-        <!-- DRG Grouping Result -->
+        <!-- DRG/DIP Grouping Result -->
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 flex-1">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
               <AppstoreOutlined class="text-blue-500" />
               DRG/DIP 入组预测
             </h3>
-            <button 
-              @click="handleDRGGrouping"
-              :disabled="grouping || !hasExtractedData"
-              class="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center gap-1"
-            >
-              <LoadingOutlined v-if="grouping" class="animate-spin" />
-              <SyncOutlined v-else />
-              {{ grouping ? '计算中...' : '重新计算' }}
-            </button>
+            <div class="flex items-center gap-2">
+              <button 
+                @click="handleDIPGrouping"
+                :disabled="grouping || !hasExtractedData"
+                class="px-3 py-1.5 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors flex items-center gap-1"
+              >
+                <LoadingOutlined v-if="grouping && groupingType === 'DIP'" class="animate-spin" />
+                <SyncOutlined v-else />
+                泸州市DIP
+              </button>
+              <button 
+                @click="handleDRGGrouping"
+                :disabled="grouping || !hasExtractedData"
+                class="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center gap-1"
+              >
+                <LoadingOutlined v-if="grouping && groupingType === 'DRG'" class="animate-spin" />
+                <SyncOutlined v-else />
+                四川省DRG
+              </button>
+            </div>
           </div>
 
-          <!-- DRG Result Display -->
+          <!-- Grouping Result Display -->
           <div v-if="drgResult" class="space-y-4">
-            <!-- DRG Code Card -->
-            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg">
+            <!-- Code Card -->
+            <div :class="['rounded-xl p-5 text-white shadow-lg', groupingType === 'DIP' ? 'bg-gradient-to-br from-green-500 to-green-600' : 'bg-gradient-to-br from-blue-500 to-blue-600']">
               <div class="flex justify-between items-start">
                 <div>
-                  <div class="text-blue-100 text-xs font-semibold uppercase tracking-wider mb-1">DRG 组编码</div>
+                  <div :class="['text-xs font-semibold uppercase tracking-wider mb-1', groupingType === 'DIP' ? 'text-green-100' : 'text-blue-100']">{{ groupingType }} 组编码</div>
                   <div class="text-3xl font-bold font-mono">{{ drgResult.code }}</div>
                   <div class="text-blue-100 mt-2 text-sm">{{ drgResult.name }}</div>
                 </div>
@@ -275,6 +289,9 @@ const extracting = ref(false)
 const grouping = ref(false)
 const extractedData = ref<any>(null)
 const drgResult = ref<any>(null)
+const admissionId = ref<string | null>(null)
+const groupingType = ref<'DIP' | 'DRG'>('DIP')  // 默认使用 DIP
+const codeMappings = ref<Record<string, string>>({})  // 国临版 -> 医保版 编码映射
 
 // Computed
 const hasExtractedData = computed(() => !!extractedData.value)
@@ -283,7 +300,8 @@ const mainDiagnosis = computed(() => {
   if (!extractedData.value?.diagnoses) return null
   const code = extractedData.value.diagnoses.discharge_main_icd || extractedData.value.diagnoses.admission_main_icd
   const text = extractedData.value.diagnoses.discharge_main_diagnosis_text || extractedData.value.diagnoses.admission_main_diagnosis_text
-  return code || text ? { code, text } : null
+  const mappedCode = codeMappings.value[code] || ''
+  return code || text ? { code, text, mappedCode } : null
 })
 
 const secondaryDiagnoses = computed(() => {
@@ -292,16 +310,21 @@ const secondaryDiagnoses = computed(() => {
   const texts = extractedData.value.diagnoses.discharge_other_diagnoses_texts || extractedData.value.diagnoses.admission_other_diagnoses_texts || []
   return texts.map((text: string, i: number) => ({
     code: codes[i] || '',
-    text
+    text,
+    mappedCode: codeMappings.value[codes[i]] || ''
   })).slice(0, 5)
 })
 
 const procedures = computed(() => {
-  if (!extractedData.value?.surgeries) return []
-  const mainCode = extractedData.value.surgeries.major_surgery_icd
-  const mainText = extractedData.value.surgeries.major_surgery_text
-  const otherCodes = extractedData.value.surgeries.other_surgery_icds || []
-  const otherTexts = extractedData.value.surgeries.other_surgery_texts || []
+  // 支持两种数据结构: surgeries (旧) 和 procedures (新)
+  const procs = extractedData.value?.procedures || extractedData.value?.surgeries
+  if (!procs) return []
+  
+  // 新格式: procedures.main_procedure_code/main_procedure_text
+  const mainCode = procs.main_procedure_code || procs.major_surgery_icd || ''
+  const mainText = procs.main_procedure_text || procs.major_surgery_text || ''
+  const otherCodes = procs.other_procedure_codes || procs.other_surgery_icds || []
+  const otherTexts = procs.other_procedure_texts || procs.other_surgery_texts || []
   
   const result = []
   if (mainText) {
@@ -318,6 +341,7 @@ const handleCaseChange = (idx: number) => {
   medicalText.value = testCases[idx].medical_text
   extractedData.value = null
   drgResult.value = null
+  admissionId.value = null
 }
 
 const handleExtract = async () => {
@@ -328,18 +352,21 @@ const handleExtract = async () => {
 
   extracting.value = true
   try {
-    const response = await fetch('/api/v1/frontpage/auto-generate-draft', {
+    // 使用正确的提取 API
+    const response = await fetch('/api/v1/case-front-page/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ medical_text: medicalText.value })
     })
 
     const data = await response.json()
-    if (response.ok && data.data?.frontpage) {
-      extractedData.value = data.data.frontpage
+    if (response.ok && data.success && data.data) {
+      extractedData.value = data.data
+      // 保存 admission_id 用于 DRG 分组
+      admissionId.value = data.data.admission_id
       message.success('AI智能抽取完成')
-      // Auto trigger DRG grouping
-      handleDRGGrouping()
+      // 默认触发 泸州市 DIP 分组
+      handleDIPGrouping()
     } else {
       message.error(data.error || data.detail || '抽取失败')
     }
@@ -351,80 +378,141 @@ const handleExtract = async () => {
   }
 }
 
-const handleDRGGrouping = async () => {
-  if (!extractedData.value) return
+const handleDIPGrouping = async () => {
+  if (!extractedData.value) {
+    message.warning('请先完成AI抽取')
+    return
+  }
 
   grouping.value = true
+  groupingType.value = 'DIP'
+  
   try {
-    // 从抽取数据中提取分组所需信息
+    // 从提取数据中获取分组所需信息
     const diagnoses = extractedData.value.diagnoses || {}
-    const surgeries = extractedData.value.surgeries || {}
+    const procedures = extractedData.value.procedures || {}
     const basicInfo = extractedData.value.basic_info || {}
+    const costs = extractedData.value.costs || {}
     
     const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || ''
     const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
-    const procedureCodes = [surgeries.major_surgery_icd, ...(surgeries.other_surgery_icds || [])].filter(Boolean)
+    const mainProcCode = procedures.main_procedure_code || ''
     
     // 计算年龄
     let patientAge = 50
-    if (basicInfo.age) {
-      const ageMatch = String(basicInfo.age).match(/(\d+)/)
-      if (ageMatch) patientAge = parseInt(ageMatch[1])
+    if (basicInfo.age_years) {
+      patientAge = basicInfo.age_years
     }
     
+    // 调用 DIP 分组 API
+    const response = await fetch('/api/v1/dip/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        city_name: '泸州市',
+        pdx_code: primaryDiagCode,
+        adx_code: secondaryDiagCodes.length > 0 ? secondaryDiagCodes[0] : '',
+        proc_code: mainProcCode,
+        patient_gender: basicInfo.gender === '1' ? 'M' : 'F',
+        patient_age: patientAge,
+        los: 7,
+        total_fee: costs.total_cost || 12000
+      })
+    })
+
+    const data = await response.json()
+    if (response.ok && data.data) {
+      const actualCost = costs.total_cost || 12000
+      
+      drgResult.value = {
+        code: data.data.dip_code,
+        name: data.data.dip_name || data.data.dip_type,
+        weight: '--',  // DIP 没有权重概念
+        payment: '--',  // DIP 使用分值计算
+        actual_cost: actualCost,
+        profit: '--',
+        messages: data.data.grouping_path ? [data.data.grouping_path] : ['主诊断匹配成功', 'DIP入组完成']
+      }
+      message.success('泸州市DIP入组预测完成')
+    } else {
+      message.error(data.detail || 'DIP分组失败')
+      drgResult.value = null
+    }
+  } catch (error) {
+    console.error('DIP grouping error:', error)
+    message.error('DIP分组服务暂不可用')
+    drgResult.value = null
+  } finally {
+    grouping.value = false
+  }
+}
+
+const handleDRGGrouping = async () => {
+  if (!extractedData.value) {
+    message.warning('请先完成AI抽取')
+    return
+  }
+
+  grouping.value = true
+  groupingType.value = 'DRG'
+  
+  try {
+    // 从提取数据中获取分组所需信息
+    const diagnoses = extractedData.value.diagnoses || {}
+    const procedures = extractedData.value.procedures || {}
+    const basicInfo = extractedData.value.basic_info || {}
+    const costs = extractedData.value.costs || {}
+    
+    const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || 'I10.x00'
+    const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
+    const mainProcCode = procedures.main_procedure_code || ''
+    const procedureCodes = mainProcCode ? [mainProcCode, ...(procedures.other_procedure_codes || [])] : []
+    
+    // 使用 predict-realtime 端点直接传入数据
     const response = await fetch('/api/v1/drg/predict-realtime', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         primary_diagnosis_code: primaryDiagCode,
+        primary_diagnosis_text: diagnoses.discharge_main_diagnosis_text || '',
         secondary_diagnosis_codes: secondaryDiagCodes,
         procedure_codes: procedureCodes,
-        patient_age: patientAge,
-        patient_gender: basicInfo.gender === '女' ? 'F' : 'M',
+        patient_age: basicInfo.age_years || 50,
+        patient_gender: basicInfo.gender === '2' ? 'F' : 'M',
         los: 7,
-        total_cost: extractedData.value.insurance?.insurance_total_cost || 12000,
+        total_cost: costs.total_cost || 12000,
         region: '四川省'
       })
     })
 
     const data = await response.json()
     if (response.ok && data.data) {
+      const actualCost = costs.total_cost || 12000
+      const baselinePayment = data.data.baseline_payment || 0
+      
+      // 更新编码映射（从 DRG 分组结果中提取）
+      if (data.data.original_code && data.data.mapped_code) {
+        codeMappings.value[data.data.original_code] = data.data.mapped_code
+      }
+      
       drgResult.value = {
-        code: data.data.drg_code || data.data.code,
-        name: data.data.drg_name || data.data.name,
+        code: data.data.drg_code,
+        name: data.data.drg_name,
         weight: data.data.weight,
-        payment: data.data.baseline_payment || data.data.payment,
-        actual_cost: data.data.actual_cost || extractedData.value.insurance?.insurance_total_cost || 12000,
-        profit: (data.data.baseline_payment || data.data.payment) - (data.data.actual_cost || 12000),
-        messages: data.data.messages || ['主诊断匹配成功', 'DRG入组完成']
+        payment: baselinePayment,
+        actual_cost: actualCost,
+        profit: baselinePayment - actualCost,
+        messages: data.data.grouping_logic ? [data.data.grouping_logic] : ['主诊断匹配成功', 'DRG入组完成']
       }
-      message.success('DRG入组预测完成')
+      message.success('四川省DRG入组预测完成')
     } else {
-      // Mock result for demo
-      drgResult.value = {
-        code: 'FM19',
-        name: '心力衰竭，伴主要并发症或合并症',
-        weight: 1.25,
-        payment: 14500,
-        actual_cost: 12580,
-        profit: 1920,
-        messages: ['主诊断匹配成功', '无手术编码影响', '并发症增加权重']
-      }
-      message.success('DRG入组预测完成 (模拟)')
+      message.error(data.detail || 'DRG分组失败')
+      drgResult.value = null
     }
   } catch (error) {
     console.error('DRG grouping error:', error)
-    // Mock result for demo
-    drgResult.value = {
-      code: 'FM19',
-      name: '心力衰竭，伴主要并发症或合并症',
-      weight: 1.25,
-      payment: 14500,
-      actual_cost: 12580,
-      profit: 1920,
-      messages: ['主诊断匹配成功', '无手术编码影响']
-    }
-    message.success('DRG入组预测完成 (模拟)')
+    message.error('DRG分组服务暂不可用')
+    drgResult.value = null
   } finally {
     grouping.value = false
   }

@@ -63,9 +63,9 @@ async def extract_frontpage_from_text(request: ExtractFrontpageRequest) -> Dict[
         if not result:
             raise HTTPException(status_code=500, detail="LLM 结构化提取失败，请检查 LLM 服务配置")
         
-        # Step 2: 从提取结果中获取诊断和手术名称
-        diagnoses_section = result.get("diagnoses", {})
-        procedures_section = result.get("procedures", {})
+        # Step 2: 从提取结果中获取诊断和手术名称（防止 None 值）
+        diagnoses_section = result.get("diagnoses") or {}
+        procedures_section = result.get("procedures") or {}
         
         # 收集入院诊断
         admission_main_diag = diagnoses_section.get("admission_main_diagnosis_text")
@@ -147,6 +147,62 @@ async def extract_frontpage_from_text(request: ExtractFrontpageRequest) -> Dict[
             
             # 将完整编码结果附加到响应中
             result["coding_details"] = coding_result
+        
+        # ===== 保存到 demo store，供 DRG 分组使用 =====
+        # 生成唯一的 admission_id
+        import hashlib
+        import time
+        hash_input = f"{result.get('basic_info', {}).get('patient_name', '')}_{time.time()}"
+        admission_id = f"EXT{hashlib.md5(hash_input.encode()).hexdigest()[:10].upper()}"
+        
+        # 映射为 DRG 分组所需的格式（防止 None 值）
+        basic_info = result.get("basic_info") or {}
+        diagnoses = result.get("diagnoses") or {}
+        procedures = result.get("procedures") or {}
+        costs = result.get("costs") or {}
+        hospitalization = result.get("hospitalization") or {}
+        
+        # 构造次要诊断列表
+        other_texts = diagnoses.get("discharge_other_diagnoses_texts") or []
+        other_icds = diagnoses.get("discharge_other_icds") or []
+        secondary_diagnoses = [
+            {"code": other_icds[i] if i < len(other_icds) else "待编码", "name": name}
+            for i, name in enumerate(other_texts)
+        ]
+        
+        # 构造手术列表
+        proc_list = []
+        if procedures.get("main_procedure_code"):
+            proc_list.append({
+                "code": procedures.get("main_procedure_code"),
+                "name": procedures.get("main_procedure_text", "")
+            })
+        
+        case_for_drg = {
+            "admission_id": admission_id,
+            "patient_name": basic_info.get("patient_name", "未知"),
+            "patient_age": basic_info.get("age_years") or 50,
+            "patient_gender": "M" if basic_info.get("gender") == "1" else "F",
+            "primary_diagnosis_code": diagnoses.get("discharge_main_icd"),
+            "primary_diagnosis_name": diagnoses.get("discharge_main_diagnosis_text"),
+            "main_procedure_code": procedures.get("main_procedure_code"),
+            "main_procedure_name": procedures.get("main_procedure_text"),
+            "secondary_diagnoses": secondary_diagnoses,
+            "procedures": proc_list,
+            "total_cost": costs.get("total_cost") or 0,
+            "total_hospital_days": hospitalization.get("actual_hospital_days") or 0,
+            "department": hospitalization.get("admission_dept") or "未知科室",
+            "admission_date": hospitalization.get("admission_datetime", "")[:10] if hospitalization.get("admission_datetime") else None,
+            "discharge_date": hospitalization.get("discharge_datetime", "")[:10] if hospitalization.get("discharge_datetime") else None,
+        }
+        
+        # 保存到 demo store
+        store = get_demo_store()
+        store.upsert_case(case_for_drg)
+        logger.info(f"已保存提取结果到 demo store, admission_id={admission_id}")
+        
+        # 在返回结果中附加 admission_id，供前端使用
+        result["admission_id"] = admission_id
         
         return {
             "success": True,

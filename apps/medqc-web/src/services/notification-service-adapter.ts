@@ -20,21 +20,21 @@ class WebSocketManager {
   private heartbeatInterval: number | null = null
   private messageHandlers: Map<string, Function[]> = new Map()
 
-  constructor(private userId: string, private authToken: string) {}
+  constructor(private userId: string, private authToken: string) { }
 
   async connect(): Promise<void> {
     try {
-      const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8001'}/api/notifications/ws/${this.userId}?token=${this.authToken}`
-      
+      const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000'}/api/notifications/ws/${this.userId}?token=${this.authToken}`
+
       this.ws = new WebSocket(wsUrl)
-      
+
       this.ws.onopen = () => {
         console.log('WebSocket连接已建立')
         this.reconnectAttempts = 0
         this.startHeartbeat()
         this.emit('connected', { userId: this.userId })
       }
-      
+
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
@@ -43,22 +43,22 @@ class WebSocketManager {
           console.error('解析WebSocket消息失败:', error)
         }
       }
-      
+
       this.ws.onclose = (event) => {
         console.log('WebSocket连接已关闭:', event.code, event.reason)
         this.stopHeartbeat()
         this.emit('disconnected', { code: event.code, reason: event.reason })
-        
+
         if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.scheduleReconnect()
         }
       }
-      
+
       this.ws.onerror = (error) => {
         console.error('WebSocket连接错误:', error)
         this.emit('error', error)
       }
-      
+
     } catch (error) {
       console.error('建立WebSocket连接失败:', error)
       throw error
@@ -76,9 +76,9 @@ class WebSocketManager {
   private scheduleReconnect(): void {
     this.reconnectAttempts++
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-    
+
     console.log(`${delay}ms后尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
-    
+
     setTimeout(() => {
       this.connect().catch(error => {
         console.error('重连失败:', error)
@@ -103,7 +103,7 @@ class WebSocketManager {
 
   private handleMessage(message): void {
     const { type, data } = message
-    
+
     switch (type) {
       case 'notification':
         this.emit('notification', data)
@@ -183,44 +183,44 @@ export class NotificationServiceAdapter {
     try {
       const authStore = useAuthStore()
       const authToken = authStore.token || localStorage.getItem('auth_token') || ''
-      
+
       if (!authToken) {
         console.warn('未找到认证令牌，无法建立WebSocket连接')
         return
       }
 
       this.wsManager = new WebSocketManager(userId, authToken)
-      
+
       // 设置事件监听
       this.wsManager.on('connected', () => {
         this.emit('connected', { userId, userType })
       })
-      
-      this.wsManager.on('disconnected',  (data) => {
+
+      this.wsManager.on('disconnected', (data) => {
         this.emit('disconnected', data)
       })
-      
-      this.wsManager.on('notification',  (notification: unknown) => {
+
+      this.wsManager.on('notification', (notification: unknown) => {
         this.emit('new-notification', notification)
-        
+
         // 根据优先级显示不同的通知
         if (notification.priority === 'urgent') {
           this.emit('urgent-notification', notification)
         }
       })
-      
-      this.wsManager.on('read_confirmed',  (data: unknown) => {
+
+      this.wsManager.on('read_confirmed', (data: unknown) => {
         this.emit('notification-read', data)
       })
-      
-      this.wsManager.on('unread_count',  (data: unknown) => {
+
+      this.wsManager.on('unread_count', (data: unknown) => {
         this.emit('unread-count-updated', data)
       })
-      
+
       await this.wsManager.connect()
-      
+
       console.log('实时通信初始化完成')
-      
+
     } catch (error) {
       console.error('初始化实时通信失败:', error)
       throw error
@@ -242,7 +242,8 @@ export class NotificationServiceAdapter {
       priority?: MessagePriority
       actions?: MessageAction[]
     }
-  ): Promise<QCNotification> { try {
+  ): Promise<QCNotification> {
+    try {
       const notificationData = {
         type,
         recipient_id: recipientId,
@@ -257,10 +258,10 @@ export class NotificationServiceAdapter {
       }
 
       const notification = await unifiedAPIClient.sendNotification(notificationData, true)
-      
+
       console.log('通知发送成功:', notification.title)
       return notification
-      
+
     } catch (error: unknown) {
       console.error('发送通知失败:', error)
       throw new Error(`发送通知失败: ${error.message}`)
@@ -284,7 +285,8 @@ export class NotificationServiceAdapter {
         actions?: MessageAction[]
       }
     }>
-  ): Promise<QCNotification[]> { try {
+  ): Promise<QCNotification[]> {
+    try {
       const notificationsData = notifications.map(notification => ({
         type: notification.type,
         recipient_id: notification.recipientId,
@@ -299,10 +301,10 @@ export class NotificationServiceAdapter {
       }))
 
       const results = await unifiedAPIClient.batchSendNotifications(notificationsData)
-      
+
       console.log(`批量发送 ${results.length} 条通知成功`)
       return results
-      
+
     } catch (error) {
       console.error('批量发送通知失败:', error)
       throw new Error(`批量发送通知失败: ${error.message}`)
@@ -334,12 +336,12 @@ export class NotificationServiceAdapter {
       }
 
       const response = await unifiedAPIClient.getUserNotifications(params)
-      
+
       return {
         notifications: response.items,
         total: response.total
       }
-      
+
     } catch (error: unknown) {
       console.error('获取用户通知失败:', error)
       throw new Error(`获取用户通知失败: ${error.message}`)
@@ -352,7 +354,7 @@ export class NotificationServiceAdapter {
   async markAsRead(notificationId: string): Promise<void> {
     try {
       await unifiedAPIClient.markNotificationAsRead(notificationId)
-      
+
       // 通过WebSocket通知服务器
       if (this.wsManager?.isConnected()) {
         this.wsManager.send({
@@ -360,9 +362,9 @@ export class NotificationServiceAdapter {
           data: { notification_id: notificationId }
         })
       }
-      
+
       console.log('消息已标记为已读')
-      
+
     } catch (error: unknown) {
       console.error('标记已读失败:', error)
       throw new Error(`标记已读失败: ${error.message}`)

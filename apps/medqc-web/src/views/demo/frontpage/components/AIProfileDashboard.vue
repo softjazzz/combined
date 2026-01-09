@@ -191,7 +191,7 @@
                                    </div>
                                 </div>
                                 
-                                <!-- Horizontal Timeline Below Body Model -->
+                                <!-- Horizontal Timeline Below Body Model - Wave Design -->
                                 <div v-if="profile?.diagnosis_timeline?.length" class="col-span-12 mt-4 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4">
                                    <div class="flex items-center justify-between mb-3">
                                       <h4 class="font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
@@ -201,28 +201,64 @@
                                       <span class="text-xs text-slate-400">{{ profile.diagnosis_timeline.length }} 个事件</span>
                                    </div>
                                    <div class="overflow-x-auto pb-2 custom-scrollbar">
-                                      <div class="flex gap-4 min-w-max">
+                                      <div class="relative min-w-max" :style="{ width: `${profile.diagnosis_timeline.length * 180 + 40}px`, height: '200px' }">
+                                         <!-- Wave SVG Path -->
+                                         <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+                                           <defs>
+                                             <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                               <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:0.8" />
+                                               <stop offset="50%" style="stop-color:#8B5CF6;stop-opacity:0.8" />
+                                               <stop offset="100%" style="stop-color:#EC4899;stop-opacity:0.8" />
+                                             </linearGradient>
+                                           </defs>
+                                           <path 
+                                             :d="getWavePath(profile.diagnosis_timeline.length)"
+                                             fill="none"
+                                             stroke="url(#waveGradient)"
+                                             stroke-width="3"
+                                             stroke-linecap="round"
+                                             class="drop-shadow-sm"
+                                           />
+                                         </svg>
+                                         
+                                         <!-- Event Nodes on Wave -->
                                          <div 
                                            v-for="(event, idx) in profile.diagnosis_timeline" 
                                            :key="idx"
-                                           class="flex-shrink-0 w-48 bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3 border-l-4 transition-all hover:shadow-md"
-                                           :class="[
-                                             event.severity === 'critical' || event.severity === 'severe' ? 'border-red-500' : 
-                                             event.severity === 'moderate' ? 'border-yellow-500' : 'border-blue-500'
-                                           ]"
+                                           class="absolute transition-all duration-300 hover:scale-105 hover:z-10"
+                                           :style="getWaveNodePosition(idx, profile.diagnosis_timeline.length)"
                                          >
-                                           <div class="text-xs text-slate-400 mb-1">{{ event.date }}</div>
-                                           <div class="text-sm font-medium text-slate-700 dark:text-slate-200 line-clamp-2">{{ event.event }}</div>
-                                           <div class="mt-2 flex items-center gap-2">
-                                             <span 
-                                               class="text-xs px-1.5 py-0.5 rounded"
-                                               :class="[
-                                                 event.type === 'diagnosis' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' :
-                                                 event.type === 'treatment' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                                                 event.type === 'examination' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
-                                                 'bg-slate-100 text-slate-700 dark:bg-slate-600 dark:text-slate-300'
-                                               ]"
-                                             >{{ event.type === 'diagnosis' ? '诊断' : event.type === 'treatment' ? '治疗' : event.type === 'examination' ? '检查' : '症状' }}</span>
+                                           <!-- Node Dot -->
+                                           <div 
+                                             class="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white shadow-lg z-10"
+                                             :class="[
+                                               event.severity === 'critical' || event.severity === 'severe' ? 'bg-red-500' : 
+                                               event.severity === 'moderate' ? 'bg-yellow-500' : 'bg-blue-500'
+                                             ]"
+                                           ></div>
+                                           
+                                           <!-- Event Card -->
+                                           <div 
+                                             class="absolute w-40 bg-white dark:bg-slate-700 rounded-lg p-2.5 shadow-md border border-slate-100 dark:border-slate-600 cursor-pointer hover:shadow-lg transition-shadow"
+                                             :class="idx % 2 === 0 ? '-translate-x-1/2 mt-3' : '-translate-x-1/2 -translate-y-full -mt-3'"
+                                           >
+                                             <div class="text-xs text-slate-400 mb-1">{{ event.date }}</div>
+                                             <div class="text-sm font-medium text-slate-700 dark:text-slate-200 line-clamp-2">{{ event.event || '事件' }}</div>
+                                             <div class="mt-1.5 flex items-center gap-1">
+                                               <span 
+                                                 class="text-xs px-1.5 py-0.5 rounded"
+                                                 :class="[
+                                                   event.type === 'diagnosis' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' :
+                                                   event.type === 'treatment' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                                   event.type === 'examination' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                                                   'bg-slate-100 text-slate-700 dark:bg-slate-600 dark:text-slate-300'
+                                                 ]"
+                                               >{{ event.type === 'diagnosis' ? '诊断' : event.type === 'treatment' ? '治疗' : event.type === 'examination' ? '检查' : '症状' }}</span>
+                                               <span 
+                                                 v-if="event.severity === 'severe' || event.severity === 'critical'"
+                                                 class="text-xs px-1 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400"
+                                               >重要</span>
+                                             </div>
                                            </div>
                                          </div>
                                       </div>
@@ -381,6 +417,58 @@ const getMarkerPosition = (marker: any, axis: 'top' | 'left'): string => {
   return '50%'
 }
 
+// Wave timeline helper functions
+const getWavePath = (eventCount: number): string => {
+  if (eventCount < 1) return ''
+  
+  const width = eventCount * 180 + 40
+  const height = 200
+  const centerY = height / 2
+  const amplitude = 40 // Wave amplitude
+  const startX = 20
+  const endX = width - 20
+  const segmentWidth = (endX - startX) / Math.max(1, eventCount - 1)
+  
+  let path = `M ${startX} ${centerY}`
+  
+  for (let i = 0; i < eventCount; i++) {
+    const x = startX + i * segmentWidth
+    const y = i % 2 === 0 ? centerY - amplitude : centerY + amplitude
+    
+    if (i === 0) {
+      path = `M ${x} ${y}`
+    } else {
+      const prevX = startX + (i - 1) * segmentWidth
+      const prevY = (i - 1) % 2 === 0 ? centerY - amplitude : centerY + amplitude
+      const cp1x = prevX + segmentWidth * 0.5
+      const cp1y = prevY
+      const cp2x = x - segmentWidth * 0.5
+      const cp2y = y
+      path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x} ${y}`
+    }
+  }
+  
+  return path
+}
+
+const getWaveNodePosition = (index: number, total: number): Record<string, string> => {
+  const width = total * 180 + 40
+  const height = 200
+  const centerY = height / 2
+  const amplitude = 40
+  const startX = 20
+  const endX = width - 20
+  const segmentWidth = (endX - startX) / Math.max(1, total - 1)
+  
+  const x = total === 1 ? width / 2 : startX + index * segmentWidth
+  const y = index % 2 === 0 ? centerY - amplitude : centerY + amplitude
+  
+  return {
+    left: `${x}px`,
+    top: `${y}px`
+  }
+}
+
 const getSeverityBadgeClass = (severity: string): string => {
   switch (severity) {
     case 'severe': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
@@ -440,9 +528,10 @@ const getRelatedTimelineEvents = (markerCondition: string) => {
 
   return profile.value.diagnosis_timeline
     .filter((item: any) => {
-      if (keywords.some((k: string) => item.event.includes(k))) return true
-      if (item.event.includes(markerCondition)) return true
-      if (markerCondition.includes('心') && item.event.includes('胸闷')) return true
+      const eventText = item?.event || ''
+      if (keywords.some((k: string) => eventText.includes(k))) return true
+      if (eventText.includes(markerCondition)) return true
+      if (markerCondition.includes('心') && eventText.includes('胸闷')) return true
       return false
     })
     .slice(0, 3)
@@ -470,7 +559,64 @@ const analyzeProfile = async () => {
     const data = await response.json()
 
     if (data.success && data.data) {
-      profile.value = data.data
+      // 转换后端数据格式为前端期望的格式
+      const backendData = data.data
+      
+      // 转换 diagnosis_timeline 格式
+      const transformedTimeline: any[] = []
+      if (backendData.diagnosis_timeline) {
+        for (const diag of backendData.diagnosis_timeline) {
+          // 添加诊断本身作为时间线事件
+          transformedTimeline.push({
+            date: diag.first_mention_time?.split(' ')[0] || '未知日期',
+            event: diag.diagnosis_name || '诊断',
+            type: 'diagnosis',
+            severity: diag.status === 'confirmed' ? 'moderate' : 'mild'
+          })
+          
+          // 添加该诊断下的时间线事件
+          if (diag.timeline_events) {
+            for (const evt of diag.timeline_events) {
+              transformedTimeline.push({
+                date: evt.time?.split(' ')[0] || '未知日期',
+                event: `${diag.diagnosis_name}: ${evt.event || '事件'}`,
+                type: evt.event_type || 'symptom',
+                severity: 'mild'
+              })
+            }
+          }
+        }
+      }
+      
+      // 添加手术验证信息到时间线
+      if (backendData.surgery_verification) {
+        for (const surg of backendData.surgery_verification) {
+          transformedTimeline.push({
+            date: surg.execution_time || surg.plan_time || '未知日期',
+            event: surg.surgery_name || '手术',
+            type: 'treatment',
+            severity: surg.verification_status === 'verified' ? 'moderate' : 'severe'
+          })
+        }
+      }
+      
+      // 按日期排序
+      transformedTimeline.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      
+      profile.value = {
+        ...backendData,
+        diagnosis_timeline: transformedTimeline,
+        // 生成 body_markers（如果后端没有提供）
+        body_markers: backendData.body_markers || transformedTimeline
+          .filter((e: any) => e.type === 'diagnosis')
+          .slice(0, 3)
+          .map((e: any, idx: number) => ({
+            region: ['heart', 'lung', 'liver', 'kidney'][idx % 4],
+            condition: e.event,
+            severity: e.severity || 'moderate'
+          }))
+      }
+      
       message.success('AI 画像分析完成')
       startMarkerAnimation()
       setTimeout(() => emit('expand'), 500)

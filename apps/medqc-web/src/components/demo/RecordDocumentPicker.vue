@@ -238,8 +238,8 @@ async function loadSichuanRules() {
       '/api/v1/semantic-rules',
       `${base}/api/v1/qc/sichuan/rules`,
       '/api/v1/qc/sichuan/rules',
-      `${location.protocol}//${location.hostname}:8001/api/v1/semantic-rules`,
-      `${location.protocol}//${location.hostname}:8001/api/v1/qc/sichuan/rules`
+      `${location.protocol}//${location.hostname}:8000/api/v1/semantic-rules`,
+      `${location.protocol}//${location.hostname}:8000/api/v1/qc/sichuan/rules`
     ]
 
     let data: unknown = null

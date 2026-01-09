@@ -1,11 +1,16 @@
 <template>
-  <!-- Extracting state -->
-  <div v-if="extracting" class="flex flex-col items-center justify-center h-64">
+  <!-- Extracting state (only show when no data yet) -->
+  <div v-if="extracting && !hasAnyData" class="flex flex-col items-center justify-center h-64">
     <a-spin size="large" />
     <p class="mt-4 text-slate-500 dark:text-slate-400">AI 正在从病历原文中提取结构化信息...</p>
   </div>
-  <!-- Has frontpage data -->
-  <div v-else-if="frontpage" class="space-y-6 pb-10">
+  <!-- Has frontpage data (show progressively even while still extracting) -->
+  <div v-else-if="frontpage || hasAnyData" class="space-y-6 pb-10">
+    <!-- Progressive extraction indicator -->
+    <div v-if="extracting" class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg">
+      <a-spin size="small" />
+      <span>正在提取更多信息...</span>
+    </div>
     <!-- 1. Basic Info & Hospitalization (Grid) -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <!-- Basic Info -->
@@ -13,34 +18,58 @@
         <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
           <UserOutlined class="text-blue-500" /> 患者基本信息
         </h4>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 text-sm">
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">姓名</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info.patient_name }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.patient_name || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">性别</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info.gender_text }}</div>
-          </div>
-          <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">出生日期</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info.birth_date }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.gender_text || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">年龄</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info.age_years }} 岁</div>
-          </div>
-          <div class="col-span-2">
-            <div class="text-xs text-slate-500 dark:text-slate-400">身份证号</div>
-            <div class="font-medium font-mono dark:text-slate-200">{{ frontpage.basic_info.id_number }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.age_years ? frontpage.basic_info.age_years + ' 岁' : '-' }}</div>
           </div>
           <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">籍贯</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info.native_place || '-' }}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">出生日期</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.birth_date || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">国籍</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.nationality || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">民族</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.ethnicity || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">婚姻状况</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.marital_status_text || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">职业</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info.job || '-' }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.occupation || frontpage.basic_info?.job || '-' }}</div>
+          </div>
+          <div class="col-span-2 lg:col-span-1">
+            <div class="text-xs text-slate-500 dark:text-slate-400">身份证号</div>
+            <div class="font-medium font-mono dark:text-slate-200">{{ frontpage.basic_info?.id_number || '-' }}</div>
+          </div>
+          <div class="col-span-2 lg:col-span-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400">现住址</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.current_address || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">联系人</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.contact_name || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">联系人关系</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.contact_relation || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">联系人电话</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.basic_info?.contact_phone || '-' }}</div>
           </div>
         </div>
       </div>
@@ -50,30 +79,54 @@
         <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
           <HistoryOutlined class="text-blue-500" /> 住院过程信息
         </h4>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 text-sm">
+          <div class="col-span-2 lg:col-span-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400">医疗机构</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.hospital_name || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">病案号</div>
+            <div class="font-medium font-mono dark:text-slate-200">{{ frontpage.hospitalization?.medical_record_no || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">住院次数</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admission_times_in_hospital ? '第 ' + frontpage.hospitalization.admission_times_in_hospital + ' 次' : '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">医疗付费方式</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.payment_method_text || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">入院途径</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admission_way_text || '-' }}</div>
+          </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">入院日期</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admission_date }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admission_datetime || frontpage.hospitalization?.admission_date || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">出院日期</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.discharge_date }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.discharge_datetime || frontpage.hospitalization?.discharge_date || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">入院科室</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admitted_dept }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admission_dept || frontpage.hospitalization?.admitted_dept || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">出院科室</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.discharged_dept }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.discharge_dept || frontpage.hospitalization?.discharged_dept || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">入院病房</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.admission_ward || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">出院病房</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.discharge_ward || '-' }}</div>
           </div>
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">住院天数</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.hospital_days }} 天</div>
-          </div>
-          <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">离院方式</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.leaving_way || '医嘱离院' }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.hospitalization?.actual_hospital_days || frontpage.hospitalization?.hospital_days ? (frontpage.hospitalization?.actual_hospital_days || frontpage.hospitalization?.hospital_days) + ' 天' : '-' }}</div>
           </div>
         </div>
       </div>
@@ -258,43 +311,48 @@
         <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
           <HeartOutlined class="text-red-500" /> 其他医疗信息
         </h4>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 text-sm">
           <div>
             <div class="text-xs text-slate-500 dark:text-slate-400">药物过敏</div>
             <div class="font-medium dark:text-slate-200">
-              <span v-if="frontpage.other_medical_info?.drug_allergy_flag === 1" class="text-green-600">无</span>
-              <span v-else-if="frontpage.other_medical_info?.drug_allergy_flag === 2" class="text-red-600">
+              <span v-if="frontpage.other_medical_info?.drug_allergy_flag === '1' || frontpage.other_medical_info?.drug_allergy_flag === 1" class="text-green-600">无</span>
+              <span v-else-if="frontpage.other_medical_info?.drug_allergy_flag === '2' || frontpage.other_medical_info?.drug_allergy_flag === 2" class="text-red-600">
                 有: {{ frontpage.other_medical_info?.drug_allergy_drugs?.join(', ') || '未知' }}
               </span>
               <span v-else>-</span>
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">血型</div>
-            <div class="font-medium dark:text-slate-200">
-              {{ frontpage.other_medical_info?.abo_blood_type || '-' }}
-              <span v-if="frontpage.other_medical_info?.rh_blood_type_text"> (Rh{{ frontpage.other_medical_info?.rh_blood_type_text }})</span>
-            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">ABO 血型</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info?.abo_blood_type || '-' }}</div>
           </div>
           <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">离院方式</div>
-            <div class="font-medium dark:text-slate-200">{{ getDischargeMethodText(frontpage.other_medical_info?.discharge_method) }}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Rh 血型</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info?.rh_blood_type_text || '-' }}</div>
           </div>
-          <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">31天再住院计划</div>
-            <div class="font-medium dark:text-slate-200">
-              <span v-if="frontpage.other_medical_info?.readmission_plan === 1" class="text-orange-600">有</span>
-              <span v-else-if="frontpage.other_medical_info?.readmission_plan === 2" class="text-green-600">无</span>
-              <span v-else>-</span>
-            </div>
-          </div>
-          <div v-if="frontpage.other_medical_info?.pathology_text">
+          <div v-if="frontpage.other_medical_info?.pathology_text" class="col-span-2 lg:col-span-3">
             <div class="text-xs text-slate-500 dark:text-slate-400">病理诊断</div>
-            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info?.pathology_text }}</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info.pathology_text }}</div>
           </div>
           <div v-if="frontpage.other_medical_info?.pathology_no">
             <div class="text-xs text-slate-500 dark:text-slate-400">病理号</div>
-            <div class="font-medium font-mono dark:text-slate-200">{{ frontpage.other_medical_info?.pathology_no }}</div>
+            <div class="font-medium font-mono dark:text-slate-200">{{ frontpage.other_medical_info.pathology_no }}</div>
+          </div>
+          <div v-if="frontpage.other_medical_info?.ventilation_hours">
+            <div class="text-xs text-slate-500 dark:text-slate-400">机械通气时长</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info.ventilation_hours }} 小时</div>
+          </div>
+          <div v-if="frontpage.other_medical_info?.icu_type">
+            <div class="text-xs text-slate-500 dark:text-slate-400">ICU 类型</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info.icu_type }}</div>
+          </div>
+          <div v-if="frontpage.other_medical_info?.icu_enter_time">
+            <div class="text-xs text-slate-500 dark:text-slate-400">进入 ICU 时间</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info.icu_enter_time }}</div>
+          </div>
+          <div v-if="frontpage.other_medical_info?.icu_leave_time">
+            <div class="text-xs text-slate-500 dark:text-slate-400">退出 ICU 时间</div>
+            <div class="font-medium dark:text-slate-200">{{ frontpage.other_medical_info.icu_leave_time }}</div>
           </div>
         </div>
       </div>
@@ -351,6 +409,89 @@
           <div class="text-xs text-slate-500 dark:text-slate-400">医保支付</div>
           <div class="text-xl font-bold text-blue-600 dark:text-blue-400">¥ {{ formatNumber(frontpage.costs?.total_cost - frontpage.costs?.self_paid) }}</div>
         </div>
+      </div>
+    </div>
+
+    <!-- 6. Field Extraction Summary Table -->
+    <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+            <span class="text-white text-xs">📊</span>
+          </span>
+          字段提取汇总
+        </h4>
+        <div class="flex items-center gap-4 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>
+            <span class="text-slate-600 dark:text-slate-400">已提取</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+            <span class="text-slate-600 dark:text-slate-400">未识别</span>
+          </div>
+          <div class="px-2.5 py-1 bg-gradient-to-r from-green-100 to-emerald-100 dark:from-green-900/30 dark:to-emerald-900/30 rounded-full text-green-700 dark:text-green-400 font-medium">
+            完整度: {{ extractionStats.completeness }}%
+          </div>
+        </div>
+      </div>
+      
+      <!-- Summary Stats Row -->
+      <div class="grid grid-cols-4 gap-3 mb-4">
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2 text-center">
+          <div class="text-lg font-bold text-green-600 dark:text-green-400">{{ extractionStats.extracted }}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">已提取字段</div>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2 text-center">
+          <div class="text-lg font-bold text-slate-400 dark:text-slate-500">{{ extractionStats.missing }}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">未识别字段</div>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2 text-center">
+          <div class="text-lg font-bold text-blue-600 dark:text-blue-400">{{ extractionStats.total }}</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">总字段数</div>
+        </div>
+        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2 text-center">
+          <div class="text-lg font-bold text-purple-600 dark:text-purple-400">{{ extractionStats.confidence }}%</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">可信度</div>
+        </div>
+      </div>
+
+      <!-- Field Categories Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-2 px-3 text-slate-500 dark:text-slate-400 font-medium w-28">类别</th>
+              <th class="text-left py-2 px-3 text-slate-500 dark:text-slate-400 font-medium">字段名称</th>
+              <th class="text-left py-2 px-3 text-slate-500 dark:text-slate-400 font-medium">提取值</th>
+              <th class="text-center py-2 px-3 text-slate-500 dark:text-slate-400 font-medium w-20">状态</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+            <template v-for="(fields, category) in fieldCategories" :key="category">
+              <tr v-for="(field, idx) in fields" :key="`${category}-${idx}`" class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <td v-if="idx === 0" :rowspan="fields.length" class="py-2 px-3 font-medium text-slate-700 dark:text-slate-300 align-top border-r border-slate-100 dark:border-slate-700/50">
+                  {{ category }}
+                </td>
+                <td class="py-2 px-3 text-slate-600 dark:text-slate-400">{{ field.label }}</td>
+                <td class="py-2 px-3 text-slate-800 dark:text-slate-200 font-mono text-xs">
+                  <span v-if="field.value" class="truncate block max-w-xs" :title="String(field.value)">{{ truncateValue(field.value) }}</span>
+                  <span v-else class="text-slate-400 dark:text-slate-500 italic">-</span>
+                </td>
+                <td class="py-2 px-3 text-center whitespace-nowrap">
+                  <span v-if="field.value" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs whitespace-nowrap">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></span>
+                    已提取
+                  </span>
+                  <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">
+                    <span class="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></span>
+                    未识别
+                  </span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -412,6 +553,18 @@ const getDischargeMethodText = (code: number | null | undefined): string => {
   return code ? map[code] || '-' : '-'
 }
 
+// 检查是否有任何数据（用于渐进式显示）
+const hasAnyData = computed(() => {
+  const fp = props.frontpage
+  if (!fp) return false
+  return !!(
+    fp.basic_info?.patient_name ||
+    fp.hospitalization?.hospital_name ||
+    fp.diagnoses?.discharge_main_diagnosis_text ||
+    fp.procedures?.main_procedure_text
+  )
+})
+
 // 检查是否有入院诊断
 const hasAdmissionDiagnosis = computed(() => {
   if (!props.frontpage?.diagnoses) return false
@@ -462,4 +615,122 @@ const isValidIcdCode = (code: string | null | undefined): boolean => {
   if (code === '待编码' || code === '待人工编码') return false
   return true
 }
+
+// 截断过长的值
+const truncateValue = (value: any): string => {
+  if (value === null || value === undefined) return '-'
+  const str = String(value)
+  return str.length > 40 ? str.slice(0, 40) + '...' : str
+}
+
+// 字段分类定义
+const fieldCategories = computed(() => {
+  const fp = props.frontpage
+  if (!fp) return {}
+  
+  // Debug logging
+  console.log('=== Summary Table Data Debug ===')
+  console.log('Diagnoses:', fp.diagnoses)
+  console.log('Procedures:', fp.procedures)
+  console.log('discharge_main_diagnosis_text:', fp.diagnoses?.discharge_main_diagnosis_text)
+  console.log('main_procedure_text:', fp.procedures?.main_procedure_text)
+  
+  return {
+    '基本信息': [
+      { label: '患者姓名', value: fp.basic_info?.patient_name },
+      { label: '性别', value: fp.basic_info?.gender_text },
+      { label: '年龄', value: fp.basic_info?.age_years ? `${fp.basic_info.age_years}岁` : null },
+      { label: '出生日期', value: fp.basic_info?.birth_date },
+      { label: '身份证号', value: fp.basic_info?.id_number },
+      { label: '国籍', value: fp.basic_info?.nationality },
+      { label: '民族', value: fp.basic_info?.ethnicity },
+      { label: '婚姻状况', value: fp.basic_info?.marital_status_text },
+      { label: '职业', value: fp.basic_info?.occupation },
+      { label: '现住址', value: fp.basic_info?.current_address },
+      { label: '联系人', value: fp.basic_info?.contact_name },
+      { label: '联系电话', value: fp.basic_info?.contact_phone },
+    ].filter(f => true), // Keep all fields for display
+    '住院信息': [
+      { label: '医疗机构', value: fp.hospitalization?.hospital_name },
+      { label: '病案号', value: fp.hospitalization?.medical_record_number },
+      { label: '住院次数', value: fp.hospitalization?.admission_count },
+      { label: '入院日期', value: fp.hospitalization?.admission_datetime || fp.hospitalization?.admission_date },
+      { label: '出院日期', value: fp.hospitalization?.discharge_datetime || fp.hospitalization?.discharge_date },
+      { label: '住院天数', value: fp.hospitalization?.actual_hospital_days },
+      { label: '入院科室', value: fp.hospitalization?.admission_dept },
+      { label: '出院科室', value: fp.hospitalization?.discharge_dept },
+      { label: '入院途径', value: fp.hospitalization?.admission_way_text },
+      { label: '付费方式', value: fp.hospitalization?.payment_method_text },
+    ],
+    '诊断信息': [
+      { label: '出院主诊断', value: fp.diagnoses?.discharge_main_diagnosis_text },
+      { label: '主诊断ICD编码', value: fp.diagnoses?.discharge_main_icd },
+      { label: '其他诊断', value: fp.diagnoses?.discharge_other_diagnoses_texts?.join('、') },
+      { label: '入院诊断', value: fp.diagnoses?.admission_main_diagnosis_text },
+      { label: '入院病情', value: fp.diagnoses?.admission_condition },
+    ],
+    '手术操作': [
+      { label: '主要手术', value: fp.procedures?.main_procedure_text || fp.procedures?.main?.name },
+      { label: '手术编码', value: fp.procedures?.main_procedure_code || fp.procedures?.main?.code },
+      { label: '手术日期', value: fp.procedures?.main_procedure_date || fp.procedures?.main?.date },
+      { label: '主刀医师', value: fp.procedures?.surgeon_name || fp.procedures?.main?.surgeon },
+      { label: '麻醉方式', value: fp.procedures?.anesthesia_method || fp.procedures?.main?.anesthesia },
+      { label: '切口愈合', value: fp.procedures?.incision_healing_grade },
+    ],
+    '其他医疗信息': [
+      { label: '药物过敏', value: fp.other_medical_info?.drug_allergy_flag === 2 ? '有' : (fp.other_medical_info?.drug_allergy_flag === 1 ? '无' : null) },
+      { label: 'ABO血型', value: fp.other_medical_info?.abo_blood_type },
+      { label: 'Rh血型', value: fp.other_medical_info?.rh_blood_type_text },
+    ],
+    '人员信息': [
+      { label: '科主任', value: fp.staff?.dept_director },
+      { label: '主任医师', value: fp.staff?.chief_physician },
+      { label: '主治医师', value: fp.staff?.attending_physician },
+      { label: '住院医师', value: fp.staff?.resident_physician },
+      { label: '责任护士', value: fp.staff?.responsible_nurse },
+      { label: '编码员', value: fp.staff?.coder },
+    ],
+    '费用信息': [
+      { label: '住院总费用', value: fp.costs?.total_cost ? `¥${fp.costs.total_cost}` : null },
+      { label: '自付金额', value: fp.costs?.self_paid ? `¥${fp.costs.self_paid}` : null },
+    ],
+  }
+})
+
+// 提取统计计算
+const extractionStats = computed(() => {
+  const categories = fieldCategories.value
+  let total = 0
+  let extracted = 0
+  
+  for (const fields of Object.values(categories)) {
+    for (const field of fields as Array<{label: string, value: any}>) {
+      total++
+      if (field.value !== null && field.value !== undefined && field.value !== '' && field.value !== '-') {
+        extracted++
+      }
+    }
+  }
+  
+  const missing = total - extracted
+  const completeness = total > 0 ? Math.round((extracted / total) * 100) : 0
+  
+  // 可信度基于编码质量和关键字段
+  const fp = props.frontpage
+  let confidence = completeness
+  if (fp?.diagnoses?.discharge_main_icd && isValidIcdCode(fp.diagnoses.discharge_main_icd)) {
+    confidence = Math.min(100, confidence + 10)
+  }
+  if (fp?.procedures?.main_procedure_code && isValidIcdCode(fp.procedures.main_procedure_code)) {
+    confidence = Math.min(100, confidence + 5)
+  }
+  
+  return {
+    total,
+    extracted,
+    missing,
+    completeness,
+    confidence: Math.round(confidence)
+  }
+})
 </script>

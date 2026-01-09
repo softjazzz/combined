@@ -35,8 +35,8 @@ class DRGGroupingService:
         调用真实 DRG 分组 API
         
         Args:
-            primary_diagnosis: 主诊断 ICD-10 编码
-            secondary_diagnoses: 其他诊断编码列表
+            primary_diagnosis: 主诊断 ICD-10 编码（国临版）
+            secondary_diagnoses: 其他诊断编码列表（国临版）
             procedures: 手术操作编码列表
             patient_age: 年龄
             patient_gender: 性别 (M/F)
@@ -45,12 +45,26 @@ class DRGGroupingService:
             total_fee: 总费用
             
         Returns:
-            分组结果
+            分组结果（包含原编码和映射后的编码）
         """
+        # 导入编码映射服务
+        from .icd_code_mapper import get_icd_mapper
+        mapper = get_icd_mapper()
+        
+        # 将国临版编码映射为医保版
+        original_pdx = primary_diagnosis
+        mapped_pdx, mapped_pdx_name = mapper.map_to_yibao(primary_diagnosis)
+        
+        # 映射次要诊断
+        original_adx = secondary_diagnoses
+        mapped_adx = mapper.map_codes_list(secondary_diagnoses) if secondary_diagnoses else []
+        
+        logger.info(f"编码映射: {original_pdx} -> {mapped_pdx}")
+        
         payload = {
             "city_name": city_name,
-            "pdx_code": primary_diagnosis,
-            "adx_code": ",".join(secondary_diagnoses) if secondary_diagnoses else "",
+            "pdx_code": mapped_pdx,  # 使用医保版编码
+            "adx_code": ",".join(mapped_adx) if mapped_adx else "",
             "proc_code": ",".join(procedures) if procedures else "",
             "patient_gender": patient_gender,
             "patient_age": patient_age,
@@ -67,7 +81,11 @@ class DRGGroupingService:
 
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "MedQC-Backend/1.0",
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "Cookie": "acw_tc=ac11000117671024951721484edd9575d3a8bd27e3e385850319c1fd267de8",
+            "Referer": "https://medchat.fun/medgroup",
+            "Origin": "https://medchat.fun",
         }
 
         logger.info(f"调用 DRG 分组 API: PDX={primary_diagnosis}, 城市={city_name}")
@@ -110,7 +128,11 @@ class DRGGroupingService:
                     "confidence": 1.0,
                     "risk_level": "medium",
                     "grouping_logic": f"远程分组: {grouping_path.get('final_outcome', 'Success')}",
-                    "raw_response": result_item
+                    "raw_response": result_item,
+                    # 编码映射信息
+                    "original_code": original_pdx,
+                    "mapped_code": mapped_pdx,
+                    "mapped_code_name": mapped_pdx_name,
                 }
 
         except Exception as e:

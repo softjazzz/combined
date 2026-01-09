@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
+        desc = { enumerable: true, get: function () { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
+}) : (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
+}) : function (o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
+    var ownKeys = function (o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -47,7 +47,7 @@ const store = (0, llmParse_1.useLLMParseStore)();
 // 响应式变量
 const saving = (0, vue_1.ref)(false);
 // API配置
-const API_BASE_URL = 'http://localhost:8001';
+const API_BASE_URL = 'http://localhost:8000';
 (0, vue_1.onMounted)(() => {
     if (!store.lastResult)
         store.loadFromSession();
@@ -122,7 +122,8 @@ const saveToDatabase = async () => {
             diagnosis_primary: data.value.primaryDiagnosis || '未识别',
             diagnosis_secondary: data.value.secondaryDiagnosis || [],
             content: data.value.content || '',
-            content_sections: { documents: data.value.documents || [],
+            content_sections: {
+                documents: data.value.documents || [],
                 major_surgery: data.value.majorSurgery || '无',
                 department: data.value.department || '未识别'
             },
@@ -206,7 +207,7 @@ if (!__VLS_ctx.result || !__VLS_ctx.result.success || !__VLS_ctx.data) {
         ...{ class: "no-result-container" },
     });
     const __VLS_0 = {}.APageHeader;
-    /** @type {[typeof __VLS_components.APageHeader, typeof __VLS_components.aPageHeader, ]} */ ;
+    /** @type {[typeof __VLS_components.APageHeader, typeof __VLS_components.aPageHeader, ]} */;
     // @ts-ignore
     const __VLS_1 = __VLS_asFunctionalComponent(__VLS_0, new __VLS_0({
         title: "LLM 精准解析结果",
@@ -217,7 +218,7 @@ if (!__VLS_ctx.result || !__VLS_ctx.result.success || !__VLS_ctx.data) {
         subTitle: "结构化信息与文书目录",
     }, ...__VLS_functionalComponentArgsRest(__VLS_1));
     const __VLS_4 = {}.AAlert;
-    /** @type {[typeof __VLS_components.AAlert, typeof __VLS_components.aAlert, ]} */ ;
+    /** @type {[typeof __VLS_components.AAlert, typeof __VLS_components.aAlert, ]} */;
     // @ts-ignore
     const __VLS_5 = __VLS_asFunctionalComponent(__VLS_4, new __VLS_4({
         type: "warning",
@@ -237,7 +238,7 @@ if (!__VLS_ctx.result || !__VLS_ctx.result.success || !__VLS_ctx.data) {
         ...{ class: "back-button" },
     });
     const __VLS_8 = {}.AButton;
-    /** @type {[typeof __VLS_components.AButton, typeof __VLS_components.aButton, typeof __VLS_components.AButton, typeof __VLS_components.aButton, ]} */ ;
+    /** @type {[typeof __VLS_components.AButton, typeof __VLS_components.aButton, typeof __VLS_components.AButton, typeof __VLS_components.aButton, ]} */;
     // @ts-ignore
     const __VLS_9 = __VLS_asFunctionalComponent(__VLS_8, new __VLS_8({
         ...{ 'onClick': {} },
@@ -257,7 +258,7 @@ if (!__VLS_ctx.result || !__VLS_ctx.result.success || !__VLS_ctx.data) {
     var __VLS_11;
 }
 else {
-    /** @type {[typeof LLMResultModal, ]} */ ;
+    /** @type {[typeof LLMResultModal, ]} */;
     // @ts-ignore
     const __VLS_16 = __VLS_asFunctionalComponent(LLMResultModal_vue_1.default, new LLMResultModal_vue_1.default({
         ...{ 'onUpdate:visible': {} },
@@ -306,10 +307,10 @@ else {
     };
     var __VLS_18;
 }
-/** @type {__VLS_StyleScopedClasses['result-page']} */ ;
-/** @type {__VLS_StyleScopedClasses['no-result-container']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['back-button']} */ ;
+/** @type {__VLS_StyleScopedClasses['result-page']} */;
+/** @type {__VLS_StyleScopedClasses['no-result-container']} */;
+/** @type {__VLS_StyleScopedClasses['mb-3']} */;
+/** @type {__VLS_StyleScopedClasses['back-button']} */;
 var __VLS_dollars;
 const __VLS_self = (await Promise.resolve().then(() => __importStar(require('vue')))).defineComponent({
     setup() {

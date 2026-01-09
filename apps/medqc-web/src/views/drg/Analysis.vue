@@ -16,8 +16,9 @@
               <a-radio-group v-model:value="dimension" button-style="solid" @change="loadAnalysisData">
                 <a-radio-button value="hospital">全院概览</a-radio-button>
                 <a-radio-button value="department">科室分析</a-radio-button>
-                <a-radio-button value="doctor">医生绩效</a-radio-button>
+                <a-radio-button value="ward">病区分析</a-radio-button>
                 <a-radio-button value="drg">DRG组分析</a-radio-button>
+                <a-radio-button value="doctor">医生绩效</a-radio-button>
               </a-radio-group>
             </a-space>
           </a-col>
@@ -256,10 +257,11 @@ const doctorBenchmarkOption = ref<EChartsOption>({})
 /** 表格标题 */
 const tableTitle = computed(() => {
   const map: Record<AnalysisDimension, string> = {
-    hospital: '科室绩效排名',
+    hospital: '全院绩效概览',
     department: '科室明细数据',
-    doctor: '医生绩效排名',
-    drg: 'DRG组详细数据'
+    ward: '病区明细数据',
+    drg: 'DRG组详细数据',
+    doctor: '医生绩效排名'
   }
   return map[dimension.value]
 })
@@ -269,8 +271,9 @@ const dynamicColumns = computed(() => {
   const nameTitleMap: Record<AnalysisDimension, string> = {
     hospital: '科室名称',
     department: '项目名称',
-    doctor: '医生姓名',
-    drg: 'DRG组名称'
+    ward: '病区名称',
+    drg: 'DRG组名称',
+    doctor: '医生姓名'
   }
 
   return [
@@ -315,8 +318,9 @@ const exporting = ref(false)
 const dimensionLabelMap: Record<string, string> = {
   hospital: '全院概览',
   department: '科室分析',
-  doctor: '医生绩效',
-  drg: 'DRG组分析'
+  ward: '病区分析',
+  drg: 'DRG组分析',
+  doctor: '医生绩效'
 }
 
 const handleExportMenu = async (e: { key: string }) => {
