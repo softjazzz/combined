@@ -3,7 +3,7 @@
     <a-page-header
       title="事后分析"
       sub-title="DRG 分组统计与绩效分析"
-      @back="() => $router.back()"
+      @back="router.back"
     />
 
     <div class="content-wrapper">
@@ -74,7 +74,8 @@
               :value-style="{ color: statistics.totalProfit >= 0 ? '#3f8600' : '#cf1322' }"
             >
               <template #prefix>
-                <component :is="statistics.totalProfit >= 0 ? RiseOutlined : FallOutlined" />
+                <RiseOutlined v-if="statistics.totalProfit >= 0" />
+                <FallOutlined v-else />
               </template>
             </a-statistic>
           </a-card>
@@ -176,6 +177,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
@@ -226,6 +228,9 @@ use([
 
 /** 日期范围格式 */
 const dateFormat = 'YYYY-MM-DD'
+
+/** Router 实例 */
+const router = useRouter()
 
 /** 选择的维度 */
 const dimension = ref<AnalysisDimension>('hospital')

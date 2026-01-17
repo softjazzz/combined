@@ -8,7 +8,10 @@ export const mockAnalysisData = (dimension: AnalysisDimension): AnalysisDataResp
         totalProfit: 1620000,
         avgCostRate: 0.95,
         drgGroupCount: 42,
-        cmi: 1.8523
+        cmi: 1.8523,
+        lowRiskMortalityRate: 0.8,
+        lowRiskDeathCount: 5,
+        lowRiskTotalCount: 625
     }
 
     // 趋势模拟

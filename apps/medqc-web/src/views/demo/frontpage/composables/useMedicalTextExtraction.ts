@@ -223,6 +223,43 @@ export function useMedicalTextExtraction(options: {
     }
 
     try {
+      const tryNonStream = async (): Promise<boolean> => {
+        try {
+          const resp = await fetch('/api/v1/frontpage/auto-generate-draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ medical_text: medicalText })
+          })
+
+          const json = await resp.json().catch(() => null)
+          const fp = json?.data?.frontpage
+          if (!fp) return false
+
+          applyFrontpageResult(fp)
+
+          if (fp.confidence?.warnings?.length > 0) {
+            const count = fp.confidence.warnings.length
+            setTimeout(() => {
+              message.warning({
+                content: `发现 ${count} 条编码校验警告，请仔细核对诊断编码`,
+                duration: 5
+              })
+            }, 500)
+          }
+
+          notification.success({
+            message: '✅ AI 提取完成',
+            description: `已成功提取结构化数据。`,
+            duration: 5,
+            placement: 'topRight'
+          })
+          options.onExtracted?.()
+          return true
+        } catch {
+          return false
+        }
+      }
+
       // Use SSE stream API for progressive display
       const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
         method: 'POST',
@@ -230,14 +267,14 @@ export function useMedicalTextExtraction(options: {
         body: JSON.stringify({ medical_text: medicalText })
       })
 
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
+        const raw = await response.text().catch(() => '')
+        console.warn('LLM 流式提取失败:', raw || `${response.status} ${response.statusText}` || 'Unknown error')
+        if (await tryNonStream()) return
         throw new Error(`HTTP error: ${response.status}`)
       }
 
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('No response body')
-      }
+      const reader = response.body.getReader()
 
       const decoder = new TextDecoder()
       let buffer = ''
@@ -300,6 +337,12 @@ export function useMedicalTextExtraction(options: {
                 options.onExtracted?.()
               } else if (eventType === 'error') {
                 console.error('SSE error:', parsed)
+                try {
+                  await reader.cancel()
+                } catch {
+                  // ignore
+                }
+                if (await tryNonStream()) return
                 throw new Error(parsed.error || 'Stream error')
               }
             } catch (parseError) {
