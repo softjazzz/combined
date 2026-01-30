@@ -1,13 +1,15 @@
 """
-DRG 批量数据存储服务
+DRG 批量数据存储服务 - Session-Based 多租户设计
 
-提供 DRG 批量记录的存储和查询功能，使用 SQLite
+每个用户上传创建独立 session，数据仅用于当次分析，
+分析完成后自动删除，支持后台清理超时 session。
 """
 
 import sqlite3
 import os
 import uuid
 import logging
+import time
 from typing import Dict, Any, List, Optional, Tuple
 from contextlib import contextmanager
 from datetime import datetime
@@ -15,16 +17,25 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# 数据库文件路径
+# 数据库目录
 DB_DIR = Path(__file__).resolve().parent.parent / "data"
-DB_PATH = DB_DIR / "drg_batch.db"
+SESSIONS_DIR = DB_DIR / "sessions"
+
+# Session 超时时间（秒）：1小时
+SESSION_TIMEOUT_SECONDS = 3600
+
+
+def get_session_db_path(session_id: str) -> Path:
+    """获取 session 数据库文件路径"""
+    return SESSIONS_DIR / f"{session_id}.db"
 
 
 @contextmanager
-def get_db_connection():
-    """获取数据库连接的上下文管理器"""
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+def get_session_connection(session_id: str):
+    """获取 session 数据库连接"""
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    db_path = get_session_db_path(session_id)
+    conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -36,9 +47,17 @@ def get_db_connection():
         conn.close()
 
 
-def init_database():
-    """初始化数据库，创建表结构"""
-    with get_db_connection() as conn:
+def create_session() -> str:
+    """创建新 session，返回 session_id"""
+    session_id = f"{uuid.uuid4().hex[:12]}_{int(time.time())}"
+    init_session_database(session_id)
+    logger.info(f"✅ 创建新 session: {session_id}")
+    return session_id
+
+
+def init_session_database(session_id: str):
+    """初始化 session 数据库表结构"""
+    with get_session_connection(session_id) as conn:
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -80,12 +99,35 @@ def init_database():
         # 创建索引
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_batch_id ON drg_batch_records(batch_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_department ON drg_batch_records(department)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_doctor ON drg_batch_records(doctor)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_drg ON drg_batch_records(drg)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_mdc ON drg_batch_records(mdc)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_created_at ON drg_batch_records(created_at DESC)')
-        
-        logger.info("✅ DRG批量数据库初始化成功")
+
+
+def delete_session(session_id: str) -> bool:
+    """删除 session 及其数据"""
+    db_path = get_session_db_path(session_id)
+    if db_path.exists():
+        db_path.unlink()
+        logger.info(f"✅ 已删除 session: {session_id}")
+        return True
+    return False
+
+
+def cleanup_expired_sessions() -> int:
+    """清理超时的 session，返回清理数量"""
+    if not SESSIONS_DIR.exists():
+        return 0
+    
+    cleaned = 0
+    current_time = time.time()
+    
+    for db_file in SESSIONS_DIR.glob("*.db"):
+        file_age = current_time - db_file.stat().st_mtime
+        if file_age > SESSION_TIMEOUT_SECONDS:
+            db_file.unlink()
+            cleaned += 1
+            logger.info(f"✅ 清理超时 session: {db_file.stem}")
+    
+    return cleaned
 
 
 def generate_batch_id() -> str:
@@ -93,9 +135,9 @@ def generate_batch_id() -> str:
     return f"BATCH_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
 
-def save_batch_record(data: Dict[str, Any]) -> int:
-    """保存单条批量记录"""
-    with get_db_connection() as conn:
+def save_batch_record(session_id: str, data: Dict[str, Any]) -> int:
+    """保存单条批量记录到指定 session"""
+    with get_session_connection(session_id) as conn:
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -142,14 +184,19 @@ def save_batch_record(data: Dict[str, Any]) -> int:
 
 
 def get_statistics(
+    session_id: str,
     batch_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     department: Optional[str] = None,
     doctor: Optional[str] = None
 ) -> Dict[str, Any]:
-    """获取统计数据"""
-    with get_db_connection() as conn:
+    """获取指定 session 的统计数据"""
+    db_path = get_session_db_path(session_id)
+    if not db_path.exists():
+        return _empty_statistics()
+    
+    with get_session_connection(session_id) as conn:
         cursor = conn.cursor()
         
         # 构建 WHERE 条件
@@ -269,23 +316,6 @@ def get_statistics(
             for r in cursor.fetchall()
         ]
         
-        # 每日趋势
-        cursor.execute(f'''
-            SELECT DATE(created_at) as date, COUNT(*) as count,
-                   SUM(total_cost) as cost, SUM(profit_margin) as profit
-            FROM drg_batch_records WHERE {where_sql}
-            GROUP BY DATE(created_at) ORDER BY date
-        ''', params)
-        daily_trends = [
-            {
-                "date": r["date"],
-                "count": r["count"],
-                "cost": round(r["cost"] or 0, 2),
-                "profit": round(r["profit"] or 0, 2)
-            }
-            for r in cursor.fetchall()
-        ]
-        
         # 费用结构
         cursor.execute(f'''
             SELECT 
@@ -309,12 +339,28 @@ def get_statistics(
             "drg_distribution": drg_distribution,
             "department_stats": department_stats,
             "doctor_stats": doctor_stats,
-            "daily_trends": daily_trends,
             "cost_structure": cost_structure
         }
 
 
+def _empty_statistics() -> Dict[str, Any]:
+    """返回空的统计数据结构"""
+    return {
+        "summary": {
+            "total_cases": 0, "success_rate": 0, "avg_cmi": 0,
+            "total_cost": 0, "total_insurance": 0, "total_baseline": 0,
+            "total_profit": 0, "avg_los": 0
+        },
+        "mdc_distribution": [],
+        "drg_distribution": [],
+        "department_stats": [],
+        "doctor_stats": [],
+        "cost_structure": {"drug": 0, "material": 0, "exam": 0, "treatment": 0}
+    }
+
+
 def drill_down(
+    session_id: str,
     dimension: str,
     value: str,
     page: int = 1,
@@ -322,7 +368,11 @@ def drill_down(
     batch_id: Optional[str] = None
 ) -> Tuple[List[Dict], int]:
     """钻取查询明细"""
-    with get_db_connection() as conn:
+    db_path = get_session_db_path(session_id)
+    if not db_path.exists():
+        return [], 0
+    
+    with get_session_connection(session_id) as conn:
         cursor = conn.cursor()
         
         # 维度映射
@@ -337,7 +387,6 @@ def drill_down(
         where_clauses = []
         params = []
         
-        # 支持 'all' 维度，返回所有记录
         if dimension != "all" and dimension in dimension_map:
             column = dimension_map[dimension]
             where_clauses.append(f"{column} = ?")
@@ -355,7 +404,7 @@ def drill_down(
         cursor.execute(f"SELECT COUNT(*) FROM drg_batch_records WHERE {where_sql}", params)
         total = cursor.fetchone()[0]
         
-        # 分页查询 (dimension='all' 时不分页)
+        # 分页查询
         if dimension == "all":
             cursor.execute(f'''
                 SELECT * FROM drg_batch_records 
@@ -376,9 +425,13 @@ def drill_down(
         return records, total
 
 
-def get_batch_list() -> List[Dict]:
-    """获取所有批次列表"""
-    with get_db_connection() as conn:
+def get_batch_list(session_id: str) -> List[Dict]:
+    """获取指定 session 的批次列表"""
+    db_path = get_session_db_path(session_id)
+    if not db_path.exists():
+        return []
+    
+    with get_session_connection(session_id) as conn:
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -401,15 +454,24 @@ def get_batch_list() -> List[Dict]:
         ]
 
 
-def get_drill_down(
-    batch_id: Optional[str] = None,
-    dimension: str = "all",
-    value: str = "all"
-) -> List[Dict]:
-    """获取钻取数据（简化接口，用于导出）"""
-    records, _ = drill_down(dimension, value, page=1, per_page=10000, batch_id=batch_id)
+def get_all_records(session_id: str, batch_id: Optional[str] = None) -> List[Dict]:
+    """获取所有记录（用于导出）"""
+    records, _ = drill_down(session_id, "all", "all", batch_id=batch_id)
     return records
 
 
-# 初始化数据库
-init_database()
+def list_active_sessions() -> List[Dict]:
+    """列出所有活跃的 session"""
+    if not SESSIONS_DIR.exists():
+        return []
+    
+    sessions = []
+    for db_file in SESSIONS_DIR.glob("*.db"):
+        sessions.append({
+            "session_id": db_file.stem,
+            "created_at": datetime.fromtimestamp(db_file.stat().st_ctime).isoformat(),
+            "last_modified": datetime.fromtimestamp(db_file.stat().st_mtime).isoformat(),
+            "size_bytes": db_file.stat().st_size
+        })
+    
+    return sorted(sessions, key=lambda x: x["last_modified"], reverse=True)

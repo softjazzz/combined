@@ -41,9 +41,9 @@
               </div>
               <div class="flex-1 min-w-0">
                 <div class="font-medium text-slate-800 dark:text-white mb-1">
-                  {{ testCase.title || `测试病历${index + 1}` }}
+                  {{ testCase.title || testCase.name || `测试病历${index + 1}` }}
                 </div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                <div v-if="testCase.description" class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
                   {{ testCase.description }}
                 </div>
                 <div class="mt-2 flex items-center gap-2 text-xs text-slate-400">
@@ -73,10 +73,10 @@
         <div v-if="selectedCase" class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div>
             <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              {{ selectedCase.title || `测试病历${selectedIndex + 1}` }}
+              {{ selectedCase.title || selectedCase.name || `测试病历${selectedIndex + 1}` }}
             </h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {{ selectedCase?.description }}
+            <p v-if="selectedCase?.description" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {{ selectedCase.description }}
             </p>
           </div>
           <div class="flex gap-2">
@@ -94,6 +94,22 @@
               <CopyOutlined />
               复制内容
             </button>
+            <button
+              v-if="selectedIndex >= 2"
+              @click="openEditModal"
+              class="px-4 py-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors text-sm flex items-center gap-2"
+            >
+              <EditOutlined />
+              编辑
+            </button>
+            <button
+              v-if="selectedIndex >= 2"
+              @click="confirmDelete"
+              class="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm flex items-center gap-2"
+            >
+              <DeleteOutlined />
+              删除
+            </button>
           </div>
         </div>
         
@@ -109,12 +125,8 @@
           <!-- Metadata -->
           <div class="mt-4 grid grid-cols-2 gap-4">
             <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-              <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">病历信息</div>
+              <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">创建信息</div>
               <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
-                  <span class="text-slate-500 dark:text-slate-400">病历类型:</span>
-                  <span class="text-slate-700 dark:text-slate-300">{{ selectedCase?.type || '住院病历' }}</span>
-                </div>
                 <div class="flex justify-between">
                   <span class="text-slate-500 dark:text-slate-400">创建时间:</span>
                   <span class="text-slate-700 dark:text-slate-300">{{ formatDate(selectedCase?.createdAt) }}</span>
@@ -170,28 +182,6 @@
         
         <div>
           <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            简要描述
-          </label>
-          <a-input 
-            v-model:value="newCase.description" 
-            placeholder="简要描述病历特点，便于识别"
-          />
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            病历类型
-          </label>
-          <a-select v-model:value="newCase.type" style="width: 100%">
-            <a-select-option value="住院病历">住院病历</a-select-option>
-            <a-select-option value="门诊病历">门诊病历</a-select-option>
-            <a-select-option value="急诊病历">急诊病历</a-select-option>
-            <a-select-option value="出院小结">出院小结</a-select-option>
-          </a-select>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
             病历原文 <span class="text-red-500">*</span>
           </label>
           <a-textarea 
@@ -216,25 +206,75 @@
         </div>
       </div>
     </a-modal>
+
+    <!-- Edit Modal -->
+    <a-modal
+      v-model:open="showEditModal"
+      title="编辑测试病历"
+      :width="720"
+      :footer="null"
+      :destroyOnClose="true"
+    >
+      <div class="space-y-4 py-2">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            病历名称 <span class="text-red-500">*</span>
+          </label>
+          <a-input
+            v-model:value="editCase.title"
+            placeholder="例如：肺炎合并高血压病历"
+            size="large"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            病历原文 <span class="text-red-500">*</span>
+          </label>
+          <a-textarea
+            v-model:value="editCase.medical_text"
+            placeholder="粘贴或输入完整的病历原文内容..."
+            :rows="12"
+            :showCount="true"
+            :maxlength="50000"
+          />
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <a-button @click="showEditModal = false">取消</a-button>
+          <a-button
+            type="primary"
+            @click="saveEdit"
+            :disabled="!editCase.title || !editCase.medical_text"
+          >
+            <template #icon><EditOutlined /></template>
+            保存修改
+          </a-button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, computed, watch } from 'vue'
+import { message, Modal } from 'ant-design-vue'
 import {
   ArrowLeftOutlined,
   FileTextOutlined,
   ClockCircleOutlined,
   UploadOutlined,
   CopyOutlined,
-  PlusOutlined
+  PlusOutlined,
+  DeleteOutlined,
+  EditOutlined
 } from '@ant-design/icons-vue'
 
 const props = defineProps<{
   testCases: Array<{
+    name?: string
     title?: string
-    description: string
+    description?: string
     medical_text: string
     type?: string
     createdAt?: string
@@ -244,17 +284,23 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'back'): void
   (e: 'loadCase', index: number): void
-  (e: 'createCase', data: { title: string; description: string; medical_text: string; type: string; createdAt: string }): void
+  (e: 'createCase', data: { title: string; medical_text: string; createdAt: string }): void
+  (e: 'updateCase', payload: { index: number; title: string; medical_text: string }): void
+  (e: 'deleteCase', index: number): void
 }>()
 
 const selectedIndex = ref(0)
 const showCreateModal = ref(false)
+const showEditModal = ref(false)
 
 const newCase = ref({
   title: '',
-  description: '',
-  medical_text: '',
-  type: '住院病历'
+  medical_text: ''
+})
+
+const editCase = ref({
+  title: '',
+  medical_text: ''
 })
 
 const selectedCase = computed(() => props.testCases[selectedIndex.value])
@@ -270,12 +316,92 @@ const loadCase = () => {
 }
 
 const copyContent = async () => {
+  const text = selectedCase.value?.medical_text || ''
+  if (!text) {
+    message.warning('病历内容为空')
+    return
+  }
+
   try {
-    await navigator.clipboard.writeText(selectedCase.value?.medical_text || '')
-    message.success('病历内容已复制到剪贴板')
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      message.success('病历内容已复制到剪贴板')
+      return
+    }
   } catch (error) {
+    // fallback below
+  }
+
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', 'true')
+    textarea.style.position = 'absolute'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    if (ok) {
+      message.success('病历内容已复制到剪贴板')
+    } else {
+      message.error('复制失败')
+    }
+  } catch {
     message.error('复制失败')
   }
+}
+
+const openEditModal = () => {
+  if (selectedIndex.value < 2) {
+    message.warning('测试病历1和测试病历2不可编辑')
+    return
+  }
+  const current = selectedCase.value
+  editCase.value = {
+    title: current?.title || current?.name || '',
+    medical_text: current?.medical_text || ''
+  }
+  showEditModal.value = true
+}
+
+const saveEdit = () => {
+  if (!editCase.value.title?.trim()) {
+    message.warning('请输入病历名称')
+    return
+  }
+  if (!editCase.value.medical_text?.trim()) {
+    message.warning('请输入病历原文')
+    return
+  }
+
+  emit('updateCase', {
+    index: selectedIndex.value,
+    title: editCase.value.title.trim(),
+    medical_text: editCase.value.medical_text.trim()
+  })
+  showEditModal.value = false
+  message.success('测试病历已更新')
+}
+
+const confirmDelete = () => {
+  if (selectedIndex.value < 2) {
+    message.warning('测试病历1和测试病历2不可删除')
+    return
+  }
+
+  const title = selectedCase.value?.title || selectedCase.value?.name || `测试病历${selectedIndex.value + 1}`
+  Modal.confirm({
+    title: '删除测试病历',
+    content: `确认删除“${title}”？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: () => {
+      emit('deleteCase', selectedIndex.value)
+      message.success('测试病历已删除')
+    }
+  })
 }
 
 const createCase = () => {
@@ -290,20 +416,29 @@ const createCase = () => {
   
   emit('createCase', {
     title: newCase.value.title.trim(),
-    description: newCase.value.description.trim() || newCase.value.title.trim(),
     medical_text: newCase.value.medical_text.trim(),
-    type: newCase.value.type,
     createdAt: new Date().toISOString()
   })
   
   // Reset form
   newCase.value = {
     title: '',
-    description: '',
-    medical_text: '',
-    type: '住院病历'
+    medical_text: ''
   }
   showCreateModal.value = false
   message.success('测试病历创建成功')
 }
+
+watch(
+  () => props.testCases.length,
+  (len) => {
+    if (len === 0) {
+      selectedIndex.value = 0
+      return
+    }
+    if (selectedIndex.value >= len) {
+      selectedIndex.value = Math.max(0, len - 1)
+    }
+  }
+)
 </script>

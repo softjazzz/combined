@@ -1,5 +1,21 @@
 <template>
   <div class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex overflow-hidden transition-colors duration-300">
+    <div v-if="!isAuthorized" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+      <div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-8">
+        <h2 class="text-xl font-semibold text-slate-800 dark:text-white mb-2">请输入访问密码</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">需要输入密码才能进入页面</p>
+        <a-input-password
+          v-model:value="passwordInput"
+          placeholder="请输入密码"
+          size="large"
+          @pressEnter="verifyPassword"
+        />
+        <p v-if="passwordError" class="text-sm text-red-500 mt-3">{{ passwordError }}</p>
+        <div class="mt-6 flex justify-end">
+          <a-button type="primary" size="large" @click="verifyPassword">进入</a-button>
+        </div>
+      </div>
+    </div>
     <!-- Sidebar -->
     <!-- Sidebar -->
     <aside :class="['bg-white dark:bg-slate-800 flex-shrink-0 flex flex-col justify-between border-r border-slate-200 dark:border-slate-700 hidden md:flex z-20 transition-all duration-300', isSidebarCollapsed ? 'w-20' : 'w-64']">
@@ -258,13 +274,15 @@
 
         <InProcessMonitoringView v-else-if="currentView === 'monitoring'" />
         <PaymentMonitoringView v-else-if="currentView === 'payment'" />
-        <PostEventAnalysisView v-else-if="currentView === 'analysis'" :batchId="selectedBatchId" />
+        <PostEventAnalysisView v-else-if="currentView === 'analysis'" :session-id="selectedSessionId" :batch-id="selectedBatchId" />
         <TestCaseListView 
           v-else-if="currentView === 'testcases'" 
           :test-cases="testCases"
           @back="currentView = 'workbench'"
           @loadCase="handleLoadTestCase"
           @createCase="handleCreateTestCase"
+          @updateCase="handleUpdateTestCase"
+          @deleteCase="handleDeleteTestCase"
         />
         <ExcelUploadView
           v-else-if="currentView === 'upload'"
@@ -345,6 +363,23 @@ const isSidebarCollapsed = ref(false)
 const drgMenuExpanded = ref(true)
 const midAnalysisExpanded = ref(true)
 const selectedBatchId = ref<string | null>(null)
+const selectedSessionId = ref<string | null>(null)  // 新增：session_id
+const isAuthorized = ref(false)
+const passwordInput = ref('')
+const passwordError = ref('')
+
+const PASSWORD = 'lxry888'
+const AUTH_STORAGE_KEY = 'frontpage_demo_auth'
+
+const verifyPassword = () => {
+  if (passwordInput.value.trim() === PASSWORD) {
+    isAuthorized.value = true
+    passwordError.value = ''
+    sessionStorage.setItem(AUTH_STORAGE_KEY, '1')
+  } else {
+    passwordError.value = '密码错误，请重试'
+  }
+}
 
 const { extracting, extractStructuredData } = useMedicalTextExtraction({
   demoCase,
@@ -766,22 +801,22 @@ T 36.8℃，P 88次/分，R 20次/分，BP 145/92mmHg
     name: '测试病历2',
     description: '肛瘘手术完整住院病历',
     medical_text: `【病案首页基本信息】
-医疗机构名称：泸州市人民医院
-组织机构代码：51050000-1
-病案号：350827
+医疗机构名称：泸州市中心医院
+组织机构代码：99999999-9
+病案号：A000123
 
-姓名：张伟
+姓名：李明
 性别：男
-出生日期：1981-02-04
-年龄：44岁
+出生日期：1990-06-15
+年龄：35岁
 国籍：中国
 民族：汉族
 婚姻状况：已婚
-职业：农民
-身份证号码：510521198102040018
-现住址：四川省泸州市泸县天立B区01号
-联系人：张伟（本人）
-联系电话：13541593206
+职业：职员
+身份证号码：999999199006150011
+现住址：四川省泸州市江岸区滨江路88号
+联系人：李明（本人）
+联系电话：13900000000
 
 住院次数：第2次
 医疗付费方式：新型农村合作医疗
@@ -849,14 +884,14 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 4. 预防性抗感染治疗
 5. 控制血压
 
-医师签名：王标
+医师签名：李志强
 记录时间：2025-03-29 15:00
 
 ================================================================================
 【首次病程记录】
 记录时间：2025-03-30 01:08
 
-患者张伟，男，44岁，以"发现肛旁肿物疼痛2天"为主诉于2025年03月29日13:49入院。
+患者李明，男，35岁，以"发现肛旁肿物疼痛2天"为主诉于2025年03月29日13:49入院。
 
 病例特点：
 1. 中年男性，起病急，病程短
@@ -880,31 +915,31 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 2. 术中探查确定有无肛瘘及瘘管走行
 3. 根据术中情况决定手术方式
 
-医师签名：孙治庆
+医师签名：周敏
 
 ================================================================================
 【术前讨论记录】
 讨论时间：2025-03-30 16:00
-主持人：王飞副主任医师
-参加人员：张云海主任医师、孙治庆主治医师、杜忠宜主治医师、李方健主治医师、刘杰主治医师、王标主治医师
+主持人：刘海波副主任医师
+参加人员：陈国华主任医师、周敏主治医师、赵天宇主治医师、韩晓东主治医师、何立新主治医师、李志强主治医师
 
 病情汇报：
-患者张伟，男，44岁，因"发现肛旁肿物疼痛2天"入院。查体见肛门2-3点位4.0×3.0cm肿块，波动感阳性。既往有肛周脓肿手术史。
+患者李明，男，35岁，因"发现肛旁肿物疼痛2天"入院。查体见肛门2-3点位4.0×3.0cm肿块，波动感阳性。既往有肛周脓肿手术史。
 
 讨论意见：
-张云海主任医师：该患者肛周脓肿诊断明确，既往手术史提示可能合并肛瘘。建议术中仔细探查，明确瘘管走行后一并处理。
+陈国华主任医师：该患者肛周脓肿诊断明确，既往手术史提示可能合并肛瘘。建议术中仔细探查，明确瘘管走行后一并处理。
 
-王飞副主任医师：同意张主任意见。根据肿物位置及指检内口位置，考虑可能为高位复杂性肛瘘。术中需注意保护括约肌功能。
+刘海波副主任医师：同意陈主任意见。根据肿物位置及指检内口位置，考虑可能为高位复杂性肛瘘。术中需注意保护括约肌功能。
 
 讨论结论：
 1. 诊断：肛周脓肿合并肛瘘
 2. 拟行手术：肛周脓肿切开引流术+肛瘘切除术
 3. 麻醉方式：腰麻联合硬膜外麻醉
-4. 手术医师：王标主治医师
+4. 手术医师：李志强主治医师
 5. 术中探查明确瘘管类型后决定具体术式
 6. 告知患者高位瘘管手术风险
 
-记录者：王标
+记录者：李志强
 
 ================================================================================
 【手术记录】
@@ -916,11 +951,11 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 术前诊断：1. 肛周脓肿  2. 肛瘘
 术中诊断：1. 高位复杂性肛瘘  2. 肛周脓肿  3. 肛窦炎
 
-手术者：王标（主治医师）
-第一助手：孙治庆（主治医师）
-麻醉医师：陈医师
-器械护士：林护士
-巡回护士：张护士
+手术者：李志强（主治医师）
+第一助手：周敏（主治医师）
+麻醉医师：唐静
+器械护士：王璐
+巡回护士：杨倩
 
 手术经过：
 1. 麻醉成功后，取截石位，常规消毒铺巾。
@@ -943,7 +978,7 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 3. 保持大便通畅
 4. 每日换药
 
-主刀医师签名：王标
+主刀医师签名：李志强
 记录时间：2025-03-31 11:00
 
 ================================================================================
@@ -960,13 +995,13 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 2025-04-03 08:00
 术后第3天。患者一般情况好，无发热，饮食正常。换药见创面肉芽生长良好，渗出减少。拟明日出院。
 
-医师签名：王标
+医师签名：李志强
 
 ================================================================================
 【主任查房记录】
 2025-04-02 10:00
 
-今日张云海主任医师查房。
+今日陈国华主任医师查房。
 
 查房意见：
 1. 患者术后恢复顺利，无发热感染征象
@@ -975,7 +1010,7 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 4. 可考虑近日出院，门诊继续换药
 5. 嘱患者注意饮食，保持大便通畅，避免辛辣刺激
 
-参加人员：张云海主任、王飞副主任、孙治庆、王标
+参加人员：陈国华主任、刘海波副主任、周敏、李志强
 
 ================================================================================
 【出院记录】
@@ -1020,14 +1055,14 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
 5. 复查：术后1周、2周、1个月门诊复查
 6. 注意事项：如出现发热、大出血、剧烈疼痛等，及时就诊
 
-科主任：张云海
-主任医师：张云海
-主治医师：王飞
-住院医师：王标
-责任护士：林护士
-编码员：陈编码
+科主任：陈国华
+主任医师：陈国华
+主治医师：刘海波
+住院医师：李志强
+责任护士：王璐
+编码员：孙婧
 
-医师签名：王标
+医师签名：李志强
 出院日期：2025-04-03
 
 ================================================================================
@@ -1086,6 +1121,12 @@ const stopResize = () => {
 onMounted(() => {
   document.addEventListener('mousemove', doResize)
   document.addEventListener('mouseup', stopResize)
+})
+
+onMounted(() => {
+  if (sessionStorage.getItem(AUTH_STORAGE_KEY) === '1') {
+    isAuthorized.value = true
+  }
 })
 
 onUnmounted(() => {
@@ -1192,20 +1233,42 @@ const handleLoadTestCase = (caseIndex: number) => {
   loadDemoCase(caseIndex)
 }
 
-const handleGoAnalysis = (batchId: string) => {
+const handleGoAnalysis = (sessionId: string, batchId: string) => {
+  selectedSessionId.value = sessionId
   selectedBatchId.value = batchId
   currentView.value = 'analysis'
 }
 
 // 创建新的测试病历
-const handleCreateTestCase = (data: { title: string; description: string; medical_text: string; type: string; createdAt: string }) => {
+const handleCreateTestCase = (data: { title: string; medical_text: string; createdAt: string }) => {
   testCases.value.push({
     name: data.title,
-    description: data.description,
+    title: data.title,
+    description: '',
     medical_text: data.medical_text,
-    type: data.type,
+    type: '住院病历',
     createdAt: data.createdAt
   })
+}
+
+const handleUpdateTestCase = (payload: { index: number; title: string; medical_text: string }) => {
+  if (payload.index < 2) {
+    message.warning('测试病历1和测试病历2不可编辑')
+    return
+  }
+  const target = testCases.value[payload.index]
+  if (!target) return
+  target.name = payload.title
+  target.title = payload.title
+  target.medical_text = payload.medical_text
+}
+
+const handleDeleteTestCase = (index: number) => {
+  if (index < 2) {
+    message.warning('测试病历1和测试病历2不可删除')
+    return
+  }
+  testCases.value.splice(index, 1)
 }
 
 // 编码变更处理 - 触发DRG重新分组

@@ -47,6 +47,7 @@
 	  open: boolean
 	  dimension: string
 	  value: string
+	  sessionId?: string  // 新增：session_id
 	  batchId?: string
 	  title: string
 	}>()
@@ -69,12 +70,13 @@ const columns = [
 ]
 
 	const fetchData = async () => {
-	  if (!props.value) return
+	  if (!props.sessionId || !props.value) return
 	  
 	  loading.value = true
 	  try {
 	    const res = await axios.get('/api/v1/drg/drill-down', {
 	      params: {
+	        session_id: props.sessionId,  // 传递 session_id
 	        batch_id: props.batchId,
 	        dimension: props.dimension,
 	        value: props.value

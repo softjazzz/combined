@@ -192,6 +192,7 @@ interface BatchInfo {
 }
 
 interface UploadResult {
+  session_id: string  // 新增：session_id
   batch_id: string
   total_records: number
   success_count: number
@@ -201,7 +202,7 @@ interface UploadResult {
 
 const emit = defineEmits<{
   (e: 'back'): void
-  (e: 'goAnalysis', batchId: string): void
+  (e: 'goAnalysis', sessionId: string, batchId: string): void  // 更新：传递 sessionId
 }>()
 
 // State
@@ -213,6 +214,7 @@ const uploadResult = ref<UploadResult | null>(null)
 const batches = ref<BatchInfo[]>([])
 const loadingBatches = ref(false)
 const selectedBatchId = ref<string | null>(null)
+const currentSessionId = ref<string | null>(null)  // 新增：当前 session_id
 
 // API base URL
 const API_BASE = '/api/v1/drg'
@@ -272,8 +274,9 @@ const uploadFile = async () => {
     
     if (data.success) {
       uploadResult.value = data
+      currentSessionId.value = data.session_id  // 保存 session_id
       message.success(`上传成功！共处理 ${data.total_records} 条记录`)
-      loadBatches()
+      loadBatches(data.session_id)  // 传递 session_id
     } else {
       throw new Error(data.detail || '上传失败')
     }
@@ -284,10 +287,15 @@ const uploadFile = async () => {
   }
 }
 
-const loadBatches = async () => {
+const loadBatches = async (sessionId?: string) => {
+  const sid = sessionId || currentSessionId.value
+  if (!sid) {
+    batches.value = []
+    return
+  }
   loadingBatches.value = true
   try {
-    const response = await fetch(`${API_BASE}/batches`)
+    const response = await fetch(`${API_BASE}/batches?session_id=${sid}`)
     const data = await response.json()
     if (data.success) {
       batches.value = data.data
@@ -300,13 +308,14 @@ const loadBatches = async () => {
 }
 
 const selectBatch = (batch: BatchInfo) => {
+  if (!currentSessionId.value) return
   selectedBatchId.value = batch.batch_id
-  emit('goAnalysis', batch.batch_id)
+  emit('goAnalysis', currentSessionId.value, batch.batch_id)
 }
 
 const goToAnalysis = () => {
-  if (uploadResult.value) {
-    emit('goAnalysis', uploadResult.value.batch_id)
+  if (uploadResult.value && currentSessionId.value) {
+    emit('goAnalysis', currentSessionId.value, uploadResult.value.batch_id)
   }
 }
 
@@ -333,6 +342,6 @@ const formatDate = (dateStr: string): string => {
 
 // Lifecycle
 onMounted(() => {
-  loadBatches()
+  // 不在 mount 时加载批次，因为还没有 session
 })
 </script>

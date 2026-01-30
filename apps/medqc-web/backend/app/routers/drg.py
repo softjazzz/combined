@@ -219,6 +219,7 @@ async def batch_upload_drg(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
     批量上传 Excel/CSV 文件进行 DRG 分组
     
+    每次上传创建新的 session，数据仅用于当次分析。
     支持的列：病案号, 性别, 年龄, 住院天数, 离院方式, 诊断列表, 手术操作列表, 总费用 等
     """
     from ..services.drg_grouping_service import get_drg_grouping_service
@@ -237,6 +238,9 @@ async def batch_upload_drg(file: UploadFile = File(...)) -> Dict[str, Any]:
         
         # 列名映射
         df = df.rename(columns=COLUMN_MAPPING)
+        
+        # ⭐ 创建新 session（多租户隔离）
+        session_id = drg_batch_store.create_session()
         
         # 生成批次ID
         batch_id = drg_batch_store.generate_batch_id()
@@ -285,7 +289,7 @@ async def batch_upload_drg(file: UploadFile = File(...)) -> Dict[str, Any]:
                 baseline_payment = drg_result.get('baseline_payment', 0)
                 profit_margin = round(baseline_payment - total_cost, 2) if baseline_payment else 0
                 
-                # 保存到数据库
+                # 保存到 session 数据库
                 record_data = {
                     'batch_id': batch_id,
                     'admission_id': admission_id,
@@ -318,7 +322,7 @@ async def batch_upload_drg(file: UploadFile = File(...)) -> Dict[str, Any]:
                     'messages': drg_result.get('grouping_logic', '')
                 }
                 
-                drg_batch_store.save_batch_record(record_data)
+                drg_batch_store.save_batch_record(session_id, record_data)
                 success_count += 1
                 
                 results.append({
@@ -339,11 +343,12 @@ async def batch_upload_drg(file: UploadFile = File(...)) -> Dict[str, Any]:
         
         return {
             "success": True,
+            "session_id": session_id,  # 返回 session_id 给前端
             "batch_id": batch_id,
             "total_records": len(df),
             "success_count": success_count,
             "failed_count": failed_count,
-            "results": results[:100]  # 只返回前100条结果
+            "results": results[:100]
         }
         
     except Exception as e:
@@ -353,6 +358,7 @@ async def batch_upload_drg(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 @router.get("/statistics")
 async def get_drg_statistics(
+    session_id: str = Query(..., description="Session ID"),
     batch_id: Optional[str] = Query(None, description="批次ID"),
     start_date: Optional[str] = Query(None, description="开始日期"),
     end_date: Optional[str] = Query(None, description="结束日期"),
@@ -360,12 +366,13 @@ async def get_drg_statistics(
     doctor: Optional[str] = Query(None, description="医生姓名"),
 ) -> Dict[str, Any]:
     """
-    获取 DRG 统计数据
+    获取指定 session 的 DRG 统计数据
     
-    返回：MDC分布、DRG Top-10、科室统计、医师统计、每日趋势、费用结构
+    返回：MDC分布、DRG Top-10、科室统计、医师统计、费用结构
     """
     try:
         stats = drg_batch_store.get_statistics(
+            session_id=session_id,
             batch_id=batch_id,
             start_date=start_date,
             end_date=end_date,
@@ -380,6 +387,7 @@ async def get_drg_statistics(
 
 @router.get("/drill-down")
 async def drg_drill_down(
+    session_id: str = Query(..., description="Session ID"),
     dimension: str = Query(..., description="钻取维度: department/doctor/drg/mdc"),
     value: str = Query(..., description="维度值"),
     page: int = Query(1, ge=1),
@@ -387,12 +395,11 @@ async def drg_drill_down(
     batch_id: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     """
-    钻取查询明细
-    
-    点击图表后获取具体病例列表
+    钻取查询指定 session 的明细
     """
     try:
         records, total = drg_batch_store.drill_down(
+            session_id=session_id,
             dimension=dimension,
             value=value,
             page=page,
@@ -415,13 +422,51 @@ async def drg_drill_down(
 
 
 @router.get("/batches")
-async def list_batches() -> Dict[str, Any]:
-    """获取所有批次列表"""
+async def list_batches(
+    session_id: str = Query(..., description="Session ID")
+) -> Dict[str, Any]:
+    """获取指定 session 的批次列表"""
     try:
-        batches = drg_batch_store.get_batch_list()
+        batches = drg_batch_store.get_batch_list(session_id)
         return {"success": True, "data": batches}
     except Exception as e:
         logger.error(f"获取批次列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str) -> Dict[str, Any]:
+    """删除 session 及其临时数据（报告生成后调用）"""
+    try:
+        deleted = drg_batch_store.delete_session(session_id)
+        if deleted:
+            return {"success": True, "message": f"Session {session_id} 已删除"}
+        else:
+            return {"success": False, "message": f"Session {session_id} 不存在"}
+    except Exception as e:
+        logger.error(f"删除 session 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cleanup-sessions")
+async def cleanup_expired_sessions() -> Dict[str, Any]:
+    """清理超时的 session（后台定时任务调用）"""
+    try:
+        cleaned = drg_batch_store.cleanup_expired_sessions()
+        return {"success": True, "cleaned_count": cleaned}
+    except Exception as e:
+        logger.error(f"清理超时 session 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions")
+async def list_active_sessions() -> Dict[str, Any]:
+    """列出所有活跃的 session（调试用）"""
+    try:
+        sessions = drg_batch_store.list_active_sessions()
+        return {"success": True, "data": sessions}
+    except Exception as e:
+        logger.error(f"获取 session 列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

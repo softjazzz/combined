@@ -172,6 +172,7 @@
 	    :title="drillTitle"
 	    :dimension="drillDimension"
 	    :value="drillValue"
+	    :session-id="sessionId"
 	    :batch-id="batchId"
 	  />
 	</template>
@@ -195,6 +196,7 @@ import {
 import { message } from 'ant-design-vue'
 
 const props = defineProps<{
+  sessionId?: string  // 新增：session_id
   batchId?: string
 }>()
 
@@ -348,11 +350,14 @@ let drgChart: echarts.ECharts | null = null
 let costChart: echarts.ECharts | null = null
 
 const fetchStatistics = async () => {
-	    if (!props.batchId) return
+	    if (!props.sessionId) return  // 需要 session_id
 
 	    try {
 	        const res = await axios.get('/api/v1/drg/statistics', {
-	            params: { batch_id: props.batchId }
+	            params: { 
+	                session_id: props.sessionId,  // 传递 session_id
+	                batch_id: props.batchId 
+	            }
 	        })
 	        const payload = res.data?.data ?? res.data
 	        if (payload && typeof payload === 'object') {
@@ -489,8 +494,8 @@ onMounted(() => {
   
   setupChartEvents()
 
-  // Initial Fetch if batchId exists
-  if (props.batchId) {
+  // Initial Fetch if sessionId exists
+  if (props.sessionId) {
       fetchStatistics()
   } else {
       // Load mock data if no batchId provided? 
@@ -500,7 +505,7 @@ onMounted(() => {
   }
 })
 
-watch(() => props.batchId, (newVal) => {
+watch(() => props.sessionId, (newVal) => {
     if (newVal) {
         fetchStatistics()
     }

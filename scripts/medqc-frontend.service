@@ -1,0 +1,18 @@
+[Unit]
+Description=MedQC Frontend Vite Dev Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web
+Environment="PATH=/home/ubuntu/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin"
+Environment="PNPM_HOME=/home/ubuntu/.local/share/pnpm"
+ExecStart=/usr/local/bin/pnpm dev --host 0.0.0.0 --port 3000
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/frontend.log
+StandardError=append:/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/frontend.log
+
+[Install]
+WantedBy=multi-user.target
