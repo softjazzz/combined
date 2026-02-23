@@ -135,27 +135,23 @@
         <template #bodyCell="{ column, record }">
           <!-- 编号列：Mono字体 + 浅色背景 -->
           <template v-if="column.key === 'rule_id'">
-            <div class="py-2">
-              <span class="font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded text-xs font-semibold select-all border border-slate-200">
-                {{ record.rule_code || record.rule_id }}
+            <span class="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold select-all border border-slate-200">
+              {{ record.rule_code || record.rule_id }}
             </span>
-            </div>
           </template>
 
           <!-- 规则名称 + 分类标签 -->
           <template v-if="column.key === 'name'">
-            <div class="py-3 pr-4">
-              <div class="flex items-center gap-2 mb-1.5">
-                <span class="text-slate-800 font-semibold text-sm leading-snug">{{ record.name }}</span>
-              </div>
-              <div class="flex items-center gap-2">
+            <div class="pr-2">
+              <div class="text-slate-800 font-semibold text-[13px] leading-snug mb-0.5">{{ record.name }}</div>
+              <div class="flex items-center gap-1.5">
                 <span
-                  class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+                  class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium shrink-0"
                   :class="getDocTypeColorClass(record.category)"
                 >
                   {{ getCategoryZh(record.category) }}
                 </span>
-                <span class="text-slate-400 text-xs truncate leading-relaxed" :title="record.description">
+                <span class="text-slate-400 text-[11px] truncate max-w-[240px]" :title="record.description">
                   {{ record.description }}
                 </span>
               </div>
@@ -165,7 +161,7 @@
           <!-- 复杂度 -->
           <template v-if="column.key === 'complexity'">
             <span 
-              class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold"
+              class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
               :class="getComplexityClass(record.complexity)"
             >
               {{ record.complexity }}
@@ -175,7 +171,7 @@
           <!-- 缺陷级别 -->
           <template v-if="column.key === 'defect_level'">
              <span 
-              class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold"
+              class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
               :class="getDefectLevelClass(record.defect_level)"
             >
               {{ getSeverityZh(record.defect_level) }}
@@ -856,18 +852,18 @@ onMounted(() => {
 .modern-table :deep(.ant-table-thead > tr > th) {
   background: #f8fafc;
   color: #475569;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.025em;
   border-bottom: 1px solid #e2e8f0;
-  padding: 1.25rem 1rem; /* 增加 Padding */
+  padding: 0.65rem 0.75rem;
 }
 
 .modern-table :deep(.ant-table-tbody > tr > td) {
-  padding: 1.25rem 1rem; /* 增加 Padding，拉大行高 */
-  border-bottom: 1px solid #e2e8f0; /* 加深分割线 */
-  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.85rem;
 }
 
 .modern-table :deep(.ant-table-tbody > tr:hover > td) {
