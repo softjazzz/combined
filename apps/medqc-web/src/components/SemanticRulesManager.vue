@@ -84,17 +84,11 @@
           <AppstoreOutlined class="stats-icon" />
         </div>
         <div class="grid grid-cols-3 gap-3 mt-2 flex-1">
-          <div class="stat-grid-item bg-blue-50/50 border-blue-100 text-blue-600">
-            <div class="text-xl font-bold mb-1">{{ getCategoryCount('诊断一致性') }}</div>
-            <div class="text-[10px] font-medium opacity-70">诊断一致</div>
-          </div>
-          <div class="stat-grid-item bg-cyan-50/50 border-cyan-100 text-cyan-600">
-            <div class="text-xl font-bold mb-1">{{ getCategoryCount('病史完整性') }}</div>
-            <div class="text-[10px] font-medium opacity-70">病史完整</div>
-          </div>
-          <div class="stat-grid-item bg-purple-50/50 border-purple-100 text-purple-600">
-            <div class="text-xl font-bold mb-1">{{ getCategoryCount('诊疗合理性') }}</div>
-            <div class="text-[10px] font-medium opacity-70">诊疗合理</div>
+          <div v-for="(cat, idx) in topCategories" :key="cat.name"
+            :class="['stat-grid-item', categoryColors[idx % categoryColors.length]]"
+          >
+            <div class="text-xl font-bold mb-1">{{ cat.count }}</div>
+            <div class="text-[10px] font-medium opacity-70 truncate w-full text-center" :title="cat.name">{{ cat.name }}</div>
           </div>
         </div>
       </div>
@@ -513,6 +507,24 @@ const getCategoryCount = (cat: string) => {
   return sichuanRules.value.filter(r => r.category === cat).length
 }
 
+// 动态获取 top 3 分类
+const topCategories = computed(() => {
+  const counts: Record<string, number> = {}
+  sichuanRules.value.forEach(r => {
+    counts[r.category] = (counts[r.category] || 0) + 1
+  })
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([name, count]) => ({ name, count }))
+})
+
+const categoryColors = [
+  'bg-blue-50/50 border-blue-100 text-blue-600',
+  'bg-cyan-50/50 border-cyan-100 text-cyan-600',
+  'bg-purple-50/50 border-purple-100 text-purple-600'
+]
+
 // 表格列定义
 const sichuanColumns = [
   { title: '序号', key: 'index', width: 60, fixed: 'left', align: 'center', customRender: ({ index }: { index: number }) => (tablePagination.value.current - 1) * tablePagination.value.pageSize + index + 1 },
@@ -548,11 +560,24 @@ const refreshSichuanRules = async () => {
       })
       
       sichuanRules.value = (data.rules || []).map(normalizeRule)
+
+      // 从规则数据中计算统计分布（后端可能返回空对象）
+      const rules = sichuanRules.value
+      const computedComplexity: Record<string, number> = {}
+      const computedDefect: Record<string, number> = {}
+      rules.forEach(r => {
+        computedComplexity[r.complexity] = (computedComplexity[r.complexity] || 0) + 1
+        computedDefect[r.defect_level] = (computedDefect[r.defect_level] || 0) + 1
+      })
+
+      const apiComplexity = data.complexity_distribution || {}
+      const apiDefect = data.defect_level_distribution || {}
+
       sichuanStats.value = {
-        total_rules: data.total_rules || 0,
-        rule_categories: data.rule_categories || [],
-        complexity_distribution: data.complexity_distribution || {},
-        defect_level_distribution: data.defect_level_distribution || {}
+        total_rules: data.total_rules || rules.length,
+        rule_categories: data.rule_categories || [...new Set(rules.map(r => r.category))],
+        complexity_distribution: Object.keys(apiComplexity).length > 0 ? apiComplexity : computedComplexity,
+        defect_level_distribution: Object.keys(apiDefect).length > 0 ? apiDefect : computedDefect
       }
       tablePagination.value.total = sichuanRules.value.length
       message.success('刷新成功')

@@ -96,105 +96,7 @@
       <!-- 传统质控规则标签页 -->
       <div v-if="activeTab === 'traditional'" class="space-y-8">
         <!-- 统计卡片 -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <!-- 卡片 1: 复杂度分布 (环形图概念) -->
-          <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-shadow duration-300">
-            <div class="flex justify-between items-start mb-4">
-              <h3 class="text-slate-700 font-semibold text-sm">规则复杂度分布</h3>
-              <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
-                <PieChartOutlined />
-              </div>
-            </div>
-            <div class="flex items-center">
-              <!-- 模拟环形图 (Donut Chart) -->
-              <div
-                class="relative w-28 h-28 mr-6 flex items-center justify-center shrink-0 rounded-full"
-                style="background: conic-gradient(#F87171 0% 30%, #FBBF24 30% 70%, #34D399 70% 100%)"
-              >
-                <div class="absolute inset-0 m-auto bg-white w-16 h-16 rounded-full flex items-center justify-center shadow-inner">
-                   <span class="text-slate-400 text-xs font-medium">分布</span>
-                </div>
-              </div>
-              <div class="space-y-3 text-sm flex-1">
-                <div class="flex justify-between items-center">
-                  <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-red-400 mr-2"></span>高复杂</span>
-                  <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.3) }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                  <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>中复杂</span>
-                  <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.5) }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                  <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>低复杂</span>
-                  <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.2) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 卡片 2: 缺陷级别 (进度条) -->
-          <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 group hover:shadow-lg transition-shadow duration-300">
-            <div class="flex justify-between items-start mb-4">
-              <h3 class="text-slate-700 font-semibold text-sm">缺陷级别分布</h3>
-              <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-orange-500 group-hover:bg-orange-50 transition-colors">
-                <ExclamationCircleOutlined />
-              </div>
-            </div>
-            <div class="space-y-4">
-              <div>
-                <div class="flex justify-between text-xs mb-1.5">
-                  <span class="text-slate-500 font-medium">严重缺陷 (阻断)</span>
-                  <span class="text-red-500 font-bold">{{ statistics.critical }}</span>
-                </div>
-                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div class="bg-red-500 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" :style="{ width: `${(statistics.critical / (statistics.total || 1)) * 100}%` }"></div>
-                </div>
-              </div>
-              <div>
-                <div class="flex justify-between text-xs mb-1.5">
-                  <span class="text-slate-500 font-medium">一般缺陷 (警告)</span>
-                  <span class="text-orange-400 font-bold">{{ Math.floor(statistics.total * 0.4) }}</span>
-                </div>
-                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div class="bg-orange-400 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" :style="{ width: '40%' }"></div>
-                </div>
-              </div>
-              <div>
-                <div class="flex justify-between text-xs mb-1.5">
-                  <span class="text-slate-500 font-medium">轻微缺陷 (提示)</span>
-                  <span class="text-blue-400 font-bold">{{ Math.floor(statistics.total * 0.3) }}</span>
-                </div>
-                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div class="bg-blue-400 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-sm" :style="{ width: '30%' }"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 卡片 3: 规则分类 (极简数字) -->
-          <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 flex flex-col justify-between group hover:shadow-lg transition-shadow duration-300">
-            <div class="flex justify-between items-start">
-              <h3 class="text-slate-700 font-semibold text-sm">规则分类统计</h3>
-              <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-violet-500 group-hover:bg-violet-50 transition-colors">
-                <AppstoreOutlined />
-              </div>
-            </div>
-            <div class="grid grid-cols-3 gap-3 mt-4">
-              <div class="text-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/50 transition-colors">
-                <div class="text-2xl font-bold text-slate-800">{{ statistics.categories }}</div>
-                <div class="text-[11px] font-medium text-slate-400 mt-1">完整性</div>
-              </div>
-              <div class="text-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-green-200 hover:bg-green-50/50 transition-colors">
-                <div class="text-2xl font-bold text-slate-800">{{ Math.floor(statistics.total * 0.2) }}</div>
-                <div class="text-[11px] font-medium text-slate-400 mt-1">一致性</div>
-              </div>
-              <div class="text-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-purple-200 hover:bg-purple-50/50 transition-colors">
-                <div class="text-2xl font-bold text-slate-800">{{ Math.floor(statistics.total * 0.15) }}</div>
-                <div class="text-[11px] font-medium text-slate-400 mt-1">合理性</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <RuleStatsCards :statistics="statistics" />
 
         <!-- 列表操作栏 (搜索 + 筛选) -->
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -419,7 +321,7 @@
               <template v-else-if="column.key === 'actions'">
                 <div class="flex items-center justify-end gap-2">
                   <a-tooltip title="查看详情">
-                    <a-button type="text" size="small" @click="viewRule()" class="text-slate-400 hover:text-blue-600">
+                    <a-button type="text" size="small" @click="viewRule(record)" class="text-slate-400 hover:text-blue-600">
                       <template #icon><EyeOutlined /></template>
                     </a-button>
                   </a-tooltip>
@@ -440,7 +342,7 @@
                   </a-popconfirm>
                   <a-button 
                     size="small" 
-                    @click="testRule()" 
+                    @click="testRule(record)" 
                     class="text-blue-600 hover:text-blue-700 font-medium text-xs border border-blue-200 hover:border-blue-300 bg-white hover:bg-blue-50 px-3 rounded-lg ml-1 flex items-center gap-1 h-7"
                   >
                     <span>评估</span>
@@ -661,6 +563,26 @@
       </template>
       <LLMApiConfig />
     </a-drawer>
+
+    <!-- 规则详情抽屉 -->
+    <RuleDetailDrawer
+      v-model:open="detailDrawerOpen"
+      :rule="detailRule"
+      @edit="handleDrawerEdit"
+      @test="handleDrawerTest"
+    />
+
+    <!-- 规则导入模态框 -->
+    <RuleImportModal
+      v-model:open="importModalOpen"
+      @imported="handleImported"
+    />
+
+    <!-- 规则测试抽屉 -->
+    <RuleTestDrawer
+      v-model:open="testDrawerOpen"
+      :rule="testRule_target"
+    />
   </div>
 </template>
 
@@ -699,6 +621,10 @@ import {
 import SemanticRulesView from './SemanticRulesView.vue'
 import DepartmentRulesTab from '@/components/rules/DepartmentRulesTab.vue'
 import CustomRulesManager from '@/components/CustomRulesManager.vue'
+import RuleDetailDrawer from '@/components/rules/RuleDetailDrawer.vue'
+import RuleImportModal from '@/components/rules/RuleImportModal.vue'
+import RuleTestDrawer from '@/components/rules/RuleTestDrawer.vue'
+import RuleStatsCards from '@/components/rules/RuleStatsCards.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { DocumentCategoryService } from '@/services/document-category-service'
 import { DocumentCategory } from '@/types/medical'
@@ -821,7 +747,7 @@ const loadDocumentCategoryOptions = async () => {
       })
     categoriesLoaded.value = true
 
-    console.log('📄 已加载文书类别选项:', documentCategoryOptions.value.map(o => o.label).join(', '))
+    // console.log('📄 已加载文书类别选项:', documentCategoryOptions.value.map(o => o.label).join(', '))
   } catch (error) {
     console.error('加载文书类别失败:', error)
     categoriesLoaded.value = false
@@ -831,6 +757,17 @@ const loadDocumentCategoryOptions = async () => {
 
 // LLM 设置相关
 const llmSettingsVisible = ref(false)
+
+// 规则详情抽屉
+const detailDrawerOpen = ref(false)
+const detailRule = ref<ResolvedRule | null>(null)
+
+// 规则导入模态框
+const importModalOpen = ref(false)
+
+// 规则测试抽屉
+const testDrawerOpen = ref(false)
+const testRule_target = ref<ResolvedRule | null>(null)
 
 // 模态框相关
 const modalVisible = ref(false)
@@ -1174,7 +1111,7 @@ const getDocumentCategoryDisplay = (category?: DocumentCategory) => {
     }
     return { label: config.label, color: config.color }
   } catch (error) {
-    console.warn('获取文书类别显示配置失败:', category, error)
+    // console.warn('获取文书类别显示配置失败:', category, error)
     return { label: '未分类', color: '#666666' }
   }
 }
@@ -1554,17 +1491,7 @@ const loadRules = async () => {
     const result = await DocumentCategoryService.getEnhancedQCRules(filters)
     rules.value = (result.data || []).map(r => augmentRuleWithDocumentCategories(r))
 
-    // 调试输出
-    console.log(`📘 [RulesView] 已加载 ${rules.value.length} 条规则`)
-
-    // 调试：检查规则中的文书类别值
-    const categoryValues = new Set()
-    rules.value.forEach(rule => {
-      if (rule.primary_document_category) categoryValues.add(rule.primary_document_category)
-      if (rule.resolvedPrimary) categoryValues.add(rule.resolvedPrimary)
-    })
-    console.log('📋 [RulesView] 规则中的文书类别值:', Array.from(categoryValues))
-    console.log('📋 [RulesView] documentCategoryOptions:', documentCategoryOptions.value.map(o => `${o.value}:${o.label}`))
+    // 调试日志已移除
 
     pagination.total = result.total
   } finally {
@@ -1588,8 +1515,6 @@ const showLLMSettings = () => {
 // 事件处理
 const handleTabChange = (key: string) => {
   activeTab.value = key
-  // 可以在这里添加标签页切换时的逻辑
-  console.log('切换到标签页:', key)
 }
 
 const refreshRules = async () => {
@@ -1656,8 +1581,8 @@ const loadDocumentCategoryStats = async () => {
     documentCategoryStats.value = stats
 
     // 调试输出
-    console.log('📊 [RulesView] 文书类别统计数据:', stats)
-    console.log('📊 [RulesView] 统计数据的键:', Object.keys(stats))
+    // console.log('📊 [RulesView] 文书类别统计数据:', stats)
+    // console.log('📊 [RulesView] 统计数据的键:', Object.keys(stats))
   } catch (error) {
     console.error('加载文书类别统计失败:', error)
   }
@@ -1757,14 +1682,24 @@ const editRule = (rule: ResolvedRule) => {
   modalVisible.value = true
 }
 
-const viewRule = () => {
-  // 可以打开详情页面或模态框
-  message.info('查看规则详情功能待实现')
+const viewRule = (rule: ResolvedRule) => {
+  detailRule.value = rule
+  detailDrawerOpen.value = true
 }
 
-const testRule = () => {
-  // 可以打开测试页面
-  message.info('规则测试功能待实现')
+const testRule = (rule: ResolvedRule) => {
+  testRule_target.value = rule
+  testDrawerOpen.value = true
+}
+
+const handleDrawerEdit = (rule: Record<string, any>) => {
+  detailDrawerOpen.value = false
+  editRule(rule as ResolvedRule)
+}
+
+const handleDrawerTest = (rule: Record<string, any>) => {
+  detailDrawerOpen.value = false
+  testRule(rule as ResolvedRule)
 }
 
 const deleteRule = async (rule: QCRule) => {
@@ -1936,7 +1871,12 @@ const handleAutoGeneratePrompt = async () => {
 
 // 导入导出
 const importRules = () => {
-  message.info('规则导入功能待实现')
+  importModalOpen.value = true
+}
+
+const handleImported = async () => {
+  await reloadRulesSafely()
+  message.success('规则已导入，列表已刷新')
 }
 
 const exportRules = async () => {
