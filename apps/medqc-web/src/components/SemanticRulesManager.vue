@@ -142,12 +142,22 @@
             </div>
           </template>
 
-          <!-- 规则名称 -->
+          <!-- 规则名称 + 分类标签 -->
           <template v-if="column.key === 'name'">
             <div class="py-3 pr-4">
-              <div class="text-slate-800 font-semibold mb-1.5 text-sm leading-snug">{{ record.name }}</div>
-              <div class="text-slate-400 text-xs truncate max-w-[360px] leading-relaxed" :title="record.description">
-                {{ record.description }}
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-slate-800 font-semibold text-sm leading-snug">{{ record.name }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+                  :class="getDocTypeColorClass(record.category)"
+                >
+                  {{ getCategoryZh(record.category) }}
+                </span>
+                <span class="text-slate-400 text-xs truncate leading-relaxed" :title="record.description">
+                  {{ record.description }}
+                </span>
               </div>
             </div>
           </template>
@@ -172,20 +182,14 @@
             </span>
           </template>
 
-          <!-- 分类 -->
-          <template v-if="column.key === 'category'">
-            <span class="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100">
-              {{ getCategoryZh(record.category) }}
-            </span>
-          </template>
-
-          <!-- 文书类别 -->
+          <!-- 适用文书 -->
           <template v-if="column.key === 'applicable_documents'">
             <div class="flex flex-wrap gap-1.5">
-              <span 
+              <span
                 v-for="docType in record.applicable_documents.slice(0, 2)"
                 :key="docType"
-                class="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded text-[10px] font-medium"
+                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium"
+                :class="getDocTypeColorClass(docType)"
               >
                 {{ getDocTypeZh(docType) || '未知' }}
               </span>
@@ -193,9 +197,9 @@
                 <template #title>
                   {{ record.applicable_documents.slice(2).map(d => getDocTypeZh(d)).join(', ') }}
                 </template>
-                <span class="text-[10px] text-slate-400 px-1 cursor-help bg-slate-50 rounded border border-slate-100">
-                +{{ record.applicable_documents.length - 2 }}
-              </span>
+                <span class="text-[10px] text-slate-400 px-1.5 py-0.5 cursor-help bg-slate-50 rounded border border-slate-100">
+                  +{{ record.applicable_documents.length - 2 }}
+                </span>
               </a-tooltip>
             </div>
           </template>
@@ -525,12 +529,11 @@ const categoryColors = [
   'bg-purple-50/50 border-purple-100 text-purple-600'
 ]
 
-// 表格列定义
+// 表格列定义（去掉重复的"分类"列，该信息已融入规则名称行）
 const sichuanColumns = [
   { title: '序号', key: 'index', width: 60, fixed: 'left', align: 'center', customRender: ({ index }: { index: number }) => (tablePagination.value.current - 1) * tablePagination.value.pageSize + index + 1 },
   { title: '编号', key: 'rule_id', width: 90, fixed: 'left' },
-  { title: '规则名称', key: 'name', width: 300 },
-  { title: '分类', key: 'category', width: 100 },
+  { title: '规则名称', key: 'name', width: 360 },
   { title: '复杂度', key: 'complexity', width: 100 },
   { title: '缺陷级别', key: 'defect_level', width: 100 },
   { title: '适用文书', key: 'applicable_documents', width: 160 },
@@ -696,6 +699,30 @@ const CANONICAL_LABEL_ZH: Record<string, string> = {
 const getDocTypeZh = (val: string) => CANONICAL_LABEL_ZH[val] || val
 const getSeverityZh = (val: string) => val
 const getCategoryZh = (val: string) => val
+
+// 文书类型颜色映射
+const DOC_TYPE_COLORS: Record<string, string> = {
+  '入院记录': 'bg-blue-50 text-blue-600 border border-blue-100',
+  'admission_record': 'bg-blue-50 text-blue-600 border border-blue-100',
+  '病程记录': 'bg-teal-50 text-teal-600 border border-teal-100',
+  'progress_note': 'bg-teal-50 text-teal-600 border border-teal-100',
+  '出院记录': 'bg-violet-50 text-violet-600 border border-violet-100',
+  '(死亡)出院记录': 'bg-violet-50 text-violet-600 border border-violet-100',
+  'discharge_record': 'bg-violet-50 text-violet-600 border border-violet-100',
+  '手术记录': 'bg-rose-50 text-rose-600 border border-rose-100',
+  '手术相关记录': 'bg-rose-50 text-rose-600 border border-rose-100',
+  'operation_record': 'bg-rose-50 text-rose-600 border border-rose-100',
+  '辅助检查': 'bg-amber-50 text-amber-600 border border-amber-100',
+  'examination_report': 'bg-amber-50 text-amber-600 border border-amber-100',
+  '知情同意书': 'bg-cyan-50 text-cyan-600 border border-cyan-100',
+  '知情同意': 'bg-cyan-50 text-cyan-600 border border-cyan-100',
+  'consent_form': 'bg-cyan-50 text-cyan-600 border border-cyan-100',
+  '医嘱': 'bg-indigo-50 text-indigo-600 border border-indigo-100',
+  '会诊记录': 'bg-orange-50 text-orange-600 border border-orange-100',
+  '输血记录': 'bg-pink-50 text-pink-600 border border-pink-100',
+  '麻醉记录': 'bg-lime-50 text-lime-600 border border-lime-100',
+}
+const getDocTypeColorClass = (val: string) => DOC_TYPE_COLORS[val] || 'bg-slate-50 text-slate-600 border border-slate-100'
 
 onMounted(() => {
   refreshSichuanRules()
