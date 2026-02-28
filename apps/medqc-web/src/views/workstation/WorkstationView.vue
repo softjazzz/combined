@@ -38,7 +38,11 @@
         </a-select>
       </div>
       <div class="toolbar-right">
-        <a-button @click="showDataImport = true">
+        <a-button @click="router.push('/dashboard/workstation/qc-overview')">
+          <AlertOutlined />
+          质控概览
+        </a-button>
+        <a-button type="primary" @click="router.push('/dashboard/workstation/import')">
           <UploadOutlined />
           导入病历数据
         </a-button>
@@ -306,9 +310,11 @@
  * 三栏布局：左侧病历列表 | 中间文书内容 | 右侧质控/分析面板
  */
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   SearchOutlined,
   UploadOutlined,
+  AlertOutlined,
   InboxOutlined,
   FileSearchOutlined,
   FileTextOutlined,
@@ -326,6 +332,8 @@ import {
   type QCResult,
   type FrontPageField,
 } from './mockData'
+
+const router = useRouter()
 
 // ==================== 状态 ====================
 

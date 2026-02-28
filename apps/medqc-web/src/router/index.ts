@@ -101,6 +101,26 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'workstation/import',
+        name: 'DataImport',
+        component: () => import('@/views/workstation/DataImportView.vue'),
+        meta: {
+          title: '病历数据导入',
+          hidden: true,
+          permission: ['admin', 'qc_manager']
+        }
+      },
+      {
+        path: 'workstation/qc-overview',
+        name: 'QCOverview',
+        component: () => import('@/views/workstation/QCOverviewView.vue'),
+        meta: {
+          title: '质控消息概览',
+          hidden: true,
+          permission: ['admin', 'qc_manager']
+        }
+      },
+      {
         path: 'frontpage-demo',
         name: 'FrontPageAutoDemo',
         component: () => import('@/views/demo/FrontPageDemoView.vue'),
