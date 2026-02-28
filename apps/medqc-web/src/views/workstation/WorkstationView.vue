@@ -7,7 +7,9 @@
           v-model:value="searchText"
           placeholder="搜索患者姓名、住院号、病案号..."
           style="width: 320px"
+          allow-clear
           @search="onSearch"
+          @change="onSearchChange"
         >
           <template #prefix>
             <SearchOutlined />
@@ -18,12 +20,21 @@
           placeholder="选择科室"
           style="width: 160px; margin-left: 12px"
           allowClear
+          @change="filterRecords"
         >
           <a-select-option value="all">全部科室</a-select-option>
-          <a-select-option value="neike">内科</a-select-option>
-          <a-select-option value="waike">外科</a-select-option>
-          <a-select-option value="fuke">妇科</a-select-option>
-          <a-select-option value="erke">儿科</a-select-option>
+          <a-select-option v-for="dept in deptList" :key="dept" :value="dept">{{ dept }}</a-select-option>
+        </a-select>
+        <a-select
+          v-model:value="selectedStatus"
+          placeholder="状态"
+          style="width: 120px; margin-left: 8px"
+          allowClear
+          @change="filterRecords"
+        >
+          <a-select-option value="all">全部</a-select-option>
+          <a-select-option value="pending">待质控</a-select-option>
+          <a-select-option value="completed">已质控</a-select-option>
         </a-select>
       </div>
       <div class="toolbar-right">
@@ -40,11 +51,11 @@
       <div class="panel panel-left" :style="{ width: leftPanelWidth + 'px' }">
         <div class="panel-header">
           <span class="panel-title">病历列表</span>
-          <a-badge :count="recordList.length" :number-style="{ backgroundColor: '#1677ff' }" />
+          <a-badge :count="filteredRecords.length" :number-style="{ backgroundColor: '#1677ff' }" />
         </div>
         <div class="record-list">
           <div
-            v-for="record in recordList"
+            v-for="record in filteredRecords"
             :key="record.visitId"
             class="record-item"
             :class="{ active: selectedRecord?.visitId === record.visitId }"
@@ -52,24 +63,22 @@
           >
             <div class="record-item-header">
               <span class="patient-name">{{ record.name }}</span>
-              <a-tag :color="record.status === 'completed' ? 'green' : 'blue'" size="small">
+              <a-tag :color="record.status === 'completed' ? 'green' : 'processing'" size="small">
                 {{ record.status === 'completed' ? '已质控' : '待质控' }}
               </a-tag>
             </div>
             <div class="record-item-meta">
-              <span>{{ record.deptName }} · {{ record.inpatNo }}</span>
+              <span>{{ record.deptName }} · {{ record.bedNo }} · {{ record.inpatNo }}</span>
             </div>
+            <div class="record-item-diag">{{ record.diagnosisMain }}</div>
             <div class="record-item-date">
-              入院：{{ record.admissionDate }}
+              {{ record.admissionDate }} ~ {{ record.dischargeDate || '在院' }}
             </div>
           </div>
           <!-- 空状态 -->
-          <div v-if="recordList.length === 0" class="empty-state">
+          <div v-if="filteredRecords.length === 0" class="empty-state">
             <InboxOutlined style="font-size: 48px; color: #d9d9d9" />
-            <p>暂无病历数据</p>
-            <a-button type="primary" size="small" @click="showDataImport = true">
-              导入数据
-            </a-button>
+            <p>暂无匹配的病历</p>
           </div>
         </div>
       </div>
@@ -81,13 +90,17 @@
       <div class="panel panel-center">
         <template v-if="selectedRecord">
           <div class="panel-header">
-            <a-segmented v-model:value="activeDocTab" :options="docTabs" />
+            <a-segmented v-model:value="activeDocTab" :options="docTabs" size="small" />
+            <div class="panel-header-extra">
+              <a-tag color="blue">{{ selectedRecord.deptName }}</a-tag>
+              <span class="header-name">{{ selectedRecord.name }} · {{ selectedRecord.age }} · {{ selectedRecord.sex }}</span>
+            </div>
           </div>
           <div class="document-content">
-            <div v-if="activeDocTab === 'admission'" class="doc-text" v-html="selectedRecord.admissionNote || '<p class=\'placeholder\'>暂无入院记录</p>'" />
-            <div v-else-if="activeDocTab === 'discharge'" class="doc-text" v-html="selectedRecord.dischargeNote || '<p class=\'placeholder\'>暂无出院记录</p>'" />
-            <div v-else-if="activeDocTab === 'progress'" class="doc-text" v-html="selectedRecord.progressNote || '<p class=\'placeholder\'>暂无病程记录</p>'" />
-            <div v-else-if="activeDocTab === 'surgery'" class="doc-text" v-html="selectedRecord.surgeryNote || '<p class=\'placeholder\'>暂无手术记录</p>'" />
+            <div v-if="activeDocTab === 'admission'" class="doc-text" v-html="selectedRecord.admissionNote || noDataHtml('入院记录')" />
+            <div v-else-if="activeDocTab === 'discharge'" class="doc-text" v-html="selectedRecord.dischargeNote || noDataHtml('出院记录')" />
+            <div v-else-if="activeDocTab === 'progress'" class="doc-text" v-html="selectedRecord.progressNote || noDataHtml('病程记录')" />
+            <div v-else-if="activeDocTab === 'surgery'" class="doc-text" v-html="selectedRecord.surgeryNote || noDataHtml('手术记录')" />
           </div>
         </template>
         <template v-else>
@@ -105,7 +118,7 @@
       <!-- 右侧：质控/分析面板 -->
       <div class="panel panel-right" :style="{ width: rightPanelWidth + 'px' }">
         <div class="panel-header">
-          <a-segmented v-model:value="activeAnalysisTab" :options="analysisTabs" />
+          <a-segmented v-model:value="activeAnalysisTab" :options="analysisTabs" size="small" />
         </div>
         <div class="analysis-content">
           <!-- Tab1: 首页生成 -->
@@ -115,20 +128,22 @@
               <p>选择病历后自动生成首页</p>
             </div>
             <div v-else class="frontpage-panel">
-              <a-button type="primary" block :loading="generating" @click="generateFrontPage">
+              <a-button type="primary" block :loading="generating" @click="generateFrontPage" style="margin-bottom: 16px">
                 <ThunderboltOutlined />
                 AI 生成病案首页
               </a-button>
-              <div v-if="frontPageData" class="frontpage-result">
-                <a-descriptions bordered size="small" :column="1" style="margin-top: 16px">
-                  <a-descriptions-item label="患者姓名">{{ frontPageData.name || '-' }}</a-descriptions-item>
-                  <a-descriptions-item label="性别">{{ frontPageData.sex || '-' }}</a-descriptions-item>
-                  <a-descriptions-item label="年龄">{{ frontPageData.age || '-' }}</a-descriptions-item>
-                  <a-descriptions-item label="入院日期">{{ frontPageData.admissionDate || '-' }}</a-descriptions-item>
-                  <a-descriptions-item label="出院日期">{{ frontPageData.dischargeDate || '-' }}</a-descriptions-item>
-                  <a-descriptions-item label="主诊断">{{ frontPageData.mainDiagnosis || '-' }}</a-descriptions-item>
-                  <a-descriptions-item label="主手术">{{ frontPageData.mainSurgery || '-' }}</a-descriptions-item>
-                </a-descriptions>
+              <div v-if="frontPageFields.length > 0" class="frontpage-result">
+                <div v-for="field in frontPageFields" :key="field.label" class="fp-field">
+                  <div class="fp-label">{{ field.label }}</div>
+                  <div class="fp-value">
+                    {{ field.value }}
+                    <a-tooltip v-if="field.confidence < 1" :title="`置信度 ${(field.confidence * 100).toFixed(0)}%，来源：${field.source}`">
+                      <span class="fp-confidence" :class="field.confidence >= 0.9 ? 'high' : field.confidence >= 0.7 ? 'mid' : 'low'">
+                        {{ (field.confidence * 100).toFixed(0) }}%
+                      </span>
+                    </a-tooltip>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -140,23 +155,45 @@
               <p>选择病历后运行质控</p>
             </div>
             <div v-else>
-              <a-button type="primary" block @click="runQualityControl">
+              <a-button type="primary" block @click="runQualityControl" :loading="qcRunning" style="margin-bottom: 16px">
                 <SafetyCertificateOutlined />
                 运行质控检查
               </a-button>
-              <div v-if="qcResults.length > 0" class="qc-results" style="margin-top: 16px">
-                <a-collapse>
+              <div v-if="qcResults.length > 0">
+                <!-- 汇总 -->
+                <div class="qc-summary">
+                  <div class="qc-stat pass">
+                    <CheckCircleOutlined />
+                    <span>{{ qcResults.filter(r => r.passed).length }} 通过</span>
+                  </div>
+                  <div class="qc-stat fail">
+                    <CloseCircleOutlined />
+                    <span>{{ qcResults.filter(r => !r.passed).length }} 不通过</span>
+                  </div>
+                  <div class="qc-stat score">
+                    <span>扣分：{{ qcResults.reduce((s, r) => s + r.deduction, 0) }}</span>
+                  </div>
+                </div>
+                <!-- 规则列表 -->
+                <a-collapse :bordered="false" style="background: transparent">
                   <a-collapse-panel
-                    v-for="(result, index) in qcResults"
-                    :key="index"
-                    :header="result.ruleName"
+                    v-for="result in qcResults"
+                    :key="result.ruleId"
+                    :style="{ borderLeft: `3px solid ${result.passed ? '#52c41a' : result.severity === 'error' ? '#ff4d4f' : '#faad14'}` }"
                   >
-                    <template #extra>
-                      <a-tag :color="result.passed ? 'green' : 'red'" size="small">
-                        {{ result.passed ? '通过' : '不通过' }}
-                      </a-tag>
+                    <template #header>
+                      <div class="qc-rule-header">
+                        <span>{{ result.ruleName }}</span>
+                        <a-tag :color="result.passed ? 'green' : result.severity === 'error' ? 'red' : 'orange'" size="small">
+                          {{ result.passed ? '✓' : result.severity === 'error' ? '✗' : '⚠' }}
+                        </a-tag>
+                      </div>
                     </template>
-                    <p>{{ result.detail }}</p>
+                    <p class="qc-detail">{{ result.detail }}</p>
+                    <div class="qc-meta">
+                      <a-tag size="small">{{ result.category }}</a-tag>
+                      <span v-if="result.deduction > 0" class="qc-deduction">-{{ result.deduction }}分</span>
+                    </div>
                   </a-collapse-panel>
                 </a-collapse>
               </div>
@@ -209,10 +246,30 @@
               <p>选择病历后进行 DRG 入组</p>
             </div>
             <div v-else>
-              <a-button type="primary" block @click="runDRGGrouping">
+              <a-button type="primary" block @click="runDRGGrouping" :loading="drgRunning" style="margin-bottom: 16px">
                 <ClusterOutlined />
                 DRG 预入组
               </a-button>
+              <div v-if="drgResult" class="drg-result">
+                <a-descriptions bordered size="small" :column="1">
+                  <a-descriptions-item label="DRG 分组">
+                    <a-tag color="blue">{{ drgResult.group }}</a-tag>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="分组名称">{{ drgResult.groupName }}</a-descriptions-item>
+                  <a-descriptions-item label="权重(RW)">{{ drgResult.weight }}</a-descriptions-item>
+                  <a-descriptions-item label="费用参考">￥{{ drgResult.refCost.toLocaleString() }}</a-descriptions-item>
+                  <a-descriptions-item label="当前费用">
+                    <span :style="{ color: drgResult.currentCost > drgResult.refCost ? '#ff4d4f' : '#52c41a' }">
+                      ￥{{ drgResult.currentCost.toLocaleString() }}
+                    </span>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="盈亏预测">
+                    <span :style="{ color: drgResult.profit >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }">
+                      {{ drgResult.profit >= 0 ? '+' : '' }}￥{{ drgResult.profit.toLocaleString() }}
+                    </span>
+                  </a-descriptions-item>
+                </a-descriptions>
+              </div>
             </div>
           </div>
         </div>
@@ -235,7 +292,7 @@
           <InboxOutlined />
         </p>
         <p class="ant-upload-text">点击或拖拽文件上传</p>
-        <p class="ant-upload-hint">支持 Excel (.xlsx/.xls) 和 CSV 格式</p>
+        <p class="ant-upload-hint">支持 Excel (.xlsx/.xls) 和 CSV 格式，单次最多 500 条</p>
       </a-upload-dragger>
     </a-modal>
   </div>
@@ -248,7 +305,7 @@
  * 统一工作站，整合首页自动生成、质控分析、ICD编码查询、DRG分组等功能。
  * 三栏布局：左侧病历列表 | 中间文书内容 | 右侧质控/分析面板
  */
-import { ref, reactive } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   SearchOutlined,
   UploadOutlined,
@@ -257,46 +314,85 @@ import {
   FileTextOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
+  CloseCircleOutlined,
   SafetyCertificateOutlined,
   ClusterOutlined,
 } from '@ant-design/icons-vue'
+import {
+  mockRecords,
+  generateMockQCResults,
+  generateMockFrontPage,
+  type MedicalRecord,
+  type QCResult,
+  type FrontPageField,
+} from './mockData'
 
 // ==================== 状态 ====================
 
 // 搜索和筛选
 const searchText = ref('')
 const selectedDept = ref<string | undefined>(undefined)
+const selectedStatus = ref<string | undefined>(undefined)
+
+// 科室列表（从 mock 数据提取）
+const deptList = computed(() => [...new Set(mockRecords.map(r => r.deptName))])
 
 // 面板宽度
-const leftPanelWidth = ref(280)
-const rightPanelWidth = ref(400)
+const leftPanelWidth = ref(300)
+const rightPanelWidth = ref(420)
 
 // 当前选中
-const selectedRecord = ref<any>(null)
+const selectedRecord = ref<MedicalRecord | null>(null)
+
+// 筛选后的病历列表
+const filteredRecords = computed(() => {
+  let list = [...mockRecords]
+  if (searchText.value) {
+    const q = searchText.value.toLowerCase()
+    list = list.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      r.inpatNo.toLowerCase().includes(q) ||
+      r.visitId.toLowerCase().includes(q) ||
+      r.diagnosisMain.toLowerCase().includes(q)
+    )
+  }
+  if (selectedDept.value && selectedDept.value !== 'all') {
+    list = list.filter(r => r.deptName === selectedDept.value)
+  }
+  if (selectedStatus.value && selectedStatus.value !== 'all') {
+    list = list.filter(r => r.status === selectedStatus.value)
+  }
+  return list
+})
 
 // 文书 Tab
 const activeDocTab = ref('admission')
-const docTabs = ['admission', 'discharge', 'progress', 'surgery'].map(key => ({
-  label: { admission: '入院记录', discharge: '出院记录', progress: '病程记录', surgery: '手术记录' }[key],
-  value: key,
-}))
+const docTabs = [
+  { label: '入院记录', value: 'admission' },
+  { label: '出院记录', value: 'discharge' },
+  { label: '病程记录', value: 'progress' },
+  { label: '手术记录', value: 'surgery' },
+]
 
 // 分析 Tab
 const activeAnalysisTab = ref('frontpage')
-const analysisTabs = ['frontpage', 'qc', 'icd', 'drg'].map(key => ({
-  label: { frontpage: '首页', qc: '质控', icd: 'ICD', drg: 'DRG' }[key],
-  value: key,
-}))
+const analysisTabs = [
+  { label: '首页', value: 'frontpage' },
+  { label: '质控', value: 'qc' },
+  { label: 'ICD', value: 'icd' },
+  { label: 'DRG', value: 'drg' },
+]
 
 // 数据导入
 const showDataImport = ref(false)
 
 // 首页生成
 const generating = ref(false)
-const frontPageData = ref<any>(null)
+const frontPageFields = ref<FrontPageField[]>([])
 
 // 质控结果
-const qcResults = ref<any[]>([])
+const qcRunning = ref(false)
+const qcResults = ref<QCResult[]>([])
 
 // ICD 编码查询
 const icdSearchText = ref('')
@@ -306,53 +402,61 @@ const icdTotal = ref(0)
 const icdCodeType = ref('all')
 const icdStats = ref<any>(null)
 
-// 病历列表（后续由 API 填充）
-const recordList = ref<any[]>([])
+// DRG 分组
+const drgRunning = ref(false)
+const drgResult = ref<any>(null)
 
 // ==================== 方法 ====================
 
-// 获取 API 基础 URL
 function getApiBaseUrl(): string {
-  // 开发环境直接连后端
-  return import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  return (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1'
 }
 
-function onSearch(value: string) {
-  console.log('搜索:', value)
-  // TODO: 调用后端搜索 API
+function noDataHtml(type: string): string {
+  return `<div style="text-align:center;padding:60px 20px;color:#999"><p style="font-size:16px">暂无${type}</p><p style="font-size:13px">该患者尚未录入此类文书</p></div>`
 }
 
-function selectRecord(record: any) {
+function onSearch() {
+  // 触发 computed 刷新
+}
+
+function onSearchChange() {
+  // 实时筛选
+}
+
+function filterRecords() {
+  // 触发 computed 刷新
+}
+
+function selectRecord(record: MedicalRecord) {
   selectedRecord.value = record
-  frontPageData.value = null
+  activeDocTab.value = 'admission'
+  frontPageFields.value = []
   qcResults.value = []
+  drgResult.value = null
 }
 
 async function generateFrontPage() {
+  if (!selectedRecord.value) return
   generating.value = true
   try {
-    // TODO: 调用 frontpage_extraction API
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    frontPageData.value = {
-      name: selectedRecord.value?.name || '',
-      sex: selectedRecord.value?.sex || '',
-      age: selectedRecord.value?.age || '',
-      admissionDate: selectedRecord.value?.admissionDate || '',
-      dischargeDate: selectedRecord.value?.dischargeDate || '',
-      mainDiagnosis: '待 AI 提取',
-      mainSurgery: '待 AI 提取',
-    }
+    // 模拟 AI 处理延迟
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    frontPageFields.value = generateMockFrontPage(selectedRecord.value)
   } finally {
     generating.value = false
   }
 }
 
 async function runQualityControl() {
-  // TODO: 调用质控引擎 API
-  qcResults.value = [
-    { ruleName: '示例：首页必填项检查', passed: true, detail: '所有必填项已填写完整' },
-    { ruleName: '示例：入院日期逻辑校验', passed: true, detail: '入院日期早于出院日期，逻辑正确' },
-  ]
+  if (!selectedRecord.value) return
+  qcRunning.value = true
+  try {
+    await new Promise(resolve => setTimeout(resolve, 800))
+    qcResults.value = generateMockQCResults(selectedRecord.value)
+  } finally {
+    qcRunning.value = false
+  }
 }
 
 async function searchICD(value: string) {
@@ -385,7 +489,6 @@ async function searchICD(value: string) {
   }
 }
 
-// 加载 ICD 编码库统计
 async function loadIcdStats() {
   try {
     const res = await fetch(`${getApiBaseUrl()}/icd/stats`)
@@ -393,16 +496,30 @@ async function loadIcdStats() {
     if (json.success) {
       icdStats.value = json.data
     }
-  } catch (err) {
-    console.error('加载 ICD 统计失败:', err)
+  } catch {
+    // 后端未启动时静默失败
   }
 }
 
-// 页面加载时获取统计信息
-loadIcdStats()
-
 async function runDRGGrouping() {
-  // TODO: 调用 DRG 分组 API
+  if (!selectedRecord.value) return
+  drgRunning.value = true
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    // Mock DRG 分组结果
+    const record = selectedRecord.value
+    const mockGroups: Record<string, any> = {
+      '心内科': { group: 'F61A', groupName: '心肌梗死伴严重并发症', weight: 3.2, refCost: 42000, currentCost: 38500 },
+      '普外科': { group: 'G18B', groupName: '阑尾切除术（无并发症）', weight: 0.85, refCost: 8500, currentCost: 7200 },
+      '呼吸内科': { group: 'E62B', groupName: '肺炎（重症）', weight: 1.8, refCost: 18000, currentCost: 22000 },
+      '产科': { group: 'O60C', groupName: '剖宫产（瘢痕子宫再次手术）', weight: 1.2, refCost: 12000, currentCost: 10500 },
+      '骨科': { group: 'I13A', groupName: '股骨颈骨折人工关节置换', weight: 2.8, refCost: 38000, currentCost: 35000 },
+    }
+    const data = mockGroups[record.deptName] || { group: 'Z99Z', groupName: '未分组', weight: 1.0, refCost: 10000, currentCost: 10000 }
+    drgResult.value = { ...data, profit: data.refCost - data.currentCost }
+  } finally {
+    drgRunning.value = false
+  }
 }
 
 // 面板拖拽调整大小
@@ -413,9 +530,9 @@ function startResize(side: 'left' | 'right', event: MouseEvent) {
   const onMouseMove = (e: MouseEvent) => {
     const diff = e.clientX - startX
     if (side === 'left') {
-      leftPanelWidth.value = Math.max(200, Math.min(500, startWidth + diff))
+      leftPanelWidth.value = Math.max(220, Math.min(500, startWidth + diff))
     } else {
-      rightPanelWidth.value = Math.max(300, Math.min(600, startWidth - diff))
+      rightPanelWidth.value = Math.max(320, Math.min(600, startWidth - diff))
     }
   }
 
@@ -430,26 +547,30 @@ function startResize(side: 'left' | 'right', event: MouseEvent) {
 
 function handleFileUpload(file: File) {
   console.log('上传文件:', file.name)
-  // TODO: 调用后端数据导入 API
-  return false // 阻止自动上传
+  return false
 }
+
+onMounted(() => {
+  loadIcdStats()
+})
 </script>
 
 <style scoped>
 .workstation-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px); /* 减去顶部导航栏高度 */
-  background: #f5f5f5;
+  height: calc(100vh - 64px);
+  background: #f0f2f5;
 }
 
 .workstation-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 10px 16px;
   background: #fff;
   border-bottom: 1px solid #e8e8e8;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
 
 .toolbar-left {
@@ -471,7 +592,7 @@ function handleFileUpload(file: File) {
 }
 
 .panel-left {
-  min-width: 200px;
+  min-width: 220px;
   max-width: 500px;
   border-right: 1px solid #e8e8e8;
 }
@@ -482,18 +603,32 @@ function handleFileUpload(file: File) {
 }
 
 .panel-right {
-  min-width: 300px;
+  min-width: 320px;
   max-width: 600px;
   border-left: 1px solid #e8e8e8;
 }
 
 .panel-header {
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.panel-header-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.header-name {
+  color: #666;
+  font-size: 12px;
 }
 
 .panel-title {
@@ -507,6 +642,7 @@ function handleFileUpload(file: File) {
   cursor: col-resize;
   background: #f0f0f0;
   transition: background 0.2s;
+  flex-shrink: 0;
 }
 
 .divider:hover {
@@ -517,7 +653,7 @@ function handleFileUpload(file: File) {
 .record-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px;
 }
 
 .record-item {
@@ -525,7 +661,7 @@ function handleFileUpload(file: File) {
   border-radius: 8px;
   cursor: pointer;
   margin-bottom: 4px;
-  transition: all 0.2s;
+  transition: all 0.15s;
   border: 1px solid transparent;
 }
 
@@ -537,13 +673,14 @@ function handleFileUpload(file: File) {
 .record-item.active {
   background: #e6f4ff;
   border-color: #91caff;
+  box-shadow: 0 1px 4px rgba(22,119,255,0.15);
 }
 
 .record-item-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .patient-name {
@@ -553,13 +690,22 @@ function handleFileUpload(file: File) {
 }
 
 .record-item-meta {
+  font-size: 11px;
+  color: #888;
+}
+
+.record-item-diag {
   font-size: 12px;
-  color: #666;
+  color: #444;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .record-item-date {
-  font-size: 12px;
-  color: #999;
+  font-size: 11px;
+  color: #aaa;
   margin-top: 2px;
 }
 
@@ -567,19 +713,25 @@ function handleFileUpload(file: File) {
 .document-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px 24px;
 }
 
 .doc-text {
   font-size: 14px;
-  line-height: 1.8;
+  line-height: 1.9;
   color: #333;
 }
 
-.doc-text :deep(.placeholder) {
-  color: #999;
-  text-align: center;
-  padding: 40px;
+.doc-text :deep(h4) {
+  color: #1a1a1a;
+  font-size: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #1677ff;
+}
+
+.doc-text :deep(b) {
+  color: #1a1a1a;
 }
 
 /* 分析面板 */
@@ -603,7 +755,6 @@ function handleFileUpload(file: File) {
   font-size: 13px;
 }
 
-/* 空状态 */
 .empty-state {
   text-align: center;
   padding: 40px 20px;
@@ -632,32 +783,102 @@ function handleFileUpload(file: File) {
   font-size: 13px;
 }
 
-/* ICD 搜索结果 */
-.icd-results {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.icd-item {
+/* 首页生成 */
+.fp-field {
   display: flex;
-  align-items: baseline;
   padding: 8px 0;
   border-bottom: 1px solid #f5f5f5;
-  gap: 12px;
+  align-items: baseline;
 }
 
-.icd-code {
-  font-family: monospace;
-  font-weight: 600;
-  color: #1677ff;
-  white-space: nowrap;
-}
-
-.icd-name {
+.fp-label {
+  width: 100px;
+  flex-shrink: 0;
   font-size: 13px;
-  color: #333;
+  color: #888;
 }
 
+.fp-value {
+  flex: 1;
+  font-size: 13px;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fp-confidence {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.fp-confidence.high {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.fp-confidence.mid {
+  background: #fffbe6;
+  color: #faad14;
+}
+
+.fp-confidence.low {
+  background: #fff2f0;
+  color: #ff4d4f;
+}
+
+/* 质控结果 */
+.qc-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.qc-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.qc-stat.pass { color: #52c41a; }
+.qc-stat.fail { color: #ff4d4f; }
+.qc-stat.score { color: #888; margin-left: auto; }
+
+.qc-rule-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding-right: 8px;
+}
+
+.qc-detail {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+}
+
+.qc-meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-deduction {
+  font-size: 12px;
+  color: #ff4d4f;
+  font-weight: 500;
+}
+
+/* ICD */
 .icd-stats {
   margin-bottom: 12px;
   display: flex;
@@ -670,8 +891,34 @@ function handleFileUpload(file: File) {
   margin-bottom: 8px;
 }
 
-/* 首页结果 */
-.frontpage-result {
-  margin-top: 16px;
+.icd-results {
+  max-height: calc(100vh - 400px);
+  overflow-y: auto;
+}
+
+.icd-item {
+  display: flex;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f5f5;
+  gap: 8px;
+}
+
+.icd-code {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-weight: 600;
+  color: #1677ff;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.icd-name {
+  font-size: 13px;
+  color: #333;
+}
+
+/* DRG */
+.drg-result {
+  margin-top: 8px;
 }
 </style>
