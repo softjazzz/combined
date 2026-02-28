@@ -196,3 +196,8 @@ supabase/logs/
 *.tar.gz
 *.zip
 *.rar
+node_modules
+node_modules
+node_modules
+node_modules
+node_modules

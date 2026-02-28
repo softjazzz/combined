@@ -32,11 +32,13 @@ async def safe_post_json(url: str, headers: Dict[str, str], payload: Dict[str, A
     # Basic safety checks
     if not (url.startswith("https://") or url.startswith("http://")):
         raise ValueError("Invalid URL scheme")
-    # Extract host
-    host = url.split("//", 1)[1].split("/", 1)[0]
-    if _is_private_address(host):
-        raise ValueError("Outbound host resolves to private/loopback address")
+    # Extract host (strip port if present)
+    host = url.split("//", 1)[1].split("/", 1)[0].split(":")[0]
+    # 先检查允许列表：允许列表中的域名跳过私有地址检查
+    # （VPN/代理环境可能把合法域名 DNS 解析到 198.18.x.x 等私有 IP 段）
     if not _is_allowed_host(host):
+        if _is_private_address(host):
+            raise ValueError("Outbound host resolves to private/loopback address")
         raise ValueError(f"Outbound host not in allowlist: {host}")
 
     # 显式禁用环境代理，避免 SOCKS 代理导致的 socksio 包缺失问题

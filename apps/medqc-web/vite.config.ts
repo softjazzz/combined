@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
+const backendTarget = 'http://10.216.235.9:8001'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -46,7 +48,7 @@ export default defineConfig({
     proxy: {
       // 流式接口（SSE）需要长连接，单独关闭超时避免 502
       '/api/v1/frontpage/auto-generate-draft-stream': {
-        target: 'http://127.0.0.1:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
         timeout: 0,
@@ -66,13 +68,13 @@ export default defineConfig({
       },
       // DRG 相关接口需要转发到新的后端服务
       '/api/v1/drg': {
-        target: 'http://127.0.0.1:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false
       },
       // 所有 API 接口都转发到后端服务（端口 8001）
       '/api': {
-        target: 'http://127.0.0.1:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
         timeout: 180000,

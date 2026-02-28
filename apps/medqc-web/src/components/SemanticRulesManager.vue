@@ -124,7 +124,7 @@
     <!-- 3. 数据表格 -->
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
       <a-table
-        :dataSource="sichuanRules"
+        :dataSource="filteredRules"
         :columns="sichuanColumns"
         :loading="loading"
         :pagination="tablePagination"
@@ -383,10 +383,14 @@
       </div>
     </a-modal>
 
-    <!-- 占位模态框 -->
+    <!-- 质控评估入口提示 -->
     <a-modal v-model:open="showQCEvaluation" title="质控评估" :footer="null" centered>
       <div class="text-center p-8">
-        <a-result status="info" title="功能开发中" sub-title="请前往主质控评估页面进行完整操作" />
+        <a-result status="info" title="请前往质控评估页面" sub-title="在主导航中点击「质控评估」进入完整评估流程">
+          <template #extra>
+            <a-button type="primary" @click="showQCEvaluation = false">知道了</a-button>
+          </template>
+        </a-result>
       </div>
     </a-modal>
 
@@ -497,6 +501,22 @@ const complexityConicGradient = computed(() => {
   }
 })
 
+// 搜索过滤 computed（修复问题 #2）
+const filteredRules = computed(() => {
+  if (!searchText.value.trim()) return sichuanRules.value
+  const keyword = searchText.value.trim().toLowerCase()
+  return sichuanRules.value.filter(r =>
+    r.rule_id.toLowerCase().includes(keyword) ||
+    r.name.toLowerCase().includes(keyword) ||
+    r.description.toLowerCase().includes(keyword) ||
+    r.category.toLowerCase().includes(keyword) ||
+    (r.applicable_documents || []).some((d: string) => {
+      const zh = getDocTypeZh(d)
+      return d.toLowerCase().includes(keyword) || zh.includes(keyword)
+    })
+  )
+})
+
 const getPercentage = (count: number | undefined) => {
   if (!count) return 0
   const total = sichuanStats.value.total_rules || 1
@@ -529,10 +549,10 @@ const categoryColors = [
 const sichuanColumns = [
   { title: '序号', key: 'index', width: 60, fixed: 'left', align: 'center', customRender: ({ index }: { index: number }) => (tablePagination.value.current - 1) * tablePagination.value.pageSize + index + 1 },
   { title: '编号', key: 'rule_id', width: 90, fixed: 'left' },
+  { title: '适用文书', key: 'applicable_documents', width: 100 },
   { title: '规则名称', key: 'name', width: 360 },
   { title: '复杂度', key: 'complexity', width: 100 },
   { title: '缺陷级别', key: 'defect_level', width: 100 },
-  { title: '适用文书', key: 'applicable_documents', width: 160 },
   { title: '操作', key: 'actions', width: 120, fixed: 'right', align: 'right' }
 ]
 
@@ -592,8 +612,8 @@ const refreshSichuanRules = async () => {
 // 辅助方法
 const handleSearch = (val: string) => {
   searchText.value = val
-  // 实际项目中这里应调用后端搜索接口，或实现前端过滤
-  // 此处仅演示 UI，未实现完整前端过滤逻辑
+  // 搜索过滤由 filteredRules computed 自动处理
+  tablePagination.value.current = 1
 }
 
 const handleTableChange = (pag: any) => {
@@ -605,12 +625,23 @@ const viewSichuanRuleDetail = async (rule: SichuanQCRule) => {
   selectedRule.value = rule
   showRuleDetail.value = true
   if (isAdmin.value) {
-    // 模拟获取 Prompt
+    // 从后端获取真实 Prompt
     promptLoading.value = true
-    setTimeout(() => {
-      currentPrompt.value = `你是一名专业的医疗质控专家...\n请检查以下规则：${rule.name}\n...`
+    try {
+      const resp = await fetch(`/api/v1/qc/sichuan/rules/${encodeURIComponent(rule.rule_id)}/prompt`)
+      if (resp.ok) {
+        const data = await resp.json()
+        currentPrompt.value = data.data?.prompt || '// 暂无提示词'
+        isDefaultPrompt.value = data.data?.is_default ?? true
+      } else {
+        currentPrompt.value = '// 获取提示词失败'
+      }
+    } catch (e) {
+      currentPrompt.value = '// 网络错误，无法获取提示词'
+      console.error(e)
+    } finally {
       promptLoading.value = false
-    }, 500)
+    }
   }
 }
 
@@ -637,22 +668,46 @@ const switchExampleType = (type: 'positive' | 'negative') => {
 }
 
 const executeRuleTest = async () => {
-    testLoading.value = true
-  // 模拟 API 调用
-    setTimeout(() => {
-        testLoading.value = false
-    const isCompliant = testExampleType.value === 'positive'
-        testResult.value = {
-      is_compliant: isCompliant,
-      confidence: 0.95,
-      findings: isCompliant ? '未发现明显缺陷。' : '发现患者入院记录中缺少现病史详细描述。',
-      evidence: isCompliant ? '' : '现病史：[空白]',
-      suggestion: isCompliant ? '' : '请补充现病史信息。'
-        }
-    }, 1500)
+  if (!testingRule.value || !testMedicalText.value.trim()) {
+    message.warning('请输入病历文本')
+    return
+  }
+  testLoading.value = true
+  testResult.value = null
+  try {
+    const resp = await fetch('/api/v1/qc/sichuan/test-rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rule_id: testingRule.value.rule_id,
+        medical_text: testMedicalText.value
+      })
+    })
+    if (resp.ok) {
+      const data = await resp.json()
+      const result = data.data || data
+      testResult.value = {
+        is_compliant: result.is_compliant ?? true,
+        confidence: result.confidence ?? 0.7,
+        findings: result.findings || '无详细发现',
+        evidence: result.evidence || '',
+        suggestion: result.suggestion || ''
+      }
+    } else {
+      const errText = await resp.text()
+      message.error(`测试请求失败: HTTP ${resp.status}`)
+      console.error('Test rule error:', errText)
+    }
+  } catch (e) {
+    message.error('网络错误，测试请求失败')
+    console.error(e)
+  } finally {
+    testLoading.value = false
+  }
 }
 
-// Prompt 管理
+// Prompt 管理（对接真实后端 API）
+const isDefaultPrompt = ref(true)
 const startEditPrompt = () => {
   editingPrompt.value = currentPrompt.value
   isEditingPrompt.value = true
@@ -660,14 +715,32 @@ const startEditPrompt = () => {
 const cancelEditPrompt = () => {
   isEditingPrompt.value = false
 }
-const savePrompt = () => {
+const savePrompt = async () => {
+  if (!selectedRule.value) return
   promptLoading.value = true
-  setTimeout(() => {
-    currentPrompt.value = editingPrompt.value
-    isEditingPrompt.value = false
+  try {
+    const resp = await fetch(`/api/v1/qc/sichuan/rules/${encodeURIComponent(selectedRule.value.rule_id)}/prompt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        custom_prompt: editingPrompt.value.trim() || null
+      })
+    })
+    if (resp.ok) {
+      currentPrompt.value = editingPrompt.value
+      isEditingPrompt.value = false
+      isDefaultPrompt.value = !editingPrompt.value.trim()
+      message.success('提示词保存成功')
+    } else {
+      const errText = await resp.text()
+      message.error(`保存失败: ${errText}`)
+    }
+  } catch (e) {
+    message.error('网络错误，保存失败')
+    console.error(e)
+  } finally {
     promptLoading.value = false
-    message.success('保存成功')
-  }, 800)
+  }
 }
 
 // 样式映射 - 使用更柔和的微着色风格
@@ -687,10 +760,19 @@ const getDefectLevelClass = (val: string) => {
 const CANONICAL_LABEL_ZH: Record<string, string> = {
   admission_record: '入院记录',
   progress_note: '病程记录',
+  first_course_record: '首次病程记录',
   discharge_record: '出院记录',
+  discharge_summary: '出院小结',
   operation_record: '手术记录',
+  preop_summary: '术前小结',
+  postop_first_record: '术后首次病程',
   examination_report: '辅助检查',
-  consent_form: '知情同意书'
+  consultation_record: '会诊记录',
+  consent_form: '知情同意书',
+  medical_order: '医嘱',
+  case_discussion: '疑难病例讨论',
+  transfusion_record: '输血记录',
+  anesthesia_record: '麻醉记录'
 }
 const getDocTypeZh = (val: string) => CANONICAL_LABEL_ZH[val] || val
 const getSeverityZh = (val: string) => val
@@ -823,7 +905,6 @@ onMounted(() => {
 }
 
 .modern-btn-ghost:hover {
-  background-color: #white;
   color: #3b82f6;
   background: #eff6ff;
 }

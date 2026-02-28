@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple
 import json
 import logging
 import asyncio
+import re
 
 from ..schemas.frontpage import FrontPageDraft
 from ..core.settings import get_settings
@@ -559,6 +560,7 @@ class FrontPageExtractionService:
                                 validation_info["warnings"] = warnings
                                 logger.info(f"stream: 捕获到 {len(warnings)} 条编码警告")
 
+                        diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
                         fp_data["diagnoses"] = diagnoses
                         fp_data["procedures"] = procedures
                         logger.info(f"stream: after merge, discharge_main_icd = {diagnoses.get('discharge_main_icd')}")
@@ -570,6 +572,8 @@ class FrontPageExtractionService:
                 continue
 
             if isinstance(result, dict):
+                if name == "diagnoses":
+                    result = self._normalize_diagnoses_structure(medical_text, result)
                 fp_data[name] = result
             else:
                 fp_data[name] = fp_data.get(name) or {}
@@ -579,7 +583,9 @@ class FrontPageExtractionService:
         # Post-processing (may trigger extra LLM calls; still stream when finished)
         try:
             if fp_data.get("diagnoses"):
+                fp_data["diagnoses"] = self._normalize_diagnoses_structure(medical_text, fp_data["diagnoses"])
                 fp_data["diagnoses"] = await self._infer_admission_conditions(medical_text, fp_data["diagnoses"])
+                fp_data["diagnoses"] = self._normalize_diagnoses_structure(medical_text, fp_data["diagnoses"])
                 yield ("update", {"module": "diagnoses", "frontpage": fp_data})
         except Exception as e:
             logger.warning(f"stream: infer admission conditions failed: {e}")
@@ -587,6 +593,7 @@ class FrontPageExtractionService:
         try:
             if fp_data.get("diagnoses") and not fp_data["diagnoses"].get("discharge_main_icd"):
                 fp_data["diagnoses"] = await self._suggest_diagnosis_codes(fp_data["diagnoses"])
+                fp_data["diagnoses"] = self._normalize_diagnoses_structure(medical_text, fp_data["diagnoses"])
                 yield ("update", {"module": "diagnoses", "frontpage": fp_data})
         except Exception as e:
             logger.warning(f"stream: suggest diagnosis codes failed: {e}")
@@ -675,6 +682,7 @@ class FrontPageExtractionService:
             procedures = procedures or {}
             other_medical = other_medical or {}
             staff = staff or {}
+            diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
 
         except Exception as e:
             logger.error(f"并行抽取发生严重错误: {e}")
@@ -719,12 +727,15 @@ class FrontPageExtractionService:
         # F4: 入院病情推理（只在没有外部结果时使用 mock/LLM 推理，或者作为补充）
         # 这里我们仍然运行它来获取 admission_condition
         if diagnoses:
+            diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
             diagnoses = await self._infer_admission_conditions(medical_text, diagnoses)
+            diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
         
         # F5/F7: ICD 编码推荐（如果在 step 3 中已经填充了编码，_suggest 方法内部应该检查是否存在）
         # 我们修改一下逻辑：如果已经有 code 了，就不再重新 suggest，或者 suggest 作为补充
         if diagnoses and not diagnoses.get("discharge_main_icd"):
             diagnoses = await self._suggest_diagnosis_codes(diagnoses)
+            diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
             
         if procedures and not procedures.get("main_procedure_code"):
             procedures = await self._suggest_procedure_codes(procedures)
@@ -760,7 +771,6 @@ class FrontPageExtractionService:
             return None
         
         # 尝试提取 JSON 块
-        import re
         json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
@@ -778,6 +788,161 @@ class FrontPageExtractionService:
         except json.JSONDecodeError as e:
             logger.warning(f"JSON 解析失败: {e}")
             return None
+
+    def _normalize_diag_text(self, value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        text = value.strip().replace("\u3000", " ")
+        text = re.sub(r"^[\-\u2022•·]+\s*", "", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip(" ;；,，。")
+
+    def _unique_texts(self, texts: List[str]) -> List[str]:
+        seen = set()
+        out: List[str] = []
+        for text in texts:
+            cleaned = self._normalize_diag_text(text)
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(cleaned)
+        return out
+
+    def _extract_discharge_diagnoses_from_text(self, medical_text: str) -> List[str]:
+        """
+        Parse discharge diagnoses from the `出院诊断` section.
+        Numbered items can span multiple lines; each continuation line is treated as
+        an independent diagnosis candidate.
+        """
+        if not medical_text or not medical_text.strip():
+            return []
+
+        text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = text.split("\n")
+
+        start_idx = -1
+        inline_text = ""
+        for i, raw_line in enumerate(lines):
+            line = raw_line.strip()
+            m = re.match(r"^出院诊断\s*[：:]\s*(.*)$", line)
+            if m:
+                start_idx = i
+                inline_text = m.group(1).strip()
+                break
+            if re.match(r"^出院诊断\s*$", line):
+                start_idx = i
+                break
+
+        if start_idx < 0:
+            return []
+
+        section_lines: List[str] = []
+        if inline_text:
+            section_lines.append(inline_text)
+
+        stop_header = re.compile(
+            r"^(入院诊断|诊疗经过|出院情况|出院医嘱|医师签名|记录时间|主诉|现病史|既往史|体格检查|辅助检查)\s*[：:]?"
+        )
+        for raw_line in lines[start_idx + 1 :]:
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            if re.match(r"^={3,}$", stripped):
+                break
+            if stop_header.match(stripped):
+                break
+            section_lines.append(raw_line)
+
+        if not section_lines:
+            return []
+
+        numbered = re.compile(r"^\s*\d{1,2}[\.、\)]\s*(.+?)\s*$")
+        items: List[List[str]] = []
+        current: List[str] = []
+
+        for raw_line in section_lines:
+            m = numbered.match(raw_line)
+            if m:
+                if current:
+                    items.append(current)
+                current = []
+                first_line = self._normalize_diag_text(m.group(1))
+                if first_line:
+                    current.append(first_line)
+                continue
+
+            line = self._normalize_diag_text(raw_line)
+            if not line:
+                continue
+
+            if current:
+                current.append(line)
+            else:
+                items.append([line])
+
+        if current:
+            items.append(current)
+
+        flattened: List[str] = []
+        for chunk in items:
+            flattened.extend(chunk)
+
+        return self._unique_texts(flattened)
+
+    def _normalize_diagnoses_structure(
+        self, medical_text: str, diagnoses: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Normalize diagnosis granularity to avoid merged multi-line diagnoses.
+        """
+        diag: Dict[str, Any] = dict(diagnoses or {})
+
+        main = self._normalize_diag_text(diag.get("discharge_main_diagnosis_text"))
+        raw_others = diag.get("discharge_other_diagnoses_texts") or []
+        others = self._unique_texts(raw_others if isinstance(raw_others, list) else [])
+
+        existing_all = self._unique_texts(([main] if main else []) + others)
+        if existing_all:
+            main = existing_all[0]
+            others = existing_all[1:]
+
+        parsed_from_text = self._extract_discharge_diagnoses_from_text(medical_text)
+        should_use_parsed = False
+        if parsed_from_text:
+            if len(parsed_from_text) > len(existing_all):
+                should_use_parsed = True
+            elif main and " " in main and len(parsed_from_text) >= 2:
+                # Composite principal diagnosis like "A B C".
+                hit_count = sum(1 for item in parsed_from_text if item and item in main)
+                if hit_count >= 2:
+                    should_use_parsed = True
+
+        if should_use_parsed:
+            logger.info(
+                "diagnoses normalization applied: existing=%d parsed=%d",
+                len(existing_all),
+                len(parsed_from_text),
+            )
+            merged = self._unique_texts(parsed_from_text + existing_all)
+            if merged:
+                main = merged[0]
+                others = merged[1:]
+
+        diag["discharge_main_diagnosis_text"] = main or None
+        diag["discharge_other_diagnoses_texts"] = others
+
+        other_icds = diag.get("discharge_other_icds")
+        if isinstance(other_icds, list):
+            if len(other_icds) < len(others):
+                other_icds = other_icds + [None] * (len(others) - len(other_icds))
+            elif len(other_icds) > len(others):
+                other_icds = other_icds[: len(others)]
+            diag["discharge_other_icds"] = other_icds
+
+        return diag
 
     async def _infer_admission_conditions(
         self, medical_text: str, diagnoses: Dict[str, Any]

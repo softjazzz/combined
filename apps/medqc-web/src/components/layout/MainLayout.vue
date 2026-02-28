@@ -39,6 +39,14 @@
           <span class="font-medium">仪表板</span>
         </a-menu-item>
 
+        <!-- 智能质控工作站 -->
+        <a-menu-item key="/dashboard/workstation" class="menu-item-base">
+          <template #icon>
+            <DesktopOutlined />
+          </template>
+          <span class="font-medium">智能质控工作站</span>
+        </a-menu-item>
+
         <!-- 病案质控 -->
         <a-sub-menu key="/dashboard/records" class="menu-item-base">
           <template #icon>
@@ -327,7 +335,8 @@ import {
   PlayCircleOutlined,
   CheckCircleOutlined,
   ProjectOutlined,
-  TeamOutlined
+  TeamOutlined,
+  DesktopOutlined
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -411,6 +420,9 @@ const breadcrumbItems = computed(() => {
             items.push({ title: '事后分析', path: null })
           }
         }
+        break
+      case 'workstation':
+        items.push({ title: '智能质控工作站', path: null })
         break
       default:
         items.push({ title: '仪表板', path: null })

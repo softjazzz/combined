@@ -130,126 +130,122 @@ async def list_rules(
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
     current_user: dict = Depends(get_current_user)
 ):
-    """获取质控规则列表，支持文书类别筛选。
-    - 首选使用 Supabase 后端筛选；
-    - 当不支持 .or_ 等语法或客户端不可用时，回退为拉取小批量并在应用层筛选。
+    """获取质控规则列表。
+    - 首选使用 Supabase；
+    - Supabase 不可用或为空时，回退到 JSON 文件。
     """
+    rules: List[Dict[str, Any]] = []
+
+    # ── 1. 尝试从 Supabase 加载 ──
     sb = get_supabase()
-    if sb is None:
-        # 数据库不可用时，返回空数据，避免与前端不一致
-        return paginated_response(
-            items=[],
-            total=0,
-            page=page,
-            page_size=limit,
-            message="数据库不可用",
-            trace_id=get_trace_id(request)
-        )
+    if sb is not None:
+        try:
+            query = sb.table('qc_rules').select('*', count='exact')
+            if keyword:
+                if hasattr(query, 'or_'):
+                    query = query.or_(f"name.ilike.%{keyword}%,description.ilike.%{keyword}%,rule_code.ilike.%{keyword}%")
+            if category:
+                query = query.eq('category', category)
+            if document_category:
+                if hasattr(query, 'or_'):
+                    query = query.or_(
+                        f"applicable_documents.cs.{{{document_category}}},"
+                        f"applicable_documents.is.null,"
+                        f"applicable_documents.eq.{{}},"
+                        f"primary_document_category.eq.{document_category},"
+                        f"document_categories.cs.{{{document_category}}}"
+                    )
+            if rule_type:
+                query = query.eq('rule_type', rule_type)
+            if severity:
+                query = query.eq('severity', severity)
+            if is_active is not None:
+                query = query.eq('is_active', is_active)
+            offset = (page - 1) * limit
+            if hasattr(query, 'range'):
+                query = query.range(offset, offset + limit - 1)
+            if hasattr(query, 'order'):
+                query = query.order('primary_document_category').order('execution_order').order('name')
 
-    # 优先尝试后端筛选
-    try:
-        query = sb.table('qc_rules').select('*', count='exact')
-        if keyword:
-            # postgrest 的 or 语法
-            if hasattr(query, 'or_'):
-                query = query.or_(f"name.ilike.%{keyword}%,description.ilike.%{keyword}%,rule_code.ilike.%{keyword}%")
-        if category:
-            query = query.eq('category', category)
-        if document_category:
-            if hasattr(query, 'or_'):
-                # Migration 006: 优先使用 applicable_documents 字段
-                query = query.or_(
-                    f"applicable_documents.cs.{{{document_category}}},"
-                    f"applicable_documents.is.null,"
-                    f"applicable_documents.eq.{{}},"
-                    f"primary_document_category.eq.{document_category},"
-                    f"document_categories.cs.{{{document_category}}}"
+            resp = await async_execute(query)
+            data = list(getattr(resp, 'data', None) or [])
+            total = getattr(resp, 'count', None)
+            if total is None:
+                total = len(data)
+
+            if data:
+                return paginated_response(
+                    items=data,
+                    total=total,
+                    page=page,
+                    page_size=limit,
+                    message="获取规则列表成功",
+                    trace_id=get_trace_id(request)
                 )
-        if rule_type:
-            query = query.eq('rule_type', rule_type)
-        if severity:
-            query = query.eq('severity', severity)
-        if is_active is not None:
-            query = query.eq('is_active', is_active)
-        offset = (page - 1) * limit
-        if hasattr(query, 'range'):
-            query = query.range(offset, offset + limit - 1)
-        if hasattr(query, 'order'):
-            query = query.order('primary_document_category').order('execution_order').order('name')
+            # Supabase 返回空，继续回退到 JSON
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
 
-        # 兼容异步/同步执行
-        resp = await async_execute(query)
-        data = list(getattr(resp, 'data', None) or [])
-        total = getattr(resp, 'count', None)
-        # 某些实现不返回 count
-        if total is None:
-            total = len(data)
-        return paginated_response(
-            items=data,
-            total=total,
-            page=page,
-            page_size=limit,
-            message="获取规则列表成功",
-            trace_id=get_trace_id(request)
+    # ── 2. 回退：从 JSON 文件加载 ──
+    try:
+        import json, os
+        json_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "data", "sichuan_rules_146.json"
         )
-    except Exception as e:
-        # 兼容回退：拉取较小窗口数据到内存再筛选
+        with open(json_path, "r", encoding="utf-8") as f:
+            rules = json.load(f)
+    except Exception:
+        rules = []
+
+    # 应用层筛选
+    def includes_keyword(r: Dict[str, Any]) -> bool:
+        if not keyword:
+            return True
+        s = str(keyword).lower()
+        return s in str(r.get('name', '')).lower() or s in str(r.get('description', '')).lower() or s in str(r.get('rule_code', '') or r.get('rule_id', '')).lower()
+
+    def matches_doc_cat(r: Dict[str, Any]) -> bool:
+        if not document_category:
+            return True
+        primary = r.get('primary_document_category')
+        cats = r.get('document_categories') or r.get('applicable_documents') or []
         try:
-            base = sb.table('qc_rules').select('*')
-            if hasattr(base, 'limit'):
-                base = base.limit(2000)
-            resp2 = await async_execute(base)
-            rules: List[Dict[str, Any]] = list(getattr(resp2, 'data', None) or [])
+            return primary == document_category or (isinstance(cats, list) and document_category in cats)
         except Exception:
-            rules = []
+            return primary == document_category
 
-        # 应用层筛选
-        def includes_keyword(r: Dict[str, Any]) -> bool:
-            if not keyword:
-                return True
-            s = str(keyword).lower()
-            return s in str(r.get('name', '')).lower() or s in str(r.get('description', '')).lower() or s in str(r.get('rule_code', '')).lower()
+    filtered = [
+        r for r in rules
+        if includes_keyword(r)
+        and (category is None or r.get('category') == category)
+        and matches_doc_cat(r)
+        and (rule_type is None or r.get('rule_type') == rule_type)
+        and (severity is None or r.get('severity') == severity)
+        and (is_active is None or bool(r.get('is_active', True)) == is_active)
+    ]
 
-        def matches_doc_cat(r: Dict[str, Any]) -> bool:
-            if not document_category:
-                return True
-            primary = r.get('primary_document_category')
-            cats = r.get('document_categories') or []
-            try:
-                return primary == document_category or (isinstance(cats, list) and document_category in cats)
-            except Exception:
-                return primary == document_category
-
-        filtered = [
-            r for r in rules
-            if includes_keyword(r)
-            and (category is None or r.get('category') == category)
-            and matches_doc_cat(r)
-            and (rule_type is None or r.get('rule_type') == rule_type)
-            and (severity is None or r.get('severity') == severity)
-            and (is_active is None or bool(r.get('is_active')) == is_active)
-        ]
-
-        # 排序与分页
-        try:
-            filtered.sort(key=lambda x: (
-                x.get('primary_document_category') or '',
-                x.get('execution_order') or 0,
-                x.get('name') or ''
-            ))
-        except Exception:
-            pass
-        total = len(filtered)
-        offset = (page - 1) * limit
-        paginated = filtered[offset: offset + limit]
-        return paginated_response(
-            items=paginated,
-            total=total,
-            page=page,
-            page_size=limit,
-            message="获取规则列表成功（应用层筛选）",
-            trace_id=get_trace_id(request)
-        )
+    # 排序与分页
+    try:
+        filtered.sort(key=lambda x: (
+            x.get('primary_document_category') or x.get('rule_id') or '',
+            x.get('execution_order') or 0,
+            x.get('name') or ''
+        ))
+    except Exception:
+        pass
+    total = len(filtered)
+    offset = (page - 1) * limit
+    paginated = filtered[offset: offset + limit]
+    return paginated_response(
+        items=paginated,
+        total=total,
+        page=page,
+        page_size=limit,
+        message="获取规则列表成功（从JSON文件加载）",
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/rules/document-categories/stats")

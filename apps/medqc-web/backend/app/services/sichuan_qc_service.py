@@ -7,120 +7,14 @@ from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
 from .unified_rule_engine import UnifiedRuleEngine
 from .llm_config_loader import LLMConfigLoader
+from .qc_llm_client import SichuanQCLLMClient  # 拆分出的 LLM 客户端
+from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
 
 logger = logging.getLogger(__name__)
 
+# SichuanQCLLMClient 已拆分至 qc_llm_client.py
+# 通过上方 import 重新导出，外部引用不受影响
 
-class SichuanQCLLMClient:
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
-        """
-        初始化 LLM 客户端
-
-        Args:
-            config: 配置字典，如果为 None 则从 .env 文件加载
-                   配置字典应包含：
-                   - api_endpoint: API 端点
-                   - api_key: API 密钥
-                   - model: 模型代码
-                   - timeout_seconds: 超时时间
-        """
-        if config:
-            # 使用传入的配置
-            self.api_endpoint: Optional[str] = config.get("api_endpoint")
-            self.api_key: Optional[str] = config.get("api_key")
-            self.model: str = config.get("model", "qwen2.5-14b-instruct")
-            self.timeout_seconds: int = config.get("timeout_seconds", 120)
-            self.config_source = config.get("source", "unknown")
-
-            # Load advanced LLM parameters from custom_parameters
-            custom_params = config.get("custom_parameters", {})
-            self.temperature: float = custom_params.get("temperature", 0.2)
-            self.top_p: float = custom_params.get("top_p", 0.9)
-            self.max_tokens: int = custom_params.get("max_tokens", 4000)
-
-            logger.info(f"✅ SichuanQCLLMClient 使用传入配置初始化: model={self.model}, source={self.config_source}, temperature={self.temperature}, top_p={self.top_p}, max_tokens={self.max_tokens}")
-        else:
-            # 回退到 .env 文件配置
-            s = get_settings()
-            self.api_endpoint: Optional[str] = str(s.SICHUAN_API_ENDPOINT) if s.SICHUAN_API_ENDPOINT else None
-            self.api_key: Optional[str] = s.SICHUAN_API_KEY
-            self.model: str = s.SICHUAN_MODEL
-            self.timeout_seconds: int = s.SICHUAN_TIMEOUT_SECONDS
-            self.config_source = "env"
-
-            # Default advanced parameters when using .env
-            self.temperature: float = 0.2
-            self.top_p: float = 0.9
-            self.max_tokens: int = 4000
-
-            logger.info(f"✅ SichuanQCLLMClient 使用 .env 配置初始化: model={self.model}, temperature={self.temperature}")
-
-        # Stats
-        self.call_count = 0
-        self.total_tokens = 0
-        self.total_api_time = 0.0
-        self.success_count = 0
-        self.error_count = 0
-
-    async def generate(self, prompt: str) -> Dict[str, Any]:
-        self.call_count += 1
-        api_start = time.time()
-
-        if not (self.api_endpoint and self.api_key):
-            # Mock result when not configured
-            api_time = time.time() - api_start
-            self.success_count += 1
-            return {
-                "choices": [{"message": {"content": f"[MOCK RESULT] 分析完成: {prompt[:60]}..."}}],
-                "usage": {"total_tokens": 0},
-                "_mock": True,
-                "_api_time": api_time,
-            }
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": self.temperature,  # 使用配置的 temperature
-            "top_p": self.top_p,              # 使用配置的 top_p
-            "max_tokens": self.max_tokens,    # 使用配置的 max_tokens
-            "stream": False,
-            "enable_thinking": False,  # Qwen3 系列模型需要此参数
-        }
-
-        try:
-            result = await safe_post_json(
-                url=f"{self.api_endpoint}/chat/completions",
-                headers=headers,
-                payload=payload,
-                timeout_seconds=self.timeout_seconds,
-            )
-            api_time = time.time() - api_start
-            self.total_api_time += api_time
-            self.success_count += 1
-            usage = result.get("usage", {})
-            self.total_tokens += usage.get("total_tokens", 0)
-            result["_api_time"] = api_time
-            return result
-        except Exception:
-            api_time = time.time() - api_start
-            self.total_api_time += api_time
-            self.error_count += 1
-            raise
-
-    def stats(self) -> Dict[str, Any]:
-        return {
-            "total_calls": self.call_count,
-            "success_calls": self.success_count,
-            "error_calls": self.error_count,
-            "success_rate": (self.success_count / self.call_count * 100) if self.call_count else 0.0,
-            "total_tokens": self.total_tokens,
-            "total_api_time": self.total_api_time,
-            "avg_api_time": (self.total_api_time / self.call_count) if self.call_count else 0.0,
-        }
 
 
 class SichuanQCService:
@@ -131,9 +25,16 @@ class SichuanQCService:
         Args:
             config: LLM 配置字典，如果为 None 则从 .env 文件加载
         """
+        # LLM 客户端（config 为 None 时，SichuanQCLLMClient 自动从 .env 加载）
         self.client = SichuanQCLLMClient(config)
+
+        # 规则缓存
         self._rules_cache: Optional[List[Dict[str, Any]]] = None
+        self._custom_rules_cache: Optional[List[Dict[str, Any]]] = None
+
+        # 统一规则引擎 (用于串行模式)
         self.rule_engine = UnifiedRuleEngine(self.client.generate)
+
         # 英文到中文文书类型映射（兼容多种同义英文编码）
         self.doc_type_mapping = {
             # 基础映射
@@ -144,21 +45,26 @@ class SichuanQCService:
             "consent_form": "知情同意书",
             "examination_report": "检查报告",
             "medical_order": "医嘱",
-            # 同义/变体编码（JSON 中存在的别名）
-            "course_record": "病程记录",            # 病程记录别名
-            "consultation_record": "病程记录",      # 会诊记录归入病程
-            "case_discussion": "病程记录",          # 病例讨论归入病程
-            "discharge_summary": "出院记录",        # 出院小结归入出院
-            "lab_report": "检查报告",               # 检验报告归入检查报告
-            "anesthesia_record": "手术记录",        # 麻醉记录归入手术相关
-            "transfusion_record": "病程记录",       # 输血记录归入病程
-            "informed_consent": "知情同意书",       # 同意书归类
+            # 同义/变体编码
+            "course_record": "病程记录",
+            "consultation_record": "病程记录",
+            "case_discussion": "病程记录",
+            "discharge_summary": "出院记录",
+            "lab_report": "检查报告",
+            "anesthesia_record": "手术记录",
+            "transfusion_record": "病程记录",
+            "informed_consent": "知情同意书",
         }
-        # 初始化截断配置
+
+        # 截断配置 + Prompt 构建器
         from ..core.settings import get_settings
         settings = get_settings()
         self.enable_truncate = settings.SICHUAN_ENABLE_TRUNCATE
         self.max_content_length = settings.SICHUAN_MAX_CONTENT_LENGTH
+        self.prompt_builder = QCPromptBuilder(
+            enable_truncate=self.enable_truncate,
+            max_content_length=self.max_content_length,
+        )
 
     async def reload_config(self, config_name: str = "default", user_id: Optional[str] = None) -> bool:
         """
@@ -246,7 +152,7 @@ class SichuanQCService:
 
     async def _load_rules_from_db(self, document_type: str) -> List[Dict[str, Any]]:
         """
-        从 JSON 文件或 Supabase 数据库加载适用于指定文书类型的质控规则。
+        加载适用于指定文书类型的质控规则（统一从 JSON 文件加载）。
 
         Args:
             document_type: 文书类型（如 "病程记录"、"入院记录" 等）
@@ -255,169 +161,51 @@ class SichuanQCService:
             适用规则列表。如果加载失败，返回空列表。
 
         规则筛选逻辑：
-        1. 优先从 JSON 文件加载（包含完整的 applicable_documents 等字段）
-        2. 如果 JSON 加载失败，回退到数据库
-        3. 通用规则（applicable_documents 为空）会被包含
-        4. 特定规则（applicable_documents 包含指定的 document_type）会被包含
+        1. 通用规则（applicable_documents 为空）会被包含
+        2. 特定规则（applicable_documents 包含指定的 document_type）会被包含
         """
-        # 优先从 JSON 文件加载
-        try:
-            all_rules = self._load_rules_from_json()
-            if all_rules:
-                # 筛选适用于当前文书类型的规则
-                applicable_rules = []
-                for rule in all_rules:
-                    applicable_docs = rule.get("applicable_documents", [])
-                    # 如果 applicable_documents 为空（通用规则）或包含当前文书类型
-                    if not applicable_docs or document_type in applicable_docs:
-                        applicable_rules.append(rule)
-
-                logger.info(f"从 JSON 文件加载了 {len(applicable_rules)} 条适用于 '{document_type}' 的规则")
-                return applicable_rules
-        except Exception as e:
-            logger.warning(f"从 JSON 文件加载规则失败，回退到数据库: {e}")
-
-        # 回退到数据库
-        try:
-            supabase = get_supabase()
-            if supabase is None:
-                logger.warning("Supabase client not available, cannot load rules from database")
-                return []
-
-            # 尝试使用异步执行，如果不支持则使用同步执行
-            async def _exec(query):
-                try:
-                    exec_async = getattr(query, "execute_async", None)
-                    if callable(exec_async):
-                        return await exec_async()
-                except Exception:
-                    pass
-                return query.execute()
-
-            # 使用数据库层面筛选（Migration 006 优化）
-            try:
-                # 方法 1: 使用 RPC 函数（推荐，最简洁）
-                try:
-                    resp = await _exec(
-                        supabase.rpc(
-                            'get_applicable_rules',
-                            {'p_document_type': document_type, 'p_is_active': True}
-                        )
-                    )
-                    applicable_rules = resp.data or []
-                    logger.info(f"Loaded {len(applicable_rules)} rules for '{document_type}' using RPC function")
-                    return applicable_rules
-                except Exception as rpc_error:
-                    logger.warning(f"RPC function not available, falling back to query: {rpc_error}")
-
-                # 方法 2: 使用 Supabase 查询（回退方案）
-                # 注意：这会匹配包含指定文书类型的规则，以及 applicable_documents 为空的通用规则
-                resp = await _exec(
-                    supabase.table("qc_rules")
-                    .select("*")
-                    .eq("is_active", True)
-                    .or_(f"applicable_documents.cs.{{{document_type}}},applicable_documents.is.null,applicable_documents.eq.{{}}")
-                    .limit(1000)
-                )
-
-                applicable_rules = resp.data or []
-                logger.info(f"Loaded {len(applicable_rules)} rules for '{document_type}' using database query")
-                return applicable_rules
-
-            except Exception as db_filter_error:
-                # 如果数据库层面筛选失败（可能是字段不存在或语法不支持），回退到应用层筛选
-                logger.warning(f"Database-level filtering failed, falling back to application-level filtering: {db_filter_error}")
-
-                # 加载所有激活的规则
-                resp = await _exec(
-                    supabase.table("qc_rules")
-                    .select("*")
-                    .eq("is_active", True)
-                    .limit(1000)
-                )
-
-                all_rules = resp.data or []
-                logger.info(f"Loaded {len(all_rules)} active rules from database")
-
-                # 在应用层筛选适用于指定文书类型的规则
-                applicable_rules = []
-                for rule in all_rules:
-                    # 优先从顶层 applicable_documents 字段读取（新字段）
-                    applicable_docs = rule.get("applicable_documents", [])
-
-                    # 如果顶层字段为空，尝试从 check_logic JSONB 字段读取（向后兼容）
-                    if not applicable_docs:
-                        check_logic = rule.get("check_logic", {})
-                        if isinstance(check_logic, dict):
-                            applicable_docs = check_logic.get("applicable_documents", [])
-
-                    # 规范化为列表
-                    if isinstance(applicable_docs, str):
-                        applicable_docs = [d.strip() for d in applicable_docs.split(",") if d.strip()]
-                    elif not isinstance(applicable_docs, list):
-                        applicable_docs = []
-
-                    # 筛选逻辑：
-                    # 1. 如果 applicable_documents 为空，视为通用规则，包含该规则
-                    # 2. 如果 applicable_documents 包含指定的 document_type，包含该规则
-                    if not applicable_docs or document_type in applicable_docs:
-                        applicable_rules.append(rule)
-
-                logger.info(f"Found {len(applicable_rules)} rules applicable to document type '{document_type}' (application-level filtering)")
-                return applicable_rules
-
-        except Exception as e:
-            logger.error(f"Failed to load rules from database: {e}", exc_info=True)
+        all_rules = self._load_rules_from_json()
+        if not all_rules:
             return []
 
+        # 筛选适用于当前文书类型的规则
+        applicable_rules = [
+            rule for rule in all_rules
+            if not rule.get("applicable_documents") or document_type in rule.get("applicable_documents", [])
+        ]
+
+        logger.info(f"从 JSON 加载了 {len(applicable_rules)}/{len(all_rules)} 条适用于 '{document_type}' 的规则")
+        return applicable_rules
+
+    # ──────────────────────────────────────────────
+    # 以下方法委托给 QCPromptBuilder（拆分出的模块）
+    # 保留方法签名以兼容现有调用
+    # ──────────────────────────────────────────────
+
     def _smart_truncate(self, content: str, max_length: int = 4000) -> str:
-        """
-        智能截断病历内容，优先保留完整段落，避免切断句子。
+        return self.prompt_builder.smart_truncate(content, max_length)
 
-        Args:
-            content: 原始病历内容
-            max_length: 最大字符长度
+    def _extract_check_points(self, custom_prompt: str) -> str:
+        return self.prompt_builder.extract_check_points(custom_prompt)
 
-        Returns:
-            截断后的内容，带有截断提示
-        """
-        if len(content) <= max_length:
-            return content
+    def _extract_core_guidance(self, custom_prompt: str) -> str:
+        return self.prompt_builder.extract_core_guidance(custom_prompt)
 
-        # 预留截断提示的空间（约80字符）
-        reserve_space = 80
-        effective_max = max_length - reserve_space
+    def _extract_enhanced_guidance(self, custom_prompt: str, rule_id: str) -> str:
+        return self.prompt_builder.extract_enhanced_guidance(custom_prompt, rule_id)
 
-        # 截断到有效长度
-        truncated = content[:effective_max]
+    def _precompute_time_facts(self, rule_id: str, content: str) -> str:
+        return self.prompt_builder.precompute_time_facts(rule_id, content)
 
-        # 向前查找最近的段落分隔符（\n\n 或 \n）
-        last_paragraph = truncated.rfind('\n\n')
-        last_newline = truncated.rfind('\n')
+    async def _build_prompt(
+        self,
+        rules: List[Dict[str, Any]],
+        content: str,
+        document_type: str,
+        prompt_mode: str = "plan_a"
+    ) -> str:
+        return await self.prompt_builder.build_prompt(rules, content, document_type, prompt_mode)
 
-        # 如果段落边界在合理范围内（90%以上），使用段落边界
-        if last_paragraph > effective_max * 0.9:
-            result = truncated[:last_paragraph]
-        elif last_newline > effective_max * 0.8:
-            result = truncated[:last_newline]
-        else:
-            # 如果没有合适的边界，查找最后一个句号
-            last_period = truncated.rfind('。')
-            if last_period > effective_max * 0.8:
-                result = truncated[:last_period + 1]
-            else:
-                result = truncated
-
-        # 添加截断标记
-        total_chars = len(content)
-        kept_chars = len(result)
-        truncated_chars = total_chars - kept_chars
-
-        result += f"\n\n[注：病历内容过长，已截断 {truncated_chars} 字符（保留前 {kept_chars}/{total_chars} 字符）]"
-
-        logger.info(f"智能截断: 原始 {total_chars} 字符 → 保留 {kept_chars} 字符（{kept_chars/total_chars*100:.1f}%）")
-
-        return result
 
     async def _evaluate_rules_with_engine(
         self,
@@ -570,6 +358,95 @@ class SichuanQCService:
 
         return "\n\n".join(parts)
 
+    def _precompute_time_facts(self, rule_id: str, content: str) -> str:
+        """
+        For time-sensitive rules, extract timestamps from the medical text
+        and pre-compute time differences using code, so the LLM doesn't
+        need to do arithmetic (which it often gets wrong).
+
+        Returns:
+            A string like "【系统预计算】抢救结束到记录完成间隔：2小时45分钟（< 6小时，符合时效要求）"
+            or empty string if not applicable.
+        """
+        import re
+        from datetime import datetime
+
+        TIME_RULES = {
+            # rule_id: (label_start, label_end, limit_hours, limit_label)
+            'SC-054': (
+                ['抢救结束时间', '抢救结束'],
+                ['记录完成时间', '记录完成'],
+                6,
+                '6小时'
+            ),
+            'SC-048': (
+                ['入院时间', '入院日期'],
+                ['首次查房', '主治医师首次查房', '主治医师.*?查房'],
+                48,
+                '48小时'
+            ),
+        }
+
+        if rule_id not in TIME_RULES:
+            return ""
+
+        start_labels, end_labels, limit_h, limit_label = TIME_RULES[rule_id]
+
+        # Common datetime patterns in Chinese medical records
+        dt_patterns = [
+            r'(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})[日号]?\s*(\d{1,2})[:时](\d{1,2})',
+            r'(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})',
+        ]
+
+        def find_time_near_label(text: str, labels: list):
+            for label in labels:
+                match = re.search(label, text)
+                if not match:
+                    continue
+                # Search within 80 chars after the label
+                search_start = match.end()
+                search_region = text[search_start:search_start + 80]
+                for pat in dt_patterns:
+                    m = re.search(pat, search_region)
+                    if m:
+                        try:
+                            groups = m.groups()
+                            return datetime(
+                                int(groups[0]), int(groups[1]), int(groups[2]),
+                                int(groups[3]), int(groups[4])
+                            )
+                        except (ValueError, IndexError):
+                            continue
+            return None
+
+        t_start = find_time_near_label(content, start_labels)
+        t_end = find_time_near_label(content, end_labels)
+
+        if t_start is None or t_end is None:
+            return ""
+
+        delta = t_end - t_start
+        total_minutes = delta.total_seconds() / 60
+        hours = int(total_minutes // 60)
+        minutes = int(total_minutes % 60)
+
+        if total_minutes < 0:
+            return ""
+
+        compliant = total_minutes <= limit_h * 60
+        verdict = "符合时效要求" if compliant else "超出时效要求"
+        relation = "<" if compliant else ">"
+
+        fact = (
+            f"\n\n【系统预计算（以下为代码精确计算结果，请直接采信）】\n"
+            f"起始时间：{t_start.strftime('%Y-%m-%d %H:%M')}\n"
+            f"结束时间：{t_end.strftime('%Y-%m-%d %H:%M')}\n"
+            f"间隔时长：{hours}小时{minutes}分钟（{relation} {limit_label}，{verdict}）"
+        )
+
+        logger.info(f"时间预计算 [{rule_id}]: {hours}h{minutes}m, compliant={compliant}")
+        return fact
+
     async def _build_prompt(
         self,
         rules: List[Dict[str, Any]],
@@ -638,6 +515,11 @@ class SichuanQCService:
                 else:
                     # 默认使用方案 A
                     guidance = self._extract_enhanced_guidance(custom_prompt, rule_id)
+
+                # 时间预计算：对时间敏感型规则，用代码精确计算时间差并注入 guidance
+                time_fact = self._precompute_time_facts(rule_id, content)
+                if time_fact:
+                    guidance = (guidance + time_fact) if guidance else time_fact
 
                 # 规则清单：序号 + rule_id + 名称 + 描述 + 额外指导
                 if guidance:

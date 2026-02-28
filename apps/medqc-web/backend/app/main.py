@@ -38,6 +38,7 @@ from .routers import frontpage as frontpage_router
 from .routers import drg as drg_router
 from .routers import dip as dip_router
 from .routers import case_front_page as case_front_page_router
+from .routers import icd_search as icd_search_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -228,6 +229,8 @@ def create_app() -> FastAPI:
     app.include_router(drg_router.router)
     # DIP 入组预测 (泸州市)
     app.include_router(dip_router.router)
+    # ICD 编码搜索（基于本地编码库 JSON）
+    app.include_router(icd_search_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

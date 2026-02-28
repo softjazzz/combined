@@ -60,7 +60,7 @@
                                    
                                    <div class="flex-1 flex items-center justify-center relative">
                                       <!-- Body Image -->
-                                      <img src="/human_body_schematic.png" class="h-[90%] object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] opacity-90" alt="Body Map" />
+                                      <img src="/human_body_schematic.svg" class="h-[90%] object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] opacity-90" alt="Body Map" />
                                       
                                       <!-- Dynamic Hotspots with Staggered Animation -->
                                       <template v-for="(marker, index) in currentBodyMarkers" :key="index">

@@ -17,7 +17,29 @@ export function useMedicalTextExtraction(options: {
 }) {
   const extracting = ref(false)
 
-  const applyFrontpageResult = (fp: any) => {
+  const sseDebugEnabled = false
+
+  const sseLog = (requestId: string, ...args: any[]) => {
+    if (!sseDebugEnabled) return
+    console.log(`[frontpage-sse:${requestId}]`, ...args)
+  }
+
+  const sseError = (requestId: string, ...args: any[]) => {
+    if (!sseDebugEnabled) return
+    console.error(`[frontpage-sse:${requestId}]`, ...args)
+  }
+
+  const summarizeFrontpage = (fp: any) => ({
+    patient_name: fp?.basic_info?.patient_name || null,
+    gender_text: fp?.basic_info?.gender_text || null,
+    main_diagnosis: fp?.diagnoses?.discharge_main_diagnosis_text || null,
+    main_icd: fp?.diagnoses?.discharge_main_icd || null,
+    main_procedure: fp?.procedures?.main_procedure_text || null,
+    main_procedure_code: fp?.procedures?.main_procedure_code || null,
+    total_cost: fp?.costs?.total_cost ?? null
+  })
+
+  const applyFrontpageResult = (fp: any, requestId?: string, source?: string) => {
     if (!options.demoCase.value) return
 
     // Preserve all original backend fields and add transformed fields for backward compatibility
@@ -134,9 +156,13 @@ export function useMedicalTextExtraction(options: {
 
     // 实际费用（用于盈亏计算）
     frontpageForDRG.total_cost = fp.costs?.total_cost || 0
+
+    if (requestId) {
+      sseLog(requestId, `applyFrontpageResult(${source || 'unknown'})`, summarizeFrontpage(fp))
+    }
   }
 
-  const useMockFallback = () => {
+  const useMockFallback = (requestId?: string) => {
     const mockFrontpage = {
       basic_info: {
         patient_name: '张三',
@@ -196,6 +222,10 @@ export function useMedicalTextExtraction(options: {
       fund_pay: 10064.4,
       patient_pay: 2516.1
     }
+
+    if (requestId) {
+      sseLog(requestId, 'useMockFallback applied')
+    }
   }
 
   const extractStructuredData = async () => {
@@ -205,9 +235,14 @@ export function useMedicalTextExtraction(options: {
     }
 
     const medicalText = options.demoCase.value.medical_text
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     extracting.value = true
     options.onStartExtract?.()
+    sseLog(requestId, 'extractStructuredData:start', {
+      case_id: options.demoCase.value.case_id,
+      medical_text_length: medicalText.length
+    })
 
     // Track completed modules for progress display
     const completedModules: string[] = []
@@ -225,17 +260,27 @@ export function useMedicalTextExtraction(options: {
     try {
       const tryNonStream = async (): Promise<boolean> => {
         try {
+          sseLog(requestId, 'tryNonStream:start')
           const resp = await fetch('/api/v1/frontpage/auto-generate-draft', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ medical_text: medicalText })
           })
+          sseLog(requestId, 'tryNonStream:response', {
+            ok: resp.ok,
+            status: resp.status,
+            content_type: resp.headers.get('content-type'),
+            trace_id: resp.headers.get('x-trace-id')
+          })
 
           const json = await resp.json().catch(() => null)
           const fp = json?.data?.frontpage
-          if (!fp) return false
+          if (!fp) {
+            sseLog(requestId, 'tryNonStream:no_frontpage_in_response')
+            return false
+          }
 
-          applyFrontpageResult(fp)
+          applyFrontpageResult(fp, requestId, 'non-stream')
 
           if (fp.confidence?.warnings?.length > 0) {
             const count = fp.confidence.warnings.length
@@ -253,22 +298,100 @@ export function useMedicalTextExtraction(options: {
             duration: 5,
             placement: 'topRight'
           })
+          sseLog(requestId, 'tryNonStream:success')
           options.onExtracted?.()
           return true
-        } catch {
+        } catch (nonStreamError) {
+          sseError(requestId, 'tryNonStream:error', nonStreamError)
           return false
         }
       }
 
-      // Use SSE stream API for progressive display
-      const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ medical_text: medicalText })
-      })
+      // Use SSE stream API for progressive display.
+      // Some dev proxy paths may hang before response headers; we retry direct backend URL.
+      const streamUrls = ['/api/v1/frontpage/auto-generate-draft-stream']
+      if (window?.location?.hostname === 'localhost') {
+        streamUrls.push('http://10.216.235.9:8001/api/v1/frontpage/auto-generate-draft-stream')
+      }
+
+      const streamHeaderTimeoutMs = 8000
+      let response: Response | null = null
+      let lastStreamFetchError: any = null
+
+      for (let i = 0; i < streamUrls.length; i += 1) {
+        const streamUrl = streamUrls[i]
+        const streamFetchStartAt = Date.now()
+        sseLog(requestId, 'streamFetch:start', {
+          attempt: i + 1,
+          url: streamUrl,
+          timeout_ms: streamHeaderTimeoutMs
+        })
+
+        const controller = new AbortController()
+        const timeoutId = window.setTimeout(() => controller.abort('stream_header_timeout'), streamHeaderTimeoutMs)
+        const waitingTimer = window.setInterval(() => {
+          sseLog(requestId, 'streamFetch:waiting_headers', {
+            attempt: i + 1,
+            url: streamUrl,
+            elapsed_ms: Date.now() - streamFetchStartAt
+          })
+        }, 3000)
+
+        try {
+          const candidate = await fetch(streamUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'text/event-stream',
+              'Cache-Control': 'no-cache'
+            },
+            body: JSON.stringify({ medical_text: medicalText }),
+            signal: controller.signal
+          })
+
+          sseLog(requestId, 'streamFetch:response', {
+            attempt: i + 1,
+            url: streamUrl,
+            elapsed_ms: Date.now() - streamFetchStartAt,
+            ok: candidate.ok,
+            status: candidate.status,
+            status_text: candidate.statusText,
+            content_type: candidate.headers.get('content-type'),
+            trace_id: candidate.headers.get('x-trace-id'),
+            transfer_encoding: candidate.headers.get('transfer-encoding')
+          })
+          response = candidate
+          break
+        } catch (streamFetchError: any) {
+          lastStreamFetchError = streamFetchError
+          sseError(requestId, 'streamFetch:request_error', {
+            attempt: i + 1,
+            url: streamUrl,
+            elapsed_ms: Date.now() - streamFetchStartAt,
+            name: streamFetchError?.name,
+            message: streamFetchError?.message || String(streamFetchError)
+          })
+        } finally {
+          window.clearTimeout(timeoutId)
+          window.clearInterval(waitingTimer)
+        }
+      }
+
+      if (!response) {
+        sseError(requestId, 'streamFetch:all_attempts_failed', {
+          attempts: streamUrls.length,
+          last_error: lastStreamFetchError?.message || String(lastStreamFetchError)
+        })
+        if (await tryNonStream()) return
+        throw lastStreamFetchError || new Error('All stream fetch attempts failed')
+      }
 
       if (!response.ok || !response.body) {
         const raw = await response.text().catch(() => '')
+        sseError(requestId, 'streamFetch:invalid_response', {
+          status: response.status,
+          raw_preview: raw.slice(0, 500)
+        })
         console.warn('LLM 流式提取失败:', raw || `${response.status} ${response.statusText}` || 'Unknown error')
         if (await tryNonStream()) return
         throw new Error(`HTTP error: ${response.status}`)
@@ -278,43 +401,87 @@ export function useMedicalTextExtraction(options: {
 
       const decoder = new TextDecoder()
       let buffer = ''
+      let eventType = ''
+      let eventData = ''
+      let chunkCount = 0
+      let totalBytes = 0
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
+        chunkCount += 1
+        if (value) totalBytes += value.byteLength
+        sseLog(requestId, 'stream:chunk', {
+          chunk: chunkCount,
+          done,
+          value_bytes: value?.byteLength || 0,
+          total_bytes: totalBytes
+        })
+        if (done) {
+          buffer += decoder.decode()
+          // Force a final flush in case the stream closes without trailing blank line.
+          buffer += '\n'
+        } else {
+          buffer += decoder.decode(value, { stream: true })
+        }
 
         // Parse SSE events from buffer
         const lines = buffer.split('\n')
         buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-        let eventType = ''
-        let eventData = ''
+        if (lines.length > 0) {
+          sseLog(requestId, 'stream:lines_ready', {
+            lines: lines.length,
+            remaining_buffer_length: buffer.length
+          })
+        }
 
         for (const line of lines) {
-          if (line.startsWith('event:')) {
-            eventType = line.slice(6).trim()
-          } else if (line.startsWith('data:')) {
-            eventData = line.slice(5).trim()
-          } else if (line === '' && eventType && eventData) {
+          const normalizedLine = line.replace(/\r$/, '')
+          if (normalizedLine.startsWith('event:')) {
+            eventType = normalizedLine.slice(6).trim()
+            sseLog(requestId, 'stream:event_type', { eventType })
+          } else if (normalizedLine.startsWith('data:')) {
+            const chunk = normalizedLine.slice(5).trim()
+            eventData = eventData ? `${eventData}\n${chunk}` : chunk
+            sseLog(requestId, 'stream:data_chunk', {
+              eventType,
+              chunk_length: chunk.length,
+              data_length: eventData.length
+            })
+          } else if (normalizedLine.startsWith(':')) {
+            // SSE comment/heartbeat line
+            sseLog(requestId, 'stream:heartbeat', normalizedLine)
+            continue
+          } else if (normalizedLine.trim() === '' && eventType && eventData) {
             // End of event, process it
+            sseLog(requestId, 'stream:event_complete', {
+              eventType,
+              data_length: eventData.length,
+              data_preview: eventData.slice(0, 200)
+            })
             try {
               const parsed = JSON.parse(eventData)
 
               if (eventType === 'update' && parsed.frontpage) {
                 // Progressive update - apply partial results immediately
-                applyFrontpageResult(parsed.frontpage)
+                sseLog(requestId, 'stream:update_event', {
+                  module: parsed.module || null,
+                  keys: Object.keys(parsed.frontpage || {})
+                })
+                applyFrontpageResult(parsed.frontpage, requestId, `stream-update:${parsed.module || 'unknown'}`)
 
                 // Track and show progress
                 if (parsed.module && !completedModules.includes(parsed.module)) {
                   completedModules.push(parsed.module)
                   const moduleName = moduleNames[parsed.module] || parsed.module
-                  console.log(`✓ ${moduleName} 提取完成`)
+                  sseLog(requestId, 'stream:module_completed', { module: parsed.module, moduleName })
                 }
               } else if (eventType === 'done' && parsed.frontpage) {
                 // Final complete result
-                applyFrontpageResult(parsed.frontpage)
+                sseLog(requestId, 'stream:done_event', {
+                  completed_modules: completedModules,
+                  keys: Object.keys(parsed.frontpage || {})
+                })
+                applyFrontpageResult(parsed.frontpage, requestId, 'stream-done')
 
                 // Check for warnings
                 if (parsed.frontpage.confidence?.warnings?.length > 0) {
@@ -336,6 +503,7 @@ export function useMedicalTextExtraction(options: {
                 })
                 options.onExtracted?.()
               } else if (eventType === 'error') {
+                sseError(requestId, 'stream:error_event', parsed)
                 console.error('SSE error:', parsed)
                 try {
                   await reader.cancel()
@@ -346,6 +514,11 @@ export function useMedicalTextExtraction(options: {
                 throw new Error(parsed.error || 'Stream error')
               }
             } catch (parseError) {
+              sseError(requestId, 'stream:event_process_error', {
+                eventType,
+                eventDataPreview: eventData.slice(0, 300),
+                parseError
+              })
               console.warn('Failed to parse SSE data:', eventData, parseError)
             }
 
@@ -354,13 +527,24 @@ export function useMedicalTextExtraction(options: {
             eventData = ''
           }
         }
+
+        if (done) {
+          sseLog(requestId, 'stream:reader_done', {
+            chunks: chunkCount,
+            total_bytes: totalBytes,
+            completed_modules: completedModules
+          })
+          break
+        }
       }
     } catch (error: any) {
+      sseError(requestId, 'extractStructuredData:error', error)
       console.error('结构化提取失败:', error)
-      useMockFallback()
+      useMockFallback(requestId)
       message.warning('网络请求失败，已使用模拟数据')
       options.onExtracted?.()
     } finally {
+      sseLog(requestId, 'extractStructuredData:finally', { extracting: false })
       extracting.value = false
     }
   }
@@ -370,3 +554,4 @@ export function useMedicalTextExtraction(options: {
     extractStructuredData
   }
 }
+

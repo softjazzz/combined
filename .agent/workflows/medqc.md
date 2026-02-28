@@ -40,28 +40,31 @@ SICHUAN_MODEL=qwen2.5-14b-instruct
 // turbo-all
 
 ### 启动开发服务
-```bash
-# 前端 (端口 3000) - 交互模式
-cd apps/medqc-web && npm run dev -- --host --port 3000
 
-# 后端 (端口 8000) - 交互模式
-cd apps/medqc-web/backend-fastapi && ./start.sh
+> ⚠️ 后端必须用 **8001** 端口，因为 `vite.config.ts` 的 proxy 将 `/api` 转发到 `127.0.0.1:8001`
+
+```bash
+# 前端 (端口 3000)
+cd apps/medqc-web && npx vite --host 0.0.0.0 --port 3000
+
+# 后端 (端口 8001) ← 必须是 8001！
+cd apps/medqc-web/backend && uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 后台启动服务 (nohup)
 ```bash
 # 前端后台启动 (端口 3000)
-cd apps/medqc-web && nohup npm run dev -- --host --port 3000 > frontend.log 2>&1 &
+cd apps/medqc-web && nohup npx vite --host 0.0.0.0 --port 3000 > frontend.log 2>&1 &
 
-# 后端后台启动 (端口 8000)
-cd apps/medqc-web/backend-fastapi && nohup ./start.sh > backend.log 2>&1 &
+# 后端后台启动 (端口 8001)
+cd apps/medqc-web/backend && nohup uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload > backend.log 2>&1 &
 
 # 检查服务状态
-lsof -i :3000 -i :8000
+lsof -i :3000 -i :8001
 
 # 停止服务
 kill $(lsof -t -i :3000) 2>/dev/null  # 停止前端
-kill $(lsof -t -i :8000) 2>/dev/null  # 停止后端
+kill $(lsof -t -i :8001) 2>/dev/null  # 停止后端
 ```
 
 ### 运行测试

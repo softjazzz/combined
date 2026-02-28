@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..services.sichuan_qc_service import SichuanQCService
 from ..services.unified_rule_engine import UnifiedRuleEngine
+from ..services.segmented_qc_pipeline import SegmentedQCPipeline
 from ..services.llm_config_loader import LLMConfigLoader
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
@@ -231,103 +232,43 @@ async def evaluate(
                 _persist_evaluation_to_db(req.document_id, response)
             return response
         else:
-            # Use single-prompt mode compatible response shape
-            result = await qc_service.evaluate_document(
+            # ── 使用分段 Pipeline（切段 → 规则路由 → 分批 → 并发 LLM） ──
+            pipeline = SegmentedQCPipeline(
+                llm_client=qc_service.client,
+                max_concurrency=3,
+            )
+            result = await pipeline.evaluate(
                 document_id=req.document_id,
                 content=req.document_content,
-                document_type=req.document_type or "病程记录",
-                rule_ids=req.rule_ids  # 传递用户选择的规则ID
+                prompt_mode=req.prompt_mode or "plan_a",
             )
 
-            summary_from_service = result.get("evaluation_summary", {}) or {}
-
-            def _infer_status(item: Dict[str, Any]) -> str:
-                if item.get("error"):
-                    return "error"
-                status = item.get("status")
-                if status:
-                    return status
-                if item.get("notApplicable") or item.get("not_applicable"):
-                    return "not_applicable"
-                applicability = item.get("applicability")
-                if isinstance(applicability, dict) and applicability.get("is_applicable") is False:
-                    return "not_applicable"
-                compliant_flag = item.get("is_compliant")
-                if compliant_flag is False:
-                    return "non_compliant"
-                return "compliant"
-
-            def _summarize_results(items: List[Dict[str, Any]]) -> Dict[str, int]:
-                stats = {
-                    "total_rules": len(items),
-                    "compliant_rules": 0,
-                    "not_applicable": 0,
-                    "issues_found": 0,
-                }
-                for i in items:
-                    status = _infer_status(i)
-                    if status == "not_applicable":
-                        stats["not_applicable"] += 1
-                        stats["compliant_rules"] += 1
-                    elif status == "non_compliant":
-                        stats["issues_found"] += 1
-                    elif status == "compliant":
-                        stats["compliant_rules"] += 1
-                return stats
-
-            token_usage = int(result.get("token_usage", {}).get("total_tokens", 0))
-            processing_time = float(result.get("api_time", 0.0))
-
-            evaluation_results = result.get("evaluation_results") or []
-            if not evaluation_results:
-                evaluation_results = result.get("parsed_evaluation_results", [])
-
-            if not evaluation_results:
-                evaluation_results = [{
-                    "rule_id": "SUMMARY",
-                    "rule_name": "质控分析汇总",
-                    "status": "compliant",
-                    "is_compliant": True,
-                    "findings": "LLM 返回了非结构化结果",
-                    "evidence": (result.get("llm_output") or "")[:200],
-                    "location": "整体评估",
-                    "suggestion": "建议人工复核",
-                    "confidence": 0.5,
-                }]
-
-            stats_from_results = _summarize_results(evaluation_results)
-
-            total_rules = summary_from_service.get("total_rules") or stats_from_results["total_rules"]
-            if not total_rules and req.rule_ids:
-                total_rules = len(req.rule_ids)
-
-            compliant_rules = summary_from_service.get("compliant_rules", stats_from_results["compliant_rules"])
-            not_applicable = summary_from_service.get("not_applicable", stats_from_results["not_applicable"])
-            issues_found = summary_from_service.get("issues_found", stats_from_results["issues_found"])
-
-            compliance_rate = float(summary_from_service.get("compliance_rate")) if summary_from_service.get("compliance_rate") is not None else (
-                (compliant_rules / total_rules * 100.0) if total_rules else 100.0
-            )
-            grade = summary_from_service.get("overall_grade") or _grade_from_rate(compliance_rate)
+            # 将 pipeline 结果转为前端兼容格式
+            summary = result.get("evaluation_summary", {})
+            perf = result.get("performance_metrics", {})
+            token_usage = perf.get("token_usage", 0)
+            compliance_rate = summary.get("compliance_rate", 100.0)
 
             response = {
                 "document_id": req.document_id,
                 "evaluation_summary": {
-                    "total_rules": total_rules,
-                    "compliant_rules": compliant_rules,
-                    "not_applicable": not_applicable,
-                    "issues_found": issues_found,
+                    "total_rules": summary.get("total_rules", 0),
+                    "compliant_rules": summary.get("compliant_rules", 0),
+                    "not_applicable": 0,
+                    "issues_found": summary.get("issues_found", 0),
                     "compliance_rate": round(compliance_rate, 2),
-                    "overall_grade": grade,
-                    "critical_violations": issues_found,
-                    "model": summary_from_service.get("model", qc_service.client.model),
+                    "overall_grade": _grade_from_rate(compliance_rate),
+                    "critical_violations": summary.get("issues_found", 0),
+                    "model": summary.get("model", qc_service.client.model),
                 },
                 "performance_metrics": {
-                    "processing_time": processing_time,
+                    "processing_time": perf.get("pipeline_time", 0),
                     "token_usage": token_usage,
                     "estimated_cost": token_usage / 1000 * 0.002,
+                    "llm_calls": perf.get("llm_calls", 0),
                 },
-                "evaluation_results": evaluation_results,  # 使用真实的解析结果
+                "evaluation_results": result.get("evaluation_results", []),
+                "sections_summary": result.get("sections_summary", []),
                 "optimization_metrics": {
                     "token_savings_rate": 0.80,
                     "estimated_original_tokens": token_usage * 5,
@@ -340,7 +281,7 @@ async def evaluate(
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
-                "mode": "single_prompt",
+                "mode": "segmented_pipeline",
             }
             # Persist (best-effort)
             if req.persist:

@@ -235,6 +235,54 @@ class TestFrontPageExtractionService:
         result = service._parse_json_response("这不是 JSON")
         assert result is None
 
+    def test_normalize_diagnoses_structure_split_multiline_discharge_section(self):
+        """出院诊断多行时，应拆分为多条诊断而不是拼成一条。"""
+        service = FrontPageExtractionService()
+        medical_text = """
+出院诊断：
+1. 冠状动脉粥样硬化性心脏病
+不稳定型心绞痛
+冠状动脉支架植入术后
+2. 高血压病3级 极高危
+3. 2型糖尿病
+4. 心功能II级
+"""
+        diagnoses = {
+            "discharge_main_diagnosis_text": "冠状动脉粥样硬化性心脏病 不稳定型心绞痛 冠状动脉支架植入术后",
+            "discharge_other_diagnoses_texts": [],
+        }
+
+        normalized = service._normalize_diagnoses_structure(medical_text, diagnoses)
+
+        assert normalized["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病"
+        assert "不稳定型心绞痛" in normalized["discharge_other_diagnoses_texts"]
+        assert "冠状动脉支架植入术后" in normalized["discharge_other_diagnoses_texts"]
+        assert "高血压病3级 极高危" in normalized["discharge_other_diagnoses_texts"]
+        assert "2型糖尿病" in normalized["discharge_other_diagnoses_texts"]
+        assert "心功能II级" in normalized["discharge_other_diagnoses_texts"]
+
+    def test_normalize_diagnoses_structure_align_other_icds_length(self):
+        """诊断拆分后，应自动补齐/截断 other ICD 列表长度。"""
+        service = FrontPageExtractionService()
+        medical_text = """
+出院诊断：
+1. 冠心病
+不稳定型心绞痛
+2. 高血压病3级
+"""
+        diagnoses = {
+            "discharge_main_diagnosis_text": "冠心病 不稳定型心绞痛",
+            "discharge_other_diagnoses_texts": [],
+            "discharge_other_icds": ["I10"],
+        }
+
+        normalized = service._normalize_diagnoses_structure(medical_text, diagnoses)
+
+        others = normalized["discharge_other_diagnoses_texts"]
+        other_icds = normalized.get("discharge_other_icds")
+        assert isinstance(other_icds, list)
+        assert len(other_icds) == len(others)
+
     @pytest.mark.asyncio
     async def test_infer_admission_conditions(
         self,

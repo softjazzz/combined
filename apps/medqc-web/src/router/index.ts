@@ -89,6 +89,17 @@ const routes: RouteRecordRaw[] = [
           icon: 'CheckCircleOutlined'
         }
       },
+      // 智能质控工作站
+      {
+        path: 'workstation',
+        name: 'Workstation',
+        component: () => import('@/views/workstation/WorkstationView.vue'),
+        meta: {
+          title: '智能质控工作站',
+          icon: 'DesktopOutlined',
+          permission: ['admin', 'qc_manager', 'coder']
+        }
+      },
       {
         path: 'frontpage-demo',
         name: 'FrontPageAutoDemo',

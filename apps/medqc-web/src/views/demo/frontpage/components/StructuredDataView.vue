@@ -628,13 +628,6 @@ const fieldCategories = computed(() => {
   const fp = props.frontpage
   if (!fp) return {}
   
-  // Debug logging
-  console.log('=== Summary Table Data Debug ===')
-  console.log('Diagnoses:', fp.diagnoses)
-  console.log('Procedures:', fp.procedures)
-  console.log('discharge_main_diagnosis_text:', fp.diagnoses?.discharge_main_diagnosis_text)
-  console.log('main_procedure_text:', fp.procedures?.main_procedure_text)
-  
   return {
     '基本信息': [
       { label: '患者姓名', value: fp.basic_info?.patient_name },
