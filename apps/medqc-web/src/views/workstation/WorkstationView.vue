@@ -131,25 +131,14 @@
               <FileTextOutlined style="font-size: 32px; color: #d9d9d9" />
               <p>选择病历后自动生成首页</p>
             </div>
-            <div v-else class="frontpage-panel">
-              <a-button type="primary" block :loading="generating" @click="generateFrontPage" style="margin-bottom: 16px">
-                <ThunderboltOutlined />
-                AI 生成病案首页
-              </a-button>
-              <div v-if="frontPageFields.length > 0" class="frontpage-result">
-                <div v-for="field in frontPageFields" :key="field.label" class="fp-field">
-                  <div class="fp-label">{{ field.label }}</div>
-                  <div class="fp-value">
-                    {{ field.value }}
-                    <a-tooltip v-if="field.confidence < 1" :title="`置信度 ${(field.confidence * 100).toFixed(0)}%，来源：${field.source}`">
-                      <span class="fp-confidence" :class="field.confidence >= 0.9 ? 'high' : field.confidence >= 0.7 ? 'mid' : 'low'">
-                        {{ (field.confidence * 100).toFixed(0) }}%
-                      </span>
-                    </a-tooltip>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <FrontPagePanel
+              v-else
+              :fields="frontPageFields"
+              :generating="generating"
+              @generate="generateFrontPage"
+              @save="handleFrontPageSave"
+              @export="handleFrontPageExport"
+            />
           </div>
 
           <!-- Tab2: 质控结果 -->
@@ -332,6 +321,7 @@ import {
   type QCResult,
   type FrontPageField,
 } from './mockData'
+import FrontPagePanel from './FrontPagePanel.vue'
 
 const router = useRouter()
 
@@ -528,6 +518,16 @@ async function runDRGGrouping() {
   } finally {
     drgRunning.value = false
   }
+}
+
+function handleFrontPageSave() {
+  console.log('保存首页数据')
+  // TODO: 调用后端 API 保存
+}
+
+function handleFrontPageExport(format: string) {
+  console.log('导出首页:', format)
+  // TODO: 调用后端导出 API
 }
 
 // 面板拖拽调整大小
