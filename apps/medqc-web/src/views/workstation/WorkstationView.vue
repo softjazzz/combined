@@ -125,19 +125,18 @@
           <a-segmented v-model:value="activeAnalysisTab" :options="analysisTabs" size="small" />
         </div>
         <div class="analysis-content">
-          <!-- Tab1: 首页生成 -->
+          <!-- Tab1: 首页生成（复用 StructuredDataView） -->
           <div v-if="activeAnalysisTab === 'frontpage'" class="tab-content">
             <div v-if="!selectedRecord" class="empty-hint">
               <FileTextOutlined style="font-size: 32px; color: #d9d9d9" />
               <p>选择病历后自动生成首页</p>
             </div>
-            <FrontPagePanel
+            <StructuredDataView
               v-else
-              :fields="frontPageFields"
-              :generating="generating"
-              @generate="generateFrontPage"
-              @save="handleFrontPageSave"
-              @export="handleFrontPageExport"
+              :extracting="bridge.extracting.value"
+              :frontpage="bridge.frontpage.value"
+              :has-medical-text="bridge.hasMedicalText.value"
+              @extract="bridge.extractStructuredData"
             />
           </div>
 
@@ -238,56 +237,32 @@
               <ClusterOutlined style="font-size: 32px; color: #d9d9d9" />
               <p>选择病历后进行 DRG 入组</p>
             </div>
-            <div v-else>
-              <a-button type="primary" block @click="runDRGGrouping" :loading="drgRunning" style="margin-bottom: 16px">
-                <ClusterOutlined />
-                DRG 预入组
-              </a-button>
-              <div v-if="drgResult" class="drg-result">
-                <a-descriptions bordered size="small" :column="1">
-                  <a-descriptions-item label="DRG 分组">
-                    <a-tag color="blue">{{ drgResult.group }}</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item label="分组名称">{{ drgResult.groupName }}</a-descriptions-item>
-                  <a-descriptions-item label="权重(RW)">{{ drgResult.weight }}</a-descriptions-item>
-                  <a-descriptions-item label="费用参考">￥{{ drgResult.refCost.toLocaleString() }}</a-descriptions-item>
-                  <a-descriptions-item label="当前费用">
-                    <span :style="{ color: drgResult.currentCost > drgResult.refCost ? '#ff4d4f' : '#52c41a' }">
-                      ￥{{ drgResult.currentCost.toLocaleString() }}
-                    </span>
-                  </a-descriptions-item>
-                  <a-descriptions-item label="盈亏预测">
-                    <span :style="{ color: drgResult.profit >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 'bold' }">
-                      {{ drgResult.profit >= 0 ? '+' : '' }}￥{{ drgResult.profit.toLocaleString() }}
-                    </span>
-                  </a-descriptions-item>
-                </a-descriptions>
-              </div>
-            </div>
+            <DRGGroupingTab
+              v-else
+              :drg-result="bridge.drgResult.value"
+              :loading="bridge.drgLoading.value"
+              :has-frontpage="bridge.hasFrontpage.value"
+              :main-diagnosis-code="bridge.mainDiagnosisCode.value"
+              :main-diagnosis-text="bridge.mainDiagnosisText.value"
+              :main-procedure-code="bridge.mainProcedureCode.value"
+              :main-procedure-name="bridge.mainProcedureName.value"
+              @group="bridge.performDRGGrouping"
+              @open-optimization="bridge.openOptimizationDrawer"
+            />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 数据导入弹窗 -->
-    <a-modal
-      v-model:open="showDataImport"
-      title="导入病历数据"
-      :footer="null"
-      width="600px"
-    >
-      <a-upload-dragger
-        name="file"
-        accept=".xlsx,.xls,.csv"
-        :before-upload="handleFileUpload"
-      >
-        <p class="ant-upload-drag-icon">
-          <InboxOutlined />
-        </p>
-        <p class="ant-upload-text">点击或拖拽文件上传</p>
-        <p class="ant-upload-hint">支持 Excel (.xlsx/.xls) 和 CSV 格式，单次最多 500 条</p>
-      </a-upload-dragger>
-    </a-modal>
+    <!-- 编码优化建议抽屉（复用 CodingOptimizationDrawer） -->
+    <CodingOptimizationDrawer
+      :visible="bridge.suggestionDrawerVisible.value"
+      :loading="bridge.suggestionsLoading.value"
+      :suggestions="bridge.suggestions.value"
+      :get-suggestion-title="bridge.getSuggestionTitle"
+      @update:visible="bridge.suggestionDrawerVisible.value = $event"
+      @handle="bridge.handleSuggestion"
+    />
   </div>
 </template>
 
@@ -304,7 +279,6 @@ import {
   SearchOutlined,
   UploadOutlined,
   AlertOutlined,
-  InboxOutlined,
   FileSearchOutlined,
   FileTextOutlined,
   ThunderboltOutlined,
@@ -316,12 +290,11 @@ import {
 import {
   mockRecords,
   generateMockQCResults,
-  generateMockFrontPage,
   type MedicalRecord,
   type QCResult,
-  type FrontPageField,
 } from './mockData'
-import FrontPagePanel from './FrontPagePanel.vue'
+import { useWorkstationBridge } from './useWorkstationBridge'
+import { StructuredDataView, DRGGroupingTab, CodingOptimizationDrawer } from '../demo/frontpage/components'
 
 const router = useRouter()
 
@@ -381,12 +354,8 @@ const analysisTabs = [
   { label: 'DRG', value: 'drg' },
 ]
 
-// 数据导入
-const showDataImport = ref(false)
-
-// 首页生成
-const generating = ref(false)
-const frontPageFields = ref<FrontPageField[]>([])
+// ===== 桥接层：复用 frontpage-demo 的 composables =====
+const bridge = useWorkstationBridge(selectedRecord)
 
 // 质控结果
 const qcRunning = ref(false)
@@ -399,10 +368,6 @@ const icdLoading = ref(false)
 const icdTotal = ref(0)
 const icdCodeType = ref('all')
 const icdStats = ref<any>(null)
-
-// DRG 分组
-const drgRunning = ref(false)
-const drgResult = ref<any>(null)
 
 // ==================== 方法 ====================
 
@@ -429,21 +394,7 @@ function filterRecords() {
 function selectRecord(record: MedicalRecord) {
   selectedRecord.value = record
   activeDocTab.value = 'admission'
-  frontPageFields.value = []
   qcResults.value = []
-  drgResult.value = null
-}
-
-async function generateFrontPage() {
-  if (!selectedRecord.value) return
-  generating.value = true
-  try {
-    // 模拟 AI 处理延迟
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    frontPageFields.value = generateMockFrontPage(selectedRecord.value)
-  } finally {
-    generating.value = false
-  }
 }
 
 async function runQualityControl() {
@@ -499,36 +450,7 @@ async function loadIcdStats() {
   }
 }
 
-async function runDRGGrouping() {
-  if (!selectedRecord.value) return
-  drgRunning.value = true
-  try {
-    await new Promise(resolve => setTimeout(resolve, 1200))
-    // Mock DRG 分组结果
-    const record = selectedRecord.value
-    const mockGroups: Record<string, any> = {
-      '心内科': { group: 'F61A', groupName: '心肌梗死伴严重并发症', weight: 3.2, refCost: 42000, currentCost: 38500 },
-      '普外科': { group: 'G18B', groupName: '阑尾切除术（无并发症）', weight: 0.85, refCost: 8500, currentCost: 7200 },
-      '呼吸内科': { group: 'E62B', groupName: '肺炎（重症）', weight: 1.8, refCost: 18000, currentCost: 22000 },
-      '产科': { group: 'O60C', groupName: '剖宫产（瘢痕子宫再次手术）', weight: 1.2, refCost: 12000, currentCost: 10500 },
-      '骨科': { group: 'I13A', groupName: '股骨颈骨折人工关节置换', weight: 2.8, refCost: 38000, currentCost: 35000 },
-    }
-    const data = mockGroups[record.deptName] || { group: 'Z99Z', groupName: '未分组', weight: 1.0, refCost: 10000, currentCost: 10000 }
-    drgResult.value = { ...data, profit: data.refCost - data.currentCost }
-  } finally {
-    drgRunning.value = false
-  }
-}
-
-function handleFrontPageSave() {
-  console.log('保存首页数据')
-  // TODO: 调用后端 API 保存
-}
-
-function handleFrontPageExport(format: string) {
-  console.log('导出首页:', format)
-  // TODO: 调用后端导出 API
-}
+// runDRGGrouping 和 generateFrontPage 已由 bridge 处理
 
 // 面板拖拽调整大小
 function startResize(side: 'left' | 'right', event: MouseEvent) {
