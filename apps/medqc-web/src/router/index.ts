@@ -780,6 +780,16 @@ const routes: RouteRecordRaw[] = [
       }
     ]
   },
+  // 验收工作站 V2（独立路由，对齐 PRD 验收范围）
+  {
+    path: '/workstation-v2',
+    name: 'WorkstationV2',
+    component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+    meta: {
+      requiresAuth: false,
+      title: '病案智能质控工作站'
+    }
+  },
   {
     path: '/demo/clinical-workstation',
     name: 'ClinicalWorkstationDemo',
