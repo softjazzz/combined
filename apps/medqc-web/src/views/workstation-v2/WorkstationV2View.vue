@@ -309,45 +309,17 @@ const {
 const frontpage = computed(() => demoCase.value?.frontpage || null)
 
 // ==================== 测试用例 ====================
-const testCases = ref([
-  {
-    name: '测试病历1',
-    description: '冠心病支架植入术完整住院病历',
-    medical_text: '', // 将在 onMounted 中从 API 或内置数据加载
-  },
-  {
-    name: '测试病历2',
-    description: '肛瘘手术完整住院病历',
-    medical_text: '',
-  },
-])
+import { getBuiltinTestCases } from '@/views/demo/frontpage/data/testCases'
 
-// 加载测试用例（复用 FrontPageDemoView 的数据加载逻辑）
+const testCases = ref(getBuiltinTestCases())
+
+// 加载测试用例
 async function loadDemoCase(idx: number) {
   if (idx < 0 || idx >= testCases.value.length) return
   loading.value = true
   currentCaseIndex.value = idx
   try {
     const tc = testCases.value[idx]
-    // 如果测试用例还没有文本，尝试从后端加载
-    if (!tc.medical_text) {
-      try {
-        const resp = await fetch('/api/v1/test-cases')
-        const json = await resp.json()
-        if (json.data?.length > 0) {
-          json.data.forEach((item: any, i: number) => {
-            if (i < testCases.value.length) {
-              testCases.value[i].medical_text = item.medical_text || ''
-              testCases.value[i].name = item.name || testCases.value[i].name
-            }
-          })
-        }
-      } catch {
-        // 后端未运行，使用提示
-        message.info('后端未运行，请在左侧粘贴病历原文或通过数据上传导入')
-      }
-    }
-
     await new Promise(resolve => setTimeout(resolve, 300))
     demoCase.value = {
       case_id: `case_${idx + 1}`,
@@ -356,9 +328,7 @@ async function loadDemoCase(idx: number) {
       frontpage: null,
       insurance_claim: null,
     }
-    if (tc.medical_text) {
-      message.success(`${tc.name} 加载成功`)
-    }
+    message.success(`${tc.name} 加载成功`)
   } finally {
     loading.value = false
   }
