@@ -121,6 +121,16 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'workstation/qc-stats',
+        name: 'QCStats',
+        component: () => import('@/views/workstation/QCStatsView.vue'),
+        meta: {
+          title: '质控统计分析',
+          hidden: true,
+          permission: ['admin', 'qc_manager']
+        }
+      },
+      {
         path: 'frontpage-demo',
         name: 'FrontPageAutoDemo',
         component: () => import('@/views/demo/FrontPageDemoView.vue'),
