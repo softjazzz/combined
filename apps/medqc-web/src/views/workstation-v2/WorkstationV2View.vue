@@ -1,7 +1,7 @@
 <template>
-  <div class="ws-v2">
-    <!-- 侧边栏 -->
-    <aside :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]">
+  <div :class="['ws-v2', { 'ws-v2-embedded': embedded }]">
+    <!-- 侧边栏（仅独立模式） -->
+    <aside v-if="!embedded" :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]">
       <div class="sidebar-header">
         <div v-if="!sidebarCollapsed" class="sidebar-title">
           <ThunderboltOutlined style="color: #1677ff" />
@@ -46,6 +46,11 @@
             事后分析
           </a-menu-item>
         </a-sub-menu>
+
+        <a-menu-item key="icd-search">
+          <template #icon><SearchOutlined /></template>
+          <span>ICD 编码查询</span>
+        </a-menu-item>
 
         <a-menu-divider />
 
@@ -133,12 +138,9 @@
               />
 
               <!-- Tab5: ICD 查询 (M4) -->
-              <div v-else-if="activeTab === 'icd'" class="tab-placeholder">
-                <SearchOutlined style="font-size: 48px; color: #1677ff" />
-                <h3>ICD 编码查询</h3>
-                <p>ICD-10 疾病编码 + ICD-9-CM-3 手术编码</p>
-                <p class="hint">Phase 2 开发：对接 /api/v1/icd/search</p>
-              </div>
+              <ICDSearchPanel
+                v-else-if="activeTab === 'icd'"
+              />
             </div>
           </div>
         </div>
@@ -202,6 +204,11 @@
         <h3>质控消息概览</h3>
         <p>M5：每日问题汇总 + 科室分布</p>
       </div>
+
+      <!-- ICD 编码查询（独立全屏视图） -->
+      <div v-else-if="currentView === 'icd-search'" class="icd-fullpage">
+        <ICDSearchPanel />
+      </div>
     </main>
 
     <!-- 编码优化建议抽屉 -->
@@ -213,11 +220,18 @@
       @update:visible="suggestionDrawerVisible = $event"
       @handle="handleSuggestion"
     />
+
+    <!-- 质控提醒浮动窗口 -->
+    <QCAlertPanel
+      :frontpage="frontpage"
+      :analyzing="extracting"
+      @refresh="extractStructuredData"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ThunderboltOutlined,
@@ -250,14 +264,33 @@ import {
   ExcelUploadView,
   PreAnalysisView,
 } from '@/views/demo/frontpage/components'
+import ICDSearchPanel from './components/ICDSearchPanel.vue'
+import QCAlertPanel from './components/QCAlertPanel.vue'
 // 复用 composables
 import { useMedicalTextExtraction, useDRGGrouping } from '@/views/demo/frontpage/composables'
 
+// ==================== Props ====================
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+  initialView?: string
+}>(), {
+  embedded: false,
+  initialView: 'workbench',
+})
+
 // ==================== 布局状态 ====================
 const sidebarCollapsed = ref(false)
-const menuSelectedKeys = ref(['workbench'])
-const currentView = ref('workbench')
+const menuSelectedKeys = ref([props.initialView || 'workbench'])
+const currentView = ref(props.initialView || 'workbench')
 const activeTab = ref('frontpage')
+
+// 嵌入模式下，跟随路由 prop 变化切换视图
+watch(() => props.initialView, (newView) => {
+  if (newView && props.embedded) {
+    currentView.value = newView
+    menuSelectedKeys.value = [newView]
+  }
+})
 
 const analysisTabs = [
   { label: '首页', value: 'frontpage' },
@@ -436,6 +469,11 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* ==================== 嵌入模式 ====================  */
+.ws-v2-embedded {
+  height: calc(100vh - 64px);
+}
+
 /* ==================== 主内容区 ==================== */
 .ws-v2-main {
   flex: 1;
@@ -545,6 +583,16 @@ onUnmounted(() => {
   margin-top: 8px;
   color: #bbb;
   font-size: 12px;
+}
+
+/* ==================== ICD 全页面 ==================== */
+.icd-fullpage {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 /* ==================== 滚动条 ==================== */

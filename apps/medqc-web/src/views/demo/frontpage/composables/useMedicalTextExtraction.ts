@@ -308,11 +308,8 @@ export function useMedicalTextExtraction(options: {
       }
 
       // Use SSE stream API for progressive display.
-      // Some dev proxy paths may hang before response headers; we retry direct backend URL.
+      // All requests go through Vite proxy (relative path) to avoid CORS issues.
       const streamUrls = ['/api/v1/frontpage/auto-generate-draft-stream']
-      if (window?.location?.hostname === 'localhost') {
-        streamUrls.push('http://10.216.235.9:8001/api/v1/frontpage/auto-generate-draft-stream')
-      }
 
       const streamHeaderTimeoutMs = 8000
       let response: Response | null = null

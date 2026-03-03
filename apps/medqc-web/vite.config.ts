@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
-const backendTarget = 'http://10.216.235.9:8001'
+const backendTarget = 'http://localhost:8002'
 
 // https://vitejs.dev/config/
 export default defineConfig({

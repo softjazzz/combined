@@ -162,15 +162,21 @@ DIAGNOSES_PROMPT = """从以下病历中提取诊断信息。
 
 PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息。
 
+【重要规则】
+- 如果手术记录中包含多个手术操作（用"+"或"及"或顿号连接），必须将每个手术拆分为独立条目
+- 第一个手术为主要手术，其余放入 other_procedures
+- 例如："高位复杂性肛瘘切除术+肛周脓肿切开引流术+亚甲蓝肛周封闭术" 应拆分为3个独立手术
+
 【病历内容】
 {medical_text}
 
 【输出格式】
 ```json
 {{
-  "main_procedure_text": "主要手术名称",
+  "main_procedure_text": "主要手术名称（仅第一个手术）",
   "main_procedure_date": "YYYY-MM-DD",
   "main_procedure_level": "手术级别",
+  "other_procedures_texts": ["其他手术1", "其他手术2"],
   "surgeon_name": "术者姓名",
   "assistant1_name": "I助姓名",
   "assistant2_name": "II助姓名",
@@ -1040,21 +1046,42 @@ class FrontPageExtractionService:
         return diagnoses
 
     async def _suggest_procedure_codes(self, procedures: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        F7: 为手术推荐 ICD-9-CM-3 编码
-        """
+        """为手术名称推荐 ICD-9 编码"""
         from .icd_coding_service import get_icd_coding_service
         icd_service = get_icd_coding_service()
-        
+
+        # 先拆分复合手术名称
+        procedures = self._split_compound_procedures(procedures)
+
         main_proc = procedures.get("main_procedure_text")
         if main_proc:
             suggestions = await icd_service.suggest_procedure_codes(main_proc, top_k=3)
             if suggestions:
                 procedures["main_procedure_code_suggestions"] = suggestions
-                # 自动填入最高置信度的编码
                 procedures["main_procedure_code"] = suggestions[0].get("code")
                 logger.info(f"主手术编码推荐: {main_proc} -> {suggestions[0].get('code')}")
-        
+
+        return procedures
+
+    @staticmethod
+    def _split_compound_procedures(procedures: Dict[str, Any]) -> Dict[str, Any]:
+        """拆分用 + 或顿号连接的复合手术名称为独立条目"""
+        main_text = procedures.get("main_procedure_text", "") or ""
+        if not main_text:
+            return procedures
+
+        # 检测是否包含分隔符（+、＋、、）
+        parts = re.split(r'[+＋、]', main_text)
+        parts = [p.strip() for p in parts if p.strip()]
+
+        if len(parts) <= 1:
+            return procedures
+
+        # 第一个 → 主手术，其余追加到 other_procedures_texts
+        procedures["main_procedure_text"] = parts[0]
+        existing_others = procedures.get("other_procedures_texts") or []
+        procedures["other_procedures_texts"] = parts[1:] + existing_others
+        logger.info(f"拆分复合手术: '{main_text}' -> 主: '{parts[0]}', 其他: {parts[1:]}")
         return procedures
 
     async def _load_demo_frontpage(self) -> FrontPageDraft:
