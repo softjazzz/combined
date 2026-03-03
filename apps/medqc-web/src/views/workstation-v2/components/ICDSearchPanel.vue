@@ -1,113 +1,122 @@
 <template>
-  <div class="icd-search-panel">
-    <!-- 顶部 Tab：临床版 / 医保版 -->
-    <div class="panel-tabs">
-      <a-segmented v-model:value="codeVersion" :options="versionTabs" block />
-    </div>
+  <div class="icd-workspace">
+    <!-- 顶部 Hero 搜索区 -->
+    <ICDSearchHero
+      :code-version="codeVersion"
+      :code-type="codeType"
+      :search-query="searchQuery"
+      :stats="codeStats"
+      @update:code-version="onVersionChange"
+      @update:code-type="onTypeChange"
+      @update:search-query="(v) => searchQuery = v"
+      @search="doSearch"
+    />
 
-    <!-- 编码视图 -->
-    <div class="coding-view">
-      <!-- 子 Tab：诊断 / 手术 -->
-      <div class="sub-tabs">
-        <a-segmented v-model:value="codeType" :options="codeTypeTabs" block />
-      </div>
-
-      <!-- 搜索框 -->
-      <div class="search-box">
-        <a-input-search
-          v-model:value="searchQuery"
-          :placeholder="codeType === 'icd10' ? '输入诊断名称或编码 (至少2位)...' : '输入手术名称或编码 (至少2位)...'"
-          allow-clear
-          @search="onSearch"
-          @change="onSearchDebounced"
-        >
-          <template #prefix>
-            <SearchOutlined style="color: #bfbfbf" />
-          </template>
-        </a-input-search>
-      </div>
-
-      <!-- 搜索结果 -->
-      <div v-if="searchQuery.length >= 2 && searchResults.length > 0" class="search-results custom-scrollbar">
-        <div class="result-header">
-          <span>搜索结果</span>
-          <a-tag color="blue">{{ searchTotal }} 条</a-tag>
+    <!-- 主内容区：双栏 -->
+    <div class="workspace-body">
+      <!-- 左栏：搜索结果 / 树形浏览 -->
+      <div class="workspace-left custom-scrollbar">
+        <!-- 搜索中 -->
+        <div v-if="searchLoading" class="state-hint">
+          <a-spin />
+          <p>搜索中…</p>
         </div>
-        <div
-          v-for="item in searchResults"
-          :key="item.code"
-          class="result-item"
-          @click="onResultClick(item)"
-        >
-          <div class="result-main">
-            <span class="result-code">{{ item.code }}</span>
-            <span class="result-name" v-html="highlightMatch(item.name, searchQuery)" />
-            <a-tag v-if="item.type === 'icd10'" color="blue" size="small">ICD-10</a-tag>
-            <a-tag v-else color="green" size="small">ICD-9</a-tag>
+
+        <!-- 搜索结果 -->
+        <div v-else-if="searchQuery.length >= 2 && searchResults.length > 0" class="search-results">
+          <div class="results-header">
+            <span>搜索结果</span>
+            <a-tag color="blue">{{ searchTotal }} 条</a-tag>
           </div>
-          <!-- 映射附注 -->
-          <div v-if="item.mapped_code" class="result-mapping" :class="{ 'mapping-diff': item.is_diff }">
-            <span class="mapping-label">{{ item.mapped_version }}:</span>
-            <span class="mapping-code">{{ item.mapped_code }}</span>
-            <span v-if="item.is_diff && item.mapped_name" class="mapping-name">{{ item.mapped_name }}</span>
-            <a-tag v-if="item.is_diff" color="orange" size="small">编码不同</a-tag>
-            <a-tag v-else color="default" size="small">相同</a-tag>
-          </div>
-        </div>
-        <div v-if="searchTotal > searchResults.length" class="result-more">
-          <a-button type="link" size="small" @click="loadMoreResults">加载更多...</a-button>
-        </div>
-      </div>
-
-      <!-- 无搜索结果提示 -->
-      <div v-else-if="searchQuery.length >= 2 && searchResults.length === 0 && !searchLoading" class="empty-hint">
-        <SearchOutlined style="font-size: 32px; color: #d9d9d9" />
-        <p>未找到匹配的编码</p>
-      </div>
-
-      <!-- 搜索中 -->
-      <div v-else-if="searchLoading" class="empty-hint">
-        <a-spin />
-        <p>搜索中...</p>
-      </div>
-
-      <!-- 树形浏览（无搜索时显示） -->
-      <div v-else class="tree-browser custom-scrollbar">
-        <a-spin :spinning="treeLoading">
-          <a-tree
-            v-if="treeData.length > 0"
-            :tree-data="treeData"
-            :load-data="onLoadChildren"
-            show-icon
-            block-node
-            :selectable="true"
-            @select="onTreeSelect"
+          <div
+            v-for="item in searchResults"
+            :key="item.code + item.type"
+            class="result-card"
+            :class="{ 'result-card--active': selectedCode?.code === item.code }"
+            @click="selectCode(item)"
           >
-            <template #icon="{ data }">
-              <FolderOutlined v-if="!data.isLeaf" style="color: #1677ff" />
-              <FileTextOutlined v-else style="color: #52c41a" />
-            </template>
-            <template #title="{ title, data }">
-              <span :class="{ 'tree-leaf': data.isLeaf }">
-                <template v-if="data.code_range">
-                  <span class="tree-code-range">({{ data.code_range }})</span>
-                </template>
-                {{ title }}
-              </span>
-            </template>
-          </a-tree>
-          <div v-else class="empty-hint">
-            <FolderOpenOutlined style="font-size: 32px; color: #d9d9d9" />
-            <p>暂无编码数据</p>
+            <div class="result-main">
+              <span class="result-code">{{ item.code }}</span>
+              <span class="result-name" v-html="highlightMatch(item.name, searchQuery)" />
+              <a-tag
+                :color="item.type === 'icd10' ? 'blue' : 'green'"
+                size="small"
+                class="result-type-tag"
+              >
+                {{ item.type === 'icd10' ? 'ICD-10' : 'ICD-9' }}
+              </a-tag>
+            </div>
+            <!-- 映射附注 -->
+            <div v-if="item.mapped_code" class="result-mapping" :class="{ 'mapping-diff': item.is_diff }">
+              <span class="mapping-label">{{ item.mapped_version }}:</span>
+              <span class="mapping-code">{{ item.mapped_code }}</span>
+              <a-tag v-if="item.is_diff" color="orange" size="small">编码不同</a-tag>
+              <a-tag v-else color="default" size="small">相同</a-tag>
+            </div>
           </div>
-        </a-spin>
+          <div v-if="searchTotal > searchResults.length" class="load-more">
+            <a-button type="link" size="small" @click="loadMoreResults">加载更多…</a-button>
+          </div>
+        </div>
+
+        <!-- 无搜索结果 -->
+        <div v-else-if="searchQuery.length >= 2 && searchResults.length === 0 && !searchLoading" class="state-hint">
+          <SearchOutlined style="font-size: 40px; color: #d9d9d9" />
+          <p>未找到匹配 "{{ searchQuery }}" 的编码</p>
+        </div>
+
+        <!-- 树形浏览（默认） -->
+        <div v-else class="tree-browser">
+          <a-spin :spinning="treeLoading">
+            <a-tree
+              v-if="treeData.length > 0"
+              :tree-data="treeData"
+              :load-data="onLoadChildren"
+              show-icon
+              block-node
+              :selectable="true"
+              @select="onTreeSelect"
+            >
+              <template #icon="{ data }">
+                <FolderOutlined v-if="!data.isLeaf" class="tree-folder-icon" />
+                <FileTextOutlined v-else class="tree-leaf-icon" />
+              </template>
+              <template #title="{ title, data }">
+                <span class="tree-node" :class="{ 'tree-node--leaf': data.isLeaf }">
+                  <span v-if="data.code_range" class="tree-range-tag">{{ data.code_range }}</span>
+                  {{ title }}
+                </span>
+              </template>
+            </a-tree>
+            <div v-else class="state-hint">
+              <FolderOpenOutlined style="font-size: 40px; color: #d9d9d9" />
+              <p>暂无编码数据</p>
+            </div>
+          </a-spin>
+        </div>
+      </div>
+
+      <!-- 右栏：编码详情 -->
+      <div class="workspace-right">
+        <ICDDetailPanel
+          :selected-code="selectedCode"
+          @copy="onCopyCode"
+        />
       </div>
     </div>
+
+    <!-- 底部最近查看 -->
+    <ICDRecentBar
+      :recent-codes="recentCodes"
+      @select="selectCode"
+      @clear="recentCodes = []"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
   FolderOutlined,
@@ -116,45 +125,36 @@ import {
 } from '@ant-design/icons-vue'
 import type { TreeProps } from 'ant-design-vue'
 
-// ==================== Tab 状态 ====================
+import ICDSearchHero from './ICDSearchHero.vue'
+import ICDDetailPanel from './ICDDetailPanel.vue'
+import ICDRecentBar from './ICDRecentBar.vue'
+import type { ICDCodeDetail } from './ICDDetailPanel.vue'
+import type { RecentCode } from './ICDRecentBar.vue'
+
+// ==================== 状态管理 ====================
 const codeVersion = ref('clinical')
-const versionTabs = [
-  { label: '🏥 临床版', value: 'clinical' },
-  { label: '🏦 医保版', value: 'insurance' },
-]
-
 const codeType = ref('icd10')
-const codeTypeTabs = [
-  { label: '诊断搜索 (ICD-10)', value: 'icd10' },
-  { label: '手术搜索 (ICD-9)', value: 'icd9cm3' },
-]
-
-// ==================== 搜索 ====================
 const searchQuery = ref('')
 const searchResults = ref<any[]>([])
 const searchTotal = ref(0)
 const searchLoading = ref(false)
-let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const selectedCode = ref<ICDCodeDetail | null>(null)
+const recentCodes = ref<RecentCode[]>([])
+const codeStats = ref<{ icd10Count?: number; icd9Count?: number }>({})
 
-function onSearchDebounced() {
-  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
-  searchDebounceTimer = setTimeout(() => {
-    if (searchQuery.value.length >= 2) {
-      doSearch()
-    } else {
-      searchResults.value = []
-      searchTotal.value = 0
-    }
-  }, 300)
+// ==================== 事件处理 ====================
+function onVersionChange(v: string) {
+  codeVersion.value = v
 }
 
-function onSearch() {
-  if (searchQuery.value.length >= 2) {
-    doSearch()
-  }
+function onTypeChange(v: string) {
+  codeType.value = v
 }
 
+// ==================== 搜索 ====================
 async function doSearch(offset = 0) {
+  if (typeof offset === 'string') offset = 0
+  if (searchQuery.value.length < 2) return
   searchLoading.value = true
   try {
     const params = new URLSearchParams({
@@ -191,8 +191,42 @@ function highlightMatch(text: string, query: string): string {
   return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>')
 }
 
-function onResultClick(item: any) {
-  console.log('选中编码:', item)
+// ==================== 编码选择 ====================
+function selectCode(item: any) {
+  selectedCode.value = {
+    code: item.code,
+    name: item.name || item.title,
+    type: item.type || codeType.value,
+    mapped_code: item.mapped_code,
+    mapped_name: item.mapped_name,
+    mapped_version: item.mapped_version,
+    is_diff: item.is_diff,
+    category_path: item.category_path,
+    inclusions: item.inclusions,
+    exclusions: item.exclusions,
+  }
+  addToRecent(item)
+}
+
+function addToRecent(item: any) {
+  const entry: RecentCode = {
+    code: item.code,
+    name: item.name || item.title || '',
+    type: item.type || codeType.value,
+  }
+  // 去重并限制最多8条
+  recentCodes.value = [
+    entry,
+    ...recentCodes.value.filter((r) => r.code !== entry.code),
+  ].slice(0, 8)
+}
+
+function onCopyCode(code: string) {
+  navigator.clipboard.writeText(code).then(() => {
+    message.success(`已复制编码: ${code}`)
+  }).catch(() => {
+    message.error('复制失败，请手动复制')
+  })
 }
 
 // ==================== 树形浏览 ====================
@@ -209,10 +243,16 @@ async function loadTree() {
         ...ch,
         children: ch.children?.map((sec: any) => ({
           ...sec,
-          // 将 children 设为 undefined 以触发懒加载
           children: undefined,
         })) || [],
       }))
+      // 更新统计
+      if (json.data.stats) {
+        codeStats.value = {
+          icd10Count: json.data.stats.icd10_count,
+          icd9Count: json.data.stats.icd9cm3_count,
+        }
+      }
     }
   } catch (e) {
     console.error('加载 ICD 树失败:', e)
@@ -254,15 +294,20 @@ const onLoadChildren: TreeProps['loadData'] = (treeNode) => {
 function onTreeSelect(selectedKeys: string[], info: any) {
   const node = info.node
   if (node.isLeaf && node.code) {
-    console.log('选中编码:', node.code, node.name || node.title)
+    selectCode({
+      code: node.code,
+      name: node.name || node.title,
+      type: codeType.value,
+    })
   }
 }
 
-// 切换编码类型或版本时重新加载
+// ==================== 监听切换 ====================
 watch([codeType, codeVersion], () => {
   searchQuery.value = ''
   searchResults.value = []
   searchTotal.value = 0
+  selectedCode.value = null
   loadTree()
 })
 
@@ -272,46 +317,58 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.icd-search-panel {
+/* ==================== 工作台容器 ==================== */
+.icd-workspace {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 0;
+  background: #f5f7fa;
 }
 
-.panel-tabs {
-  padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.coding-view {
-  display: flex;
-  flex-direction: column;
+/* ==================== 主体双栏 ==================== */
+.workspace-body {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
   flex: 1;
+  min-height: 0;
+  padding: 16px 20px;
+}
+
+.workspace-left {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  overflow-y: auto;
   min-height: 0;
 }
 
-.sub-tabs {
-  padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+.workspace-right {
+  min-height: 0;
 }
 
-.search-box {
-  padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+/* ==================== 状态提示 ==================== */
+.state-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: #999;
+}
+.state-hint p {
+  margin: 12px 0 0;
+  font-size: 14px;
 }
 
-.search-results {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
-}
-
-.result-header {
+/* ==================== 搜索结果 ==================== */
+.results-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 12px 16px;
   font-weight: 600;
   font-size: 13px;
   color: #666;
@@ -319,130 +376,123 @@ onMounted(() => {
   border-bottom: 1px solid #f0f0f0;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
+  border-radius: 12px 12px 0 0;
 }
 
-.result-item {
+.result-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid #f5f5f5;
-  transition: background 0.15s;
+  border-bottom: 1px solid #f8f8f8;
+  border-left: 3px solid transparent;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
-.result-item:hover {
-  background: #e6f4ff;
+.result-card:hover {
+  background: #f0f7ff;
+  border-left-color: #0066CC;
 }
+.result-card--active {
+  background: #e8f4ff;
+  border-left-color: #0066CC;
+}
+
 .result-main {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.result-code {
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+  font-weight: 700;
+  color: #0066CC;
+  min-width: 80px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.result-name {
+  flex: 1;
+  font-size: 14px;
+  color: #333;
+  min-width: 0;
+}
+.result-name :deep(mark) {
+  background: #ffe58f;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.result-type-tag {
+  flex-shrink: 0;
 }
 
 .result-mapping {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-left: 86px;
+  padding-left: 90px;
   font-size: 12px;
   color: #999;
 }
 .result-mapping.mapping-diff {
   color: #d46b08;
 }
+
 .mapping-label {
   font-weight: 500;
   color: #8c8c8c;
 }
 .mapping-code {
-  font-family: 'Courier New', monospace;
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
   font-weight: 500;
-  color: #8c8c8c;
-}
-.mapping-diff .mapping-code {
-  color: #d46b08;
-}
-.mapping-name {
-  color: #8c8c8c;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.result-code {
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-  color: #1677ff;
-  min-width: 80px;
-  font-size: 13px;
-}
-
-.result-name {
-  flex: 1;
-  font-size: 13px;
-  color: #333;
-}
-.result-name :deep(mark) {
-  background: #ffe58f;
-  padding: 0 2px;
-  border-radius: 2px;
-}
-
-.result-more {
+.load-more {
   text-align: center;
-  padding: 8px;
+  padding: 12px;
 }
 
+/* ==================== 树形浏览 ==================== */
 .tree-browser {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 4px;
+  padding: 12px 8px;
 }
 
-.tree-code-range {
-  color: #1677ff;
-  font-weight: 500;
-  margin-right: 4px;
-  font-size: 12px;
+.tree-folder-icon {
+  color: #0066CC;
+}
+.tree-leaf-icon {
+  color: #00A651;
 }
 
-.tree-leaf {
+.tree-node {
+  font-size: 14px;
   color: #333;
 }
+.tree-node--leaf {
+  color: #444;
+}
 
-.empty-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  text-align: center;
-  color: #999;
-}
-.empty-hint h3 {
-  margin: 12px 0 4px;
-  font-size: 16px;
-  color: #333;
-}
-.empty-hint p {
-  margin: 4px 0;
-  font-size: 13px;
-}
-.empty-hint .hint {
-  color: #bbb;
+.tree-range-tag {
+  display: inline-block;
+  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
   font-size: 12px;
+  font-weight: 600;
+  color: #0066CC;
+  background: #e8f4ff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  letter-spacing: 0.3px;
 }
 
-.monitor-view {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 滚动条 */
+/* ==================== 滚动条 ==================== */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
@@ -450,10 +500,20 @@ onMounted(() => {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
+  background: #e0e0e0;
   border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
+  background: #ccc;
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 1024px) {
+  .workspace-body {
+    grid-template-columns: 1fr;
+  }
+  .workspace-right {
+    display: none;
+  }
 }
 </style>

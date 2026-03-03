@@ -590,8 +590,6 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-radius: 8px;
   overflow: hidden;
 }
 
