@@ -39,6 +39,7 @@ from .routers import drg as drg_router
 from .routers import dip as dip_router
 from .routers import case_front_page as case_front_page_router
 from .routers import icd_search as icd_search_router
+from .routers import medical_records as medical_records_router_cdm
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -231,6 +232,8 @@ def create_app() -> FastAPI:
     app.include_router(dip_router.router)
     # ICD 编码搜索（基于本地编码库 JSON）
     app.include_router(icd_search_router.router)
+    # CDM 病案数据 API（连接 Repository 层）
+    app.include_router(medical_records_router_cdm.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
@@ -248,11 +251,12 @@ def create_app() -> FastAPI:
         """应用启动时初始化四川质控服务"""
         logger.info("🚀 应用启动中...")
         try:
-            # NOTE: do not block server startup on external/service initialization.
-            # qc_sichuan service will be lazily initialized on first use.
+            # 初始化 CDM 数据库
+            from .database import init_db
+            init_db()
             logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")
         except Exception as exc:
-            logger.error(f"❌ 四川质控服务初始化失败: {exc}")
+            logger.error(f"❌ 启动初始化失败: {exc}")
 
     return app
 

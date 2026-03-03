@@ -89,7 +89,7 @@ const routes: RouteRecordRaw[] = [
           icon: 'CheckCircleOutlined'
         }
       },
-      // 智能质控工作站
+      // 智能质控工作站 V1（旧版保留）
       {
         path: 'workstation',
         name: 'Workstation',
@@ -780,15 +780,78 @@ const routes: RouteRecordRaw[] = [
       }
     ]
   },
-  // 验收工作站 V2（独立路由，对齐 PRD 验收范围）
+  // 验收工作站 V2（独立 Layout，与 Dashboard 完全隔离）
   {
     path: '/workstation-v2',
-    name: 'WorkstationV2',
-    component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+    component: () => import('@/components/layout/WorkstationLayout.vue'),
     meta: {
       requiresAuth: false,
       title: '病案智能质控工作站'
-    }
+    },
+    children: [
+      {
+        path: '',
+        name: 'WorkstationV2',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'workbench' },
+        meta: { title: '工作台' }
+      },
+      {
+        path: 'icd',
+        name: 'WorkstationV2ICD',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'icd-search' },
+        meta: { title: 'ICD 编码查询' }
+      },
+      {
+        path: 'upload',
+        name: 'WorkstationV2Upload',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'upload' },
+        meta: { title: '数据上传' }
+      },
+      {
+        path: 'stats',
+        name: 'WorkstationV2Stats',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'workbench' },
+        meta: { title: '统计分析' }
+      },
+      {
+        path: 'drg/pre',
+        name: 'WorkstationV2DRGPre',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'pre-analysis' },
+        meta: { title: '事前分析' }
+      },
+      {
+        path: 'drg/mid',
+        name: 'WorkstationV2DRGMid',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'mid-analysis' },
+        meta: { title: '事中监控' }
+      },
+      {
+        path: 'drg/payment',
+        name: 'WorkstationV2DRGPayment',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'payment' },
+        meta: { title: '付费监测' }
+      },
+      {
+        path: 'drg/post',
+        name: 'WorkstationV2DRGPost',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'post-analysis' },
+        meta: { title: '事后分析' }
+      },
+      {
+        path: 'data',
+        name: 'WorkstationV2Data',
+        component: () => import('@/views/workstation-v2/CDMDataView.vue'),
+        meta: { title: '数据管理' }
+      },
+    ]
   },
   {
     path: '/demo/clinical-workstation',
