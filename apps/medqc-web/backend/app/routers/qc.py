@@ -379,3 +379,94 @@ async def poc_rules(request: Request):
         message="获取 PoC 规则成功",
         trace_id=get_trace_id(request)
     )
+
+
+# ==================== 形式质控 API ====================
+
+from ..services.frontpage_formal_qc import FrontpageFormalQC, Category as FQCategory, Severity as FQSeverity
+
+_formal_qc_engine = FrontpageFormalQC()
+
+
+@router.post("/formal-qc/validate")
+async def validate_frontpage_formal(
+    request: Request,
+    payload: Dict[str, Any],
+):
+    """
+    对病案首页执行形式质控校验。
+
+    POST body:
+    {
+        "frontpage": { ... 首页数据字典 ... },
+        "categories": ["required", "format"],  // 可选，按类别过滤
+        "severities": ["error"]                // 可选，按严重度过滤
+    }
+    """
+    frontpage = payload.get("frontpage") or payload
+    categories = None
+    severities = None
+
+    if "categories" in payload and payload["categories"]:
+        categories = [FQCategory(c) for c in payload["categories"]]
+    if "severities" in payload and payload["severities"]:
+        severities = [FQSeverity(s) for s in payload["severities"]]
+
+    report = _formal_qc_engine.validate(frontpage, categories=categories, severities=severities)
+
+    return success_response(
+        data={
+            "total_rules": report.total_rules,
+            "passed": report.passed,
+            "failed": report.failed,
+            "pass_rate": round(report.passed / report.total_rules * 100, 1) if report.total_rules else 0,
+            "results": [
+                {
+                    "rule_id": r.rule_id,
+                    "field_name": r.field_name,
+                    "rule_name": r.rule_name,
+                    "passed": r.passed,
+                    "message": r.message,
+                    "severity": r.severity.value,
+                    "category": r.category.value,
+                }
+                for r in report.results
+                if not r.passed  # 只返回失败项
+            ],
+        },
+        message=f"形式质控完成：{report.passed}/{report.total_rules} 通过",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/formal-qc/stats")
+async def get_formal_qc_stats(request: Request):
+    """获取形式质控规则统计。"""
+    stats = _formal_qc_engine.get_stats()
+    return success_response(
+        data=stats,
+        message="获取形式质控规则统计成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/formal-qc/rules")
+async def list_formal_qc_rules(request: Request):
+    """获取全部形式质控规则列表（用于前端展示规则说明）。"""
+    rules_data = [
+        {
+            "rule_id": r.rule_id,
+            "field_name": r.field_name,
+            "rule_name": r.rule_name,
+            "description": r.description,
+            "severity": r.severity.value,
+            "category": r.category.value,
+        }
+        for r in _formal_qc_engine.rules
+    ]
+    return success_response(
+        data=rules_data,
+        message=f"共 {len(rules_data)} 条形式质控规则",
+        trace_id=get_trace_id(request),
+    )
+
