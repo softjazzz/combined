@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import contextlib
 import json
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -268,3 +269,66 @@ async def analyze_medical_profile(
             code="PROFILE_ANALYZE_ERROR",
             trace_id=trace_id,
         )
+
+
+# ==================== 首页导出 API ====================
+
+from ..services.frontpage_export_service import FrontpageExportService, ExportFormat
+
+_export_service = FrontpageExportService()
+
+
+class ExportFrontpageRequest(BaseModel):
+    """首页导出请求"""
+    frontpage: Dict[str, Any] = Field(..., description="首页数据")
+    format: str = Field("nhc", description="导出格式: nhc/insurance/settlement")
+
+
+@router.post("/export")
+async def export_frontpage(
+    request: Request,
+    payload: ExportFrontpageRequest,
+):
+    """
+    导出病案首页为 Excel 文件。
+
+    支持 3 种格式:
+    - nhc: 卫健委标准住院病案首页
+    - insurance: 医保病案首页
+    - settlement: 医保结算清单
+    """
+    try:
+        fmt = ExportFormat(payload.format)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的导出格式: {payload.format}。支持: nhc, insurance, settlement"
+        )
+
+    excel_bytes = _export_service.export(payload.frontpage, fmt)
+    filename = _export_service.get_filename(payload.frontpage, fmt)
+
+    return StreamingResponse(
+        BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+from io import BytesIO as _BytesIO  # 避免与已有导入冲突
+
+# 替换上面的 BytesIO 引用
+@router.get("/export/formats")
+async def get_export_formats(request: Request):
+    """获取支持的导出格式列表。"""
+    formats = [
+        {"id": "nhc", "name": "卫健委标准住院病案首页", "description": "符合卫健委规范的标准住院病案首页"},
+        {"id": "insurance", "name": "医保病案首页", "description": "医疗保险病案首页格式"},
+        {"id": "settlement", "name": "医保结算清单", "description": "医疗保障基金结算清单"},
+    ]
+    return success_response(
+        data=formats,
+        message=f"支持 {len(formats)} 种导出格式",
+        trace_id=get_trace_id(request),
+    )
+
