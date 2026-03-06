@@ -36,10 +36,13 @@ from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
 from .routers import frontpage as frontpage_router
 from .routers import drg as drg_router
+from .routers import smart_upload as smart_upload_router
 from .routers import dip as dip_router
 from .routers import case_front_page as case_front_page_router
 from .routers import icd_search as icd_search_router
 from .routers import medical_records as medical_records_router_cdm
+from .routers import system_config as system_config_router
+from .routers import demo_panel as demo_panel_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -228,12 +231,18 @@ def create_app() -> FastAPI:
     # DRG/DIP demo APIs (to support DRG pages in web)
     app.include_router(case_front_page_router.router)
     app.include_router(drg_router.router)
+    # 智能上传 + 字段映射 + 报表生成（从 drg 项目迁移）
+    app.include_router(smart_upload_router.router)
     # DIP 入组预测 (泸州市)
     app.include_router(dip_router.router)
     # ICD 编码搜索（基于本地编码库 JSON）
     app.include_router(icd_search_router.router)
     # CDM 病案数据 API（连接 Repository 层）
     app.include_router(medical_records_router_cdm.router)
+    # 系统配置与 ETL 同步管理
+    app.include_router(system_config_router.router)
+    # 演示面板 API (P5/P7/P8)
+    app.include_router(demo_panel_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
