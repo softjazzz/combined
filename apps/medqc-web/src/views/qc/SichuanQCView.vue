@@ -115,11 +115,45 @@
                   <a-input v-model:value="documentId" placeholder="请输入文档标识" />
                 </a-form-item>
                 <a-form-item label="文档类型">
-                  <a-select v-model:value="documentType" placeholder="选择文档类型">
-                    <a-select-option value="病程记录">病程记录</a-select-option>
-                    <a-select-option value="入院记录">入院记录</a-select-option>
-                    <a-select-option value="出院记录">出院记录</a-select-option>
+                  <a-select v-model:value="documentType" placeholder="选择文档类型" show-search>
+                    <a-select-opt-group label="入院/出院">
+                      <a-select-option value="入院记录">入院记录</a-select-option>
+                      <a-select-option value="出院记录">出院记录</a-select-option>
+                      <a-select-option value="死亡记录">死亡记录</a-select-option>
+                    </a-select-opt-group>
+                    <a-select-opt-group label="病程记录">
+                      <a-select-option value="首次病程记录">首次病程记录</a-select-option>
+                      <a-select-option value="日常病程记录">日常病程记录</a-select-option>
+                      <a-select-option value="上级查房记录">上级查房记录</a-select-option>
+                      <a-select-option value="抢救记录">抢救记录</a-select-option>
+                      <a-select-option value="交接班记录">交接班记录</a-select-option>
+                      <a-select-option value="转科记录">转科记录</a-select-option>
+                      <a-select-option value="阶段小结">阶段小结</a-select-option>
+                    </a-select-opt-group>
+                    <a-select-opt-group label="讨论/会诊">
+                      <a-select-option value="疑难病例讨论记录">疑难病例讨论记录</a-select-option>
+                      <a-select-option value="死亡病例讨论记录">死亡病例讨论记录</a-select-option>
+                      <a-select-option value="会诊记录">会诊记录</a-select-option>
+                    </a-select-opt-group>
+                    <a-select-opt-group label="手术相关">
+                      <a-select-option value="术前小结">术前小结</a-select-option>
+                      <a-select-option value="术前讨论">术前讨论</a-select-option>
+                      <a-select-option value="手术记录">手术记录</a-select-option>
+                      <a-select-option value="术后首次病程记录">术后首次病程记录</a-select-option>
+                      <a-select-option value="手术安全核查">手术安全核查</a-select-option>
+                      <a-select-option value="手术风险评估">手术风险评估</a-select-option>
+                      <a-select-option value="麻醉记录">麻醉记录</a-select-option>
+                    </a-select-opt-group>
+                    <a-select-opt-group label="其他文书">
+                      <a-select-option value="知情同意书">知情同意书</a-select-option>
+                      <a-select-option value="新生儿记录">新生儿记录</a-select-option>
+                      <a-select-option value="输血记录">输血记录</a-select-option>
+                      <a-select-option value="护理记录">护理记录</a-select-option>
+                      <a-select-option value="检查检验报告">检查检验报告</a-select-option>
+                      <a-select-option value="日常病程记录" disabled style="display:none">医嘱</a-select-option>
+                    </a-select-opt-group>
                   </a-select>
+
                 </a-form-item>
                 <a-form-item>
                   <a-button 
@@ -413,7 +447,7 @@ const activeTab = ref('single')
 const fileList = ref<UploadFile[]>([])
 const documentContent = ref('')
 const documentId = ref('')
-const documentType = ref('病程记录')
+const documentType = ref('入院记录')
 const evaluating = ref(false)
 const evaluationResult = ref<unknown>(null)
 
