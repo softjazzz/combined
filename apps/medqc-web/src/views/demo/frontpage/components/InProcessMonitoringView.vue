@@ -7,6 +7,9 @@
       </button>
       <h2 class="text-xl font-semibold text-slate-800 dark:text-white">事中监控</h2>
       <span class="text-sm text-slate-400">实时预警和编码建议</span>
+      <span v-if="loading" class="ml-2">
+        <LoadingOutlined class="text-blue-500 animate-spin" />
+      </span>
     </div>
 
     <!-- Stats Cards -->
@@ -15,7 +18,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">质量总数</div>
         <div class="flex items-baseline gap-1">
           <WarningOutlined class="text-yellow-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">6</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.total_alerts }}</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -24,7 +27,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">严重预警</div>
         <div class="flex items-baseline gap-1">
           <CloseCircleOutlined class="text-red-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">3</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.severe_alerts }}</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -33,7 +36,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">待处理建议</div>
         <div class="flex items-baseline gap-1">
           <InfoCircleOutlined class="text-blue-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">8</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.pending_suggestions }}</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -42,7 +45,7 @@
         <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">今日新增</div>
         <div class="flex items-baseline gap-1">
           <RiseOutlined class="text-green-500 text-lg" />
-          <span class="text-2xl font-bold text-slate-800 dark:text-white">15</span>
+          <span class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.today_new }}</span>
           <span class="text-sm text-slate-400">条</span>
         </div>
       </div>
@@ -87,8 +90,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in mockData" :key="item.id" class="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-              <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ item.caseNo }}</td>
+            <tr v-for="item in filteredAlerts" :key="item.id" class="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+              <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ item.case_no }}</td>
               <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ item.dept }}</td>
               <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ item.diagnosis }}</td>
               <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ item.drg }}</td>
@@ -111,126 +114,169 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 import {
   ArrowLeftOutlined,
   WarningOutlined,
   CloseCircleOutlined,
   InfoCircleOutlined,
-  RiseOutlined
+  RiseOutlined,
+  LoadingOutlined
 } from '@ant-design/icons-vue'
+import { panelApi } from '@/api/panel'
+import type { DrgAlert, MonitoringStats, CmiTrend, DeptCostIndex } from '@/api/panel'
 
 const cmiChartRef = ref<HTMLElement | null>(null)
 const costChartRef = ref<HTMLElement | null>(null)
 const filterType = ref('all')
+const loading = ref(false)
 
 let cmiChart: echarts.ECharts | null = null
 let costChart: echarts.ECharts | null = null
 
-const mockData = [
-  // 严重预警 - 费用超标严重
-  { id: 1, caseNo: '#2026010101', dept: '心内科', diagnosis: '急性心肌梗死', drg: 'FM19', ratio: 1.35, status: 'warning', los: 12, estCost: 85000 },
-  { id: 2, caseNo: '#2026010108', dept: '神经外科', diagnosis: '颅内动脉瘤', drg: 'IC15', ratio: 1.28, status: 'warning', los: 18, estCost: 125000 },
-  { id: 3, caseNo: '#2026010115', dept: '骨科', diagnosis: '股骨颈骨折', drg: 'IB19', ratio: 1.22, status: 'warning', los: 15, estCost: 65000 },
-  
-  // 一般预警 - 轻度超标
-  { id: 4, caseNo: '#2026010103', dept: '骨科', diagnosis: '腰椎间盘突出', drg: 'EB13', ratio: 1.08, status: 'warning', los: 8, estCost: 38000 },
-  { id: 5, caseNo: '#2026010105', dept: '神经内科', diagnosis: '急性脑梗死', drg: 'BR23', ratio: 1.05, status: 'warning', los: 10, estCost: 42000 },
-  { id: 6, caseNo: '#2026010112', dept: '消化内科', diagnosis: '上消化道出血', drg: 'GD21', ratio: 1.03, status: 'warning', los: 7, estCost: 28000 },
-  
-  // 正常 - 费用控制良好
-  { id: 7, caseNo: '#2026010102', dept: '呼吸科', diagnosis: '社区获得性肺炎', drg: 'BW15', ratio: 0.92, status: 'normal', los: 6, estCost: 18000 },
-  { id: 8, caseNo: '#2026010104', dept: '普外科', diagnosis: '急性阑尾炎', drg: 'GD15', ratio: 0.85, status: 'normal', los: 4, estCost: 12000 },
-  { id: 9, caseNo: '#2026010106', dept: '泌尿外科', diagnosis: '肾结石', drg: 'KB19', ratio: 0.88, status: 'normal', los: 5, estCost: 22000 },
-  { id: 10, caseNo: '#2026010107', dept: '妇产科', diagnosis: '剖宫产', drg: 'MD15', ratio: 0.78, status: 'normal', los: 5, estCost: 15000 },
-  { id: 11, caseNo: '#2026010109', dept: '儿科', diagnosis: '支气管肺炎', drg: 'BP11', ratio: 0.82, status: 'normal', los: 4, estCost: 8500 },
-  { id: 12, caseNo: '#2026010110', dept: '肿瘤科', diagnosis: '肺癌化疗', drg: 'RA19', ratio: 0.95, status: 'normal', los: 6, estCost: 35000 },
-  { id: 13, caseNo: '#2026010111', dept: '心内科', diagnosis: '心律失常', drg: 'FM15', ratio: 0.91, status: 'normal', los: 5, estCost: 25000 },
-  { id: 14, caseNo: '#2026010113', dept: '呼吸科', diagnosis: '慢阻肺急性加重', drg: 'BW21', ratio: 0.89, status: 'normal', los: 7, estCost: 22000 },
-  { id: 15, caseNo: '#2026010114', dept: '内分泌科', diagnosis: '糖尿病酮症酸中毒', drg: 'KB15', ratio: 0.95, status: 'normal', los: 6, estCost: 18000 }
-]
+// ==================== 响应式数据 ====================
+
+const stats = ref<MonitoringStats>({
+  total_alerts: 0,
+  severe_alerts: 0,
+  pending_suggestions: 0,
+  today_new: 0,
+})
+
+const drgAlerts = ref<DrgAlert[]>([])
+
+const filteredAlerts = computed(() => {
+  if (filterType.value === 'all') return drgAlerts.value
+  return drgAlerts.value.filter(a => a.status === filterType.value)
+})
+
+// ==================== 数据加载 ====================
+
+async function loadData() {
+  loading.value = true
+  try {
+    // 并行加载所有数据
+    const [statsData, alertsData, cmiData, costData] = await Promise.all([
+      panelApi.getMonitoringStats(),
+      panelApi.getDrgAlerts(),
+      panelApi.getCmiTrend(7),
+      panelApi.getDeptCostIndex(),
+    ])
+
+    stats.value = statsData
+    drgAlerts.value = alertsData
+
+    // 渲染图表
+    renderCmiChart(cmiData)
+    renderCostChart(costData)
+  } catch (error) {
+    console.error('加载事中监控数据失败:', error)
+    // 降级：使用 fallback 图表
+    renderFallbackCharts()
+  } finally {
+    loading.value = false
+  }
+}
+
+// ==================== 图表渲染 ====================
+
+function renderCmiChart(data: CmiTrend) {
+  if (!cmiChartRef.value) return
+  cmiChart = echarts.init(cmiChartRef.value)
+  cmiChart.setOption({
+    grid: { left: 50, right: 20, top: 20, bottom: 30 },
+    xAxis: {
+      type: 'category',
+      data: data.labels,
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#94a3b8' }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0.8,
+      max: 1.2,
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: '#f1f5f9' } },
+      axisLabel: { color: '#94a3b8' }
+    },
+    series: [{
+      data: data.values,
+      type: 'line',
+      smooth: true,
+      lineStyle: { color: '#3b82f6', width: 3 },
+      itemStyle: { color: '#3b82f6' },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+        { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
+      ])},
+      markLine: {
+        silent: true,
+        lineStyle: { color: '#f59e0b', type: 'dashed' },
+        data: [{ yAxis: data.benchmark }],
+        label: { formatter: '标杆值' }
+      }
+    }]
+  })
+}
+
+function renderCostChart(data: DeptCostIndex) {
+  if (!costChartRef.value) return
+  costChart = echarts.init(costChartRef.value)
+  costChart.setOption({
+    grid: { left: 60, right: 20, top: 40, bottom: 50 },
+    xAxis: {
+      type: 'category',
+      data: data.departments,
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#94a3b8', rotate: 15 }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 1.5,
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: '#f1f5f9' } },
+      axisLabel: { color: '#94a3b8' }
+    },
+    series: [
+      {
+        type: 'bar',
+        data: data.values.map(v => ({
+          value: v,
+          itemStyle: { color: v > data.benchmark ? '#ef4444' : '#22c55e' }
+        })),
+        barWidth: '40%'
+      },
+      {
+        type: 'line',
+        data: data.departments.map(() => data.benchmark),
+        lineStyle: { color: '#f59e0b', width: 2, type: 'dashed' },
+        symbol: 'none',
+      }
+    ]
+  })
+}
+
+function renderFallbackCharts() {
+  // CMI fallback
+  renderCmiChart({
+    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+    values: [1.0, 1.05, 1.03, 1.08, 1.12, 1.09, 1.15],
+    benchmark: 1.0
+  })
+  // Cost fallback
+  renderCostChart({
+    departments: ['心内科', '呼吸科', '骨科', '普外科', '神经内科', '神经外科', '消化内科', '泌尿外科'],
+    values: [0.92, 0.89, 1.15, 0.85, 1.05, 1.28, 0.95, 0.88],
+    benchmark: 1.0
+  })
+}
+
+// ==================== 生命周期 ====================
 
 onMounted(() => {
-  if (cmiChartRef.value) {
-    cmiChart = echarts.init(cmiChartRef.value)
-    cmiChart.setOption({
-      grid: { left: 50, right: 20, top: 20, bottom: 30 },
-      xAxis: {
-        type: 'category',
-        data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
-        axisLabel: { color: '#94a3b8' }
-      },
-      yAxis: {
-        type: 'value',
-        min: 0.8,
-        max: 1.2,
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: '#f1f5f9' } },
-        axisLabel: { color: '#94a3b8' }
-      },
-      series: [{
-        data: [1.0, 1.05, 1.03, 1.08, 1.12, 1.09, 1.15],
-        type: 'line',
-        smooth: true,
-        lineStyle: { color: '#3b82f6', width: 3 },
-        itemStyle: { color: '#3b82f6' },
-        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
-          { offset: 1, color: 'rgba(59, 130, 246, 0.05)' }
-        ])}
-      }]
-    })
-  }
-
-  if (costChartRef.value) {
-    costChart = echarts.init(costChartRef.value)
-    costChart.setOption({
-      grid: { left: 60, right: 20, top: 40, bottom: 50 },
-      xAxis: {
-        type: 'category',
-        data: ['心内科', '呼吸科', '骨科', '普外科', '神经内科', '神经外科', '消化内科', '泸尿外科'],
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
-        axisLabel: { color: '#94a3b8', rotate: 15 }
-      },
-      yAxis: {
-        type: 'value',
-        min: 0,
-        max: 1.5,
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: '#f1f5f9' } },
-        axisLabel: { color: '#94a3b8' }
-      },
-      series: [
-        {
-          type: 'bar',
-          data: [
-            { value: 0.92, itemStyle: { color: '#22c55e' } },
-            { value: 0.89, itemStyle: { color: '#22c55e' } },
-            { value: 1.15, itemStyle: { color: '#ef4444' } },
-            { value: 0.85, itemStyle: { color: '#22c55e' } },
-            { value: 1.05, itemStyle: { color: '#ef4444' } },
-            { value: 1.28, itemStyle: { color: '#ef4444' } },
-            { value: 0.95, itemStyle: { color: '#22c55e' } },
-            { value: 0.88, itemStyle: { color: '#22c55e' } }
-          ],
-          barWidth: '40%'
-        },
-        {
-          type: 'line',
-          data: [1, 1, 1, 1, 1, 1, 1, 1],
-          lineStyle: { color: '#f59e0b', width: 2, type: 'dashed' },
-          symbol: 'none',
-          markLine: {
-            silent: true,
-            lineStyle: { color: '#f59e0b', type: 'dashed' },
-            data: [{ yAxis: 1 }]
-          }
-        }
-      ]
-    })
-  }
+  loadData()
 })
 
 onUnmounted(() => {
