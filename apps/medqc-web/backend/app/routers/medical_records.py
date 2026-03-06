@@ -116,6 +116,72 @@ async def get_record_content(
     return {"content": content}
 
 
+@router.get("/documents/{visit_id}")
+async def get_documents(visit_id: str):
+    """获取某次就诊的全部病历文书列表及内容（供前端预览使用）"""
+    from ..database.connection import engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy import text as sql_text
+
+    # 定义需要查询的文书类型
+    doc_types = [
+        ("admission_record", "入院记录"),
+        ("discharge_record", "出院记录"),
+        ("surgery_record", "手术记录"),
+        ("first_course_record", "首次病程记录"),
+        ("daily_course_record", "日常病程记录"),
+        ("senior_course_record", "上级医师查房记录"),
+        ("consultation_record", "会诊记录"),
+        ("rescue_record", "抢救记录"),
+        ("transfer_in_record", "转入记录"),
+        ("transfer_out_record", "转出记录"),
+        ("postsurg_firstcourse_record", "术后首次病程记录"),
+    ]
+
+    documents = []
+    try:
+        with Session(engine) as session:
+            for table_name, label in doc_types:
+                try:
+                    rows = session.execute(sql_text(
+                        f"SELECT record_content FROM {table_name} WHERE visit_id = :vid"
+                    ), {"vid": visit_id}).mappings().all()
+
+                    if rows:
+                        for idx, row in enumerate(rows):
+                            content = row.get("record_content") or ""
+                            content_str = str(content).strip()
+                            doc_label = label if len(rows) == 1 else f"{label} ({idx + 1})"
+                            documents.append({
+                                "type": table_name,
+                                "label": doc_label,
+                                "has_content": bool(content_str),
+                                "content": content_str if content_str else None,
+                                "length": len(content_str),
+                            })
+                    else:
+                        documents.append({
+                            "type": table_name,
+                            "label": label,
+                            "has_content": False,
+                            "content": None,
+                            "length": 0,
+                        })
+                except Exception:
+                    # 表不存在时静默跳过
+                    documents.append({
+                        "type": table_name,
+                        "label": label,
+                        "has_content": False,
+                        "content": None,
+                        "length": 0,
+                    })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询文书失败: {str(e)}")
+
+    return {"documents": documents, "visit_id": visit_id}
+
+
 # ==================== 质控结果 ====================
 
 @router.post("/qc-results")
@@ -164,6 +230,97 @@ async def get_departments():
         if dept:
             depts.add(dept)
     return sorted(list(depts))
+
+
+# ==================== V4 工作台（科室+卡片）====================
+
+@router.get("/workstation")
+async def get_workstation_data(
+    dept: Optional[str] = Query(None, description="科室筛选，不传则返回全部"),
+    keyword: Optional[str] = Query(None, description="搜索姓名/病案号"),
+    page_size: int = Query(200, ge=1, le=1000, description="每页条数"),
+):
+    """V4 工作台专用接口 — 返回病案列表 + 科室统计 + 主诊断 + 床号"""
+    from ..database.connection import engine
+    from ..database.models.cdm import MedicalRecordFrontpage, Diagnosis, AdmissionRecord
+    from sqlalchemy.orm import Session
+    from sqlalchemy import func
+
+    with Session(engine) as session:
+        # 1. 查病案首页
+        q = session.query(MedicalRecordFrontpage)
+        if dept:
+            q = q.filter(MedicalRecordFrontpage.discharge_dept_name == dept)
+        if keyword:
+            kw = f"%{keyword}%"
+            q = q.filter(
+                MedicalRecordFrontpage.name.like(kw) |
+                MedicalRecordFrontpage.mr_no.like(kw) |
+                MedicalRecordFrontpage.inpat_no.like(kw)
+            )
+        records = q.order_by(MedicalRecordFrontpage.admission_datetime.desc()).limit(page_size).all()
+
+        # 2. 批量查主诊断
+        pids = [(r.patient_id, r.visit_id) for r in records]
+        diag_map = {}
+        if pids:
+            diags = session.query(Diagnosis).filter(
+                Diagnosis.diagnosis_type == "出院主要诊断"
+            ).all()
+            for d in diags:
+                diag_map[(d.patient_id, d.visit_id)] = {
+                    "name": d.diagnosis_name,
+                    "code": d.diagnosis_code,
+                }
+
+        # 3. 批量查床号
+        bed_map = {}
+        if pids:
+            beds = session.query(
+                AdmissionRecord.patient_id,
+                AdmissionRecord.visit_id,
+                AdmissionRecord.bed_no,
+            ).all()
+            for b in beds:
+                bed_map[(b.patient_id, b.visit_id)] = b.bed_no
+
+        # 4. 组装科室统计
+        dept_stats = session.query(
+            MedicalRecordFrontpage.discharge_dept_name,
+            func.count().label("total"),
+        ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
+
+        departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
+        for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
+            departments.append({"name": d.discharge_dept_name, "total": d.total, "warningCount": 0})
+
+        # 5. 组装响应
+        items = []
+        for r in records:
+            key = (r.patient_id, r.visit_id)
+            diag = diag_map.get(key, {})
+            items.append({
+                "id": r.visit_id,
+                "bedNo": bed_map.get(key, ""),
+                "name": r.name or "",
+                "sex": r.sex or "",
+                "age": int(r.age_year) if r.age_year else 0,
+                "insurance": r.insurance_type or "",
+                "department": r.discharge_dept_name or r.admission_dept_name or "",
+                "admissionDate": r.admission_datetime.strftime("%m-%d") if r.admission_datetime else "",
+                "dischargeDate": r.discharge_datetime.strftime("%m-%d") if r.discharge_datetime else "",
+                "days": int(r.hospital_duration) if r.hospital_duration else 0,
+                "diagnosis": diag.get("name", ""),
+                "diagnosisCode": diag.get("code", ""),
+                "doctor": r.attending_physician_sign or "",
+                "status": "completed",  # 后续接入质控状态
+            })
+
+    return {
+        "departments": departments,
+        "records": items,
+        "total": len(items),
+    }
 
 
 # ==================== 表结构元数据 ====================
