@@ -20,29 +20,90 @@ class ApplicabilityResult:
 class ApplicabilityChecker:
     """
     针对规则的适用性检查。
-    目前只实现了泸县规则中的典型场景（如 LX-003 婴幼儿喂养史），
-    后续可以根据 rule_config 扩展。
+    检查顺序：
+    1. 文书类型匹配（applicable_documents vs 当前文书类型）
+    2. 手术标志检测（手术类规则仅对手术患者适用）
+    3. 年龄/规则特定逻辑（如 LX-003 婴幼儿、LX-006 儿科年龄段）
     """
 
     PEDIATRIC_HINTS = ["患儿", "婴儿", "新生儿", "儿科", "月龄"]
 
+    # 仅适用于手术患者的规则 ID 前缀/集合
+    SURGERY_ONLY_RULES = {
+        "SC-080", "SC-081", "SC-082", "SC-083", "SC-084", "SC-085",  # 术前小结/讨论
+        "SC-086", "SC-092", "SC-093", "SC-094", "SC-095", "SC-096",  # 麻醉/手术记录
+        "SC-097", "SC-098", "SC-099", "SC-100", "SC-101", "SC-102",
+        "SC-103", "SC-104", "SC-105", "SC-106", "SC-107", "SC-108",
+        "SC-109", "SC-110", "SC-111", "SC-112", "SC-113", "SC-114",
+        "SC-115",
+        "LX-019", "LX-020", "LX-021", "LX-022", "LX-023", "LX-024",
+        "LX-025", "LX-026", "LX-027", "LX-028",
+    }
+
+    SURGERY_HINTS = ["手术", "术中", "术后", "术前", "麻醉", "切除", "切开",
+                     "缝合", "PCI", "介入", "植入", "移植", "造口"]
+
+    # 英文→中文文书类型映射（用于匹配时兼容两种编码）
+    _DOC_TYPE_CN_MAP = {
+        "admission_record": "入院记录",
+        "first_course_record": "首次病程记录",
+        "daily_course_record": "日常病程记录",
+        "senior_course_record": "上级查房记录",
+        "rescue_record": "抢救记录",
+        "diffcase_discussion_record": "疑难病例讨论记录",
+        "death_discussion": "死亡病例讨论记录",
+        "consultation_record": "会诊记录",
+        "surgery_record": "手术记录",
+        "presurg_summary": "术前小结",
+        "presurg_discussion": "术前讨论",
+        "postsurg_firstcourse_record": "术后首次病程记录",
+        "surgery_safecheck_record": "手术安全核查",
+        "surgery_risk_assessment": "手术风险评估",
+        "anesthesia_record": "麻醉记录",
+        "newborn_record": "新生儿记录",
+        "bloodtrans_record": "输血记录",
+        "nursing_record": "护理记录",
+        "discharge_record": "出院记录",
+        "consent_form": "知情同意书",
+        "exam_item_report": "检查检验报告",
+        "labtest_item_report": "检验报告",
+        "medical_order": "医嘱",
+    }
+
     def check(self, rule: Dict[str, Any], medical_record: Dict[str, Any]) -> ApplicabilityResult:
         rule_id = (rule.get("rule_id") or "").upper()
         text = medical_record.get("content") or ""
+        document_type = medical_record.get("document_type") or ""
 
+        # ---- 1. 文书类型匹配 ----
+        applicable_docs = rule.get("applicable_documents") or []
+        if applicable_docs and document_type:
+            matched = self._match_document_type(document_type, applicable_docs)
+            if not matched:
+                return ApplicabilityResult(
+                    is_applicable=False,
+                    reason=f"规则适用文书类型 {applicable_docs}，当前文书为 '{document_type}'",
+                    method="document_type_guard",
+                )
+
+        # ---- 2. 手术标志检测 ----
+        if rule_id in self.SURGERY_ONLY_RULES:
+            has_surgery = any(hint in text for hint in self.SURGERY_HINTS)
+            if not has_surgery:
+                return ApplicabilityResult(
+                    is_applicable=False,
+                    reason=f"规则 {rule_id} 仅适用于手术患者，病历中未检测到手术特征",
+                    method="surgery_guard",
+                )
+
+        # ---- 3. 年龄 / 规则特定逻辑 ----
         if rule_id == "LX-003":
-            # 适用性完全交给大模型判断，不在这里做年龄/科室过滤
             return ApplicabilityResult(
-                is_applicable=True,
-                reason="",
-                method="lx003_via_llm",
+                is_applicable=True, reason="", method="lx003_via_llm",
             )
         elif rule_id == "LX-005":
-            # 体格检查缺生命体征：是否儿科由大模型按提示词判断
             return ApplicabilityResult(
-                is_applicable=True,
-                reason="",
-                method="lx005_via_llm",
+                is_applicable=True, reason="", method="lx005_via_llm",
             )
         elif rule_id == "LX-006":
             age_years = self._extract_age(text)
@@ -71,6 +132,23 @@ class ApplicabilityChecker:
 
         return ApplicabilityResult(is_applicable=True, reason="", method="default")
 
+    def _match_document_type(self, current_type: str, applicable_docs: list) -> bool:
+        """检查当前文书类型是否匹配规则的适用文书列表（兼容中英文）"""
+        # 直接匹配
+        if current_type in applicable_docs:
+            return True
+        # 英文→中文转换后匹配
+        for doc in applicable_docs:
+            cn_name = self._DOC_TYPE_CN_MAP.get(doc)
+            if cn_name and cn_name == current_type:
+                return True
+        # 中文→英文反向匹配
+        cn_to_en = {v: k for k, v in self._DOC_TYPE_CN_MAP.items()}
+        current_en = cn_to_en.get(current_type)
+        if current_en and current_en in applicable_docs:
+            return True
+        return False
+
     @staticmethod
     def _extract_age(text: str) -> Optional[int]:
         if not text:
@@ -88,6 +166,7 @@ class ApplicabilityChecker:
                 except Exception:
                     continue
         return None
+
 
 
 class EvidenceVerifier:
