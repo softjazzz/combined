@@ -12,6 +12,11 @@
 | 接口形式 | PostgreSQL 存储过程（`CALL web.xxx(date)`） |
 | 本地数据库 | PostgreSQL（SQLAlchemy ORM） |
 
+**相关文档：**
+- [DHC 接口对接清单（57个接口详情）](file:///d:/大模型项目/lx0222/health-qc-monorepo/apps/medqc-web/backend/docs/dhc_interface_tables.md) — 存储过程、参数、字段说明
+- [ORM 模型定义（20张表结构）](file:///d:/大模型项目/lx0222/health-qc-monorepo/apps/medqc-web/backend/app/database/models/cdm.py) — Python SQLAlchemy 模型，含每个字段的 comment
+- [规则-文书类型映射清单](file:///d:/大模型项目/lx0222/health-qc-monorepo/apps/medqc-web/backend/docs/规则-文书类型映射清单.md) — 质控规则与文书的对应关系
+
 ---
 
 ## 架构概览
