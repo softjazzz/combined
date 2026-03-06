@@ -469,3 +469,309 @@ class QCResult(Base):
         Index("ix_qc_visit", "institute_id", "patient_id", "visit_id"),
         Index("ix_qc_type", "qc_type", "severity"),
     )
+
+
+# ==================== 10. 第二批接口 - 病程记录类 ====================
+
+class FirstCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """首次病程记录（first_course_record）"""
+    __tablename__ = "first_course_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class DailyCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """日常病程记录（daily_course_record）"""
+    __tablename__ = "daily_course_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class SeniorCourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """上级医师查房记录（senior_course_record）"""
+    __tablename__ = "senior_course_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class PostsurgFirstcourseRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """术后首次病程记录（postsurg_firstcourse_record）"""
+    __tablename__ = "postsurg_firstcourse_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class ConsultationRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """会诊记录（consultation_record）"""
+    __tablename__ = "consultation_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class RescueRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """抢救记录（rescue_record）"""
+    __tablename__ = "rescue_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class TransferInRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """转入记录（transfer_in_record）"""
+    __tablename__ = "transfer_in_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class TransferOutRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """转出记录（transfer_out_record）"""
+    __tablename__ = "transfer_out_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+# ==================== 11. 手术与检验检查报告表 ====================
+
+class SurgeryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """手术记录（surgery_record）"""
+    __tablename__ = "surgery_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号/单号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class LabtestItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """检验报告（labtest_item_report）"""
+    __tablename__ = "labtest_item_report"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号/报告单号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class ExamItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """检查报告（exam_item_report）"""
+    __tablename__ = "exam_item_report"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号/报告单号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+# ==================== 12. 第三批接口 - 质控规则涉及的缺失文书类型 ====================
+
+class DiffcaseDiscussionRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """疑难病例讨论记录（diffcase_discussion_record）"""
+    __tablename__ = "diffcase_discussion_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class DeathDiscussion(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """死亡病例讨论记录（death_discussion）"""
+    __tablename__ = "death_discussion"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class DeathRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """死亡记录（death_record）"""
+    __tablename__ = "death_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class HandoffRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """交班记录（handoff_record）"""
+    __tablename__ = "handoff_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class HandoverRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """接班记录（handover_record）"""
+    __tablename__ = "handover_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class SummaryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """阶段小结（summary_record）"""
+    __tablename__ = "summary_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class PresurgSummary(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """术前小结（presurg_summary）"""
+    __tablename__ = "presurg_summary"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class PresurgDiscussion(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """术前讨论（presurg_discussion）"""
+    __tablename__ = "presurg_discussion"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class SurgerySafecheckRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """手术安全核查记录（surgery_safecheck_record）"""
+    __tablename__ = "surgery_safecheck_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class SurgeryRiskAssessment(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """手术风险评估（surgery_risk_assessment）"""
+    __tablename__ = "surgery_risk_assessment"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class AnesthesiaRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """麻醉记录（anesthesia_record）"""
+    __tablename__ = "anesthesia_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class NewbornRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """新生儿记录（newborn_record）"""
+    __tablename__ = "newborn_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class BloodtransRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """输血记录（bloodtrans_record）"""
+    __tablename__ = "bloodtrans_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")
+
+
+class NursingRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """护理记录（nursing_record）"""
+    __tablename__ = "nursing_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+    record_content = Column(Text, comment="非结构化全文")

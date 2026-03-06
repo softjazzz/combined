@@ -308,7 +308,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "4.1.1",
@@ -323,7 +323,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.1.2",
@@ -338,7 +338,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.1.3",
@@ -353,7 +353,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "3",
     "original_id": "4.1.4",
@@ -368,7 +368,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.1.5",
@@ -383,7 +383,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.1.6",
@@ -398,7 +398,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "admission_record"
+      "first_course_record"
     ],
     "score_deduction": "3",
     "original_id": "4.1.7",
@@ -413,7 +413,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2/次",
     "original_id": "4.2.1",
@@ -428,7 +428,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3",
     "original_id": "4.2.2",
@@ -443,7 +443,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.2.3",
@@ -458,7 +458,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.2.4",
@@ -473,7 +473,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.2.5",
@@ -488,7 +488,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2/次",
     "original_id": "4.3.1",
@@ -503,7 +503,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.3.2",
@@ -518,7 +518,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2/次",
     "original_id": "4.3.3",
@@ -533,7 +533,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.3.4",
@@ -548,7 +548,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "1/次",
     "original_id": "4.4.1",
@@ -563,7 +563,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2/次",
     "original_id": "4.5.1",
@@ -578,7 +578,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.6.1",
@@ -593,7 +593,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.7.1",
@@ -608,7 +608,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.7.2",
@@ -623,7 +623,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.8.1",
@@ -638,7 +638,7 @@
     "complexity": "高复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "4.9.1",
@@ -653,7 +653,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "original_id": "4.10.1",
@@ -668,7 +668,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.11.1",
@@ -683,7 +683,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.11.2",
@@ -698,7 +698,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3",
     "original_id": "4.12.1",
@@ -713,7 +713,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "senior_course_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.13.1",
@@ -728,7 +728,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "senior_course_record"
     ],
     "score_deduction": "3",
     "original_id": "4.13.2",
@@ -743,7 +743,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "senior_course_record"
     ],
     "score_deduction": "2/次",
     "original_id": "4.13.3",
@@ -758,7 +758,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "senior_course_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.14.1",
@@ -773,7 +773,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "senior_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.14.2",
@@ -788,7 +788,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "rescue_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "4.15.1",
@@ -803,7 +803,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "rescue_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.15.2",
@@ -818,7 +818,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "rescue_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.15.3",
@@ -833,7 +833,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "diffcase_discussion_record"
     ],
     "score_deduction": "5",
     "original_id": "4.16.1",
@@ -848,7 +848,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "diffcase_discussion_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.16.2",
@@ -863,7 +863,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "diffcase_discussion_record"
     ],
     "score_deduction": "3",
     "original_id": "4.16.3",
@@ -878,7 +878,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "death_discussion"
     ],
     "score_deduction": "5",
     "original_id": "4.17.1",
@@ -893,7 +893,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "death_discussion"
     ],
     "score_deduction": "2/项",
     "original_id": "4.17.2",
@@ -908,7 +908,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "death_discussion"
     ],
     "score_deduction": "2",
     "original_id": "4.17.3",
@@ -923,7 +923,8 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "handoff_record",
+      "handover_record"
     ],
     "score_deduction": "5",
     "original_id": "4.18.1",
@@ -938,7 +939,8 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "handoff_record",
+      "handover_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.18.2",
@@ -953,7 +955,8 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "transfer_in_record",
+      "transfer_out_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.18.3",
@@ -968,7 +971,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "summary_record"
     ],
     "score_deduction": "3",
     "original_id": "4.18.4",
@@ -983,7 +986,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.19.1",
@@ -998,7 +1001,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "consultation_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.20.1",
@@ -1013,7 +1016,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "consultation_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.20.2",
@@ -1028,7 +1031,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "consultation_record"
     ],
     "score_deduction": "2/项",
     "original_id": "4.20.3",
@@ -1043,7 +1046,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3",
     "original_id": "4.20.4",
@@ -1058,7 +1061,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "consultation_record"
     ],
     "score_deduction": "5",
     "original_id": "4.20.5",
@@ -1073,7 +1076,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "consultation_record"
     ],
     "score_deduction": "5",
     "original_id": "4.20.6",
@@ -1088,7 +1091,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "乙级",
     "original_id": "4.21.1",
@@ -1103,7 +1106,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.21.2",
@@ -1118,7 +1121,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "3/次",
     "original_id": "4.22.1",
@@ -1133,7 +1136,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "5",
     "original_id": "4.22.2",
@@ -1148,7 +1151,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "original_id": "4.22.3",
@@ -1163,7 +1166,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "newborn_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "4.23.1",
@@ -1178,7 +1181,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note"
+      "newborn_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "4.24.1",
@@ -1193,7 +1196,7 @@
     "complexity": "高复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "preop_summary"
+      "presurg_summary"
     ],
     "score_deduction": "5",
     "original_id": "5.1.1",
@@ -1208,7 +1211,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "preop_summary"
+      "presurg_summary"
     ],
     "score_deduction": "2/项",
     "original_id": "5.1.2",
@@ -1223,7 +1226,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "preop_discussion"
+      "presurg_discussion"
     ],
     "score_deduction": "乙级",
     "original_id": "5.2.1",
@@ -1238,7 +1241,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "preop_discussion"
+      "presurg_discussion"
     ],
     "score_deduction": "1",
     "original_id": "5.2.2",
@@ -1253,7 +1256,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "preop_discussion"
+      "presurg_discussion"
     ],
     "score_deduction": "3",
     "original_id": "5.3.1",
@@ -1268,7 +1271,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "preop_discussion"
+      "presurg_discussion"
     ],
     "score_deduction": "2/项",
     "original_id": "5.3.2",
@@ -1283,7 +1286,6 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "preop_summary",
       "anesthesia_record"
     ],
     "score_deduction": "5",
@@ -1314,7 +1316,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "consent_form"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "5.5.2",
@@ -1419,7 +1421,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "5.10.1",
@@ -1434,7 +1436,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "乙级",
     "original_id": "5.10.2",
@@ -1449,7 +1451,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "2/项",
     "original_id": "5.10.3",
@@ -1464,7 +1466,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "5",
     "original_id": "5.10.4",
@@ -1479,7 +1481,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "1/次",
     "original_id": "5.11.1",
@@ -1494,7 +1496,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "5",
     "original_id": "5.12.1",
@@ -1509,7 +1511,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "3",
     "original_id": "5.12.2",
@@ -1524,7 +1526,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_safecheck_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "5.13.1",
@@ -1539,7 +1541,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_safecheck_record"
     ],
     "score_deduction": "1/项",
     "original_id": "5.13.2",
@@ -1554,7 +1556,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "postsurg_firstcourse_record"
     ],
     "score_deduction": "5",
     "original_id": "5.14.1",
@@ -1569,7 +1571,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "postsurg_firstcourse_record"
     ],
     "score_deduction": "2/项",
     "original_id": "5.14.2",
@@ -1584,7 +1586,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "anesthesia_record"
     ],
     "score_deduction": "2/项",
     "original_id": "5.15.1",
@@ -1599,7 +1601,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "daily_course_record"
     ],
     "score_deduction": "2/次",
     "original_id": "5.16.1",
@@ -1614,7 +1616,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "单项否决丙级",
     "original_id": "5.17.1",
@@ -1629,7 +1631,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "乙级",
     "original_id": "5.17.2",
@@ -1644,7 +1646,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "乙级",
     "original_id": "5.17.3",
@@ -1659,7 +1661,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_risk_assessment"
     ],
     "score_deduction": "乙级",
     "original_id": "5.17.4",
@@ -1674,7 +1676,7 @@
     "complexity": "低复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_risk_assessment"
     ],
     "score_deduction": "1/项",
     "original_id": "5.17.5",
@@ -1689,7 +1691,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "presurg_summary"
     ],
     "score_deduction": "5",
     "original_id": "5.18.1",
@@ -1704,7 +1706,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "original_id": "5.18.2",
@@ -1719,7 +1721,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "5",
     "original_id": "5.18.3",
@@ -2064,7 +2066,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "examination_report"
+      "exam_item_report"
     ],
     "score_deduction": "2/次",
     "original_id": "8.1.1",
@@ -2079,7 +2081,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "examination_report"
+      "exam_item_report"
     ],
     "score_deduction": "1/次",
     "original_id": "8.2.1",
@@ -2094,7 +2096,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "examination_report"
+      "exam_item_report"
     ],
     "score_deduction": "3",
     "original_id": "8.3.1",
@@ -2109,7 +2111,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note",
+      "daily_course_record",
       "medical_order"
     ],
     "score_deduction": "单项否决丙级",
@@ -2125,7 +2127,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "progress_note",
+      "daily_course_record",
       "medical_order"
     ],
     "score_deduction": "3",
@@ -2141,7 +2143,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "progress_note",
+      "daily_course_record",
       "medical_order"
     ],
     "score_deduction": "1/项",
@@ -2157,7 +2159,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "progress_note",
+      "daily_course_record",
       "medical_order"
     ],
     "score_deduction": "1/项",
@@ -2173,7 +2175,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note",
+      "daily_course_record",
       "medical_order"
     ],
     "score_deduction": "乙级",
@@ -2189,7 +2191,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "progress_note",
+      "daily_course_record",
       "medical_order"
     ],
     "score_deduction": "5",
@@ -2331,7 +2333,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "admission_record"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "check_points": [
@@ -2356,7 +2358,7 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "admission_record"
+      "daily_course_record"
     ],
     "score_deduction": "1",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认鉴别诊断是否逐条列出并与初步诊断相关联。\n2. 判断是否说明排除或支持各鉴别诊断的依据。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2370,7 +2372,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "course_record"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认患者是否使用系统性抗菌药物。\n2. 检查病程中是否记录抗菌药名称、剂量/疗程、疗效或不良反应。\n3. 对于仅局部外用的药物说明是否豁免。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2384,7 +2386,7 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "course_record"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认是否存在化疗或免疫治疗医嘱。\n2. 核查病程是否记录化疗方案/药物名称及执行情况。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2398,7 +2400,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "course_record"
+      "daily_course_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 判断是否存在经治医师变更或接/交班场景。\n2. 核查交班记录是否在交班前完成、接班记录是否在24小时内完成。\n\n【补充说明】\n- 如未发生医师变更，可说明规则不适用。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 必须根据实际病历内容，不要使用占位符或模板\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【重要提醒】\n1. 必须仔细阅读下方提供的实际病历文本\n2. 所有判断和引用必须基于实际病历内容\n3. 严禁编造不存在的病历内容\n4. 严禁照搬提示词中的示例或描述\n5. evidence 字段必须引用实际病历中的原文，用引号标注\n\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2427,7 +2429,7 @@
     "defect_level": "轻微缺陷",
     "applicable_documents": [
       "consultation_record",
-      "course_record"
+      "daily_course_record"
     ],
     "score_deduction": "1",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认病程中是否记录会诊意见要点。\n2. 检查申请医师是否说明会诊意见的执行或后续处理。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2455,7 +2457,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "transfusion_record"
+      "bloodtrans_record"
     ],
     "score_deduction": "3",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认是否存在输血医嘱或输血记录。\n2. 检查是否有输血前评估、输血记录单、输血后评价或不良反应监测。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2469,7 +2471,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "presurg_discussion"
     ],
     "score_deduction": "3",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认患者是否属于三、四级手术且非紧急情况。\n2. 核查是否存在术前讨论记录并记录要点及参与人员。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2497,8 +2499,8 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "informed_consent",
-      "operation_record"
+      "consent_form",
+      "surgery_record"
     ],
     "score_deduction": "单项否决",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 比较术前计划手术名称与术中实际名称。\n2. 如术中变更术式，确认是否补充术中变更知情同意并完善签名。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2512,7 +2514,7 @@
     "complexity": "中复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "informed_consent",
+      "consent_form",
       "anesthesia_record"
     ],
     "score_deduction": "单项否决",
@@ -2555,7 +2557,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "单项否决",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 当存在手术医嘱时，确认是否提供正式的手术记录文书。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2569,7 +2571,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "3",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 获取手术结束时间（麻醉或手术记录）。\n2. 核对手术记录书写时间是否在术后24小时内完成。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。\n- **强限制要求**：如果病历中给出的书写时间与手术日期跨天（例如手术当天结束，而书写时间在第二天），请仔细对比精确计算时间差，超过24小时即使符合“次日书写”也必须判定为缺陷。如果只有时间没有具体日期，请不要随意推断时间差导致超期。"
@@ -2583,7 +2585,7 @@
     "complexity": "低复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认手术记录书写者是否为第一助手。\n2. 如由一助书写，需有术者审核或签名确认。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2597,7 +2599,7 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "operation_record"
+      "surgery_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 判断患者是否属于需审批的特殊或重大手术。\n2. 核查是否附有重大手术审批表及审批意见。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2611,7 +2613,7 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "discharge_summary"
+      "discharge_record"
     ],
     "score_deduction": "3",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 确认出院医嘱下达时间与实际出院时间。\n2. 检查出院或死亡记录是否在出院后24小时内完成，且未提前撰写。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。\n- **强限制要求**：如果病历中**完全未提及**出院记录的书写完成时间，无法确认时间差，必须直接判定为存在缺陷（不合规），严禁根据常规临床流程私自假推断其已按时完成。"
@@ -2625,8 +2627,8 @@
     "complexity": "低复杂度",
     "defect_level": "严重缺陷",
     "applicable_documents": [
-      "discharge_summary",
-      "lab_report"
+      "discharge_record",
+      "labtest_item_report"
     ],
     "score_deduction": "3",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 核对出院记录中的诊断列表。\n2. 与病案首页诊断对比，确认诊断名称、顺序、主要次要诊断是否一致。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。\n- **强限制要求**：注意区分实验室检查指标本身（如“白细胞升高”）和确切的疾病诊断名称（如“肺部感染”）。将无定性的实验室指标词汇作为出院诊断视为存在缺陷（不合规）。"
@@ -2640,8 +2642,8 @@
     "complexity": "中复杂度",
     "defect_level": "轻微缺陷",
     "applicable_documents": [
-      "course_record",
-      "lab_report"
+      "daily_course_record",
+      "labtest_item_report"
     ],
     "score_deduction": "1",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 识别检验科提供的异常检验结果。\n2. 确认病程记录是否对异常指标进行分析、处理或给出计划。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2655,8 +2657,8 @@
     "complexity": "中复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "course_record",
-      "case_discussion"
+      "daily_course_record",
+      "diffcase_discussion_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 判断患者是否入院超过3天仍未明确诊断（如出现“诊断待查”）。\n2. 确认是否组织疑难病例讨论并记录时间、参与人员、结论。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
@@ -2670,8 +2672,8 @@
     "complexity": "高复杂度",
     "defect_level": "一般缺陷",
     "applicable_documents": [
-      "course_record",
-      "case_discussion"
+      "daily_course_record",
+      "diffcase_discussion_record"
     ],
     "score_deduction": "2",
     "custom_prompt": "你是一名经验丰富的病历质控专家，负责核对病历记录是否满足质控规则要求。\n\n请根据下列信息审阅病历文本，并判断是否符合本规则。\n\n【规则信息】\n- 规则ID: {rule_id}\n- 规则名称: {name}\n- 规则描述: {description}\n- 适用文书: {applicable_documents}\n- 缺陷级别: {defect_level}\n- 复杂度: {complexity}\n\n【检查要点】\n1. 识别病程中是否出现疗效不佳、病情进展或非计划再次手术等情况。\n2. 若存在上述情形，确认是否及时召开疑难病例讨论并记录讨论情况。\n\n【分析方法】\n- 逐字阅读相关文书内容，定位与上述要点相关的段落或缺失位置。\n- 对每个要点给出是否满足及理由，若证据不足请说明原因。\n\n【输出要求】\n输出一个 JSON 对象：{{{{\n  \"is_compliant\": true/false,\n  \"findings\": \"汇总所有问题或说明符合要求的依据。如不适用，请说明理由。\",\n  \"issues\": [\n    {{{{\n      \"description\": \"问题描述（简洁明确，10字以内）\",\n      \"evidence\": \"简洁的证据指向（告诉用户在哪里发现的问题，1-2句话）\"\n    }}}}\n  ],\n  \"evidence\": \"完整的证据引用，必须包含具体的病历原文片段（带引号）。对于缺失型问题，应引用相关段落并说明缺少什么。\",\n  \"suggestion\": \"具体整改建议，必须条目化列出，使用 (1)(2)(3) 格式。建议内容必须根据实际病历内容和发现的具体问题来生成，不要使用模板化的通用建议。\",\n  \"confidence\": 0.6-0.9 之间的置信度（病历质控存在一定主观性，请保持适度谨慎）\n}}}}\n\n注意：\n1. **issues 数组中的 evidence（问题级证据）**：\n   - 作用：简洁地告诉用户在哪里发现了问题\n   - 长度：1-2句话，不超过50字\n   - 示例：✅ \"病程记录2025-01-10提到医师接班，但未记录交班\"\n\n2. **顶层 evidence 字段（综合证据）**：\n   - 作用：提供完整详细的病历原文片段作为证据\n   - 格式：必须使用引号标注原文，如：记载：\"原文内容\"\n   - 要求：引用多个原文片段时，每个片段都要标注来源\n\n3. **suggestion（改进建议）必须满足以下要求**：\n   - ✅ 必须使用 (1)(2)(3) 或 ①②③ 条目化格式，列出2-5条具体建议\n   - ✅ 必须根据实际病历内容和发现的具体问题来定制建议\n   - ✅ 如果是缺失型问题，列出需要补充的具体内容要点\n   - ✅ 如果是内容错误，说明需要修正哪些具体部分\n   - ✅ 如果是时效性问题，说明需要在什么时间前完成\n   - ❌ 禁止使用以下空泛表述：\n     * \"请根据上述问题进行修改\"\n     * \"请根据问题进行整改\"\n     * \"建议完善相关记录\"\n   - ❌ 禁止完全照搬提示词中的示例，必须结合具体病历内容\n\n4. **suggestion 的定制化原则**：\n   - 分析病历中已有的内容和缺失的内容\n   - 针对缺失或错误的部分给出精准的补充或修正建议\n   - 如果病历已有部分内容，在建议中明确指出还缺少哪些部分\n   - 如果是完全缺失，列出完整的内容要点\n\n5. 置信度应在 0.6-0.9 范围，避免过度自信\n\n6. evidence、suggestion 统一使用字符串格式，避免使用数组或对象\n\"\n\n【病历文本】\n{medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"

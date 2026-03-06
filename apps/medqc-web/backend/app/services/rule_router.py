@@ -12,23 +12,62 @@ logger = logging.getLogger(__name__)
 
 # section_type → applicable_documents 的映射
 # 左侧是 document_segmenter 输出的类型，右侧是规则 JSON 中的类型
-# 注意：保持精准映射，不要过度扩展，否则一个段落会匹配太多规则
+# 注意：保持精准映射，同时保留旧的粗粒度类型作为兼容入口
 SECTION_TO_RULE_TYPES = {
-    'admission_record':     ['admission_record'],
-    'progress_note':        ['progress_note', 'course_record'],
-    'operation_record':     ['operation_record'],
-    'discharge_record':     ['discharge_record', 'discharge_summary'],
-    'consultation_record':  ['consultation_record'],
-    'case_discussion':      ['case_discussion'],
-    'examination_report':   ['examination_report', 'lab_report'],
-    'medical_order':        ['medical_order'],
-    'consent_form':         ['consent_form', 'informed_consent'],
-    'anesthesia_record':    ['anesthesia_record'],
-    'transfusion_record':   ['transfusion_record'],
-    # 新增细粒度类型
-    'preop_summary':        ['preop_summary', 'operation_record'],
-    'preop_discussion':     ['preop_discussion', 'case_discussion'],
+    # ---- 精确映射（与 CDM 表名一致）----
+    'admission_record':             ['admission_record'],
+    'first_course_record':          ['first_course_record'],
+    'daily_course_record':          ['daily_course_record'],
+    'senior_course_record':         ['senior_course_record'],
+    'rescue_record':                ['rescue_record'],
+    'diffcase_discussion_record':   ['diffcase_discussion_record'],
+    'death_discussion':             ['death_discussion'],
+    'handoff_record':               ['handoff_record'],
+    'handover_record':              ['handover_record'],
+    'summary_record':               ['summary_record'],
+    'consultation_record':          ['consultation_record'],
+    'surgery_record':               ['surgery_record'],
+    'presurg_summary':              ['presurg_summary'],
+    'presurg_discussion':           ['presurg_discussion'],
+    'postsurg_firstcourse_record':  ['postsurg_firstcourse_record'],
+    'surgery_safecheck_record':     ['surgery_safecheck_record'],
+    'surgery_risk_assessment':      ['surgery_risk_assessment'],
+    'anesthesia_record':            ['anesthesia_record'],
+    'newborn_record':               ['newborn_record'],
+    'bloodtrans_record':            ['bloodtrans_record'],
+    'nursing_record':               ['nursing_record'],
+    'discharge_record':             ['discharge_record'],
+    'death_record':                 ['death_record'],
+    'consent_form':                 ['consent_form'],
+    'examination_report':           ['exam_item_report'],
+    'exam_item_report':             ['exam_item_report'],
+    'labtest_item_report':          ['labtest_item_report'],
+    'medical_order':                ['medical_order'],
+    'transfer_in_record':           ['transfer_in_record'],
+    'transfer_out_record':          ['transfer_out_record'],
+
+    # ---- 向后兼容：旧的粗粒度类型 → 展开为所有子类型 ----
+    'progress_note': [
+        'first_course_record', 'daily_course_record',
+        'senior_course_record', 'rescue_record',
+    ],
+    'course_record': [
+        'first_course_record', 'daily_course_record',
+        'senior_course_record',
+    ],
+    'operation_record': [
+        'surgery_record', 'presurg_summary', 'presurg_discussion',
+        'postsurg_firstcourse_record',
+    ],
+    'case_discussion': [
+        'diffcase_discussion_record', 'death_discussion',
+    ],
+    'informed_consent':             ['consent_form'],
+    'discharge_summary':            ['discharge_record'],
+    'lab_report':                   ['labtest_item_report'],
+    'transfusion_record':           ['bloodtrans_record'],
 }
+
 
 
 
@@ -66,14 +105,22 @@ class RuleRouter:
         )
 
     def _load_rules(self) -> List[Dict[str, Any]]:
-        """从 JSON 文件加载规则"""
-        json_path = Path(__file__).parent.parent / 'data' / 'sichuan_rules_146.json'
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"加载规则文件失败: {e}")
-            return []
+        """从 JSON 文件加载规则（sichuan + custom）"""
+        data_dir = Path(__file__).parent.parent / 'data'
+        all_rules: List[Dict[str, Any]] = []
+        for filename in ['sichuan_rules_146.json', 'custom_rules_33.json']:
+            json_path = data_dir / filename
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    rules = json.load(f)
+                    all_rules.extend(rules)
+                    logger.info(f"从 {filename} 加载了 {len(rules)} 条规则")
+            except FileNotFoundError:
+                logger.warning(f"规则文件不存在: {json_path}")
+            except Exception as e:
+                logger.error(f"加载规则文件 {filename} 失败: {e}")
+        return all_rules
+
 
     def get_rules_for_section(self, section_type: str) -> List[Dict[str, Any]]:
         """
