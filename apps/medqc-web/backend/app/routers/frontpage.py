@@ -136,13 +136,24 @@ async def auto_generate_frontpage_draft_stream(
         )
 
     async def event_generator():
+        print(f"\n[DEBUG] SSE 接口收到请求: visit_id={payload.visit_id}, medical_text_len={len(payload.medical_text or '')}")
         medical_text = payload.medical_text or ""
+        visit_id = payload.visit_id or ""
+        
+        # 如果没有直接传入文本且有 visit_id，走三层架构（visit_id 透传给 stream 方法）
+        # 三层架构会内部处理：SQL 直读 → 码表映射 → LLM 补缺
+        if not medical_text and visit_id:
+            print(f"[DEBUG] 三层架构模式: visit_id={visit_id}，SQL 直读 + LLM 补缺")
+            # 同时获取 LLM 需要的文本作为 fallback
+            medical_text = await service._get_llm_context_text(visit_id)
+            print(f"[DEBUG] 获取到 LLM 上下文文本长度: {len(medical_text)}")
+        
         queue: asyncio.Queue = asyncio.Queue()
         producer_task: Optional[asyncio.Task] = None
 
         async def produce():
             try:
-                async for event_name, data in service.extract_from_text_stream(medical_text):
+                async for event_name, data in service.extract_from_text_stream(medical_text, visit_id=visit_id):
                     await queue.put((event_name, data))
             except Exception as exc:
                 await queue.put(("error", {"success": False, "error": str(exc), "trace_id": trace_id}))
