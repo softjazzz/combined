@@ -1,362 +1,443 @@
 """
 四川质控服务单元测试
 
-测试 P0 优先级任务的实现：
-1. 从数据库加载规则
+测试目标：
+1. 从 JSON 文件加载规则并按文书类型筛选
 2. 使用 Prompt 模板构建 Prompt
+3. 通过 SQLAlchemy 查询 CDM 表获取病历内容
+4. 使用统一规则引擎进行质控评估
+
+数据库策略：
+- 单元测试使用 SQLite in-memory（与生产 PG 结构一致，SQLAlchemy 兼容）
+- 规则数据来自真实 JSON 文件（sichuan_rules_146.json / custom_rules_33.json）
 """
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
 from app.services.sichuan_qc_service import SichuanQCService
+from app.database.connection import Base
 
 
-class TestSichuanQCService:
-    """四川质控服务单元测试类"""
+# ==================== Fixtures ====================
 
-    @pytest.fixture
-    def service(self):
-        """创建服务实例"""
-        return SichuanQCService()
+@pytest.fixture(scope="module")
+def test_engine():
+    """创建 SQLite in-memory 引擎用于测试（结构与 PG 一致）"""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    return engine
 
-    @pytest.fixture
-    def mock_rules(self):
-        """模拟规则数据"""
-        return [
-            {
-                "id": "rule-001",
-                "rule_code": "SC-001",
-                "name": "病情分析完整性",
-                "description": "首次病程记录必须包含详细的病情分析",
-                "category": "completeness",
-                "severity": "critical",
-                "is_active": True,
-                "check_logic": {
-                    "applicable_documents": ["首次病程记录", "病程记录"]
-                }
-            },
-            {
-                "id": "rule-002",
-                "rule_code": "SC-002",
-                "name": "鉴别诊断完整性",
-                "description": "首次病程记录必须包含鉴别诊断",
-                "category": "completeness",
-                "severity": "critical",
-                "is_active": True,
-                "check_logic": {
-                    "applicable_documents": ["首次病程记录"]
-                }
-            },
-            {
-                "id": "rule-003",
-                "rule_code": "SC-003",
-                "name": "诊疗计划完整性",
-                "description": "首次病程记录必须包含详细的诊疗计划",
-                "category": "completeness",
-                "severity": "major",
-                "is_active": True,
-                "check_logic": {
-                    "applicable_documents": ["首次病程记录", "病程记录"]
-                }
-            },
-            {
-                "id": "rule-004",
-                "rule_code": "SC-004",
-                "name": "手术记录完整性",
-                "description": "手术记录必须包含手术过程描述",
-                "category": "completeness",
-                "severity": "critical",
-                "is_active": True,
-                "check_logic": {
-                    "applicable_documents": ["手术记录"]
-                }
-            },
+
+@pytest.fixture(scope="module")
+def test_session_factory(test_engine):
+    """创建 session 工厂"""
+    return sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+
+@pytest.fixture
+def db_session(test_session_factory):
+    """单个测试用 session（每个测试后回滚）"""
+    session = test_session_factory()
+    yield session
+    session.rollback()
+    session.close()
+
+
+@pytest.fixture
+def seed_cdm_data(db_session):
+    """向 CDM 表写入测试数据（每次测试前清理重建）"""
+    # 清理旧数据
+    for table in ['admission_record', 'first_course_record', 'daily_course_record',
+                  'surgery_record', 'discharge_record']:
+        db_session.execute(text(f"DELETE FROM {table} WHERE institute_id = 'TEST001'"))
+    db_session.commit()
+    # 入院记录
+    db_session.execute(text("""
+        INSERT INTO admission_record (institute_id, patient_id, visit_id, document_id, record_content)
+        VALUES ('TEST001', 'P001', 'V001', 'D001',
+                '入院记录\n患者男性，65岁，因胸痛3天入院。\n主诉：反复胸痛3天。\n现病史：患者3天前无明显诱因出现胸痛...\n既往史：高血压病史5年。\n个人史：无特殊。\n家族史：父亲有冠心病史。\n体格检查：T 36.5℃，P 80次/分，R 18次/分，BP 140/90mmHg。\n辅助检查：心电图示ST段改变。\n初步诊断：冠心病，不稳定型心绞痛。')
+    """))
+    # 首次病程记录
+    db_session.execute(text("""
+        INSERT INTO first_course_record (institute_id, patient_id, visit_id, document_id, record_content)
+        VALUES ('TEST001', 'P001', 'V001', 'D002',
+                '首次病程记录\n病例特点：患者男性，65岁，因胸痛3天入院。\n诊断依据：1. 老年男性；2. 反复胸痛3天；3. 心电图示ST段改变。\n鉴别诊断：需与急性心肌梗死、主动脉夹层鉴别。\n诊疗计划：1. 完善冠脉CTA；2. 抗血小板治疗；3. 监测心肌酶谱。')
+    """))
+    # 日常病程记录
+    db_session.execute(text("""
+        INSERT INTO daily_course_record (institute_id, patient_id, visit_id, document_id, record_content)
+        VALUES ('TEST001', 'P001', 'V001', 'D003',
+                '日常病程记录\n2025-01-02 查房记录\n患者胸痛较前缓解，夜间未发作。\n生命体征平稳，心率72次/分，血压132/82mmHg。\n治疗反应良好，继续当前治疗方案。')
+    """))
+    # 手术记录
+    db_session.execute(text("""
+        INSERT INTO surgery_record (institute_id, patient_id, visit_id, document_id, record_content)
+        VALUES ('TEST001', 'P001', 'V001', 'D004',
+                '手术记录\n手术名称：经皮冠状动脉介入治疗(PCI)\n手术日期：2025-01-03\n麻醉方式：局部麻醉\n手术经过：常规消毒铺巾，穿刺右桡动脉...\n术中出血量：约5ml\n术后诊断：冠心病，LAD中段狭窄90%')
+    """))
+    # 出院记录
+    db_session.execute(text("""
+        INSERT INTO discharge_record (institute_id, patient_id, visit_id, document_id, record_content)
+        VALUES ('TEST001', 'P001', 'V001', 'D005',
+                '出院记录\n入院日期：2025-01-01\n出院日期：2025-01-10\n入院诊断：冠心病\n出院诊断：冠心病，LAD中段狭窄（PCI术后）\n诊疗经过：入院后完善相关检查...行PCI术，术后恢复良好。\n出院医嘱：1. 继续口服阿司匹林；2. 1月后复查。')
+    """))
+    db_session.commit()
+    return db_session
+
+
+@pytest.fixture
+def service():
+    """创建 SichuanQCService 实例"""
+    return SichuanQCService()
+
+
+# ==================== 规则加载测试 ====================
+
+class TestRuleLoading:
+    """测试从 JSON 加载规则并按文书类型筛选"""
+
+    def test_load_all_rules_from_json(self, service):
+        """测试加载所有规则"""
+        rules = service._load_rules_from_json()
+        assert len(rules) == 179  # SC-146 + LX-33
+        assert all("rule_id" in r for r in rules)
+
+    def test_load_custom_rules_from_json(self, service):
+        """测试加载自定义规则"""
+        rules = service._load_custom_rules_from_json()
+        assert len(rules) > 0
+        # 应包含 LX 和 LXE 系列
+        lx_ids = [r["rule_id"] for r in rules if r["rule_id"].startswith("LX-")]
+        lxe_ids = [r["rule_id"] for r in rules if r["rule_id"].startswith("LXE-")]
+        assert len(lx_ids) == 33
+        assert len(lxe_ids) > 0
+
+    @pytest.mark.asyncio
+    async def test_filter_rules_for_admission_record(self, service):
+        """测试筛选入院记录适用规则"""
+        rules = await service._load_rules_from_db("入院记录")
+        assert len(rules) == 29  # SC-001~020 + LX-001~009
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        assert "SC-001" in rule_ids
+        assert "SC-020" in rule_ids
+        assert "LX-001" in rule_ids
+        assert "LX-009" in rule_ids
+        # 不应包含非入院记录的规则
+        assert "SC-021" not in rule_ids  # 首次病程
+        assert "SC-095" not in rule_ids  # 手术记录
+
+    @pytest.mark.asyncio
+    async def test_filter_rules_for_first_course(self, service):
+        """测试筛选首次病程记录适用规则"""
+        rules = await service._load_rules_from_db("首次病程记录")
+        assert len(rules) == 7  # SC-021~027
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        assert "SC-021" in rule_ids
+        assert "SC-027" in rule_ids
+
+    @pytest.mark.asyncio
+    async def test_filter_rules_for_daily_course(self, service):
+        """测试筛选日常病程记录适用规则"""
+        rules = await service._load_rules_from_db("日常病程记录")
+        assert len(rules) >= 34  # SC 29条 + LX 5条 + 跨文书
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        assert "SC-028" in rule_ids
+        assert "LX-010" in rule_ids
+
+    @pytest.mark.asyncio
+    async def test_filter_rules_for_surgery_record(self, service):
+        """测试筛选手术记录适用规则"""
+        rules = await service._load_rules_from_db("手术记录")
+        assert len(rules) >= 15  # SC 11条 + LX 4条 + 跨文书
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        assert "SC-095" in rule_ids
+        assert "LX-025" in rule_ids
+
+    @pytest.mark.asyncio
+    async def test_filter_rules_for_discharge_record(self, service):
+        """测试筛选出院记录适用规则"""
+        rules = await service._load_rules_from_db("出院记录")
+        assert len(rules) >= 13  # SC 12条 + LX 1条 + 跨文书
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        assert "SC-116" in rule_ids
+        assert "LX-029" in rule_ids
+
+    @pytest.mark.asyncio
+    async def test_filter_rules_for_consultation(self, service):
+        """测试筛选会诊记录适用规则"""
+        rules = await service._load_rules_from_db("会诊记录")
+        assert len(rules) >= 7  # SC 5条 + LX 2-3条
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        assert "SC-067" in rule_ids
+        assert "LX-015" in rule_ids
+
+    @pytest.mark.asyncio
+    async def test_unknown_document_type_returns_empty(self, service):
+        """测试未知文书类型返回空列表（无通用规则）"""
+        rules = await service._load_rules_from_db("不存在的文书类型")
+        assert len(rules) == 0
+
+    def test_doc_type_mapping_covers_all_types(self, service):
+        """验证 doc_type_mapping 覆盖了所有精确文书类型"""
+        expected_types = [
+            "admission_record", "first_course_record", "daily_course_record",
+            "senior_course_record", "rescue_record", "diffcase_discussion_record",
+            "death_discussion", "consultation_record", "surgery_record",
+            "presurg_summary", "presurg_discussion", "postsurg_firstcourse_record",
+            "surgery_safecheck_record", "surgery_risk_assessment",
+            "anesthesia_record", "newborn_record", "bloodtrans_record",
+            "nursing_record", "discharge_record", "consent_form",
+            "exam_item_report", "labtest_item_report", "medical_order",
         ]
+        for eng_type in expected_types:
+            assert eng_type in service.doc_type_mapping, \
+                f"doc_type_mapping 缺少 '{eng_type}'"
+            assert service.doc_type_mapping[eng_type] != eng_type, \
+                f"'{eng_type}' 未转为中文"
+
+
+# ==================== Prompt 构建测试 ====================
+
+class TestPromptBuilding:
+    """测试 Prompt 构建"""
 
     @pytest.mark.asyncio
-    async def test_load_rules_from_db_success_with_db_filtering(self, service, mock_rules):
-        """测试从数据库成功加载规则（使用数据库层面筛选）"""
-        # Mock Supabase 客户端
-        mock_supabase = MagicMock()
-        mock_query = MagicMock()
-        mock_response = MagicMock()
-
-        # 模拟数据库层面筛选后的结果（只返回适用的规则）
-        filtered_rules = [r for r in mock_rules if r["rule_code"] in ["SC-001", "SC-002", "SC-003"]]
-        mock_response.data = filtered_rules
-
-        # 设置 Mock 链
-        mock_supabase.table.return_value = mock_query
-        mock_query.select.return_value = mock_query
-        mock_query.eq.return_value = mock_query
-        mock_query.or_.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.execute.return_value = mock_response
-
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
-            # 测试加载首次病程记录的规则
-            rules = await service._load_rules_from_db("首次病程记录")
-
-            # 验证结果
-            assert len(rules) == 3  # SC-001, SC-002, SC-003
-            assert all(r["rule_code"] in ["SC-001", "SC-002", "SC-003"] for r in rules)
-
-            # 验证 Supabase 调用（使用数据库层面筛选）
-            mock_supabase.table.assert_called_once_with("qc_rules")
-            mock_query.select.assert_called_once_with("*")
-            mock_query.eq.assert_called_once_with("is_active", True)
-            mock_query.or_.assert_called_once()  # 验证使用了 or_ 筛选
-            mock_query.limit.assert_called_once_with(1000)
-
-    @pytest.mark.asyncio
-    async def test_load_rules_from_db_success_with_app_filtering(self, service, mock_rules):
-        """测试从数据库成功加载规则（回退到应用层筛选）"""
-        # Mock Supabase 客户端
-        mock_supabase = MagicMock()
-        mock_query = MagicMock()
-        mock_response = MagicMock()
-        mock_response.data = mock_rules
-
-        # 设置 Mock 链
-        mock_supabase.table.return_value = mock_query
-        mock_query.select.return_value = mock_query
-        mock_query.eq.return_value = mock_query
-
-        # 模拟数据库层面筛选失败（or_ 方法抛出异常）
-        mock_query.or_.side_effect = Exception("Database filtering not supported")
-
-        mock_query.limit.return_value = mock_query
-        mock_query.execute.return_value = mock_response
-
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
-            # 测试加载首次病程记录的规则
-            rules = await service._load_rules_from_db("首次病程记录")
-
-            # 验证结果（应该回退到应用层筛选）
-            assert len(rules) == 3  # SC-001, SC-002, SC-003
-            assert all(r["rule_code"] in ["SC-001", "SC-002", "SC-003"] for r in rules)
-
-            # 验证 Supabase 调用
-            mock_supabase.table.assert_called_with("qc_rules")
-            mock_query.select.assert_called_with("*")
-            mock_query.eq.assert_called_with("is_active", True)
-
-    @pytest.mark.asyncio
-    async def test_load_rules_from_db_filter_by_document_type(self, service, mock_rules):
-        """测试按文书类型筛选规则"""
-        # Mock Supabase 客户端
-        mock_supabase = MagicMock()
-        mock_query = MagicMock()
-        mock_response = MagicMock()
-
-        # 模拟数据库层面筛选后的结果（只返回适用于手术记录的规则）
-        filtered_rules = [r for r in mock_rules if r["rule_code"] == "SC-004"]
-        mock_response.data = filtered_rules
-
-        mock_supabase.table.return_value = mock_query
-        mock_query.select.return_value = mock_query
-        mock_query.eq.return_value = mock_query
-        mock_query.or_.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.execute.return_value = mock_response
-
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
-            # 测试加载手术记录的规则
-            rules = await service._load_rules_from_db("手术记录")
-
-            # 验证结果：只有 SC-004 适用于手术记录
-            assert len(rules) == 1
-            assert rules[0]["rule_code"] == "SC-004"
-
-    @pytest.mark.asyncio
-    async def test_load_rules_from_db_no_supabase(self, service):
-        """测试 Supabase 不可用时的降级处理"""
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=None):
-            rules = await service._load_rules_from_db("首次病程记录")
-            
-            # 验证返回空列表
-            assert rules == []
-
-    @pytest.mark.asyncio
-    async def test_load_rules_from_db_exception(self, service):
-        """测试数据库异常时的降级处理"""
-        mock_supabase = MagicMock()
-        mock_supabase.table.side_effect = Exception("Database connection error")
-        
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
-            rules = await service._load_rules_from_db("首次病程记录")
-            
-            # 验证返回空列表
-            assert rules == []
-
-    @pytest.mark.asyncio
-    async def test_build_prompt_with_rules(self, service, mock_rules):
+    async def test_build_prompt_with_rules(self, service):
         """测试使用规则构建 Prompt"""
-        content = "这是一份首次病程记录的内容..."
-        document_type = "首次病程记录"
-        
-        # 使用前 3 条规则
-        rules = mock_rules[:3]
-        
-        prompt = await service._build_prompt(rules, content, document_type)
-        
-        # 验证 Prompt 包含关键信息
+        rules = (await service._load_rules_from_db("入院记录"))[:3]
+        content = "患者男性，65岁，因胸痛3天入院。主诉：反复胸痛3天。"
+
+        prompt = await service._build_prompt(rules, content, "入院记录")
+
         assert "资深病案质控专家" in prompt
-        assert "首次病程记录" in prompt
-        assert "适用规则数: 3" in prompt
-        assert "病情分析完整性" in prompt
-        assert "鉴别诊断完整性" in prompt
-        assert "诊疗计划完整性" in prompt
+        assert "入院记录" in prompt
+        assert f"适用规则数: {len(rules)}" in prompt
         assert content in prompt
 
     @pytest.mark.asyncio
     async def test_build_prompt_without_rules(self, service):
         """测试无规则时构建 Prompt"""
         content = "这是一份病程记录的内容..."
-        document_type = "病程记录"
-        
-        prompt = await service._build_prompt([], content, document_type)
-        
-        # 验证 Prompt 包含关键信息
+
+        prompt = await service._build_prompt([], content, "日常病程记录")
+
         assert "资深病案质控专家" in prompt
-        assert "病程记录" in prompt
+        assert "日常病程记录" in prompt
         assert "适用规则数: 0" in prompt
         assert "未加载到具体规则" in prompt
-        assert content in prompt
+
+
+# ==================== CDM 数据查询测试 ====================
+
+class TestCDMDataAccess:
+    """测试通过 SQLAlchemy 查询 CDM 表获取病历内容"""
+
+    def test_query_admission_record(self, seed_cdm_data):
+        """测试查询入院记录"""
+        from app.database.models.cdm import AdmissionRecord
+
+        session = seed_cdm_data
+        records = session.query(AdmissionRecord).filter_by(
+            institute_id="TEST001", patient_id="P001"
+        ).all()
+
+        assert len(records) == 1
+        assert records[0].record_content is not None
+        assert "胸痛" in records[0].record_content
+        assert "初步诊断" in records[0].record_content
+
+    def test_query_first_course_record(self, seed_cdm_data):
+        """测试查询首次病程记录"""
+        from app.database.models.cdm import FirstCourseRecord
+
+        session = seed_cdm_data
+        records = session.query(FirstCourseRecord).filter_by(
+            institute_id="TEST001", patient_id="P001"
+        ).all()
+
+        assert len(records) == 1
+        assert "鉴别诊断" in records[0].record_content
+        assert "诊疗计划" in records[0].record_content
+
+    def test_query_surgery_record(self, seed_cdm_data):
+        """测试查询手术记录"""
+        from app.database.models.cdm import SurgeryRecord
+
+        session = seed_cdm_data
+        records = session.query(SurgeryRecord).filter_by(
+            institute_id="TEST001", patient_id="P001"
+        ).all()
+
+        assert len(records) == 1
+        assert "手术名称" in records[0].record_content
+        assert "PCI" in records[0].record_content
+
+    def test_query_discharge_record(self, seed_cdm_data):
+        """测试查询出院记录"""
+        from app.database.models.cdm import DischargeRecord
+
+        session = seed_cdm_data
+        records = session.query(DischargeRecord).filter_by(
+            institute_id="TEST001", patient_id="P001"
+        ).all()
+
+        assert len(records) == 1
+        assert "出院诊断" in records[0].record_content
+        assert "出院医嘱" in records[0].record_content
+
+
+# ==================== 评估流程测试 ====================
+
+class TestEvaluation:
+    """测试完整评估流程"""
 
     @pytest.mark.asyncio
-    async def test_evaluate_document_with_db_rules(self, service, mock_rules):
-        """测试使用数据库规则进行质控评估"""
-        # Mock Supabase 客户端
-        mock_supabase = MagicMock()
-        mock_query = MagicMock()
-        mock_response = MagicMock()
-
-        # 模拟数据库层面筛选后的结果（只返回适用于首次病程记录的规则）
-        filtered_rules = [r for r in mock_rules if r["rule_code"] in ["SC-001", "SC-002", "SC-003"]]
-        mock_response.data = filtered_rules
-
-        mock_supabase.table.return_value = mock_query
-        mock_query.select.return_value = mock_query
-        mock_query.eq.return_value = mock_query
-        mock_query.or_.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.execute.return_value = mock_response
-
-        # Mock LLM 客户端
-        mock_llm_response = {
-            "choices": [{"message": {"content": "质控分析结果..."}}],
-            "usage": {"total_tokens": 1000},
-            "_api_time": 2.5,
-            "_mock": True
+    async def test_evaluate_with_admission_rules(self, service):
+        """测试使用入院记录规则进行评估"""
+        # Mock 统一规则引擎的 evaluate 方法
+        mock_engine_result = {
+            "rule_id": "SC-001",
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "主诉描述完整",
+            "evidence": "",
+            "confidence": 0.95,
+            "metadata": {"tokens_used": 200, "api_time": 0.5}
         }
 
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
-            with patch.object(service.client, 'generate', return_value=mock_llm_response):
-                result = await service.evaluate_document(
-                    document_id="test-001",
-                    content="首次病程记录内容...",
-                    document_type="首次病程记录"
-                )
+        with patch.object(service.rule_engine, 'evaluate',
+                         new_callable=AsyncMock, return_value=mock_engine_result):
+            result = await service.evaluate_document(
+                document_id="test-admission-001",
+                content="患者男性，65岁，因胸痛3天入院。主诉：反复胸痛3天。",
+                document_type="入院记录"
+            )
 
-                # 验证结果
-                assert result["document_id"] == "test-001"
-                assert result["document_type"] == "首次病程记录"
-                assert result["total_rules"] == 3  # SC-001, SC-002, SC-003
-                assert len(result["applicable_rules"]) == 3
-                assert "SC-001" in result["applicable_rules"]
-                assert "SC-002" in result["applicable_rules"]
-                assert "SC-003" in result["applicable_rules"]
-                assert result["llm_output"] == "质控分析结果..."
-                assert result["token_usage"]["total_tokens"] == 1000
-                assert result["api_time"] == 2.5
+            assert result["document_id"] == "test-admission-001"
+            assert result["document_type"] == "入院记录"
+            assert result["total_rules"] == 29  # 入院记录 29 条规则
+            assert len(result["applicable_rules"]) == 29
 
     @pytest.mark.asyncio
-    async def test_evaluate_document_fallback_to_empty_rules(self, service):
-        """测试数据库不可用时的降级处理"""
-        # Mock LLM 客户端
-        mock_llm_response = {
-            "choices": [{"message": {"content": "质控分析结果..."}}],
-            "usage": {"total_tokens": 500},
-            "_api_time": 1.5,
-            "_mock": True
+    async def test_evaluate_with_first_course_rules(self, service):
+        """测试使用首次病程记录规则进行评估"""
+        mock_engine_result = {
+            "rule_id": "SC-021",
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "病情分析完整",
+            "evidence": "",
+            "confidence": 0.9,
+            "metadata": {"tokens_used": 150, "api_time": 0.4}
         }
-        
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=None):
-            with patch.object(service.client, 'generate', return_value=mock_llm_response):
-                result = await service.evaluate_document(
-                    document_id="test-002",
-                    content="病程记录内容...",
-                    document_type="病程记录"
-                )
-                
-                # 验证结果：规则数为 0，但仍然可以进行质控
-                assert result["document_id"] == "test-002"
-                assert result["document_type"] == "病程记录"
-                assert result["total_rules"] == 0
-                assert result["applicable_rules"] == []
-                assert result["llm_output"] == "质控分析结果..."
+
+        with patch.object(service.rule_engine, 'evaluate',
+                         new_callable=AsyncMock, return_value=mock_engine_result):
+            result = await service.evaluate_document(
+                document_id="test-first-course-001",
+                content="首次病程记录内容...",
+                document_type="首次病程记录"
+            )
+
+            assert result["document_id"] == "test-first-course-001"
+            assert result["document_type"] == "首次病程记录"
+            assert result["total_rules"] == 7  # 首次病程 7 条规则
 
     @pytest.mark.asyncio
-    async def test_evaluate_multi_document_with_db_rules(self, service, mock_rules):
-        """测试多文档质控使用数据库规则"""
-        # Mock Supabase 客户端
-        mock_supabase = MagicMock()
+    async def test_evaluate_compliance_rate(self, service):
+        """测试合规率计算"""
+        call_count = {"n": 0}
 
-        # 使用计数器跟踪调用次数
-        call_counter = {'count': 0}
+        async def mock_evaluate(rule, medical_record):
+            call_count["n"] += 1
+            # 前 20 条合规，后 9 条不合规
+            is_compliant = call_count["n"] <= 20
+            return {
+                "rule_id": rule.get("rule_id", f"R-{call_count['n']}"),
+                "status": "compliant" if is_compliant else "non_compliant",
+                "is_compliant": is_compliant,
+                "findings": "合规" if is_compliant else "不合规",
+                "evidence": "",
+                "confidence": 0.9,
+                "metadata": {"tokens_used": 100, "api_time": 0.3}
+            }
 
-        # 为不同的文书类型返回不同的规则
-        def mock_table_call(table_name):
-            mock_query = MagicMock()
-            mock_response = MagicMock()
+        with patch.object(service.rule_engine, 'evaluate', side_effect=mock_evaluate):
+            result = await service.evaluate_document(
+                document_id="test-compliance-001",
+                content="入院记录内容...",
+                document_type="入院记录"
+            )
 
-            # 根据调用次数返回不同的规则
-            if call_counter['count'] == 0:  # 第一次调用：首次病程记录
-                filtered_rules = [r for r in mock_rules if r["rule_code"] in ["SC-001", "SC-002", "SC-003"]]
-                call_counter['count'] += 1
-            else:  # 第二次调用：手术记录
-                filtered_rules = [r for r in mock_rules if r["rule_code"] == "SC-004"]
+            assert result["total_rules"] == 29
+            # 20/29 合规
+            summary = result["evaluation_summary"]
+            assert summary["compliance_rate"] == pytest.approx(68.97, abs=1)
+            assert summary["compliant_rules"] == 20
+            assert summary["issues_found"] == 9
 
-            mock_response.data = filtered_rules
-
-            mock_query.select.return_value = mock_query
-            mock_query.eq.return_value = mock_query
-            mock_query.or_.return_value = mock_query
-            mock_query.limit.return_value = mock_query
-            mock_query.execute.return_value = mock_response
-
-            return mock_query
-
-        mock_supabase.table.side_effect = mock_table_call
-
-        # Mock LLM 客户端
-        mock_llm_response = {
-            "choices": [{"message": {"content": "质控分析结果..."}}],
-            "usage": {"total_tokens": 1000},
-            "_api_time": 2.5,
-            "_mock": True
+    @pytest.mark.asyncio
+    async def test_evaluate_with_specific_rule_ids(self, service):
+        """测试指定 rule_ids 精确评估"""
+        mock_engine_result = {
+            "rule_id": "SC-001",
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "合规",
+            "evidence": "",
+            "confidence": 0.95,
+            "metadata": {"tokens_used": 100, "api_time": 0.3}
         }
 
-        with patch('app.services.sichuan_qc_service.get_supabase', return_value=mock_supabase):
-            with patch.object(service.client, 'generate', return_value=mock_llm_response):
-                result = await service.evaluate_multi_document(
-                    document_id="test-multi-001",
-                    document_content="病历内容...",
-                    document_types=["首次病程记录", "手术记录"]
-                )
+        with patch.object(service.rule_engine, 'evaluate',
+                         new_callable=AsyncMock, return_value=mock_engine_result):
+            result = await service.evaluate_document(
+                document_id="test-specific-001",
+                content="入院记录内容...",
+                document_type="入院记录",
+                rule_ids=["SC-001", "SC-002"]
+            )
 
-                # 验证结果
-                assert result["document_id"] == "test-multi-001"
-                assert "document_results" in result
-                assert "首次病程记录" in result["document_results"]
-                assert "手术记录" in result["document_results"]
+            # 指定了 2 条规则
+            assert result["total_rules"] == 2
 
-                # 验证首次病程记录的规则数（SC-001, SC-002, SC-003）
-                first_course_result = result["document_results"]["首次病程记录"]
-                assert first_course_result["total_rules"] == 3
 
-                # 验证手术记录的规则数（SC-004）
-                surgery_result = result["document_results"]["手术记录"]
-                assert surgery_result["total_rules"] == 1
+# ==================== RuleRouter 测试 ====================
 
+class TestRuleRouter:
+    """测试规则路由"""
+
+    def test_router_loads_all_rules(self):
+        """测试路由器加载所有规则"""
+        from app.services.rule_router import RuleRouter
+        router = RuleRouter()
+        assert len(router._all_rules) > 200  # sichuan 179 + custom 89
+
+    def test_router_backward_compat_progress_note(self):
+        """测试 progress_note 旧类型兼容"""
+        from app.services.rule_router import RuleRouter
+        router = RuleRouter()
+        rules = router.get_rules_for_section("progress_note")
+        # progress_note 展开为 first_course + daily_course + senior_course + rescue
+        assert len(rules) > 0
+        doc_types = set()
+        for r in rules:
+            doc_types.update(r.get("applicable_documents", []))
+        assert "first_course_record" in doc_types or "daily_course_record" in doc_types
+
+    def test_router_precise_type(self):
+        """测试精确文书类型路由"""
+        from app.services.rule_router import RuleRouter
+        router = RuleRouter()
+        rules = router.get_rules_for_section("admission_record")
+        assert len(rules) >= 29
+
+    def test_router_unknown_type(self):
+        """测试未知类型返回空"""
+        from app.services.rule_router import RuleRouter
+        router = RuleRouter()
+        rules = router.get_rules_for_section("unknown_type_xyz")
+        assert len(rules) == 0
