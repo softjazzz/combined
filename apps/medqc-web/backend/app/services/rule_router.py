@@ -50,14 +50,18 @@ SECTION_TO_RULE_TYPES = {
     'progress_note': [
         'first_course_record', 'daily_course_record',
         'senior_course_record', 'rescue_record',
+        'course_record',  # 兼容 LXE 旧类型
     ],
     'course_record': [
         'first_course_record', 'daily_course_record',
-        'senior_course_record',
+        'senior_course_record', 'rescue_record',
+        'course_record',  # LXE 规则使用此旧类型
     ],
     'operation_record': [
         'surgery_record', 'presurg_summary', 'presurg_discussion',
-        'postsurg_firstcourse_record',
+        'postsurg_firstcourse_record', 'surgery_safecheck_record',
+        'surgery_risk_assessment', 'anesthesia_record',
+        'operation_record',  # LXE 规则使用此旧类型
     ],
     'case_discussion': [
         'diffcase_discussion_record', 'death_discussion',

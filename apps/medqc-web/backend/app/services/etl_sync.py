@@ -331,6 +331,13 @@ SYNC_TABLES = [
         "key_fields": ["patient_id", "visit_id", "document_id"],
     },
     {
+        "name": "handover_record",
+        "label": "接班记录",
+        "procedure": "web.handover_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
         "name": "summary_record",
         "label": "阶段小结",
         "procedure": "web.summary_record",

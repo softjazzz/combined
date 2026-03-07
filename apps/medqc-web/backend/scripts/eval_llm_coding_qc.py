@@ -36,8 +36,14 @@ PROVIDERS = {
         "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         "api_key": "sk-e2808814ae874c8f94e40f20c99bc3a3",
         "models": [
+            # Qwen 2.5 系列
             "qwen2.5-14b-instruct",
-            "qwen3-30b-a3b-instruct-2507",
+            # Qwen 3 系列
+            "qwen3-4b",
+            "qwen3-8b",
+            "qwen3-14b",
+            "qwen3-30b-a3b",
+            # Qwen 3.5 系列
             "qwen3.5-122b-a10b",
             "qwen3.5-27b",
             "qwen3.5-35b-a3b",
@@ -53,14 +59,17 @@ PROVIDERS = {
     },
 }
 
+# 默认测试列表：只用百炼平台的可私有化部署模型
 ALL_MODELS = [
-    ("dashscope",  "qwen2.5-14b-instruct"),
-    ("dashscope",  "qwen3-30b-a3b-instruct-2507"),
-    ("dashscope",  "qwen3.5-122b-a10b"),
+    # Qwen 3 系列
+    ("dashscope",  "qwen3-4b"),
+    ("dashscope",  "qwen3-8b"),
+    ("dashscope",  "qwen3-14b"),
+    ("dashscope",  "qwen3-30b-a3b"),
+    # Qwen 3.5 系列
     ("dashscope",  "qwen3.5-27b"),
     ("dashscope",  "qwen3.5-35b-a3b"),
-    ("siliconflow", "Qwen/Qwen3.5-4B"),
-    ("siliconflow", "Qwen/Qwen3.5-9B"),
+    ("dashscope",  "qwen3.5-122b-a10b"),
 ]
 
 
@@ -93,8 +102,9 @@ async def call_llm(provider: str, model: str, system_prompt: str,
         "max_tokens": 4000,
         "stream": False,
     }
-    # Qwen 系列 非流式需要 enable_thinking=False
-    if "qwen" in model.lower():
+    # DashScope 的 Qwen 系列非流式需要 enable_thinking=False
+    # 硅基流动不支持此参数
+    if provider == "dashscope" and "qwen" in model.lower():
         payload["enable_thinking"] = False
 
     t0 = time.time()
@@ -593,11 +603,33 @@ def generate_comparison_table(all_model_results: Dict[str, List[CaseResult]]) ->
 
 # ==================== 主流程 ====================
 
+async def evaluate_single_model(prov: str, model: str, dims: Optional[List[str]],
+                                out_dir: Path) -> tuple:
+    """评测单个模型并保存结果，返回 (model, results) 元组。"""
+    results = await run_model_evaluation(prov, model, dims)
+
+    # 生成并保存报告
+    report = generate_report(model, prov, results)
+    safe_name = model.replace("/", "_").replace(".", "_")
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    report_file = out_dir / f"eval_{safe_name}_{ts}.txt"
+    report_file.write_text(report, encoding="utf-8")
+    logger.info(f"📄 报告已保存: {report_file}")
+
+    # 保存原始 JSON
+    json_file = out_dir / f"eval_{safe_name}_{ts}.json"
+    json_data = [asdict(r) for r in results]
+    json_file.write_text(json.dumps(json_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return (model, results, report)
+
+
 async def main():
     parser = argparse.ArgumentParser(description="LLM 编码质控能力评测")
     parser.add_argument("--model", type=str, help="指定测试模型")
     parser.add_argument("--provider", type=str, help="指定平台 (dashscope/siliconflow)")
     parser.add_argument("--all", action="store_true", help="测试所有模型")
+    parser.add_argument("--parallel", action="store_true", help="并发测试多个模型")
     parser.add_argument("--dims", type=str, help="指定维度，逗号分隔，如 D1,D3")
     parser.add_argument("--output", type=str, default="reports", help="报告输出目录")
     args = parser.parse_args()
@@ -611,40 +643,54 @@ async def main():
         prov = args.provider or find_provider(args.model)
         models_to_test = [(prov, args.model)]
     else:
-        # 默认只测最小的模型做快速验证
-        models_to_test = [("siliconflow", "Qwen/Qwen3.5-4B")]
+        # 默认测试所有百炼可部署模型
+        models_to_test = ALL_MODELS
 
     # 输出目录
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    logger.info(f"\n🚀 评测计划: {len(models_to_test)} 个模型, "
+                f"{'并发' if args.parallel else '串行'}模式")
+    for p, m in models_to_test:
+        logger.info(f"   - {m} ({p})")
+
     all_model_results = {}
-    for prov, model in models_to_test:
-        results = await run_model_evaluation(prov, model, dims)
-        all_model_results[model] = results
 
-        # 生成单模型报告
-        report = generate_report(model, prov, results)
-        print(report)
+    if args.parallel and len(models_to_test) > 1:
+        # 并发模式：所有模型同时评测
+        logger.info(f"\n⚡ 启动并发评测...")
+        tasks = [
+            evaluate_single_model(prov, model, dims, out_dir)
+            for prov, model in models_to_test
+        ]
+        completed = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 保存报告
-        safe_name = model.replace("/", "_").replace(".", "_")
-        report_file = out_dir / f"eval_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        report_file.write_text(report, encoding="utf-8")
-        logger.info(f"📄 报告已保存: {report_file}")
+        for item in completed:
+            if isinstance(item, Exception):
+                logger.error(f"❌ 模型评测失败: {item}")
+            else:
+                model, results, report = item
+                all_model_results[model] = results
+                print(report)
+    else:
+        # 串行模式：逐个评测
+        for prov, model in models_to_test:
+            model_name, results, report = await evaluate_single_model(
+                prov, model, dims, out_dir
+            )
+            all_model_results[model_name] = results
+            print(report)
 
-        # 保存原始 JSON 数据
-        json_file = out_dir / f"eval_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        json_data = [asdict(r) for r in results]
-        json_file.write_text(json.dumps(json_data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # 多模型对比
+    # 多模型对比表
     if len(all_model_results) > 1:
         comparison = generate_comparison_table(all_model_results)
         print(comparison)
         comp_file = out_dir / f"comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         comp_file.write_text(comparison, encoding="utf-8")
         logger.info(f"📊 对比表已保存: {comp_file}")
+
+    logger.info(f"\n✅ 评测完成！共 {len(all_model_results)} 个模型")
 
 
 if __name__ == "__main__":
