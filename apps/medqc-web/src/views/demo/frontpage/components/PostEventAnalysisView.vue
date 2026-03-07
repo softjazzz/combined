@@ -103,8 +103,23 @@
       </div>
     </div>
 
-    <!-- Charts Grid -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
+    <!-- Backend Generated Advanced Charts -->
+    <div v-if="stats.charts && Object.keys(stats.charts).length > 0" class="flex flex-col gap-4 mb-6">
+      <div class="grid grid-cols-2 gap-4">
+        <div v-show="stats.charts.profit_waterfall" class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+          <div ref="waterfallRef" class="h-80 w-full"></div>
+        </div>
+        <div v-show="stats.charts.dept_profit_ranking" class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+          <div ref="deptRankingRef" class="h-80 w-full"></div>
+        </div>
+      </div>
+      <div v-show="stats.charts.drg_scatter" class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+        <div ref="drgScatterRef" class="h-96 w-full"></div>
+      </div>
+    </div>
+
+    <!-- Fallback Charts Grid (Demo Data) -->
+    <div v-else class="grid grid-cols-2 gap-4 mb-6">
       <!-- Quality Trend -->
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
         <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">{{ chartTitles.trend }}</h3>
@@ -135,8 +150,24 @@
       <OverCostAnalysisCard :batch-id="batchId" />
     </div>
 
-    <!-- Issue Summary -->
-    <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+    <!-- AI Insights Summary -->
+    <div v-if="stats.ai_insights && stats.ai_insights.length > 0" class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+      <div class="flex items-center gap-2 mb-4">
+        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">AI 智能洞察</h3>
+        <a-tag color="blue">模型分析</a-tag>
+      </div>
+      <div class="space-y-3">
+        <div v-for="(insight, idx) in stats.ai_insights" :key="idx" class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/30">
+          <InfoCircleOutlined class="text-blue-500 text-lg mt-0.5" />
+          <div class="flex-1 text-sm text-blue-700 dark:text-blue-300">
+            {{ insight }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legacy Issue Summary (Fallback) -->
+    <div v-else class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
       <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">问题汇总与建议</h3>
       <div class="space-y-3">
         <div class="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900/30">
@@ -178,7 +209,7 @@
 	</template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import axios from 'axios'
 import DrillDownModal from './DrillDownModal.vue'
@@ -204,6 +235,11 @@ const qualityTrendRef = ref<HTMLElement | null>(null)
 const deptComparisonRef = ref<HTMLElement | null>(null)
 const drgPieRef = ref<HTMLElement | null>(null)
 const costStructureRef = ref<HTMLElement | null>(null)
+
+// Advanced Backend Chart Refs
+const waterfallRef = ref<HTMLElement | null>(null)
+const deptRankingRef = ref<HTMLElement | null>(null)
+const drgScatterRef = ref<HTMLElement | null>(null)
 
 const dateRange = ref<any>(null)
 const analysisType = ref('quality')
@@ -341,13 +377,19 @@ const stats = ref({
   department_stats: [] as any[],
   doctor_stats: [] as any[],
   daily_trends: [] as any[],
-  cost_structure: { drug: 0, material: 0, exam: 0, treatment: 0 }
+  cost_structure: { drug: 0, material: 0, exam: 0, treatment: 0 },
+  charts: {} as Record<string, any>,
+  ai_insights: [] as string[]
 })
 
 let qualityChart: echarts.ECharts | null = null
 let deptChart: echarts.ECharts | null = null
 let drgChart: echarts.ECharts | null = null
 let costChart: echarts.ECharts | null = null
+
+let waterfallChart: echarts.ECharts | null = null
+let deptRankingChart: echarts.ECharts | null = null
+let drgScatterChart: echarts.ECharts | null = null
 
 const fetchStatistics = async () => {
 	    if (!props.sessionId) return  // 需要 session_id
@@ -376,7 +418,31 @@ const fetchStatistics = async () => {
 	    }
 	}
 
-const updateCharts = () => {
+const updateCharts = async () => {
+    await nextTick()
+
+    // 如果后端的 charts 数据存在，则显示高级图表
+    if (stats.value.charts && Object.keys(stats.value.charts).length > 0) {
+        const c = stats.value.charts
+        
+        if (c.profit_waterfall && waterfallRef.value) {
+            if (!waterfallChart) waterfallChart = echarts.init(waterfallRef.value)
+            waterfallChart.setOption(c.profit_waterfall, true)
+        }
+        
+        if (c.dept_profit_ranking && deptRankingRef.value) {
+            if (!deptRankingChart) deptRankingChart = echarts.init(deptRankingRef.value)
+            deptRankingChart.setOption(c.dept_profit_ranking, true)
+        }
+        
+        if (c.drg_scatter && drgScatterRef.value) {
+            if (!drgScatterChart) drgScatterChart = echarts.init(drgScatterRef.value)
+            drgScatterChart.setOption(c.drg_scatter, true)
+        }
+        return
+    }
+
+    // 回退到静态演示图表（如果 backend 没有提供 charts）
     // 1. Quality/Daily Trend Chart
     if (qualityChart && stats.value.daily_trends) {
         const dates = stats.value.daily_trends.map((d: any) => d.date)
@@ -599,5 +665,8 @@ onUnmounted(() => {
   deptChart?.dispose()
   drgChart?.dispose()
   costChart?.dispose()
+  waterfallChart?.dispose()
+  deptRankingChart?.dispose()
+  drgScatterChart?.dispose()
 })
 </script>

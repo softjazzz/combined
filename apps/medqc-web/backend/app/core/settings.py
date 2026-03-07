@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # LLM API Configuration (unified naming)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = None  # e.g. https://dashscope.aliyuncs.com/compatible-mode/v1
     LLM_API_KEY: Optional[str] = None
-    LLM_MODEL: str = "qwen3-next-30b-a3b-instruct"
+    LLM_MODEL: str = "qwen3.5-35b-a3b"
     LLM_TIMEOUT_SECONDS: int = 120
     # Content truncation settings
     LLM_ENABLE_TRUNCATE: bool = False  # 禁用截断（模型支持128K上下文）
@@ -90,6 +90,7 @@ class Settings(BaseSettings):
         # Only load backend-local .env to avoid picking up frontend Vite envs
         env_file = (".env",)
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 def get_settings() -> Settings:

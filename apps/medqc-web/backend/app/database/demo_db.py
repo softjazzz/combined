@@ -37,7 +37,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db():
     """初始化数据库，创建所有表"""
     Base.metadata.create_all(bind=engine)
-    print(f"✅ 数据库初始化完成: {DB_FILE}")
+    # Keep ASCII output to avoid Windows GBK console encoding errors.
+    print(f"Database initialized: {DB_FILE}")
 
 
 def get_db() -> Generator[Session, None, None]:

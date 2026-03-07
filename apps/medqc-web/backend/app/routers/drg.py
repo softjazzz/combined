@@ -368,10 +368,12 @@ async def get_drg_statistics(
     """
     获取指定 session 的 DRG 统计数据
     
-    返回：MDC分布、DRG Top-10、科室统计、医师统计、费用结构
+    返回：MDC分布、DRG Top-10、科室统计、医师统计、费用结构。
+    同时集成 EnhancedAnalyzer 提供的高级指标、AI 洞察和图表配置。
     """
     try:
-        stats = drg_batch_store.get_statistics(
+        # 获取基础的 SQLite 聚合统计（兼容原有前端）
+        basic_stats = drg_batch_store.get_statistics(
             session_id=session_id,
             batch_id=batch_id,
             start_date=start_date,
@@ -379,7 +381,67 @@ async def get_drg_statistics(
             department=department,
             doctor=doctor
         )
-        return {"success": True, "data": stats}
+        
+        # 获取所有明细数据用于高级分析
+        records, total = drg_batch_store.drill_down(
+            session_id=session_id, 
+            dimension="all", 
+            value="all", 
+            batch_id=batch_id, 
+            page=1, 
+            per_page=10000  # 获取全部数据进行分析
+        )
+        
+        if not records:
+            basic_stats["ai_insights"] = []
+            basic_stats["charts"] = {}
+            return {"success": True, "data": basic_stats}
+            
+        # 转换为 DataFrame 用于 EnhancedAnalyzer
+        df = pd.DataFrame(records)
+        
+        # 执行高级分析
+        try:
+            from ..services.enhanced_analysis import EnhancedAnalyzer
+            from ..services.chart_service import ChartService
+            
+            # 使用 LLM 分析器进行多维计算
+            # 建立 medqc -> drg 表字段映射
+            mappings = {
+                "baseline_payment": "dip_payment",
+                "drg_weight": "dip_weight",
+                "drg": "dip_name",
+                "department_name": "department"
+            }
+            analyzer = EnhancedAnalyzer(df, user_mappings=mappings)
+            analysis_results = analyzer.run_full_analysis()
+            
+            # 将高级分析结果附加到响应中
+            basic_stats["advanced_analysis"] = analysis_results
+            
+            # TODO: 暂时构造一些基础的 AI insight，后续可以接入真正的 LLM
+            insights = []
+            overview = analysis_results.get("overview", {})
+            if overview.get("loss_case_count", 0) > 0:
+                insights.append(f"发现 {overview['loss_case_count']} 例亏损病案，建议关注。")
+            
+            top_loss_depts = overview.get("top_loss_departments", [])
+            if top_loss_depts:
+                dept_names = ", ".join([d["name"] for d in top_loss_depts])
+                insights.append(f"前三大亏损科室为: {dept_names}。")
+                
+            basic_stats["ai_insights"] = insights
+            
+            # 生成图表配置
+            basic_stats["charts"] = ChartService.generate_all_charts(analysis_results)
+            
+        except Exception as e:
+            logger.error(f"高级分析或图表生成失败: {e}", exc_info=True)
+            basic_stats["advanced_analysis"] = {}
+            basic_stats["ai_insights"] = ["高级分析引擎运行出错"]
+            basic_stats["charts"] = {}
+            
+        return {"success": True, "data": basic_stats}
     except Exception as e:
         logger.error(f"获取统计数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

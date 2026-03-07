@@ -38,6 +38,22 @@
           <span class="font-medium">工作台</span>
         </a-menu-item>
 
+        <!-- 工作台 V3 (卡片版) -->
+        <a-menu-item key="/workstation-v3" class="menu-item-base">
+          <template #icon>
+            <AppstoreOutlined />
+          </template>
+          <span class="font-medium">工作台 V3</span>
+        </a-menu-item>
+
+        <!-- 工作台 V4 (全屏详情版) -->
+        <a-menu-item key="/workstation-v4" class="menu-item-base">
+          <template #icon>
+            <DesktopOutlined />
+          </template>
+          <span class="font-medium">工作台 V4</span>
+        </a-menu-item>
+
         <!-- ICD 编码查询 -->
         <a-menu-item key="/workstation-v2/icd" class="menu-item-base">
           <template #icon>
@@ -94,6 +110,14 @@
             <DatabaseOutlined />
           </template>
           <span class="font-medium">数据管理</span>
+        </a-menu-item>
+
+        <!-- 数据库配置 -->
+        <a-menu-item key="/system-config" class="menu-item-base">
+          <template #icon>
+            <SettingOutlined />
+          </template>
+          <span class="font-medium">数据库配置</span>
         </a-menu-item>
 
         </a-menu>
@@ -217,6 +241,8 @@ import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
   ThunderboltOutlined,
+  AppstoreOutlined,
+  DesktopOutlined,
   SearchOutlined,
   CloudUploadOutlined,
   ClusterOutlined,
@@ -247,6 +273,8 @@ const breadcrumbItems = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
     '/workstation-v2': '工作台',
+    '/workstation-v3': '工作台 V3',
+    '/workstation-v4': '工作台 V4',
     '/workstation-v2/icd': 'ICD 编码查询',
     '/workstation-v2/upload': '数据上传',
     '/workstation-v2/stats': '统计分析',
@@ -255,6 +283,7 @@ const breadcrumbItems = computed(() => {
     '/workstation-v2/drg/payment': '付费监测',
     '/workstation-v2/drg/post': '事后分析',
     '/workstation-v2/data': '数据管理',
+    '/system-config': '数据库配置',
   }
   const title = titleMap[path] || '工作台'
   return [{ title }]

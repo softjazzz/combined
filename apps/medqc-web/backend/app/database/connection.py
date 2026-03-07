@@ -9,10 +9,15 @@
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 from contextlib import contextmanager
 from typing import Generator
+
+# 加载 .env 文件（从 backend/ 目录）
+_env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(_env_path)
 
 # ==================== Base 类 ====================
 class Base(DeclarativeBase):

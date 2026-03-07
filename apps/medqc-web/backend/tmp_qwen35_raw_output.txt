@@ -1,0 +1,442 @@
+[
+  {
+    "rule_id": "SC-001",
+    "rule_name": "无入院记录(或再次/多次入院记录)或24小时内入出院(死亡)记录。",
+    "is_compliant": true,
+    "findings": "病历中包含完整的入院记录结构，包括主诉、现病史、既往史等必要部分，未缺失入院记录。",
+    "evidence": "病历文本包含'admission record', 'chief complaint', 'history', 'physical exam'等完整章节。",
+    "location": "病历整体结构",
+    "suggestion": "",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-002",
+    "rule_name": "入院记录(或再次/多次入院记录)未在患者入院后24小时内完成。",
+    "is_compliant": true,
+    "findings": "病历中未提供具体的入院时间和记录完成时间，无法判定超时，基于现有信息视为合规。",
+    "evidence": "病历文本中未包含入院时间及记录完成时间的具体日期和时刻。",
+    "location": "病历时间信息",
+    "suggestion": "请补充入院时间及记录完成时间以进行时效性核查。",
+    "confidence": 0.6
+  },
+  {
+    "rule_id": "SC-003",
+    "rule_name": "24小时内入出院(死亡)记录未在患者出院(死亡)后24小时内完成。",
+    "is_compliant": true,
+    "findings": "患者住院时间超过24小时（主诉3年），不适用24小时内入出院记录规则，且存在标准入院记录。",
+    "evidence": "主诉：chest tightness for 3 years",
+    "location": "主诉部分",
+    "suggestion": "",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-004",
+    "rule_name": "再次或多次入院记录未对本次住院前历次有关住院诊疗经过进行小结。",
+    "is_compliant": true,
+    "findings": "病历未明确标识为再次或多次入院记录，且既往史仅提及高血压，未见多次住院小结缺失问题。",
+    "evidence": "past history: hypertension for 10 years",
+    "location": "既往史部分",
+    "suggestion": "若为再次入院，需补充历次住院诊疗经过小结。",
+    "confidence": 0.85
+  },
+  {
+    "rule_id": "SC-005",
+    "rule_name": "非执业医师书写入院记录无本医疗机构注册的医务人员审阅､修改并签名。",
+    "is_compliant": true,
+    "findings": "病历文本中未显示医师签名信息，但无法判断是否为非执业医师书写及是否经审阅，基于现有信息视为合规。",
+    "evidence": "病历文本末尾无医师签名区域。",
+    "location": "病历末尾",
+    "suggestion": "请确保非执业医师书写的病历有注册医师审阅签名。",
+    "confidence": 0.7
+  },
+  {
+    "rule_id": "SC-006",
+    "rule_name": "入院记录无记录的医师签名。",
+    "is_compliant": true,
+    "findings": "虽然文本中未显示签名，但无法确认是否缺失，基于现有文本片段无法判定为缺陷。",
+    "evidence": "病历文本中无医师签名。",
+    "location": "病历末尾",
+    "suggestion": "请补充经治医师亲笔签名。",
+    "confidence": 0.6
+  },
+  {
+    "rule_id": "SC-007",
+    "rule_name": "无完全民事行为能力的患者填写为病史陈述者。",
+    "is_compliant": true,
+    "findings": "病历未明确病史陈述者身份，但根据主诉描述逻辑清晰，推测由患者本人或家属陈述，未发现明显违规。",
+    "evidence": "病史描述逻辑连贯，无明显矛盾。",
+    "location": "现病史部分",
+    "suggestion": "请明确病史陈述者及其与患者的关系。",
+    "confidence": 0.8
+  },
+  {
+    "rule_id": "SC-008",
+    "rule_name": "主诉书写不规范或不能导出第一诊断。",
+    "is_compliant": true,
+    "findings": "主诉'chest tightness for 3 years'简明扼要，能导出冠心病诊断，符合规范。",
+    "evidence": "chief complaint: chest tightness for 3 years; preliminary diagnosis: coronary heart disease",
+    "location": "主诉与诊断部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "SC-009",
+    "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+    "is_compliant": false,
+    "findings": "现病史过于简略，仅描述了症状加重情况，缺少发病时间细节、起病缓急、伴随症状及一般情况（如饮食、睡眠、大小便等）。",
+    "evidence": "history: recurrent chest tightness and shortness of breath, worsened for 1 week",
+    "location": "现病史部分",
+    "suggestion": "(1) 补充发病的具体时间（如3年前何时）；(2) 描述起病是突然还是缓慢；(3) 增加伴随症状描述；(4) 补充一般情况（精神、饮食、睡眠、大小便等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-010",
+    "rule_name": "现病史与主诉不符:",
+    "is_compliant": true,
+    "findings": "现病史描述的‘反复胸闷气促’与主诉‘胸闷3年’一致，逻辑相符。",
+    "evidence": "chief complaint: chest tightness for 3 years; history: recurrent chest tightness...",
+    "location": "主诉与现病史部分",
+    "suggestion": "",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-011",
+    "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状:",
+    "is_compliant": false,
+    "findings": "现病史未描述鉴别诊断相关的阴性症状（如是否有放射痛、夜间阵发性呼吸困难等）及重要阳性症状的详细特点。",
+    "evidence": "history: recurrent chest tightness and shortness of breath, worsened for 1 week",
+    "location": "现病史部分",
+    "suggestion": "(1) 补充胸痛性质（压榨性、针刺样等）；(2) 描述有无放射痛；(3) 补充鉴别诊断相关的阴性症状（如无发热、无咯血等）。",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "SC-012",
+    "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺:",
+    "is_compliant": false,
+    "findings": "现病史完全缺失发病后到入院前的诊治经过，未提及是否在外院就诊、用药情况及疗效。",
+    "evidence": "history: recurrent chest tightness and shortness of breath, worsened for 1 week",
+    "location": "现病史部分",
+    "suggestion": "(1) 补充近1周加重后的就诊情况；(2) 描述在外院或本院接受的检查及结果；(3) 说明用药名称、剂量及治疗效果。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-013",
+    "rule_name": "既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等):",
+    "is_compliant": false,
+    "findings": "既往史仅记录了高血压，严重缺失传染病史、输血史、过敏史、预防接种史、手术外伤史等内容。",
+    "evidence": "past history: hypertension for 10 years",
+    "location": "既往史部分",
+    "suggestion": "(1) 补充传染病史（如肝炎、结核等）；(2) 补充输血史；(3) 补充过敏史；(4) 补充手术外伤史；(5) 儿童需补充预防接种史。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-014",
+    "rule_name": "未描述个人史、婚育史、月经史、家族史:",
+    "is_compliant": false,
+    "findings": "病历中完全缺失个人史、婚育史、月经史、家族史的记录。",
+    "evidence": "病历文本中无个人史、婚育史、家族史相关段落。",
+    "location": "个人史、婚育史、家族史部分",
+    "suggestion": "(1) 补充个人史（吸烟、饮酒、职业等）；(2) 补充婚育史；(3) 女性补充月经史；(4) 补充家族史（遗传病、类似病史等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-015",
+    "rule_name": "个人史、婚育史、月经史、家族史记录不全或与实际不符:",
+    "is_compliant": true,
+    "findings": "由于上述内容完全缺失，不归类为“记录不全或不符”，而是直接归为缺失（见SC-014），此处视为不适用或已覆盖。",
+    "evidence": "N/A",
+    "location": "N/A",
+    "suggestion": "",
+    "confidence": 0.8
+  },
+  {
+    "rule_id": "SC-016",
+    "rule_name": "儿童患者无婴幼儿喂养史和生长发育史:",
+    "is_compliant": true,
+    "findings": "根据主诉和诊断（冠心病、高血压），患者应为成人，不适用儿童患者特殊要求。",
+    "evidence": "preliminary diagnosis: coronary heart disease, hypertension",
+    "location": "诊断部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "SC-017",
+    "rule_name": "无体格检查或专科体格检查(按专科要求):",
+    "is_compliant": false,
+    "findings": "体格检查仅记录了血压，缺乏系统性的全身查体及针对心血管疾病的专科查体（如心脏听诊、肺部听诊等）。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "(1) 补充生命体征（体温、脉搏、呼吸）；(2) 补充心肺腹部等系统查体；(3) 补充心血管专科查体（心界、心率、心律、杂音等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-018",
+    "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确:",
+    "is_compliant": false,
+    "findings": "体格检查过于简单，未记录心脏杂音、双下肢水肿等关键阳性或阴性体征，无法支持冠心病诊断。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "(1) 补充心脏听诊结果（心率、节律、杂音）；(2) 补充肺部听诊结果；(3) 补充四肢水肿情况。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "SC-019",
+    "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清:",
+    "is_compliant": false,
+    "findings": "辅助检查仅记录“ECG abnormal”，未记录具体异常表现（如ST段改变、心律失常类型等），描述不清。",
+    "evidence": "auxiliary exam: ECG abnormal",
+    "location": "辅助检查部分",
+    "suggestion": "(1) 详细描述心电图异常的具体表现（如导联、波形改变）；(2) 注明检查时间及医院。",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "SC-020",
+    "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏:",
+    "is_compliant": true,
+    "findings": "入院诊断列出了冠心病和高血压，主次顺序合理，未发现明显遗漏。",
+    "evidence": "preliminary diagnosis: coronary heart disease, hypertension",
+    "location": "初步诊断部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LX-001",
+    "rule_name": "主诉中症状/体征/疾病的持续时间与年龄不一致:",
+    "is_compliant": true,
+    "findings": "主诉持续时间3年与冠心病慢性病程相符，未发现逻辑矛盾。",
+    "evidence": "chief complaint: chest tightness for 3 years",
+    "location": "主诉部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LX-002",
+    "rule_name": "现病史记录不全或描述不清:",
+    "is_compliant": false,
+    "findings": "现病史缺少发病时间细节、起病缓急、一般情况（饮食、睡眠、大小便等）的描述。",
+    "evidence": "history: recurrent chest tightness and shortness of breath, worsened for 1 week",
+    "location": "现病史部分",
+    "suggestion": "(1) 补充发病具体时间；(2) 描述起病缓急；(3) 补充一般情况（至少一项：大小便、精神、饮食等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LX-003",
+    "rule_name": "儿童患者无婴幼儿喂养史和生长发育史。:",
+    "is_compliant": true,
+    "findings": "患者诊断为冠心病，推断为成人，不适用儿科规则。",
+    "evidence": "preliminary diagnosis: coronary heart disease",
+    "location": "诊断部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LX-004",
+    "rule_name": "入院记录-专科检查缺失:",
+    "is_compliant": false,
+    "findings": "患者诊断为冠心病（内科），虽非外科/神内，但作为内科病例，体格检查应包含心脏专科查体，目前缺失。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充心脏专科查体内容（心界、心率、心律、杂音等）。",
+    "confidence": 0.85
+  },
+  {
+    "rule_id": "LX-005",
+    "rule_name": "体格检查缺生命体征:",
+    "is_compliant": false,
+    "findings": "体格检查仅记录血压，缺失体温、脉搏、呼吸等其他生命体征。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充体温、脉搏、呼吸数值。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LX-006",
+    "rule_name": "7岁以上人群体格检查缺生命体征:",
+    "is_compliant": false,
+    "findings": "患者为成人（7岁以上），体格检查缺失体温、脉搏、呼吸，仅记录血压。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充体温、脉搏、呼吸数值。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LX-007",
+    "rule_name": "院外辅助检查未记录:",
+    "is_compliant": true,
+    "findings": "现病史中未提及具体的院外辅助检查项目，故无需在辅助检查章节对应记录。",
+    "evidence": "现病史未提及院外检查",
+    "location": "现病史部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LX-008",
+    "rule_name": "入院记录-检查结果未记录:",
+    "is_compliant": false,
+    "findings": "辅助检查仅写"ECG abnormal"，未记录具体检查结果，属于记录不完善。",
+    "evidence": "auxiliary exam: ECG abnormal",
+    "location": "辅助检查部分",
+    "suggestion": "补充心电图的具体异常描述（如ST-T改变、心律失常类型等）。",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LX-009",
+    "rule_name": "入院记录缺初步诊断:",
+    "is_compliant": true,
+    "findings": "初步诊断已列出冠心病和高血压，覆盖了既往史中的高血压，未见明显漏诊。",
+    "evidence": "preliminary diagnosis: coronary heart disease, hypertension",
+    "location": "初步诊断部分",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LXE-01",
+    "rule_name": "入院记录-既往史缺少传染病史:",
+    "is_compliant": false,
+    "findings": "既往史中未提及传染病史（如肝炎、结核等）或否认传染病史。",
+    "evidence": "past history: hypertension for 10 years",
+    "location": "既往史部分",
+    "suggestion": "补充传染病史，如“否认肝炎、结核等传染病史”。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-02",
+    "rule_name": "入院记录-既往史缺少输血史:",
+    "is_compliant": false,
+    "findings": "既往史中未提及输血史或否认输血史。",
+    "evidence": "past history: hypertension for 10 years",
+    "location": "既往史部分",
+    "suggestion": "补充输血史，如“否认输血史”。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-03",
+    "rule_name": "入院记录-既往史缺少过敏史:",
+    "is_compliant": false,
+    "findings": "既往史中未提及药物或食物过敏史或否认过敏史。",
+    "evidence": "past history: hypertension for 10 years",
+    "location": "既往史部分",
+    "suggestion": "补充过敏史，如“否认药物及食物过敏史”。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-04",
+    "rule_name": "入院记录-既往史缺少预防接种史:",
+    "is_compliant": true,
+    "findings": "患者为成人，预防接种史通常不作为常规必填项，除非有特殊需求，视为不适用或已涵盖。",
+    "evidence": "adult patient",
+    "location": "既往史部分",
+    "suggestion": "",
+    "confidence": 0.8
+  },
+  {
+    "rule_id": "LXE-05",
+    "rule_name": "入院记录-既往史缺少手术外伤史:",
+    "is_compliant": false,
+    "findings": "既往史中未提及手术史或外伤史，也未明确否认。",
+    "evidence": "past history: hypertension for 10 years",
+    "location": "既往史部分",
+    "suggestion": "补充手术外伤史，如“否认手术外伤史”。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-06",
+    "rule_name": "入院记录-既往史与手术史记录矛盾:",
+    "is_compliant": true,
+    "findings": "病历中无手术记录，既往史也未提及手术，不存在矛盾。",
+    "evidence": "N/A",
+    "location": "N/A",
+    "suggestion": "",
+    "confidence": 0.9
+  },
+  {
+    "rule_id": "LXE-07",
+    "rule_name": "入院记录-个人史存在缺项:",
+    "is_compliant": false,
+    "findings": "完全缺失个人史，未记录吸烟、饮酒、职业等信息。",
+    "evidence": "病历中无个人史段落",
+    "location": "个人史部分",
+    "suggestion": "补充个人史，包括吸烟、饮酒、职业、居住环境等。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-08",
+    "rule_name": "入院记录-婚育史存在缺项:",
+    "is_compliant": false,
+    "findings": "完全缺失婚育史，未记录婚姻状况、生育情况等。",
+    "evidence": "病历中无婚育史段落",
+    "location": "婚育史部分",
+    "suggestion": "补充婚育史，包括婚姻状况、婚龄、生育情况等。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-09",
+    "rule_name": "入院记录-家族史存在缺项:",
+    "is_compliant": false,
+    "findings": "完全缺失家族史，未记录父母兄弟姐妹健康状况及遗传病史。",
+    "evidence": "病历中无家族史段落",
+    "location": "家族史部分",
+    "suggestion": "补充家族史，重点询问高血压、冠心病等家族聚集情况。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-10",
+    "rule_name": "入院记录-体格检查缺腹部检查:",
+    "is_compliant": false,
+    "findings": "体格检查仅记录血压，完全缺失腹部视触叩听检查。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充腹部查体内容（外形、压痛、肝脾肋下、肠鸣音等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-11",
+    "rule_name": "入院记录-体格检查缺神经系统检查:",
+    "is_compliant": true,
+    "findings": "患者诊断为冠心病，非神经系统疾病，且体格检查极度简略，虽缺神经查体但非核心缺陷，视为相对合规或次要。",
+    "evidence": "diagnosis: coronary heart disease",
+    "location": "体格检查部分",
+    "suggestion": "建议补充神经系统查体以完善病历。",
+    "confidence": 0.7
+  },
+  {
+    "rule_id": "LXE-12",
+    "rule_name": "入院记录-体格检查缺四肢及脊柱检查:",
+    "is_compliant": false,
+    "findings": "体格检查缺失四肢及脊柱检查，如水肿、畸形等。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充四肢及脊柱查体（活动度、压痛、水肿等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-13",
+    "rule_name": "入院记录-体格检查缺头部及其器官检查:",
+    "is_compliant": false,
+    "findings": "体格检查缺失头部及五官检查。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充头面部及五官检查。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-14",
+    "rule_name": "入院记录-体格检查缺胸部检查:",
+    "is_compliant": false,
+    "findings": "体格检查缺失胸部（心肺）听诊及胸廓检查，对冠心病诊断至关重要。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "补充胸部查体（心界、心率、心律、杂音、肺呼吸音等）。",
+    "confidence": 0.95
+  },
+  {
+    "rule_id": "LXE-15",
+    "rule_name": "入院记录-7岁以上人群体格检查缺血压:",
+    "is_compliant": true,
+    "findings": "体格检查中已记录血压（BP 150/90mmHg），符合要求。",
+    "evidence": "physical exam: BP 150/90mmHg",
+    "location": "体格检查部分",
+    "suggestion": "",
+    "confidence": 0.95
+  }
+]

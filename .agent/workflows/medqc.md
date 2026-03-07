@@ -30,10 +30,15 @@ description: MedQC 病案质控系统项目规则和约定
 
 环境变量（在 `backend/.env` 中配置）:
 ```
-SICHUAN_API_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1
-SICHUAN_API_KEY=sk-xxx
-SICHUAN_MODEL=qwen2.5-14b-instruct
+LLM_API_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_API_KEY=sk-xxx
+LLM_MODEL=qwen-turbo
+LLM_TIMEOUT_SECONDS=120
 ```
+
+> [!CAUTION]
+> **`.env` 文件必须位于 `backend/` 目录下**，且启动后端时**工作目录必须是 `backend/`**，
+> 否则 Pydantic Settings 无法读取 `.env`，LLM API 将不可用（会 fallback 到模拟数据）。
 
 ## 常用命令
 
@@ -41,30 +46,44 @@ SICHUAN_MODEL=qwen2.5-14b-instruct
 
 ### 启动开发服务
 
-> ⚠️ 后端必须用 **8001** 端口，因为 `vite.config.ts` 的 proxy 将 `/api` 转发到 `127.0.0.1:8001`
+> [!IMPORTANT]
+> 后端和前端的端口必须匹配。当前 `vite.config.ts` 中 `backendTarget` 指向 `http://localhost:8000`。
+> **后端必须以 `backend/` 为工作目录启动**，确保 `.env` 能被正确加载。
 
+#### Linux / macOS
 ```bash
 # 前端 (端口 3000)
 cd apps/medqc-web && npx vite --host 0.0.0.0 --port 3000
 
-# 后端 (端口 8001) ← 必须是 8001！
-cd apps/medqc-web/backend && uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+# 后端 (端口 8000)
+cd apps/medqc-web/backend && JWT_SECRET=dev-secret uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 后台启动服务 (nohup)
+#### Windows PowerShell
+```powershell
+# 前端 (端口 3000)
+cd d:\大模型项目\lx0222\health-qc-monorepo\apps\medqc-web
+npx vite --port 3000 --host
+
+# 后端 (端口 8000) ← 必须在 backend 目录下启动！
+cd d:\大模型项目\lx0222\health-qc-monorepo\apps\medqc-web\backend
+$env:JWT_SECRET="dev-secret"; python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 后台启动服务 (nohup, Linux only)
 ```bash
 # 前端后台启动 (端口 3000)
 cd apps/medqc-web && nohup npx vite --host 0.0.0.0 --port 3000 > frontend.log 2>&1 &
 
-# 后端后台启动 (端口 8001)
-cd apps/medqc-web/backend && nohup uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload > backend.log 2>&1 &
+# 后端后台启动 (端口 8000)
+cd apps/medqc-web/backend && nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
 
 # 检查服务状态
-lsof -i :3000 -i :8001
+lsof -i :3000 -i :8000
 
 # 停止服务
-kill $(lsof -t -i :3000) 2>/dev/null  # 停止前端
-kill $(lsof -t -i :8001) 2>/dev/null  # 停止后端
+kill $(lsof -t -i :3000) 2>/dev/null
+kill $(lsof -t -i :8000) 2>/dev/null
 ```
 
 ### 运行测试

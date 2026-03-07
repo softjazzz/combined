@@ -796,6 +796,7 @@ const routes: RouteRecordRaw[] = [
         props: { embedded: true, initialView: 'workbench' },
         meta: { title: '工作台' }
       },
+
       {
         path: 'icd',
         name: 'WorkstationV2ICD',
@@ -851,6 +852,57 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/workstation-v2/CDMDataView.vue'),
         meta: { title: '数据管理' }
       },
+    ]
+  },
+  // 工作台 V3 (卡片式布局)
+  {
+    path: '/workstation-v3',
+    component: () => import('@/components/layout/WorkstationLayout.vue'),
+    meta: {
+      requiresAuth: false,
+      title: '病案智能提取工作台 V3'
+    },
+    children: [
+      {
+        path: '',
+        name: 'WorkstationV3Index',
+        component: () => import('@/views/workstation-v2/WorkstationV3View.vue'),
+        meta: { title: '工作台 V3', permission: ['admin', 'qc_manager', 'doctor'] }
+      }
+    ]
+  },
+  // 病案工作台 V4（科室侧边栏 + 表格）
+  {
+    path: '/workstation-v4',
+    component: () => import('@/components/layout/WorkstationLayout.vue'),
+    meta: {
+      requiresAuth: false,
+      title: '病案工作台 V4'
+    },
+    children: [
+      {
+        path: '',
+        name: 'WorkstationV4Index',
+        component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
+        meta: { title: '工作台 V4', permission: ['admin', 'qc_manager', 'doctor'] }
+      }
+    ]
+  },
+  // 系统配置（数据库连接、同步管理）
+  {
+    path: '/system-config',
+    component: () => import('@/components/layout/WorkstationLayout.vue'),
+    meta: {
+      requiresAuth: false,
+      title: '数据源配置'
+    },
+    children: [
+      {
+        path: '',
+        name: 'SystemConfigIndex',
+        component: () => import('@/views/workstation-v2/SystemConfigView.vue'),
+        meta: { title: '数据源配置', permission: ['admin'] }
+      }
     ]
   },
   {

@@ -1,0 +1,397 @@
+name: field_mapper
+description: 智能字段识别与映射 - 将用户上传的数据列名映射到标准分析字段
+
+llm:
+  provider: dashscope
+  model: deepseek-v3.2
+  temperature: 0.1
+  max_tokens: 2000
+
+# ========== 标准字段定义 ==========
+# 每个字段包含：key(内部名称), name(显示名), aliases(同义词列表), category(分类), required(是否必填)
+
+standard_fields:
+  # === 核心标识 ===
+  - key: case_id
+    name: 病例ID
+    aliases:
+      - 住院号
+      - 病案号
+      - 就诊号
+      - 病历号
+      - 住院流水号
+    category: 基础
+    required: true
+
+  # === 科室与病区 ===
+  - key: department_name
+    name: 科室名称
+    aliases:
+      - 科室
+      - 出院科室
+      - 住院科室
+      - 所属科室
+      - 科室名
+      - 诊疗科室
+      - 出院诊疗科室
+      - 主管科室
+      - 就诊科室
+      - 归属科室
+      - 出院科室名称
+    category: 基础
+    required: true
+
+  - key: ward_name
+    name: 病区名称
+    aliases:
+      - 病区
+      - 住院病区
+      - 病房
+    category: 基础
+    required: false
+
+  # === DIP/DRG 分组信息 ===
+  - key: dip_code
+    name: DIP病种编码
+    aliases:
+      - 分组编码
+      - DIP编码
+      - 病种分组编码
+    category: 分组
+    required: true
+
+  - key: dip_name
+    name: DIP病种名称
+    aliases:
+      - 分组名称
+      - DIP分组名称
+      - 病种名称
+      - DIP病种
+    category: 分组
+    required: false
+
+  - key: dip_weight
+    name: DIP点数
+    aliases:
+      - 分组病种分值
+      - DIP分值
+      - 点数
+      - 权重
+      - 病种分值
+      - 实际结算分值
+    category: 分组
+    required: false
+
+  - key: drg_code
+    name: DRG编码
+    aliases:
+      - DRG分组编码
+      - CN-DRG编码
+    category: 分组
+    required: false
+
+  # === 费用信息 ===
+  - key: actual_cost
+    name: 实际费用
+    aliases:
+      - 总费用
+      - 住院总费用
+      - 住院医疗总费用
+      - 医疗总费用
+      - 实际医疗费用
+    category: 费用
+    required: true
+
+  - key: dip_payment
+    name: DIP支付标准
+    aliases:
+      - 统筹支出
+      - 统筹支付
+      - 医保支付金额
+      - DIP结算金额
+      - 医保基金支付
+      - DIP统筹支付总金额
+      - 医保支付
+    category: 费用
+    required: true
+
+  - key: profit_loss
+    name: 盈亏额
+    aliases:
+      - 盈亏
+      - 结余
+      - 超支结余
+      - 盈亏金额
+    category: 费用
+    required: false
+
+  - key: self_payment
+    name: 自付金额
+    aliases:
+      - 个人支付
+      - 患者自费
+      - 自费金额
+      - 个人账户支出
+    category: 费用
+    required: false
+
+  # === 费用明细 ===
+  - key: drug_cost
+    name: 药品费
+    aliases:
+      - 西药费
+      - 药费
+      - 草药费
+      - 中成药费
+    category: 费用明细
+    required: false
+
+  - key: treatment_cost
+    name: 治疗费
+    aliases:
+      - 诊疗费
+      - 诊治费
+    category: 费用明细
+    required: false
+
+  - key: exam_cost
+    name: 检查费
+    aliases:
+      - 检验费
+      - 检查检验费
+    category: 费用明细
+    required: false
+
+  - key: material_cost
+    name: 材料费
+    aliases:
+      - 耗材费
+      - 医用材料费
+    category: 费用明细
+    required: false
+
+  # === 患者信息 ===
+  - key: patient_name
+    name: 患者姓名
+    aliases:
+      - 姓名
+      - 人员姓名
+      - 病人姓名
+    category: 患者
+    required: false
+
+  - key: patient_age
+    name: 年龄
+    aliases:
+      - 患者年龄
+      - 入院年龄
+    category: 患者
+    required: false
+
+  - key: patient_gender
+    name: 性别
+    aliases:
+      - 患者性别
+    category: 患者
+    required: false
+
+  - key: insurance_type
+    name: 医保类型
+    aliases:
+      - 险种类型
+      - 医疗类别
+      - 参保类型
+      - 医保类别
+    category: 患者
+    required: false
+
+  # === 诊断与手术 ===
+  - key: main_diagnosis
+    name: 主诊断名称
+    aliases:
+      - 出院诊断名称
+      - 诊断名称
+      - 主要诊断
+    category: 诊疗
+    required: false
+
+  - key: main_diagnosis_code
+    name: 主诊断编码
+    aliases:
+      - 出院诊断疾病编码
+      - 诊断编码
+      - ICD-10编码
+    category: 诊疗
+    required: false
+
+  - key: main_surgery
+    name: 主要手术
+    aliases:
+      - 操作名称
+      - 手术名称
+      - 手术分组名称
+    category: 诊疗
+    required: false
+
+  - key: main_surgery_code
+    name: 主要手术编码
+    aliases:
+      - 操作编码
+      - 手术编码
+      - 手术分组代码
+      - ICD-9-CM-3编码
+    category: 诊疗
+    required: false
+
+  # === 医生信息 ===
+  - key: attending_doctor
+    name: 主管医生
+    aliases:
+      - 主管医师
+      - 主治医生
+      - 主诊医师姓名
+      - 责任医生
+    category: 医生
+    required: false
+
+  - key: surgeon
+    name: 主刀医生
+    aliases:
+      - 手术医生
+      - 术者
+    category: 医生
+    required: false
+
+  # === 时间信息 ===
+  - key: admission_date
+    name: 入院日期
+    aliases:
+      - 入院时间
+      - 住院日期
+    category: 时间
+    required: false
+
+  - key: discharge_date
+    name: 出院日期
+    aliases:
+      - 出院时间
+    category: 时间
+    required: false
+
+  - key: los
+    name: 住院天数
+    aliases:
+      - 住院天数
+      - 住院日数
+      - 住院时长
+      - 实际住院天数
+      - 住院日
+      - 天数
+      - 住院总天数
+    category: 时间
+    required: false
+
+  # === 其他 ===
+  - key: is_remote
+    name: 异地标志
+    aliases:
+      - 异地
+      - 是否异地
+    category: 其他
+    required: false
+
+  - key: region
+    name: 统筹区
+    aliases:
+      - 参保所属医保区划
+      - 所属区划
+      - 医保区划
+    category: 其他
+    required: false
+
+  # === DIP专项分析字段 ===
+  - key: rate_status
+    name: 分值状态
+    aliases:
+      - 倍率类型
+      - 分值类型
+      - 分值状态码
+      - 高低倍率
+    category: DIP
+    required: false
+
+  - key: surgery_code
+    name: 手术分组代码
+    aliases:
+      - 手术分组编码
+      - 操作分组代码
+      - DIP手术分组代码
+    category: DIP
+    required: false
+
+  - key: point_value
+    name: 预结算点值
+    aliases:
+      - 点值
+      - 结算点值
+      - 职工点值
+      - 居民点值
+      - 月度点值
+    category: DIP
+    required: false
+
+  - key: data_month
+    name: 数据月份
+    aliases:
+      - 月份
+      - 结算月份
+      - 出院月份
+      - 数据期间
+    category: DIP
+    required: false
+
+# ========== LLM 提示词模板 ==========
+prompt_template: |
+  你是一个医疗数据分析专家，擅长识别医院信息系统中的字段含义。
+
+  ## 任务
+  分析用户提供的数据列名，将它们映射到标准字段。
+
+  ## 标准字段列表
+  {standard_field_list}
+
+  ## 用户数据列名
+  {user_columns}
+
+  ## 数据样本（前3行）
+  {sample_data}
+
+  ## 输出格式
+  返回 JSON 格式：
+  ```json
+  {
+    "mappings": {
+      "用户列名1": "标准字段key",
+      "用户列名2": "标准字段key"
+    },
+    "confidence": 0.85,
+    "unmapped": ["未识别的列1", "未识别的列2"]
+  }
+  ```
+
+  ## 注意事项
+  1. 只映射能确定的字段，不确定的放入 unmapped
+  2. 一个用户列名只能映射到一个标准字段
+  3. 一个标准字段可以被多个用户列名映射（如西药费和中成药费都映射到drug_cost）
+  4. confidence 表示整体识别置信度 (0-1)
+
+fallback_rules:
+  # 当 LLM 识别失败时使用的备用规则
+  - pattern: "住院号|病案号"
+    field: case_id
+  - pattern: "科室"
+    field: department_name
+  - pattern: "总费用|医疗总费用"
+    field: actual_cost
+  - pattern: "统筹支出|医保支付"
+    field: dip_payment

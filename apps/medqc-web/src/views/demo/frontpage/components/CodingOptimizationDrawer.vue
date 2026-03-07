@@ -1,7 +1,7 @@
 <template>
   <a-drawer
-    :visible="visible"
-    @update:visible="$emit('update:visible', $event)"
+    :open="drawerOpen"
+    @update:open="handleOpenUpdate"
     title="AI 编码优化建议"
     placement="right"
     width="450"
@@ -53,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { CheckCircleOutlined, ExclamationCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
 
 export interface Suggestion {
@@ -64,15 +65,27 @@ export interface Suggestion {
   created_at?: string
 }
 
-defineProps<{
-  visible: boolean
+const props = defineProps<{
+  visible?: boolean
+  open?: boolean
   loading: boolean
   suggestions: Suggestion[]
   getSuggestionTitle: (type: string) => string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void
   (e: 'update:visible', value: boolean): void
   (e: 'handle', id: number, action: 'accept' | 'reject'): void
 }>()
+
+const drawerOpen = computed(() => {
+  if (typeof props.open === 'boolean') return props.open
+  return !!props.visible
+})
+
+const handleOpenUpdate = (value: boolean) => {
+  emit('update:open', value)
+  emit('update:visible', value)
+}
 </script>

@@ -66,6 +66,15 @@ class SichuanEvaluateRequest(BaseModel):
     persist: Optional[bool] = True
     # Prompt optimization mode (default: plan_a)
     prompt_mode: Optional[str] = "plan_a"
+    # ── 质控引擎高级配置（前端高级设置面板） ──
+    # 每批发给 LLM 的最大规则数（分段模式）
+    max_rules_per_batch: Optional[int] = None
+    # LLM 最大并发调用数（分段模式）
+    max_concurrency: Optional[int] = None
+    # LLM 温度参数
+    temperature: Optional[float] = None
+    # LLM 最大输出 token 数
+    max_tokens: Optional[int] = None
 
 
 class SichuanBatchDocument(BaseModel):
@@ -233,9 +242,16 @@ async def evaluate(
             return response
         else:
             # ── 使用分段 Pipeline（切段 → 规则路由 → 分批 → 并发 LLM） ──
+            # 应用前端传入的高级配置
+            if req.temperature is not None:
+                qc_service.client.temperature = req.temperature
+            if req.max_tokens is not None:
+                qc_service.client.max_tokens = req.max_tokens
+
             pipeline = SegmentedQCPipeline(
                 llm_client=qc_service.client,
-                max_concurrency=3,
+                max_concurrency=req.max_concurrency or 3,
+                max_rules_per_batch=req.max_rules_per_batch or 15,
             )
             result = await pipeline.evaluate(
                 document_id=req.document_id,

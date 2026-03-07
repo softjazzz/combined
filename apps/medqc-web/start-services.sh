@@ -126,11 +126,30 @@ start_backend() {
     
     # 进入后端目录
     cd "$BACKEND_ROOT"
+
+    # 确保 .env 含字段映射服务所需变量别名
+    if [ -f "$BACKEND_ROOT/.env" ]; then
+        if ! grep -Eq '^DASHSCOPE_API_KEY=' "$BACKEND_ROOT/.env"; then
+            printf '\nDASHSCOPE_API_KEY=${LLM_API_KEY:-}\n' >> "$BACKEND_ROOT/.env"
+        fi
+        if ! grep -Eq '^DASHSCOPE_BASE_URL=' "$BACKEND_ROOT/.env"; then
+            printf 'DASHSCOPE_BASE_URL=${LLM_API_ENDPOINT:-}\n' >> "$BACKEND_ROOT/.env"
+        fi
+        if ! grep -Eq '^FIELD_MAPPER_MODEL=' "$BACKEND_ROOT/.env"; then
+            printf 'FIELD_MAPPER_MODEL=${LLM_MODEL:-deepseek-v3}\n' >> "$BACKEND_ROOT/.env"
+        fi
+    fi
     
     # 启动后端服务
     log_info "启动后端服务..."
     nohup bash -c "
+        set -a
+        if [ -f \"$BACKEND_ROOT/.env\" ]; then source \"$BACKEND_ROOT/.env\"; fi
+        set +a
         if [ -z \"\$JWT_SECRET\" ]; then export JWT_SECRET=dev-secret; fi && \
+        if [ -z \"\$DASHSCOPE_API_KEY\" ] && [ -n \"\$LLM_API_KEY\" ]; then export DASHSCOPE_API_KEY=\"\$LLM_API_KEY\"; fi && \
+        if [ -z \"\$DASHSCOPE_BASE_URL\" ] && [ -n \"\$LLM_API_ENDPOINT\" ]; then export DASHSCOPE_BASE_URL=\"\$LLM_API_ENDPOINT\"; fi && \
+        if [ -z \"\$FIELD_MAPPER_MODEL\" ] && [ -n \"\$LLM_MODEL\" ]; then export FIELD_MAPPER_MODEL=\"\$LLM_MODEL\"; fi && \
         if [ \"\$BACKEND_RELOAD\" = \"1\" ]; then \
           .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload; \
         else \

@@ -163,17 +163,39 @@ const fillRate = computed(() => {
 
 // 从 fields 中提取诊断和手术
 watch(() => props.fields, (newFields) => {
-  if (newFields.length > 0 && diagnosisFields.value.length === 0) {
-    const mainDiag = newFields.find(f => f.label === '主要诊断')
-    const mainProc = newFields.find(f => f.label === '主要手术/操作')
-    diagnosisFields.value = [
-      { name: mainDiag?.value || '', code: '', confidence: mainDiag?.confidence || 0.5 },
-    ]
-    procedureFields.value = mainProc && mainProc.value !== '无'
-      ? [{ name: mainProc?.value || '', code: '', confidence: mainProc?.confidence || 0.5 }]
-      : []
+  // 1. 如果新数据为空数组（例如触发了重新生成），则重置本地列表
+  if (newFields.length === 0) {
+    diagnosisFields.value = []
+    procedureFields.value = []
+    return
   }
-}, { immediate: true })
+
+  // 2. 如果正在 AI 生成，或者列表尚未初始化，则从此列表同步数据
+  if (props.generating || diagnosisFields.value.length === 0) {
+    const mainDiag = newFields.find(f => f.label === '主要诊断')
+    const mainDiagCode = newFields.find(f => f.label === '主要诊断编码')
+    const mainProc = newFields.find(f => f.label === '主要手术')
+    const mainProcCode = newFields.find(f => f.label === '主要手术编码')
+
+    // 更新主诊断
+    if (diagnosisFields.value.length === 0) {
+      diagnosisFields.value.push({ name: '', code: '', confidence: 0.5 })
+    }
+    if (mainDiag?.value) diagnosisFields.value[0].name = mainDiag.value
+    if (mainDiagCode?.value) diagnosisFields.value[0].code = mainDiagCode.value
+    if (mainDiag?.confidence) diagnosisFields.value[0].confidence = mainDiag.confidence
+
+    // 更新主手术
+    if (mainProc && mainProc.value !== '无' && mainProc.value !== '–') {
+      if (procedureFields.value.length === 0) {
+        procedureFields.value.push({ name: '', code: '', confidence: 0.5 })
+      }
+      if (mainProc.value) procedureFields.value[0].name = mainProc.value
+      if (mainProcCode?.value) procedureFields.value[0].code = mainProcCode.value
+      if (mainProc?.confidence) procedureFields.value[0].confidence = mainProc.confidence
+    }
+  }
+}, { immediate: true, deep: true })
 
 function addDiagnosis() {
   diagnosisFields.value.push({ name: '', code: '', confidence: 0 })

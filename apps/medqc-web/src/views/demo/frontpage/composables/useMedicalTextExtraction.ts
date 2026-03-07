@@ -16,6 +16,31 @@ export function useMedicalTextExtraction(options: {
   onExtracted?: () => void
 }) {
   const extracting = ref(false)
+  // 'idle' | 'extracting' | 'completed' | 'mock_fallback'
+  const extractionStatus = ref<'idle' | 'extracting' | 'completed' | 'mock_fallback'>('idle')
+  const extractionProgress = ref<{
+    completed: string[]
+    currentModule: string
+    total: number
+    percent: number
+  }>({
+    completed: [],
+    currentModule: '',
+    total: 8,
+    percent: 0
+  })
+
+  const MODULE_NAMES: Record<string, string> = {
+    basic_info: '基本信息',
+    hospitalization: '住院信息',
+    diagnoses: '诊断信息',
+    procedures: '手术操作',
+    other_medical_info: '其他医疗信息',
+    staff: '人员信息',
+    costs: '费用信息',
+    coding_result: 'ICD 编码',
+    confidence: '置信度校验'
+  }
 
   const sseDebugEnabled = false
 
@@ -64,22 +89,23 @@ export function useMedicalTextExtraction(options: {
         admitted_dept: fp.hospitalization?.admission_dept || '',
         discharged_dept: fp.hospitalization?.discharge_dept || '',
         admission_way: fp.hospitalization?.admission_way_text || '',
-        leaving_way: '医嘱离院'
+        leaving_way: fp.hospitalization?.leaving_hospital_way || '医嘱离院',
+        rehospital_within_month: fp.hospitalization?.rehospital_within_month || '无'
       },
       diagnoses: {
         ...fp.diagnoses,
         // Transformed fields for backward compatibility
         admission_main_conn: String(fp.diagnoses?.admission_condition ?? '') === '1' ? '有' : '-',
         discharge_main_conn: '有',
+        discharge_main_outcome: fp.diagnoses?.discharge_main_outcome || '好转',
         // Legacy format for other diagnoses
         discharge_other_diagnoses: (
-          fp.diagnoses?.discharge_other_diagnoses_texts?.length > 0
-            ? fp.diagnoses.discharge_other_diagnoses_texts
-            : fp.diagnoses?.ed_diagnosis_texts?.slice(1) || []
+          fp.diagnoses?.discharge_other_diagnoses_texts || []
         ).map((name: string, idx: number) => ({
           name,
           code: fp.diagnoses?.discharge_other_icds?.[idx] || '待编码',
-          conn: '有'
+          conn: '有',
+          outcome: fp.diagnoses?.discharge_other_outcomes?.[idx] || '好转'
         }))
       },
       procedures: {
@@ -89,9 +115,13 @@ export function useMedicalTextExtraction(options: {
           name: fp.procedures?.main_procedure_text || '无',
           code: fp.procedures?.main_procedure_code || '',
           date: fp.procedures?.main_procedure_date || '',
+          start_time: fp.procedures?.main_procedure_start_time || '',
+          end_time: fp.procedures?.main_procedure_end_time || '',
           surgeon: fp.procedures?.surgeon_name || '',
           anesthesia: fp.procedures?.anesthesia_method || '',
-          level: fp.procedures?.main_procedure_level || ''
+          level: fp.procedures?.main_procedure_level || '',
+          incision_grade: fp.procedures?.incision_grade || '',
+          anesthesia_grade: fp.procedures?.anesthesia_grade || ''
         },
         others: []
       },
@@ -109,7 +139,11 @@ export function useMedicalTextExtraction(options: {
         director: fp.staff?.dept_director || '',
         chief_doctor: fp.staff?.chief_physician || '',
         attending_doctor: fp.staff?.attending_physician || '',
-        coder: 'AI 预编'
+        coder: fp.staff?.coder || '待定',
+        qc_physician: fp.staff?.qc_physician || '',
+        qc_nurse: fp.staff?.qc_nurse || '',
+        qc_date: fp.staff?.qc_date || '',
+        qc_level: fp.staff?.medical_record_quality || ''
       }
     }
 
@@ -238,6 +272,7 @@ export function useMedicalTextExtraction(options: {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     extracting.value = true
+    extractionStatus.value = 'extracting'
     options.onStartExtract?.()
     sseLog(requestId, 'extractStructuredData:start', {
       case_id: options.demoCase.value.case_id,
@@ -246,15 +281,14 @@ export function useMedicalTextExtraction(options: {
 
     // Track completed modules for progress display
     const completedModules: string[] = []
-    const moduleNames: Record<string, string> = {
-      basic_info: '基本信息',
-      hospitalization: '住院信息',
-      diagnoses: '诊断信息',
-      procedures: '手术操作',
-      other_medical_info: '其他医疗信息',
-      staff: '人员信息',
-      costs: '费用信息',
-      coding_result: 'ICD 编码'
+    const moduleNames: Record<string, string> = MODULE_NAMES
+
+    // Reset progress
+    extractionProgress.value = {
+      completed: [],
+      currentModule: '正在初始化...',
+      total: Object.keys(moduleNames).length,
+      percent: 0
     }
 
     try {
@@ -281,6 +315,16 @@ export function useMedicalTextExtraction(options: {
           }
 
           applyFrontpageResult(fp, requestId, 'non-stream')
+
+          // 更新进度到100%
+          const allKeys = Object.keys(MODULE_NAMES)
+          extractionProgress.value = {
+            completed: allKeys,
+            currentModule: '✅ 提取完成',
+            total: allKeys.length,
+            percent: 100
+          }
+          extractionStatus.value = 'completed'
 
           if (fp.confidence?.warnings?.length > 0) {
             const count = fp.confidence.warnings.length
@@ -311,7 +355,7 @@ export function useMedicalTextExtraction(options: {
       // All requests go through Vite proxy (relative path) to avoid CORS issues.
       const streamUrls = ['/api/v1/frontpage/auto-generate-draft-stream']
 
-      const streamHeaderTimeoutMs = 8000
+      const streamHeaderTimeoutMs = 30000
       let response: Response | null = null
       let lastStreamFetchError: any = null
 
@@ -471,6 +515,13 @@ export function useMedicalTextExtraction(options: {
                   completedModules.push(parsed.module)
                   const moduleName = moduleNames[parsed.module] || parsed.module
                   sseLog(requestId, 'stream:module_completed', { module: parsed.module, moduleName })
+                  // Update reactive progress
+                  extractionProgress.value = {
+                    completed: [...completedModules],
+                    currentModule: moduleName,
+                    total: Object.keys(moduleNames).length,
+                    percent: Math.round((completedModules.length / Object.keys(moduleNames).length) * 100)
+                  }
                 }
               } else if (eventType === 'done' && parsed.frontpage) {
                 // Final complete result
@@ -479,6 +530,16 @@ export function useMedicalTextExtraction(options: {
                   keys: Object.keys(parsed.frontpage || {})
                 })
                 applyFrontpageResult(parsed.frontpage, requestId, 'stream-done')
+
+                // 更新进度到100%
+                const allKeys = Object.keys(moduleNames)
+                extractionProgress.value = {
+                  completed: allKeys,
+                  currentModule: '✅ 提取完成',
+                  total: allKeys.length,
+                  percent: 100
+                }
+                extractionStatus.value = 'completed'
 
                 // Check for warnings
                 if (parsed.frontpage.confidence?.warnings?.length > 0) {
@@ -538,17 +599,30 @@ export function useMedicalTextExtraction(options: {
       sseError(requestId, 'extractStructuredData:error', error)
       console.error('结构化提取失败:', error)
       useMockFallback(requestId)
+      // 模拟进度完成动画
+      const allKeys = Object.keys(MODULE_NAMES)
+      extractionProgress.value = {
+        completed: allKeys,
+        currentModule: '✅ 已使用模拟数据',
+        total: allKeys.length,
+        percent: 100
+      }
+      extractionStatus.value = 'mock_fallback'
       message.warning('网络请求失败，已使用模拟数据')
       options.onExtracted?.()
     } finally {
       sseLog(requestId, 'extractStructuredData:finally', { extracting: false })
-      extracting.value = false
+      // 延迟 2.5 秒再隐藏提取状态，让用户看到完成状态
+      setTimeout(() => {
+        extracting.value = false
+      }, 2500)
     }
   }
 
   return {
     extracting,
+    extractionProgress,
+    extractionStatus,
     extractStructuredData
   }
 }
-

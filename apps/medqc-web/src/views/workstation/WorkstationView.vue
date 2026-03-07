@@ -256,11 +256,11 @@
 
     <!-- 编码优化建议抽屉（复用 CodingOptimizationDrawer） -->
     <CodingOptimizationDrawer
-      :visible="bridge.suggestionDrawerVisible.value"
+      :open="bridge.suggestionDrawerVisible.value"
       :loading="bridge.suggestionsLoading.value"
       :suggestions="bridge.suggestions.value"
       :get-suggestion-title="bridge.getSuggestionTitle"
-      @update:visible="bridge.suggestionDrawerVisible.value = $event"
+      @update:open="bridge.suggestionDrawerVisible.value = $event"
       @handle="bridge.handleSuggestion"
     />
   </div>

@@ -6,6 +6,7 @@
 import time
 import logging
 from typing import Dict, Any, Optional
+import re
 
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class SichuanQCLLMClient:
+    DEFAULT_MAX_TOKENS = 16384
+    THINKING_MIN_MAX_TOKENS = 16384
+    THINKING_LARGE_RULES_MAX_TOKENS = 24576
+    MAX_TOKENS_HARD_CAP = 32768
+
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         """
         初始化 LLM 客户端
@@ -38,7 +44,7 @@ class SichuanQCLLMClient:
             custom_params = config.get("custom_parameters", {})
             self.temperature: float = custom_params.get("temperature", 0.2)
             self.top_p: float = custom_params.get("top_p", 0.9)
-            self.max_tokens: int = custom_params.get("max_tokens", 4000)
+            self.max_tokens: int = custom_params.get("max_tokens", self.DEFAULT_MAX_TOKENS)
 
             logger.info(f"✅ SichuanQCLLMClient 使用传入配置初始化: model={self.model}, source={self.config_source}, temperature={self.temperature}, top_p={self.top_p}, max_tokens={self.max_tokens}")
         else:
@@ -53,7 +59,7 @@ class SichuanQCLLMClient:
             # Default advanced parameters when using .env
             self.temperature: float = 0.2
             self.top_p: float = 0.9
-            self.max_tokens: int = 4000
+            self.max_tokens: int = self.DEFAULT_MAX_TOKENS
 
             logger.info(f"✅ SichuanQCLLMClient 使用 .env 配置初始化: model={self.model}, temperature={self.temperature}")
 
@@ -83,12 +89,13 @@ class SichuanQCLLMClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        max_tokens = self._resolve_max_tokens(prompt)
         payload = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
             "top_p": self.top_p,
-            "max_tokens": self.max_tokens,
+            "max_tokens": max_tokens,
             "stream": False,
             "enable_thinking": False,  # Qwen3 系列模型需要此参数
         }
@@ -100,6 +107,40 @@ class SichuanQCLLMClient:
                 payload=payload,
                 timeout_seconds=self.timeout_seconds,
             )
+
+            # 双保险：若模型仍返回 <think> 标签，统一在客户端剥离。
+            self._strip_think_content_inplace(result)
+
+            finish_reason = (
+                result.get("choices", [{}])[0]
+                .get("finish_reason", "")
+            )
+            if finish_reason == "length":
+                logger.warning(
+                    "LLM 输出触发 max_tokens 截断: model=%s max_tokens=%s prompt_len=%s",
+                    self.model,
+                    max_tokens,
+                    len(prompt),
+                )
+                # Thinking 模型优先做一次自动扩容重试，避免输出被截断。
+                retry_tokens = min(max(max_tokens * 2, self.THINKING_MIN_MAX_TOKENS), self.MAX_TOKENS_HARD_CAP)
+                if self._is_thinking_model() and retry_tokens > max_tokens:
+                    retry_payload = dict(payload)
+                    retry_payload["max_tokens"] = retry_tokens
+                    logger.warning(
+                        "检测到 length 截断，触发一次扩容重试: model=%s max_tokens=%s -> %s",
+                        self.model,
+                        max_tokens,
+                        retry_tokens,
+                    )
+                    result = await safe_post_json(
+                        url=f"{self.api_endpoint}/chat/completions",
+                        headers=headers,
+                        payload=retry_payload,
+                        timeout_seconds=self.timeout_seconds,
+                    )
+                    self._strip_think_content_inplace(result)
+
             api_time = time.time() - api_start
             self.total_api_time += api_time
             self.success_count += 1
@@ -112,6 +153,49 @@ class SichuanQCLLMClient:
             self.total_api_time += api_time
             self.error_count += 1
             raise
+
+    def _is_thinking_model(self) -> bool:
+        model = (self.model or "").lower()
+        return ("qwen3.5" in model) or ("thinking" in model)
+
+    def _estimate_rule_count(self, prompt: str) -> int:
+        match = re.search(r"适用规则数:\s*(\d+)", prompt)
+        if match:
+            try:
+                return int(match.group(1))
+            except Exception:
+                return 0
+        return 0
+
+    def _resolve_max_tokens(self, prompt: str) -> int:
+        max_tokens = int(self.max_tokens or self.DEFAULT_MAX_TOKENS)
+        if not self._is_thinking_model():
+            return max_tokens
+
+        # Thinking 模型默认放宽输出上限，避免思考过程耗尽输出 token。
+        max_tokens = max(max_tokens, self.THINKING_MIN_MAX_TOKENS)
+        rule_count = self._estimate_rule_count(prompt)
+        if rule_count >= 40:
+            max_tokens = max(max_tokens, self.THINKING_LARGE_RULES_MAX_TOKENS)
+        return min(max_tokens, self.MAX_TOKENS_HARD_CAP)
+
+    @staticmethod
+    def _strip_think_tags(text: str) -> str:
+        if not text:
+            return text
+        return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
+
+    def _strip_think_content_inplace(self, result: Dict[str, Any]) -> None:
+        try:
+            message = result.get("choices", [{}])[0].get("message", {})
+            content = message.get("content", "")
+            cleaned = self._strip_think_tags(content)
+            if cleaned != content:
+                message["content"] = cleaned
+                result["choices"][0]["message"] = message
+        except Exception:
+            # 不影响主流程
+            return
 
     def stats(self) -> Dict[str, Any]:
         return {

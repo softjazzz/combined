@@ -56,9 +56,48 @@ ensure_jwt_secret() {
   fi
 }
 
+ensure_field_mapper_env_aliases() {
+  local env_file="${BACKEND_DIR}/.env"
+  if [[ ! -f "${env_file}" ]]; then
+    touch "${env_file}"
+  fi
+  if ! grep -Eq '^DASHSCOPE_API_KEY=' "${env_file}"; then
+    printf '\nDASHSCOPE_API_KEY=${LLM_API_KEY:-}\n' >> "${env_file}"
+  fi
+  if ! grep -Eq '^DASHSCOPE_BASE_URL=' "${env_file}"; then
+    printf 'DASHSCOPE_BASE_URL=${LLM_API_ENDPOINT:-}\n' >> "${env_file}"
+  fi
+  if ! grep -Eq '^FIELD_MAPPER_MODEL=' "${env_file}"; then
+    printf 'FIELD_MAPPER_MODEL=${LLM_MODEL:-deepseek-v3}\n' >> "${env_file}"
+  fi
+}
+
+load_backend_env() {
+  local env_file="${BACKEND_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+  if [[ -z "${JWT_SECRET:-}" ]]; then
+    export JWT_SECRET="dev-secret"
+  fi
+  if [[ -z "${DASHSCOPE_API_KEY:-}" && -n "${LLM_API_KEY:-}" ]]; then
+    export DASHSCOPE_API_KEY="${LLM_API_KEY}"
+  fi
+  if [[ -z "${DASHSCOPE_BASE_URL:-}" && -n "${LLM_API_ENDPOINT:-}" ]]; then
+    export DASHSCOPE_BASE_URL="${LLM_API_ENDPOINT}"
+  fi
+  if [[ -z "${FIELD_MAPPER_MODEL:-}" && -n "${LLM_MODEL:-}" ]]; then
+    export FIELD_MAPPER_MODEL="${LLM_MODEL}"
+  fi
+}
+
 start_backend() {
   # shellcheck disable=SC1091
   source "${BACKEND_DIR}/.venv/bin/activate"
+  load_backend_env
   log "启动后端 FastAPI: ${HOST}:${PORT}"
   (
     cd "${BACKEND_DIR}"
@@ -69,6 +108,7 @@ start_backend() {
 ensure_python
 ensure_backend_venv
 ensure_jwt_secret
+ensure_field_mapper_env_aliases
 start_backend
 
 

@@ -188,7 +188,7 @@ class LLMConfigLoader:
                 if hasattr(client, 'top_p'):
                     client.top_p = custom_params.get("top_p", 0.9)
                 if hasattr(client, 'max_tokens'):
-                    client.max_tokens = custom_params.get("max_tokens", 4000)
+                    client.max_tokens = custom_params.get("max_tokens", 16384)
 
                 logger.info(f"✅ 成功为服务重新加载配置: model={client.model}, source={config.get('source')}, temperature={getattr(client, 'temperature', 'N/A')}, top_p={getattr(client, 'top_p', 'N/A')}")
                 return True

@@ -18,6 +18,7 @@ from .routers import auth as auth_router
 from .routers import records as records_router
 from .routers import qc as qc_router
 from .routers import qc_sichuan as qc_sichuan_router
+from .routers import qc_settings as qc_settings_router
 from .routers import tools as tools_router
 from .routers import ingest as ingest_router
 from .routers import medical_documents as medical_documents_router
@@ -207,6 +208,7 @@ def create_app() -> FastAPI:
     app.include_router(records_router.router)
     app.include_router(qc_router.router)
     app.include_router(qc_sichuan_router.router)
+    app.include_router(qc_settings_router.router)
     app.include_router(tools_router.router)
     app.include_router(ingest_router.router)
     app.include_router(medical_documents_router.router)

@@ -196,6 +196,7 @@
       <ExcelUploadView
         v-else-if="currentView === 'upload'"
         @go-analysis="handleGoAnalysis"
+        @analysis-ready="handleAnalysisReady"
       />
 
       <!-- 质控消息 -->
@@ -213,11 +214,11 @@
 
     <!-- 编码优化建议抽屉 -->
     <CodingOptimizationDrawer
-      :visible="suggestionDrawerVisible"
+      :open="suggestionDrawerVisible"
       :loading="suggestionsLoading"
       :suggestions="suggestions"
       :get-suggestion-title="getSuggestionTitle"
-      @update:visible="suggestionDrawerVisible = $event"
+      @update:open="suggestionDrawerVisible = $event"
       @handle="handleSuggestion"
     />
 
@@ -391,6 +392,12 @@ function handleGoAnalysis(sessionId: string, batchId: string) {
   selectedBatchId.value = batchId
   currentView.value = 'pre-analysis'
   menuSelectedKeys.value = ['pre-analysis']
+}
+
+function handleAnalysisReady(data: { charts: any; aiInsights: string[]; analysisResults: any }) {
+  // 智能上传分析完成后，自动切换到事后分析视图
+  currentView.value = 'post-analysis'
+  menuSelectedKeys.value = ['post-analysis']
 }
 
 // ==================== 拖拽分隔线 ====================

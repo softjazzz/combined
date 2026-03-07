@@ -28,8 +28,8 @@ class SegmentedQCPipeline:
     不通过 SichuanQCService 加载规则，因为路由器已经完成了规则分配。
     """
 
-    # 每次 LLM 调用的最大规则数（超出自动拆批，避免注意力衰减）
-    MAX_RULES_PER_BATCH = 15
+    # 默认每次 LLM 调用的最大规则数（可通过构造器覆盖）
+    DEFAULT_MAX_RULES_PER_BATCH = 15
 
     def __init__(
         self,
@@ -37,6 +37,7 @@ class SegmentedQCPipeline:
         prompt_builder: Optional[QCPromptBuilder] = None,
         router: Optional[RuleRouter] = None,
         max_concurrency: int = 5,
+        max_rules_per_batch: int = 15,
     ):
         self.client = llm_client or SichuanQCLLMClient()
         self.prompt_builder = prompt_builder or QCPromptBuilder(
@@ -45,6 +46,7 @@ class SegmentedQCPipeline:
         )
         self.router = router or RuleRouter()
         self.max_concurrency = max_concurrency
+        self.MAX_RULES_PER_BATCH = max_rules_per_batch
 
     async def evaluate(
         self,

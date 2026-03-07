@@ -61,12 +61,15 @@ class SichuanQCService:
         Returns:
             是否成功重新加载配置
         """
-        return await LLMConfigLoader.reload_config_for_service(self, config_name, user_id)
-        # 加载截断配置
-        from ..core.settings import get_settings
-        settings = get_settings()
-        self.enable_truncate = settings.SICHUAN_ENABLE_TRUNCATE
-        self.max_content_length = settings.SICHUAN_MAX_CONTENT_LENGTH
+        success = await LLMConfigLoader.reload_config_for_service(self, config_name, user_id)
+        if success:
+            # 同步最新截断配置到 service 与 prompt_builder
+            settings = get_settings()
+            self.enable_truncate = settings.SICHUAN_ENABLE_TRUNCATE
+            self.max_content_length = settings.SICHUAN_MAX_CONTENT_LENGTH
+            self.prompt_builder.enable_truncate = self.enable_truncate
+            self.prompt_builder.max_content_length = self.max_content_length
+        return success
 
     def _load_rules_from_json(self) -> List[Dict[str, Any]]:
         """
@@ -170,13 +173,25 @@ class SichuanQCService:
         if not all_rules:
             return []
 
+        # 兼容旧文书类型别名：
+        # - "病程记录"/course_record/progress_note -> 首次+日常+上级+抢救
+        raw_doc_type = (document_type or "").strip()
+        canonical_doc_type = self.doc_type_mapping.get(raw_doc_type, raw_doc_type)
+        target_doc_types = {canonical_doc_type}
+        if raw_doc_type in {"course_record", "progress_note"} or canonical_doc_type == "病程记录":
+            target_doc_types.update({"首次病程记录", "日常病程记录", "上级查房记录", "抢救记录"})
+
         # 筛选适用于当前文书类型的规则
         applicable_rules = [
             rule for rule in all_rules
-            if not rule.get("applicable_documents") or document_type in rule.get("applicable_documents", [])
+            if not rule.get("applicable_documents")
+            or bool(target_doc_types.intersection(set(rule.get("applicable_documents", []))))
         ]
 
-        logger.info(f"从 JSON 加载了 {len(applicable_rules)}/{len(all_rules)} 条适用于 '{document_type}' 的规则")
+        logger.info(
+            f"从 JSON 加载了 {len(applicable_rules)}/{len(all_rules)} 条适用于 '{document_type}' 的规则"
+            f"（匹配类型: {sorted(target_doc_types)}）"
+        )
         return applicable_rules
 
     # ──────────────────────────────────────────────
@@ -260,6 +275,9 @@ class SichuanQCService:
         import re
 
         try:
+            # 双保险：清理 Thinking 模型可能返回的 <think>...</think> 内容
+            llm_output = re.sub(r"<think>[\s\S]*?</think>", "", llm_output or "", flags=re.IGNORECASE).strip()
+
             # 尝试提取 JSON 数组部分
             # 查找第一个 [ 和最后一个 ]
             json_start = llm_output.find('[')

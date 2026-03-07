@@ -192,6 +192,8 @@
 	                    <StructuredDataView
 	                      v-if="activeTab === 'structured'"
 	                      :extracting="extracting"
+	                      :extraction-progress="extractionProgress"
+	                      :extraction-status="extractionStatus"
 	                      :frontpage="frontpage"
 	                      :has-medical-text="!!demoCase?.medical_text"
 	                      @extract="extractStructuredData"
@@ -381,7 +383,7 @@ const verifyPassword = () => {
   }
 }
 
-const { extracting, extractStructuredData } = useMedicalTextExtraction({
+const { extracting, extractionProgress, extractionStatus, extractStructuredData } = useMedicalTextExtraction({
   demoCase,
   onStartExtract: () => {
     // 开始提取 2 秒后即扩展页面，不等待提取完成
