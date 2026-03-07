@@ -303,8 +303,107 @@ const startDrag = (e: MouseEvent) => {
 
 import { integratedQCEngine } from '@/services/integrated-qc-engine'
 import type { ComprehensiveQCResult, QCRuleResult, DocumentType } from '@/types/enhanced-qc-rule'
+import axios from 'axios'
 
 // ==================== 引擎对接与数据生成 ====================
+
+// --- 后端编码质控 API 调用 ---
+const codingQCLoading = ref(false)
+
+const fetchCodingQCFromBackend = async () => {
+  const fp = props.frontpage
+  if (!fp) return []
+
+  // 构建后端需要的 frontpage 格式
+  const diagnoses = fp.diagnoses || {}
+  const procedures = fp.procedures || {}
+
+  // 将首页数据映射为编码质控入参
+  const diagList: any[] = []
+  if (diagnoses.discharge_main_diagnosis_text || diagnoses.discharge_main_icd) {
+    diagList.push({
+      code: diagnoses.discharge_main_icd || '',
+      name: diagnoses.discharge_main_diagnosis_text || '',
+    })
+  }
+  const otherTexts = diagnoses.discharge_other_diagnoses_texts || []
+  const otherICDs = diagnoses.discharge_other_icds || []
+  for (let i = 0; i < otherTexts.length; i++) {
+    diagList.push({
+      code: otherICDs[i] || '',
+      name: otherTexts[i] || '',
+    })
+  }
+
+  const surgList: any[] = []
+  if (procedures.main_procedure_text || procedures.main_procedure_code) {
+    surgList.push({
+      code: procedures.main_procedure_code || '',
+      name: procedures.main_procedure_text || '',
+    })
+  }
+
+  const payload = {
+    frontpage: {
+      sex: fp.sex || fp.basic_info?.sex || fp.basic_info?.gender_text || '',
+      age: fp.age || fp.basic_info?.age || fp.basic_info?.age_years || '',
+      diagnoses: diagList,
+      surgeries: surgList,
+      clinical_summary: fp.clinical_summary || '',
+    },
+  }
+
+  try {
+    codingQCLoading.value = true
+    const resp = await axios.post('/api/v1/qc/coding-qc/check', payload, {
+      timeout: 30000,
+    })
+    const data = resp.data?.data
+    if (!data) return []
+
+    const codingIssues: QCIssue[] = []
+    let idx = 0
+
+    // 规则层问题
+    for (const issue of (data.rule_issues || [])) {
+      codingIssues.push({
+        id: `coding-rule-${idx++}`,
+        category: 'coding',
+        severity: issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+        group: issue.dimension === 'format' ? '编码格式校验' : '编码存在性验证',
+        description: issue.description,
+        suggestion: issue.suggestion,
+        actionLabel: '修正编码',
+      })
+    }
+
+    // LLM 层问题
+    const dimensionLabels: Record<string, string> = {
+      merge: '编码合并', exclusion: '编码互斥',
+      primary: '主诊断选择', consistency: '编码一致性',
+    }
+    for (const issue of (data.llm_issues || [])) {
+      codingIssues.push({
+        id: `coding-llm-${idx++}`,
+        category: 'coding',
+        severity: issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+        group: dimensionLabels[issue.dimension] || 'LLM 语义审查',
+        description: issue.description,
+        suggestion: issue.suggestion,
+        actionLabel: '查看详情',
+      })
+    }
+
+    return codingIssues
+  } catch (err) {
+    console.error('后端编码质控调用失败', err)
+    return []
+  } finally {
+    codingQCLoading.value = false
+  }
+}
+
+// --- 前端引擎（首页质控）---
 const runRealQCEngine = async () => {
   const fp = props.frontpage
   if (!fp) {
@@ -312,14 +411,13 @@ const runRealQCEngine = async () => {
     return
   }
 
-  // 1. 构造引擎需要的入参格式 (组装一个包含基本文档的结构)
   const patientData = {
     patientId: fp.case_id || fp.patient_id || `PAT_${Date.now()}`,
     documents: [
       {
         id: `doc_${Date.now()}`,
         type: 'admission_record' as DocumentType,
-        content: JSON.stringify(fp), // 在实际应用中这里会传入真实的病历文书原文
+        content: JSON.stringify(fp),
         timestamp: new Date().toISOString(),
         status: 'draft'
       }
@@ -327,35 +425,29 @@ const runRealQCEngine = async () => {
   }
 
   try {
-    // 2. 调用质控引擎 (注意此时引擎内部 MockLLMService 会接管具体的文本提取和规则判定)
-    const engineResult: ComprehensiveQCResult = await integratedQCEngine.executeQualityControl(patientData)
-    
-    // 3. 将 ComprehensiveQCResult 中的 QCRuleResult[] 转换为面板需要的 QCIssue[] 格式
+    // 并行执行：前端引擎（首页质控）+ 后端 API（编码质控）
+    const [engineResult, codingIssues] = await Promise.all([
+      integratedQCEngine.executeQualityControl(patientData),
+      fetchCodingQCFromBackend(),
+    ])
+
     const newIssues: QCIssue[] = []
     let issueId = 0
-    
-    // 如果没有任何规则结果，给一个提示
-    if (!engineResult.ruleResults || engineResult.ruleResults.length === 0) {
-       issues.value = []
-       return
-    }
 
-    engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
-      // 一条 RuleResult 里可能有多个 specific findings
-      if (!ruleRes.isCompliant && ruleRes.findings && ruleRes.findings.length > 0) {
-         ruleRes.findings.forEach(finding => {
-            // 映射 Severity
+    // 前端引擎结果 → 首页质控 + 控费 Tab
+    if (engineResult.ruleResults && engineResult.ruleResults.length > 0) {
+      engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
+        if (!ruleRes.isCompliant && ruleRes.findings && ruleRes.findings.length > 0) {
+          ruleRes.findings.forEach(finding => {
             let sev: 'error' | 'warning' | 'info' = 'info'
             if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
             else if (finding.severity === 'minor') sev = 'warning'
-            
-            // 映射 UI Category (前端 Tab 只有三种，这里做一个粗略映射，真实情况可以靠 category 属性更好判定)
+
             let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleCode.includes('.2') || ruleRes.ruleName.includes('编码')) {
-               tabCat = 'coding'
-            } else if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) {
-               tabCat = 'cost'
+            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) {
+              tabCat = 'cost'
             }
+            // 不再把编码相关问题放到 coding Tab（由后端 API 负责）
 
             newIssues.push({
               id: `sys-${issueId++}`,
@@ -366,21 +458,22 @@ const runRealQCEngine = async () => {
               suggestion: finding.recommendation,
               actionLabel: '查看详情'
             })
-         })
-      }
-    })
+          })
+        }
+      })
+    }
+
+    // 后端 API 结果 → 编码质控 Tab
+    newIssues.push(...codingIssues)
 
     issues.value = newIssues
   } catch (error) {
     console.error('质控引擎执行异常', error)
-    // 出错时至少清空或者保留一个提示
     issues.value = []
   }
 }
 
-// 修改原有的入口
 const generateMockIssues = () => {
-  // 不再调用纯 Mock 逻辑，转而通过真实集成引擎跑数据
   runRealQCEngine()
 }
 
@@ -390,12 +483,11 @@ watch(
   (newVal) => {
     if (newVal) {
       generateMockIssues()
-      // 有问题时自动弹出 (因为 runRealQCEngine 是异步的，等一下再弹会更好，目前可以用 setTimeout 估算一下)
       setTimeout(() => {
         if (totalIssueCount.value > 0 && !visible.value) {
            visible.value = true
         }
-      }, 3500) // 因为上面 engineResult 是异步过程 (3000ms+)，等几秒再测
+      }, 4000)
     }
   },
   { deep: true }
