@@ -470,3 +470,60 @@ async def list_formal_qc_rules(request: Request):
         trace_id=get_trace_id(request),
     )
 
+
+# ==================== 编码质控 API ====================
+
+from ..services.coding_qc_service import CodingQCEngine
+
+import logging as _logging
+logger = _logging.getLogger(__name__)
+
+# 编码质控引擎（LLM 客户端延迟初始化）
+_coding_qc_engine: Optional[CodingQCEngine] = None
+
+
+def _get_coding_qc_engine() -> CodingQCEngine:
+    """获取或初始化编码质控引擎。"""
+    global _coding_qc_engine
+    if _coding_qc_engine is None:
+        try:
+            from ..services.qc_llm_client import SichuanQCLLMClient
+            llm_client = SichuanQCLLMClient()
+            _coding_qc_engine = CodingQCEngine(llm_client=llm_client)
+            logger.info("编码质控引擎初始化完成（规则层 + LLM 层）")
+        except Exception as e:
+            logger.warning(f"LLM 客户端初始化失败，编码质控仅使用规则层: {e}")
+            _coding_qc_engine = CodingQCEngine(llm_client=None)
+    return _coding_qc_engine
+
+
+@router.post("/coding-qc/check")
+async def check_coding_qc(
+    request: Request,
+    payload: Dict[str, Any],
+):
+    """
+    对病案首页执行编码规范质控。
+
+    POST body:
+    {
+        "frontpage": { ... 首页数据字典 ... },
+        "skip_llm": false  // 可选，跳过 LLM 语义审查
+    }
+    """
+    frontpage = payload.get("frontpage") or payload
+    skip_llm = payload.get("skip_llm", False)
+
+    engine = _get_coding_qc_engine()
+
+    if skip_llm:
+        temp_engine = CodingQCEngine(llm_client=None)
+        report = await temp_engine.run_all(frontpage)
+    else:
+        report = await engine.run_all(frontpage)
+
+    return success_response(
+        data=report.to_dict(),
+        message=f"编码质控完成：{report.overall_assessment}（{report.total_issues} 个问题）",
+        trace_id=get_trace_id(request),
+    )
