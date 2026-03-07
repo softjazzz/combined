@@ -148,6 +148,16 @@ class TestRuleLoading:
         assert "LX-010" in rule_ids
 
     @pytest.mark.asyncio
+    async def test_filter_rules_for_course_record_alias(self, service):
+        """测试“病程记录”粗粒度别名能展开到具体病程文书类型"""
+        rules = await service._load_applicable_rules("病程记录")
+        assert len(rules) > 0
+        rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
+        # 首次病程 + 日常病程规则都应能命中
+        assert "SC-021" in rule_ids
+        assert "SC-028" in rule_ids
+
+    @pytest.mark.asyncio
     async def test_filter_rules_for_surgery_record(self, service):
         """测试筛选手术记录适用规则"""
         rules = await service._load_applicable_rules("手术记录")
@@ -228,6 +238,30 @@ class TestPromptBuilding:
         assert "日常病程记录" in prompt
         assert "适用规则数: 0" in prompt
         assert "未加载到具体规则" in prompt
+
+    def test_parse_llm_json_response_with_think_tags(self, service):
+        """测试 JSON 解析前会清理 <think> 标签"""
+        llm_output = """
+<think>
+先进行推理过程...
+</think>
+[
+  {
+    "rule_id": "SC-001",
+    "rule_name": "测试规则",
+    "is_compliant": true,
+    "findings": "合规",
+    "evidence": "",
+    "location": "主诉",
+    "suggestion": "",
+    "confidence": 0.93
+  }
+]
+"""
+        parsed = service._parse_llm_json_response(llm_output, rules=[{"rule_id": "SC-001"}])
+        assert len(parsed) == 1
+        assert parsed[0]["rule_id"] == "SC-001"
+        assert parsed[0]["is_compliant"] is True
 
 
 # ==================== CDM 数据查询测试 ====================
@@ -404,6 +438,29 @@ class TestEvaluation:
 
             # 指定了 2 条规则
             assert result["total_rules"] == 2
+
+    @pytest.mark.asyncio
+    async def test_evaluate_multi_document_default_course_record_has_rules(self, service):
+        """测试多文书评估默认文书类型“病程记录”不会出现 0 规则空跑"""
+        mock_engine_result = {
+            "rule_id": "SC-021",
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "合规",
+            "evidence": "",
+            "confidence": 0.95,
+            "metadata": {"tokens_used": 50, "api_time": 0.1}
+        }
+
+        with patch.object(service.rule_engine, 'evaluate', new_callable=AsyncMock, return_value=mock_engine_result):
+            result = await service.evaluate_multi_document(
+                document_id="test-multi-default-001",
+                document_content="患者病程记录内容..."
+            )
+
+            assert result["overall_summary"]["total_rules"] > 0
+            assert "病程记录" in result["document_results"]
+            assert result["document_results"]["病程记录"]["total_rules"] > 0
 
 
 # ==================== RuleRouter 测试 ====================
