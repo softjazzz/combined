@@ -43,32 +43,10 @@ class ApplicabilityChecker:
     SURGERY_HINTS = ["手术", "术中", "术后", "术前", "麻醉", "切除", "切开",
                      "缝合", "PCI", "介入", "植入", "移植", "造口"]
 
-    # 英文→中文文书类型映射（用于匹配时兼容两种编码）
-    _DOC_TYPE_CN_MAP = {
-        "admission_record": "入院记录",
-        "first_course_record": "首次病程记录",
-        "daily_course_record": "日常病程记录",
-        "senior_course_record": "上级查房记录",
-        "rescue_record": "抢救记录",
-        "diffcase_discussion_record": "疑难病例讨论记录",
-        "death_discussion": "死亡病例讨论记录",
-        "consultation_record": "会诊记录",
-        "surgery_record": "手术记录",
-        "presurg_summary": "术前小结",
-        "presurg_discussion": "术前讨论",
-        "postsurg_firstcourse_record": "术后首次病程记录",
-        "surgery_safecheck_record": "手术安全核查",
-        "surgery_risk_assessment": "手术风险评估",
-        "anesthesia_record": "麻醉记录",
-        "newborn_record": "新生儿记录",
-        "bloodtrans_record": "输血记录",
-        "nursing_record": "护理记录",
-        "discharge_record": "出院记录",
-        "consent_form": "知情同意书",
-        "exam_item_report": "检查检验报告",
-        "labtest_item_report": "检验报告",
-        "medical_order": "医嘱",
-    }
+    # 英文→中文文书类型映射（从共享常量导入，避免重复维护）
+    from app.constants.doc_types import DOC_TYPE_MAP
+    _DOC_TYPE_CN_MAP = DOC_TYPE_MAP
+
 
     def check(self, rule: Dict[str, Any], medical_record: Dict[str, Any]) -> ApplicabilityResult:
         rule_id = (rule.get("rule_id") or "").upper()

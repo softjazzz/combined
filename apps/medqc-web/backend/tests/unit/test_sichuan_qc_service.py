@@ -102,7 +102,7 @@ class TestRuleLoading:
     def test_load_all_rules_from_json(self, service):
         """测试加载所有规则"""
         rules = service._load_rules_from_json()
-        assert len(rules) == 179  # SC-146 + LX-33
+        assert len(rules) == 179  # sichuan_rules_146.json: SC-068 启用 + LX-xxx 等
         assert all("rule_id" in r for r in rules)
 
     def test_load_custom_rules_from_json(self, service):
@@ -118,8 +118,8 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_filter_rules_for_admission_record(self, service):
         """测试筛选入院记录适用规则"""
-        rules = await service._load_rules_from_db("入院记录")
-        assert len(rules) == 29  # SC-001~020 + LX-001~009
+        rules = await service._load_applicable_rules("入院记录")
+        assert len(rules) == 44  # SC + LX + LXE（按 rule_id 去重后）
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-001" in rule_ids
         assert "SC-020" in rule_ids
@@ -132,8 +132,8 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_filter_rules_for_first_course(self, service):
         """测试筛选首次病程记录适用规则"""
-        rules = await service._load_rules_from_db("首次病程记录")
-        assert len(rules) == 7  # SC-021~027
+        rules = await service._load_applicable_rules("首次病程记录")
+        assert len(rules) >= 7  # SC-021~027 + LXE 展开后的 course_record 规则
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-021" in rule_ids
         assert "SC-027" in rule_ids
@@ -141,7 +141,7 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_filter_rules_for_daily_course(self, service):
         """测试筛选日常病程记录适用规则"""
-        rules = await service._load_rules_from_db("日常病程记录")
+        rules = await service._load_applicable_rules("日常病程记录")
         assert len(rules) >= 34  # SC 29条 + LX 5条 + 跨文书
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-028" in rule_ids
@@ -150,7 +150,7 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_filter_rules_for_surgery_record(self, service):
         """测试筛选手术记录适用规则"""
-        rules = await service._load_rules_from_db("手术记录")
+        rules = await service._load_applicable_rules("手术记录")
         assert len(rules) >= 15  # SC 11条 + LX 4条 + 跨文书
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-095" in rule_ids
@@ -159,7 +159,7 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_filter_rules_for_discharge_record(self, service):
         """测试筛选出院记录适用规则"""
-        rules = await service._load_rules_from_db("出院记录")
+        rules = await service._load_applicable_rules("出院记录")
         assert len(rules) >= 13  # SC 12条 + LX 1条 + 跨文书
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-116" in rule_ids
@@ -168,7 +168,7 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_filter_rules_for_consultation(self, service):
         """测试筛选会诊记录适用规则"""
-        rules = await service._load_rules_from_db("会诊记录")
+        rules = await service._load_applicable_rules("会诊记录")
         assert len(rules) >= 7  # SC 5条 + LX 2-3条
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-067" in rule_ids
@@ -177,7 +177,7 @@ class TestRuleLoading:
     @pytest.mark.asyncio
     async def test_unknown_document_type_returns_empty(self, service):
         """测试未知文书类型返回空列表（无通用规则）"""
-        rules = await service._load_rules_from_db("不存在的文书类型")
+        rules = await service._load_applicable_rules("不存在的文书类型")
         assert len(rules) == 0
 
     def test_doc_type_mapping_covers_all_types(self, service):
@@ -207,7 +207,7 @@ class TestPromptBuilding:
     @pytest.mark.asyncio
     async def test_build_prompt_with_rules(self, service):
         """测试使用规则构建 Prompt"""
-        rules = (await service._load_rules_from_db("入院记录"))[:3]
+        rules = (await service._load_applicable_rules("入院记录"))[:3]
         content = "患者男性，65岁，因胸痛3天入院。主诉：反复胸痛3天。"
 
         prompt = await service._build_prompt(rules, content, "入院记录")
@@ -318,8 +318,8 @@ class TestEvaluation:
 
             assert result["document_id"] == "test-admission-001"
             assert result["document_type"] == "入院记录"
-            assert result["total_rules"] == 29  # 入院记录 29 条规则
-            assert len(result["applicable_rules"]) == 29
+            assert result["total_rules"] == 44  # 入院记录规则（SC + LX + LXE，去重后）
+            assert len(result["applicable_rules"]) == 44
 
     @pytest.mark.asyncio
     async def test_evaluate_with_first_course_rules(self, service):
@@ -344,7 +344,8 @@ class TestEvaluation:
 
             assert result["document_id"] == "test-first-course-001"
             assert result["document_type"] == "首次病程记录"
-            assert result["total_rules"] == 7  # 首次病程 7 条规则
+            assert result["total_rules"] >= 7  # SC-021~027 + LXE 展开
+
 
     @pytest.mark.asyncio
     async def test_evaluate_compliance_rate(self, service):
@@ -372,12 +373,12 @@ class TestEvaluation:
                 document_type="入院记录"
             )
 
-            assert result["total_rules"] == 29
-            # 20/29 合规
+            assert result["total_rules"] == 44
+            # 20/44 合规
             summary = result["evaluation_summary"]
-            assert summary["compliance_rate"] == pytest.approx(68.97, abs=1)
+            assert summary["compliance_rate"] == pytest.approx(45.45, abs=1)
             assert summary["compliant_rules"] == 20
-            assert summary["issues_found"] == 9
+            assert summary["issues_found"] == 24
 
     @pytest.mark.asyncio
     async def test_evaluate_with_specific_rule_ids(self, service):

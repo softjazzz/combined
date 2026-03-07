@@ -150,7 +150,6 @@
                       <a-select-option value="输血记录">输血记录</a-select-option>
                       <a-select-option value="护理记录">护理记录</a-select-option>
                       <a-select-option value="检查检验报告">检查检验报告</a-select-option>
-                      <a-select-option value="日常病程记录" disabled style="display:none">医嘱</a-select-option>
                     </a-select-opt-group>
                   </a-select>
 

@@ -35,49 +35,9 @@ class SichuanQCService:
         # 统一规则引擎 (用于串行模式)
         self.rule_engine = UnifiedRuleEngine(self.client.generate)
 
-        # 英文到中文文书类型映射（兼容多种同义英文编码）
-        self.doc_type_mapping = {
-            # ---- 精确映射（与 CDM 表名一致）----
-            "admission_record": "入院记录",
-            "first_course_record": "首次病程记录",
-            "daily_course_record": "日常病程记录",
-            "senior_course_record": "上级查房记录",
-            "rescue_record": "抢救记录",
-            "diffcase_discussion_record": "疑难病例讨论记录",
-            "death_discussion": "死亡病例讨论记录",
-            "death_record": "死亡记录",
-            "handoff_record": "交接班记录",
-            "handover_record": "交接班记录",
-            "summary_record": "阶段小结",
-            "consultation_record": "会诊记录",
-            "surgery_record": "手术记录",
-            "presurg_summary": "术前小结",
-            "presurg_discussion": "术前讨论",
-            "postsurg_firstcourse_record": "术后首次病程记录",
-            "surgery_safecheck_record": "手术安全核查",
-            "surgery_risk_assessment": "手术风险评估",
-            "anesthesia_record": "麻醉记录",
-            "newborn_record": "新生儿记录",
-            "bloodtrans_record": "输血记录",
-            "nursing_record": "护理记录",
-            "discharge_record": "出院记录",
-            "consent_form": "知情同意书",
-            "exam_item_report": "检查检验报告",
-            "labtest_item_report": "检验报告",
-            "medical_order": "医嘱",
-            "transfer_in_record": "转科记录",
-            "transfer_out_record": "转科记录",
-            # ---- 旧的粗粒度/同义编码（向后兼容）----
-            "progress_note": "病程记录",
-            "operation_record": "手术记录",
-            "examination_report": "检查检验报告",
-            "course_record": "病程记录",
-            "case_discussion": "病例讨论",
-            "discharge_summary": "出院记录",
-            "lab_report": "检验报告",
-            "informed_consent": "知情同意书",
-            "transfusion_record": "输血记录",
-        }
+        # 英文到中文文书类型映射（从共享常量导入，避免重复维护）
+        from app.constants.doc_types import DOC_TYPE_FULL_MAP
+        self.doc_type_mapping = dict(DOC_TYPE_FULL_MAP)
 
 
         # 截断配置 + Prompt 构建器
@@ -178,7 +138,7 @@ class SichuanQCService:
             logger.error(f"从 JSON 文件加载自定义规则失败: {e}", exc_info=True)
             return []
 
-    async def _load_rules_from_db(self, document_type: str) -> List[Dict[str, Any]]:
+    async def _load_applicable_rules(self, document_type: str) -> List[Dict[str, Any]]:
         """
         加载适用于指定文书类型的质控规则（统一从 JSON 文件加载）。
 
@@ -410,7 +370,7 @@ class SichuanQCService:
             - api_time: API 调用时间
         """
         # P0 任务 1: 从数据库加载规则（按文书类型）
-        rules = await self._load_rules_from_db(document_type)
+        rules = await self._load_applicable_rules(document_type)
 
         # 如果指定了 rule_ids，优先按 ID 精确取规则（支持 SC-/LX- 前缀跨来源）
         if rule_ids and len(rule_ids) > 0:
@@ -544,14 +504,14 @@ class SichuanQCService:
                 logger.info(f"Selected {len(rules)} rules via get_rule_by_id from IDs: {rule_ids}")
             else:
                 # 回退：从数据库按文书类型加载，再按 rule_ids 过滤
-                rules = await self._load_rules_from_db(document_type)
+                rules = await self._load_applicable_rules(document_type)
                 rules = [
                     r for r in rules
                     if r.get("rule_id") in rule_ids or r.get("rule_code") in rule_ids or r.get("id") in rule_ids
                 ]
                 logger.info(f"Filtered to {len(rules)} rules based on rule_ids within loaded set: {rule_ids}")
         else:
-            rules = await self._load_rules_from_db(document_type)
+            rules = await self._load_applicable_rules(document_type)
 
         if not rules:
             logger.warning(f"未找到适用的规则: document_type={document_type}, rule_ids={rule_ids}")
@@ -669,7 +629,7 @@ class SichuanQCService:
         if not rules_by_document_type:
             rules_by_document_type = {}
             for doc_type in doc_map.keys():
-                rules_by_document_type[doc_type] = await self._load_rules_from_db(doc_type)
+                rules_by_document_type[doc_type] = await self._load_applicable_rules(doc_type)
             logger.info(f"Loaded rules from database for {len(rules_by_document_type)} document types")
 
         document_results: Dict[str, Any] = {}
