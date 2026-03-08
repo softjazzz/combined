@@ -322,6 +322,15 @@ const routes: RouteRecordRaw[] = [
           permission: ['admin', 'qc_manager']
         }
       },
+      {
+        path: 'notifications',
+        name: 'Notifications',
+        component: () => import('@/views/dashboard/notifications/NotificationsView.vue'),
+        meta: {
+          title: '通知与整改',
+          icon: 'BellOutlined',
+        }
+      },
 
       // 数据权限配置路由
       {

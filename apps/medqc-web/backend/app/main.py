@@ -49,6 +49,7 @@ from .routers import dashboard_api as dashboard_api_router
 from .routers import emr_render as emr_render_router
 from .routers import scoring_rules as scoring_rules_router
 from .routers import staff_ranking as staff_ranking_router
+from .routers import notifications as notifications_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -260,6 +261,8 @@ def create_app() -> FastAPI:
     app.include_router(scoring_rules_router.router)
     # 质控员工作量排名
     app.include_router(staff_ranking_router.router)
+    # 通知与申诉（消息+整改跟踪+问题闭环）
+    app.include_router(notifications_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
