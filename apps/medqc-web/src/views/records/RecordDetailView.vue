@@ -1,80 +1,162 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
+  <div class="record-detail-page p-6">
+    <!-- 顶部导航 -->
+    <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-4">
         <a-button :icon="h(ArrowLeftOutlined)" @click="goBack">
           返回
         </a-button>
-        <h1 class="page-title">病案详情</h1>
+        <h1 class="text-2xl font-bold text-gray-900">病案详情</h1>
+        <a-tag v-if="recordId" color="blue" class="text-xs">{{ recordId }}</a-tag>
       </div>
-      
-      <a-button type="primary" :icon="h(PlayCircleOutlined)">
-        开始质控
-      </a-button>
+
+      <div class="flex items-center gap-3">
+        <a-button @click="() => showQCPanel = !showQCPanel">
+          <ExclamationCircleOutlined />
+          {{ showQCPanel ? '隐藏质控' : '查看质控' }}
+        </a-button>
+        <a-button type="primary" :icon="h(PlayCircleOutlined)">
+          开始质控
+        </a-button>
+      </div>
     </div>
-    
-    <div class="grid grid-cols-12 gap-6">
-      <!-- 病案信息 -->
-      <div class="col-span-8">
-        <a-card title="基本信息" class="mb-6">
-          <a-descriptions :column="2" bordered>
-            <a-descriptions-item label="病案号">R202312001</a-descriptions-item>
-            <a-descriptions-item label="患者姓名">张**</a-descriptions-item>
-            <a-descriptions-item label="科室">内科</a-descriptions-item>
-            <a-descriptions-item label="状态">
-              <a-badge status="success" text="已完成" />
-            </a-descriptions-item>
-          </a-descriptions>
-        </a-card>
-        
-        <a-card title="病案内容">
-          <div class="bg-gray-50 p-4 rounded">
-            <p>主诉：胸闷气短3天</p>
-            <p>现病史：患者3天前无明显诱因出现胸闷气短...</p>
-          </div>
-        </a-card>
+
+    <!-- 主体内容：左侧 EMR + 右侧质控面板 -->
+    <div class="flex gap-6">
+      <!-- 左侧：EMR 文书渲染 -->
+      <div :class="showQCPanel ? 'flex-1' : 'w-full'" class="transition-all">
+        <EMRViewer
+          v-if="recordId"
+          ref="emrViewerRef"
+          :record-id="recordId"
+          :max-height="700"
+          @defect-click="handleDefectClick"
+          @loaded="handleEMRLoaded"
+        />
       </div>
-      
-      <!-- 操作面板 -->
-      <div class="col-span-4">
-        <a-card title="快速操作">
-          <div class="space-y-3">
-            <a-button block :icon="h(EditOutlined)">编辑病案</a-button>
-            <a-button block :icon="h(DownloadOutlined)">下载报告</a-button>
-            <a-button block danger :icon="h(DeleteOutlined)">删除病案</a-button>
+
+      <!-- 右侧：质控结果面板 -->
+      <div
+        v-if="showQCPanel"
+        class="w-80 flex-shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+      >
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="text-sm font-bold text-gray-700">
+            <ExclamationCircleOutlined class="mr-1 text-orange-500" />
+            质控结果
+          </h3>
+          <a-tag :color="qcIssues.length > 0 ? 'red' : 'green'" size="small">
+            {{ qcIssues.length }} 个问题
+          </a-tag>
+        </div>
+
+        <div v-if="qcIssues.length === 0" class="p-8 text-center text-gray-400">
+          <CheckCircleOutlined class="text-3xl text-green-400 mb-2" />
+          <p class="text-sm">暂无质控问题</p>
+        </div>
+
+        <div v-else class="overflow-y-auto" style="max-height: 650px">
+          <div
+            v-for="(issue, index) in qcIssues"
+            :key="issue.defect_id"
+            :class="[
+              'px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors',
+              activeDefectId === issue.defect_id ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'hover:bg-gray-50'
+            ]"
+            @click="scrollToDefect(issue.defect_id)"
+          >
+            <div class="flex items-center gap-2 mb-1">
+              <span
+                :class="[
+                  'w-5 h-5 rounded-full text-white text-[10px] flex items-center justify-center font-bold',
+                  issue.severity === 'critical' ? 'bg-red-500' :
+                  issue.severity === 'error' ? 'bg-orange-500' :
+                  issue.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                ]"
+              >
+                {{ index + 1 }}
+              </span>
+              <span class="text-sm font-medium text-gray-700 truncate flex-1">
+                {{ issue.rule_name || issue.category }}
+              </span>
+              <a-tag
+                :color="issue.severity === 'critical' ? 'red' : issue.severity === 'error' ? 'orange' : 'gold'"
+                size="small"
+              >
+                {{ severityText(issue.severity) }}
+              </a-tag>
+            </div>
+            <p class="text-xs text-gray-500 line-clamp-2 ml-7">{{ issue.description }}</p>
+            <p v-if="issue.suggestion" class="text-xs text-blue-500 ml-7 mt-1 line-clamp-1">
+              💡 {{ issue.suggestion }}
+            </p>
           </div>
-        </a-card>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { h } from 'vue'
-import { useRouter } from 'vue-router'
-import { 
+import { ref, h } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
   ArrowLeftOutlined,
   PlayCircleOutlined,
-  EditOutlined,
-  DownloadOutlined,
-  DeleteOutlined
+  ExclamationCircleOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons-vue'
+import EMRViewer from '@/components/qc/EMRViewer.vue'
+import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 
+const route = useRoute()
 const router = useRouter()
 
+// 从路由获取 recordId
+const recordId = route.params.id as string
+
+// 状态
+const showQCPanel = ref(true)
+const qcIssues = ref<DefectAnnotation[]>([])
+const activeDefectId = ref<string | null>(null)
+const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
+
+// 返回上一页
 const goBack = () => {
   router.go(-1)
+}
+
+// 严重级别文本
+const severityText = (severity: string) => {
+  const map: Record<string, string> = {
+    critical: '严重',
+    error: '错误',
+    warning: '警告',
+    info: '提示',
+  }
+  return map[severity] || severity
+}
+
+// EMR 加载完成
+const handleEMRLoaded = (data: any) => {
+  qcIssues.value = data?.defect_annotations || []
+}
+
+// 缺陷点击：从 EMRViewer 内部触发
+const handleDefectClick = (defectId: string) => {
+  activeDefectId.value = defectId
+}
+
+// 从右侧面板点击：滚动到文书中的缺陷位置
+const scrollToDefect = (defectId: string) => {
+  activeDefectId.value = defectId
+  emrViewerRef.value?.scrollTo(defectId)
 }
 </script>
 
 <style scoped>
-.page-container {
-  @apply p-6;
-}
-.page-header {
-  @apply flex items-center justify-between mb-6;
-}
-.page-title {
-  @apply text-2xl font-bold text-gray-900;
+.record-detail-page {
+  min-height: 100vh;
+  background: #f8fafc;
 }
 </style>
