@@ -85,6 +85,52 @@
       </a-button>
     </div>
 
+    <!-- ⚙️ 高级设置折叠面板（始终可见） -->
+    <a-collapse :bordered="false" class="advanced-settings-collapse" style="margin-bottom: 12px;">
+      <a-collapse-panel key="advanced" header="⚙️ 高级设置">
+        <a-row :gutter="[16, 12]">
+          <!-- Prompt 模式 -->
+          <a-col :span="6">
+            <div class="setting-label">Prompt 模式</div>
+            <a-select v-model:value="advancedSettings.prompt_mode" style="width: 100%">
+              <a-select-option value="plan_a">plan_a（标准，推荐）</a-select-option>
+              <a-select-option value="current">current（精简）</a-select-option>
+              <a-select-option value="plan_c">plan_c（详细）</a-select-option>
+            </a-select>
+            <div class="setting-hint">控制发送给 LLM 的规则信息量</div>
+          </a-col>
+          <!-- 每批规则数 -->
+          <a-col :span="5">
+            <div class="setting-label">每批规则数</div>
+            <a-input-number v-model:value="advancedSettings.max_rules_per_batch" :min="3" :max="50" style="width: 100%" />
+            <div class="setting-hint">每次发给 LLM 的规则数量</div>
+          </a-col>
+          <!-- 并发数 -->
+          <a-col :span="4">
+            <div class="setting-label">LLM 并发数</div>
+            <a-input-number v-model:value="advancedSettings.max_concurrency" :min="1" :max="10" style="width: 100%" />
+            <div class="setting-hint">同时请求 LLM 数</div>
+          </a-col>
+          <!-- Temperature -->
+          <a-col :span="4">
+            <div class="setting-label">Temperature {{ advancedSettings.temperature }}</div>
+            <a-slider v-model:value="advancedSettings.temperature" :min="0" :max="1" :step="0.05" />
+            <div class="setting-hint">越低越确定</div>
+          </a-col>
+          <!-- Max Tokens -->
+          <a-col :span="4">
+            <div class="setting-label">Max Tokens</div>
+            <a-input-number v-model:value="advancedSettings.max_tokens" :min="1024" :max="65536" :step="1024" style="width: 100%" />
+            <div class="setting-hint">最大输出 token 数</div>
+          </a-col>
+          <!-- 恢复默认 -->
+          <a-col :span="1" style="display: flex; align-items: flex-end;">
+            <a-button @click="resetAdvancedSettings" size="small" type="link">重置</a-button>
+          </a-col>
+        </a-row>
+      </a-collapse-panel>
+    </a-collapse>
+
     <!-- 功能选项卡 -->
     <a-tabs v-model:activeKey="activeTab" class="function-tabs">
       <!-- 单文档质控 -->

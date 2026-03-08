@@ -133,10 +133,12 @@ class TestCodingQCEngineFormat:
         assert len(issues) == 0
 
     def test_missing_code_field(self):
-        """诊断无编码字段应跳过。"""
+        """诊断无编码字段应报错（缺少 ICD 编码）。"""
         fp = {"diagnoses": [{"name": "无编码诊断"}]}
         issues = self.engine.check_format(fp)
-        assert len(issues) == 0
+        assert len(issues) == 1
+        assert issues[0].dimension == "format"
+        assert issues[0].severity == "error"
 
 
 # ============================================================

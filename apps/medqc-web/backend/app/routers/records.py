@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from ..core.permissions import (
 
 
 router = APIRouter(prefix="/api/v1/records", tags=["records"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -48,7 +50,7 @@ async def get_medical_records(
             ).order('created_at', {'ascending': False}).execute()  # type: ignore[attr-defined]
             records = list(response.data or [])
 
-            # 🚀 优化：一次性查询所有文档，避免N+1查询问题
+            # 优化：一次性查询所有文档，避免 N+1 查询问题
             if records:
                 try:
                     # 收集所有记录ID
@@ -61,7 +63,7 @@ async def get_medical_records(
                     ).in_('record_id', record_ids).order('sort_order').execute()
 
                     all_documents = all_docs_response.data or []
-                    print(f"✅ 一次性加载了 {len(all_documents)} 个文档")
+                    logger.info("Loaded %s documents in one query", len(all_documents))
 
                     # 按 record_id 分组文档
                     docs_by_record = {}
@@ -74,10 +76,14 @@ async def get_medical_records(
                     # 将文档分配给对应的记录
                     for record in records:
                         record['documents'] = docs_by_record.get(record['id'], [])
-                        print(f"  📄 记录 {record['id']}: {len(record['documents'])} 个文档")
+                        logger.debug(
+                            "Record %s loaded with %s documents",
+                            record.get('id'),
+                            len(record.get('documents', [])),
+                        )
 
                 except Exception as doc_error:
-                    print(f"⚠️ 批量加载文档失败: {doc_error}")
+                    logger.warning("Batch loading documents failed: %s", doc_error)
                     # 降级：为每条记录设置空文档列表
                     for record in records:
                         record['documents'] = []

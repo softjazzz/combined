@@ -32,7 +32,7 @@ def get_auth_headers(email: str, password: str) -> dict:
 @pytest.fixture
 def admin_headers():
     """Admin 用户认证头"""
-    return get_auth_headers("admin@medqc.com", "admin123")
+    return get_auth_headers("admin@medqc.com", "admin888")
 
 
 @pytest.fixture

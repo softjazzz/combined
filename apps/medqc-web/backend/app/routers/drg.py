@@ -573,14 +573,15 @@ async def download_template() -> StreamingResponse:
 
 @router.get("/export/excel")
 async def export_excel_report(
+    session_id: str = Query(..., description="Session ID"),
     batch_id: Optional[str] = Query(None),
     days: int = Query(30)
 ) -> StreamingResponse:
     """导出 Excel 分析报告"""
     try:
         # 获取统计数据
-        stats = drg_batch_store.get_statistics(batch_id=batch_id, days=days)
-        records = drg_batch_store.get_drill_down(batch_id=batch_id, dimension="all", value="all")
+        stats = drg_batch_store.get_statistics(session_id=session_id, batch_id=batch_id)
+        records = drg_batch_store.get_all_records(session_id=session_id, batch_id=batch_id)
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -669,6 +670,7 @@ async def trigger_notification(
 
 @router.get("/export/pdf")
 async def export_pdf_report(
+    session_id: str = Query(..., description="Session ID"),
     batch_id: Optional[str] = Query(None),
     days: int = Query(30)
 ) -> StreamingResponse:
@@ -683,7 +685,7 @@ async def export_pdf_report(
         from reportlab.pdfbase.ttfonts import TTFont
         
         # 获取数据
-        stats = drg_batch_store.get_statistics(batch_id=batch_id, days=days)
+        stats = drg_batch_store.get_statistics(session_id=session_id, batch_id=batch_id)
         summary = stats['summary']
         
         output = io.BytesIO()
@@ -764,6 +766,7 @@ async def export_pdf_report(
 
 @router.get("/export/word")
 async def export_word_report(
+    session_id: str = Query(..., description="Session ID"),
     batch_id: Optional[str] = Query(None),
     days: int = Query(30)
 ) -> StreamingResponse:
@@ -775,9 +778,9 @@ async def export_word_report(
         from docx.enum.table import WD_TABLE_ALIGNMENT
         
         # 获取数据
-        stats = drg_batch_store.get_statistics(batch_id=batch_id, days=days)
+        stats = drg_batch_store.get_statistics(session_id=session_id, batch_id=batch_id)
         summary = stats['summary']
-        records = drg_batch_store.get_drill_down(batch_id=batch_id, dimension="all", value="all")
+        records = drg_batch_store.get_all_records(session_id=session_id, batch_id=batch_id)
         
         doc = Document()
         

@@ -9,14 +9,22 @@
         </h2>
         <p class="text-slate-500 text-sm mt-1 font-medium">{{ activeTabDescription }}</p>
       </div>
-      <button
-        @click="showLLMSettings"
-        class="group relative inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-full shadow-lg hover:shadow-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 mt-4 sm:mt-0 cursor-pointer"
-      >
-        <ThunderboltOutlined class="mr-2 animate-pulse" />
-        LLM 模型配置
-        <div class="absolute inset-0 rounded-full ring-2 ring-white/20 group-hover:ring-white/40"></div>
-      </button>
+      <div class="flex items-center gap-3 mt-4 sm:mt-0">
+        <button
+          @click="showAICreator = true"
+          class="group relative inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full shadow-lg hover:shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+        >
+          <RobotOutlined class="mr-2" />
+          AI 创建规则
+        </button>
+        <button
+          @click="showLLMSettings"
+          class="group relative inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-full shadow-lg hover:shadow-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 cursor-pointer"
+        >
+          <ThunderboltOutlined class="mr-2 animate-pulse" />
+          LLM 模型配置
+        </button>
+      </div>
     </div>
 
     <!-- Tab 导航 -->
@@ -583,6 +591,12 @@
       v-model:open="testDrawerOpen"
       :rule="testRule_target"
     />
+
+    <!-- AI 智能创建规则抽屉 -->
+    <AIRuleCreatorDrawer
+      v-model:visible="showAICreator"
+      @saved="onAIRuleSaved"
+    />
   </div>
 </template>
 
@@ -616,7 +630,8 @@ import {
   PieChartOutlined,
   EyeOutlined,
   EditOutlined,
-  PlayCircleOutlined
+  PlayCircleOutlined,
+  RobotOutlined
 } from '@ant-design/icons-vue'
 import SemanticRulesView from './SemanticRulesView.vue'
 import DepartmentRulesTab from '@/components/rules/DepartmentRulesTab.vue'
@@ -626,6 +641,7 @@ import RuleImportModal from '@/components/rules/RuleImportModal.vue'
 import RuleTestDrawer from '@/components/rules/RuleTestDrawer.vue'
 import RuleStatsCards from '@/components/rules/RuleStatsCards.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
+import AIRuleCreatorDrawer from '@/components/rules/AIRuleCreatorDrawer.vue'
 import { DocumentCategoryService } from '@/services/document-category-service'
 import { DocumentCategory } from '@/types/medical'
 import { RulesService } from '@/services/rules-service'
@@ -768,6 +784,15 @@ const importModalOpen = ref(false)
 // 规则测试抽屉
 const testDrawerOpen = ref(false)
 const testRule_target = ref<ResolvedRule | null>(null)
+
+// AI 创建规则抽屉
+const showAICreator = ref(false)
+const onAIRuleSaved = () => {
+  showAICreator.value = false
+  // 刷新当前 Tab 的规则列表
+  fetchRules()
+  message.success('新规则已添加，规则列表已刷新')
+}
 
 // 模态框相关
 const modalVisible = ref(false)

@@ -9,6 +9,7 @@ DRG/DIP 功能性 API 测试
 """
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 # 导入 FastAPI 应用
@@ -21,12 +22,18 @@ from app.main import app
 pytest_plugins = ('pytest_asyncio',)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def async_client():
     """创建异步测试客户端"""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def session_id():
+    """使用不存在的 session_id，验证接口在空会话下的稳定行为。"""
+    return "test_session_for_api_contract"
 
 
 # ============================================
@@ -154,24 +161,25 @@ class TestBatchDataAPI:
     """批量数据功能测试"""
 
     @pytest.mark.asyncio
-    async def test_get_batches(self, async_client):
+    async def test_get_batches(self, async_client, session_id):
         """测试获取批次列表"""
-        response = await async_client.get("/api/v1/drg/batches")
+        response = await async_client.get("/api/v1/drg/batches", params={"session_id": session_id})
         
         assert response.status_code == 200
         data = response.json()
-        assert "batches" in data
-        assert isinstance(data["batches"], list)
+        assert data.get("success") is True
+        assert isinstance(data.get("data"), list)
 
     @pytest.mark.asyncio
-    async def test_get_statistics(self, async_client):
+    async def test_get_statistics(self, async_client, session_id):
         """测试获取统计数据"""
-        response = await async_client.get("/api/v1/drg/statistics")
+        response = await async_client.get("/api/v1/drg/statistics", params={"session_id": session_id})
         
         assert response.status_code == 200
         data = response.json()
         # 验证统计结构
-        assert isinstance(data, dict)
+        assert data.get("success") is True
+        assert isinstance(data.get("data"), dict)
 
     @pytest.mark.asyncio
     async def test_template_download(self, async_client):
@@ -191,17 +199,17 @@ class TestExportAPI:
     """导出功能测试"""
 
     @pytest.mark.asyncio
-    async def test_export_excel(self, async_client):
+    async def test_export_excel(self, async_client, session_id):
         """测试 Excel 导出"""
-        response = await async_client.get("/api/v1/drg/export/excel")
+        response = await async_client.get("/api/v1/drg/export/excel", params={"session_id": session_id})
         
         # 可能返回文件或 404（无数据）
         assert response.status_code in [200, 404]
 
     @pytest.mark.asyncio
-    async def test_export_pdf(self, async_client):
+    async def test_export_pdf(self, async_client, session_id):
         """测试 PDF 导出"""
-        response = await async_client.get("/api/v1/drg/export/pdf")
+        response = await async_client.get("/api/v1/drg/export/pdf", params={"session_id": session_id})
         
         # 可能返回文件或 404（无数据）
         assert response.status_code in [200, 404]

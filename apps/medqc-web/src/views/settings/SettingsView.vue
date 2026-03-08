@@ -71,6 +71,12 @@
               <span>分类算法</span>
             </template>
           </a-tab-pane>
+          <a-tab-pane key="qc_engine" tab="质控配置">
+            <template #tab>
+              <ExperimentOutlined class="settings-tabs__icon" />
+              <span>质控配置</span>
+            </template>
+          </a-tab-pane>
         </a-tabs>
       </a-card>
 
@@ -417,6 +423,78 @@
       >
         <ClassificationVersionManager />
       </a-card>
+
+      <!-- 质控引擎配置 -->
+      <a-card
+        v-if="activeTab === 'qc_engine'"
+        title="质控引擎配置"
+        class="settings-card"
+        :bordered="false"
+      >
+        <template #extra>
+          <a-space>
+            <a-button size="small" @click="resetQcSettings">恢复默认</a-button>
+            <a-button type="primary" size="small" @click="saveQcSettings" :loading="loading.qcSettings">保存配置</a-button>
+          </a-space>
+        </template>
+
+        <a-alert
+          message="质控引擎高级配置"
+          description="以下参数控制 LLM 质控引擎的行为。修改后点击“保存配置”生效，会影响所有质控评估请求。"
+          type="info"
+          show-icon
+          class="settings-alert"
+          style="margin-bottom: 24px;"
+        />
+
+        <a-form layout="vertical">
+          <a-divider orientation="left">Prompt 策略</a-divider>
+          <a-row :gutter="[24, 16]">
+            <a-col :xs="24" :md="8">
+              <a-form-item label="Prompt 模式">
+                <a-select v-model:value="qcSettings.prompt_mode" style="width: 100%">
+                  <a-select-option value="plan_a">plan_a（标准，推荐）</a-select-option>
+                  <a-select-option value="current">current（精简）</a-select-option>
+                  <a-select-option value="plan_c">plan_c（详细）</a-select-option>
+                </a-select>
+                <div class="qc-setting-hint">控制发送给 LLM 的规则信息量。plan_a 在准确性和 Token 消耗之间取得最佳平衡。</div>
+              </a-form-item>
+            </a-col>
+          </a-row>
+
+          <a-divider orientation="left">分段引擎</a-divider>
+          <a-row :gutter="[24, 16]">
+            <a-col :xs="24" :md="8">
+              <a-form-item label="每批规则数">
+                <a-input-number v-model:value="qcSettings.max_rules_per_batch" :min="3" :max="50" style="width: 100%" />
+                <div class="qc-setting-hint">分段模式下每次发给 LLM 的最大规则数量（3-50）。越少越精确但调用次数越多。</div>
+              </a-form-item>
+            </a-col>
+            <a-col :xs="24" :md="8">
+              <a-form-item label="LLM 并发数">
+                <a-input-number v-model:value="qcSettings.max_concurrency" :min="1" :max="10" style="width: 100%" />
+                <div class="qc-setting-hint">同时请求 LLM 的最大数量（1-10）。增加并发可加快速度，但可能触发限流。</div>
+              </a-form-item>
+            </a-col>
+          </a-row>
+
+          <a-divider orientation="left">LLM 参数</a-divider>
+          <a-row :gutter="[24, 16]">
+            <a-col :xs="24" :md="8">
+              <a-form-item :label="'Temperature: ' + qcSettings.temperature">
+                <a-slider v-model:value="qcSettings.temperature" :min="0" :max="1" :step="0.05" />
+                <div class="qc-setting-hint">越低越确定性（推荐 0.1-0.3）。质控场景建议使用较低温度以保证一致性。</div>
+              </a-form-item>
+            </a-col>
+            <a-col :xs="24" :md="8">
+              <a-form-item label="Max Tokens">
+                <a-input-number v-model:value="qcSettings.max_tokens" :min="1024" :max="65536" :step="1024" style="width: 100%" />
+                <div class="qc-setting-hint">LLM 最大输出 token 数。规则较多时需要更大的输出空间。</div>
+              </a-form-item>
+            </a-col>
+          </a-row>
+        </a-form>
+      </a-card>
     </div>
 
     <UserEditModal
@@ -438,7 +516,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h } from 'vue'
+import { ref, reactive, computed, onMounted, h, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SettingOutlined,
@@ -454,7 +532,8 @@ import {
   DownloadOutlined,
   UploadOutlined,
   BranchesOutlined,
-  ApiOutlined
+  ApiOutlined,
+  ExperimentOutlined
 } from '@ant-design/icons-vue'
 
 import UserEditModal from '@/components/settings/UserEditModal.vue'
@@ -463,11 +542,17 @@ import ClassificationVersionManager from '@/components/settings/ClassificationVe
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 
 const activeTab = ref('users')
+
+// 切换到质控配置 Tab 时自动加载
+watch(activeTab, (tab) => {
+  if (tab === 'qc_engine') loadQcSettings()
+})
 const loading = reactive({
   users: false,
   roles: false,
   permissions: false,
-  systemConfig: false
+  systemConfig: false,
+  qcSettings: false
 })
 
 const modals = reactive({
@@ -783,6 +868,58 @@ const exportConfig = () => {
 
 const importConfig = () => {
   message.info('导入配置功能开发中')
+}
+
+// ── 质控引擎配置 ──
+const qcSettings = reactive({
+  prompt_mode: 'plan_a',
+  max_rules_per_batch: 15,
+  max_concurrency: 3,
+  temperature: 0.2,
+  max_tokens: 16384,
+})
+
+const loadQcSettings = async () => {
+  try {
+    const resp = await fetch('/api/v1/qc/settings')
+    if (resp.ok) {
+      const data = await resp.json()
+      Object.assign(qcSettings, data.settings)
+    }
+  } catch {}
+}
+
+const saveQcSettings = async () => {
+  loading.qcSettings = true
+  try {
+    const resp = await fetch('/api/v1/qc/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(qcSettings),
+    })
+    if (resp.ok) {
+      message.success('质控配置已保存')
+    } else {
+      message.error('保存失败')
+    }
+  } catch {
+    message.error('保存异常')
+  } finally {
+    loading.qcSettings = false
+  }
+}
+
+const resetQcSettings = async () => {
+  try {
+    const resp = await fetch('/api/v1/qc/settings/reset', { method: 'POST' })
+    if (resp.ok) {
+      const data = await resp.json()
+      Object.assign(qcSettings, data.settings)
+      message.success('已恢复默认质控配置')
+    }
+  } catch {
+    message.error('重置失败')
+  }
 }
 
 const getUserAvatarColor = (email: string) => {
@@ -1240,5 +1377,12 @@ onMounted(async () => {
   .settings-filter-bar {
     padding: 12px;
   }
+}
+
+.qc-setting-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+  line-height: 1.4;
 }
 </style>

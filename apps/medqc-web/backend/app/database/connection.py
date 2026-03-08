@@ -68,7 +68,8 @@ def init_db():
     from .models import cdm  # noqa: F401
     Base.metadata.create_all(bind=engine)
     db_type = "SQLite" if DATABASE_URL.startswith("sqlite") else "PostgreSQL"
-    print(f"✅ CDM 数据库初始化完成 ({db_type}): {DATABASE_URL}")
+    # 使用纯 ASCII 输出，避免 Windows GBK 终端编码异常导致启动流程报错
+    print(f"[OK] CDM database initialized ({db_type}): {DATABASE_URL}")
 
 
 def get_db() -> Generator[Session, None, None]:

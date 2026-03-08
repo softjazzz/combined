@@ -243,7 +243,7 @@ const testAuth = async () => {
       // 尝试使用演示账户登录
       const response = await ApiService.login({
         email: 'admin@medqc.com',
-        password: 'admin123'
+        password: 'admin888'
       })
       
       const duration = Date.now() - startTime

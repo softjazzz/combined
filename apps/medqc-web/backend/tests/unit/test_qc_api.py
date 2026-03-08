@@ -24,6 +24,22 @@ def async_return(value):
 class TestQCAPI:
     """质控 API 测试类"""
 
+    @pytest.fixture(autouse=True)
+    def _auth_client(self, client):
+        """所有接口测试默认携带 admin token（接口已启用鉴权）。"""
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@medqc.com", "password": "admin888"},
+        )
+        assert login_resp.status_code == 200
+        login_body = login_resp.json()
+        token = (
+            (login_body.get("data") or {}).get("access_token")
+            or login_body.get("access_token")
+        )
+        assert token, f"login response missing access token: {login_body}"
+        client.headers.update({"Authorization": f"Bearer {token}"})
+
     @patch("app.routers.qc.service.evaluate", new_callable=AsyncMock)
     def test_analyze_record_success(self, mock_evaluate, client, sample_qc_result):
         """测试分析单个病历成功"""

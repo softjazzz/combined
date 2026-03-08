@@ -47,39 +47,28 @@ def get_supabase() -> Optional[Client]:
     api_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
     if settings.SUPABASE_URL and api_key:
         try:
-            # 配置客户端选项，跳过SSL验证以解决证书问题
-            client_options = {
-                "postgrest": {
-                    "headers": {"apikey": api_key}
-                },
-                "auth": {
-                    "persistSession": False
-                }
-            }
-            _supabase = create_client(
-                str(settings.SUPABASE_URL),
-                api_key,
-                options=client_options
+            # supabase-py v2 需要 ClientOptions 实例，传 dict 会触发属性错误
+            client_options = (
+                ClientOptions(persist_session=False)
+                if ClientOptions is not None
+                else None
             )
+            if client_options is not None:
+                _supabase = create_client(
+                    str(settings.SUPABASE_URL),
+                    api_key,
+                    options=client_options
+                )
+            else:
+                _supabase = create_client(
+                    str(settings.SUPABASE_URL),
+                    api_key,
+                )
             logging.getLogger(__name__).info("Supabase 客户端初始化成功: %s", settings.SUPABASE_URL)
         except TypeError as e:
-            # 兼容部分版本的 supabase-py：create_client 内部传 proxy 导致报错
-            if "proxy" in str(e) and ClientOptions is not None:
-                try:
-                    _supabase = Client(
-                        str(settings.SUPABASE_URL),
-                        api_key,
-                        ClientOptions(),
-                    )
-                    logging.getLogger(__name__).info(
-                        "Supabase 客户端初始化成功(兼容模式): %s", settings.SUPABASE_URL
-                    )
-                except Exception as e2:  # pragma: no cover
-                    logging.getLogger(__name__).warning("Supabase 兼容初始化失败: %s", e2)
-                    _supabase = None
-            else:
-                logging.getLogger(__name__).warning("Supabase 客户端初始化失败: %s", e)
-                _supabase = None
+            # 某些环境下 supabase-py 会因 proxy 参数不兼容抛 TypeError，直接进入 REST 兜底
+            logging.getLogger(__name__).warning("Supabase 客户端初始化失败: %s", e)
+            _supabase = None
         except Exception as e:
             logging.getLogger(__name__).warning("Supabase 客户端初始化失败: %s", e)
             _supabase = None

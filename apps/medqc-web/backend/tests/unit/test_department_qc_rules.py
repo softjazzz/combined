@@ -22,7 +22,7 @@ client = TestClient(app)
 # 测试辅助函数
 # ============================================================================
 
-def get_auth_headers(email: str = "admin@medqc.com", password: str = "admin123") -> dict:
+def get_auth_headers(email: str = "admin@medqc.com", password: str = "admin888") -> dict:
     """获取认证头"""
     response = client.post(
         "/api/v1/auth/login",
@@ -39,7 +39,7 @@ def get_auth_headers(email: str = "admin@medqc.com", password: str = "admin123")
 @pytest.fixture
 def admin_headers():
     """Admin 用户认证头"""
-    return get_auth_headers("admin@medqc.com", "admin123")
+    return get_auth_headers("admin@medqc.com", "admin888")
 
 
 @pytest.fixture

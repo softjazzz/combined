@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request
 from datetime import datetime
 import subprocess
 import os
+import time
+from inspect import isawaitable
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.response import success_response, get_trace_id
@@ -9,44 +11,77 @@ from ..services.sichuan_qc_service import SichuanQCService
 
 router = APIRouter(prefix="/api/v1", tags=["system"])
 
+_HEALTH_CACHE_TTL_SECONDS = int(os.getenv("HEALTH_CACHE_TTL_SECONDS", "30"))
+_git_rev_cache = "unknown"
+_llm_health_cache = {
+    "expires_at": 0.0,
+    "llm_ok": False,
+}
+
+
+def _get_git_rev() -> str:
+    global _git_rev_cache
+    if _git_rev_cache != "unknown":
+        return _git_rev_cache
+    try:
+        _git_rev_cache = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.dirname(__file__)),
+        ).decode().strip()
+    except Exception:
+        _git_rev_cache = "unknown"
+    return _git_rev_cache
+
+
+async def _exec_query(query):
+    try:
+        exec_async = getattr(query, "execute_async", None)
+        if callable(exec_async):
+            async_result = exec_async()
+            if isawaitable(async_result):
+                return await async_result
+    except Exception:
+        pass
+    return query.execute()
+
+
+async def _get_llm_health_cached(supabase) -> bool:
+    now = time.time()
+    if now < _llm_health_cache["expires_at"]:
+        return bool(_llm_health_cache["llm_ok"])
+
+    llm_ok = False
+    if supabase is not None:
+        try:
+            p = await _exec_query(
+                supabase.table("llm_api_providers").select("id").eq("is_active", True).limit(1)
+            )
+            m = await _exec_query(
+                supabase.table("llm_models").select("id").eq("is_active", True).limit(1)
+            )
+            llm_ok = bool((p.data or []) or (m.data or []))
+        except Exception:
+            llm_ok = False
+
+    _llm_health_cache["llm_ok"] = llm_ok
+    _llm_health_cache["expires_at"] = now + _HEALTH_CACHE_TTL_SECONDS
+    return llm_ok
+
 
 @router.get("/health")
 async def health(request: Request):
     """健康检查接口"""
-    git_rev = ""
-    try:
-        git_rev = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=os.path.dirname(os.path.dirname(__file__))).decode().strip()
-    except Exception:
-        git_rev = "unknown"
-
     settings = get_settings()
-    supabase_ok = get_supabase() is not None
-    llm_ok = False
-    try:
-        # 简化健康检查：若存在任一启用 provider 或 model 即认为可用
-        sb = get_supabase()
-        if sb:
-            async def _exec(q):
-                try:
-                    exec_async = getattr(q, "execute_async", None)
-                    if callable(exec_async):
-                        return await exec_async()
-                except Exception:
-                    pass
-                return q.execute()
-
-            p = await _exec(sb.table("llm_api_providers").select("id").eq("is_active", True).limit(1))
-            m = await _exec(sb.table("llm_models").select("id").eq("is_active", True).limit(1))
-            llm_ok = bool((p.data or []) or (m.data or []))
-    except Exception:
-        llm_ok = False
+    supabase = get_supabase()
+    supabase_ok = supabase is not None
+    llm_ok = await _get_llm_health_cached(supabase)
 
     return success_response(
         data={
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "version": "1.0.0",
-            "git": git_rev,
+            "git": _get_git_rev(),
             "dependencies": {
                 "supabase": supabase_ok,
                 "llm": llm_ok,

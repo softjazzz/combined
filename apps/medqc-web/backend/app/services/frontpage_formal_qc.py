@@ -1149,3 +1149,14 @@ class FrontpageFormalQC:
             "by_category": by_category,
             "by_severity": by_severity,
         }
+
+
+class FrontpageFormalQCEngine(FrontpageFormalQC):
+    """
+    兼容旧调用方的别名。
+    旧代码使用 FrontpageFormalQCEngine().run(frontpage) 接口，
+    这里保留同名类与 run 方法以避免导入/调用中断。
+    """
+
+    def run(self, frontpage: dict):
+        return self.validate(frontpage)

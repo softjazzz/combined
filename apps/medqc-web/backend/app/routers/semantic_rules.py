@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from inspect import isawaitable
 from ..core.supabase_client import get_supabase
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
 from datetime import datetime
@@ -9,6 +10,45 @@ router = APIRouter(prefix="/api/v1/semantic-rules", tags=["semantic-rules"])
 
 # 移除内置占位规则，保持为空。
 _rules: list[dict[str, Any]] = []
+
+
+async def _exec_query(query):
+    """优先执行异步查询，失败时回退同步 execute。"""
+    try:
+        exec_async = getattr(query, "execute_async", None)
+        if callable(exec_async):
+            async_result = exec_async()
+            if isawaitable(async_result):
+                return await async_result
+    except Exception:
+        pass
+    return query.execute()
+
+
+def _build_rules_list_response(
+    items: List[Dict[str, Any]],
+    total: int,
+    page: int,
+    page_size: int,
+    trace_id: Optional[str] = None,
+    message: Optional[str] = None,
+) -> Dict[str, Any]:
+    """统一返回分页格式，同时兼容历史顶层 rules/count 字段。"""
+    response = paginated_response(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        trace_id=trace_id,
+        message=message,
+    )
+    if isinstance(response.get("data"), dict):
+        response["data"]["rules"] = items
+    response["rules"] = items
+    response["count"] = total
+    response["page"] = page
+    response["page_size"] = page_size
+    return response
 
 
 @router.get("")
@@ -29,7 +69,7 @@ async def get_all(
     """
     supabase = get_supabase()
     if supabase is None:
-        return paginated_response(
+        return _build_rules_list_response(
             items=[],
             total=0,
             page=page,
@@ -117,16 +157,6 @@ async def get_all(
 
         return list(sorted(base))
 
-    async def _exec(q):
-        # 优先使用异步以避免阻塞
-        try:
-            exec_async = getattr(q, "execute_async", None)
-            if callable(exec_async):
-                return await exec_async()
-        except Exception:
-            pass
-        return q.execute()
-
     def normalize(r: Dict[str, Any]) -> Dict[str, Any]:
         # 读取文书类型：优先顶层字段，其次 check_logic.applicable_documents，兼容别名
         check_logic = r.get("check_logic") if isinstance(r.get("check_logic"), dict) else {}
@@ -163,7 +193,7 @@ async def get_all(
 
     try:
         # 简化实现：拉取较大窗口数据到内存，再在应用层做筛选/排序/分页（数据量小场景可接受）
-        resp = await _exec(supabase.table("qc_rules").select("*").limit(2000))
+        resp = await _exec_query(supabase.table("qc_rules").select("*"))
         rows: List[Dict[str, Any]] = list(resp.data or [])
 
         # 兼容筛选
@@ -203,15 +233,21 @@ async def get_all(
         end = start + page_size
         page_items = filtered[start:end]
 
-        return {
-            "success": True,
-            "rules": page_items,
-            "count": total,
-            "page": page,
-            "page_size": page_size,
-        }
+        return _build_rules_list_response(
+            items=page_items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            trace_id=get_trace_id(request),
+        )
     except Exception:
-        return {"success": True, "rules": [], "count": 0, "page": page, "page_size": page_size}
+        return _build_rules_list_response(
+            items=[],
+            total=0,
+            page=page,
+            page_size=page_size,
+            trace_id=get_trace_id(request),
+        )
 
 
 @router.get("/stats")
@@ -248,8 +284,8 @@ async def validate_llm(request: Request):
 
     if supabase is not None:
         try:
-            p = await _exec(supabase.table("llm_api_providers").select("*").eq("is_active", True).limit(1))
-            m = await _exec(supabase.table("llm_models").select("*").eq("is_active", True).limit(1))
+            p = await _exec_query(supabase.table("llm_api_providers").select("*").eq("is_active", True).limit(1))
+            m = await _exec_query(supabase.table("llm_models").select("*").eq("is_active", True).limit(1))
             if p.data:
                 provider = p.data[0]
                 provider_name = provider.get("name") or provider.get("provider_code") or provider.get("id") or "unknown"

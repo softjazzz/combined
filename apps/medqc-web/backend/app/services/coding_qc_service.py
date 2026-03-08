@@ -323,6 +323,19 @@ class CodingQCEngine:
         # 诊断编码格式
         for diag in (frontpage.get("diagnoses") or []):
             code = diag.get("code") or diag.get("icd_code") or ""
+            name = diag.get("name") or diag.get("diagnosis_name") or ""
+            if name and not str(code).strip():
+                issues.append(
+                    CodingIssue(
+                        dimension="format",
+                        severity="error",
+                        code="",
+                        description=f"诊断“{name}”缺少 ICD-10 编码",
+                        suggestion="请为该诊断补充规范 ICD-10 编码",
+                        source="rule",
+                    )
+                )
+                continue
             if code:
                 issue = check_icd10_format(code)
                 if issue:
@@ -331,6 +344,19 @@ class CodingQCEngine:
         # 手术编码格式
         for surg in (frontpage.get("surgeries") or []):
             code = surg.get("code") or surg.get("operation_code") or ""
+            name = surg.get("name") or surg.get("operation_name") or ""
+            if name and not str(code).strip():
+                issues.append(
+                    CodingIssue(
+                        dimension="format",
+                        severity="error",
+                        code="",
+                        description=f"手术“{name}”缺少 ICD-9-CM-3 编码",
+                        suggestion="请为该手术补充规范 ICD-9-CM-3 编码",
+                        source="rule",
+                    )
+                )
+                continue
             if code:
                 issue = check_icd9cm3_format(code)
                 if issue:

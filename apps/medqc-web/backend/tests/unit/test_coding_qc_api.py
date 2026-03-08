@@ -46,7 +46,7 @@ class TestCodingQCAPI:
         resp = self.client.post(self.base_url, json=payload)
         assert resp.status_code == 200
         body = resp.json()
-        assert body.get("code") == 200 or body.get("status") == "success"
+        assert body.get("success") is True
         data = body.get("data", {})
         # 应有 rule_issues 和 llm_issues 两个 key
         assert "rule_issues" in data or "total_issues" in data

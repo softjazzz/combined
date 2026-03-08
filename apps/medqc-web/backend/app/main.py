@@ -44,6 +44,7 @@ from .routers import icd_search as icd_search_router
 from .routers import medical_records as medical_records_router_cdm
 from .routers import system_config as system_config_router
 from .routers import demo_panel as demo_panel_router
+from .routers import defects as defects_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -245,6 +246,8 @@ def create_app() -> FastAPI:
     app.include_router(system_config_router.router)
     # 演示面板 API (P5/P7/P8)
     app.include_router(demo_panel_router.router)
+    # 缺陷操作管理（催办/整改/审核/导出）
+    app.include_router(defects_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

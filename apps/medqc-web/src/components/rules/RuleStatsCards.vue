@@ -1,39 +1,5 @@
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <!-- 卡片 1: 复杂度分布 (环形图概念) -->
-    <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 relative overflow-hidden group hover:shadow-lg transition-shadow duration-300">
-      <div class="flex justify-between items-start mb-4">
-        <h3 class="text-slate-700 font-semibold text-sm">规则复杂度分布</h3>
-        <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
-          <PieChartOutlined />
-        </div>
-      </div>
-      <div class="flex items-center">
-        <!-- 模拟环形图 (Donut Chart) -->
-        <div
-          class="relative w-28 h-28 mr-6 flex items-center justify-center shrink-0 rounded-full"
-          style="background: conic-gradient(#F87171 0% 30%, #FBBF24 30% 70%, #34D399 70% 100%)"
-        >
-          <div class="absolute inset-0 m-auto bg-white w-16 h-16 rounded-full flex items-center justify-center shadow-inner">
-             <span class="text-slate-400 text-xs font-medium">分布</span>
-          </div>
-        </div>
-        <div class="space-y-3 text-sm flex-1">
-          <div class="flex justify-between items-center">
-            <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-red-400 mr-2"></span>高复杂</span>
-            <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.3) }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>中复杂</span>
-            <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.5) }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>低复杂</span>
-            <span class="font-bold text-slate-700">{{ Math.floor(statistics.active * 0.2) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
     <!-- 卡片 2: 缺陷级别 (进度条) -->
     <div class="bg-white p-6 rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 group hover:shadow-lg transition-shadow duration-300">
@@ -102,7 +68,6 @@
 
 <script setup lang="ts">
 import {
-  PieChartOutlined,
   ExclamationCircleOutlined,
   AppstoreOutlined
 } from '@ant-design/icons-vue'

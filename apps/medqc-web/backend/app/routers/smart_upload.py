@@ -331,6 +331,9 @@ async def confirm_mapping(request: MappingConfirmRequest):
         "department_name": "department",
         "attending_doctor": "doctor",
         "actual_cost": "total_cost",
+        # 兼容历史字段键，避免前端仍提交旧 key 时误判缺字段
+        "dip_payment_amount": "dip_payment",
+        "profit_loss_amount": "profit_loss",
     }
     alias_rename = {k: v for k, v in internal_aliases.items() if k in df_mapped.columns}
     if alias_rename:
@@ -348,6 +351,7 @@ async def confirm_mapping(request: MappingConfirmRequest):
         "actual_cost": "total_cost",
         "main_diagnosis": "diagnosis_name",
         "main_diagnosis_code": "diagnosis_code",
+        "dip_payment": "dip_payment",
         "dip_payment_amount": "dip_payment",
         "profit_loss_amount": "profit_loss",
     }
