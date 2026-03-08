@@ -4,6 +4,8 @@ import { useAuthStore } from '@/stores/auth'
 import { getTodoStats, getPerformanceRanking } from '@/api/dashboard'
 import type { TodoStats, PerformanceData } from '@/api/dashboard'
 import QCTrendChart from '@/components/charts/QCTrendChart.vue'
+import TodoBoard from '@/components/dashboard/TodoBoard.vue'
+import PerformanceBoard from '@/components/dashboard/PerformanceBoard.vue'
 import {
   ReloadOutlined,
   PlusOutlined,
@@ -44,6 +46,9 @@ const stats = ref({
 
 // 排名数据
 const performanceData = ref<PerformanceData | null>(null)
+
+// TodoBoard 原始数据
+const todoStatsRaw = ref<Record<string, any>>({})
 
 // 最新活动数据
 const recentActivities = ref([
@@ -153,6 +158,18 @@ const refreshData = async () => {
   }
 }
 
+// 排名周期切换
+const handlePeriodChange = async (period: string) => {
+  try {
+    const res = await getPerformanceRanking(period as 'this_week' | 'last_week' | 'this_month')
+    if (res.success && res.data) {
+      performanceData.value = res.data
+    }
+  } catch (err) {
+    console.error('切换排名周期失败:', err)
+  }
+}
+
 // 从 API 获取 Dashboard 数据
 const fetchDashboardData = async () => {
   try {
@@ -175,6 +192,9 @@ const fetchDashboardData = async () => {
         todayUploads: data.task_stats?.not_started || 0,
         weeklyTrend: '--',
       }
+
+      // 保存原始数据给 TodoBoard
+      todoStatsRaw.value = data
     }
 
     if (perfRes.success && perfRes.data) {
@@ -343,6 +363,16 @@ onMounted(async () => {
               <span class="text-slate-400">实时同步</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 2.5 待办看板 + 工作表现 -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5">
+        <div class="lg:col-span-8">
+          <TodoBoard :todo-data="todoStatsRaw" />
+        </div>
+        <div class="lg:col-span-4">
+          <PerformanceBoard :ranking-data="performanceData || {}" @period-change="handlePeriodChange" />
         </div>
       </div>
 
