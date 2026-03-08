@@ -1,5 +1,8 @@
 <template>
   <div class="all-tasks-container p-8 bg-gray-50 min-h-screen">
+    <!-- CreateTaskDrawer -->
+    <CreateTaskDrawer v-model:open="showCreateDrawer" @created="onTaskCreated" />
+
     <!-- 页面标题 -->
     <div class="mb-8">
       <h1 class="text-3xl font-bold text-gray-800 mb-2">全部任务</h1>
@@ -229,6 +232,7 @@ import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { getTaskList, getTaskStats, createTask, deleteTask, cancelTask } from '@/api/tasks'
 import type { TaskItem, TaskStats } from '@/api/tasks'
+import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import {
   ProjectOutlined,
   ClockCircleOutlined,
@@ -257,6 +261,7 @@ const selectedDepartment = ref(undefined)
 const dateRange = ref([])
 const tasks = ref<TaskItem[]>([])
 const selectedRowKeys = ref([])
+const showCreateDrawer = ref(false)
 
 // 任务统计
 const taskStats = ref<TaskStats>({
@@ -367,8 +372,13 @@ const getStatusText = (status: string) => {
 
 // 事件处理函数
 const handleCreateTask = async () => {
-  // TODO: 打开创建任务 Drawer
-  message.info('创建新任务功能开发中...')
+  showCreateDrawer.value = true
+}
+
+const onTaskCreated = (task: any) => {
+  message.success(`任务「${task?.task_name || ''}」已创建`)
+  fetchTasks()
+  fetchStats()
 }
 
 const handleBatchAssign = () => {
