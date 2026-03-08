@@ -312,6 +312,16 @@ const routes: RouteRecordRaw[] = [
           permission: ['admin', 'qc_manager']
         }
       },
+      {
+        path: 'staff-ranking',
+        name: 'StaffRanking',
+        component: () => import('@/views/dashboard/ranking/StaffRankingView.vue'),
+        meta: {
+          title: '质控员工作量排名',
+          icon: 'TrophyOutlined',
+          permission: ['admin', 'qc_manager']
+        }
+      },
 
       // 数据权限配置路由
       {
