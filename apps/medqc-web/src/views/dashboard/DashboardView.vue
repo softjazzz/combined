@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { getTodoStats, getPerformanceRanking } from '@/api/dashboard'
+import type { TodoStats, PerformanceData } from '@/api/dashboard'
 import QCTrendChart from '@/components/charts/QCTrendChart.vue'
 import {
   ReloadOutlined,
@@ -28,17 +30,20 @@ const loading = ref(true)
 const refreshing = ref(false)
 const selectedPeriod = ref('month')
 
-// 统计数据
+// 统计数据（初始为 0，由 API 填充）
 const stats = ref({
-  totalRecords: 1247,
-  pendingRecords: 23,
-  analyzingRecords: 8,
-  completedRecords: 1216,
-  averageScore: 87.5,
-  passRate: 94.2,
-  todayUploads: 15,
-  weeklyTrend: '+12.5%'
+  totalRecords: 0,
+  pendingRecords: 0,
+  analyzingRecords: 0,
+  completedRecords: 0,
+  averageScore: 0,
+  passRate: 0,
+  todayUploads: 0,
+  weeklyTrend: '--'
 })
+
+// 排名数据
+const performanceData = ref<PerformanceData | null>(null)
 
 // 最新活动数据
 const recentActivities = ref([
@@ -142,10 +147,41 @@ const handleQuickAction = (action: string) => {
 const refreshData = async () => {
   refreshing.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    stats.value.todayUploads += Math.floor(Math.random() * 5)
+    await fetchDashboardData()
   } finally {
     refreshing.value = false
+  }
+}
+
+// 从 API 获取 Dashboard 数据
+const fetchDashboardData = async () => {
+  try {
+    // 并行请求待办统计和排名
+    const [todoRes, perfRes] = await Promise.all([
+      getTodoStats(),
+      getPerformanceRanking('this_week'),
+    ])
+
+    if (todoRes.success && todoRes.data) {
+      const data = todoRes.data
+      const overview = data.overview || {} as any
+      stats.value = {
+        totalRecords: data.record_stats?.total || overview.total_records || 0,
+        pendingRecords: data.record_stats?.pending_review || overview.total_defects || 0,
+        analyzingRecords: data.task_stats?.in_progress || 0,
+        completedRecords: (data.record_stats?.total || 0) - (data.record_stats?.pending_review || 0),
+        averageScore: overview.avg_score || 0,
+        passRate: overview.pass_rate || 0,
+        todayUploads: data.task_stats?.not_started || 0,
+        weeklyTrend: '--',
+      }
+    }
+
+    if (perfRes.success && perfRes.data) {
+      performanceData.value = perfRes.data
+    }
+  } catch (err) {
+    console.error('获取 Dashboard 数据失败:', err)
   }
 }
 
@@ -157,9 +193,8 @@ const currentDate = computed(() => {
 })
 
 onMounted(async () => {
-  setTimeout(() => {
-    loading.value = false
-  }, 800)
+  await fetchDashboardData()
+  loading.value = false
 })
 </script>
 

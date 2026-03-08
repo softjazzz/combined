@@ -12,7 +12,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">总任务数</p>
-            <p class="text-3xl font-bold text-gray-800">342</p>
+            <p class="text-3xl font-bold text-gray-800">{{ taskStats.total }}</p>
           </div>
           <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
             <ProjectOutlined class="text-gray-600 text-xl" />
@@ -24,7 +24,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">待分配</p>
-            <p class="text-3xl font-bold text-orange-600">28</p>
+            <p class="text-3xl font-bold text-orange-600">{{ taskStats.draft }}</p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
             <ClockCircleOutlined class="text-orange-600 text-xl" />
@@ -36,7 +36,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">进行中</p>
-            <p class="text-3xl font-bold text-blue-600">156</p>
+            <p class="text-3xl font-bold text-blue-600">{{ taskStats.in_progress }}</p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
             <SyncOutlined class="text-blue-600 text-xl" />
@@ -48,7 +48,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">已完成</p>
-            <p class="text-3xl font-bold text-green-600">158</p>
+            <p class="text-3xl font-bold text-green-600">{{ taskStats.completed }}</p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <CheckCircleOutlined class="text-green-600 text-xl" />
@@ -60,7 +60,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">逾期任务</p>
-            <p class="text-3xl font-bold text-red-600">12</p>
+            <p class="text-3xl font-bold text-red-600">{{ taskStats.cancelled }}</p>
           </div>
           <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
             <ExclamationCircleOutlined class="text-red-600 text-xl" />
@@ -227,6 +227,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { getTaskList, getTaskStats, createTask, deleteTask, cancelTask } from '@/api/tasks'
+import type { TaskItem, TaskStats } from '@/api/tasks'
 import {
   ProjectOutlined,
   ClockCircleOutlined,
@@ -253,8 +255,18 @@ const selectedStatus = ref(undefined)
 const selectedAssignee = ref(undefined)
 const selectedDepartment = ref(undefined)
 const dateRange = ref([])
-const tasks = ref([])
+const tasks = ref<TaskItem[]>([])
 const selectedRowKeys = ref([])
+
+// 任务统计
+const taskStats = ref<TaskStats>({
+  total: 0,
+  by_status: {},
+  draft: 0,
+  in_progress: 0,
+  completed: 0,
+  cancelled: 0,
+})
 
 // 分页配置
 const pagination = ref({
@@ -298,73 +310,19 @@ const departmentOptions = [
 
 // 表格列配置
 const columns = [
-  {
-    title: '任务编号',
-    dataIndex: 'taskNumber',
-    key: 'taskNumber',
-    width: 120
-  },
-  {
-    title: '任务名称',
-    dataIndex: 'taskName',
-    key: 'taskName',
-    width: 200
-  },
-  {
-    title: '病历号',
-    dataIndex: 'recordNumber',
-    key: 'recordNumber',
-    width: 120
-  },
-  {
-    title: '科室',
-    dataIndex: 'department',
-    key: 'department',
-    width: 100
-  },
-  {
-    title: '负责人',
-    dataIndex: 'assignee',
-    key: 'assignee',
-    width: 120
-  },
-  {
-    title: '优先级',
-    dataIndex: 'priority',
-    key: 'priority',
-    width: 80
-  },
-  {
-    title: '状态',
-    dataIndex: 'status',
-    key: 'status',
-    width: 100
-  },
-  {
-    title: '进度',
-    dataIndex: 'progress',
-    key: 'progress',
-    width: 120
-  },
-  {
-    title: '创建时间',
-    dataIndex: 'createTime',
-    key: 'createTime',
-    width: 150
-  },
-  {
-    title: '截止时间',
-    dataIndex: 'deadline',
-    key: 'deadline',
-    width: 150
-  },
-  {
-    title: '操作',
-    key: 'action',
-    width: 250,
-    fixed: 'right'
-  }
+  { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
+  { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
+  { title: '任务类型', dataIndex: 'task_type', key: 'taskType', width: 100 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+  { title: '进度', dataIndex: 'progress', key: 'progress', width: 120 },
+  { title: '总病历', dataIndex: 'total_records', key: 'totalRecords', width: 90 },
+  { title: '已完成', dataIndex: 'completed_records', key: 'completedRecords', width: 90 },
+  { title: '创建人', dataIndex: 'creator_name', key: 'creatorName', width: 100 },
+  { title: '创建时间', dataIndex: 'created_at', key: 'createTime', width: 150 },
+  { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
+  { title: '操作', key: 'action', width: 250, fixed: 'right' as const }
 ]
+
 
 // 工具函数
 const getPriorityColor = (priority: string) => {
@@ -408,8 +366,9 @@ const getStatusText = (status: string) => {
 }
 
 // 事件处理函数
-const handleCreateTask = () => {
-  message.info('创建新任务')
+const handleCreateTask = async () => {
+  // TODO: 打开创建任务 Drawer
+  message.info('创建新任务功能开发中...')
 }
 
 const handleBatchAssign = () => {
@@ -445,70 +404,75 @@ const handleReset = () => {
 
 const handleRefresh = () => {
   fetchTasks()
+  fetchStats()
 }
 
 const handleExport = () => {
   message.info('导出任务数据')
 }
 
-const handleViewDetail = (record) => {
-  message.info(`查看任务详情: ${record.taskName}`)
+const handleViewDetail = (record: any) => {
+  message.info(`查看任务详情: ${record.task_name}`)
 }
 
-const handleAssign = (record) => {
-  message.info(`分配任务: ${record.taskName}`)
+const handleAssign = (record: any) => {
+  message.info(`分配任务: ${record.task_name}`)
 }
 
-const handleEdit = (record) => {
-  message.info(`编辑任务: ${record.taskName}`)
+const handleEdit = (record: any) => {
+  message.info(`编辑任务: ${record.task_name}`)
 }
 
-const handleDelete = (record) => {
-  message.info(`删除任务: ${record.taskName}`)
+const handleDelete = async (record: any) => {
+  try {
+    const res = await deleteTask(record.id)
+    if (res.success) {
+      message.success('任务已删除')
+      await fetchTasks()
+      await fetchStats()
+    } else {
+      message.error(res.message || '删除失败')
+    }
+  } catch (e) {
+    message.error('删除失败')
+  }
 }
 
-const handleTableChange = (pag) => {
+const handleTableChange = (pag: any) => {
   pagination.value = { ...pagination.value, ...pag }
   fetchTasks()
 }
 
-// 获取数据
+// 获取任务统计
+const fetchStats = async () => {
+  try {
+    const res = await getTaskStats()
+    if (res.success && res.data) {
+      taskStats.value = res.data as TaskStats
+    }
+  } catch (err) {
+    console.error('获取任务统计失败:', err)
+  }
+}
+
+// 获取任务列表数据
 const fetchTasks = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // 模拟数据
-    tasks.value = [
-      {
-        id: 1,
-        taskNumber: 'T2024001',
-        taskName: '内科病历质控',
-        recordNumber: 'R2024001',
-        department: '内科',
-        assignee: '张三',
-        priority: 'high',
-        status: 'in_progress',
-        progress: 75,
-        createTime: '2024-01-15 09:00:00',
-        deadline: '2024-01-20 18:00:00'
-      },
-      {
-        id: 2,
-        taskNumber: 'T2024002',
-        taskName: '外科病历审核',
-        recordNumber: 'R2024002',
-        department: '外科',
-        assignee: null,
-        priority: 'medium',
-        status: 'unassigned',
-        progress: 0,
-        createTime: '2024-01-16 10:00:00',
-        deadline: '2024-01-22 18:00:00'
-      }
-    ]
-    
-    pagination.value.total = 100
+    const res = await getTaskList({
+      keyword: searchKeyword.value || undefined,
+      status: selectedStatus.value || undefined,
+      page: pagination.value.current,
+      page_size: pagination.value.pageSize,
+    })
+
+    if (res.success && res.data) {
+      const data = res.data as any
+      tasks.value = data.items || []
+      pagination.value.total = data.total || 0
+    } else {
+      message.error(res.message || '获取任务列表失败')
+    }
   } catch (error) {
     message.error('获取数据失败')
   } finally {
@@ -518,6 +482,7 @@ const fetchTasks = async () => {
 
 onMounted(() => {
   fetchTasks()
+  fetchStats()
 })
 </script>
 
