@@ -47,6 +47,7 @@ from .routers import demo_panel as demo_panel_router
 from .routers import defects as defects_router
 from .routers import dashboard_api as dashboard_api_router
 from .routers import emr_render as emr_render_router
+from .routers import scoring_rules as scoring_rules_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -254,6 +255,8 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_api_router.router)
     # EMR 文书渲染（文书内容+缺陷标注）
     app.include_router(emr_render_router.router)
+    # 评分标准配置（扣分规则 CRUD + 导入导出）
+    app.include_router(scoring_rules_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

@@ -301,6 +301,18 @@ const routes: RouteRecordRaw[] = [
         }
       },
 
+      // 评分标准配置路由
+      {
+        path: 'scoring-rules',
+        name: 'ScoringRules',
+        component: () => import('@/views/dashboard/scoring/ScoringRulesView.vue'),
+        meta: {
+          title: '评分标准配置',
+          icon: 'StarOutlined',
+          permission: ['admin', 'qc_manager']
+        }
+      },
+
       // 数据权限配置路由
       {
         path: 'permissions',
