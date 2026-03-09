@@ -1,17 +1,21 @@
+import asyncio
+import logging
 from fastapi import APIRouter, Request
 from datetime import datetime
 import subprocess
 import os
 import time
-from inspect import isawaitable
-from ..core.supabase_client import get_supabase
+from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..core.response import success_response, get_trace_id
 from ..services.sichuan_qc_service import SichuanQCService
 
 router = APIRouter(prefix="/api/v1", tags=["system"])
+logger = logging.getLogger(__name__)
 
 _HEALTH_CACHE_TTL_SECONDS = int(os.getenv("HEALTH_CACHE_TTL_SECONDS", "30"))
+_HEALTH_REMOTE_TIMEOUT_SECONDS = float(os.getenv("HEALTH_REMOTE_TIMEOUT_SECONDS", "2.0"))
+_HEALTH_REMOTE_CHECK_ENABLED = os.getenv("HEALTH_REMOTE_CHECK_ENABLED", "false").lower() == "true"
 _git_rev_cache = "unknown"
 _llm_health_cache = {
     "expires_at": 0.0,
@@ -33,33 +37,27 @@ def _get_git_rev() -> str:
     return _git_rev_cache
 
 
-async def _exec_query(query):
-    try:
-        exec_async = getattr(query, "execute_async", None)
-        if callable(exec_async):
-            async_result = exec_async()
-            if isawaitable(async_result):
-                return await async_result
-    except Exception:
-        pass
-    return query.execute()
-
-
 async def _get_llm_health_cached(supabase) -> bool:
     now = time.time()
     if now < _llm_health_cache["expires_at"]:
         return bool(_llm_health_cache["llm_ok"])
 
     llm_ok = False
-    if supabase is not None:
+    if supabase is not None and _HEALTH_REMOTE_CHECK_ENABLED:
         try:
-            p = await _exec_query(
-                supabase.table("llm_api_providers").select("id").eq("is_active", True).limit(1)
-            )
-            m = await _exec_query(
-                supabase.table("llm_models").select("id").eq("is_active", True).limit(1)
-            )
+            async def _probe():
+                p = await async_execute(
+                    supabase.table("llm_api_providers").select("id").eq("is_active", True).limit(1)
+                )
+                m = await async_execute(
+                    supabase.table("llm_models").select("id").eq("is_active", True).limit(1)
+                )
+                return p, m
+
+            p, m = await asyncio.wait_for(_probe(), timeout=_HEALTH_REMOTE_TIMEOUT_SECONDS)
             llm_ok = bool((p.data or []) or (m.data or []))
+        except asyncio.TimeoutError:
+            logger.warning("LLM health probe timed out after %.1fs", _HEALTH_REMOTE_TIMEOUT_SECONDS)
         except Exception:
             llm_ok = False
 

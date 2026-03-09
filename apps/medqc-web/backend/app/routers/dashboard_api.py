@@ -7,7 +7,9 @@
 - 工作表现排名（缺陷排名/病历排名）
 """
 
+import asyncio
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
@@ -20,6 +22,7 @@ from ..core.permissions import require_permission, ResourceType, PermissionActio
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 logger = logging.getLogger(__name__)
+_DB_STATS_TIMEOUT_SECONDS = float(os.getenv("DASHBOARD_DB_STATS_TIMEOUT_SECONDS", "2.0"))
 
 
 # ============================
@@ -49,89 +52,97 @@ async def _aggregate_from_memory() -> Dict[str, Any]:
     }
 
 
+async def _collect_db_stats(sb) -> Dict[str, Any]:
+    """从 Supabase 获取统计数据。"""
+    stats = {}
+
+    # 1. 病历统计
+    record_query = sb.table('medical_records').select('id,status,department', count='exact')
+    resp = await async_execute(record_query)
+    records = list(getattr(resp, 'data', None) or [])
+    total_records = getattr(resp, 'count', None) or len(records)
+
+    status_counts = {}
+    dept_counts = {}
+    for r in records:
+        st = r.get('status', 'unknown')
+        status_counts[st] = status_counts.get(st, 0) + 1
+        dept = r.get('department', '未分类')
+        dept_counts[dept] = dept_counts.get(dept, 0) + 1
+
+    stats['records'] = {
+        'total': total_records,
+        'by_status': status_counts,
+        'by_department': dept_counts,
+    }
+
+    # 2. 质控结果统计
+    qc_query = sb.table('qc_results').select('id,overall_score,grade', count='exact')
+    resp = await async_execute(qc_query)
+    qc_results = list(getattr(resp, 'data', None) or [])
+    total_qc = getattr(resp, 'count', None) or len(qc_results)
+
+    grade_counts = {}
+    scores = []
+    for qr in qc_results:
+        grade = qr.get('grade', 'unknown')
+        grade_counts[grade] = grade_counts.get(grade, 0) + 1
+        score = qr.get('overall_score')
+        if score is not None:
+            scores.append(float(score))
+
+    stats['qc'] = {
+        'total': total_qc,
+        'avg_score': round(sum(scores) / len(scores), 1) if scores else 0,
+        'by_grade': grade_counts,
+    }
+
+    # 3. 申诉统计
+    try:
+        appeal_query = sb.table('qc_appeals').select('id,status', count='exact')
+        resp = await async_execute(appeal_query)
+        appeals = list(getattr(resp, 'data', None) or [])
+        appeal_status = {}
+        for a in appeals:
+            st = a.get('status', 'unknown')
+            appeal_status[st] = appeal_status.get(st, 0) + 1
+        stats['appeals'] = {
+            'total': getattr(resp, 'count', None) or len(appeals),
+            'by_status': appeal_status,
+        }
+    except Exception:
+        stats['appeals'] = {'total': 0, 'by_status': {}}
+
+    # 4. 整改任务统计
+    try:
+        remediation_query = sb.table('qc_remediation_tasks').select('id,status,severity', count='exact')
+        resp = await async_execute(remediation_query)
+        tasks = list(getattr(resp, 'data', None) or [])
+        task_status = {}
+        for t in tasks:
+            st = t.get('status', 'unknown')
+            task_status[st] = task_status.get(st, 0) + 1
+        stats['remediation'] = {
+            'total': getattr(resp, 'count', None) or len(tasks),
+            'by_status': task_status,
+        }
+    except Exception:
+        stats['remediation'] = {'total': 0, 'by_status': {}}
+
+    return stats
+
+
 async def _get_db_stats(user_id: str = None) -> Dict[str, Any]:
-    """从 Supabase 获取统计数据"""
+    """从 Supabase 获取统计数据，超时后快速降级。"""
     sb = get_supabase()
     if sb is None:
         return None
 
-    stats = {}
     try:
-        # 1. 病历统计
-        record_query = sb.table('medical_records').select('id,status,department', count='exact')
-        resp = await async_execute(record_query)
-        records = list(getattr(resp, 'data', None) or [])
-        total_records = getattr(resp, 'count', None) or len(records)
-
-        # 按状态聚合
-        status_counts = {}
-        dept_counts = {}
-        for r in records:
-            st = r.get('status', 'unknown')
-            status_counts[st] = status_counts.get(st, 0) + 1
-            dept = r.get('department', '未分类')
-            dept_counts[dept] = dept_counts.get(dept, 0) + 1
-
-        stats['records'] = {
-            'total': total_records,
-            'by_status': status_counts,
-            'by_department': dept_counts,
-        }
-
-        # 2. 质控结果统计
-        qc_query = sb.table('qc_results').select('id,overall_score,grade', count='exact')
-        resp = await async_execute(qc_query)
-        qc_results = list(getattr(resp, 'data', None) or [])
-        total_qc = getattr(resp, 'count', None) or len(qc_results)
-
-        grade_counts = {}
-        scores = []
-        for qr in qc_results:
-            grade = qr.get('grade', 'unknown')
-            grade_counts[grade] = grade_counts.get(grade, 0) + 1
-            score = qr.get('overall_score')
-            if score is not None:
-                scores.append(float(score))
-
-        stats['qc'] = {
-            'total': total_qc,
-            'avg_score': round(sum(scores) / len(scores), 1) if scores else 0,
-            'by_grade': grade_counts,
-        }
-
-        # 3. 申诉统计
-        try:
-            appeal_query = sb.table('qc_appeals').select('id,status', count='exact')
-            resp = await async_execute(appeal_query)
-            appeals = list(getattr(resp, 'data', None) or [])
-            appeal_status = {}
-            for a in appeals:
-                st = a.get('status', 'unknown')
-                appeal_status[st] = appeal_status.get(st, 0) + 1
-            stats['appeals'] = {
-                'total': getattr(resp, 'count', None) or len(appeals),
-                'by_status': appeal_status,
-            }
-        except Exception:
-            stats['appeals'] = {'total': 0, 'by_status': {}}
-
-        # 4. 整改任务统计
-        try:
-            remediation_query = sb.table('qc_remediation_tasks').select('id,status,severity', count='exact')
-            resp = await async_execute(remediation_query)
-            tasks = list(getattr(resp, 'data', None) or [])
-            task_status = {}
-            for t in tasks:
-                st = t.get('status', 'unknown')
-                task_status[st] = task_status.get(st, 0) + 1
-            stats['remediation'] = {
-                'total': getattr(resp, 'count', None) or len(tasks),
-                'by_status': task_status,
-            }
-        except Exception:
-            stats['remediation'] = {'total': 0, 'by_status': {}}
-
-        return stats
+        return await asyncio.wait_for(_collect_db_stats(sb), timeout=_DB_STATS_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        logger.warning("Dashboard DB stats timed out after %.1fs; using fallback data", _DB_STATS_TIMEOUT_SECONDS)
+        return None
     except Exception as e:
         logger.error(f"获取数据库统计失败: {e}")
         return None
