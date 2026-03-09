@@ -47,7 +47,7 @@ LLM_TIMEOUT_SECONDS=120
 ### 启动开发服务
 
 > [!IMPORTANT]
-> 后端和前端的端口必须匹配。当前 `vite.config.ts` 中 `backendTarget` 指向 `http://localhost:8000`。
+> 后端和前端的端口必须匹配。当前 `vite.config.ts` 中 `backendTarget` 指向 `http://localhost:8001`。
 > **后端必须以 `backend/` 为工作目录启动**，确保 `.env` 能被正确加载。
 
 #### Linux / macOS
@@ -55,8 +55,8 @@ LLM_TIMEOUT_SECONDS=120
 # 前端 (端口 3000)
 cd apps/medqc-web && npx vite --host 0.0.0.0 --port 3000
 
-# 后端 (端口 8000)
-cd apps/medqc-web/backend && JWT_SECRET=dev-secret uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# 后端 (端口 8001)
+cd apps/medqc-web/backend && JWT_SECRET=dev-secret uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 #### Windows PowerShell
@@ -65,9 +65,9 @@ cd apps/medqc-web/backend && JWT_SECRET=dev-secret uvicorn app.main:app --host 0
 cd d:\大模型项目\lx0222\health-qc-monorepo\apps\medqc-web
 npx vite --port 3000 --host
 
-# 后端 (端口 8000) ← 必须在 backend 目录下启动！
+# 后端 (端口 8001) ← 必须在 backend 目录下启动！
 cd d:\大模型项目\lx0222\health-qc-monorepo\apps\medqc-web\backend
-$env:JWT_SECRET="dev-secret"; python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+$env:JWT_SECRET="dev-secret"; python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 后台启动服务 (nohup, Linux only)
@@ -75,15 +75,15 @@ $env:JWT_SECRET="dev-secret"; python -m uvicorn app.main:app --host 0.0.0.0 --po
 # 前端后台启动 (端口 3000)
 cd apps/medqc-web && nohup npx vite --host 0.0.0.0 --port 3000 > frontend.log 2>&1 &
 
-# 后端后台启动 (端口 8000)
-cd apps/medqc-web/backend && nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
+# 后端后台启动 (端口 8001)
+cd apps/medqc-web/backend && nohup uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload > backend.log 2>&1 &
 
 # 检查服务状态
-lsof -i :3000 -i :8000
+lsof -i :3000 -i :8001
 
 # 停止服务
 kill $(lsof -t -i :3000) 2>/dev/null
-kill $(lsof -t -i :8000) 2>/dev/null
+kill $(lsof -t -i :8001) 2>/dev/null
 ```
 
 ### 运行测试
