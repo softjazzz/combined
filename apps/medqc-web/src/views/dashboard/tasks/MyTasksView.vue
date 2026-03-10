@@ -12,7 +12,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">待处理</p>
-            <p class="text-3xl font-bold text-orange-600">12</p>
+            <p class="text-3xl font-bold text-orange-600">{{ taskStats.draft }}</p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
             <ClockCircleOutlined class="text-orange-600 text-xl" />
@@ -24,7 +24,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">进行中</p>
-            <p class="text-3xl font-bold text-blue-600">8</p>
+            <p class="text-3xl font-bold text-blue-600">{{ taskStats.in_progress }}</p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
             <SyncOutlined class="text-blue-600 text-xl" />
@@ -36,7 +36,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">已完成</p>
-            <p class="text-3xl font-bold text-green-600">156</p>
+            <p class="text-3xl font-bold text-green-600">{{ taskStats.completed }}</p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <CheckCircleOutlined class="text-green-600 text-xl" />
@@ -48,7 +48,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-gray-600 text-sm mb-1">完成率</p>
-            <p class="text-3xl font-bold text-purple-600">88.6%</p>
+            <p class="text-3xl font-bold text-purple-600">{{ completionRate }}%</p>
           </div>
           <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
             <TrophyOutlined class="text-purple-600 text-xl" />
@@ -65,11 +65,11 @@
           <PlayCircleOutlined class="text-lg" />
           <span class="ml-2">开始任务</span>
         </a-button>
-        <a-button size="large" @click="handleViewPending" class="rounded-lg h-16">
+        <a-button size="large" @click="handleViewByStatus('pending')" class="rounded-lg h-16">
           <ClockCircleOutlined class="text-lg" />
           <span class="ml-2">待处理任务</span>
         </a-button>
-        <a-button size="large" @click="handleViewCompleted" class="rounded-lg h-16">
+        <a-button size="large" @click="handleViewByStatus('completed')" class="rounded-lg h-16">
           <CheckCircleOutlined class="text-lg" />
           <span class="ml-2">已完成任务</span>
         </a-button>
@@ -86,20 +86,21 @@
         <a-select
           v-model:value="selectedStatus"
           placeholder="选择状态"
+          allow-clear
           class="rounded-lg"
           :options="statusOptions"
         />
         
-        <a-select
-          v-model:value="selectedPriority"
-          placeholder="选择优先级"
+        <a-input-search
+          v-model:value="searchKeyword"
+          placeholder="搜索任务名称"
+          allow-clear
+          @search="handleFilter"
           class="rounded-lg"
-          :options="priorityOptions"
         />
         
         <a-range-picker
           v-model:value="dateRange"
-          placeholder="选择日期范围"
           class="rounded-lg"
         />
         
@@ -136,18 +137,13 @@
         class="rounded-lg"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'priority'">
-            <a-tag :color="getPriorityColor(record.priority)">
-              {{ getPriorityText(record.priority) }}
-            </a-tag>
-          </template>
           <template v-if="column.key === 'status'">
             <a-tag :color="getStatusColor(record.status)">
               {{ getStatusText(record.status) }}
             </a-tag>
           </template>
           <template v-if="column.key === 'progress'">
-            <a-progress :percent="record.progress" size="small" />
+            <a-progress :percent="record.progress" size="small" :status="record.progress >= 100 ? 'success' : 'active'" />
           </template>
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
@@ -155,7 +151,7 @@
                 type="link" 
                 size="small" 
                 @click="handleStartWork(record)"
-                v-if="record.status === 'pending'"
+                v-if="record.status === 'draft' || record.status === 'assigned'"
               >
                 <PlayCircleOutlined />
                 开始
@@ -173,26 +169,70 @@
                 <EyeOutlined />
                 详情
               </a-button>
-              <a-button 
-                type="link" 
-                size="small" 
-                @click="handleSubmit(record)"
-                v-if="record.status === 'in_progress'"
-              >
-                <CheckOutlined />
-                提交
-              </a-button>
             </div>
           </template>
         </template>
       </a-table>
     </div>
+
+    <!-- 任务详情抽屉 -->
+    <a-drawer
+      v-model:open="detailDrawerVisible"
+      :title="detailTask?.task_name || '任务详情'"
+      :width="560"
+      :headerStyle="{ borderBottom: '1px solid #e2e8f0' }"
+      :bodyStyle="{ padding: '20px' }"
+    >
+      <template v-if="detailTask">
+        <div class="space-y-4">
+          <!-- 基本信息 -->
+          <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+            <h4 class="text-sm font-bold text-slate-500 mb-3">基本信息</h4>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div><span class="text-slate-400">编号：</span><span class="font-medium">{{ detailTask.task_number }}</span></div>
+              <div><span class="text-slate-400">类型：</span><span class="font-medium">{{ detailTask.task_type === 'one_time' ? '一次性' : '定时' }}</span></div>
+              <div><span class="text-slate-400">状态：</span><a-tag :color="getStatusColor(detailTask.status)">{{ getStatusText(detailTask.status) }}</a-tag></div>
+              <div><span class="text-slate-400">创建人：</span><span class="font-medium">{{ detailTask.creator_name }}</span></div>
+              <div><span class="text-slate-400">截止：</span><span class="font-medium">{{ detailTask.deadline || '无' }}</span></div>
+              <div><span class="text-slate-400">创建时间：</span><span class="font-medium">{{ formatDate(detailTask.created_at) }}</span></div>
+            </div>
+          </div>
+
+          <!-- 进度信息 -->
+          <div class="bg-blue-50 rounded-lg p-4 border border-blue-100" v-if="detailProgress">
+            <h4 class="text-sm font-bold text-blue-700 mb-3">进度详情</h4>
+            <a-progress :percent="detailProgress.progress_pct" :status="detailProgress.progress_pct >= 100 ? 'success' : 'active'" class="mb-3" />
+            <div class="grid grid-cols-3 gap-3 text-sm text-center">
+              <div class="bg-white rounded-lg p-2 border border-blue-100">
+                <div class="text-lg font-bold text-slate-700">{{ detailProgress.pending_count }}</div>
+                <div class="text-xs text-slate-400">待处理</div>
+              </div>
+              <div class="bg-white rounded-lg p-2 border border-blue-100">
+                <div class="text-lg font-bold text-blue-600">{{ detailProgress.working_count }}</div>
+                <div class="text-xs text-slate-400">进行中</div>
+              </div>
+              <div class="bg-white rounded-lg p-2 border border-blue-100">
+                <div class="text-lg font-bold text-green-600">{{ detailProgress.done_count }}</div>
+                <div class="text-xs text-slate-400">已完成</div>
+              </div>
+            </div>
+            <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div><span class="text-slate-400">平均分：</span><span class="font-bold">{{ detailProgress.avg_score ?? '-' }}</span></div>
+              <div><span class="text-slate-400">总缺陷：</span><span class="font-bold text-red-500">{{ detailProgress.total_defects }}</span></div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { useRouter } from 'vue-router'
+import { getTaskList, getTaskStats, getTaskDetail, getTaskProgress, updateTask } from '@/api/tasks'
+import type { TaskItem, TaskStats, TaskProgress } from '@/api/tasks'
 import {
   ClockCircleOutlined,
   SyncOutlined,
@@ -203,16 +243,39 @@ import {
   FilterOutlined,
   ReloadOutlined,
   EditOutlined,
-  EyeOutlined,
-  CheckOutlined
+  EyeOutlined
 } from '@ant-design/icons-vue'
+
+const router = useRouter()
 
 // 响应式数据
 const loading = ref(false)
-const selectedStatus = ref(undefined)
-const selectedPriority = ref(undefined)
+const selectedStatus = ref<string | undefined>(undefined)
+const searchKeyword = ref('')
 const dateRange = ref([])
-const tasks = ref([])
+const tasks = ref<TaskItem[]>([])
+
+// 统计
+const taskStats = ref<TaskStats>({
+  total: 0,
+  by_status: {},
+  draft: 0,
+  in_progress: 0,
+  completed: 0,
+  cancelled: 0,
+})
+
+// 完成率
+const completionRate = computed(() => {
+  const total = taskStats.value.total
+  if (!total) return 0
+  return Math.round((taskStats.value.completed / total) * 1000) / 10
+})
+
+// 详情抽屉
+const detailDrawerVisible = ref(false)
+const detailTask = ref<TaskItem | null>(null)
+const detailProgress = ref<TaskProgress | null>(null)
 
 // 分页配置
 const pagination = ref({
@@ -226,128 +289,106 @@ const pagination = ref({
 
 // 状态选项
 const statusOptions = [
-  { value: 'pending', label: '待处理' },
+  { value: 'draft', label: '草稿' },
+  { value: 'assigned', label: '已分配' },
   { value: 'in_progress', label: '进行中' },
   { value: 'completed', label: '已完成' },
-  { value: 'overdue', label: '已逾期' }
-]
-
-// 优先级选项
-const priorityOptions = [
-  { value: 'high', label: '高' },
-  { value: 'medium', label: '中' },
-  { value: 'low', label: '低' }
+  { value: 'cancelled', label: '已取消' }
 ]
 
 // 表格列配置
 const columns = [
-  {
-    title: '任务编号',
-    dataIndex: 'taskNumber',
-    key: 'taskNumber',
-    width: 120
-  },
-  {
-    title: '任务名称',
-    dataIndex: 'taskName',
-    key: 'taskName',
-    width: 200
-  },
-  {
-    title: '病历号',
-    dataIndex: 'recordNumber',
-    key: 'recordNumber',
-    width: 120
-  },
-  {
-    title: '优先级',
-    dataIndex: 'priority',
-    key: 'priority',
-    width: 80
-  },
-  {
-    title: '状态',
-    dataIndex: 'status',
-    key: 'status',
-    width: 100
-  },
-  {
-    title: '进度',
-    dataIndex: 'progress',
-    key: 'progress',
-    width: 120
-  },
-  {
-    title: '截止时间',
-    dataIndex: 'deadline',
-    key: 'deadline',
-    width: 150
-  },
-  {
-    title: '操作',
-    key: 'action',
-    width: 200,
-    fixed: 'right'
-  }
+  { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
+  { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
+  { title: '进度', dataIndex: 'progress', key: 'progress', width: 140 },
+  { title: '总病历', dataIndex: 'total_records', key: 'totalRecords', width: 90, align: 'center' as const },
+  { title: '已完成', dataIndex: 'completed_records', key: 'completedRecords', width: 90, align: 'center' as const },
+  { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
+  { title: '操作', key: 'action', width: 200, fixed: 'right' as const }
 ]
 
-// 获取优先级颜色和文本
-const getPriorityColor = (priority: string) => {
-  const colorMap: Record<string, string> = {
-    high: 'red',
-    medium: 'orange',
-    low: 'green'
-  }
-  return colorMap[priority] || 'default'
-}
-
-const getPriorityText = (priority: string) => {
-  const textMap: Record<string, string> = {
-    high: '高',
-    medium: '中',
-    low: '低'
-  }
-  return textMap[priority] || priority
-}
-
-// 获取状态颜色和文本
+// 工具函数
 const getStatusColor = (status: string) => {
-  const colorMap: Record<string, string> = {
-    pending: 'orange',
-    in_progress: 'blue',
-    completed: 'green',
-    overdue: 'red'
+  const map: Record<string, string> = {
+    draft: 'default', sampling: 'cyan', assigned: 'orange',
+    in_progress: 'blue', completed: 'green', cancelled: 'red'
   }
-  return colorMap[status] || 'default'
+  return map[status] || 'default'
 }
 
 const getStatusText = (status: string) => {
-  const textMap: Record<string, string> = {
-    pending: '待处理',
-    in_progress: '进行中',
-    completed: '已完成',
-    overdue: '已逾期'
+  const map: Record<string, string> = {
+    draft: '草稿', sampling: '抽样中', assigned: '已分配',
+    in_progress: '进行中', completed: '已完成', cancelled: '已取消'
   }
-  return textMap[status] || status
+  return map[status] || status
 }
 
-// 事件处理函数
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-'
+  try {
+    return new Date(dateStr).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch { return dateStr }
+}
+
+// ====== 数据获取 ======
+
+const fetchStats = async () => {
+  try {
+    const res = await getTaskStats()
+    if (res.success && res.data) {
+      taskStats.value = res.data as TaskStats
+    }
+  } catch (err) {
+    console.error('获取任务统计失败:', err)
+  }
+}
+
+const fetchTasks = async () => {
+  loading.value = true
+  try {
+    const res = await getTaskList({
+      tab: 'received',
+      keyword: searchKeyword.value || undefined,
+      status: selectedStatus.value as any,
+      page: pagination.value.current,
+      page_size: pagination.value.pageSize,
+    })
+
+    if (res.success && res.data) {
+      const data = res.data as any
+      tasks.value = data.items || []
+      pagination.value.total = data.total || 0
+    } else {
+      message.error(res.message || '获取任务列表失败')
+    }
+  } catch (error) {
+    message.error('获取数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// ====== 事件处理 ======
+
 const handleStartTask = () => {
-  message.info('开始新任务')
+  // 跳转到第一个待处理任务
+  const pending = tasks.value.find(t => t.status === 'draft' || t.status === 'assigned')
+  if (pending) {
+    handleStartWork(pending)
+  } else {
+    message.info('暂无待处理任务')
+  }
 }
 
-const handleViewPending = () => {
-  selectedStatus.value = 'pending'
-  handleFilter()
-}
-
-const handleViewCompleted = () => {
-  selectedStatus.value = 'completed'
+const handleViewByStatus = (status: string) => {
+  selectedStatus.value = status
   handleFilter()
 }
 
 const handleTaskReport = () => {
-  message.info('查看任务报告')
+  router.push('/statistics')
 }
 
 const handleFilter = () => {
@@ -357,7 +398,7 @@ const handleFilter = () => {
 
 const handleResetFilter = () => {
   selectedStatus.value = undefined
-  selectedPriority.value = undefined
+  searchKeyword.value = ''
   dateRange.value = []
   pagination.value.current = 1
   fetchTasks()
@@ -365,69 +406,55 @@ const handleResetFilter = () => {
 
 const handleRefresh = () => {
   fetchTasks()
+  fetchStats()
 }
 
-const handleStartWork = (record) => {
-  message.info(`开始任务: ${record.taskName}`)
+const handleStartWork = async (record: TaskItem) => {
+  try {
+    if (record.status === 'draft' || record.status === 'assigned') {
+      const res = await updateTask(record.id, { status: 'in_progress' })
+      if (res.success) {
+        message.success(`任务「${record.task_name}」已开始`)
+        fetchTasks()
+        fetchStats()
+      } else {
+        message.error(res.message || '操作失败')
+      }
+    }
+  } catch (e) {
+    message.error('操作失败')
+  }
 }
 
-const handleContinueWork = (record) => {
-  message.info(`继续任务: ${record.taskName}`)
+const handleContinueWork = (record: TaskItem) => {
+  // 跳转到工作站（带上任务上下文）
+  router.push({ path: '/workstation-v4', query: { taskId: record.id } })
 }
 
-const handleViewDetail = (record) => {
-  message.info(`查看任务详情: ${record.taskName}`)
+const handleViewDetail = async (record: TaskItem) => {
+  detailTask.value = record
+  detailProgress.value = null
+  detailDrawerVisible.value = true
+
+  // 异步加载进度详情
+  try {
+    const res = await getTaskProgress(record.id)
+    if (res.success && res.data) {
+      detailProgress.value = res.data as TaskProgress
+    }
+  } catch (e) {
+    console.error('获取进度失败:', e)
+  }
 }
 
-const handleSubmit = (record) => {
-  message.info(`提交任务: ${record.taskName}`)
-}
-
-const handleTableChange = (pag) => {
+const handleTableChange = (pag: any) => {
   pagination.value = { ...pagination.value, ...pag }
   fetchTasks()
 }
 
-// 获取数据
-const fetchTasks = async () => {
-  loading.value = true
-  try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // 模拟数据
-    tasks.value = [
-      {
-        id: 1,
-        taskNumber: 'T2024001',
-        taskName: '内科病历质控',
-        recordNumber: 'R2024001',
-        priority: 'high',
-        status: 'pending',
-        progress: 0,
-        deadline: '2024-01-20 18:00:00'
-      },
-      {
-        id: 2,
-        taskNumber: 'T2024002',
-        taskName: '外科病历审核',
-        recordNumber: 'R2024002',
-        priority: 'medium',
-        status: 'in_progress',
-        progress: 65,
-        deadline: '2024-01-22 18:00:00'
-      }
-    ]
-    
-    pagination.value.total = 50
-  } catch (error) {
-    message.error('获取数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
 onMounted(() => {
   fetchTasks()
+  fetchStats()
 })
 </script>
 

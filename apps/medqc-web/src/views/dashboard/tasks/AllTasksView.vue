@@ -293,11 +293,12 @@ const rowSelection = {
 
 // 选项配置
 const statusOptions = [
-  { value: 'unassigned', label: '待分配' },
-  { value: 'pending', label: '待处理' },
+  { value: 'draft', label: '草稿' },
+  { value: 'sampling', label: '抽样中' },
+  { value: 'assigned', label: '已分配' },
   { value: 'in_progress', label: '进行中' },
   { value: 'completed', label: '已完成' },
-  { value: 'overdue', label: '已逾期' }
+  { value: 'cancelled', label: '已取消' }
 ]
 
 const assigneeOptions = [
@@ -350,22 +351,16 @@ const getPriorityText = (priority: string) => {
 
 const getStatusColor = (status: string) => {
   const colorMap: Record<string, string> = {
-    unassigned: 'gray',
-    pending: 'orange',
-    in_progress: 'blue',
-    completed: 'green',
-    overdue: 'red'
+    draft: 'default', sampling: 'cyan', assigned: 'orange',
+    in_progress: 'blue', completed: 'green', cancelled: 'red'
   }
   return colorMap[status] || 'default'
 }
 
 const getStatusText = (status: string) => {
   const textMap: Record<string, string> = {
-    unassigned: '待分配',
-    pending: '待处理',
-    in_progress: '进行中',
-    completed: '已完成',
-    overdue: '已逾期'
+    draft: '草稿', sampling: '抽样中', assigned: '已分配',
+    in_progress: '进行中', completed: '已完成', cancelled: '已取消'
   }
   return textMap[status] || status
 }
