@@ -203,6 +203,13 @@
           </div>
           <div class="flex items-center gap-3">
             <a-button
+              @click="icdDrawerVisible = true"
+              class="!rounded-lg"
+            >
+              <template #icon><SearchOutlined /></template>
+              ICD 查询
+            </a-button>
+            <a-button
               type="primary"
               :loading="frontpageGenerating"
               @click="generateFrontpage"
@@ -310,7 +317,11 @@
                     <FrontPagePanel
                       :fields="frontpageFields"
                       :generating="frontpageGenerating"
+                      :focus-target="frontpageFocusTarget"
                       @generate="generateFrontpage"
+                      @export="handleExportFrontpage"
+                      @save="handleSaveFrontpage"
+                      @draft-change="handleFrontPanelDraftChange"
                     />
                   </a-tab-pane>
                   <a-tab-pane key="preview" tab="首页预览/打印">
@@ -330,6 +341,188 @@
             </div>
           </main>
         </div>
+
+        <WorkstationAssistPanel
+          v-if="selectedRecord"
+          v-model:visible="assistPanelVisible"
+          :default-tab="assistTab"
+          :patient-info="assistPatientInfo"
+          :qc-count="assistBadgeCount"
+          :profile-count="frontpageDraft ? 1 : 0"
+          :drg-count="drgResult ? 1 : 0"
+          :message-count="notificationUnreadCount"
+          @tab-change="handleAssistTabChange"
+        >
+          <template #qc="{ activeSubTab }">
+            <QCResultTab
+              :frontpage="frontpageDraft"
+              :analyzing="frontpageGenerating"
+              :refresh-seed="qcRefreshSeed"
+              :active-tab="activeSubTab"
+              @issues-change="handleAssistIssuesChange"
+              @locate-field="handleLocateFromQC"
+              @jump-evidence="handleJumpEvidenceFromQC"
+              @refresh="generateFrontpage"
+            />
+          </template>
+          <template #profile>
+            <AIProfileDashboard
+              :frontpage="frontpageDraft"
+              :medical-text="combinedMedicalText"
+            />
+          </template>
+          <template #drg>
+            <DRGGroupingTab
+              :drg-result="drgResult"
+              :loading="drgLoading"
+              :has-frontpage="!!frontpageDraft"
+              :main-diagnosis-code="frontpageDraft?.diagnoses?.discharge_main_icd || ''"
+              :main-diagnosis-text="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text || ''"
+              :main-procedure-code="frontpageDraft?.procedures?.main_procedure_code || ''"
+              :main-procedure-name="frontpageDraft?.procedures?.main_procedure_text || ''"
+              @group="performDRGGrouping"
+              @open-optimization="openOptimization"
+            />
+          </template>
+          <template #message>
+            <div class="p-3 space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <a-segmented
+                  v-model:value="notificationReadFilter"
+                  size="small"
+                  :options="[
+                    { label: '未读', value: 'unread' },
+                    { label: '全部', value: 'all' },
+                    { label: '已读', value: 'read' },
+                  ]"
+                />
+                <a-button type="link" size="small" :disabled="notificationUnreadCount === 0" @click="markAllAssistNotificationsRead">
+                  <CheckOutlined /> 全部已读
+                </a-button>
+              </div>
+              <div v-if="notificationLoading" class="py-8 text-center">
+                <a-spin />
+              </div>
+              <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+                <div
+                  v-for="notif in filteredAssistNotifications"
+                  :key="notif.id"
+                  class="rounded-lg border p-3"
+                  :class="notif.is_read ? 'border-slate-200 bg-slate-50/50' : 'border-blue-200 bg-blue-50/50'"
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                        <NotificationOutlined class="text-blue-500" />
+                        <span class="truncate">{{ notif.title || '通知消息' }}</span>
+                      </div>
+                      <div class="mt-1 text-xs text-slate-500 leading-5">
+                        {{ notif.content || '暂无内容' }}
+                      </div>
+                      <div class="mt-1 text-[11px] text-slate-400">
+                        {{ formatRelativeTime(notif.created_at) }}
+                      </div>
+                    </div>
+                    <a-tag v-if="!notif.is_read" color="blue">未读</a-tag>
+                  </div>
+                  <div class="mt-2 flex items-center justify-end gap-2">
+                    <a-button size="small" @click="handleAssistNotificationClick(notif)">去处理</a-button>
+                    <a-button v-if="!notif.is_read" type="link" size="small" @click="markAssistNotificationRead(notif)">标记已读</a-button>
+                  </div>
+                </div>
+                <a-empty v-if="filteredAssistNotifications.length === 0" description="暂无消息" />
+              </div>
+            </div>
+          </template>
+        </WorkstationAssistPanel>
+
+        <a-drawer
+          v-model:open="suggestionDrawerVisible"
+          title="DRG 优化建议"
+          placement="right"
+          :width="560"
+        >
+          <div class="space-y-3">
+            <div
+              v-for="item in suggestions"
+              :key="item.suggestion_id"
+              class="rounded-lg border border-slate-200 bg-white p-4"
+            >
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="text-sm font-semibold text-slate-800">
+                  {{ getSuggestionTitle(item.suggestion_type) }}
+                </div>
+                <a-tag :color="suggestionSeverityTag(item.severity)">
+                  {{ item.severity || 'info' }}
+                </a-tag>
+              </div>
+              <div class="text-sm text-slate-700 leading-6">
+                {{ item.message }}
+              </div>
+              <div v-if="item.evidence" class="mt-2 rounded bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                依据：{{ item.evidence }}
+              </div>
+              <div class="mt-3 flex justify-end gap-2">
+                <a-button
+                  size="small"
+                  @click="handleDRGSuggestion('reject', item.suggestion_id)"
+                >
+                  忽略
+                </a-button>
+                <a-button
+                  type="primary"
+                  size="small"
+                  @click="handleDRGSuggestion('accept', item.suggestion_id)"
+                >
+                  采纳并重算
+                </a-button>
+              </div>
+            </div>
+
+            <a-empty
+              v-if="!suggestionsLoading && suggestions.length === 0"
+              description="暂无待处理优化建议"
+            />
+            <div v-if="suggestionsLoading" class="flex items-center justify-center py-10">
+              <a-spin />
+            </div>
+          </div>
+        </a-drawer>
+
+        <a-drawer
+          v-model:open="icdDrawerVisible"
+          title="ICD 编码查询"
+          placement="right"
+          :width="920"
+          :bodyStyle="{ padding: '0', backgroundColor: '#f8fafc' }"
+        >
+          <div class="border-b border-slate-200 bg-white px-5 py-4">
+            <div class="text-xs font-bold tracking-wider text-slate-400 uppercase mb-2">回填目标</div>
+            <div class="flex items-center gap-3 flex-wrap">
+              <a-segmented
+                v-model:value="icdApplyTarget"
+                :options="icdTargetOptions"
+                size="small"
+              />
+              <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
+                <span>第</span>
+                <a-input-number
+                  v-model:value="icdApplyIndex"
+                  :min="1"
+                  :max="20"
+                  size="small"
+                  style="width: 78px"
+                />
+                <span>条</span>
+              </div>
+            </div>
+          </div>
+          <ICDSearchPanel
+            allow-apply
+            :apply-label="icdApplyLabel"
+            @apply="handleApplyICDCode"
+          />
+        </a-drawer>
       </div>
     </template>
   </div>
@@ -345,43 +538,50 @@ import {
   CheckCircleOutlined,
   WarningOutlined,
   InboxOutlined,
-  CloseOutlined,
   FileTextOutlined,
   ThunderboltOutlined,
   LeftOutlined,
   UserOutlined,
   FileSearchOutlined,
   EyeOutlined,
+  SearchOutlined,
+  CheckOutlined,
+  NotificationOutlined,
 } from '@ant-design/icons-vue'
 import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
 import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
+import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
+import QCResultTab from './components/QCResultTab.vue'
+import ICDSearchPanel from './components/ICDSearchPanel.vue'
+import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
+import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
+import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
+import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
+import { useWorkstationSession } from './composables/useWorkstationSession'
+import { useFrontpageDraft } from './composables/useFrontpageDraft'
+import { useQcPipeline } from './composables/useQcPipeline'
+import type {
+  PatientRecord,
+  DeptInfo,
+  DocItem,
+  FrontpageFocusTarget,
+  QCIssueLike,
+} from './types'
 
-// ========== 类型 ==========
-interface PatientRecord {
-  id: string
-  bedNo: string
-  name: string
-  sex: string
-  age: number
-  insurance: string
-  department: string
-  admissionDate: string
-  dischargeDate: string
-  days: number
-  diagnosis: string
-  diagnosisCode: string
-  doctor: string
-  status: 'pending' | 'processing' | 'completed' | 'warning'
-}
-
-interface DeptInfo {
-  name: string
-  total: number
-  warningCount: number
-}
-
-// ========== 视图模式 ==========
-const viewMode = ref<'list' | 'detail'>('list')
+const {
+  viewMode,
+  selectedId,
+  frontpageTab,
+  assistPanelVisible,
+  assistTab,
+  icdDrawerVisible,
+  icdApplyTarget,
+  icdApplyIndex,
+  isOtherTarget,
+  openRecord: openSessionRecord,
+  goBackToList: backToList,
+  resetPerRecordTransient,
+} = useWorkstationSession()
 
 // ========== 数据（从 API 加载） ==========
 const allRecords = ref<PatientRecord[]>([])
@@ -393,22 +593,32 @@ const activeDept = ref('全部科室')
 const searchText = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
-const selectedId = ref<string | null>(null)
 
-// ========== 首页生成状态 ==========
-const frontpageGenerating = ref(false)
-const frontpageDraft = ref<any>(null)
-const frontpageModule = ref('')
-const frontpageTab = ref('fields')
+const icdTargetOptions = [
+  { label: '主诊断编码', value: 'mainDiagnosis' },
+  { label: '其他诊断编码', value: 'otherDiagnosis' },
+  { label: '主手术编码', value: 'mainProcedure' },
+  { label: '其他手术编码', value: 'otherProcedure' },
+]
+
+const {
+  drgLoading,
+  drgResult,
+  suggestionDrawerVisible,
+  suggestionsLoading,
+  suggestions,
+  performDRGGrouping: doDRGGrouping,
+  openOptimizationDrawer,
+  handleSuggestion,
+  getSuggestionTitle,
+} = useDRGGrouping()
+
+const assistNotifications = ref<any[]>([])
+const notificationUnreadCount = ref(0)
+const notificationLoading = ref(false)
+const notificationReadFilter = ref<'all' | 'unread' | 'read'>('unread')
 
 // ========== 病历文书预览 ==========
-interface DocItem {
-  type: string
-  label: string
-  has_content: boolean
-  content: string | null
-  length: number
-}
 const documentsList = ref<DocItem[]>([])
 const documentsLoading = ref(false)
 const docDrawerVisible = ref(false)
@@ -439,6 +649,47 @@ function openDocPreview(doc: DocItem) {
   docDrawerVisible.value = true
 }
 
+const combinedMedicalText = computed(() =>
+  documentsList.value
+    .filter(doc => doc.has_content && doc.content)
+    .map(doc => `${doc.label}\n${doc.content}`)
+    .join('\n\n')
+)
+
+const selectedRecord = computed(() =>
+  allRecords.value.find(r => r.id === selectedId.value),
+)
+
+const {
+  assistIssues,
+  assistBadgeCount: qcIssueCount,
+  qcRefreshSeed,
+  handleAssistIssuesChange,
+  touchCodingRefresh,
+  findEvidenceDoc,
+  findEvidenceSnippet,
+} = useQcPipeline()
+
+const {
+  frontpageGenerating,
+  frontpageDraft,
+  frontpageModule,
+  frontpageFocusTarget,
+  frontpageFields,
+  setDraftEmpty,
+  generateFrontpage,
+  handleExportFrontpage,
+  handleSaveFrontpage,
+  focusFrontpageSection,
+  handleApplyICDCode: applyICDCodeToDraft,
+  applyFrontPanelEdits,
+} = useFrontpageDraft(
+  selectedId,
+  selectedRecord,
+  combinedMedicalText,
+  touchCodingRefresh,
+)
+
 const statusOptions = [
   { value: 'all', label: '全部状态' },
   { value: 'pending', label: '待处理' },
@@ -463,127 +714,21 @@ async function fetchData() {
 
 onMounted(() => {
   fetchData()
+  fetchAssistNotifications()
 })
 
 // 切换病历时清除上次生成结果 + 加载文书列表
 watch(selectedId, (newId) => {
-  frontpageDraft.value = null
-  frontpageModule.value = ''
-  frontpageTab.value = 'fields'
-  frontpageGenerating.value = false
-  // 加载文书列表
+  setDraftEmpty()
+  resetPerRecordTransient()
+  assistIssues.value = []
+  suggestionDrawerVisible.value = false
   docDrawerVisible.value = false
   if (newId) {
     loadDocuments(newId)
   } else {
     documentsList.value = []
   }
-})
-
-// ========== 首页生成 ==========
-async function generateFrontpage() {
-  if (!selectedRecord.value) return
-
-  frontpageGenerating.value = true
-  frontpageDraft.value = null
-  frontpageModule.value = ''
-
-  try {
-    const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        visit_id: selectedId.value,
-        medical_text: ''
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-
-    if (!reader) throw new Error('无法读取响应流')
-
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const payload = JSON.parse(line.slice(6))
-            if (payload.frontpage) {
-              frontpageDraft.value = payload.frontpage
-            }
-            if (payload.module) {
-              frontpageModule.value = payload.module
-            }
-          } catch (e) {
-            // 忽略解析错误
-          }
-        }
-      }
-    }
-
-    if (frontpageDraft.value) {
-      message.success('首页生成完成')
-    } else {
-      message.warning('未能生成首页数据')
-    }
-  } catch (err: any) {
-    console.error('首页生成失败:', err)
-    message.error('首页生成失败: ' + (err.message || '未知错误'))
-  } finally {
-    frontpageGenerating.value = false
-    frontpageModule.value = ''
-  }
-}
-
-// 将 draft 转换为 FrontPagePanel 需要的 fields 格式
-const frontpageFields = computed(() => {
-  const draft = frontpageDraft.value
-  if (!draft) return []
-
-  const fields: any[] = []
-  const addField = (category: string, label: string, value: any, confidence = 0.8) => {
-    fields.push({ category, label, value: value ?? '', confidence })
-  }
-
-  const bi = draft.basic_info || {}
-  addField('basic', '患者姓名', bi.patient_name)
-  addField('basic', '性别', bi.gender_text)
-  addField('basic', '年龄', bi.age_years ? `${bi.age_years}岁` : '')
-  addField('basic', '出生日期', bi.birth_date)
-  addField('basic', '民族', bi.ethnicity)
-  addField('basic', '婚姻状况', bi.marital_status_text)
-  addField('basic', '身份证号', bi.id_number)
-  addField('basic', '职业', bi.occupation)
-  addField('basic', '住院号', draft.hospitalization?.medical_record_no || '')
-
-  const hosp = draft.hospitalization || {}
-  addField('basic', '医疗机构名称', hosp.hospital_name)
-  addField('admission', '入院日期', hosp.admission_datetime?.split(' ')[0] || '')
-  addField('admission', '出院日期', hosp.discharge_datetime?.split(' ')[0] || '')
-  addField('admission', '住院天数', hosp.actual_hospital_days ? String(hosp.actual_hospital_days) : '')
-  addField('admission', '入院科室', hosp.admission_dept)
-  addField('admission', '出院科室', hosp.discharge_dept)
-  addField('admission', '床号', selectedRecord.value?.bedNo ? `${selectedRecord.value.bedNo}床` : '')
-
-  const diag = draft.diagnoses || {}
-  addField('basic', '主要诊断', diag.discharge_main_diagnosis_text)
-  addField('basic', '主要诊断编码', diag.discharge_main_icd)
-  addField('basic', '主要手术', draft.procedures?.main_procedure_text)
-  addField('basic', '主要手术编码', draft.procedures?.main_procedure_code)
-
-  return fields
 })
 
 // ========== 计算 ==========
@@ -625,10 +770,6 @@ const completionRate = computed(() => {
   return Math.round((all.filter(r => r.status === 'completed').length / all.length) * 100)
 })
 
-const selectedRecord = computed(() =>
-  allRecords.value.find(r => r.id === selectedId.value)
-)
-
 const detailItems = computed(() => {
   const r = selectedRecord.value
   if (!r) return []
@@ -645,23 +786,202 @@ const detailItems = computed(() => {
   ]
 })
 
+const assistPatientInfo = computed(() => {
+  const record = selectedRecord.value
+  if (!record) return null
+  return {
+    name: record.name,
+    sex: record.sex,
+    age: `${record.age}岁`,
+    diagnosis: record.diagnosis,
+    visitId: record.id,
+  }
+})
+
+const assistBadgeCount = computed(() => {
+  if (qcIssueCount.value > 0) return qcIssueCount.value
+  const record = selectedRecord.value
+  if (!record) return 0
+  return record.status === 'warning' ? 1 : 0
+})
+
+const icdApplyLabel = computed(() => {
+  if (icdApplyTarget.value === 'mainDiagnosis') return '回填主诊断编码'
+  if (icdApplyTarget.value === 'mainProcedure') return '回填主手术编码'
+  if (icdApplyTarget.value === 'otherDiagnosis') return `回填其他诊断编码（第 ${icdApplyIndex.value} 条）`
+  return `回填其他手术编码（第 ${icdApplyIndex.value} 条）`
+})
+
+const filteredAssistNotifications = computed(() => {
+  if (notificationReadFilter.value === 'all') return assistNotifications.value
+  const expectRead = notificationReadFilter.value === 'read'
+  return assistNotifications.value.filter(item => !!item.is_read === expectRead)
+})
+
 // ========== 方法 ==========
 function selectDept(name: string) {
   activeDept.value = name
 }
 
 function openRecord(record: PatientRecord) {
-  selectedId.value = record.id
-  viewMode.value = 'detail'
+  openSessionRecord(record.id)
+  assistPanelVisible.value = false
+  icdDrawerVisible.value = false
 }
 
 function goBackToList() {
-  viewMode.value = 'list'
+  backToList()
+  assistPanelVisible.value = false
+  icdDrawerVisible.value = false
+  suggestionDrawerVisible.value = false
   // 不清空 selectedId，方便返回后还能看到高亮
 }
 
 function refreshData() {
   fetchData()
+}
+
+async function fetchAssistNotifications() {
+  notificationLoading.value = true
+  try {
+    const res = await axios.get('/api/v1/notifications', { params: { page_size: 30 } })
+    const data = res.data?.data || {}
+    assistNotifications.value = Array.isArray(data.items) ? data.items : []
+    notificationUnreadCount.value = Number(data.unread_count || 0)
+  } catch (err) {
+    console.error('加载消息概览失败:', err)
+  } finally {
+    notificationLoading.value = false
+  }
+}
+
+async function markAssistNotificationRead(notif: any) {
+  if (!notif?.id || notif.is_read) return
+  try {
+    await axios.put(`/api/v1/notifications/${notif.id}/read`)
+    notif.is_read = true
+    notificationUnreadCount.value = Math.max(0, notificationUnreadCount.value - 1)
+  } catch (err) {
+    console.error('标记消息已读失败:', err)
+    message.error('标记已读失败')
+  }
+}
+
+async function markAllAssistNotificationsRead() {
+  try {
+    await axios.put('/api/v1/notifications/read-all')
+    await fetchAssistNotifications()
+    message.success('已全部标记为已读')
+  } catch (err) {
+    console.error('全部已读失败:', err)
+    message.error('全部已读失败')
+  }
+}
+
+async function handleAssistNotificationClick(notif: any) {
+  await markAssistNotificationRead(notif)
+  const targetRecordId = notif?.record_id
+  if (!targetRecordId) {
+    assistTab.value = 'form'
+    frontpageTab.value = 'fields'
+    message.info('该消息未绑定病历，已切换到质控页')
+    return
+  }
+
+  const record = allRecords.value.find(item => item.id === targetRecordId)
+  if (!record) {
+    message.warning(`未找到病历 ${targetRecordId}`)
+    return
+  }
+
+  openSessionRecord(record.id)
+  assistPanelVisible.value = true
+  assistTab.value = 'form'
+  frontpageTab.value = 'fields'
+}
+
+function formatRelativeTime(iso: string) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  return `${Math.floor(diff / 86400)} 天前`
+}
+
+function handleLocateFromQC(payload: { target: FrontpageFocusTarget; issue: { description?: string } }) {
+  if (!frontpageDraft.value) {
+    message.warning('请先生成首页后再定位字段')
+    return
+  }
+  frontpageTab.value = 'fields'
+  focusFrontpageSection(payload.target as FrontpageFocusTarget)
+  if (payload?.issue?.description) {
+    message.info(`已定位：${payload.issue.description}`)
+  }
+}
+
+function handleApplyICDCode(detail: ICDCodeDetail) {
+  const applied = applyICDCodeToDraft(detail, icdApplyTarget.value, Number(icdApplyIndex.value || 1))
+  if (!applied) return
+  frontpageTab.value = 'fields'
+  icdDrawerVisible.value = false
+  touchCodingRefresh()
+}
+
+function handleFrontPanelDraftChange(payload: { diagnoses: any[]; procedures: any[] }) {
+  applyFrontPanelEdits(payload)
+  touchCodingRefresh()
+}
+
+function handleJumpEvidenceFromQC(issue: QCIssueLike) {
+  const doc = findEvidenceDoc(issue, documentsList.value)
+  if (!doc) {
+    message.warning('暂无可跳转的文书依据')
+    return
+  }
+  docDrawerTitle.value = `依据文书：${doc.label}`
+  docDrawerContent.value = findEvidenceSnippet(issue, doc.content) || (doc.content || '暂无内容')
+  docDrawerVisible.value = true
+}
+
+function handleAssistTabChange(tab: 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message') {
+  assistTab.value = tab
+  if (tab === 'message') {
+    fetchAssistNotifications()
+  }
+}
+
+function performDRGGrouping() {
+  if (!selectedId.value) {
+    message.warning('请先选择病历')
+    return
+  }
+  doDRGGrouping(selectedId.value)
+}
+
+function openOptimization() {
+  if (!selectedId.value) {
+    message.warning('请先选择病历')
+    return
+  }
+  openOptimizationDrawer(selectedId.value)
+}
+
+function suggestionSeverityTag(severity?: string) {
+  if (severity === 'high' || severity === 'error' || severity === 'critical') return 'error'
+  if (severity === 'medium' || severity === 'warning') return 'warning'
+  return 'processing'
+}
+
+function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) {
+  if (!selectedId.value) {
+    message.warning('请先选择病历')
+    return
+  }
+  handleSuggestion(suggestionId, action, selectedId.value)
 }
 </script>
 
