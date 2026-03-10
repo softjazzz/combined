@@ -1,480 +1,486 @@
-from typing import Optional, Dict, Any
-from supabase import create_client, Client  # type: ignore
-from .settings import get_settings
+"""
+SQLAlchemy 适配客户端 — 替代 Supabase PostgREST
+
+设计目标：
+- 保持 .table().select().eq().execute() 链式 API 不变
+- 24 个路由文件零改动
+- get_supabase() 返回本适配客户端而非 Supabase Client
+- 支持同步 execute() 和异步 execute_async()
+"""
+
+from __future__ import annotations
+
 import logging
 import os
-import httpx
-import urllib3
-from anyio import to_thread
+from typing import Any, Dict, List, Optional, Tuple
 
-# 仅在开发/显式允许时禁用 SSL 校验
-_settings = None
-try:
-    _settings = get_settings()
-except Exception:
-    _settings = None
+from sqlalchemy import text, create_engine
+from sqlalchemy.orm import sessionmaker
 
-ALLOW_INSECURE_SSL = False
-if _settings is not None:
-    env = str(getattr(_settings, "ENV", "development")).lower()
-    # 仅在本地/开发环境，且显式开启时，放宽对自签名证书的告警。
-    # 不再通过修改全局 SSL 上下文来关闭验证，避免影响进程内其他 HTTPS 请求。
-    ALLOW_INSECURE_SSL = env in ("local", "development") and (
-        os.getenv("ALLOW_INSECURE_SSL", "false").lower() == "true"
-    )
-else:
-    # 无法读取设置时，保持保守策略：不自动放宽 SSL 校验
-    ALLOW_INSECURE_SSL = False
+logger = logging.getLogger(__name__)
 
-if ALLOW_INSECURE_SSL:
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# ==================== 连接池（复用 database/connection.py 的配置逻辑） ====================
 
-try:  # Optional import for constructing ClientOptions when create_client has incompatibility
-    from supabase.lib.client_options import ClientOptions  # type: ignore
-except Exception:  # pragma: no cover
-    ClientOptions = None  # type: ignore
-
-_supabase: Optional[Client] = None
+_engine = None
+_SessionLocal = None
 
 
-def get_supabase() -> Optional[Client]:
-    global _supabase
-    if _supabase is not None:
-        return _supabase
-    settings = get_settings()
-    # Fallback: if SUPABASE not set, try VITE_* (handled in settings already)
-    # Prefer service role key for server-side access; fallback to anon
-    api_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
-    if settings.SUPABASE_URL and api_key:
-        try:
-            # supabase-py v2 需要 ClientOptions 实例，传 dict 会触发属性错误
-            client_options = (
-                ClientOptions(persist_session=False)
-                if ClientOptions is not None
-                else None
-            )
-            if client_options is not None:
-                _supabase = create_client(
-                    str(settings.SUPABASE_URL),
-                    api_key,
-                    options=client_options
-                )
+def _get_session_factory():
+    """获取或创建 SQLAlchemy Session 工厂"""
+    global _engine, _SessionLocal
+    if _SessionLocal is not None:
+        return _SessionLocal
+
+    from dotenv import load_dotenv
+    from pathlib import Path
+    # __file__ = app/core/supabase_client.py → 往上三级到 backend/.env
+    _env_path = Path(__file__).parent.parent.parent / ".env"
+    load_dotenv(_env_path)
+
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        logger.warning("DATABASE_URL 未设置，SQLAlchemy 适配客户端不可用")
+        return None
+
+    engine_kwargs = {}
+    if db_url.startswith("sqlite"):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        engine_kwargs.update({
+            "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+            "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "5")),
+            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
+            "pool_use_lifo": True,
+        })
+
+    _engine = create_engine(db_url, pool_pre_ping=True, **engine_kwargs)
+    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+    logger.info("SQLAlchemy 适配客户端连接池就绪: %s", db_url.split("@")[-1] if "@" in db_url else db_url)
+    return _SessionLocal
+
+
+# ==================== Response 对象 ====================
+
+class _Response:
+    """兼容 Supabase 响应格式"""
+    def __init__(self, data: Any = None, count: Optional[int] = None):
+        self.data = data
+        self.count = count
+
+
+# ==================== Query Builder ====================
+
+class _Query:
+    """
+    模拟 Supabase PostgREST 的链式查询构建器。
+    支持的方法: select, eq, in_, is_, neq, gte, lte, gt, lt, like, ilike,
+                or_, order, limit, range, single, insert, update, delete
+    """
+
+    def __init__(self, session_factory, table_name: str):
+        self._session_factory = session_factory
+        self._table = table_name
+        self._method = "SELECT"
+        self._columns = "*"
+        self._filters: List[Tuple[str, str, Any]] = []  # (column, op, value)
+        self._or_filters: List[str] = []  # raw OR filter strings
+        self._orders: List[Tuple[str, bool]] = []  # (column, ascending)
+        self._limit_val: Optional[int] = None
+        self._range_val: Optional[Tuple[int, int]] = None
+        self._single: bool = False
+        self._count_mode: Optional[str] = None
+        self._payload: Any = None
+
+    # ---------- 方法设置 ----------
+
+    def select(self, columns: str = "*", count: Optional[str] = None) -> _Query:
+        self._method = "SELECT"
+        self._columns = columns or "*"
+        if count:
+            self._count_mode = count
+        return self
+
+    def insert(self, payload: Any) -> _Query:
+        self._method = "INSERT"
+        self._payload = payload
+        return self
+
+    def update(self, payload: Any) -> _Query:
+        self._method = "UPDATE"
+        self._payload = payload
+        return self
+
+    def delete(self) -> _Query:
+        self._method = "DELETE"
+        return self
+
+    # ---------- 过滤器 ----------
+
+    def eq(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, "=", value))
+        return self
+
+    def neq(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, "!=", value))
+        return self
+
+    def gt(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, ">", value))
+        return self
+
+    def gte(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, ">=", value))
+        return self
+
+    def lt(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, "<", value))
+        return self
+
+    def lte(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, "<=", value))
+        return self
+
+    def like(self, column: str, pattern: str) -> _Query:
+        self._filters.append((column, "LIKE", pattern))
+        return self
+
+    def ilike(self, column: str, pattern: str) -> _Query:
+        self._filters.append((column, "ILIKE", pattern))
+        return self
+
+    def in_(self, column: str, values: list) -> _Query:
+        self._filters.append((column, "IN", values))
+        return self
+
+    def is_(self, column: str, value: Any) -> _Query:
+        self._filters.append((column, "IS", value))
+        return self
+
+    def or_(self, filter_str: str) -> _Query:
+        """兼容 Supabase 的 or_ 过滤，格式如 'col1.ilike.%val%,col2.ilike.%val%'"""
+        self._or_filters.append(filter_str)
+        return self
+
+    # ---------- 排序/分页 ----------
+
+    def order(self, column: str, options: Optional[Dict] = None,
+              desc: bool = False, **kwargs) -> _Query:
+        ascending = True
+        if desc:
+            ascending = False
+        elif isinstance(options, dict) and "ascending" in options:
+            ascending = bool(options["ascending"])
+        elif "ascending" in kwargs:
+            ascending = bool(kwargs["ascending"])
+        self._orders.append((column, ascending))
+        return self
+
+    def limit(self, n: int) -> _Query:
+        self._limit_val = int(n)
+        return self
+
+    def range(self, start: int, end: int) -> _Query:
+        self._range_val = (start, end)
+        return self
+
+    def single(self) -> _Query:
+        self._single = True
+        self._limit_val = 1
+        return self
+
+    # ---------- 构建 SQL ----------
+
+    def _build_where(self) -> Tuple[str, Dict[str, Any]]:
+        """构建 WHERE 子句和参数"""
+        clauses = []
+        params: Dict[str, Any] = {}
+        param_idx = 0
+
+        for col, op, val in self._filters:
+            pname = f"p{param_idx}"
+            param_idx += 1
+
+            if op == "IN":
+                if not val:
+                    clauses.append("FALSE")
+                else:
+                    placeholders = ", ".join(f":{pname}_{i}" for i in range(len(val)))
+                    clauses.append(f'"{col}" IN ({placeholders})')
+                    for i, v in enumerate(val):
+                        params[f"{pname}_{i}"] = v
+            elif op == "IS":
+                if val is None:
+                    clauses.append(f'"{col}" IS NULL')
+                elif isinstance(val, bool):
+                    clauses.append(f'"{col}" IS {"TRUE" if val else "FALSE"}')
+                else:
+                    clauses.append(f'"{col}" IS NULL')
             else:
-                _supabase = create_client(
-                    str(settings.SUPABASE_URL),
-                    api_key,
-                )
-            logging.getLogger(__name__).info("Supabase 客户端初始化成功: %s", settings.SUPABASE_URL)
-        except TypeError as e:
-            # 某些环境下 supabase-py 会因 proxy 参数不兼容抛 TypeError，直接进入 REST 兜底
-            logging.getLogger(__name__).warning("Supabase 客户端初始化失败: %s", e)
-            _supabase = None
+                clauses.append(f'"{col}" {op} :{pname}')
+                params[pname] = val
+
+        # 处理 or_ 过滤器
+        for or_str in self._or_filters:
+            or_parts = []
+            for part in or_str.split(","):
+                part = part.strip()
+                segments = part.split(".", 2)
+                if len(segments) >= 3:
+                    col, op_name, val = segments[0], segments[1], segments[2]
+                    pname = f"p{param_idx}"
+                    param_idx += 1
+                    if op_name == "ilike":
+                        or_parts.append(f'"{col}" ILIKE :{pname}')
+                        params[pname] = val
+                    elif op_name == "like":
+                        or_parts.append(f'"{col}" LIKE :{pname}')
+                        params[pname] = val
+                    elif op_name == "eq":
+                        or_parts.append(f'"{col}" = :{pname}')
+                        params[pname] = val
+                    elif op_name == "neq":
+                        or_parts.append(f'"{col}" != :{pname}')
+                        params[pname] = val
+                    else:
+                        or_parts.append(f'"{col}" = :{pname}')
+                        params[pname] = val
+            if or_parts:
+                clauses.append(f"({' OR '.join(or_parts)})")
+
+        where = " AND ".join(clauses) if clauses else ""
+        return where, params
+
+    def _build_select_sql(self) -> Tuple[str, Dict[str, Any]]:
+        where, params = self._build_where()
+
+        # 列选择（简化：忽略关系查询，只取字段名）
+        if self._columns == "*":
+            cols = "*"
+        else:
+            # 过滤掉 Supabase 关系语法如 "rel!inner(col)"
+            col_parts = []
+            for c in self._columns.split(","):
+                c = c.strip()
+                if "(" not in c:
+                    col_parts.append(f'"{c}"' if c != "*" else "*")
+            cols = ", ".join(col_parts) if col_parts else "*"
+
+        sql = f'SELECT {cols} FROM "{self._table}"'
+        if where:
+            sql += f" WHERE {where}"
+
+        for col, asc in self._orders:
+            direction = "ASC" if asc else "DESC"
+            sql += f' ORDER BY "{col}" {direction}'
+
+        if self._range_val:
+            offset = self._range_val[0]
+            limit = self._range_val[1] - self._range_val[0] + 1
+            sql += f" LIMIT {limit} OFFSET {offset}"
+        elif self._limit_val is not None:
+            sql += f" LIMIT {self._limit_val}"
+
+        return sql, params
+
+    def _build_count_sql(self) -> Tuple[str, Dict[str, Any]]:
+        where, params = self._build_where()
+        sql = f'SELECT COUNT(*) FROM "{self._table}"'
+        if where:
+            sql += f" WHERE {where}"
+        return sql, params
+
+    # ---------- 执行 ----------
+
+    def execute(self) -> _Response:
+        """同步执行"""
+        session_factory = self._session_factory
+        if session_factory is None:
+            return _Response(data=[], count=0)
+
+        session = session_factory()
+        try:
+            if self._method == "SELECT":
+                return self._exec_select(session)
+            elif self._method == "INSERT":
+                return self._exec_insert(session)
+            elif self._method == "UPDATE":
+                return self._exec_update(session)
+            elif self._method == "DELETE":
+                return self._exec_delete(session)
+            else:
+                return _Response(data=[])
         except Exception as e:
-            logging.getLogger(__name__).warning("Supabase 客户端初始化失败: %s", e)
-            _supabase = None
+            session.rollback()
+            logger.error("SQL 执行错误 [%s on %s]: %s", self._method, self._table, e)
+            raise
+        finally:
+            session.close()
 
-        # 最后一层兜底：使用 PostgREST 直连封装，覆盖本项目用到的最小方法集合
-        if _supabase is None:
-            try:
-                class _RestResponse:
-                    def __init__(self, data: Any, count: int | None = None) -> None:
-                        self.data = data
-                        self.count = count
+    async def execute_async(self) -> _Response:
+        """异步执行（在线程池中运行同步代码）"""
+        from anyio import to_thread
+        return await to_thread.run_sync(self.execute)
 
-                class _RestQuery:
-                    def __init__(self, base_url: str, api_key: str, table: str) -> None:
-                        self.base_url = base_url.rstrip("/")
-                        self.api_key = api_key
-                        self.table = table
-                        self._select = "*"
-                        self._filters: Dict[str, Any] = {}
-                        self._method: str = "GET"
-                        self._payload: Any = None
-                        self._orders: list[tuple[str, bool]] = []  # (column, ascending)
-                        self._limit: int | None = None
-                        self._count: str | None = None  # 添加 count 支持
-                        self._range: tuple[int, int] | None = None  # 添加 range 支持
-                        self._single: bool = False  # 添加 single 支持
+    def _exec_select(self, session) -> _Response:
+        sql, params = self._build_select_sql()
+        result = session.execute(text(sql), params)
+        rows = [dict(row._mapping) for row in result]
 
-                    # 选择字段，支持传入 "id, col1, rel!inner(col)" 字符串，以及 count 参数
-                    def select(self, columns: str = "*", count: str | None = None) -> "_RestQuery":
-                        self._select = columns or "*"
-                        self._method = "GET"
-                        if count:
-                            self._count = count  # 'exact', 'planned', 'estimated'
-                        return self
+        count = None
+        if self._count_mode:
+            count_sql, count_params = self._build_count_sql()
+            count_result = session.execute(text(count_sql), count_params)
+            count = count_result.scalar()
 
-                    # 删除操作，结合 eq 构造 where
-                    def delete(self) -> "_RestQuery":
-                        self._method = "DELETE"
-                        return self
+        if self._single:
+            data = rows[0] if rows else None
+        else:
+            data = rows
 
-                    # 插入
-                    def insert(self, payload: Any) -> "_RestQuery":
-                        self._method = "POST"
-                        self._payload = payload
-                        return self
+        return _Response(data=data, count=count)
 
-                    # 更新（最小实现，映射到 PATCH）
-                    def update(self, payload: Any) -> "_RestQuery":
-                        self._method = "PATCH"
-                        self._payload = payload
-                        return self
+    def _exec_insert(self, session) -> _Response:
+        payload = self._payload
+        if isinstance(payload, dict):
+            payload = [payload]
 
-                    # 排序（最小实现）：支持 order("col", {"ascending": False}) 和 order("col", desc=True)
-                    def order(self, column: str, options: Dict[str, Any] | None = None, desc: bool = False, **kwargs) -> "_RestQuery":
-                        ascending = True
+        if not payload:
+            return _Response(data=[])
 
-                        # 支持 desc 关键字参数
-                        if desc:
-                            ascending = False
-                        # 支持 options 字典
-                        elif isinstance(options, dict) and "ascending" in options:
-                            try:
-                                ascending = bool(options["ascending"])  # type: ignore[arg-type]
-                            except Exception:
-                                ascending = True
-                        # 支持 ascending 关键字参数
-                        elif "ascending" in kwargs:
-                            ascending = bool(kwargs["ascending"])
+        results = []
+        for row in payload:
+            cols = list(row.keys())
+            col_str = ", ".join(f'"{c}"' for c in cols)
+            val_str = ", ".join(f":{c}" for c in cols)
+            sql = f'INSERT INTO "{self._table}" ({col_str}) VALUES ({val_str}) RETURNING *'
+            result = session.execute(text(sql), row)
+            inserted = [dict(r._mapping) for r in result]
+            results.extend(inserted)
 
-                        self._orders.append((column, ascending))
-                        return self
+        session.commit()
+        return _Response(data=results)
 
-                    # 限制条数
-                    def limit(self, n: int) -> "_RestQuery":
-                        try:
-                            self._limit = int(n)
-                        except Exception:
-                            self._limit = None
-                        return self
+    def _exec_update(self, session) -> _Response:
+        if not self._payload:
+            return _Response(data=[])
 
-                    # 等于过滤（仅支持最常用 eq）
-                    def eq(self, column: str, value: Any) -> "_RestQuery":
-                        self._filters[column] = value
-                        return self
+        where, params = self._build_where()
+        set_parts = []
+        for key, val in self._payload.items():
+            pname = f"set_{key}"
+            set_parts.append(f'"{key}" = :{pname}')
+            params[pname] = val
 
-                    # IN 过滤（支持多个值），兼容 PostgREST 语法
-                    def in_(self, column: str, values: list) -> "_RestQuery":
-                        self._filters[column] = ("in", values)
-                        return self
+        sql = f'UPDATE "{self._table}" SET {", ".join(set_parts)}'
+        if where:
+            sql += f" WHERE {where}"
+        sql += " RETURNING *"
 
-                    # IS 过滤（支持 None/True/False），兼容 PostgREST 语法
-                    def is_(self, column: str, value: Any) -> "_RestQuery":
-                        self._filters[column] = ("is", value)
-                        return self
+        result = session.execute(text(sql), params)
+        rows = [dict(r._mapping) for r in result]
+        session.commit()
+        return _Response(data=rows)
 
-                    # Range 过滤（用于分页）
-                    def range(self, start: int, end: int) -> "_RestQuery":
-                        self._range = (start, end)
-                        return self
+    def _exec_delete(self, session) -> _Response:
+        where, params = self._build_where()
+        sql = f'DELETE FROM "{self._table}"'
+        if where:
+            sql += f" WHERE {where}"
+        sql += " RETURNING *"
 
-                    # Single 方法（返回单条记录）
-                    def single(self) -> "_RestQuery":
-                        self._single = True
-                        self._limit = 1
-                        return self
-
-                    def _headers(self) -> Dict[str, str]:
-                        h = {
-                            "apikey": self.api_key,
-                            "Authorization": f"Bearer {self.api_key}",
-                        }
-                        if self._method in ("POST", "DELETE", "PATCH"):
-                            h["Prefer"] = "return=representation"
-                            h["Content-Type"] = "application/json"
-                        # 添加 count 支持
-                        if self._count:
-                            h["Prefer"] = h.get("Prefer", "") + f",count={self._count}"
-                        # 添加 Range 头
-                        if self._range:
-                            h["Range"] = f"{self._range[0]}-{self._range[1]}"
-                        return h
-
-                    async def execute_async(self) -> _RestResponse:  # type: ignore[name-defined]
-                        """异步执行，减少在 FastAPI 事件循环中的阻塞。
-                        若调用方无法 `await`，仍可使用同步版 `execute()`。
-                        """
-                        # 重要：PostgREST 参数顺序：select -> 过滤器 -> order -> limit
-                        params = {}
-
-                        # 1. select 参数
-                        params["select"] = self._select
-
-                        # 2. 过滤器参数（必须在 order 之前）
-                        for k, v in self._filters.items():
-                            if isinstance(v, tuple) and len(v) == 2:
-                                op, val = v
-                                if op == "is":
-                                    if val is None:
-                                        params[k] = "is.null"
-                                    elif isinstance(val, bool):
-                                        params[k] = f"is.{str(val).lower()}"
-                                    else:
-                                        params[k] = f"is.{val}"
-                                elif op == "in":
-                                    # IN 操作符：格式为 in.(value1,value2,value3)
-                                    if isinstance(val, list):
-                                        values_str = ",".join(str(item) for item in val)
-                                        params[k] = f"in.({values_str})"
-                                    else:
-                                        params[k] = f"in.({val})"
-                                else:
-                                    params[k] = f"{op}.{val}"
-                            else:
-                                params[k] = f"eq.{v}"
-
-                        # 3. order 参数
-                        if self._orders:
-                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
-                            params["order"] = ",".join(order_parts)
-
-                        # 4. limit 参数
-                        if self._limit is not None and not self._range:
-                            params["limit"] = str(self._limit)
-                        url = f"{self.base_url}/rest/v1/{self.table}"
-                        # trust_env=False 避免继承系统 SOCKS/HTTP 代理配置，避免触发 socksio 依赖
-                        async with httpx.AsyncClient(
-                            timeout=30,
-                            verify=not ALLOW_INSECURE_SSL,
-                            trust_env=False,
-                        ) as c:  # 异步请求
-                            if self._method == "GET":
-                                r = await c.get(url, headers=self._headers(), params=params)
-                            elif self._method == "POST":
-                                r = await c.post(url, headers=self._headers(), params=params, json=self._payload)
-                            elif self._method == "PATCH":
-                                r = await c.patch(url, headers=self._headers(), params=params, json=self._payload)
-                            elif self._method == "DELETE":
-                                r = await c.delete(url, headers=self._headers(), params=params)
-                            else:
-                                raise RuntimeError("Unsupported method")
-                            r.raise_for_status()
-                            try:
-                                data = r.json()
-                            except Exception:
-                                data = None
-
-                            # 处理 count
-                            count = None
-                            if self._count:
-                                content_range = r.headers.get("Content-Range")
-                                if content_range:
-                                    # Content-Range: 0-9/100
-                                    parts = content_range.split("/")
-                                    if len(parts) == 2:
-                                        try:
-                                            count = int(parts[1])
-                                        except:
-                                            pass
-
-                            # 处理 single
-                            if self._single and isinstance(data, list) and len(data) > 0:
-                                data = data[0]
-
-                            return _RestResponse(data, count)
-
-                    def execute(self) -> _RestResponse:  # type: ignore[name-defined]
-                        """同步执行（向后兼容）。
-                        如在异步上下文中调用，仍为阻塞调用；建议改用 execute_async。
-                        """
-                        # 重要：PostgREST 参数顺序：select -> 过滤器 -> order -> limit
-                        params = {}
-
-                        # 1. select 参数
-                        params["select"] = self._select
-
-                        # 2. 过滤器参数（必须在 order 之前）
-                        for k, v in self._filters.items():
-                            if isinstance(v, tuple) and len(v) == 2:
-                                op, val = v
-                                if op == "is":
-                                    if val is None:
-                                        params[k] = "is.null"
-                                    elif isinstance(val, bool):
-                                        params[k] = f"is.{str(val).lower()}"
-                                    else:
-                                        params[k] = f"is.{val}"
-                                elif op == "in":
-                                    # IN 操作符：格式为 in.(value1,value2,value3)
-                                    if isinstance(val, list):
-                                        values_str = ",".join(str(item) for item in val)
-                                        params[k] = f"in.({values_str})"
-                                    else:
-                                        params[k] = f"in.({val})"
-                                else:
-                                    params[k] = f"{op}.{val}"
-                            else:
-                                params[k] = f"eq.{v}"
-
-                        # 3. order 参数
-                        if self._orders:
-                            order_parts = [f"{col}.{'asc' if asc else 'desc'}" for col, asc in self._orders]
-                            params["order"] = ",".join(order_parts)
-
-                        # 4. limit 参数
-                        if self._limit is not None and not self._range:
-                            params["limit"] = str(self._limit)
-                        url = f"{self.base_url}/rest/v1/{self.table}"
-                        with httpx.Client(
-                            timeout=30,
-                            verify=not ALLOW_INSECURE_SSL,
-                            trust_env=False,
-                        ) as c:
-                            if self._method == "GET":
-                                r = c.get(url, headers=self._headers(), params=params)
-                            elif self._method == "POST":
-                                r = c.post(url, headers=self._headers(), params=params, json=self._payload)
-                            elif self._method == "PATCH":
-                                r = c.patch(url, headers=self._headers(), params=params, json=self._payload)
-                            elif self._method == "DELETE":
-                                r = c.delete(url, headers=self._headers(), params=params)
-                            else:
-                                raise RuntimeError("Unsupported method")
-                            r.raise_for_status()
-                            try:
-                                data = r.json()
-                            except Exception:
-                                data = None
-
-                            # 处理 count
-                            count = None
-                            if self._count:
-                                content_range = r.headers.get("Content-Range")
-                                if content_range:
-                                    # Content-Range: 0-9/100
-                                    parts = content_range.split("/")
-                                    if len(parts) == 2:
-                                        try:
-                                            count = int(parts[1])
-                                        except:
-                                            pass
-
-                            # 处理 single
-                            if self._single and isinstance(data, list) and len(data) > 0:
-                                data = data[0]
-
-                            return _RestResponse(data, count)
-
-                    class _RpcCall:
-                        def __init__(self, base_url: str, api_key: str, function_name: str, params: Dict[str, Any]) -> None:
-                            self.base_url = base_url.rstrip("/")
-                            self.api_key = api_key
-                            self.function_name = function_name
-                            self.params = params or {}
-
-                        def execute(self):
-                            url = f"{self.base_url}/rest/v1/rpc/{self.function_name}"
-                            headers = {
-                                "apikey": self.api_key,
-                                "Authorization": f"Bearer {self.api_key}",
-                                "Content-Type": "application/json",
-                                "Accept": "application/json",
-                            }
-                            with httpx.Client(
-                                verify=not ALLOW_INSECURE_SSL,
-                                timeout=30.0,
-                                trust_env=False,
-                            ) as client:
-                                r = client.post(url, json=self.params, headers=headers)
-                                r.raise_for_status()
-                                data = r.json() if r.text else None
-                                return _RestResponse(data)
-
-                        async def execute_async(self):
-                            url = f"{self.base_url}/rest/v1/rpc/{self.function_name}"
-                            headers = {
-                                "apikey": self.api_key,
-                                "Authorization": f"Bearer {self.api_key}",
-                                "Content-Type": "application/json",
-                                "Accept": "application/json",
-                            }
-                            async with httpx.AsyncClient(
-                                verify=not ALLOW_INSECURE_SSL,
-                                timeout=30.0,
-                                trust_env=False,
-                            ) as client:
-                                r = await client.post(url, json=self.params, headers=headers)
-                                r.raise_for_status()
-                                data = r.json() if r.text else None
-                                return _RestResponse(data)
+        result = session.execute(text(sql), params)
+        rows = [dict(r._mapping) for r in result]
+        session.commit()
+        return _Response(data=rows)
 
 
-                class _RestClient:
-                    def __init__(self, base_url: str, api_key: str) -> None:
-                        self.base_url = base_url
-                        self.api_key = api_key
+# ==================== RPC 调用 ====================
 
-                    def table(self, table_name: str) -> _RestQuery:  # type: ignore[name-defined]
-                        return _RestQuery(self.base_url, self.api_key, table_name)
+class _RpcCall:
+    """模拟 Supabase RPC 调用 — 映射为 PG 函数调用"""
 
-                    def rpc(self, function_name: str, params: Dict[str, Any] | None = None):  # type: ignore[name-defined]
-                        base_url = self.base_url.rstrip("/")
-                        api_key = self.api_key
-                        fn = function_name
-                        payload = params or {}
+    def __init__(self, session_factory, function_name: str, params: Optional[Dict] = None):
+        self._session_factory = session_factory
+        self._function_name = function_name
+        self._params = params or {}
 
-                        class _InlineRpc:
-                            def execute(self_inner):
-                                url = f"{base_url}/rest/v1/rpc/{fn}"
-                                headers = {
-                                    "apikey": api_key,
-                                    "Authorization": f"Bearer {api_key}",
-                                    "Content-Type": "application/json",
-                                    "Accept": "application/json",
-                                }
-                                with httpx.Client(
-                                    verify=not ALLOW_INSECURE_SSL,
-                                    timeout=30.0,
-                                    trust_env=False,
-                                ) as client:
-                                    r = client.post(url, json=payload, headers=headers)
-                                    try:
-                                        r.raise_for_status()
-                                    except httpx.HTTPStatusError as e:  # pragma: no cover
-                                        # 提供更详细的错误信息，便于排查 RPC 400/500
-                                        detail = r.text
-                                        raise Exception(f"RPC {fn} failed: {e} | Body: {detail}")
-                                    data = r.json() if r.text else None
-                                    return _RestResponse(data)
+    def execute(self) -> _Response:
+        session_factory = self._session_factory
+        if session_factory is None:
+            return _Response(data=None)
 
-                            async def execute_async(self_inner):
-                                url = f"{base_url}/rest/v1/rpc/{fn}"
-                                headers = {
-                                    "apikey": api_key,
-                                    "Authorization": f"Bearer {api_key}",
-                                    "Content-Type": "application/json",
-                                    "Accept": "application/json",
-                                }
-                                async with httpx.AsyncClient(
-                                    verify=not ALLOW_INSECURE_SSL,
-                                    timeout=30.0,
-                                    trust_env=False,
-                                ) as client:
-                                    r = await client.post(url, json=payload, headers=headers)
-                                    try:
-                                        r.raise_for_status()
-                                    except httpx.HTTPStatusError as e:  # pragma: no cover
-                                        detail = r.text
-                                        raise Exception(f"RPC {fn} failed: {e} | Body: {detail}")
-                                    data = r.json() if r.text else None
-                                    return _RestResponse(data)
+        session = session_factory()
+        try:
+            # 构建 SELECT function_name(param1 => :p1, ...)
+            if self._params:
+                param_str = ", ".join(f"{k} => :{k}" for k in self._params)
+                sql = f"SELECT * FROM {self._function_name}({param_str})"
+            else:
+                sql = f"SELECT * FROM {self._function_name}()"
 
-                        return _InlineRpc()
+            result = session.execute(text(sql), self._params)
+            rows = [dict(r._mapping) for r in result]
+            return _Response(data=rows)
+        except Exception as e:
+            logger.error("RPC 执行错误 [%s]: %s", self._function_name, e)
+            raise
+        finally:
+            session.close()
 
-                _supabase = _RestClient(str(settings.SUPABASE_URL), api_key)
-                logging.getLogger(__name__).info("Supabase REST 兼容客户端就绪: %s", settings.SUPABASE_URL)
-            except Exception as e3:  # pragma: no cover
-                logging.getLogger(__name__).warning("Supabase REST 兼容客户端初始化失败: %s", e3)
-                _supabase = None
-    return _supabase
+    async def execute_async(self) -> _Response:
+        from anyio import to_thread
+        return await to_thread.run_sync(self.execute)
+
+
+# ==================== 主客户端 ====================
+
+class _PgClient:
+    """SQLAlchemy 版 Supabase 兼容客户端"""
+
+    def __init__(self, session_factory):
+        self._session_factory = session_factory
+
+    def table(self, table_name: str) -> _Query:
+        return _Query(self._session_factory, table_name)
+
+    def rpc(self, function_name: str, params: Optional[Dict] = None) -> _RpcCall:
+        return _RpcCall(self._session_factory, function_name, params)
+
+
+# ==================== 公共 API（替代原 supabase_client.py） ====================
+
+_client: Optional[_PgClient] = None
+
+
+def get_supabase() -> Optional[_PgClient]:
+    """获取数据库客户端（SQLAlchemy 适配版）
+
+    返回值兼容原 Supabase Client 的链式 API：
+        sb = get_supabase()
+        sb.table("qc_tasks").select("*").eq("id", task_id).execute()
+
+    24 个路由文件无需修改。
+    """
+    global _client
+    if _client is not None:
+        return _client
+
+    session_factory = _get_session_factory()
+    if session_factory is None:
+        logger.warning("无法创建 SQLAlchemy 会话工厂，get_supabase() 返回 None")
+        return None
+
+    _client = _PgClient(session_factory)
+    logger.info("SQLAlchemy 适配客户端已就绪（替代 Supabase）")
+    return _client
 
 
 async def async_execute(query):
-    """统一的异步执行帮助函数。
-    - 若 query 提供 execute_async，则直接 await 它。
-    - 否则将同步 execute 放入线程池，避免阻塞事件循环。
-    返回值保持与 supabase-py 一致，具备 data 字段。
+    """统一的异步执行辅助函数（兼容原接口）
+
+    - 若 query 提供 execute_async，直接 await
+    - 否则在线程池中运行同步 execute
     """
     try:
         exec_async = getattr(query, "execute_async", None)
@@ -482,4 +488,5 @@ async def async_execute(query):
             return await exec_async()
     except Exception:
         pass
+    from anyio import to_thread
     return await to_thread.run_sync(query.execute)
