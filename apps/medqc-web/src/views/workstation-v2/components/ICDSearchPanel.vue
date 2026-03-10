@@ -100,7 +100,10 @@
       <div class="workspace-right">
         <ICDDetailPanel
           :selected-code="selectedCode"
+          :allow-apply="allowApply"
+          :apply-label="applyLabel"
           @copy="onCopyCode"
+          @apply="onApplyCode"
         />
       </div>
     </div>
@@ -130,6 +133,18 @@ import ICDDetailPanel from './ICDDetailPanel.vue'
 import ICDRecentBar from './ICDRecentBar.vue'
 import type { ICDCodeDetail } from './ICDDetailPanel.vue'
 import type { RecentCode } from './ICDRecentBar.vue'
+
+const props = withDefaults(defineProps<{
+  allowApply?: boolean
+  applyLabel?: string
+}>(), {
+  allowApply: false,
+  applyLabel: '',
+})
+
+const emit = defineEmits<{
+  apply: [detail: ICDCodeDetail]
+}>()
 
 // ==================== 状态管理 ====================
 const codeVersion = ref('clinical')
@@ -227,6 +242,10 @@ function onCopyCode(code: string) {
   }).catch(() => {
     message.error('复制失败，请手动复制')
   })
+}
+
+function onApplyCode(detail: ICDCodeDetail) {
+  emit('apply', detail)
 }
 
 // ==================== 树形浏览 ====================

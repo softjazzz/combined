@@ -13,7 +13,7 @@
       </div>
 
       <!-- 基本信息 -->
-      <div class="fp-section">
+      <div ref="basicSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'basic' }">
         <div class="fp-section-title">基本信息</div>
         <div class="fp-grid">
           <div v-for="f in basicFields" :key="f.label" class="fp-field">
@@ -29,7 +29,7 @@
       </div>
 
       <!-- 住院信息 -->
-      <div class="fp-section">
+      <div ref="admissionSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'admission' }">
         <div class="fp-section-title">住院信息</div>
         <div class="fp-grid">
           <div v-for="f in admissionFields" :key="f.label" class="fp-field">
@@ -45,7 +45,7 @@
       </div>
 
       <!-- 诊断信息 -->
-      <div class="fp-section">
+      <div ref="diagnosisSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'diagnosis' }">
         <div class="fp-section-title">
           诊断信息
           <a-tag color="processing" size="small">AI 提取</a-tag>
@@ -71,7 +71,7 @@
       </div>
 
       <!-- 手术/操作 -->
-      <div class="fp-section">
+      <div ref="procedureSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'procedure' }">
         <div class="fp-section-title">
           手术/操作
           <a-tag color="processing" size="small">AI 提取</a-tag>
@@ -106,6 +106,10 @@
           <DownloadOutlined />
           医保格式
         </a-button>
+        <a-button size="small" @click="emit('export', 'settlement')">
+          <DownloadOutlined />
+          结算清单
+        </a-button>
         <a-button type="primary" size="small" @click="emit('save')">
           <SaveOutlined />
           保存首页
@@ -121,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   ThunderboltOutlined,
   FileTextOutlined,
@@ -133,18 +137,24 @@ import type { FrontPageField } from './mockData'
 const props = defineProps<{
   fields: FrontPageField[]
   generating: boolean
+  focusTarget?: 'basic' | 'admission' | 'diagnosis' | 'procedure' | ''
 }>()
 
 const emit = defineEmits<{
   generate: []
   save: []
-  export: [format: string]
+  export: [format: 'health' | 'insurance' | 'settlement']
+  'draft-change': [payload: { diagnoses: DiagItem[]; procedures: DiagItem[] }]
 }>()
 
 // 诊断和手术列表（可编辑）
 interface DiagItem { name: string; code: string; confidence: number }
 const diagnosisFields = ref<DiagItem[]>([])
 const procedureFields = ref<DiagItem[]>([])
+const basicSectionRef = ref<HTMLElement | null>(null)
+const admissionSectionRef = ref<HTMLElement | null>(null)
+const diagnosisSectionRef = ref<HTMLElement | null>(null)
+const procedureSectionRef = ref<HTMLElement | null>(null)
 
 // 将 fields 按类别分组
 const basicFields = computed(() =>
@@ -170,32 +180,38 @@ watch(() => props.fields, (newFields) => {
     return
   }
 
-  // 2. 如果正在 AI 生成，或者列表尚未初始化，则从此列表同步数据
-  if (props.generating || diagnosisFields.value.length === 0) {
-    const mainDiag = newFields.find(f => f.label === '主要诊断')
-    const mainDiagCode = newFields.find(f => f.label === '主要诊断编码')
-    const mainProc = newFields.find(f => f.label === '主要手术')
-    const mainProcCode = newFields.find(f => f.label === '主要手术编码')
+  const mainDiag = newFields.find(f => f.label === '主要诊断')
+  const mainDiagCode = newFields.find(f => f.label === '主要诊断编码')
+  const mainProc = newFields.find(f => f.label === '主要手术')
+  const mainProcCode = newFields.find(f => f.label === '主要手术编码')
 
-    // 更新主诊断
-    if (diagnosisFields.value.length === 0) {
-      diagnosisFields.value.push({ name: '', code: '', confidence: 0.5 })
-    }
-    if (mainDiag?.value) diagnosisFields.value[0].name = mainDiag.value
-    if (mainDiagCode?.value) diagnosisFields.value[0].code = mainDiagCode.value
-    if (mainDiag?.confidence) diagnosisFields.value[0].confidence = mainDiag.confidence
+  if (diagnosisFields.value.length === 0) {
+    diagnosisFields.value.push({ name: '', code: '', confidence: 0.5 })
+  }
+  diagnosisFields.value[0].name = mainDiag?.value || diagnosisFields.value[0].name || ''
+  diagnosisFields.value[0].code = mainDiagCode?.value || diagnosisFields.value[0].code || ''
+  diagnosisFields.value[0].confidence = mainDiag?.confidence || diagnosisFields.value[0].confidence || 0.5
 
-    // 更新主手术
-    if (mainProc && mainProc.value !== '无' && mainProc.value !== '–') {
-      if (procedureFields.value.length === 0) {
-        procedureFields.value.push({ name: '', code: '', confidence: 0.5 })
-      }
-      if (mainProc.value) procedureFields.value[0].name = mainProc.value
-      if (mainProcCode?.value) procedureFields.value[0].code = mainProcCode.value
-      if (mainProc?.confidence) procedureFields.value[0].confidence = mainProc.confidence
+  if (mainProc && mainProc.value !== '无' && mainProc.value !== '–') {
+    if (procedureFields.value.length === 0) {
+      procedureFields.value.push({ name: '', code: '', confidence: 0.5 })
     }
+    procedureFields.value[0].name = mainProc.value || procedureFields.value[0].name || ''
+    procedureFields.value[0].code = mainProcCode?.value || procedureFields.value[0].code || ''
+    procedureFields.value[0].confidence = mainProc?.confidence || procedureFields.value[0].confidence || 0.5
   }
 }, { immediate: true, deep: true })
+
+watch(
+  [diagnosisFields, procedureFields],
+  () => {
+    emit('draft-change', {
+      diagnoses: diagnosisFields.value.map(item => ({ ...item })),
+      procedures: procedureFields.value.map(item => ({ ...item })),
+    })
+  },
+  { deep: true },
+)
 
 function addDiagnosis() {
   diagnosisFields.value.push({ name: '', code: '', confidence: 0 })
@@ -208,6 +224,25 @@ function addProcedure() {
 function confidenceClass(c: number) {
   return c >= 0.9 ? 'high' : c >= 0.7 ? 'mid' : 'low'
 }
+
+watch(
+  () => props.focusTarget,
+  async (target) => {
+    if (!target) return
+    await nextTick()
+    const map = {
+      basic: basicSectionRef.value,
+      admission: admissionSectionRef.value,
+      diagnosis: diagnosisSectionRef.value,
+      procedure: procedureSectionRef.value,
+    }
+    map[target]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    })
+  },
+)
 </script>
 
 <style scoped>
@@ -229,6 +264,12 @@ function confidenceClass(c: number) {
   border: 1px solid #f0f0f0;
   border-radius: 8px;
   overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.fp-section--focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
 }
 
 .fp-section-title {

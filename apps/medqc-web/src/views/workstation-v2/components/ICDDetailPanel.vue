@@ -101,6 +101,10 @@
           <template #icon><CopyOutlined /></template>
           复制编码
         </a-button>
+        <a-button v-if="allowApply" block style="margin-top: 8px" @click="$emit('apply', selectedCode)">
+          <template #icon><CheckCircleOutlined /></template>
+          {{ applyLabel || '回填当前字段' }}
+        </a-button>
       </div>
     </div>
   </div>
@@ -133,10 +137,13 @@ export interface ICDCodeDetail {
 
 defineProps<{
   selectedCode: ICDCodeDetail | null
+  allowApply?: boolean
+  applyLabel?: string
 }>()
 
 defineEmits<{
   copy: [code: string]
+  apply: [detail: ICDCodeDetail]
 }>()
 </script>
 

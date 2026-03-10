@@ -193,7 +193,7 @@ import {
 } from '@ant-design/icons-vue'
 import {
   urgeDefect,
-  markRemediated,
+  markDefectRemediated,
   approveDefect,
   rejectDefect,
   exportDefects,
@@ -334,7 +334,7 @@ const handleDefectAction = async (action: string, issue: QCIssue) => {
         break
       }
       case 'mark_remediated': {
-        const res = await markRemediated(defectId, { remediation_note: '已整改' })
+        const res = await markDefectRemediated(defectId, { remediation_note: '已整改' })
         if (res.success) {
           message.success('已标记为整改')
           issue.dismissed = true

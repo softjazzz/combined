@@ -301,6 +301,8 @@ async def get_workstation_data(
             diag = diag_map.get(key, {})
             items.append({
                 "id": r.visit_id,
+                "instituteId": r.institute_id,
+                "patientId": r.patient_id,
                 "bedNo": bed_map.get(key, ""),
                 "name": r.name or "",
                 "sex": r.sex or "",

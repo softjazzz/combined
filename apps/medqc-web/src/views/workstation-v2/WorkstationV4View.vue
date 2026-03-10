@@ -366,23 +366,138 @@
             />
           </template>
           <template #profile>
-            <AIProfileDashboard
-              :frontpage="frontpageDraft"
-              :medical-text="combinedMedicalText"
-            />
+            <div class="p-3 space-y-3">
+              <!-- 未分析状态 -->
+              <div v-if="!profileAnalyzed && !profileAnalyzing" class="flex flex-col items-center text-center py-6">
+                <div class="w-14 h-14 bg-blue-50 rounded-xl mb-4 flex items-center justify-center border border-blue-100">
+                  <ScanOutlined class="text-2xl text-blue-500" />
+                </div>
+                <div class="text-sm font-bold text-slate-700 mb-1">AI 深度画像</div>
+                <div class="text-xs text-slate-400 mb-4 max-w-[200px] leading-5">对病历全文进行深度阅读，构建诊断时间轴与风险画像</div>
+                <a-button type="primary" size="small" @click="aiProfileModalVisible = true; profileAnalyzed = true" :disabled="!combinedMedicalText" class="!rounded-lg">
+                  <template #icon><ThunderboltOutlined /></template>
+                  开始分析
+                </a-button>
+              </div>
+
+              <!-- 已分析 / 摘要卡 -->
+              <template v-else>
+                <div class="rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+                  <div class="flex items-center gap-2 mb-2">
+                    <ScanOutlined class="text-blue-500" />
+                    <span class="text-xs font-bold text-slate-700">画像摘要</span>
+                    <span class="ml-auto text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-bold">已生成</span>
+                  </div>
+                  <div class="space-y-1.5 text-xs text-slate-600">
+                    <div v-if="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text" class="flex items-center gap-1.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
+                      <span class="truncate">{{ frontpageDraft.diagnoses.discharge_main_diagnosis_text }}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"></span>
+                      <span>诊断时间轴 + 人体透视 + 器官画像</span>
+                    </div>
+                  </div>
+                </div>
+                <a-button block @click="aiProfileModalVisible = true" class="!rounded-lg !text-sm !font-bold">
+                  <template #icon><EyeOutlined /></template>
+                  查看完整 AI 画像
+                </a-button>
+              </template>
+            </div>
+
+            <!-- AI 画像 Modal -->
+            <a-modal
+              v-model:open="aiProfileModalVisible"
+              title="AI 深度画像分析"
+              :width="1100"
+              :footer="null"
+              :bodyStyle="{ padding: 0, height: '78vh', overflow: 'hidden' }"
+              centered
+              destroyOnClose
+            >
+              <AIProfileDashboard
+                :frontpage="frontpageDraft"
+                :medical-text="combinedMedicalText"
+                style="height: 100%; overflow-y: auto;"
+              />
+            </a-modal>
           </template>
           <template #drg>
-            <DRGGroupingTab
-              :drg-result="drgResult"
-              :loading="drgLoading"
-              :has-frontpage="!!frontpageDraft"
-              :main-diagnosis-code="frontpageDraft?.diagnoses?.discharge_main_icd || ''"
-              :main-diagnosis-text="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text || ''"
-              :main-procedure-code="frontpageDraft?.procedures?.main_procedure_code || ''"
-              :main-procedure-name="frontpageDraft?.procedures?.main_procedure_text || ''"
-              @group="performDRGGrouping"
-              @open-optimization="openOptimization"
-            />
+            <div class="p-3 space-y-3">
+              <!-- DRG 未分组状态 -->
+              <div v-if="!drgResult && !drgLoading" class="flex flex-col items-center text-center py-6">
+                <div class="w-14 h-14 bg-emerald-50 rounded-xl mb-4 flex items-center justify-center border border-emerald-100">
+                  <NodeIndexOutlined class="text-2xl text-emerald-500" />
+                </div>
+                <div class="text-sm font-bold text-slate-700 mb-1">DRG 分组分析</div>
+                <div class="text-xs text-slate-400 mb-4 max-w-[200px] leading-5">基于诊断和手术编码进行 DRG 分组与盈亏预测</div>
+                <a-button type="primary" size="small" @click="performDRGGrouping" :disabled="!frontpageDraft" class="!rounded-lg">
+                  <template #icon><ThunderboltOutlined /></template>
+                  开始分组
+                </a-button>
+              </div>
+
+              <!-- DRG 加载中 -->
+              <div v-else-if="drgLoading" class="flex flex-col items-center py-8">
+                <a-spin />
+                <div class="text-xs text-slate-400 mt-3">DRG 分组计算中...</div>
+              </div>
+
+              <!-- DRG 已分组 / 摘要卡 -->
+              <template v-else-if="drgResult">
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                  <div class="flex items-center gap-2 mb-2">
+                    <NodeIndexOutlined class="text-emerald-500" />
+                    <span class="text-xs font-bold text-slate-700">分组结果</span>
+                  </div>
+                  <div class="space-y-1.5">
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-500">DRG 分组</span>
+                      <span class="font-bold text-slate-800">{{ drgResult.drg_code || '-' }}</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                      <span class="text-slate-500">权重</span>
+                      <span class="font-bold text-blue-600">{{ drgResult.weight || '-' }}</span>
+                    </div>
+                    <div v-if="drgResult.payment" class="flex justify-between text-xs">
+                      <span class="text-slate-500">支付标准</span>
+                      <span class="font-bold text-emerald-600">¥{{ drgResult.payment }}</span>
+                    </div>
+                  </div>
+                </div>
+                <a-button block @click="drgDetailModalVisible = true" class="!rounded-lg !text-sm !font-bold">
+                  <template #icon><EyeOutlined /></template>
+                  查看 DRG 详情
+                </a-button>
+                <a-button block type="link" size="small" @click="performDRGGrouping">
+                  <SyncOutlined /> 重新分组
+                </a-button>
+              </template>
+            </div>
+
+            <!-- DRG 详情 Modal -->
+            <a-modal
+              v-model:open="drgDetailModalVisible"
+              title="DRG 分组详情"
+              :width="960"
+              :footer="null"
+              :bodyStyle="{ padding: '16px', maxHeight: '78vh', overflowY: 'auto' }"
+              centered
+              destroyOnClose
+            >
+              <DRGGroupingTab
+                :drg-result="drgResult"
+                :loading="drgLoading"
+                :has-frontpage="!!frontpageDraft"
+                :main-diagnosis-code="frontpageDraft?.diagnoses?.discharge_main_icd || ''"
+                :main-diagnosis-text="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text || ''"
+                :main-procedure-code="frontpageDraft?.procedures?.main_procedure_code || ''"
+                :main-procedure-name="frontpageDraft?.procedures?.main_procedure_text || ''"
+                @group="performDRGGrouping"
+                @open-optimization="openOptimization"
+              />
+            </a-modal>
           </template>
           <template #message>
             <div class="p-3 space-y-3">
@@ -547,6 +662,8 @@ import {
   SearchOutlined,
   CheckOutlined,
   NotificationOutlined,
+  ScanOutlined,
+  NodeIndexOutlined,
 } from '@ant-design/icons-vue'
 import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
 import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
@@ -624,6 +741,12 @@ const documentsLoading = ref(false)
 const docDrawerVisible = ref(false)
 const docDrawerTitle = ref('')
 const docDrawerContent = ref('')
+
+// ========== AI画像 & DRG Modal ==========
+const aiProfileModalVisible = ref(false)
+const profileAnalyzed = ref(false)
+const profileAnalyzing = ref(false)
+const drgDetailModalVisible = ref(false)
 
 async function loadDocuments(visitId: string) {
   documentsLoading.value = true
