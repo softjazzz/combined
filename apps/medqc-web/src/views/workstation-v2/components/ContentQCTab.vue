@@ -374,9 +374,9 @@ async function runContentQC() {
         patient_info: {
           current_document_type: qcDocType,
           current_table: sec.type,
-          available_documents: docs.map(d => TABLE_TO_DOC_TYPE[d.type] || d.label),
-          patient_id: props.patientId,
-          visit_id: props.visitId,
+          available_documents: docs.map(d => TABLE_TO_DOC_TYPE[d.type] || d.label).join('、'),
+          patient_id: props.patientId || '',
+          visit_id: props.visitId || '',
         },
         persist: false,
         prompt_mode: 'plan_a',
