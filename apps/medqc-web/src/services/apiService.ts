@@ -46,7 +46,7 @@ function computeBaseURL(): string {
       const isPrivateIPv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
       // 本地/内网环境强制指向本机后端，避免误用线上域名导致证书/跨域问题
       if (isLocalHost || isPrivateIPv4) {
-        base = 'http://127.0.0.1:8000'
+        base = 'http://127.0.0.1:8001'
       }
     }
   } catch { }
@@ -267,6 +267,9 @@ export class ApiService {
    */
   static async login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
+      // 每次登录前清除旧 Token，避免 Mock/过期 Token 残留
+      TokenManager.clearTokens()
+
       console.log('🔐 ApiService.login 发送请求:', {
         email: credentials.email,
         role: credentials.role,
@@ -1087,7 +1090,7 @@ export class ApiService {
    */
   static async checkConnection(): Promise<boolean> {
     try {
-      await apiClient.get('/api/health')
+      await apiClient.get('/api/v1/health')
       return true
     } catch {
       return false
@@ -1115,3 +1118,4 @@ export class ApiService {
 
 // 导出默认实例
 export default ApiService
+

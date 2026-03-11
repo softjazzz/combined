@@ -4,18 +4,16 @@
  * 提供任务的创建、查询、抽样、分配、进度查看等功能
  */
 
-import { useAuthStore } from '@/stores/auth'
-
 const BASE_URL = '/api/v1/tasks'
 
 /** 获取带认证的请求头 */
 function getHeaders(): Record<string, string> {
-    const authStore = useAuthStore()
+    const token = localStorage.getItem('medqc_access_token')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     }
-    if (authStore.token) {
-        headers['Authorization'] = `Bearer ${authStore.token}`
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`
     }
     return headers
 }

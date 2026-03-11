@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Security
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 开发环境24小时，生产环境应改为30
 
     # CORS
     # 支持逗号分隔或 JSON 数组两种格式；为避免严格 URL 校验导致环境解析失败，这里使用 List[str]

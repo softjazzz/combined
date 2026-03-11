@@ -4,18 +4,16 @@
  * 提供待办统计、工作表现排名、概览数据
  */
 
-import { useAuthStore } from '@/stores/auth'
-
 const BASE_URL = '/api/v1/dashboard'
 
 /** 获取带认证的请求头 */
 function getHeaders(): Record<string, string> {
-    const authStore = useAuthStore()
+    const token = localStorage.getItem('medqc_access_token')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     }
-    if (authStore.token) {
-        headers['Authorization'] = `Bearer ${authStore.token}`
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`
     }
     return headers
 }

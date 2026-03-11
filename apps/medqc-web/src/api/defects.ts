@@ -4,18 +4,16 @@
  * 提供缺陷的催办、撤回、标记整改、审核通过、审核存疑等操作
  */
 
-import { useAuthStore } from '@/stores/auth'
-
 const BASE_URL = '/api/v1/qc/defects'
 
 /** 获取带认证的请求头 */
 function getHeaders(): Record<string, string> {
-    const authStore = useAuthStore()
+    const token = localStorage.getItem('medqc_access_token')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     }
-    if (authStore.token) {
-        headers['Authorization'] = `Bearer ${authStore.token}`
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`
     }
     return headers
 }
@@ -188,11 +186,11 @@ export function getDefectExportUrl(params?: {
 /** 下载导出文件 */
 export async function exportDefects(params?: Parameters<typeof getDefectExportUrl>[0]) {
     const url = getDefectExportUrl(params)
-    const authStore = useAuthStore()
+    const token = localStorage.getItem('medqc_access_token')
     try {
         const response = await fetch(url, {
             headers: {
-                ...(authStore.token ? { 'Authorization': `Bearer ${authStore.token}` } : {}),
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
             },
         })
         if (!response.ok) {
