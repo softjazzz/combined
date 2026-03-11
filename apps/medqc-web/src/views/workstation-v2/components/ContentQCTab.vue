@@ -421,10 +421,25 @@ async function runContentQC() {
     const secStart = Date.now()
 
     try {
+      // 构建上下文：告知 LLM 当前正在评估的文书类型、患者已有的所有文书清单
+      const allDocTypes = sectionTimeline.value.map(s => s.label).join('、')
+      const contextPrefix = [
+        `【重要上下文】当前正在评估的文书类型是「${sec.label}」。`,
+        `该患者病历中包含以下文书：${allDocTypes}。`,
+        `以下内容即为该患者的「${sec.label}」全文：`,
+        '',
+      ].join('\n')
+
       const resp = await axios.post('/api/v1/qc/sichuan/evaluate', {
         document_id: `${props.patientId}-${props.visitId}-${sec.type}`,
-        document_content: sec.content,
+        document_content: contextPrefix + sec.content,
         document_type: sec.type,
+        patient_info: {
+          current_document_type: sec.type,
+          available_documents: sectionTimeline.value.map(s => s.type),
+          patient_id: props.patientId,
+          visit_id: props.visitId,
+        },
         persist: false,
         prompt_mode: 'plan_a',
       }, { timeout: 120000 })
