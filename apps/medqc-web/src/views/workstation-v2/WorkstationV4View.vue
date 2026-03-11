@@ -359,14 +359,31 @@
                       <a-tab-pane key="preview" tab="首页预览/打印">
                         <HmFrontpagePreview :draft="frontpageDraft" />
                       </a-tab-pane>
+                      <a-tab-pane key="official" tab="官方格式">
+                        <div v-if="frontpageSheetLoading" class="flex items-center justify-center py-12">
+                          <a-spin />
+                        </div>
+                        <FrontpageSheet v-else-if="frontpageSheetData" :data="frontpageSheetData" />
+                        <div v-else class="text-center text-slate-400 py-12">暂无数据库首页数据</div>
+                      </a-tab-pane>
                     </a-tabs>
                   </div>
-                  <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
-                    <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
-                      <FileTextOutlined class="text-3xl" />
+                  <div v-else>
+                    <!-- 未AI生成时，直接显示数据库中的官方格式 -->
+                    <div v-if="frontpageSheetLoading" class="flex flex-col items-center py-20">
+                      <a-spin size="large" />
+                      <div class="text-sm text-slate-400 mt-4">加载病案首页数据中...</div>
                     </div>
-                    <div class="text-sm font-medium mb-1">尚未生成病案首页</div>
-                    <div class="text-xs text-slate-400">点击右上角「AI 生成首页」按钮开始</div>
+                    <div v-else-if="frontpageSheetData">
+                      <FrontpageSheet :data="frontpageSheetData" />
+                    </div>
+                    <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                      <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                        <FileTextOutlined class="text-3xl" />
+                      </div>
+                      <div class="text-sm font-medium mb-1">暂无病案首页数据</div>
+                      <div class="text-xs text-slate-400">可点击右上角「AI 生成首页」按钮从病历中自动提取</div>
+                    </div>
                   </div>
                 </div>
               </a-tab-pane>
@@ -779,6 +796,7 @@ import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
 import QCResultTab from './components/QCResultTab.vue'
 import ICDSearchPanel from './components/ICDSearchPanel.vue'
 import SettlementSheet from './components/SettlementSheet.vue'
+import FrontpageSheet from './components/FrontpageSheet.vue'
 import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
 import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
 import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
@@ -878,6 +896,27 @@ const settlementData = ref<any>(null)
 const settlementLoading = ref(false)
 const settlementQcReport = ref<any>(null)
 const settlementQcLoading = ref(false)
+
+// ========== 病案首页官方格式数据 ==========
+const frontpageSheetData = ref<any>(null)
+const frontpageSheetLoading = ref(false)
+
+async function loadFrontpageSheet(patientId: string, visitId: string) {
+  frontpageSheetLoading.value = true
+  try {
+    const resp = await fetch(`/api/medical-records/frontpage-sheet/${patientId}/${visitId}`)
+    if (resp.ok) {
+      frontpageSheetData.value = await resp.json()
+    } else {
+      frontpageSheetData.value = null
+    }
+  } catch (e) {
+    console.error('加载病案首页数据失败:', e)
+    frontpageSheetData.value = null
+  } finally {
+    frontpageSheetLoading.value = false
+  }
+}
 const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
 
 const costColumns = [
@@ -1086,11 +1125,13 @@ watch(selectedId, (newId) => {
     const record = allRecords.value.find(r => r.id === newId)
     if (record?.patientId) {
       loadSettlement(record.patientId, newId)
+      loadFrontpageSheet(record.patientId, newId)
     }
   } else {
     documentsList.value = []
     concatText.value = ''
     settlementData.value = null
+    frontpageSheetData.value = null
   }
 })
 

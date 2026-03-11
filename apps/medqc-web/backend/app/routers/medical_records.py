@@ -438,3 +438,93 @@ async def get_table_data(
         "columns": columns,
         "items": items,
     }
+
+
+# ==================== 病案首页官方格式数据 ====================
+
+@router.get("/frontpage-sheet/{patient_id}/{visit_id}")
+async def get_frontpage_sheet(patient_id: str, visit_id: str):
+    """获取病案首页完整数据（基本信息+诊断+手术+费用），用于官方格式渲染"""
+    from sqlalchemy.orm import Session
+    from ..database.connection import engine
+    from ..database.models.cdm import (
+        MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
+    )
+
+    with Session(engine) as session:
+        # 1. 基本信息
+        fp = session.query(MedicalRecordFrontpage).filter_by(
+            patient_id=patient_id, visit_id=visit_id
+        ).first()
+
+        if not fp:
+            raise HTTPException(status_code=404, detail="未找到病案首页数据")
+
+        # 序列化基本信息
+        basic = {}
+        for col in MedicalRecordFrontpage.__table__.columns:
+            val = getattr(fp, col.name, None)
+            if val is not None:
+                basic[col.name] = str(val)
+            else:
+                basic[col.name] = None
+
+        # 2. 诊断列表
+        diag_rows = session.query(Diagnosis).filter_by(
+            patient_id=patient_id, visit_id=visit_id
+        ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
+
+        diagnoses = []
+        for d in diag_rows:
+            diagnoses.append({
+                "diagnosis_type": d.diagnosis_type,
+                "diagnosis_no": d.diagnosis_no,
+                "diagnosis_name": d.diagnosis_name,
+                "diagnosis_code": d.diagnosis_code,
+                "admission_condition": d.admission_condition,
+                "discharge_condition": d.discharge_condition,
+            })
+
+        # 3. 手术列表
+        surg_rows = session.query(MrSurgery).filter_by(
+            patient_id=patient_id, visit_id=visit_id
+        ).all()
+
+        surgeries = []
+        for s in surg_rows:
+            surgeries.append({
+                "surgery_name": s.surgery_name,
+                "surgery_code": s.surgery_code,
+                "surgical_level": s.surgical_level,
+                "surgery_begin_datetime": str(s.surgery_begin_datetime) if s.surgery_begin_datetime else None,
+                "surgeon": s.surgeon,
+                "first_assistant": s.first_assistant,
+                "second_assistant": s.second_assistant,
+                "anesthesia_method": s.anesthesia_method,
+                "anesthesiologist": s.anesthesiologist,
+                "surgial_incision_level": s.surgial_incision_level,
+                "surgical_incisionheal_level": s.surgical_incisionheal_level,
+                "main_surgery_sign": s.main_surgery_sign,
+            })
+
+        # 4. 费用
+        cost_row = session.query(MrCost).filter_by(
+            patient_id=patient_id, visit_id=visit_id
+        ).first()
+
+        cost_data = None
+        if cost_row:
+            cost_data = {}
+            for col in MrCost.__table__.columns:
+                val = getattr(cost_row, col.name, None)
+                if val is not None:
+                    cost_data[col.name] = str(val)
+                else:
+                    cost_data[col.name] = None
+
+        return {
+            "basic": basic,
+            "diagnoses": diagnoses,
+            "surgeries": surgeries,
+            "cost": cost_data,
+        }
