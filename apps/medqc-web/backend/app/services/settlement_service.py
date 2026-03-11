@@ -181,13 +181,13 @@ class SettlementService:
                 result["patient_name"] = mr.name
                 result["patient_sex"] = mr.sex
                 result["patient_age"] = mr.age_year
-                result["patient_id_card"] = mr.id_card
+                result["patient_id_card"] = getattr(mr, "id_card", None)
                 result["patient_birthday"] = _to_str(mr.birthday)
                 result["patient_insurance_type"] = mr.insurance_type
                 result["patient_nationality"] = mr.nationality
                 result["patient_ethnicity"] = mr.ethnicity
                 result["patient_marital_status"] = mr.marital_status
-                result["attending_physician"] = mr.attending_physician_sign
+                result["attending_physician"] = getattr(mr, "attending_physician_sign", None)
                 result["hospital_duration"] = mr.hospital_duration
 
             # 3. 诊断列表
