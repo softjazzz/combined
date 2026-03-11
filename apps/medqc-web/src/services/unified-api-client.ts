@@ -1,4 +1,4 @@
-// 统一API客户端
+﻿// 统一API客户端
 // 适配Python FastAPI后端的统一API调用服务
 
 import type {
@@ -31,7 +31,7 @@ interface PaginatedResponse<T> {
 }
 
 class UnifiedAPIClient {
-  private baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+  private baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
 
   private async request<T>(
     endpoint: string,
@@ -327,7 +327,7 @@ class UnifiedAPIClient {
   // ==================== 系统信息API ====================
 
   async getSystemHealth(): Promise<unknown> {
-    return this.request('/health')
+    return this.request('/api/v1/health')
   }
 
   async getSystemInfo(): Promise<unknown> {
@@ -344,3 +344,4 @@ export const unifiedAPIClient = new UnifiedAPIClient()
 
 // 导出类型
 export type { APIResponse, PaginatedResponse }
+

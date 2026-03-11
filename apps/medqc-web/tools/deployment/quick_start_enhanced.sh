@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 # 医疗质控系统增强版快速启动脚本
 # 支持Python后端 + Vue前端的完整启动流程
@@ -100,7 +100,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
 # API配置
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8001
 VITE_ENABLE_ENHANCED_API=true
 
 # LLM服务配置
@@ -176,8 +176,8 @@ EOF
     log_success "Python依赖安装完成"
     
     # 检查端口
-    if ! check_port 8000; then
-        log_error "后端端口8000被占用，请释放端口或修改配置"
+    if ! check_port 8001; then
+        log_error "后端端口8001被占用，请释放端口或修改配置"
         exit 1
     fi
     
@@ -188,7 +188,7 @@ EOF
     echo $BACKEND_PID > ../backend.pid
     
     # 等待后端启动
-    if wait_for_service "http://localhost:8000/health" "Python后端服务"; then
+    if wait_for_service "http://localhost:8001/api/v1/health" "Python后端服务"; then
         log_success "后端服务启动成功 (PID: $BACKEND_PID)"
     else
         log_error "后端服务启动失败"
@@ -222,20 +222,20 @@ EOF
     log_info "验证服务状态..."
     
     # 检查后端健康状态
-    if curl -s http://localhost:8000/health | grep -q "healthy"; then
+    if curl -s http://localhost:8001/api/v1/health | grep -q "healthy"; then
         log_success "✅ 后端服务健康检查通过"
     else
         log_warning "⚠️ 后端服务健康检查异常"
     fi
     
     # 检查增强版API状态
-    if curl -s http://localhost:8000/api/v2/enhanced-ai-assistance/service-status | grep -q "success"; then
+    if curl -s http://localhost:8001/api/v2/enhanced-ai-assistance/service-status | grep -q "success"; then
         log_success "✅ 增强版AI服务正常"
     else
         log_warning "⚠️ 增强版AI服务异常"
     fi
     
-    if curl -s http://localhost:8000/api/v2/enhanced-audit-tasks/health | grep -q "success"; then
+    if curl -s http://localhost:8001/api/v2/enhanced-audit-tasks/health | grep -q "success"; then
         log_success "✅ 增强版审核任务服务正常"
     else
         log_warning "⚠️ 增强版审核任务服务异常"
@@ -246,10 +246,10 @@ EOF
     log_success "🎉 医疗质控系统增强版启动完成！"
     echo ""
     echo "📊 服务信息:"
-    echo "  • 后端服务: http://localhost:8000"
+    echo "  • 后端服务: http://localhost:8001"
     echo "  • 前端界面: http://localhost:5173"
-    echo "  • API文档: http://localhost:8000/docs"
-    echo "  • 系统监控: http://localhost:8000/api/system/metrics"
+    echo "  • API文档: http://localhost:8001/docs"
+    echo "  • 系统监控: http://localhost:8001/api/system/metrics"
     echo ""
     echo "📋 进程信息:"
     echo "  • 后端PID: $BACKEND_PID (日志: backend.log)"
@@ -338,3 +338,12 @@ trap cleanup SIGINT SIGTERM
 
 # 执行主函数
 main "$@"
+
+
+
+
+
+
+
+
+

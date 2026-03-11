@@ -1,4 +1,4 @@
-# 项目交接文档
+﻿# 项目交接文档
 
 **项目名称**: Health-QC-Monorepo 医疗质控系统  
 **文档版本**: v1.0  
@@ -600,7 +600,7 @@ const getComplexityClass = (complexity?: string): string => {
 
 | 服务 | 端口 | 状态 | 进程数 |
 |------|------|------|--------|
-| **后端服务 (FastAPI)** | 8000 | ✅ 运行中 | 2 |
+| **后端服务 (FastAPI)** | 8001 | ✅ 运行中 | 2 |
 | **前端服务 (Vite)** | 3000 | ✅ 运行中 | 2 |
 
 #### 2.4.2 UI 改进验证
@@ -631,7 +631,7 @@ const getComplexityClass = (complexity?: string): string => {
 
 | 服务 | 端口 | 状态 | 访问地址 |
 |------|------|------|----------|
-| **后端服务 (FastAPI)** | 8000 | ✅ 运行中 | http://localhost:8000 |
+| **后端服务 (FastAPI)** | 8001 | ✅ 运行中 | http://localhost:8001 |
 | **前端服务 (Vite)** | 3000 | ✅ 运行中 | http://localhost:3000 |
 
 #### 3.1.2 访问地址
@@ -642,9 +642,9 @@ const getComplexityClass = (complexity?: string): string => {
 - 批量规则测试: http://localhost:3000/#/batch-test
 
 **后端API**:
-- API 文档 (Swagger UI): http://localhost:8000/docs
-- API 文档 (ReDoc): http://localhost:8000/redoc
-- 快速质控API: `POST http://localhost:8000/api/v1/qc/sichuan/evaluate-fast`
+- API 文档 (Swagger UI): http://localhost:8001/docs
+- API 文档 (ReDoc): http://localhost:8001/redoc
+- 快速质控API: `POST http://localhost:8001/api/v1/qc/sichuan/evaluate-fast`
 
 ### 3.2 已实现的功能列表
 
@@ -780,7 +780,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 启动后端服务
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 **启动前端服务**:
@@ -801,7 +801,7 @@ pnpm run dev
 ```bash
 # 后台启动后端
 cd health-qc-monorepo/apps/medqc-web/backend
-nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > /tmp/backend.log 2>&1 &
+nohup uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload > /tmp/backend.log 2>&1 &
 
 # 后台启动前端
 cd health-qc-monorepo/apps/medqc-web
@@ -1077,7 +1077,7 @@ nohup pnpm run dev > /tmp/frontend.log 2>&1 &
    ```
 4. 检查端口 8000 是否被占用：
    ```bash
-   lsof -i :8000
+   lsof -i :8001
    # 如果被占用，杀死进程
    kill -9 <PID>
    ```
@@ -1089,7 +1089,7 @@ nohup pnpm run dev > /tmp/frontend.log 2>&1 &
 **排查步骤**:
 1. 检查后端服务是否运行：
    ```bash
-   curl http://localhost:8000/docs
+   curl http://localhost:8001/docs
    ```
 2. 检查 API 路径是否正确
 3. 检查请求参数是否正确
@@ -1116,7 +1116,7 @@ nohup pnpm run dev > /tmp/frontend.log 2>&1 &
 
 ```bash
 # 检查端口
-netstat -tlnp | grep -E ":8000|:3000"
+netstat -tlnp | grep -E ":8001|:3000"
 
 # 检查进程
 ps aux | grep -E "uvicorn|vite" | grep -v grep
@@ -1173,7 +1173,7 @@ kill <PID>
 # 重启后端
 pkill -f uvicorn
 cd health-qc-monorepo/apps/medqc-web/backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
 # 重启前端
 pkill -f vite
@@ -1251,4 +1251,6 @@ pnpm run dev
 **最后更新**: 2025-11-09  
 **维护者**: AI Agent (Augment)  
 **状态**: ✅ 完成
+
+
 

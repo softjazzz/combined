@@ -41,6 +41,21 @@ _engine_kwargs = {}
 
 if DATABASE_URL.startswith("sqlite"):
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # PostgreSQL 默认不要无限等待。连接失败或连接池拿不到连接时，应尽快报错，
+    # 否则在 Windows 开发环境里会表现成“进程还活着，但所有接口都 pending”。
+    _engine_kwargs.update(
+        {
+            "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+            "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "5")),
+            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
+            "pool_use_lifo": True,
+            "connect_args": {
+                "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5")),
+            },
+        }
+    )
 
 engine = create_engine(
     DATABASE_URL,

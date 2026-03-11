@@ -1,4 +1,4 @@
-# 新版演示页面 - 四川质控 API 集成测试指南
+﻿# 新版演示页面 - 四川质控 API 集成测试指南
 
 ## 📋 概述
 
@@ -43,7 +43,7 @@
 
 ### 前置条件
 
-1. ✅ 后端服务运行在 `http://localhost:8000`
+1. ✅ 后端服务运行在 `http://localhost:8001`
 2. ✅ 前端服务运行在 `http://localhost:3000`
 3. ✅ 已登录系统 (admin@medqc.com / admin123)
 4. ✅ 四川质控引擎已配置 LLM API 密钥
@@ -219,12 +219,12 @@ console.log('Analysis Result:', store.analysisResult)
 **解决**:
 ```bash
 # 检查后端服务
-curl http://localhost:8000/api/v1/health
+curl http://localhost:8001/api/v1/health
 
 # 重启后端
 cd apps/medqc-web/backend
 source venv/bin/activate
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 ### 问题 2: 返回 Mock 数据
@@ -288,4 +288,5 @@ cat .env | grep SICHUAN
 **文档版本**: 1.0.0  
 **更新时间**: 2025-10-17  
 **作者**: Augment Agent
+
 

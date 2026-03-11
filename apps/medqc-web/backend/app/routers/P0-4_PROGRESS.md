@@ -1,4 +1,4 @@
-# P0-4: 统一 API 响应格式 - 进度报告
+﻿# P0-4: 统一 API 响应格式 - 进度报告
 
 ## 📊 总体进度
 
@@ -227,7 +227,7 @@ def test_endpoint():
 ### 手动测试
 ```bash
 # 测试成功响应
-curl http://localhost:8001/api/health
+curl http://localhost:8001/api/v1/health
 
 # 测试错误响应
 curl http://localhost:8001/api/records/invalid-id
@@ -304,4 +304,5 @@ python3 -m py_compile app/routers/qc.py
 git add app/routers/qc.py
 git commit -m "refactor(P0-4): 统一 qc.py 响应格式"
 ```
+
 

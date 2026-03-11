@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 依次切换系统中配置的所有阿里云（通义千问）模型，调用 /api/v1/qc/sichuan/test-rule
 对 LX-030（病案首页诊断 vs 出院诊断）进行质控，统计哪些模型能识别诊断遗漏问题。
@@ -6,7 +6,7 @@
 用法：
     ALIYUN_API_KEY=sk-xxx python3 scripts/run_aliyun_models_lx030.py
 可选环境变量：
-    QC_BACKEND_BASE_URL   默认为 http://127.0.0.1:8000
+    QC_BACKEND_BASE_URL   默认为 http://127.0.0.1:8001
     QC_CONFIG_NAME        默认为 default
 """
 
@@ -23,7 +23,7 @@ from typing import Any, Dict, List
 import httpx
 
 
-BASE_URL = os.getenv("QC_BACKEND_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+BASE_URL = os.getenv("QC_BACKEND_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
 CONFIG_NAME = os.getenv("QC_CONFIG_NAME", "default")
 ALIYUN_API_KEY = os.getenv("ALIYUN_API_KEY") or os.getenv("SICHUAN_API_KEY")
 PROVIDER_CODE = "alibaba"
@@ -289,3 +289,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 语义质控规则服务
  * 连接前端与Python语义规则引擎
  */
@@ -63,8 +63,8 @@ export class SemanticRulesService {
     this.baseURL = import.meta.env.DEV
       ? '' // 开发环境使用Vite代理
       : (window.location.hostname === 'localhost'
-        ? 'http://localhost:8000'
-        : 'http://124.220.6.136:8000')
+        ? 'http://localhost:8001'
+        : 'http://124.220.6.136:8001')
   }
 
   // ------------------- CRUD & Import/Export -------------------
@@ -389,3 +389,4 @@ export class SemanticRulesService {
 
 // 导出单例实例
 export const semanticRulesService = new SemanticRulesService()
+

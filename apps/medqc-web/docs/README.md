@@ -52,9 +52,8 @@ pnpm dev:medqc
 
 # 启动后端 (端口 8001) - 新终端
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
-source venv/bin/activate
 export JWT_SECRET=dev-secret
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+pwsh ./start_dev_backend.ps1 -Port 8001
 ```
 
 ## 🌐 访问地址
@@ -64,7 +63,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 | 前端应用 | 3000 | http://localhost:3000 | Vue 3 应用主界面 |
 | 后端API | 8001 | http://localhost:8001 | FastAPI 服务 |
 | API文档 | 8001 | http://localhost:8001/docs | Swagger UI 文档 |
-| 健康检查 | 8001 | http://localhost:8001/api/health | 服务状态检查 |
+| 健康检查 | 8001 | http://localhost:8001/api/v1/health | 服务状态检查 |
 
 ## 📋 核心功能
 

@@ -1,4 +1,4 @@
-// 消息通知服务适配器
+﻿// 消息通知服务适配器
 // 适配Python FastAPI后端的消息通知功能，支持WebSocket和Supabase实时功能
 
 import type {
@@ -24,7 +24,7 @@ class WebSocketManager {
 
   async connect(): Promise<void> {
     try {
-      const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000'}/api/notifications/ws/${this.userId}?token=${this.authToken}`
+      const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8001'}/api/notifications/ws/${this.userId}?token=${this.authToken}`
 
       this.ws = new WebSocket(wsUrl)
 
@@ -483,3 +483,4 @@ export class NotificationServiceAdapter {
 
 // 导出单例实例
 export const notificationService = new NotificationServiceAdapter()
+

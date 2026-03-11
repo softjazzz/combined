@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <!-- 面包屑导航 -->
     <a-breadcrumb class="breadcrumb">
@@ -317,9 +317,9 @@ import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordSe
 const getApiBaseUrl = () => {
   // 检测是否从外部IP访问，如果是则使用服务器IP
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return 'http://124.220.6.136:8000'
+    return 'http://124.220.6.136:8001'
   }
-  return 'http://localhost:8000'
+  return 'http://localhost:8001'
 }
 const API_BASE_URL = getApiBaseUrl()
 console.log('🌐 编辑页面使用API地址:', API_BASE_URL)
@@ -829,3 +829,4 @@ const handleCancel = () => {
   font-size: 12px !important;
 }
 </style>
+

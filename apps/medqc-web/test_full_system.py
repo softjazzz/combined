@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 四川省住院病历语义质控系统完整集成测试
@@ -21,7 +21,7 @@ def test_backend_services():
     
     # 1. 健康检查
     try:
-        response = requests.get(f"{base_url}/api/health", timeout=5)
+        response = requests.get(f"{base_url}/api/v1/health", timeout=5)
         if response.status_code == 200:
             print("✅ 后端API健康检查通过")
         else:
@@ -241,3 +241,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+

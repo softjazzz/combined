@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 四川省质控API服务启动脚本
@@ -21,7 +21,7 @@ def start_api_server():
     print("=" * 60)
     print("📡 服务地址: http://0.0.0.0:8001")
     print("📚 API文档: http://localhost:8001/docs")
-    print("🔍 健康检查: http://localhost:8001/api/health")
+    print("🔍 健康检查: http://localhost:8001/api/v1/health")
     print()
     print("🎯 新增四川省质控API端点:")
     print("  - POST /api/qc/sichuan/evaluate - 单文档质控评估")
@@ -41,3 +41,4 @@ def start_api_server():
 
 if __name__ == "__main__":
     start_api_server()
+

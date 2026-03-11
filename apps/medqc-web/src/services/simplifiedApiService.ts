@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 简化的API服务
  * 只保留认证和工具类API，数据操作直接使用Supabase
  */
@@ -13,7 +13,7 @@ import type {
 } from '@/types'
 
 // API基础配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
 const API_TIMEOUT = 30000 // 30秒超时
 
 // 创建axios实例
@@ -178,7 +178,7 @@ export class SimplifiedApiService {
    */
   static async healthCheck(): Promise<ApiResponse<unknown>> {
     try {
-      const response = await apiClient.get('/api/health')
+      const response = await apiClient.get('/api/v1/health')
       return {
         success: true,
         data: response.data
@@ -299,3 +299,4 @@ export class SimplifiedApiService {
 
 // 导出默认实例
 export default SimplifiedApiService
+

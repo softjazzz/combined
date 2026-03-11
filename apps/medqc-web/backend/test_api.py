@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 API集成测试脚本
 测试前后端28个API接口的完整功能
@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # API基础URL
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8001"
 
 # 测试结果
 test_results = []
@@ -34,7 +34,7 @@ def log_test(name, success, message, details=None):
 def test_health_check():
     """测试健康检查"""
     try:
-        response = requests.get(f"{BASE_URL}/api/health")
+        response = requests.get(f"{BASE_URL}/api/v1/health")
         if response.status_code == 200:
             data = response.json()
             log_test("健康检查", True, "API服务正常运行", f"状态: {data.get('status')}")
@@ -289,3 +289,4 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+

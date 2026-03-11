@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 /**
  * 调试前端API调用问题
@@ -16,7 +16,7 @@ async function debugFrontendAPI() {
     // 步骤1：检查后端服务状态
     console.log('🔍 步骤1：检查后端服务状态...');
     try {
-      const healthResponse = await fetch(`${API_BASE_URL}/api/health`);
+      const healthResponse = await fetch(`${API_BASE_URL}/api/v1/health`);
       console.log(`📊 健康检查状态: ${healthResponse.status} ${healthResponse.statusText}`);
       if (healthResponse.ok) {
         const healthData = await healthResponse.json();
@@ -172,3 +172,4 @@ async function debugFrontendAPI() {
 
 // 运行调试
 debugFrontendAPI();
+

@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 
 from .document_segmenter import split_document, merge_small_sections, DocumentSection
+from .llm_document_splitter import split_document_by_llm
 from .rule_router import RuleRouter
 from .qc_llm_client import SichuanQCLLMClient
 from .qc_prompt_builder import QCPromptBuilder
@@ -38,12 +39,14 @@ class SegmentedQCPipeline:
         router: Optional[RuleRouter] = None,
         max_concurrency: int = 5,
         max_rules_per_batch: int = 15,
+        use_llm_splitter: bool = True,
     ):
         self.client = llm_client or SichuanQCLLMClient()
         self.prompt_builder = prompt_builder or QCPromptBuilder(
             enable_truncate=False,  # 分段后每段已经很短，不需要截断
             max_content_length=8000,
         )
+        self.use_llm_splitter = use_llm_splitter
         self.router = router or RuleRouter()
         self.max_concurrency = max_concurrency
         self.MAX_RULES_PER_BATCH = max_rules_per_batch
@@ -69,11 +72,19 @@ class SegmentedQCPipeline:
         """
         pipeline_start = time.time()
 
-        # ── Step 1: 段落切割 ──
-        sections = split_document(content)
+        # ── Step 1: 段落切割（优先 LLM，回退正则）──
+        if self.use_llm_splitter:
+            try:
+                sections = await split_document_by_llm(content, llm_client=self.client)
+                logger.info(f"[Pipeline] LLM 切割为 {len(sections)} 个段落")
+            except Exception as e:
+                logger.warning(f"[Pipeline] LLM 切分失败({e})，回退正则")
+                sections = split_document(content)
+        else:
+            sections = split_document(content)
         sections = merge_small_sections(sections, min_chars=min_section_chars)
 
-        logger.info(f"[Pipeline] 切割为 {len(sections)} 个段落")
+        logger.info(f"[Pipeline] 最终 {len(sections)} 个段落")
 
         # ── Step 2: 规则路由 + 自动分批 ──
         tasks_info: List[Dict[str, Any]] = []

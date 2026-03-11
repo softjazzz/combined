@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import httpx
 from pprint import pprint
 import sys
@@ -24,7 +24,7 @@ async def main():
     print("\n提交抽取请求...")
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
-            "http://localhost:8000/api/v1/frontpage/auto-generate-draft",
+            "http://localhost:8001/api/v1/frontpage/auto-generate-draft",
             json={"medical_text": medical_text}
         )
         
@@ -53,3 +53,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

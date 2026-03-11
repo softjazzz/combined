@@ -1,4 +1,4 @@
-# 贡献指南
+﻿# 贡献指南
 
 感谢您对医疗质控系统项目的关注！我们欢迎所有形式的贡献。
 
@@ -125,7 +125,7 @@ python test_api.py
 ## 📚 开发资源
 
 ### 文档
-- [API 文档](http://localhost:8000/docs)
+- [API 文档](http://localhost:8001/docs)
 - [前端组件文档](./docs/frontend.md)
 - [后端架构文档](./docs/backend.md)
 
@@ -157,3 +157,4 @@ python test_api.py
 ---
 
 **注意**：本项目涉及医疗数据处理，请确保您的贡献符合相关的医疗数据安全和隐私法规。
+

@@ -775,3 +775,692 @@ class NursingRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+
+
+# ==================== 13. 第一批接口补充 - 结构化表 ====================
+
+class MedicalInsuranceSettlement(AuditMixin, Base):
+    """医保结算清单（medical_insurance_settlement）- 98字段大表"""
+    __tablename__ = "medical_insurance_settlement"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    document_id = Column(String(100), comment="文档编号")
+
+    # 机构与清单基本信息
+    designated_medical_institution = Column(String(100), comment="定点医疗机构代码")
+    medical_insurance_record_dept = Column(String(100), comment="医疗机构填报部门")
+    medical_insurance_recorder = Column(String(100), comment="医疗机构填报人")
+    medinsur_serial_no = Column(String(100), comment="清单流水号")
+    business_serial_no = Column(String(100), comment="业务流水号")
+    medinsur_receipt_id = Column(String(100), comment="医保结算号")
+    ticket_code = Column(String(100), comment="票据代码")
+    ticket_no = Column(String(100), comment="票据号码")
+    settlement_method = Column(String(100), comment="清算方式")
+
+    # 患者身份信息
+    patient_insurance_no = Column(String(100), comment="医保系统内人员编号")
+    inpat_no = Column(String(100), comment="住院号")
+    mr_no = Column(String(100), comment="病案号")
+    nationality = Column(String(100), comment="国籍")
+    occupation_category = Column(String(100), comment="职业类别")
+
+    # 现住址
+    currentaddress_province = Column(String(100), comment="现住址-省名称")
+    currentaddress_city = Column(String(100), comment="现住址-市名称")
+    currentaddress_county = Column(String(100), comment="现住址-县名称")
+    currentaddress_town = Column(String(100), comment="现住址-镇名称")
+    currentaddress_village = Column(String(100), comment="现住址-村名称")
+    currentaddress_detail = Column(String(100), comment="现住址-具体地址")
+    currentaddress = Column(Text, comment="现住址")
+    currentaddress_postcode = Column(String(100), comment="现住址邮编")
+    currentaddress_phone = Column(String(100), comment="现住址电话")
+
+    # 工作单位
+    work_unit = Column(String(100), comment="工作单位")
+    workplace_province = Column(String(100), comment="工作单位地址-省名称")
+    workplace_city = Column(String(100), comment="工作单位地址-市名称")
+    workplace_county = Column(String(100), comment="工作单位地址-县名称")
+    workplace_town = Column(String(100), comment="工作单位地址-镇名称")
+    workplace_village = Column(String(100), comment="工作单位地址-村名称")
+    workplace_detail = Column(String(100), comment="工作单位地址-具体地址")
+    workplace = Column(Text, comment="工作单位地址")
+    workplace_postcode = Column(String(100), comment="工作单位地址邮编")
+    work_telephone = Column(String(100), comment="工作电话")
+
+    # 联系人
+    contact_name = Column(String(100), comment="联系人姓名")
+    contact_relationship = Column(String(100), comment="联系人关系")
+    contact_address = Column(String(100), comment="联系人地址")
+    contact_telephone = Column(String(100), comment="联系人电话")
+
+    # 新生儿
+    newborn_admission_type = Column(String(100), comment="新生儿入院类型")
+    newborn_birthweight = Column(String(100), comment="新生儿出生体重")
+    newborn_admitweigth = Column(String(100), comment="新生儿入院体重")
+    newborn_birth_weight = Column(String(100), comment="多新生儿出生体重（克）")
+    newborn_admission_weight = Column(String(100), comment="多新生儿入院体重（克）")
+
+    # 住院核心信息
+    admission_route = Column(String(100), comment="入院途径")
+    special_personnel_type = Column(String(100), comment="特殊人员类型")
+    admission_datetime = Column(DateTime, comment="入院时间")
+    admission_dept_name = Column(String(100), comment="入院科室")
+    transfer_dept_name = Column(String(100), comment="转科科室")
+    discharge_datetime = Column(DateTime, comment="出院时间")
+    discharge_dept_name = Column(String(100), comment="出院科室")
+    leaving_hospital_way = Column(String(100), comment="离院方式")
+    receiving_institution_name = Column(String(100), comment="拟接收机构名称")
+    receiving_institution_code = Column(String(100), comment="拟接收机构代码")
+    rehospital_with_month = Column(String(100), comment="出院31天内再住院标志")
+    rehospital_with_month_purpose = Column(String(100), comment="出院31天内再住院目的")
+
+    # 医保信息
+    insurance_no = Column(String(100), comment="医保编号")
+    declaration_time = Column(DateTime, comment="申报时间")
+    inpat_type = Column(String(100), comment="住院医疗类型")
+    therapy_type = Column(String(100), comment="治疗类别")
+
+    # 诊断与手术计数
+    diagnosis_code_cnt = Column(String(100), comment="诊断代码计数")
+    surgery_code_cnt = Column(String(100), comment="手术操作代码计数")
+    ventilator_usetime = Column(String(100), comment="呼吸机使用时间")
+
+    # 颅脑损伤昏迷时间
+    coma_timebefadm_d = Column(String(100), comment="颅脑损伤患者入院前昏迷时间-d")
+    coma_timebefadm_h = Column(String(100), comment="颅脑损伤患者入院前昏迷时间-h")
+    coma_timebefadm_min = Column(String(100), comment="颅脑损伤患者入院前昏迷时间-min")
+    coma_timeaftadm_d = Column(String(100), comment="颅脑损伤患者入院后昏迷时间-d")
+    coma_timeaftadm_h = Column(String(100), comment="颅脑损伤患者入院后昏迷时间-h")
+    coma_timeaftadm_min = Column(String(100), comment="颅脑损伤患者入院后昏迷时间-min")
+
+    # 护理天数
+    primary_care_days = Column(String(100), comment="一级护理天数")
+    secondary_care_days = Column(String(100), comment="二级护理天数")
+    tertiary_care_days = Column(String(100), comment="三级护理天数")
+    intensive_care_days = Column(String(100), comment="特级护理天数")
+
+    # 费用
+    insured_place = Column(String(100), comment="参保地")
+    out_of_pocket_advance = Column(String(100), comment="个人自付")
+    out_of_pocket_amount = Column(String(100), comment="个人自费")
+    personal_account_expend = Column(String(100), comment="个人账户支付")
+    cash_payment_amount = Column(String(100), comment="个人现金支付")
+    insurance_type = Column(String(100), comment="医保支付方式")
+
+    # 医保机构
+    medical_insurance_institution = Column(String(100), comment="医保机构")
+    medical_insurance_agent = Column(String(100), comment="医保机构经办人")
+    medical_insurance_agent_code = Column(String(100), comment="医保机构经办人员编码")
+
+    # 门诊慢特病
+    outp_chronic_department = Column(String(100), comment="门诊慢特病诊断科别")
+    outp_chronic_date = Column(DateTime, comment="门诊慢特病就诊日期")
+
+    # 其他
+    attending_physician_code = Column(String(100), comment="主诊医师代码")
+    responsible_nurse_code = Column(String(100), comment="责任护士代码")
+    settlement_status = Column(String(100), comment="状态分类")
+    start_date = Column(DateTime, comment="结算开始日期")
+    end_date = Column(DateTime, comment="结算结束日期")
+
+
+class MedicalInsuranceSettlementCost(AuditMixin, Base):
+    """医保结算清单费用明细（medical_insurance_settlement_cost）"""
+    __tablename__ = "medical_insurance_settlement_cost"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    document_id = Column(String(100), comment="文档编号")
+    medinsur_serial_no = Column(String(100), comment="清单流水号")
+    medinsur_serial_item_id = Column(String(100), primary_key=True, comment="清单费用明细号")
+
+    charge = Column(String(100), comment="实收金额")
+    type_of_medicalcharge = Column(String(100), comment="医疗收费项目类别")
+    charge_item_level = Column(String(100), comment="收费项目等级")
+
+    # HIS 额外增加的4个字段
+    item_class_a_amount = Column(String(100), comment="甲类金额")
+    item_class_b_amount = Column(String(100), comment="乙类金额")
+    item_own_pay_amount = Column(String(100), comment="自费金额")
+    item_other_amount = Column(String(100), comment="其他金额")
+
+
+class InpatDrugOrder(AuditMixin, Base):
+    """住院药品医嘱（inpat_drug_order）"""
+    __tablename__ = "inpat_drug_order"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    order_id = Column(String(100), primary_key=True, comment="医嘱号")
+
+    inpat_no = Column(String(100), comment="住院号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    age_month = Column(String(100), comment="年龄(月)")
+    age = Column(String(100), comment="年龄")
+    dept_name = Column(String(100), comment="科室名称")
+
+    group_id = Column(String(100), comment="医嘱组号")
+    repeat_indicator = Column(String(100), comment="医嘱长临标识")
+    drug_type = Column(String(100), comment="药品类别")
+    brand_name = Column(String(100), comment="药品商品名")
+    drug_code = Column(String(100), comment="药品机构代码")
+    generic_name = Column(String(100), comment="药品通用名")
+    cfda_id = Column(String(100), comment="国药准字号")
+    firm = Column(String(100), comment="药品生产厂商")
+    drug_specification = Column(String(100), comment="药品规格")
+    drug_frequency = Column(String(100), comment="用药频次")
+    drug_apply_method = Column(String(100), comment="用药途径")
+    single_dose = Column(String(100), comment="单次用药剂量")
+    single_dose_unit = Column(String(100), comment="单次用药剂量单位")
+    dose_form = Column(String(100), comment="药品剂型")
+    medication_duration = Column(String(100), comment="用药天数")
+
+    prescribed_datetime = Column(DateTime, comment="开立时间")
+    prescribed_doctor = Column(String(100), comment="开立医师姓名")
+    order_status = Column(String(100), comment="医嘱状态")
+    record_content = Column(Text, comment="记录内容")
+
+
+class InpatNondrugOrder(AuditMixin, Base):
+    """住院非药品医嘱（inpat_nondrug_order）"""
+    __tablename__ = "inpat_nondrug_order"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    order_id = Column(String(100), primary_key=True, comment="医嘱号")
+
+    inpat_no = Column(String(100), comment="住院号")
+    application_id = Column(String(100), comment="申请号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    age_month = Column(String(100), comment="年龄(月)")
+    age = Column(String(100), comment="年龄")
+    dept_name = Column(String(100), comment="科室名称")
+
+    group_id = Column(String(100), comment="医嘱组号")
+    repeat_indicator = Column(String(100), comment="医嘱长临标识")
+    order_type = Column(String(100), comment="医嘱类别")
+    order_name = Column(String(100), comment="医嘱名称")
+    quantity = Column(String(100), comment="数量")
+    quantity_unit = Column(String(100), comment="数量单位")
+    frequency = Column(String(100), comment="频次")
+
+    prescribed_datetime = Column(DateTime, comment="开立时间")
+    prescribed_doctor = Column(String(100), comment="开立医师姓名")
+    order_status = Column(String(100), comment="医嘱状态")
+    record_content = Column(Text, comment="记录内容")
+
+
+class InpatBillItem(AuditMixin, Base):
+    """住院费用明细（inpat_bill_item）"""
+    __tablename__ = "inpat_bill_item"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    bill_item_id = Column(String(100), primary_key=True, comment="费用明细号")
+
+    receipt_id = Column(String(100), comment="费用结算号")
+    inpat_no = Column(String(100), comment="住院号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    order_id = Column(String(100), comment="医嘱号")
+    item_type = Column(String(100), comment="项目类别")
+    medical_catalog_code = Column(String(100), comment="医疗目录编码")
+    medical_catalog_name = Column(String(100), comment="医疗目录名称")
+    medinsur_catalog_code = Column(String(100), comment="医保目录编码")
+    medinsur_catalog_name = Column(String(100), comment="医保目录名称")
+    item_specification = Column(String(100), comment="项目规格")
+    firm = Column(String(100), comment="生产厂商")
+    unit_price = Column(String(100), comment="单价")
+    quantity = Column(String(100), comment="数量")
+    quantity_unit = Column(String(100), comment="数量单位")
+    cost = Column(String(100), comment="应收金额")
+    charge = Column(String(100), comment="实收金额")
+    insurance_category = Column(String(100), comment="医保分类")
+    charge_item_level = Column(String(100), comment="收费项目等级")
+    billing_datetime = Column(DateTime, comment="费用发生时间")
+    order_dept_name = Column(String(100), comment="开单科室")
+    executive_dept_name = Column(String(100), comment="执行科室")
+    record_content = Column(Text, comment="记录内容")
+
+
+class LabtestMaster(AuditMixin, Base):
+    """检验申请单（labtest_master）"""
+    __tablename__ = "labtest_master"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    test_id = Column(String(100), primary_key=True, comment="申请序号")
+
+    order_id = Column(String(100), comment="医嘱号")
+    inpat_no = Column(String(100), comment="住院号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    labtest_subject = Column(String(100), comment="检验类别")
+    labtest_cause = Column(String(100), comment="检验目的")
+    specimen = Column(String(100), comment="标本类型")
+    request_dept = Column(String(100), comment="申请科室")
+    request_physician = Column(String(100), comment="申请医师姓名")
+    request_datetime = Column(DateTime, comment="申请时间")
+    report_datetime = Column(DateTime, comment="报告时间")
+    reporter = Column(String(100), comment="报告者")
+    verifier = Column(String(100), comment="审核者")
+    labtest_result_status = Column(String(100), comment="检验结果状态")
+    record_content = Column(Text, comment="记录内容")
+
+
+class LabtestItem(AuditMixin, Base):
+    """检验项目（labtest_item）"""
+    __tablename__ = "labtest_item"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    test_id = Column(String(100), primary_key=True, comment="申请序号")
+    test_item_id = Column(String(100), primary_key=True, comment="项目序号")
+
+    item_name = Column(String(100), comment="项目名称")
+    item_code = Column(String(100), comment="项目代码")
+    report_datetime = Column(DateTime, comment="报告时间")
+    record_content = Column(Text, comment="记录内容")
+
+
+class MrBloodtrans(AuditMixin, Base):
+    """病案首页输血记录明细（mr_bloodtrans）"""
+    __tablename__ = "mr_bloodtrans"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    document_id = Column(String(100), comment="文档编号")
+    bloodtrans_id = Column(String(100), primary_key=True, comment="输血记录号")
+
+    inpat_no = Column(String(100), comment="住院号")
+    mr_no = Column(String(100), comment="病案号")
+    transfuse_variety = Column(String(100), comment="输血品种")
+    bloodbag_id = Column(String(100), comment="血袋编码")
+    blood_transfusion_volume = Column(String(100), comment="输血剂量")
+    blood_transfusion_unit = Column(String(100), comment="输血量计量单位")
+    transblood_reaction_sign = Column(String(100), comment="输血反应标志")
+    transblood_reaction_type = Column(String(100), comment="输血反应类型")
+    transfution_datetime = Column(DateTime, comment="输血时间")
+    transfusion_reason = Column(String(100), comment="输血原因")
+
+
+class MrIcu(AuditMixin, Base):
+    """病案首页重症监护记录明细（mr_icu）"""
+    __tablename__ = "mr_icu"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    document_id = Column(String(100), comment="文档编号")
+    icu_id = Column(String(100), primary_key=True, comment="重症监护记录号")
+
+    inpat_no = Column(String(100), comment="住院号")
+    mr_no = Column(String(100), comment="病案号")
+    icu_type = Column(String(100), comment="重症监护室病房类型")
+    icu_name = Column(String(100), comment="重症监护室名称")
+    icu_start_datetime = Column(DateTime, comment="进重症监护室时间")
+    icu_end_datetime = Column(DateTime, comment="出重症监护室时间")
+    icu_period = Column(String(100), comment="时间合计")
+
+
+class MrCustomize(AuditMixin, Base):
+    """病案首页医院自定义明细（mr_customize）"""
+    __tablename__ = "mr_customize"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    document_id = Column(String(100), comment="文档编号")
+    mr_no = Column(String(100), comment="病案号")
+
+    T_stage = Column(String(100), comment="T分期")
+    N_stage = Column(String(100), comment="N分期")
+    M_stage = Column(String(100), comment="M分期")
+    tumor_stage = Column(String(100), comment="肿瘤分期")
+    transferin_org_name = Column(String(100), comment="转入医疗机构名称")
+    discharge_condition = Column(String(100), comment="出院情况")
+    living_ability_admission_score = Column(String(100), comment="生活能力评定量表评分-入院")
+    living_ability_discharge_score = Column(String(100), comment="生活能力评定量表评分-出院")
+    rescue_no = Column(String(100), comment="抢救次数")
+    rescue_success_no = Column(String(100), comment="抢救成功次数")
+    criticalcare_record_sign = Column(String(100), comment="危重病历标志")
+    difficult_record_sign = Column(String(100), comment="疑难病历标志")
+
+
+class MedinsurReceipt(AuditMixin, Base):
+    """医保费用结算（medinsur_receipt）"""
+    __tablename__ = "medinsur_receipt"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    medinsur_receipt_id = Column(String(100), primary_key=True, comment="医保结算号")
+
+    outpat_no = Column(String(100), comment="门急诊号")
+    inpat_no = Column(String(100), comment="住院号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    ethnicity = Column(String(100), comment="民族")
+    birthday = Column(Date, comment="出生日期")
+    age_year = Column(String(100), comment="年龄(年)")
+    insurance_type = Column(String(100), comment="医保类别")
+    insurance_no = Column(String(100), comment="医保号")
+    settlement_method = Column(String(100), comment="清算方式")
+    total_charge = Column(String(100), comment="医疗费用总额")
+    personnel_payment = Column(String(100), comment="个人支付金额")
+    fund_payment_amount = Column(String(100), comment="基金支付金额")
+    personal_account_expend = Column(String(100), comment="个人账户支出")
+    cash_payment_amount = Column(String(100), comment="现金支付金额")
+    start_date = Column(DateTime, comment="开始日期")
+    end_date = Column(DateTime, comment="结束日期")
+    settle_datetime = Column(DateTime, comment="结算时间")
+    record_content = Column(Text, comment="记录内容")
+
+
+class PathologyExamMaster(AuditMixin, Base):
+    """病理检查申请单（pathology_exam_master）"""
+    __tablename__ = "pathology_exam_master"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    pathology_exam_id = Column(String(100), primary_key=True, comment="申请序号")
+
+    pathology_id = Column(String(100), comment="病理号")
+    inpat_no = Column(String(100), comment="住院号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    clinical_history = Column(String(100), comment="临床病史")
+    surgery_name = Column(String(100), comment="手术名称")
+    specimen_name = Column(String(100), comment="送检标本名称")
+    request_dept = Column(String(100), comment="申请科室")
+    request_physician = Column(String(100), comment="申请医师")
+    request_datetime = Column(DateTime, comment="申请时间")
+    record_content = Column(Text, comment="记录内容")
+
+
+class PathologyExamReport(AuditMixin, Base):
+    """病理检查报告（pathology_exam_report）"""
+    __tablename__ = "pathology_exam_report"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    pathology_exam_id = Column(String(100), primary_key=True, comment="申请序号")
+
+    pathology_id = Column(String(100), comment="病理号")
+    specimen_name = Column(String(100), comment="标本名称")
+    eye_findings = Column(String(100), comment="肉眼观察所见")
+    microscope_findings = Column(String(100), comment="镜下所见")
+    diagnosis = Column(Text, comment="病理诊断")  # HIS额外增加的字段
+    report_status = Column(String(100), comment="报告状态")
+    report_datetime = Column(DateTime, comment="报告时间")
+    reporter = Column(String(100), comment="报告者")
+    review_datetime = Column(DateTime, comment="审核时间")
+    reviewer = Column(String(100), comment="审核者")
+    record_content = Column(Text, comment="记录内容")
+
+
+class EpidemicRecord(AuditMixin, DocumentMixin, Base):
+    """传染病报告记录（epidemic_record）"""
+    __tablename__ = "epidemic_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    inpat_no = Column(String(100), comment="住院号")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    record_content = Column(Text, comment="记录内容")
+    record_datetime = Column(DateTime, comment="记录时间")
+
+
+# ==================== 14. 第二批接口补充 - 文书类 ====================
+
+class OutpatRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """门急诊病历（outpat_record）"""
+    __tablename__ = "outpat_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    outpat_no = Column(String(100), comment="门急诊号")
+    visit_datetime = Column(DateTime, comment="就诊时间")
+    chief_complaint = Column(Text, comment="主诉")
+    history_of_present_illness = Column(Text, comment="现病史")
+    past_history = Column(Text, comment="既往史")
+    checkup = Column(Text, comment="体格检查")
+    assist_exam = Column(Text, comment="辅助检查")
+    treatment_advice = Column(String(100), comment="诊疗意见")
+    record_content = Column(Text, comment="记录内容")
+
+
+class SurgeryApplication(AuditMixin, PatientBasicMixin, Base):
+    """手术申请单（surgery_application）"""
+    __tablename__ = "surgery_application"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    application_id = Column(String(100), primary_key=True, comment="申请号")
+
+    order_id = Column(String(100), comment="医嘱号")
+    dept_name = Column(String(100), comment="科室名称")
+    surgery_name = Column(String(100), comment="手术操作名称")
+    surgery_code = Column(String(100), comment="手术操作编码")
+    surgery_level = Column(String(100), comment="手术级别")
+    anesthesia_method = Column(String(100), comment="麻醉方法")
+    surgeon = Column(String(100), comment="手术医师姓名")
+    request_physician = Column(String(100), comment="申请医师姓名")
+    request_surgery_datetime = Column(DateTime, comment="申请手术时间")
+    record_content = Column(Text, comment="记录内容")
+
+
+class DocpatCommuRecord(AuditMixin, DocumentMixin, Base):
+    """医患沟通记录（docpat_commu_record）"""
+    __tablename__ = "docpat_commu_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    pat_doc_comm_type = Column(String(100), comment="医患沟通记录类型")
+    record_content = Column(Text, comment="记录内容")
+    record_datetime = Column(DateTime, comment="记录时间")
+
+
+class DailyAdmissionRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """24小时入出院记录（daily_admission_record）"""
+    __tablename__ = "daily_admission_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    admission_datetime = Column(DateTime, comment="入院时间")
+    discharge_datetime = Column(DateTime, comment="出院时间")
+    chief_complaint = Column(Text, comment="主诉")
+    admission_condition = Column(Text, comment="入院情况")
+    treatment_course = Column(Text, comment="诊疗经过")
+    discharge_condition = Column(Text, comment="出院情况")
+    discharge_order = Column(Text, comment="出院医嘱")
+    record_content = Column(Text, comment="记录内容")
+
+
+class DailyDeathRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """24小时入院死亡记录（daily_death_record）"""
+    __tablename__ = "daily_death_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    admission_condition = Column(Text, comment="入院情况")
+    treatment_course = Column(Text, comment="诊疗经过")
+    death_reason = Column(String(100), comment="死亡原因")
+    death_datetime = Column(DateTime, comment="死亡时间")
+    record_content = Column(Text, comment="记录内容")
+
+
+class PreaneSurveilRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """麻醉术前访视记录（preane_surveil_record）"""
+    __tablename__ = "preane_surveil_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    condition_summary = Column(Text, comment="病情摘要")
+    planned_anesthesia_method = Column(String(100), comment="拟实施麻醉方法")
+    ASA_level = Column(String(100), comment="ASA分级")
+    record_content = Column(Text, comment="记录内容")
+    anesthetist_sign = Column(String(100), comment="麻醉医师签名")
+
+
+class PostaneSurveilRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """麻醉术后访视记录（postane_surveil_record）"""
+    __tablename__ = "postane_surveil_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    surgery_name = Column(String(100), comment="手术操作名称")
+    anesthesia_method = Column(String(100), comment="麻醉方法")
+    resume_descirption = Column(String(100), comment="麻醉恢复情况")
+    record_content = Column(Text, comment="记录内容")
+    anesthetist_sign = Column(String(100), comment="麻醉医师签名")
+
+
+class SurgeryInformConsent(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """手术知情同意书（surgery_inform_consent）"""
+    __tablename__ = "surgery_inform_consent"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    planned_operation_name = Column(String(100), comment="拟实施手术操作名称")
+    planned_operation_code = Column(String(100), comment="拟实施手术操作编码")
+    planned_anesthesia_method = Column(String(100), comment="拟实施麻醉方法")
+    surgery_risk_description = Column(Text, comment="手术中可能出现的意外及风险")
+    record_content = Column(Text, comment="记录内容")
+    patient_sign = Column(String(100), comment="患者签名")
+    surgeon_sign = Column(String(100), comment="手术医师签名")
+
+
+class CrisisValueRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """危急值记录（crisis_value_record）"""
+    __tablename__ = "crisis_value_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    record_content = Column(Text, comment="记录内容")
+    record_datetime = Column(DateTime, comment="记录时间")
+
+
+class BloodApplication(AuditMixin, Base):
+    """输血申请单（blood_application）"""
+    __tablename__ = "blood_application"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    visit_type = Column(String(100), comment="就诊类型")
+    application_id = Column(String(100), primary_key=True, comment="申请号")
+
+    inpat_no = Column(String(100), comment="住院号")
+    dept_name = Column(String(100), comment="科室名称")
+    name = Column(String(100), comment="患者姓名")
+    sex = Column(String(100), comment="患者性别")
+    age_year = Column(String(100), comment="年龄(年)")
+    patient_bloodtype_abo = Column(String(100), comment="患者ABO血型")
+    patient_bloodtype_rhd = Column(String(100), comment="患者RH血型")
+    transfuse_variety = Column(String(100), comment="输血品种")
+    transfuse_volume = Column(String(100), comment="输血剂量")
+    transfuse_volume_unit = Column(String(100), comment="输血剂量单位")
+    request_datetime = Column(DateTime, comment="申请时间")
+    physician_name = Column(String(100), comment="申请医师")
+    record_content = Column(Text, comment="记录内容")
+
+
+class SurgeryInventoryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
+    """手术清点记录（surgery_inventory_record）"""
+    __tablename__ = "surgery_inventory_record"
+
+    institute_id = Column(String(100), primary_key=True, comment="机构号")
+    patient_id = Column(String(100), primary_key=True, comment="患者号")
+    visit_id = Column(String(100), primary_key=True, comment="就诊号")
+    document_id = Column(String(100), primary_key=True, comment="文档编号")
+    visit_type = Column(String(100), comment="就诊类型")
+
+    dept_name = Column(String(100), comment="科室名称")
+    surgery_room_name = Column(String(100), comment="手术间")
+    surgery_date = Column(Date, comment="手术日期")
+    surgery_name = Column(String(100), comment="手术名称")
+    record_content = Column(Text, comment="记录内容")

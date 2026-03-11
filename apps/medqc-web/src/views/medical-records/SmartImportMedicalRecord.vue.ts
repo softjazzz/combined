@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -454,7 +454,7 @@ const parsePDFFile = async (file) => {
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
         // 尝试直接调用后端，如果代理有问题的话
         const apiUrl = window.location.hostname === 'localhost'
-            ? 'http://localhost:8000/api/parse-medical-file'
+            ? 'http://localhost:8001/api/parse-medical-file'
             : '/api/parse-medical-file';
         console.log('调用API:', apiUrl);
         console.log('发送请求...');
@@ -2686,3 +2686,4 @@ export const default = (await Promise.resolve().then(() => __importStar(require(
     },
 });
 ; /* PartiallyEnd: #4569/main.vue */
+

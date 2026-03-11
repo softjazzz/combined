@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <!-- 面包屑导航 -->
     <a-breadcrumb class="breadcrumb">
@@ -945,7 +945,7 @@ const parsePDFFile = async (file: File) => {
 
     // 尝试直接调用后端，如果代理有问题的话
     const apiUrl = window.location.hostname === 'localhost'
-      ? 'http://localhost:8000/api/parse-medical-file'
+      ? 'http://localhost:8001/api/parse-medical-file'
       : '/api/parse-medical-file'
 
     console.log('调用API:', apiUrl)
@@ -1894,3 +1894,4 @@ const handleCancel = () => {
   font-size: 12px !important;
 }
 </style>
+

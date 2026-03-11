@@ -1,4 +1,4 @@
-# 第二阶段迁移完成报告
+﻿# 第二阶段迁移完成报告
 ## 审核任务管理核心逻辑从TypeScript到Python的完整迁移
 
 ### 🎉 **第二阶段迁移成功完成！**
@@ -247,13 +247,13 @@ cd frontend && npm run test:audit-task-service
 ### **性能验证**
 ```bash
 # 获取增强版服务统计
-curl http://localhost:8000/api/enhanced-audit-tasks/service/statistics
+curl http://localhost:8001/api/enhanced-audit-tasks/service/statistics
 
 # 检查服务健康状态
-curl http://localhost:8000/api/enhanced-audit-tasks/health
+curl http://localhost:8001/api/enhanced-audit-tasks/health
 
 # 获取任务性能分析
-curl http://localhost:8000/api/enhanced-audit-tasks/{task_id}/performance-analysis
+curl http://localhost:8001/api/enhanced-audit-tasks/{task_id}/performance-analysis
 ```
 
 ---
@@ -283,3 +283,4 @@ curl http://localhost:8000/api/enhanced-audit-tasks/{task_id}/performance-analys
 ---
 
 *第二阶段迁移完成报告 - 生成时间: 2024-12-24*
+

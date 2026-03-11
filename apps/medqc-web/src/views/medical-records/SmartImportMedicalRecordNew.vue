@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="min-h-screen p-4 md:p-6 bg-gradient-to-br from-blue-50 via-blue-50 to-indigo-100">
     <a-card class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all ring-1 ring-blue-100/70 border md:border-2 border-gray-200 max-w-7xl mx-auto">
       <template #title>
@@ -1452,7 +1452,7 @@ const checkBackendConnection = async () => {
       return true
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/health`)
+    const response = await fetch(`${API_BASE_URL}/api/v1/health`)
     if (response.ok) {
       const result: unknown = await response.json()
       operationLog.value += `\n后端服务连接正常: ${result.message || 'OK'}`
@@ -2505,3 +2505,4 @@ pre {
 }
 
 </stylex>
+

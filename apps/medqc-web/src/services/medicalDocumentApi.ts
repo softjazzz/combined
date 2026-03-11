@@ -1,4 +1,4 @@
-export interface MedicalDocumentPayload {
+﻿export interface MedicalDocumentPayload {
   id?: string
   record_id?: string | null
   document_type: string
@@ -16,7 +16,7 @@ export interface MedicalDocumentPayload {
 
 export async function createDocumentsBatch(items: MedicalDocumentPayload[]): Promise<{ success: boolean; count: number }> {
   const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:8000/api/medical-documents/batch'
+    ? 'http://localhost:8001/api/medical-documents/batch'
     : '/api/medical-documents/batch'
 
   const resp = await fetch(apiUrl, {
@@ -36,10 +36,11 @@ export async function createDocumentsBatch(items: MedicalDocumentPayload[]): Pro
 
 export async function listDocuments(record_id?: string) {
   const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? `http://localhost:8000/api/medical-documents${record_id ? `?record_id=${record_id}` : ''}`
+    ? `http://localhost:8001/api/medical-documents${record_id ? `?record_id=${record_id}` : ''}`
     : `/api/medical-documents${record_id ? `?record_id=${record_id}` : ''}`
   const resp = await fetch(apiUrl)
   if (!resp.ok) throw new Error('获取医疗文书失败')
   return resp.json()
 }
+
 

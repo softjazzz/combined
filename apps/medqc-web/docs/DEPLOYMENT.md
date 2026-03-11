@@ -1,4 +1,4 @@
-# 🚀 部署指南
+﻿# 🚀 部署指南
 
 本文档详细介绍了医疗质控系统的部署方法和配置。
 
@@ -49,7 +49,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
       - DATABASE_URL=postgresql://medqc:${DB_PASSWORD}@db:5432/medqc
       - REDIS_URL=redis://redis:6379
@@ -189,7 +189,7 @@ export JWT_SECRET="your-secret-key"
 export OPENAI_API_KEY="your-openai-key"
 
 # 启动服务
-uvicorn main_api:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn main_api:app --host 0.0.0.0 --port 8001 --workers 4
 ```
 
 ### 2. 前端部署
@@ -295,7 +295,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://backend:8000;
+        proxy_pass http://backend:8001;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -310,7 +310,7 @@ server {
 
 ```bash
 # 检查服务状态
-curl -f http://localhost:8000/api/health || exit 1
+curl -f http://localhost:8001/api/v1/health || exit 1
 
 # 检查数据库连接
 docker-compose exec db pg_isready -U medqc
@@ -377,7 +377,7 @@ tar -czf config_backup_$(date +%Y%m%d).tar.gz .env* docker-compose*.yml nginx.co
 1. **服务无法启动**
    ```bash
    # 检查端口占用
-   sudo netstat -tlnp | grep :8000
+   sudo netstat -tlnp | grep :8001
    
    # 检查日志
    docker-compose logs backend
@@ -399,7 +399,7 @@ tar -czf config_backup_$(date +%Y%m%d).tar.gz .env* docker-compose*.yml nginx.co
         -H "Access-Control-Request-Method: GET" \
         -H "Access-Control-Request-Headers: X-Requested-With" \
         -X OPTIONS \
-        http://localhost:8000/api/health
+        http://localhost:8001/api/v1/health
    ```
 
 ## 📈 性能优化
@@ -426,3 +426,4 @@ upstream backend {
 ---
 
 如需更多帮助，请查看 [故障排除指南](./TROUBLESHOOTING.md) 或联系技术支持。
+

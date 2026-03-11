@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 测试快速质控模式对 LX 系列入院记录 9 条规则的评估效果
 
@@ -14,7 +14,7 @@ import time
 from typing import Dict, Any, List
 
 # 配置
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8001"
 CONFIG_RELOAD_URL = f"{BASE_URL}/api/v1/qc/sichuan/reload-config"
 
 # 测试文档（使用之前的入院记录）
@@ -291,4 +291,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 

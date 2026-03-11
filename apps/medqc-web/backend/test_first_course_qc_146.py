@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 使用146条四川规则测试首次病程记录质控
 只应用与病程记录相关的规则
@@ -139,7 +139,7 @@ def main():
     print("\n【步骤1】获取适用于病程记录的质控规则...")
     try:
         rules_response = requests.get(
-            "http://localhost:8000/api/v1/qc/sichuan/rules",
+            "http://localhost:8001/api/v1/qc/sichuan/rules",
             params={"document_type": "progress_note"},  # 使用英文文档类型
             timeout=10
         )
@@ -180,7 +180,7 @@ def main():
         }
 
         eval_response = requests.post(
-            "http://localhost:8000/api/v1/qc/sichuan/evaluate",
+            "http://localhost:8001/api/v1/qc/sichuan/evaluate",
             json=qc_payload,
             timeout=120  # LLM调用可能需要较长时间
         )
@@ -268,3 +268,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 统一的医疗质控系统API服务
  *
  * 架构说明：
@@ -15,7 +15,7 @@
  */
 
 // API配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
 const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
 
 // 接口类型定义
@@ -182,3 +182,4 @@ export const formatTokens = (tokens: number): string => {
 export const formatCompressionRatio = (ratio: number): string => {
   return `${(ratio * 100).toFixed(1)}%`
 }
+

@@ -1,4 +1,4 @@
-# FastAPI 后端实现完成报告
+﻿# FastAPI 后端实现完成报告
 
 **完成时间**：2025-01-04
 **实现者**：Claude Code
@@ -563,7 +563,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 - **Swagger UI**：http://localhost:8001/docs
 - **ReDoc**：http://localhost:8001/redoc
-- **健康检查**：http://localhost:8001/health
+- **健康检查**：http://localhost:8001/api/v1/health
 
 ---
 
@@ -601,7 +601,7 @@ def test_suggest_coding():
 
 ```bash
 # 健康检查
-curl http://localhost:8001/health
+curl http://localhost:8001/api/v1/health
 
 # ICD 编码推荐
 curl -X POST http://localhost:8001/api/v1/coding/suggest \

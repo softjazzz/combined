@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 测试四川省规则管理界面的API集成
@@ -61,7 +61,7 @@ def test_sichuan_rules_api():
     # 测试3: 健康检查
     print("3. 测试API健康检查...")
     try:
-        response = requests.get(f"{base_url}/api/health", timeout=5)
+        response = requests.get(f"{base_url}/api/v1/health", timeout=5)
         if response.status_code == 200:
             print("   ✅ API服务健康")
         else:
@@ -186,3 +186,4 @@ if __name__ == "__main__":
         print("   1. 确认API服务器正在运行")
         print("   2. 检查API端点是否正确")
         print("   3. 验证四川省规则数据是否加载")
+

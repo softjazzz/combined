@@ -7,16 +7,23 @@ This directory introduces a modular backend under `app/` while preserving the le
 - `app/main.py`: application factory and router composition
 - `app/core/settings.py`: centralized config via pydantic-settings (requires env `JWT_SECRET`)
 - `app/core/logging.py`: basic structured request logging
-- `app/routers/system.py`: health endpoint `/api/health`
+- `app/routers/system.py`: health endpoint `/api/v1/health`
 - `app/routers/proxy.py`: placeholder for LLM proxy with safe validation
 - `app/routers/{auth,records,qc,qc_sichuan,medical_documents,tools,ingest,semantic_rules,llm_info,qc_llm_configs,system,debug}.py`
 - `app/services/*`: extracted services (QC, Sichuan QC, records ingest) and cores (settings/http/security/supabase)
 
 ## Run (new app)
 
-```bash
-export JWT_SECRET=dev-secret
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```powershell
+$env:JWT_SECRET="dev-secret"
+.\start_dev_backend.ps1 -Port 8001
+```
+
+如需临时启用热重载：
+
+```powershell
+$env:JWT_SECRET="dev-secret"
+.\start_dev_backend.ps1 -Port 8001 -Reload
 ```
 
 ## Migration Plan

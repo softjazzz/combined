@@ -365,8 +365,12 @@ class DiagnosisSurgeryProfilingService:
         }
         
         try:
+            # 确保 endpoint 以 /v1 结尾（兼容不同配置方式）
+            base = self.api_endpoint.rstrip("/")
+            if not base.endswith("/v1"):
+                base = f"{base}/v1"
             result = await safe_post_json(
-                url=f"{self.api_endpoint}/chat/completions",
+                url=f"{base}/chat/completions",
                 headers=headers,
                 payload=payload,
                 timeout_seconds=60,

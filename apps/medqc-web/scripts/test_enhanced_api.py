@@ -1,4 +1,4 @@
-"""
+﻿"""
 增强版API测试脚本
 测试层级化医疗文书分类功能
 """
@@ -306,3 +306,4 @@ if __name__ == "__main__":
         }, f, ensure_ascii=False, indent=2)
     
     print(f"\n📄 测试结果已保存到 test_results.json")
+

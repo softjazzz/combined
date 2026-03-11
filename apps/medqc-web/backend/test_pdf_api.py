@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 测试PDF文件解析API
 """
@@ -12,7 +12,7 @@ def test_pdf_api():
     print("🧪 PDF文件解析API测试")
     print("=" * 50)
     
-    base_url = "http://localhost:8000"
+    base_url = "http://localhost:8001"
     
     # 1. 登录获取token
     print("1️⃣ 获取访问令牌...")
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     else:
         print("\n❌ PDF文件解析API测试失败！")
         exit(1)
+
 
 
 

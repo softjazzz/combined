@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 模型对比测试：qwen-flash vs qwen2.5-14b-instruct
 测试快速质控和串行质控的性能差异
@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 import httpx
 
 # 测试配置
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001"
 TEST_DOCUMENT = """
 患者：张三，男，44岁
 主诉：胸痛3天
@@ -273,4 +273,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 

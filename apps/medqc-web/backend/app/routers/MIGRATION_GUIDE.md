@@ -1,4 +1,4 @@
-# 路由响应格式迁移指南
+﻿# 路由响应格式迁移指南
 
 ## 目标
 
@@ -196,7 +196,7 @@ def test_example_endpoint():
 
 ```bash
 # 测试成功响应
-curl http://localhost:8001/api/health
+curl http://localhost:8001/api/v1/health
 
 # 预期输出
 {
@@ -256,4 +256,5 @@ if (result.success) {
 - **已完成**: 1
 - **进度**: 5.6%
 - **预计完成时间**: 20 小时
+
 

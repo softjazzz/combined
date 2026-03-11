@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 ICD 编码推荐服务测试脚本
 
@@ -88,7 +88,7 @@ async def test_extract_coding_api():
     
     import requests
     
-    api_url = "http://localhost:8000/api/v1/case-front-page/extract-coding"
+    api_url = "http://localhost:8001/api/v1/case-front-page/extract-coding"
     
     test_text = """
     入院记录
@@ -135,3 +135,4 @@ async def test_extract_coding_api():
 if __name__ == "__main__":
     asyncio.run(test_icd_coding_service())
     asyncio.run(test_extract_coding_api())
+

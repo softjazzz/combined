@@ -1,4 +1,4 @@
-# 🚀 医疗质控系统项目启动指南
+﻿# 🚀 医疗质控系统项目启动指南
 
 **更新时间**: 2024-12-24  
 **项目版本**: v2.0.0 (Python增强版)  
@@ -25,7 +25,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
 # API配置
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8001
 VITE_ENABLE_ENHANCED_API=true
 
 # LLM服务配置
@@ -122,19 +122,19 @@ EOF
 python main.py
 
 # 方式2: 使用uvicorn
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 # 方式3: 生产环境
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4
 ```
 
 ### **4. 验证后端服务**
 ```bash
 # 检查健康状态
-curl http://localhost:8000/health
+curl http://localhost:8001/api/v1/health
 
 # 查看API文档
-# 浏览器访问: http://localhost:8000/docs
+# 浏览器访问: http://localhost:8001/docs
 ```
 
 ---
@@ -214,19 +214,19 @@ docker-compose up --build
 ### **后端服务检查**
 ```bash
 # 1. 健康检查
-curl http://localhost:8000/health
+curl http://localhost:8001/api/v1/health
 
 # 2. 系统信息
-curl http://localhost:8000/api/system/info
+curl http://localhost:8001/api/system/info
 
 # 3. 增强版AI服务状态
-curl http://localhost:8000/api/v2/enhanced-ai-assistance/service-status
+curl http://localhost:8001/api/v2/enhanced-ai-assistance/service-status
 
 # 4. 增强版审核任务服务状态
-curl http://localhost:8000/api/v2/enhanced-audit-tasks/health
+curl http://localhost:8001/api/v2/enhanced-audit-tasks/health
 
 # 5. 系统性能监控
-curl http://localhost:8000/api/system/metrics
+curl http://localhost:8001/api/system/metrics
 ```
 
 ### **前端服务检查**
@@ -324,13 +324,13 @@ VITE_ENABLE_ENHANCED_API=false
 ### **实时监控**
 ```bash
 # 系统性能指标
-curl http://localhost:8000/api/system/metrics
+curl http://localhost:8001/api/system/metrics
 
 # AI服务性能统计
-curl http://localhost:8000/api/v2/enhanced-ai-assistance/performance-stats
+curl http://localhost:8001/api/v2/enhanced-ai-assistance/performance-stats
 
 # 审核任务服务统计
-curl http://localhost:8000/api/v2/enhanced-audit-tasks/service/statistics
+curl http://localhost:8001/api/v2/enhanced-audit-tasks/service/statistics
 ```
 
 ### **日志查看**
@@ -415,3 +415,4 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 - 体验智能抽样和负载均衡
 
 如有问题，请参考常见问题解决方案或查看详细日志。
+

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 测试前端发送的质控请求格式
@@ -213,7 +213,7 @@ def main():
     
     # 检查后端服务
     try:
-        response = requests.get(f"{API_BASE_URL}/api/health", timeout=5)
+        response = requests.get(f"{API_BASE_URL}/api/v1/health", timeout=5)
         if response.status_code != 200:
             print("❌ 后端服务不可用")
             return
@@ -243,3 +243,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

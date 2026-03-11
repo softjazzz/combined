@@ -1,4 +1,4 @@
-# 病案首页验收报告模板
+﻿# 病案首页验收报告模板
 
 ## 1. 报告信息
 
@@ -72,8 +72,9 @@
 ```bash
 cd apps/medqc-web/backend
 python scripts/run_frontpage_acceptance.py \
-  --base-url http://localhost:8000 \
+  --base-url http://localhost:8001 \
   --dataset docs/frontpage_acceptance_dataset_template.json \
   --output-dir docs/acceptance
 ```
+
 

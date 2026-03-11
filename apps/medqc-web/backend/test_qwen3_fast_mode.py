@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Qwen3 系列模型快速质控模式测试脚本
 
@@ -15,7 +15,7 @@ import time
 from typing import Dict, Any, List
 
 # 配置
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001"
 
 # 测试文档（与串行模式相同）
 TEST_DOCUMENT = """
@@ -269,4 +269,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 

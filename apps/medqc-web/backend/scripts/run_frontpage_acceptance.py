@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 病案首页验收基线脚本
@@ -214,7 +214,7 @@ def _build_markdown_report(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="运行病案首页验收基线并输出报告")
-    parser.add_argument("--base-url", default="http://localhost:8000", help="后端地址，如 http://localhost:8000")
+    parser.add_argument("--base-url", default="http://localhost:8001", help="后端地址，如 http://localhost:8001")
     parser.add_argument(
         "--dataset",
         required=True,
@@ -377,4 +377,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

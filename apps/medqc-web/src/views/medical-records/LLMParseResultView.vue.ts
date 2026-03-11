@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -47,7 +47,7 @@ const store = (0, llmParse_1.useLLMParseStore)();
 // 响应式变量
 const saving = (0, vue_1.ref)(false);
 // API配置
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8001';
 (0, vue_1.onMounted)(() => {
     if (!store.lastResult)
         store.loadFromSession();
@@ -334,3 +334,4 @@ export const default = (await Promise.resolve().then(() => __importStar(require(
     },
 });
 ; /* PartiallyEnd: #4569/main.vue */
+

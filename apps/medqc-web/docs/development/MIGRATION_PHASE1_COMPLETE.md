@@ -1,4 +1,4 @@
-# 第一阶段迁移完成报告
+﻿# 第一阶段迁移完成报告
 ## AI缺陷识别服务从TypeScript到Python的完整迁移
 
 ### 🎉 **迁移完成总结**
@@ -196,10 +196,10 @@ cd frontend && npm run test:ai-service
 ### **性能验证**
 ```bash
 # 获取性能统计
-curl http://localhost:8000/api/enhanced-ai-assistance/performance-stats
+curl http://localhost:8001/api/enhanced-ai-assistance/performance-stats
 
 # 检查服务状态
-curl http://localhost:8000/api/enhanced-ai-assistance/service-status
+curl http://localhost:8001/api/enhanced-ai-assistance/service-status
 ```
 
 ---
@@ -219,3 +219,4 @@ curl http://localhost:8000/api/enhanced-ai-assistance/service-status
 ---
 
 *第一阶段迁移完成报告 - 生成时间: 2024-12-24*
+

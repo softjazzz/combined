@@ -1,4 +1,4 @@
-# SC-010 现病史与主诉不符 - 测试报告
+﻿# SC-010 现病史与主诉不符 - 测试报告
 
 ## 文档信息
 
@@ -111,7 +111,7 @@
 
 ### 4.1 测试环境
 
-- **API 地址**: `http://localhost:8000/api/v1/qc/sichuan/evaluate`
+- **API 地址**: `http://localhost:8001/api/v1/qc/sichuan/evaluate`
 - **测试工具**: Python 脚本 (`test_sc010.py`)
 - **测试时间**: 2025-10-29 11:38
 - **后端服务**: ✅ 运行正常
@@ -307,7 +307,7 @@ return buildCaseText(example)
 ```bash
 # 确保后端服务运行
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
-# 如果未运行，启动: uvicorn app.main:app --reload --port 8000
+# 如果未运行，启动: uvicorn app.main:app --reload --port 8001
 
 # 运行测试脚本
 python3 test_sc010.py
@@ -372,3 +372,4 @@ cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web
 **报告生成时间**: 2025-10-29 11:40
 **报告版本**: v1.0
 **维护人员**: 质控规则开发组
+

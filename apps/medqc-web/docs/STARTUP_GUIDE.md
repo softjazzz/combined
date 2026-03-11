@@ -34,9 +34,8 @@ pnpm dev:medqc
 
 # Start backend (port 8001) - in new terminal
 cd apps/medqc-web/backend
-source venv/bin/activate
 export JWT_SECRET=dev-secret
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+pwsh ./start_dev_backend.ps1 -Port 8001
 ```
 
 ## 📝 Detailed Steps
@@ -80,21 +79,16 @@ pnpm dev --host 0.0.0.0 --port 3000
 # 1. Enter backend directory
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
 
-# 2. Activate virtual environment
-source venv/bin/activate
-
-# 3. Set environment variables (required)
+# 2. Set environment variables (required)
 export JWT_SECRET=dev-secret
 
-# 4. Start FastAPI service
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+# 3. Start FastAPI service
+pwsh ./start_dev_backend.ps1 -Port 8001
 ```
 
 #### Backend Success Indicators
 ```
-INFO:     Will watch for changes in these directories: ['/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-INFO:     Started reloader process [481778] using WatchFiles
 INFO:     Started server process [481781]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
@@ -112,12 +106,13 @@ INFO:     Application startup complete.
 | **Frontend** | 3000 | Vue 3 Dev Server | http://localhost:3000 |
 | **Backend** | 8001 | FastAPI Server | http://localhost:8001 |
 | **API Docs** | 8001 | Swagger UI | http://localhost:8001/docs |
-| **Health Check** | 8001 | Service Status | http://localhost:8001/api/health |
+| **Health Check** | 8001 | Service Status | http://localhost:8001/api/v1/health |
 
 ### Important Notes
 - ⚠️ **Backend must use port 8001**, not 8000
 - Frontend API configuration points to port 8001
 - Using wrong port will break frontend-backend communication
+- On Windows, avoid running bare `uvicorn ... --reload`; use `start_dev_backend.ps1` first
 
 ## 🔍 Health Checks
 
@@ -136,7 +131,7 @@ curl -s http://localhost:3000 | head -5
 ### Backend Health Check
 ```bash
 # Check backend health status
-curl -s http://localhost:8001/api/health
+curl -s http://localhost:8001/api/v1/health
 
 # Expected output:
 # {
@@ -169,15 +164,14 @@ netstat -tlnp | grep -E "(3000|8001)"
 
 #### Issue: `python: command not found`
 ```bash
-# Solution: Activate virtual environment
+# Solution: ensure Python environment is available, then start via script
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
-source venv/bin/activate
+pwsh ./start_dev_backend.ps1 -Port 8001
 ```
 
 #### Issue: `ModuleNotFoundError: No module named 'fastapi'`
 ```bash
-# Solution: Ensure dependencies are installed in virtual environment
-source venv/bin/activate
+# Solution: Ensure dependencies are installed in the backend Python environment
 pip install -r requirements.txt
 ```
 
@@ -237,9 +231,8 @@ pnpm dev:medqc
 ```bash
 # Ctrl+C to stop current service, then restart
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
-source venv/bin/activate
 export JWT_SECRET=dev-secret
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+pwsh ./start_dev_backend.ps1 -Port 8001
 ```
 
 ### Force Stop Services

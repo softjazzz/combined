@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 # 测试四川质控 API 集成
 # 用途：验证新版演示页面能否正确调用四川质控引擎
@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 
 # 1. 检查后端服务
 echo "1️⃣  检查后端服务..."
-HEALTH_RESPONSE=$(curl -s http://localhost:8000/api/v1/health)
+HEALTH_RESPONSE=$(curl -s http://localhost:8001/api/v1/health)
 if echo "$HEALTH_RESPONSE" | grep -q '"success":true'; then
     echo -e "${GREEN}✅ 后端服务正常运行${NC}"
     echo "   响应: $(echo $HEALTH_RESPONSE | jq -r '.data.status')"
@@ -40,7 +40,7 @@ echo ""
 
 # 3. 登录获取 token
 echo "3️⃣  登录系统..."
-LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8001/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@medqc.com",
@@ -67,7 +67,7 @@ echo ""
 
 # 4. 测试四川质控 API
 echo "4️⃣  测试四川质控 API..."
-QC_RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/qc/sichuan/evaluate \
+QC_RESPONSE=$(curl -s -X POST http://localhost:8001/api/v1/qc/sichuan/evaluate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -140,4 +140,5 @@ echo "   8. 查看分析结果"
 echo ""
 echo "📖 详细测试指南: docs/新版演示页面-四川质控API集成测试指南.md"
 echo ""
+
 

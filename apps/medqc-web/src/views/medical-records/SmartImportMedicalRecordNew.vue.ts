@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -828,7 +828,7 @@ const checkBackendConnection = async () => {
             backendAvailable.value = false;
             return true;
         }
-        const response = await fetch(`${API_BASE_URL}/api/health`);
+        const response = await fetch(`${API_BASE_URL}/api/v1/health`);
         if (response.ok) {
             const result = await response.json();
             operationLog.value += `\n后端服务连接正常: ${result.message || 'OK'}`;
@@ -3090,3 +3090,4 @@ export const default = (await Promise.resolve().then(() => __importStar(require(
     },
 });
 ; /* PartiallyEnd: #4569/main.vue */
+

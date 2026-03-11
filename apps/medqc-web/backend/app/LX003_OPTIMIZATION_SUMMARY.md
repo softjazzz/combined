@@ -1,4 +1,4 @@
-# LX-003 优化总结
+﻿# LX-003 优化总结
 
 ## 问题背景
 
@@ -160,7 +160,7 @@ response_data = {
 # 如果没有自动重载，手动重启：
 pkill -f uvicorn
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend/app
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 测试验证
@@ -259,3 +259,4 @@ if not evidence_verified:
 **优化完成时间**：2025-01-05
 **优化者**：Claude Code
 **版本**：v1.0
+

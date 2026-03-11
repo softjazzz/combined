@@ -1,4 +1,4 @@
-# 质控对比测试执行总结
+﻿# 质控对比测试执行总结
 
 **执行时间**：2024-11-08 05:35:04  
 **执行人**：Claude (Augment Agent)  
@@ -33,7 +33,7 @@ ss -ltnp | grep 8000
 ```bash
 cd health-qc-monorepo/apps/medqc-web
 python3 scripts/compare_qc_results.py \
-  --base-url http://127.0.0.1:8000 \
+  --base-url http://127.0.0.1:8001 \
   --rules LX-001,LX-002,LX-003,LX-004,LX-005,LX-006,LX-007,LX-008,LX-009
 ```
 
@@ -246,4 +246,5 @@ patterns = [
 **任务状态**：✅ **完成**  
 **关键成果**：发现并分析了 2 处串行模式误判问题  
 **下一步**：修复串行模式的提示词逻辑
+
 

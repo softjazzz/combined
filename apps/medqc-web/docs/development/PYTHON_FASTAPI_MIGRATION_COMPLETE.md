@@ -1,4 +1,4 @@
-# Python FastAPI统一后端架构迁移完成
+﻿# Python FastAPI统一后端架构迁移完成
 
 ## 🎉 **迁移完成总结**
 
@@ -189,7 +189,7 @@ npm run dev
 ```
 
 ### **3. 访问地址**
-- **API文档**: http://localhost:8000/docs
+- **API文档**: http://localhost:8001/docs
 - **前端应用**: http://localhost:3000
 - **演示页面**: http://localhost:3000/audit-module-demo
 
@@ -208,25 +208,25 @@ REDIS_URL=redis://localhost:6379
 ### **前端环境变量**
 ```bash
 # .env
-VITE_API_BASE_URL=http://localhost:8000
-VITE_WS_BASE_URL=ws://localhost:8000
+VITE_API_BASE_URL=http://localhost:8001
+VITE_WS_BASE_URL=ws://localhost:8001
 ```
 
 ## 📈 **监控和健康检查**
 
 ### **系统健康检查**
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8001/api/v1/health
 ```
 
 ### **服务状态监控**
 ```bash
-curl http://localhost:8000/api/system/stats
+curl http://localhost:8001/api/system/stats
 ```
 
 ### **API文档**
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:8001/docs
+- **ReDoc**: http://localhost:8001/redoc
 
 ## 🎯 **迁移优势总结**
 
@@ -263,3 +263,4 @@ curl http://localhost:8000/api/system/stats
 **迁移完成！** 🎉
 
 现在您拥有了一个统一的Python FastAPI后端架构，充分利用了现有的三层质控引擎投资，同时获得了更好的性能和扩展性。
+

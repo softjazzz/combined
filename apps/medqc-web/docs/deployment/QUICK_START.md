@@ -1,4 +1,4 @@
-# ⚡ 医疗质控系统 - 快速启动指南
+﻿# ⚡ 医疗质控系统 - 快速启动指南
 
 **版本**: v2.0.0 增强版  
 **更新**: 2024-12-24
@@ -49,7 +49,7 @@ VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # API配置
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8001
 VITE_ENABLE_ENHANCED_API=true
 
 # LLM配置
@@ -68,25 +68,25 @@ EOF
 ### **检查服务状态**
 ```bash
 # 后端健康检查
-curl http://localhost:8000/health
+curl http://localhost:8001/api/v1/health
 
 # 前端访问
 # 浏览器打开: http://localhost:5173
 
 # API文档
-# 浏览器打开: http://localhost:8000/docs
+# 浏览器打开: http://localhost:8001/docs
 ```
 
 ### **增强版功能验证**
 ```bash
 # AI服务状态
-curl http://localhost:8000/api/v2/enhanced-ai-assistance/service-status
+curl http://localhost:8001/api/v2/enhanced-ai-assistance/service-status
 
 # 审核任务服务状态
-curl http://localhost:8000/api/v2/enhanced-audit-tasks/health
+curl http://localhost:8001/api/v2/enhanced-audit-tasks/health
 
 # 系统性能监控
-curl http://localhost:8000/api/system/metrics
+curl http://localhost:8001/api/system/metrics
 ```
 
 ---
@@ -127,10 +127,10 @@ tail -f frontend.log
 | 服务 | 地址 | 说明 |
 |------|------|------|
 | **前端界面** | http://localhost:5173 | Vue.js用户界面 |
-| **后端API** | http://localhost:8000 | FastAPI后端服务 |
-| **API文档** | http://localhost:8000/docs | Swagger API文档 |
-| **系统监控** | http://localhost:8000/api/system/metrics | 性能监控 |
-| **健康检查** | http://localhost:8000/health | 服务健康状态 |
+| **后端API** | http://localhost:8001 | FastAPI后端服务 |
+| **API文档** | http://localhost:8001/docs | Swagger API文档 |
+| **系统监控** | http://localhost:8001/api/system/metrics | 性能监控 |
+| **健康检查** | http://localhost:8001/api/v1/health | 服务健康状态 |
 
 ---
 
@@ -139,7 +139,7 @@ tail -f frontend.log
 ### **端口被占用**
 ```bash
 # 查看端口占用
-lsof -i :8000  # 后端端口
+lsof -i :8001  # 后端端口
 lsof -i :5173  # 前端端口
 
 # 杀死占用进程
@@ -207,3 +207,4 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 ---
 
 **🚀 快速启动完成！享受增强版医疗质控系统的强大功能！**
+

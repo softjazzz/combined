@@ -1,5 +1,6 @@
 param(
-    [int]$Port = 8001
+    [int]$Port = 8001,
+    [switch]$Reload
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +27,11 @@ $env:PYTHONIOENCODING = "utf-8"
 
 Write-Host "Starting backend on port $Port"
 Write-Host "Log dir: $logDir"
+if ($Reload) {
+    Write-Host "Reload mode: ON (Windows 下仅建议在确实需要热重载时启用)"
+} else {
+    Write-Host "Reload mode: OFF (默认关闭，避免 uvicorn --reload 在 Windows 上卡死)"
+}
 
 Set-Location $backendRoot
 
@@ -42,11 +48,17 @@ $uvicornArgs = @(
     '-m', 'uvicorn', 'app.main:app',
     '--host', '0.0.0.0',
     '--port', "$Port",
-    '--reload',
-    '--reload-dir', 'app',
-    '--reload-exclude=*.log',
-    '--reload-exclude=data/*',
-    '--reload-exclude=downloads/*'
+    '--timeout-keep-alive', '5'
 )
+
+if ($Reload) {
+    $uvicornArgs += @(
+        '--reload',
+        '--reload-dir', 'app',
+        '--reload-exclude=*.log',
+        '--reload-exclude=data/*',
+        '--reload-exclude=downloads/*'
+    )
+}
 
 & python @uvicornArgs

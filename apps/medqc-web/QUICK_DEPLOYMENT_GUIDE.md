@@ -1,4 +1,4 @@
-# 🚀 医疗质控系统快速部署指南
+﻿# 🚀 医疗质控系统快速部署指南
 
 **GitHub 仓库**: https://github.com/softjazzz/MedQC0825.git  
 **部署时间**: 预计 15-30 分钟  
@@ -216,7 +216,7 @@ curl -X POST "http://localhost:8001/api/auth/login" \
   }'
 
 # 测试健康检查
-curl http://localhost:8001/health
+curl http://localhost:8001/api/v1/health
 ```
 
 ### **前端功能测试**
@@ -386,7 +386,7 @@ pip install prometheus-client
 npm install @sentry/vue
 
 # 配置健康检查端点
-# GET /health
+# GET /api/v1/health
 # GET /metrics
 ```
 
@@ -450,3 +450,5 @@ logging.basicConfig(
 4. 邀请用户注册使用
 
 **技术支持**: 查看项目文档或提交 GitHub Issue
+
+

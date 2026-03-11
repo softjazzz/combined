@@ -224,7 +224,7 @@ const checkAPI = async () => {
 
   try {
     // 检查后端健康状态
-    const healthResponse = await fetch('/api/health')
+    const healthResponse = await fetch('/api/v1/health')
     status.backend = healthResponse.ok
 
     // 检查患者数据 API

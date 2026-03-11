@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 SC-010 现病史与主诉不符 测试脚本
 
@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 
 # API 配置
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8001"
 EVALUATE_ENDPOINT = f"{BASE_URL}/api/v1/qc/sichuan/evaluate"
 
 # 测试用例
@@ -136,7 +136,7 @@ def main():
             print(f"⚠️ 后端服务响应异常: {health_check.status_code}")
     except Exception as e:
         print(f"❌ 无法连接后端服务: {e}")
-        print("请确保后端服务已启动: cd apps/medqc-web/backend && uvicorn app.main:app --reload --port 8000")
+        print("请确保后端服务已启动: cd apps/medqc-web/backend && uvicorn app.main:app --reload --port 8001")
         return
 
     # 运行测试用例
@@ -177,3 +177,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

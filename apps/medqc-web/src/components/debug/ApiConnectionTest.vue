@@ -203,7 +203,7 @@ const testConnection = async () => {
         description: '成功连接到后端API服务',
         status: 'success',
         duration,
-        details: `GET ${apiBaseUrl.value}/api/health`
+        details: `GET ${apiBaseUrl.value}/api/v1/health`
       })
       message.success('API连接正常')
     } else {

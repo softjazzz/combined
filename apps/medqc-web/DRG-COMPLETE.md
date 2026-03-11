@@ -1,4 +1,4 @@
-# 🎉 DRG/DIP 模块开发完成报告
+﻿# 🎉 DRG/DIP 模块开发完成报告
 
 **完成时间**：2025-01-04
 **项目状态**：✅ 开发完成，可立即测试
@@ -305,7 +305,7 @@ npm run dev
 
 - **前端**：http://localhost:5173
 - **后端 API 文档**：http://localhost:8001/docs
-- **后端健康检查**：http://localhost:8001/health
+- **后端健康检查**：http://localhost:8001/api/v1/health
 
 ---
 
@@ -336,7 +336,7 @@ npm run dev
 #### 1. 健康检查
 
 ```bash
-curl http://localhost:8001/health
+curl http://localhost:8001/api/v1/health
 ```
 
 #### 2. ICD 编码推荐
@@ -677,3 +677,4 @@ External Services (DeepSeek, Supabase, OpenDRG)
 **创建者**：Claude Code
 **版本**：v1.0.0
 **许可证**：MIT
+
