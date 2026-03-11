@@ -386,7 +386,7 @@
                   </div>
                   <div v-else-if="settlementData">
                     <!-- 操作栏 -->
-                    <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center justify-between mb-4 px-2">
                       <div class="text-sm text-slate-500">
                         清单流水号: <span class="font-mono font-bold text-slate-700">{{ settlementData.medinsur_serial_no || '-' }}</span>
                       </div>
@@ -397,78 +397,8 @@
                         </a-button>
                       </div>
                     </div>
-
-                    <!-- 基本信息 -->
-                    <div class="mb-6">
-                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <UserOutlined class="text-blue-500" /> 基本信息
-                      </h4>
-                      <div class="grid grid-cols-3 gap-3">
-                        <div v-for="item in settlementBasicFields" :key="item.label" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
-                          <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
-                          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" :title="item.value">{{ item.value || '-' }}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 住院信息 -->
-                    <div class="mb-6">
-                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <MedicineBoxOutlined class="text-blue-500" /> 住院信息
-                      </h4>
-                      <div class="grid grid-cols-3 gap-3">
-                        <div v-for="item in settlementHospFields" :key="item.label" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
-                          <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
-                          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" :title="item.value">{{ item.value || '-' }}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 诊断列表 -->
-                    <div v-if="settlementData.diagnoses && settlementData.diagnoses.length" class="mb-6">
-                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <FileTextOutlined class="text-blue-500" /> 诊断信息 ({{ settlementData.diagnoses.length }})
-                      </h4>
-                      <div class="space-y-2">
-                        <div v-for="(diag, idx) in settlementData.diagnoses" :key="idx" class="bg-slate-50 dark:bg-slate-800 rounded-lg px-4 py-3 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
-                          <div class="flex items-center gap-2">
-                            <span class="text-[10px] px-1.5 py-0.5 rounded font-bold" :class="idx === 0 ? 'text-blue-600 bg-blue-100' : 'text-slate-400 bg-slate-200'">
-                              {{ idx === 0 ? '主诊断' : `诊断${idx + 1}` }}
-                            </span>
-                            <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">{{ diag.name }}</span>
-                          </div>
-                          <span class="text-xs text-slate-400 font-mono">{{ diag.code }}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 费用明细 -->
-                    <div v-if="settlementData.cost_details && settlementData.cost_details.length" class="mb-6">
-                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <span style="font-size:14px">💰</span> 费用明细 ({{ settlementData.cost_details.length }})
-                      </h4>
-                      <a-table
-                        :dataSource="settlementData.cost_details"
-                        :columns="costColumns"
-                        size="small"
-                        :pagination="false"
-                        :scroll="{ y: 300 }"
-                        rowKey="item_id"
-                      />
-                    </div>
-
-                    <!-- 医保结算信息 -->
-                    <div class="mb-6">
-                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <span style="font-size:14px">🏥</span> 医保结算
-                      </h4>
-                      <div class="grid grid-cols-3 gap-3">
-                        <div v-for="item in settlementInsurFields" :key="item.label" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
-                          <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
-                          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" :title="item.value">{{ item.value || '-' }}</div>
-                        </div>
-                      </div>
-                    </div>
+                    <!-- 官方格式结算清单 -->
+                    <SettlementSheet :data="settlementData" />
 
                     <!-- 质控结果摘要 -->
                     <div v-if="settlementQcReport" class="mb-6">
@@ -848,6 +778,7 @@ import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
 import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
 import QCResultTab from './components/QCResultTab.vue'
 import ICDSearchPanel from './components/ICDSearchPanel.vue'
+import SettlementSheet from './components/SettlementSheet.vue'
 import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
 import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
 import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
