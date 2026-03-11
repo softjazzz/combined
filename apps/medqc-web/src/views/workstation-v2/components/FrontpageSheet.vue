@@ -155,12 +155,12 @@
         
         <div class="fp-row text-right-align">
           <span style="flex:1;"></span>
-          <span class="ml-4">病理号</span><u class="fill w-32">{{ b('pathology_id') }}</u>
+          <span class="ml-4">病理号</span><u class="fill w-32">{{ t('pathology_id') }}</u>
         </div>
         
         <div class="fp-row">
           <span>药物过敏</span><span class="val-box">{{ b('allergy_sign') === '2' ? '2' : '1' }}</span><span class="hint">1.无 2.有，过敏药物：</span>
-          <u class="fill flex-1">{{ b('allergy_sign') === '2' ? b('allergy_history') : '' }}</u>
+          <u class="fill flex-1">{{ b('allergy_sign') === '2' ? t('allergy_history') : '' }}</u>
           <span class="ml-4">死亡患者尸检</span><span class="val-box">{{ b('death_autopsy_sign') }}</span><span class="hint">1.是 2.否</span>
         </div>
         
@@ -185,8 +185,8 @@
         
         <div class="fp-row">
           <span>病案质量</span><span class="val-box">{{ b('medicalrecord_quality') }}</span><span class="hint">1.甲 2.乙 3.丙</span>
-          <span class="ml-8">质控医师</span><u class="fill flex-1">{{ b('QC_physician_sign') }}</u>
-          <span class="ml-4">质控护士</span><u class="fill flex-1">{{ b('QC_nurse_sign') }}</u>
+          <span class="ml-8">质控医师</span><u class="fill flex-1">{{ t('QC_physician_sign') }}</u>
+          <span class="ml-4">质控护士</span><u class="fill flex-1">{{ t('QC_nurse_sign') }}</u>
         </div>
         
         <div class="fp-row" style="border-bottom: none;">
@@ -237,12 +237,12 @@
         </table>
 
         <!-- 离院等信息 -->
-        <div class="fp-row">
+        <div class="fp-row" style="border-bottom: none; padding-bottom: 0; min-height: auto;">
           <span>离院方式</span><span class="val-box">{{ b('leaving_hospital_way') }}</span><span class="hint">1.医嘱离院 2.医嘱转院，拟接收医疗机构名称：</span>
-          <u class="fill flex-1">{{ b('planned_transder_to') }}</u>
+          <u class="fill flex-1">{{ t('planned_transder_to') }}</u>
         </div>
         
-        <div class="fp-row">
+        <div class="fp-row" style="padding-top: 4px; min-height: auto;">
           <span class="hint">3.医嘱转社区卫生服务机构/乡镇卫生院，拟接收医疗机构名称：</span>
           <u class="fill flex-1"></u>
           <span class="hint ml-2">4.非医嘱离院 5.死亡 9.其他</span>
@@ -250,7 +250,7 @@
         
         <div class="fp-row">
           <span>是否有出院31天内再住院计划</span><span class="val-box">{{ b('rehospital_with_month') }}</span><span class="hint">1.无 2.有，目的：</span>
-          <u class="fill flex-1">{{ b('rehospital_with_month_purpose') }}</u>
+          <u class="fill flex-1">{{ t('rehospital_with_month_purpose') }}</u>
         </div>
         
         <div class="fp-row">
@@ -362,6 +362,12 @@ const props = defineProps({
 
 function b(field) {
   return props.data?.basic?.[field] || ''
+}
+
+// t() 用于纯粹长下划线填空，过滤掉数据库里的 '/' 或 '-'，避免打印在下划线上显得突兀
+function t(field) {
+  const v = props.data?.basic?.[field]
+  return (!v || v === '/' || v === '-') ? '' : v
 }
 
 function c(field) {

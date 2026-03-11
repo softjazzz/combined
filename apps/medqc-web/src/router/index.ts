@@ -89,15 +89,15 @@ const routes: RouteRecordRaw[] = [
           icon: 'CheckCircleOutlined'
         }
       },
-      // 智能质控工作站 V1（旧版保留）
+      // 智能质控工作站 V4（主质控工作台）
       {
         path: 'workstation',
         name: 'Workstation',
-        component: () => import('@/views/workstation/WorkstationView.vue'),
+        component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
         meta: {
           title: '智能质控工作站',
           icon: 'DesktopOutlined',
-          permission: ['admin', 'qc_manager', 'coder']
+          permission: ['admin', 'qc_manager', 'coder', 'doctor']
         }
       },
       {

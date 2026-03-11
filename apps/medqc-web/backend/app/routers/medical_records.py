@@ -264,7 +264,7 @@ async def get_workstation_data(
 ):
     """V4 工作台专用接口 — 返回病案列表 + 科室统计 + 主诊断 + 床号"""
     from ..database.connection import engine
-    from ..database.models.cdm import MedicalRecordFrontpage, Diagnosis, AdmissionRecord
+    from ..database.models.cdm import MedicalRecordFrontpage, Diagnosis, AdmissionRecord, QCResult
     from sqlalchemy.orm import Session
     from sqlalchemy import func
 
@@ -312,15 +312,47 @@ async def get_workstation_data(
             func.count().label("total"),
         ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
 
+        # 批量查病案质控状态
+        visit_ids = [r.visit_id for r in records]
+        status_map = {}
+        if visit_ids:
+            qc_results = session.query(
+                QCResult.visit_id,
+                QCResult.severity,
+                QCResult.status,
+            ).filter(
+                QCResult.visit_id.in_(visit_ids)
+            ).all()
+            for r in qc_results:
+                vid = r.visit_id
+                if vid not in status_map:
+                    status_map[vid] = {"has_error": False, "has_any": True}
+                if r.status == "open" and r.severity == "error":
+                    status_map[vid]["has_error"] = True
+
         departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
-        for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
-            departments.append({"name": d.discharge_dept_name, "total": d.total, "warningCount": 0})
+        dept_warning_counts = {}
 
         # 5. 组装响应
         items = []
         for r in records:
             key = (r.patient_id, r.visit_id)
             diag = diag_map.get(key, {})
+            
+            # 判断质控状态
+            qc_info = status_map.get(r.visit_id)
+            if qc_info is None:
+                record_status = "pending"
+            elif qc_info["has_error"]:
+                record_status = "has_defects"
+            else:
+                record_status = "completed"
+
+            dept_name = r.discharge_dept_name or r.admission_dept_name or ""
+            if record_status == "has_defects":
+                dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
+                departments[0]["warningCount"] += 1
+                
             items.append({
                 "id": r.visit_id,
                 "instituteId": r.institute_id,
@@ -330,15 +362,19 @@ async def get_workstation_data(
                 "sex": r.sex or "",
                 "age": int(r.age_year) if r.age_year else 0,
                 "insurance": r.insurance_type or "",
-                "department": r.discharge_dept_name or r.admission_dept_name or "",
+                "department": dept_name,
                 "admissionDate": r.admission_datetime.strftime("%m-%d") if r.admission_datetime else "",
                 "dischargeDate": r.discharge_datetime.strftime("%m-%d") if r.discharge_datetime else "",
                 "days": int(r.hospital_duration) if r.hospital_duration else 0,
                 "diagnosis": diag.get("name", ""),
                 "diagnosisCode": diag.get("code", ""),
                 "doctor": r.attending_physician_sign or "",
-                "status": "completed",  # 后续接入质控状态
+                "status": record_status,
             })
+
+        for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
+            dept_name = d.discharge_dept_name or ""
+            departments.append({"name": dept_name, "total": d.total, "warningCount": dept_warning_counts.get(dept_name, 0)})
 
     return {
         "departments": departments,

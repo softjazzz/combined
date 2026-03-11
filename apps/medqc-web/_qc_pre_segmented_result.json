@@ -1,0 +1,4043 @@
+{
+  "document_id": "pre-segmented-test-01",
+  "evaluation_summary": {
+    "total_rules": 90,
+    "compliant_rules": 90,
+    "not_applicable": 90,
+    "issues_found": 0,
+    "compliance_rate": 100.0,
+    "overall_grade": "A",
+    "critical_violations": 0,
+    "document_breakdown": {
+      "admission_record": {
+        "total_rules": 44,
+        "compliant_rules": 44,
+        "compliance_rate": 100.0,
+        "critical_violations": 0,
+        "not_applicable": 44
+      },
+      "first_course_record": {
+        "total_rules": 26,
+        "compliant_rules": 26,
+        "compliance_rate": 100.0,
+        "critical_violations": 0,
+        "not_applicable": 26
+      },
+      "surgery_record": {
+        "total_rules": 20,
+        "compliant_rules": 20,
+        "compliance_rate": 100.0,
+        "critical_violations": 0,
+        "not_applicable": 20
+      }
+    }
+  },
+  "performance_metrics": {
+    "processing_time": 0.0,
+    "token_usage": 0,
+    "estimated_cost": 0.0
+  },
+  "evaluation_results": [
+    {
+      "rule_id": "SC-001",
+      "rule_name": "无入院记录(或再次/多次入院记录)或24小时内入出院(死亡)记录。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-002",
+      "rule_name": "入院记录(或再次/多次入院记录)未在患者入院后24小时内完成。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-003",
+      "rule_name": "24小时内入出院(死亡)记录未在患者出院(死亡)后24小时内完成。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-004",
+      "rule_name": "再次或多次入院记录未对本次住院前历次有关住院诊疗经过进行小结。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-005",
+      "rule_name": "非执业医师书写入院记录无本医疗机构注册的医务人员审阅､修改并签名。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-006",
+      "rule_name": "入院记录无记录的医师签名。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-007",
+      "rule_name": "无完全民事行为能力的患者填写为病史陈述者。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-008",
+      "rule_name": "主诉书写不规范或不能导出第一诊断。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-009",
+      "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-010",
+      "rule_name": "现病史与主诉不符",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-011",
+      "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-012",
+      "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-013",
+      "rule_name": "既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等)",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-014",
+      "rule_name": "未描述个人史、婚育史、月经史、家族史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-015",
+      "rule_name": "个人史、婚育史、月经史、家族史记录不全或与实际不符",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-016",
+      "rule_name": "儿童患者无婴幼儿喂养史和生长发育史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-017",
+      "rule_name": "无体格检查或专科体格检查(按专科要求)",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-018",
+      "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-019",
+      "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-020",
+      "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-001",
+      "rule_name": "主诉中症状/体征/疾病的持续时间与年龄不一致",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-002",
+      "rule_name": "现病史记录不全或描述不清",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-003",
+      "rule_name": "儿童患者无婴幼儿喂养史和生长发育史。",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-004",
+      "rule_name": "入院记录-专科检查缺失",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-005",
+      "rule_name": "体格检查缺生命体征",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-006",
+      "rule_name": "7岁以上人群体格检查缺生命体征",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-007",
+      "rule_name": "院外辅助检查未记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-008",
+      "rule_name": "入院记录-检查结果未记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-009",
+      "rule_name": "入院记录缺初步诊断",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-01",
+      "rule_name": "入院记录-既往史缺少传染病史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-02",
+      "rule_name": "入院记录-既往史缺少输血史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-03",
+      "rule_name": "入院记录-既往史缺少过敏史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-04",
+      "rule_name": "入院记录-既往史缺少预防接种史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-05",
+      "rule_name": "入院记录-既往史缺少手术外伤史",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-06",
+      "rule_name": "入院记录-既往史与手术史记录矛盾",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-07",
+      "rule_name": "入院记录-个人史存在缺项",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-08",
+      "rule_name": "入院记录-婚育史存在缺项",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-09",
+      "rule_name": "入院记录-家族史存在缺项",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-10",
+      "rule_name": "入院记录-体格检查缺腹部检查",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-11",
+      "rule_name": "入院记录-体格检查缺神经系统检查",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-12",
+      "rule_name": "入院记录-体格检查缺四肢及脊柱检查",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-13",
+      "rule_name": "入院记录-体格检查缺头部及其器官检查",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-14",
+      "rule_name": "入院记录-体格检查缺胸部检查",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-15",
+      "rule_name": "入院记录-7岁以上人群体格检查缺血压",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-021",
+      "rule_name": "无首次病程记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-022",
+      "rule_name": "未能在规定时间(8小时)内完成首次病程记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-023",
+      "rule_name": "首次病程记录无病例特点",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-024",
+      "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-025",
+      "rule_name": "首次病程记录无诊断依据、鉴别诊断、诊疗计划任意一项",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-026",
+      "rule_name": "首次病程记录诊断依据或鉴别诊断不充分、不全面",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-027",
+      "rule_name": "首次病程记录诊疗计划不全面、不具体",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-16",
+      "rule_name": "首次病程记录未在入院后8小时内完成",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-17",
+      "rule_name": "首次病程记录-鉴别诊断无具体诊断名称",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-18",
+      "rule_name": "非危重症患者三天未完成一次病程记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-19",
+      "rule_name": "病重患者病程记录未按规定时限书写",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-20",
+      "rule_name": "病危患者病程记录未按规定时限书写",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-21",
+      "rule_name": "病程记录内容高度重复（>70%）",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-22",
+      "rule_name": "病程记录内容完全复制（>85%）",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-23",
+      "rule_name": "病程记录未反映CT/MRI等重要检查结果",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-24",
+      "rule_name": "病程记录未反映细菌培养结果及分析",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-25",
+      "rule_name": "抗菌药物使用明显不符合指征或越级",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-26",
+      "rule_name": "抗菌药物使用相关医嘱单缺失",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-27",
+      "rule_name": "病程记录未反映病原学送检及结果",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-28",
+      "rule_name": "有创诊疗操作记录缺失",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-30",
+      "rule_name": "手术前24小时内无术者查房记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-34",
+      "rule_name": "术后首次病程记录缺失",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-35",
+      "rule_name": "术后未连续3天书写病程记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-53",
+      "rule_name": "病危患者缺病危通知书",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-54",
+      "rule_name": "病重患者缺病重通知书",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-55",
+      "rule_name": "放弃抢救缺少知情同意书",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['知情同意书', '首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['知情同意书', '首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-095",
+      "rule_name": "无手术记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-096",
+      "rule_name": "手术记录未在术后24小时内完成",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-097",
+      "rule_name": "手术记录缺项或描述不清",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-098",
+      "rule_name": "无主刀医师签名",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-099",
+      "rule_name": "术中取材情况和病理结果未在手术记录中记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-100",
+      "rule_name": "植入物条形码不齐全",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-101",
+      "rule_name": "植入物种类和数量等情况未在手术记录或病程记录中有相应记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-108",
+      "rule_name": "未按手术分级管理制度开展手术",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-109",
+      "rule_name": "需审批或授权的手术无审批或授权的记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-110",
+      "rule_name": "急诊手术无主治及以上医师(注明姓名及职称)的指示记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "SC-115",
+      "rule_name": "手术记录中术中所见未体现第一次手术术区或再次手术部位情况的描述，如术后出血，未描述出血部位和出血情况",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-021",
+      "rule_name": "缺术中更改术式的知情同意书",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['知情同意书', '手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['知情同意书', '手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-025",
+      "rule_name": "手术患者缺手术记录",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-026",
+      "rule_name": "手术记录-手术记录时间超过手术时间24小时",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-027",
+      "rule_name": "手术记录-由一助书写但缺手术医生签名",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LX-028",
+      "rule_name": "缺特殊手术相关审批记录单",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-29",
+      "rule_name": "手术患者无术前小结",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-31",
+      "rule_name": "缺手术知情同意书",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['知情同意书', '手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['知情同意书', '手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-32",
+      "rule_name": "手术记录内容缺项或描述不清",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    },
+    {
+      "rule_id": "LXE-33",
+      "rule_name": "无手术安全核查记录单",
+      "status": "not_applicable",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+      "evidence": "",
+      "suggestion": "",
+      "confidence": 0.9,
+      "llm_raw_output": null,
+      "applicability": {
+        "is_applicable": false,
+        "reason": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+        "method": "document_type_guard"
+      },
+      "evidence_verified": true,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0.0
+      }
+    }
+  ],
+  "optimization_metrics": {
+    "token_savings_rate": 0.0,
+    "estimated_original_tokens": 0,
+    "actual_tokens_saved": 0,
+    "cost_savings": 0.0
+  },
+  "document_results": {
+    "admission_record": {
+      "total_rules": 44,
+      "compliant_rules": 44,
+      "not_applicable": 44,
+      "processing_time": 0.0,
+      "token_usage": 0,
+      "critical_violations": 0,
+      "evaluation_results": [
+        {
+          "rule_id": "SC-001",
+          "rule_name": "无入院记录(或再次/多次入院记录)或24小时内入出院(死亡)记录。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-002",
+          "rule_name": "入院记录(或再次/多次入院记录)未在患者入院后24小时内完成。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-003",
+          "rule_name": "24小时内入出院(死亡)记录未在患者出院(死亡)后24小时内完成。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-004",
+          "rule_name": "再次或多次入院记录未对本次住院前历次有关住院诊疗经过进行小结。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-005",
+          "rule_name": "非执业医师书写入院记录无本医疗机构注册的医务人员审阅､修改并签名。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-006",
+          "rule_name": "入院记录无记录的医师签名。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-007",
+          "rule_name": "无完全民事行为能力的患者填写为病史陈述者。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-008",
+          "rule_name": "主诉书写不规范或不能导出第一诊断。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-009",
+          "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-010",
+          "rule_name": "现病史与主诉不符",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-011",
+          "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-012",
+          "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-013",
+          "rule_name": "既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等)",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-014",
+          "rule_name": "未描述个人史、婚育史、月经史、家族史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-015",
+          "rule_name": "个人史、婚育史、月经史、家族史记录不全或与实际不符",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-016",
+          "rule_name": "儿童患者无婴幼儿喂养史和生长发育史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-017",
+          "rule_name": "无体格检查或专科体格检查(按专科要求)",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-018",
+          "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-019",
+          "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-020",
+          "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-001",
+          "rule_name": "主诉中症状/体征/疾病的持续时间与年龄不一致",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-002",
+          "rule_name": "现病史记录不全或描述不清",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-003",
+          "rule_name": "儿童患者无婴幼儿喂养史和生长发育史。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-004",
+          "rule_name": "入院记录-专科检查缺失",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-005",
+          "rule_name": "体格检查缺生命体征",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-006",
+          "rule_name": "7岁以上人群体格检查缺生命体征",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-007",
+          "rule_name": "院外辅助检查未记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-008",
+          "rule_name": "入院记录-检查结果未记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-009",
+          "rule_name": "入院记录缺初步诊断",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-01",
+          "rule_name": "入院记录-既往史缺少传染病史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-02",
+          "rule_name": "入院记录-既往史缺少输血史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-03",
+          "rule_name": "入院记录-既往史缺少过敏史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-04",
+          "rule_name": "入院记录-既往史缺少预防接种史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-05",
+          "rule_name": "入院记录-既往史缺少手术外伤史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-06",
+          "rule_name": "入院记录-既往史与手术史记录矛盾",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-07",
+          "rule_name": "入院记录-个人史存在缺项",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-08",
+          "rule_name": "入院记录-婚育史存在缺项",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-09",
+          "rule_name": "入院记录-家族史存在缺项",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-10",
+          "rule_name": "入院记录-体格检查缺腹部检查",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-11",
+          "rule_name": "入院记录-体格检查缺神经系统检查",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-12",
+          "rule_name": "入院记录-体格检查缺四肢及脊柱检查",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-13",
+          "rule_name": "入院记录-体格检查缺头部及其器官检查",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-14",
+          "rule_name": "入院记录-体格检查缺胸部检查",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-15",
+          "rule_name": "入院记录-7岁以上人群体格检查缺血压",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['入院记录']，当前文书为 'admission_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        }
+      ]
+    },
+    "first_course_record": {
+      "total_rules": 26,
+      "compliant_rules": 26,
+      "not_applicable": 26,
+      "processing_time": 0.0,
+      "token_usage": 0,
+      "critical_violations": 0,
+      "evaluation_results": [
+        {
+          "rule_id": "SC-021",
+          "rule_name": "无首次病程记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-022",
+          "rule_name": "未能在规定时间(8小时)内完成首次病程记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-023",
+          "rule_name": "首次病程记录无病例特点",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-024",
+          "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-025",
+          "rule_name": "首次病程记录无诊断依据、鉴别诊断、诊疗计划任意一项",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-026",
+          "rule_name": "首次病程记录诊断依据或鉴别诊断不充分、不全面",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-027",
+          "rule_name": "首次病程记录诊疗计划不全面、不具体",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-16",
+          "rule_name": "首次病程记录未在入院后8小时内完成",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-17",
+          "rule_name": "首次病程记录-鉴别诊断无具体诊断名称",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-18",
+          "rule_name": "非危重症患者三天未完成一次病程记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-19",
+          "rule_name": "病重患者病程记录未按规定时限书写",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-20",
+          "rule_name": "病危患者病程记录未按规定时限书写",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-21",
+          "rule_name": "病程记录内容高度重复（>70%）",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-22",
+          "rule_name": "病程记录内容完全复制（>85%）",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-23",
+          "rule_name": "病程记录未反映CT/MRI等重要检查结果",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-24",
+          "rule_name": "病程记录未反映细菌培养结果及分析",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-25",
+          "rule_name": "抗菌药物使用明显不符合指征或越级",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-26",
+          "rule_name": "抗菌药物使用相关医嘱单缺失",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-27",
+          "rule_name": "病程记录未反映病原学送检及结果",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-28",
+          "rule_name": "有创诊疗操作记录缺失",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-30",
+          "rule_name": "手术前24小时内无术者查房记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-34",
+          "rule_name": "术后首次病程记录缺失",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-35",
+          "rule_name": "术后未连续3天书写病程记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-53",
+          "rule_name": "病危患者缺病危通知书",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-54",
+          "rule_name": "病重患者缺病重通知书",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-55",
+          "rule_name": "放弃抢救缺少知情同意书",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['知情同意书', '首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['知情同意书', '首次病程记录', '日常病程记录', '上级查房记录', '抢救记录']，当前文书为 'first_course_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        }
+      ]
+    },
+    "surgery_record": {
+      "total_rules": 20,
+      "compliant_rules": 20,
+      "not_applicable": 20,
+      "processing_time": 0.0,
+      "token_usage": 0,
+      "critical_violations": 0,
+      "evaluation_results": [
+        {
+          "rule_id": "SC-095",
+          "rule_name": "无手术记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-096",
+          "rule_name": "手术记录未在术后24小时内完成",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-097",
+          "rule_name": "手术记录缺项或描述不清",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-098",
+          "rule_name": "无主刀医师签名",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-099",
+          "rule_name": "术中取材情况和病理结果未在手术记录中记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-100",
+          "rule_name": "植入物条形码不齐全",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-101",
+          "rule_name": "植入物种类和数量等情况未在手术记录或病程记录中有相应记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-108",
+          "rule_name": "未按手术分级管理制度开展手术",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-109",
+          "rule_name": "需审批或授权的手术无审批或授权的记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-110",
+          "rule_name": "急诊手术无主治及以上医师(注明姓名及职称)的指示记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "SC-115",
+          "rule_name": "手术记录中术中所见未体现第一次手术术区或再次手术部位情况的描述，如术后出血，未描述出血部位和出血情况",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-021",
+          "rule_name": "缺术中更改术式的知情同意书",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['知情同意书', '手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['知情同意书', '手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-025",
+          "rule_name": "手术患者缺手术记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-026",
+          "rule_name": "手术记录-手术记录时间超过手术时间24小时",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-027",
+          "rule_name": "手术记录-由一助书写但缺手术医生签名",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LX-028",
+          "rule_name": "缺特殊手术相关审批记录单",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-29",
+          "rule_name": "手术患者无术前小结",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-31",
+          "rule_name": "缺手术知情同意书",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['知情同意书', '手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['知情同意书', '手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-32",
+          "rule_name": "手术记录内容缺项或描述不清",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        },
+        {
+          "rule_id": "LXE-33",
+          "rule_name": "无手术安全核查记录单",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则适用文书类型 ['手术记录', '术前小结', '术前讨论', '术后首次病程记录', '手术安全核查', '手术风险评估', '麻醉记录']，当前文书为 'surgery_record'",
+            "method": "document_type_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0
+          }
+        }
+      ]
+    }
+  },
+  "timestamp": "2026-03-11T12:32:04.027321+00:00",
+  "status": "success",
+  "mode": "multi_document"
+}
