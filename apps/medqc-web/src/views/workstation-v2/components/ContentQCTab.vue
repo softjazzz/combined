@@ -198,33 +198,33 @@ interface SectionProgress {
   issues?: ContentIssue[]
 }
 
-// ==================== 文书类型映射 ====================
-const DOC_TYPE_LABELS: Record<string, string> = {
-  '入院记录': '入院记录',
-  '首次病程记录': '首次病程记录',
-  '日常病程记录': '日常病程记录',
-  '主任（副主任）医师查房记录': '主任查房记录',
-  '出院记录': '出院记录',
-  '手术记录': '手术记录',
-  '术后首次病程记录': '术后首次病程',
-  '会诊记录': '会诊记录',
-  '死亡记录': '死亡记录',
-  '病危通知': '病危通知',
-  '知情同意书': '知情同意书',
-  '病案首页': '病案首页',
+// ==================== 文书类型（来自 PG 数据库表） ====================
+
+interface DocItem {
+  type: string       // PG 表名，如 admission_record
+  label: string      // 中文文书名，如 "入院记录"
+  has_content: boolean
+  content: string | null
+  length: number
 }
 
-// 自动识别文书段落的正则
-const SECTION_PATTERNS = [
-  { pattern: /入院记录/i, type: '入院记录' },
-  { pattern: /首次病程记录/i, type: '首次病程记录' },
-  { pattern: /日常病程记录|病程记录/i, type: '日常病程记录' },
-  { pattern: /主任.*查房|副主任.*查房/i, type: '主任（副主任）医师查房记录' },
-  { pattern: /出院记录|出院小结/i, type: '出院记录' },
-  { pattern: /手术记录/i, type: '手术记录' },
-  { pattern: /术后首次病程/i, type: '术后首次病程记录' },
-  { pattern: /会诊记录/i, type: '会诊记录' },
-]
+// PG 表名 → 质控引擎文书类型映射
+const TABLE_TO_DOC_TYPE: Record<string, string> = {
+  admission_record: '入院记录',
+  first_course_record: '首次病程记录',
+  daily_course_record: '日常病程记录',
+  senior_course_record: '主任（副主任）医师查房记录',
+  discharge_record: '出院记录',
+  surgery_record: '手术记录',
+  postsurg_firstcourse_record: '术后首次病程记录',
+  consultation_record: '会诊记录',
+  death_record: '死亡记录',
+  rescue_record: '抢救记录',
+  surgery_inform_consent: '手术知情同意书',
+  preane_surveil_record: '麻醉前访视记录',
+  presurg_discussion: '术前讨论记录',
+  diffcase_discussion_record: '疑难病例讨论记录',
+}
 
 // ==================== Props & Emits ====================
 
@@ -232,7 +232,7 @@ const props = defineProps<{
   patientId?: string
   visitId?: string
   instituteId?: string
-  medicalText?: string
+  documents?: DocItem[]   // 从 PG 各文书表查出的文书列表
 }>()
 
 const emit = defineEmits<{
@@ -288,65 +288,9 @@ function severityLabel(sev: string) {
   return { error: '严重', warning: '警告', info: '提示' }[sev] || '未知'
 }
 
-/** 从病历全文中识别文书段落 */
-function splitDocumentSections(text: string): { type: string; label: string; content: string }[] {
-  if (!text || text.trim().length === 0) return []
-
-  const lines = text.split('\n')
-  const sections: { type: string; label: string; startLine: number }[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue
-
-    for (const sp of SECTION_PATTERNS) {
-      if (sp.pattern.test(line) && line.length < 30) {
-        // 避免重复同类型（除日常病程可以多次）
-        const lastOfType = sections.filter(s => s.type === sp.type)
-        if (lastOfType.length === 0 || sp.type === '日常病程记录') {
-          sections.push({
-            type: sp.type,
-            label: DOC_TYPE_LABELS[sp.type] || sp.type,
-            startLine: i,
-          })
-        }
-        break
-      }
-    }
-  }
-
-  // 将段落按起始行切分内容
-  const result: { type: string; label: string; content: string }[] = []
-  for (let i = 0; i < sections.length; i++) {
-    const start = sections[i].startLine
-    const end = i + 1 < sections.length ? sections[i + 1].startLine : lines.length
-    const content = lines.slice(start, end).join('\n')
-    
-    // 合并相同类型
-    const existing = result.find(r => r.type === sections[i].type)
-    if (existing) {
-      existing.content += '\n\n' + content
-    } else {
-      result.push({
-        type: sections[i].type,
-        label: sections[i].label,
-        content,
-      })
-    }
-  }
-
-  // 如果没有识别到任何段落，整体作为一个"病程记录"
-  if (result.length === 0 && text.trim().length > 50) {
-    result.push({ type: '病程记录', label: '病程记录（全文）', content: text })
-  }
-
-  return result
-}
-
 /** 解析单次 evaluate 返回中的问题 */
-function parseEvalResults(data: any, docType: string): ContentIssue[] {
+function parseEvalResults(data: any, docLabel: string): ContentIssue[] {
   const newIssues: ContentIssue[] = []
-
   const evalResults = data.evaluation_results || []
   for (const result of evalResults) {
     if (result.is_compliant === false || result.compliance === '不合规') {
@@ -355,7 +299,7 @@ function parseEvalResults(data: any, docType: string): ContentIssue[] {
         ruleName: result.rule_name || result.rule_text || '未知规则',
         severity: result.severity === '严重' || result.severity === 'critical' ? 'error'
           : result.severity === '轻微' || result.severity === 'minor' ? 'info' : 'warning',
-        group: docType,
+        group: docLabel,
         description: result.issue_description || result.analysis || '未提供详细说明',
         suggestion: result.improvement_suggestion || result.suggestion || '',
       })
@@ -364,7 +308,7 @@ function parseEvalResults(data: any, docType: string): ContentIssue[] {
   return newIssues
 }
 
-// ==================== 核心：逐文书质控 ====================
+// ==================== 核心：逐文书质控（从 PG 分表数据） ====================
 
 async function runContentQC() {
   if (!props.patientId) {
@@ -372,9 +316,10 @@ async function runContentQC() {
     return
   }
 
-  const medText = props.medicalText || ''
-  if (!medText || medText.trim().length < 20) {
-    message.warning('病历文书内容为空，请先加载病历文书')
+  // 直接使用 PG 数据库按表存储的文书列表（每个 DocItem 自带 type/label/content）
+  const docs = (props.documents || []).filter(d => d.has_content && d.content)
+  if (docs.length === 0) {
+    message.warning('该患者暂无病历文书内容，请先加载文书')
     return
   }
 
@@ -385,30 +330,20 @@ async function runContentQC() {
   summary.value = null
   completedSections.value = []
 
-  // 1. 切分文书段落
-  const sections = splitDocumentSections(medText)
-  totalSections.value = sections.length
+  totalSections.value = docs.length
 
-  // 初始化时间线
-  sectionTimeline.value = sections.map(s => ({
-    type: s.type,
-    label: s.label,
-    content: s.content,
+  // 初始化时间线（直接使用 PG 表的 type 和 label）
+  sectionTimeline.value = docs.map(d => ({
+    type: d.type,
+    label: d.label,
+    content: d.content || '',
     status: 'pending' as const,
   }))
 
-  if (sections.length === 0) {
-    // 无法识别段落，整体发送
-    sectionTimeline.value = [{
-      type: '病程记录',
-      label: '病程记录（全文）',
-      content: medText,
-      status: 'active',
-    }]
-    totalSections.value = 1
-  }
+  // 所有文书类型清单（用于告知 LLM 患者有哪些文书）
+  const allDocLabels = docs.map(d => d.label).join('、')
 
-  // 2. 逐文书调用后端
+  // 逐文书调用后端 LLM 质控
   let allIssues: ContentIssue[] = []
   let totalRules = 0
   let totalCompliant = 0
@@ -418,25 +353,28 @@ async function runContentQC() {
     const sec = sectionTimeline.value[i]
     sec.status = 'active'
 
+    // PG 表名 → 质控引擎文书类型
+    const qcDocType = TABLE_TO_DOC_TYPE[sec.type] || sec.label
+
     const secStart = Date.now()
 
     try {
-      // 构建上下文：告知 LLM 当前正在评估的文书类型、患者已有的所有文书清单
-      const allDocTypes = sectionTimeline.value.map(s => s.label).join('、')
+      // 构建上下文：PG 已经按表分好了，明确告知 LLM 文书类型
       const contextPrefix = [
-        `【重要上下文】当前正在评估的文书类型是「${sec.label}」。`,
-        `该患者病历中包含以下文书：${allDocTypes}。`,
-        `以下内容即为该患者的「${sec.label}」全文：`,
+        `【重要上下文】当前正在评估的文书类型是「${qcDocType}」。`,
+        `该患者病历中包含以下文书：${allDocLabels}。`,
+        `以下内容即为该患者的「${qcDocType}」全文，来自数据库 ${sec.type} 表：`,
         '',
       ].join('\n')
 
       const resp = await axios.post('/api/v1/qc/sichuan/evaluate', {
         document_id: `${props.patientId}-${props.visitId}-${sec.type}`,
         document_content: contextPrefix + sec.content,
-        document_type: sec.type,
+        document_type: qcDocType,
         patient_info: {
-          current_document_type: sec.type,
-          available_documents: sectionTimeline.value.map(s => s.type),
+          current_document_type: qcDocType,
+          current_table: sec.type,
+          available_documents: docs.map(d => TABLE_TO_DOC_TYPE[d.type] || d.label),
           patient_id: props.patientId,
           visit_id: props.visitId,
         },

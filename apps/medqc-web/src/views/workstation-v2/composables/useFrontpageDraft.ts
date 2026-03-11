@@ -4,6 +4,26 @@ import { message } from 'ant-design-vue'
 import type { FrontpageFocusTarget, IcdApplyTarget, PatientRecord } from '../types'
 import type { ICDCodeDetail } from '../components/ICDDetailPanel.vue'
 
+/** 模块中文名映射 */
+export const MODULE_LABELS: Record<string, string> = {
+  basic_info: '基本信息',
+  hospitalization: '住院信息',
+  diagnoses: '诊断信息',
+  procedures: '手术/操作',
+  other_medical_info: '其他医疗信息',
+  staff: '医护人员',
+  costs: '费用信息',
+  confidence: 'ICD 编码校验',
+}
+
+export interface CompletedModule {
+  name: string
+  label: string
+  /** 模块提取到的关键字段预览（最多3项） */
+  preview: string[]
+  timestamp: number
+}
+
 function parseDownloadFilename(contentDisposition: string | null, fallback = 'frontpage_export.xlsx') {
   if (!contentDisposition) return fallback
   const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
@@ -23,6 +43,8 @@ export function useFrontpageDraft(
   const frontpageDraft = ref<any>(null)
   const frontpageModule = ref('')
   const frontpageFocusTarget = ref<'' | FrontpageFocusTarget>('')
+  const completedModules = ref<CompletedModule[]>([])
+  const generateStartTime = ref(0)
 
   const frontpageFields = computed(() => {
     const draft = frontpageDraft.value
@@ -62,11 +84,117 @@ export function useFrontpageDraft(
     return fields
   })
 
+  /** 从 frontpage 数据中提取模块关键字段的预览文本 */
+  function getModulePreview(moduleName: string, fp: any): string[] {
+    if (!fp) return []
+    const previews: string[] = []
+    const add = (v: any) => { if (v && String(v).trim()) previews.push(String(v).trim()) }
+    switch (moduleName) {
+      case 'basic_info': {
+        const bi = fp.basic_info || {}
+        add(bi.patient_name ? `姓名: ${bi.patient_name}` : '')
+        add(bi.gender_text ? `性别: ${bi.gender_text}` : '')
+        add(bi.age_years ? `年龄: ${bi.age_years}岁` : '')
+        add(bi.birth_date ? `出生: ${bi.birth_date}` : '')
+        add(bi.ethnicity ? `民族: ${bi.ethnicity}` : '')
+        add(bi.marital_status_text ? `婚姻: ${bi.marital_status_text}` : '')
+        add(bi.id_number ? `身份证: ${bi.id_number.replace(/^(.{6}).+(.{4})$/, '$1****$2')}` : '')
+        add(bi.occupation ? `职业: ${bi.occupation}` : '')
+        add(bi.contact_name ? `联系人: ${bi.contact_name}` : '')
+        break
+      }
+      case 'hospitalization': {
+        const h = fp.hospitalization || {}
+        add(h.hospital_name ? `医院: ${h.hospital_name}` : '')
+        add(h.admission_datetime ? `入院: ${h.admission_datetime.split(' ')[0]}` : '')
+        add(h.discharge_datetime ? `出院: ${h.discharge_datetime.split(' ')[0]}` : '')
+        add(h.actual_hospital_days ? `天数: ${h.actual_hospital_days}天` : '')
+        add(h.admission_dept ? `入院科室: ${h.admission_dept}` : '')
+        add(h.discharge_dept ? `出院科室: ${h.discharge_dept}` : '')
+        add(h.payment_method_text ? `付费方式: ${h.payment_method_text}` : '')
+        add(h.admission_way_text ? `入院途径: ${h.admission_way_text}` : '')
+        add(h.medical_record_no ? `病案号: ${h.medical_record_no}` : '')
+        break
+      }
+      case 'diagnoses': {
+        const d = fp.diagnoses || {}
+        add(d.discharge_main_diagnosis_text ? `主诊断: ${d.discharge_main_diagnosis_text}` : '')
+        add(d.discharge_main_icd ? `主诊断编码: ${d.discharge_main_icd}` : '')
+        add(d.discharge_main_outcome ? `转归: ${d.discharge_main_outcome}` : '')
+        const others = d.discharge_other_diagnoses_texts || []
+        if (others.length) {
+          others.forEach((t: string, i: number) => {
+            const code = d.discharge_other_icds?.[i] || ''
+            add(`其他${i + 1}: ${t}${code ? ' (' + code + ')' : ''}`)
+          })
+        }
+        const eds = d.ed_diagnosis_texts || []
+        if (eds.length) add(`门急诊诊断: ${eds.join('、')}`)
+        break
+      }
+      case 'procedures': {
+        const p = fp.procedures || {}
+        if (!p.main_procedure_text) {
+          add('无手术记录')
+          break
+        }
+        add(p.main_procedure_text ? `主手术: ${p.main_procedure_text}` : '')
+        add(p.main_procedure_code ? `手术编码: ${p.main_procedure_code}` : '')
+        add(p.main_procedure_date ? `手术日期: ${p.main_procedure_date}` : '')
+        add(p.surgeon_name ? `术者: ${p.surgeon_name}` : '')
+        add(p.anesthesia_method ? `麻醉方式: ${p.anesthesia_method}` : '')
+        add(p.anesthetist_name ? `麻醉医师: ${p.anesthetist_name}` : '')
+        add(p.incision_grade ? `切口等级: ${p.incision_grade}` : '')
+        const otherProcs = p.other_procedures_texts || p.other_procedure_texts || []
+        if (otherProcs.length) add(`其他手术: ${otherProcs.length}项`)
+        break
+      }
+      case 'other_medical_info': {
+        const o = fp.other_medical_info || {}
+        add(o.abo_blood_type ? `ABO血型: ${o.abo_blood_type}` : '')
+        add(o.rh_blood_type_text ? `Rh血型: ${o.rh_blood_type_text}` : '')
+        add(o.drug_allergy_flag === '2' ? `药物过敏: 有` : o.drug_allergy_flag === '1' ? '药物过敏: 无' : '')
+        add(o.drug_allergy_drugs?.length ? `过敏药物: ${o.drug_allergy_drugs.join('、')}` : '')
+        add(o.pathology_text ? `病理诊断: ${o.pathology_text}` : '')
+        add(o.pathology_no ? `病理号: ${o.pathology_no}` : '')
+        add(o.ventilation_hours ? `呼吸机: ${o.ventilation_hours}小时` : '')
+        break
+      }
+      case 'staff': {
+        const s = fp.staff || {}
+        add(s.dept_director ? `科主任: ${s.dept_director}` : '')
+        add(s.chief_physician ? `主任医师: ${s.chief_physician}` : '')
+        add(s.attending_physician ? `主治医师: ${s.attending_physician}` : '')
+        add(s.resident_physician ? `住院医师: ${s.resident_physician}` : '')
+        add(s.responsible_nurse ? `责任护士: ${s.responsible_nurse}` : '')
+        add(s.coder ? `编码员: ${s.coder}` : '')
+        add(s.medical_record_quality ? `病案质量: ${s.medical_record_quality}` : '')
+        break
+      }
+      case 'costs': {
+        const c = fp.costs || {}
+        add(c.total_cost ? `总费用: ¥${c.total_cost}` : '')
+        add(c.self_paid ? `自付: ¥${c.self_paid}` : '')
+        const cats = c.categories || {}
+        if (cats.western_medicine) add(`西药费: ¥${cats.western_medicine}`)
+        if (cats.surgery_treatment) add(`手术费: ¥${cats.surgery_treatment}`)
+        if (cats.laboratory_diagnostic) add(`检验费: ¥${cats.laboratory_diagnostic}`)
+        if (cats.nursing_care) add(`护理费: ¥${cats.nursing_care}`)
+        break
+      }
+      case 'confidence':
+        add('编码匹配校验完成')
+        break
+    }
+    return previews
+  }
+
   function setDraftEmpty() {
     frontpageDraft.value = null
     frontpageModule.value = ''
     frontpageGenerating.value = false
     frontpageFocusTarget.value = ''
+    completedModules.value = []
   }
 
   async function generateFrontpage() {
@@ -75,6 +203,8 @@ export function useFrontpageDraft(
     frontpageGenerating.value = true
     frontpageDraft.value = null
     frontpageModule.value = ''
+    completedModules.value = []
+    generateStartTime.value = Date.now()
 
     try {
       const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
@@ -113,6 +243,19 @@ export function useFrontpageDraft(
             }
             if (payload.module) {
               frontpageModule.value = payload.module
+              // 记录已完成的模块（去重，同一模块可能多次更新）
+              const existing = completedModules.value.findIndex(m => m.name === payload.module)
+              const entry: CompletedModule = {
+                name: payload.module,
+                label: MODULE_LABELS[payload.module] || payload.module,
+                preview: getModulePreview(payload.module, payload.frontpage),
+                timestamp: Date.now() - generateStartTime.value,
+              }
+              if (existing >= 0) {
+                completedModules.value[existing] = entry
+              } else {
+                completedModules.value.push(entry)
+              }
             }
           } catch {
             // 忽略解析错误
@@ -364,6 +507,7 @@ export function useFrontpageDraft(
     frontpageModule,
     frontpageFocusTarget,
     frontpageFields,
+    completedModules,
     setDraftEmpty,
     generateFrontpage,
     handleExportFrontpage,

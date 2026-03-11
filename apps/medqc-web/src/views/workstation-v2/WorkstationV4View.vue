@@ -212,7 +212,7 @@
             <a-button
               type="primary"
               :loading="frontpageGenerating"
-              @click="generateFrontpage"
+              @click="detailMainTab = 'frontpage'; generateFrontpage()"
               class="!rounded-lg"
             >
               <template #icon><ThunderboltOutlined /></template>
@@ -338,23 +338,111 @@
                   <span class="flex items-center gap-1.5"><FileSearchOutlined />病案首页</span>
                 </template>
                 <div class="p-6">
-                  <div v-if="frontpageGenerating" class="flex flex-col items-center justify-center py-20">
-                    <a-spin size="large" />
-                    <div class="text-sm text-slate-400 mt-4">正在从病历中提取首页信息...</div>
-                    <div v-if="frontpageModule" class="text-xs text-blue-500 mt-2">当前模块: {{ frontpageModule }}</div>
+                  <div v-if="frontpageGenerating" class="py-8">
+                    <!-- 进度头部 -->
+                    <div class="flex items-center gap-3 mb-6 px-2">
+                      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200">
+                        <ThunderboltOutlined class="text-white text-lg" />
+                      </div>
+                      <div>
+                        <div class="text-sm font-bold text-slate-800">正在从病历中提取首页信息</div>
+                        <div class="text-xs text-slate-400 mt-0.5">已完成 {{ completedModules.length }} / 8 个模块</div>
+                      </div>
+                      <a-spin class="ml-auto" />
+                    </div>
+
+                    <!-- 进度条 -->
+                    <div class="mb-6 px-2">
+                      <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500" :style="{ width: `${Math.round(completedModules.length / 8 * 100)}%` }"></div>
+                      </div>
+                    </div>
+
+                    <!-- 模块时间线 -->
+                    <div class="space-y-1 px-2">
+                      <div
+                        v-for="m in ALL_MODULE_KEYS"
+                        :key="m"
+                        class="flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all duration-300"
+                        :class="getModuleStatus(m) === 'done' ? 'bg-green-50/80' : getModuleStatus(m) === 'active' ? 'bg-blue-50 animate-pulse' : 'bg-slate-50/50'"
+                      >
+                        <!-- 状态图标 -->
+                        <div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                          :class="getModuleStatus(m) === 'done' ? 'bg-green-500' : getModuleStatus(m) === 'active' ? 'bg-blue-500' : 'bg-slate-200'"
+                        >
+                          <CheckCircleOutlined v-if="getModuleStatus(m) === 'done'" class="text-white text-[10px]" />
+                          <span v-else-if="getModuleStatus(m) === 'active'" class="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                          <span v-else class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                        </div>
+                        <!-- 内容 -->
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium"
+                              :class="getModuleStatus(m) === 'done' ? 'text-green-700' : getModuleStatus(m) === 'active' ? 'text-blue-600' : 'text-slate-400'"
+                            >{{ MODULE_LABELS_MAP[m] || m }}</span>
+                            <span v-if="getModuleEntry(m)?.timestamp" class="text-[10px] text-slate-400 tabular-nums">{{ (getModuleEntry(m).timestamp / 1000).toFixed(1) }}s</span>
+                            <span v-if="getModuleStatus(m) === 'active'" class="text-[10px] text-blue-400 font-medium">提取中...</span>
+                          </div>
+                          <!-- 提取结果预览 -->
+                          <div v-if="getModuleEntry(m)?.preview?.length" class="flex flex-wrap gap-1.5 mt-1">
+                            <span
+                              v-for="(p, pi) in getModuleEntry(m).preview"
+                              :key="pi"
+                              class="text-[11px] px-1.5 py-0.5 rounded bg-white border border-green-200 text-green-700 truncate max-w-[200px]"
+                            >{{ p }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div v-else-if="frontpageDraft">
                     <a-tabs v-model:activeKey="frontpageTab" size="small">
                       <a-tab-pane key="fields" tab="提取结果">
-                        <FrontPagePanel
-                          :fields="frontpageFields"
-                          :generating="frontpageGenerating"
-                          :focus-target="frontpageFocusTarget"
-                          @generate="generateFrontpage"
-                          @export="handleExportFrontpage"
-                          @save="handleSaveFrontpage"
-                          @draft-change="handleFrontPanelDraftChange"
-                        />
+                        <!-- 完成头部 -->
+                        <div class="flex items-center gap-3 mb-4">
+                          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md shadow-green-200">
+                            <CheckCircleOutlined class="text-white text-base" />
+                          </div>
+                          <div class="flex-1">
+                            <div class="text-sm font-bold text-slate-800">首页信息提取完成</div>
+                            <div class="text-xs text-slate-400 mt-0.5">已从病历中提取 {{ completedModules.length }} 个模块的字段信息</div>
+                          </div>
+                          <div class="flex gap-2">
+                            <a-button size="small" @click="handleExportFrontpage('health')">
+                              <template #icon><DownloadOutlined /></template>
+                              导出
+                            </a-button>
+                            <a-button size="small" type="primary" @click="handleSaveFrontpage">
+                              <template #icon><SaveOutlined /></template>
+                              保存到数据库
+                            </a-button>
+                          </div>
+                        </div>
+
+                        <!-- 完成后的模块清单 -->
+                        <div class="space-y-1.5">
+                          <div
+                            v-for="m in ALL_MODULE_KEYS"
+                            :key="m"
+                            class="px-3 py-2.5 rounded-lg bg-slate-50/80 border border-slate-100"
+                          >
+                            <div class="flex items-center gap-2 mb-1.5">
+                              <div class="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                                <CheckCircleOutlined class="text-white text-[9px]" />
+                              </div>
+                              <span class="text-sm font-medium text-slate-700">{{ MODULE_LABELS_MAP[m] || m }}</span>
+                              <span v-if="getModuleEntry(m)?.timestamp" class="text-[10px] text-slate-400 tabular-nums">{{ (getModuleEntry(m).timestamp / 1000).toFixed(1) }}s</span>
+                              <span v-if="!getModuleEntry(m)?.preview?.length" class="text-[10px] text-slate-400 italic">未提取到数据</span>
+                            </div>
+                            <div v-if="getModuleEntry(m)?.preview?.length" class="flex flex-wrap gap-1.5 pl-6">
+                              <span
+                                v-for="(p, pi) in getModuleEntry(m).preview"
+                                :key="pi"
+                                class="text-[11px] px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 leading-tight max-w-[260px] truncate"
+                              >{{ p }}</span>
+                            </div>
+                          </div>
+                        </div>
                       </a-tab-pane>
                       <a-tab-pane key="preview" tab="首页预览/打印">
                         <HmFrontpagePreview :draft="frontpageDraft" />
@@ -484,7 +572,7 @@
               :patient-id="selectedRecord?.patientId"
               :visit-id="selectedRecord?.id"
               :institute-id="selectedRecord?.instituteId"
-              :medical-text="combinedMedicalText"
+              :documents="documentsList"
               @issues-change="(count: number) => contentQCCount = count"
             />
           </template>
@@ -1080,6 +1168,7 @@ const {
   frontpageModule,
   frontpageFocusTarget,
   frontpageFields,
+  completedModules,
   setDraftEmpty,
   generateFrontpage,
   handleExportFrontpage,
@@ -1093,6 +1182,22 @@ const {
   combinedMedicalText,
   touchCodingRefresh,
 )
+
+// ========== AI 生成进度辅助 ==========
+import { MODULE_LABELS, type CompletedModule } from './composables/useFrontpageDraft'
+
+const ALL_MODULE_KEYS = ['basic_info', 'hospitalization', 'diagnoses', 'procedures', 'other_medical_info', 'staff', 'costs', 'confidence']
+const MODULE_LABELS_MAP = MODULE_LABELS
+
+function getModuleEntry(m: string): CompletedModule | undefined {
+  return completedModules.value.find(c => c.name === m)
+}
+
+function getModuleStatus(m: string): 'done' | 'active' | 'pending' {
+  if (getModuleEntry(m)) return 'done'
+  if (frontpageModule.value === m) return 'active'
+  return 'pending'
+}
 
 const statusOptions = [
   { value: 'all', label: '全部状态' },
