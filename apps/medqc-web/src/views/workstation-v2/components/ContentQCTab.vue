@@ -12,11 +12,71 @@
       </a-button>
     </div>
 
-    <!-- 加载态 -->
-    <div v-if="loading" class="content-qc-tab__loading">
-      <a-spin />
-      <div class="loading-text">大模型正在分析病历文书内涵质量...</div>
-      <div class="loading-sub">预计耗时 30-60 秒</div>
+    <!-- 加载态 — 实时进度时间线 -->
+    <div v-if="loading" class="content-qc-tab__progress">
+      <!-- 进度头部 -->
+      <div class="progress-header">
+        <div class="progress-avatar">
+          <ThunderboltOutlined class="text-white text-lg" />
+        </div>
+        <div>
+          <div class="progress-title">正在逐文书质控分析</div>
+          <div class="progress-sub">已完成 {{ completedSections.length }} / {{ totalSections }} 个文书</div>
+        </div>
+        <a-spin class="ml-auto" />
+      </div>
+
+      <!-- 进度条 -->
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" :style="{ width: `${progressPercent}%` }"></div>
+        </div>
+      </div>
+
+      <!-- 文书时间线 -->
+      <div class="progress-timeline">
+        <div
+          v-for="sec in sectionTimeline"
+          :key="sec.type"
+          class="timeline-item"
+          :class="{
+            'timeline-done': sec.status === 'done',
+            'timeline-active': sec.status === 'active',
+            'timeline-pending': sec.status === 'pending',
+          }"
+        >
+          <!-- 状态图标 -->
+          <div class="timeline-dot" :class="`timeline-dot--${sec.status}`">
+            <CheckCircleOutlined v-if="sec.status === 'done'" class="text-white text-[10px]" />
+            <span v-else-if="sec.status === 'active'" class="dot-ping"></span>
+            <span v-else class="dot-idle"></span>
+          </div>
+          <!-- 内容 -->
+          <div class="timeline-content">
+            <div class="timeline-title-row">
+              <span class="timeline-label" :class="`timeline-label--${sec.status}`">{{ sec.label }}</span>
+              <span v-if="sec.duration" class="timeline-time">{{ sec.duration }}s</span>
+              <span v-if="sec.status === 'active'" class="timeline-active-hint">分析中...</span>
+            </div>
+            <!-- 已完成的质控结果预览 -->
+            <div v-if="sec.status === 'done' && sec.ruleCount !== undefined" class="timeline-result">
+              <span class="result-tag result-tag--rules">{{ sec.ruleCount }} 条规则</span>
+              <span v-if="sec.issueCount > 0" class="result-tag result-tag--issues">{{ sec.issueCount }} 个问题</span>
+              <span v-else class="result-tag result-tag--pass">全部通过</span>
+            </div>
+            <!-- 发现的问题逐条展示 -->
+            <div v-if="sec.status === 'done' && sec.issues && sec.issues.length > 0" class="timeline-issues">
+              <div v-for="(iss, i) in sec.issues.slice(0, 3)" :key="i" class="timeline-issue-item">
+                <a-tag :color="severityTagColor(iss.severity)" size="small" class="!text-[10px]">{{ severityLabel(iss.severity) }}</a-tag>
+                <span class="issue-text">{{ iss.description }}</span>
+              </div>
+              <div v-if="sec.issues.length > 3" class="timeline-issue-more">
+                +{{ sec.issues.length - 3 }} 条...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 空态 - 未分析 -->
@@ -55,8 +115,8 @@
           <span class="summary-value text-red-500">{{ summary.issuesFound }}</span>
         </div>
         <div class="summary-row">
-          <span class="summary-label">评定等级</span>
-          <a-tag :color="gradeColor(summary.grade)">{{ summary.grade }}</a-tag>
+          <span class="summary-label">文书数</span>
+          <span class="summary-value">{{ summary.docCount }}</span>
         </div>
       </div>
 
@@ -68,11 +128,7 @@
             <span class="group-title">{{ group.title }}</span>
             <span class="group-count">({{ group.items.length }})</span>
           </header>
-          <article
-            v-for="(issue, iIdx) in group.items"
-            :key="iIdx"
-            class="issue-item"
-          >
+          <article v-for="(issue, iIdx) in group.items" :key="iIdx" class="issue-item">
             <div class="issue-top">
               <a-tag :color="severityTagColor(issue.severity)" size="small">{{ severityLabel(issue.severity) }}</a-tag>
               <span class="issue-rule">{{ issue.ruleName }}</span>
@@ -93,7 +149,7 @@
     </div>
 
     <!-- 底部 -->
-    <footer v-if="analyzed" class="content-qc-tab__footer">
+    <footer v-if="analyzed && !loading" class="content-qc-tab__footer">
       <span>共 <strong>{{ totalCount }}</strong> 个问题</span>
       <a-button type="link" size="small" @click="runContentQC" :loading="loading">
         <ReloadOutlined /> 重新分析
@@ -103,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SafetyCertificateOutlined,
@@ -112,6 +168,8 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 import axios from 'axios'
+
+// ==================== 类型 ====================
 
 interface ContentIssue {
   ruleId: string
@@ -126,8 +184,49 @@ interface ContentSummary {
   totalRules: number
   complianceRate: number
   issuesFound: number
-  grade: string
+  docCount: number
 }
+
+interface SectionProgress {
+  type: string
+  label: string
+  content: string
+  status: 'pending' | 'active' | 'done'
+  ruleCount?: number
+  issueCount?: number
+  duration?: string
+  issues?: ContentIssue[]
+}
+
+// ==================== 文书类型映射 ====================
+const DOC_TYPE_LABELS: Record<string, string> = {
+  '入院记录': '入院记录',
+  '首次病程记录': '首次病程记录',
+  '日常病程记录': '日常病程记录',
+  '主任（副主任）医师查房记录': '主任查房记录',
+  '出院记录': '出院记录',
+  '手术记录': '手术记录',
+  '术后首次病程记录': '术后首次病程',
+  '会诊记录': '会诊记录',
+  '死亡记录': '死亡记录',
+  '病危通知': '病危通知',
+  '知情同意书': '知情同意书',
+  '病案首页': '病案首页',
+}
+
+// 自动识别文书段落的正则
+const SECTION_PATTERNS = [
+  { pattern: /入院记录/i, type: '入院记录' },
+  { pattern: /首次病程记录/i, type: '首次病程记录' },
+  { pattern: /日常病程记录|病程记录/i, type: '日常病程记录' },
+  { pattern: /主任.*查房|副主任.*查房/i, type: '主任（副主任）医师查房记录' },
+  { pattern: /出院记录|出院小结/i, type: '出院记录' },
+  { pattern: /手术记录/i, type: '手术记录' },
+  { pattern: /术后首次病程/i, type: '术后首次病程记录' },
+  { pattern: /会诊记录/i, type: '会诊记录' },
+]
+
+// ==================== Props & Emits ====================
 
 const props = defineProps<{
   patientId?: string
@@ -140,12 +239,22 @@ const emit = defineEmits<{
   (e: 'issues-change', count: number): void
 }>()
 
+// ==================== 状态 ====================
+
 const loading = ref(false)
 const analyzed = ref(false)
 const issues = ref<ContentIssue[]>([])
 const summary = ref<ContentSummary | null>(null)
+const completedSections = ref<SectionProgress[]>([])
+const sectionTimeline = ref<SectionProgress[]>([])
+const totalSections = ref(0)
 
 const totalCount = computed(() => issues.value.length)
+const progressPercent = computed(() =>
+  totalSections.value > 0
+    ? Math.round((completedSections.value.length / totalSections.value) * 100)
+    : 0,
+)
 
 const complianceClass = computed(() => {
   if (!summary.value) return ''
@@ -167,6 +276,8 @@ const groupedIssues = computed(() => {
   return Object.values(groups)
 })
 
+// ==================== 辅助函数 ====================
+
 function severityColor(sev: string) {
   return { error: '#ef4444', warning: '#f59e0b', info: '#2563eb' }[sev] || '#94a3b8'
 }
@@ -176,12 +287,84 @@ function severityTagColor(sev: string) {
 function severityLabel(sev: string) {
   return { error: '严重', warning: '警告', info: '提示' }[sev] || '未知'
 }
-function gradeColor(grade: string) {
-  if (grade === '甲') return 'green'
-  if (grade === '乙') return 'blue'
-  if (grade === '丙') return 'red'
-  return 'default'
+
+/** 从病历全文中识别文书段落 */
+function splitDocumentSections(text: string): { type: string; label: string; content: string }[] {
+  if (!text || text.trim().length === 0) return []
+
+  const lines = text.split('\n')
+  const sections: { type: string; label: string; startLine: number }[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    for (const sp of SECTION_PATTERNS) {
+      if (sp.pattern.test(line) && line.length < 30) {
+        // 避免重复同类型（除日常病程可以多次）
+        const lastOfType = sections.filter(s => s.type === sp.type)
+        if (lastOfType.length === 0 || sp.type === '日常病程记录') {
+          sections.push({
+            type: sp.type,
+            label: DOC_TYPE_LABELS[sp.type] || sp.type,
+            startLine: i,
+          })
+        }
+        break
+      }
+    }
+  }
+
+  // 将段落按起始行切分内容
+  const result: { type: string; label: string; content: string }[] = []
+  for (let i = 0; i < sections.length; i++) {
+    const start = sections[i].startLine
+    const end = i + 1 < sections.length ? sections[i + 1].startLine : lines.length
+    const content = lines.slice(start, end).join('\n')
+    
+    // 合并相同类型
+    const existing = result.find(r => r.type === sections[i].type)
+    if (existing) {
+      existing.content += '\n\n' + content
+    } else {
+      result.push({
+        type: sections[i].type,
+        label: sections[i].label,
+        content,
+      })
+    }
+  }
+
+  // 如果没有识别到任何段落，整体作为一个"病程记录"
+  if (result.length === 0 && text.trim().length > 50) {
+    result.push({ type: '病程记录', label: '病程记录（全文）', content: text })
+  }
+
+  return result
 }
+
+/** 解析单次 evaluate 返回中的问题 */
+function parseEvalResults(data: any, docType: string): ContentIssue[] {
+  const newIssues: ContentIssue[] = []
+
+  const evalResults = data.evaluation_results || []
+  for (const result of evalResults) {
+    if (result.is_compliant === false || result.compliance === '不合规') {
+      newIssues.push({
+        ruleId: result.rule_id || '',
+        ruleName: result.rule_name || result.rule_text || '未知规则',
+        severity: result.severity === '严重' || result.severity === 'critical' ? 'error'
+          : result.severity === '轻微' || result.severity === 'minor' ? 'info' : 'warning',
+        group: docType,
+        description: result.issue_description || result.analysis || '未提供详细说明',
+        suggestion: result.improvement_suggestion || result.suggestion || '',
+      })
+    }
+  }
+  return newIssues
+}
+
+// ==================== 核心：逐文书质控 ====================
 
 async function runContentQC() {
   if (!props.patientId) {
@@ -189,107 +372,131 @@ async function runContentQC() {
     return
   }
 
+  const medText = props.medicalText || ''
+  if (!medText || medText.trim().length < 20) {
+    message.warning('病历文书内容为空，请先加载病历文书')
+    return
+  }
+
+  // 重置状态
   loading.value = true
   analyzed.value = false
   issues.value = []
   summary.value = null
+  completedSections.value = []
 
-  try {
-    // 优先使用 CDM 数据库中的病历文书数据
-    // 调用后端的四川质控引擎分段 Pipeline
-    const documentContent = props.medicalText || ''
-    
-    if (!documentContent) {
-      // 如果没有文书文本，尝试从后端获取
-      message.info('正在从数据库加载病历文书...')
-    }
+  // 1. 切分文书段落
+  const sections = splitDocumentSections(medText)
+  totalSections.value = sections.length
 
-    const resp = await axios.post('/api/v1/qc/sichuan/evaluate', {
-      document_id: `${props.patientId}-${props.visitId}`,
-      document_content: documentContent,
-      document_type: '病程记录',
-      persist: false,
-      prompt_mode: 'plan_a',
-    }, { timeout: 120000 })
+  // 初始化时间线
+  sectionTimeline.value = sections.map(s => ({
+    type: s.type,
+    label: s.label,
+    content: s.content,
+    status: 'pending' as const,
+  }))
 
-    const data = resp.data
+  if (sections.length === 0) {
+    // 无法识别段落，整体发送
+    sectionTimeline.value = [{
+      type: '病程记录',
+      label: '病程记录（全文）',
+      content: medText,
+      status: 'active',
+    }]
+    totalSections.value = 1
+  }
 
-    if (data?.status === 'success') {
-      // 解析评估结果
-      const evalSummary = data.evaluation_summary || {}
-      summary.value = {
-        totalRules: evalSummary.total_rules || 0,
-        complianceRate: Math.round((evalSummary.compliance_rate || 0) * 100) / 100,
-        issuesFound: evalSummary.issues_found || evalSummary.critical_violations || 0,
-        grade: evalSummary.overall_grade || '-',
-      }
+  // 2. 逐文书调用后端
+  let allIssues: ContentIssue[] = []
+  let totalRules = 0
+  let totalCompliant = 0
+  const startTime = Date.now()
 
-      // 解析每条质控结果
-      const newIssues: ContentIssue[] = []
-      const evalResults = data.evaluation_results || []
-      for (const result of evalResults) {
-        if (result.is_compliant === false || result.compliance === '不合规') {
-          newIssues.push({
-            ruleId: result.rule_id || '',
-            ruleName: result.rule_name || result.rule_text || '未知规则',
-            severity: result.severity === '严重' || result.severity === 'critical' ? 'error'
-              : result.severity === '轻微' || result.severity === 'minor' ? 'info' : 'warning',
-            group: result.document_type || result.category || '病历文书',
-            description: result.issue_description || result.analysis || '未提供详细说明',
-            suggestion: result.improvement_suggestion || result.suggestion || '',
-          })
-        }
-      }
+  for (let i = 0; i < sectionTimeline.value.length; i++) {
+    const sec = sectionTimeline.value[i]
+    sec.status = 'active'
 
-      // 如果有 document_results（分段模式），也解析
-      if (data.document_results) {
-        for (const [docType, docData] of Object.entries(data.document_results as Record<string, any>)) {
-          const docResults = docData?.evaluation_results || []
-          for (const result of docResults) {
-            if (result.is_compliant === false || result.compliance === '不合规') {
-              // 避免重复（如果 evaluation_results 已经包含了）
-              const exists = newIssues.some(i => i.ruleId === result.rule_id && i.group === docType)
-              if (!exists) {
-                newIssues.push({
-                  ruleId: result.rule_id || '',
-                  ruleName: result.rule_name || result.rule_text || '未知规则',
-                  severity: result.severity === '严重' || result.severity === 'critical' ? 'error'
-                    : result.severity === '轻微' || result.severity === 'minor' ? 'info' : 'warning',
-                  group: docType,
-                  description: result.issue_description || result.analysis || '未提供详细说明',
-                  suggestion: result.improvement_suggestion || result.suggestion || '',
-                })
-              }
-            }
-          }
-        }
-      }
+    const secStart = Date.now()
 
-      issues.value = newIssues
-      analyzed.value = true
-      emit('issues-change', newIssues.length)
+    try {
+      const resp = await axios.post('/api/v1/qc/sichuan/evaluate', {
+        document_id: `${props.patientId}-${props.visitId}-${sec.type}`,
+        document_content: sec.content,
+        document_type: sec.type,
+        persist: false,
+        prompt_mode: 'plan_a',
+      }, { timeout: 120000 })
 
-      if (newIssues.length === 0) {
-        message.success('内涵质控通过，未发现问题')
+      const data = resp.data
+      const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
+
+      if (data?.status === 'success') {
+        const evalSummary = data.evaluation_summary || {}
+        const secIssues = parseEvalResults(data, sec.label)
+
+        // 更新时间线
+        sec.status = 'done'
+        sec.ruleCount = evalSummary.total_rules || 0
+        sec.issueCount = secIssues.length
+        sec.duration = secDuration
+        sec.issues = secIssues
+
+        // 累加
+        allIssues = [...allIssues, ...secIssues]
+        totalRules += evalSummary.total_rules || 0
+        totalCompliant += evalSummary.compliant_rules || 0
+
+        completedSections.value.push({ ...sec })
+
+        // 实时更新问题列表和 badge 计数
+        issues.value = [...allIssues]
+        emit('issues-change', allIssues.length)
       } else {
-        message.warning(`发现 ${newIssues.length} 个内涵质控问题`)
+        sec.status = 'done'
+        sec.ruleCount = 0
+        sec.issueCount = 0
+        sec.duration = secDuration
+        completedSections.value.push({ ...sec })
       }
-    } else {
-      message.error('内涵质控分析失败')
+    } catch (err: any) {
+      const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
+      console.error(`质控 ${sec.label} 失败:`, err)
+      sec.status = 'done'
+      sec.ruleCount = 0
+      sec.issueCount = -1  // 标记失败
+      sec.duration = secDuration
+      completedSections.value.push({ ...sec })
     }
-  } catch (err: any) {
-    console.error('内涵质控分析异常', err)
-    message.error(err?.response?.data?.detail || err?.message || '内涵质控分析失败')
-  } finally {
-    loading.value = false
+  }
+
+  // 3. 汇总
+  const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1)
+  summary.value = {
+    totalRules,
+    complianceRate: totalRules > 0 ? Math.round((totalCompliant / totalRules) * 10000) / 100 : 100,
+    issuesFound: allIssues.length,
+    docCount: sectionTimeline.value.length,
+  }
+
+  analyzed.value = true
+  loading.value = false
+
+  if (allIssues.length === 0) {
+    message.success(`内涵质控通过（${totalDuration}s，${sectionTimeline.value.length} 个文书）`)
+  } else {
+    message.warning(`发现 ${allIssues.length} 个问题（${totalDuration}s）`)
   }
 }
 
-// 当患者切换时重置状态
+// 切换患者时重置
 watch(() => props.patientId, () => {
   analyzed.value = false
   issues.value = []
   summary.value = null
+  completedSections.value = []
+  sectionTimeline.value = []
   emit('issues-change', 0)
 })
 </script>
@@ -328,29 +535,211 @@ watch(() => props.patientId, () => {
   color: #0f172a;
 }
 
-.content-qc-tab__loading {
+/* ========== 进度时间线 ========== */
+.content-qc-tab__progress {
   flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+}
+
+.progress-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.progress-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
-  text-align: center;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
 }
 
-.loading-text {
-  margin-top: 16px;
+.progress-title {
   font-size: 13px;
-  font-weight: 700;
-  color: #334155;
+  font-weight: 800;
+  color: #0f172a;
 }
 
-.loading-sub {
-  margin-top: 4px;
+.progress-sub {
   font-size: 11px;
   color: #94a3b8;
+  margin-top: 2px;
 }
 
+.progress-bar-wrap {
+  margin-bottom: 14px;
+}
+
+.progress-bar-bg {
+  height: 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  transition: width 0.5s ease;
+}
+
+.progress-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.timeline-done { background: #f0fdf4; }
+.timeline-active { background: #eff6ff; animation: pulse-bg 2s infinite; }
+.timeline-pending { background: rgba(248, 250, 252, 0.5); }
+
+@keyframes pulse-bg {
+  0%, 100% { background: #eff6ff; }
+  50% { background: #dbeafe; }
+}
+
+.timeline-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.timeline-dot--done { background: #22c55e; }
+.timeline-dot--active { background: #3b82f6; }
+.timeline-dot--pending { background: #e2e8f0; }
+
+.dot-ping {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #fff;
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.dot-idle {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+.timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeline-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timeline-label--done { color: #15803d; }
+.timeline-label--active { color: #2563eb; }
+.timeline-label--pending { color: #94a3b8; }
+
+.timeline-time {
+  font-size: 10px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-active-hint {
+  font-size: 10px;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.timeline-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.result-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.result-tag--rules {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.result-tag--issues {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.result-tag--pass {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.timeline-issues {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline-issue-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.issue-text {
+  font-size: 11px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-issue-more {
+  font-size: 10px;
+  color: #94a3b8;
+  padding-left: 4px;
+}
+
+/* ========== 空态、结果 ========== */
 .content-qc-tab__empty {
   flex: 1;
   display: flex;
@@ -372,29 +761,10 @@ watch(() => props.patientId, () => {
   margin-bottom: 16px;
 }
 
-.empty-icon {
-  font-size: 24px;
-  color: #7c3aed;
-}
-
-.empty-title {
-  font-size: 14px;
-  font-weight: 800;
-  color: #0f172a;
-  margin-bottom: 6px;
-}
-
-.empty-desc {
-  font-size: 12px;
-  color: #94a3b8;
-  line-height: 1.6;
-  margin-bottom: 16px;
-  max-width: 240px;
-}
-
-.empty-btn {
-  border-radius: 10px !important;
-}
+.empty-icon { font-size: 24px; color: #7c3aed; }
+.empty-title { font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+.empty-desc { font-size: 12px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px; max-width: 240px; }
+.empty-btn { border-radius: 10px !important; }
 
 .content-qc-tab__body {
   flex: 1;
@@ -420,21 +790,10 @@ watch(() => props.patientId, () => {
   padding: 4px 8px;
 }
 
-.summary-label {
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 600;
-}
+.summary-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
+.summary-value { font-size: 13px; font-weight: 800; color: #0f172a; }
 
-.summary-value {
-  font-size: 13px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.issue-group {
-  margin-bottom: 12px;
-}
+.issue-group { margin-bottom: 12px; }
 
 .group-header {
   display: flex;
@@ -447,23 +806,9 @@ watch(() => props.patientId, () => {
   margin-bottom: 8px;
 }
 
-.group-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.group-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: #334155;
-}
-
-.group-count {
-  font-size: 11px;
-  color: #94a3b8;
-}
+.group-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.group-title { font-size: 12px; font-weight: 700; color: #334155; }
+.group-count { font-size: 11px; color: #94a3b8; }
 
 .issue-item {
   background: #fff;
@@ -473,25 +818,9 @@ watch(() => props.patientId, () => {
   margin-bottom: 8px;
 }
 
-.issue-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.issue-rule {
-  font-size: 12px;
-  font-weight: 700;
-  color: #475569;
-}
-
-.issue-desc {
-  font-size: 13px;
-  color: #0f172a;
-  line-height: 1.6;
-}
-
+.issue-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.issue-rule { font-size: 12px; font-weight: 700; color: #475569; }
+.issue-desc { font-size: 13px; color: #0f172a; line-height: 1.6; }
 .issue-suggestion {
   margin-top: 6px;
   background: #fff7ed;
@@ -512,17 +841,8 @@ watch(() => props.patientId, () => {
   text-align: center;
 }
 
-.empty-result-icon {
-  font-size: 30px;
-  color: #22c55e;
-  margin-bottom: 10px;
-}
-
-.empty-result-text {
-  font-size: 13px;
-  font-weight: 700;
-  color: #334155;
-}
+.empty-result-icon { font-size: 30px; color: #22c55e; margin-bottom: 10px; }
+.empty-result-text { font-size: 13px; font-weight: 700; color: #334155; }
 
 .content-qc-tab__footer {
   display: flex;
@@ -534,6 +854,8 @@ watch(() => props.patientId, () => {
   font-size: 12px;
   color: #475569;
 }
+
+.ml-auto { margin-left: auto; }
 
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
