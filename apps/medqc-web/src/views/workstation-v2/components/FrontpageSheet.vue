@@ -472,6 +472,7 @@ const paddedSurgeries = computed(() => {
 })
 
 function formatIncision(s) {
+  if (!s.surgery_name && !s.surgery_code) return ''
   if (!s.surgial_incision_level && !s.surgical_incisionheal_level) return '/'
   return `${s.surgial_incision_level || ''} / ${s.surgical_incisionheal_level || ''}`
 }
@@ -631,6 +632,7 @@ u.fill.cost-val {
 
 .diag-table td { height: 26px; }
 .surgery-table td { height: 24px; }
+
 
 /* 第二页底部说明文字 */
 .fp-footer-desc {

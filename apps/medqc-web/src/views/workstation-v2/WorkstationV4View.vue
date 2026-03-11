@@ -472,12 +472,22 @@
           v-model:visible="assistPanelVisible"
           :default-tab="assistTab"
           :patient-info="assistPatientInfo"
+          :content-count="contentQCCount"
           :qc-count="assistBadgeCount"
           :profile-count="frontpageDraft ? 1 : 0"
           :drg-count="drgResult ? 1 : 0"
           :message-count="notificationUnreadCount"
           @tab-change="handleAssistTabChange"
         >
+          <template #content>
+            <ContentQCTab
+              :patient-id="selectedRecord?.patientId"
+              :visit-id="selectedRecord?.id"
+              :institute-id="selectedRecord?.instituteId"
+              :medical-text="combinedMedicalText"
+              @issues-change="(count: number) => contentQCCount = count"
+            />
+          </template>
           <template #qc="{ activeSubTab }">
             <QCResultTab
               :frontpage="frontpageDraft"
@@ -794,6 +804,7 @@ import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
 import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
 import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
 import QCResultTab from './components/QCResultTab.vue'
+import ContentQCTab from './components/ContentQCTab.vue'
 import ICDSearchPanel from './components/ICDSearchPanel.vue'
 import SettlementSheet from './components/SettlementSheet.vue'
 import FrontpageSheet from './components/FrontpageSheet.vue'
@@ -837,6 +848,7 @@ const activeDept = ref('全部科室')
 const searchText = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
+const contentQCCount = ref(0)
 
 const icdTargetOptions = [
   { label: '主诊断编码', value: 'mainDiagnosis' },

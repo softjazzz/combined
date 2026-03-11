@@ -81,7 +81,16 @@
           </nav>
 
           <div class="assist-panel__content">
-            <div v-if="currentTab === 'form' || currentTab === 'coding' || currentTab === 'cost'" class="assist-panel__slot">
+            <div v-if="currentTab === 'content'" class="assist-panel__slot">
+              <slot name="content">
+                <div class="assist-empty">
+                  <SafetyCertificateOutlined class="assist-empty__icon" />
+                  <div class="assist-empty__title">内涵质控待接入</div>
+                </div>
+              </slot>
+            </div>
+
+            <div v-else-if="currentTab === 'form' || currentTab === 'coding' || currentTab === 'cost'" class="assist-panel__slot">
               <slot name="qc" :active-sub-tab="currentTab">
                 <div class="assist-empty">
                   <CheckCircleOutlined class="assist-empty__icon" />
@@ -136,7 +145,7 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 
-type AssistTabKey = 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
+type AssistTabKey = 'content' | 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PatientInfo {
   name?: string
@@ -151,6 +160,7 @@ const props = withDefaults(defineProps<{
   defaultVisible?: boolean
   defaultTab?: AssistTabKey
   patientInfo?: PatientInfo | null
+  contentCount?: number
   qcCount?: number
   codingCount?: number
   costCount?: number
@@ -160,8 +170,9 @@ const props = withDefaults(defineProps<{
 }>(), {
   visible: undefined,
   defaultVisible: false,
-  defaultTab: 'form',
+  defaultTab: 'content',
   patientInfo: null,
+  contentCount: 0,
   qcCount: 0,
   codingCount: 0,
   costCount: 0,
@@ -199,6 +210,7 @@ const mergedVisible = computed(() => (
 ))
 
 const tabs = [
+  { key: 'content' as const, label: '内涵\n质控' },
   { key: 'form' as const, label: '首页\n质控' },
   { key: 'coding' as const, label: '编码\n质控' },
   { key: 'cost' as const, label: '控费\n监测' },
@@ -208,10 +220,11 @@ const tabs = [
 ]
 
 const totalBadgeCount = computed(() =>
-  props.qcCount + props.codingCount + props.costCount + props.profileCount + props.drgCount + props.messageCount,
+  props.contentCount + props.qcCount + props.codingCount + props.costCount + props.profileCount + props.drgCount + props.messageCount,
 )
 
 function getBadge(tab: AssistTabKey): number {
+  if (tab === 'content') return props.contentCount
   if (tab === 'form') return props.qcCount
   if (tab === 'coding') return props.codingCount
   if (tab === 'cost') return props.costCount
