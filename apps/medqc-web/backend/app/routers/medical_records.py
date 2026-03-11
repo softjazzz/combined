@@ -117,25 +117,30 @@ async def get_record_content(
 
 
 @router.get("/documents/{visit_id}")
-async def get_documents(visit_id: str):
+async def get_documents(
+    visit_id: str,
+    mode: Optional[str] = Query(None, description="返回模式: 默认返回列表, concat=拼接全文"),
+):
     """获取某次就诊的全部病历文书列表及内容（供前端预览使用）"""
     from ..database.connection import engine
     from sqlalchemy.orm import Session
     from sqlalchemy import text as sql_text
 
     # 定义需要查询的文书类型
+    # 按病历实际排列顺序
     doc_types = [
         ("admission_record", "入院记录"),
-        ("discharge_record", "出院记录"),
-        ("surgery_record", "手术记录"),
         ("first_course_record", "首次病程记录"),
         ("daily_course_record", "日常病程记录"),
         ("senior_course_record", "上级医师查房记录"),
         ("consultation_record", "会诊记录"),
+        ("surgery_record", "手术记录"),
+        ("postsurg_firstcourse_record", "术后首次病程记录"),
         ("rescue_record", "抢救记录"),
         ("transfer_in_record", "转入记录"),
         ("transfer_out_record", "转出记录"),
-        ("postsurg_firstcourse_record", "术后首次病程记录"),
+        ("nursing_record", "护理记录"),
+        ("discharge_record", "出院记录"),
     ]
 
     documents = []
@@ -178,6 +183,23 @@ async def get_documents(visit_id: str):
                     })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询文书失败: {str(e)}")
+
+    # concat 模式：拼接所有文书内容成完整病历
+    if mode == "concat":
+        sections = []
+        for doc in documents:
+            if doc["has_content"] and doc["content"]:
+                sep = "=" * 40
+                section = f"{sep}\n\U0001f4cb {doc['label']}\n{sep}\n\n{doc['content']}"
+                sections.append(section)
+        concat_text = "\n\n\n".join(sections)
+        return {
+            "visit_id": visit_id,
+            "mode": "concat",
+            "text": concat_text,
+            "total_length": len(concat_text),
+            "document_count": len([d for d in documents if d["has_content"]]),
+        }
 
     return {"documents": documents, "visit_id": visit_id}
 

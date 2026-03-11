@@ -300,45 +300,223 @@
             </div>
           </aside>
 
-          <!-- 右侧：AI 首页生成 (65%) -->
-          <main class="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-900">
-            <div class="p-6">
-              <!-- 生成中进度 -->
-              <div v-if="frontpageGenerating" class="flex flex-col items-center justify-center py-20">
-                <a-spin size="large" />
-                <div class="text-sm text-slate-400 mt-4">正在从病历中提取首页信息...</div>
-                <div v-if="frontpageModule" class="text-xs text-blue-500 mt-2">当前模块: {{ frontpageModule }}</div>
-              </div>
-
-              <!-- 生成结果 Tabs -->
-              <div v-else-if="frontpageDraft">
-                <a-tabs v-model:activeKey="frontpageTab" size="small">
-                  <a-tab-pane key="fields" tab="提取结果">
-                    <FrontPagePanel
-                      :fields="frontpageFields"
-                      :generating="frontpageGenerating"
-                      :focus-target="frontpageFocusTarget"
-                      @generate="generateFrontpage"
-                      @export="handleExportFrontpage"
-                      @save="handleSaveFrontpage"
-                      @draft-change="handleFrontPanelDraftChange"
-                    />
-                  </a-tab-pane>
-                  <a-tab-pane key="preview" tab="首页预览/打印">
-                    <HmFrontpagePreview :draft="frontpageDraft" />
-                  </a-tab-pane>
-                </a-tabs>
-              </div>
-
-              <!-- 未生成状态 -->
-              <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
-                <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
-                  <FileTextOutlined class="text-3xl" />
+          <!-- 右侧：三 Tab 内容区 (65%) -->
+          <main class="flex-1 overflow-hidden flex flex-col bg-white dark:bg-slate-900">
+            <a-tabs v-model:activeKey="detailMainTab" size="small" class="detail-main-tabs flex-1 flex flex-col overflow-hidden" :tabBarStyle="{ margin: 0, padding: '0 24px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }">
+              <!-- ====== Tab 1: 病历详情 ====== -->
+              <a-tab-pane key="records" class="flex-1 overflow-y-auto custom-scrollbar">
+                <template #tab>
+                  <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
+                </template>
+                <div class="p-6">
+                  <div v-if="concatLoading" class="flex flex-col items-center py-20">
+                    <a-spin size="large" />
+                    <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
+                  </div>
+                  <div v-else-if="concatText" class="medical-record-document">
+                    <div v-for="(section, idx) in concatSections" :key="idx" class="mb-8">
+                      <div class="flex items-center gap-2 mb-3 pb-2 border-b-2 border-blue-100">
+                        <FileTextOutlined class="text-blue-500" />
+                        <h3 class="text-base font-bold text-slate-800 dark:text-white m-0">{{ section.title }}</h3>
+                      </div>
+                      <pre class="whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-300 leading-7 m-0 bg-slate-50/50 dark:bg-slate-800/30 rounded-lg p-4 border border-slate-100 dark:border-slate-700/30">{{ section.content }}</pre>
+                    </div>
+                  </div>
+                  <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                    <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                      <FileTextOutlined class="text-3xl" />
+                    </div>
+                    <div class="text-sm font-medium mb-1">暂无病历文书</div>
+                    <div class="text-xs text-slate-400">该患者尚无可展示的病历文书内容</div>
+                  </div>
                 </div>
-                <div class="text-sm font-medium mb-1">尚未生成病案首页</div>
-                <div class="text-xs text-slate-400">点击右上角「AI 生成首页」按钮开始</div>
-              </div>
-            </div>
+              </a-tab-pane>
+
+              <!-- ====== Tab 2: 病案首页 ====== -->
+              <a-tab-pane key="frontpage" class="flex-1 overflow-y-auto custom-scrollbar">
+                <template #tab>
+                  <span class="flex items-center gap-1.5"><FileSearchOutlined />病案首页</span>
+                </template>
+                <div class="p-6">
+                  <div v-if="frontpageGenerating" class="flex flex-col items-center justify-center py-20">
+                    <a-spin size="large" />
+                    <div class="text-sm text-slate-400 mt-4">正在从病历中提取首页信息...</div>
+                    <div v-if="frontpageModule" class="text-xs text-blue-500 mt-2">当前模块: {{ frontpageModule }}</div>
+                  </div>
+                  <div v-else-if="frontpageDraft">
+                    <a-tabs v-model:activeKey="frontpageTab" size="small">
+                      <a-tab-pane key="fields" tab="提取结果">
+                        <FrontPagePanel
+                          :fields="frontpageFields"
+                          :generating="frontpageGenerating"
+                          :focus-target="frontpageFocusTarget"
+                          @generate="generateFrontpage"
+                          @export="handleExportFrontpage"
+                          @save="handleSaveFrontpage"
+                          @draft-change="handleFrontPanelDraftChange"
+                        />
+                      </a-tab-pane>
+                      <a-tab-pane key="preview" tab="首页预览/打印">
+                        <HmFrontpagePreview :draft="frontpageDraft" />
+                      </a-tab-pane>
+                    </a-tabs>
+                  </div>
+                  <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                    <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                      <FileTextOutlined class="text-3xl" />
+                    </div>
+                    <div class="text-sm font-medium mb-1">尚未生成病案首页</div>
+                    <div class="text-xs text-slate-400">点击右上角「AI 生成首页」按钮开始</div>
+                  </div>
+                </div>
+              </a-tab-pane>
+
+              <!-- ====== Tab 3: 结算清单 ====== -->
+              <a-tab-pane key="settlement" class="flex-1 overflow-y-auto custom-scrollbar">
+                <template #tab>
+                  <span class="flex items-center gap-1.5">
+                    <span style="font-size:14px">💰</span>结算清单
+                    <span v-if="settlementQcFailed > 0" class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-100 text-red-600 text-[10px] font-bold px-1">{{ settlementQcFailed }}</span>
+                  </span>
+                </template>
+                <div class="p-6">
+                  <div v-if="settlementLoading" class="flex flex-col items-center py-20">
+                    <a-spin size="large" />
+                    <div class="text-sm text-slate-400 mt-4">加载结算清单中...</div>
+                  </div>
+                  <div v-else-if="settlementData">
+                    <!-- 操作栏 -->
+                    <div class="flex items-center justify-between mb-4">
+                      <div class="text-sm text-slate-500">
+                        清单流水号: <span class="font-mono font-bold text-slate-700">{{ settlementData.medinsur_serial_no || '-' }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <a-button size="small" @click="runSettlementQc" :loading="settlementQcLoading">
+                          <template #icon><CheckOutlined /></template>
+                          执行质控
+                        </a-button>
+                      </div>
+                    </div>
+
+                    <!-- 基本信息 -->
+                    <div class="mb-6">
+                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <UserOutlined class="text-blue-500" /> 基本信息
+                      </h4>
+                      <div class="grid grid-cols-3 gap-3">
+                        <div v-for="item in settlementBasicFields" :key="item.label" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
+                          <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
+                          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" :title="item.value">{{ item.value || '-' }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 住院信息 -->
+                    <div class="mb-6">
+                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <MedicineBoxOutlined class="text-blue-500" /> 住院信息
+                      </h4>
+                      <div class="grid grid-cols-3 gap-3">
+                        <div v-for="item in settlementHospFields" :key="item.label" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
+                          <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
+                          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" :title="item.value">{{ item.value || '-' }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 诊断列表 -->
+                    <div v-if="settlementData.diagnoses && settlementData.diagnoses.length" class="mb-6">
+                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <FileTextOutlined class="text-blue-500" /> 诊断信息 ({{ settlementData.diagnoses.length }})
+                      </h4>
+                      <div class="space-y-2">
+                        <div v-for="(diag, idx) in settlementData.diagnoses" :key="idx" class="bg-slate-50 dark:bg-slate-800 rounded-lg px-4 py-3 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <span class="text-[10px] px-1.5 py-0.5 rounded font-bold" :class="idx === 0 ? 'text-blue-600 bg-blue-100' : 'text-slate-400 bg-slate-200'">
+                              {{ idx === 0 ? '主诊断' : `诊断${idx + 1}` }}
+                            </span>
+                            <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">{{ diag.name }}</span>
+                          </div>
+                          <span class="text-xs text-slate-400 font-mono">{{ diag.code }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 费用明细 -->
+                    <div v-if="settlementData.cost_details && settlementData.cost_details.length" class="mb-6">
+                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span style="font-size:14px">💰</span> 费用明细 ({{ settlementData.cost_details.length }})
+                      </h4>
+                      <a-table
+                        :dataSource="settlementData.cost_details"
+                        :columns="costColumns"
+                        size="small"
+                        :pagination="false"
+                        :scroll="{ y: 300 }"
+                        rowKey="item_id"
+                      />
+                    </div>
+
+                    <!-- 医保结算信息 -->
+                    <div class="mb-6">
+                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <span style="font-size:14px">🏥</span> 医保结算
+                      </h4>
+                      <div class="grid grid-cols-3 gap-3">
+                        <div v-for="item in settlementInsurFields" :key="item.label" class="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
+                          <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
+                          <div class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" :title="item.value">{{ item.value || '-' }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 质控结果摘要 -->
+                    <div v-if="settlementQcReport" class="mb-6">
+                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <CheckCircleOutlined class="text-green-500" /> 质控结果
+                      </h4>
+                      <div class="grid grid-cols-4 gap-3 mb-4">
+                        <div class="bg-blue-50 rounded-lg p-3 text-center border border-blue-100">
+                          <div class="text-2xl font-black text-blue-600">{{ settlementQcReport.summary.total }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">总规则数</div>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-3 text-center border border-green-100">
+                          <div class="text-2xl font-black text-green-600">{{ settlementQcReport.summary.passed }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">通过</div>
+                        </div>
+                        <div class="bg-red-50 rounded-lg p-3 text-center border border-red-100">
+                          <div class="text-2xl font-black text-red-600">{{ settlementQcReport.summary.failed }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">不通过</div>
+                        </div>
+                        <div class="bg-amber-50 rounded-lg p-3 text-center border border-amber-100">
+                          <div class="text-2xl font-black text-amber-600">{{ settlementQcReport.summary.pass_rate }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">通过率</div>
+                        </div>
+                      </div>
+                      <div class="space-y-2">
+                        <div v-for="r in settlementQcReport.results.filter((x: any) => !x.passed)" :key="r.rule_id"
+                          class="bg-white dark:bg-slate-800 rounded-lg px-4 py-3 border flex items-start gap-3"
+                          :class="r.severity === 'error' ? 'border-red-200' : 'border-amber-200'"
+                        >
+                          <a-tag :color="r.severity === 'error' ? 'red' : 'orange'" class="mt-0.5 flex-shrink-0">{{ r.rule_id }}</a-tag>
+                          <div class="min-w-0">
+                            <div class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ r.field_name }}</div>
+                            <div class="text-xs text-slate-500 mt-0.5">{{ r.message }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                    <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                      <span style="font-size: 32px">💰</span>
+                    </div>
+                    <div class="text-sm font-medium mb-1">暂无结算清单</div>
+                    <div class="text-xs text-slate-400">该患者尚未有医保结算清单数据</div>
+                  </div>
+                </div>
+              </a-tab-pane>
+            </a-tabs>
           </main>
         </div>
 
@@ -742,6 +920,127 @@ const docDrawerVisible = ref(false)
 const docDrawerTitle = ref('')
 const docDrawerContent = ref('')
 
+// ========== 详情主 Tab ==========
+const detailMainTab = ref('records')  // records | frontpage | settlement
+
+// ========== 病历详情（拼接文本） ==========
+const concatText = ref('')
+const concatLoading = ref(false)
+const concatSections = computed(() => {
+  if (!concatText.value) return []
+  const parts = concatText.value.split(/={40}/)
+  const sections: { title: string; content: string }[] = []
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim()
+    if (part.startsWith('📋')) {
+      const title = part.replace('📋', '').trim()
+      const nextContent = parts[i + 1] || ''
+      sections.push({ title, content: nextContent.trim() })
+      i++ // skip next part since it's content
+    }
+  }
+  return sections
+})
+
+// ========== 结算清单 ==========
+const settlementData = ref<any>(null)
+const settlementLoading = ref(false)
+const settlementQcReport = ref<any>(null)
+const settlementQcLoading = ref(false)
+const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
+
+const costColumns = [
+  { title: '收费类别', dataIndex: 'type', width: 120 },
+  { title: '等级', dataIndex: 'level', width: 80 },
+  { title: '实收金额', dataIndex: 'charge', width: 100 },
+  { title: '甲类', dataIndex: 'class_a_amount', width: 80 },
+  { title: '乙类', dataIndex: 'class_b_amount', width: 80 },
+  { title: '自费', dataIndex: 'own_pay_amount', width: 80 },
+]
+
+const settlementBasicFields = computed(() => {
+  const d = settlementData.value
+  if (!d) return []
+  return [
+    { label: '患者姓名', value: d.patient_name },
+    { label: '性别', value: d.patient_sex },
+    { label: '年龄', value: d.patient_age },
+    { label: '医保类型', value: d.patient_insurance_type || d.insurance_type },
+    { label: '病案号', value: d.mr_no },
+    { label: '住院号', value: d.inpat_no },
+  ]
+})
+
+const settlementHospFields = computed(() => {
+  const d = settlementData.value
+  if (!d) return []
+  return [
+    { label: '入院科室', value: d.admission_dept_name },
+    { label: '出院科室', value: d.discharge_dept_name },
+    { label: '入院时间', value: d.admission_datetime },
+    { label: '出院时间', value: d.discharge_datetime },
+    { label: '入院途径', value: d.admission_route },
+    { label: '离院方式', value: d.leaving_hospital_way },
+  ]
+})
+
+const settlementInsurFields = computed(() => {
+  const d = settlementData.value
+  if (!d) return []
+  return [
+    { label: '参保地', value: d.insured_place },
+    { label: '个人自付', value: d.out_of_pocket_advance },
+    { label: '个人自费', value: d.out_of_pocket_amount },
+    { label: '个人现金支付', value: d.cash_payment_amount },
+    { label: '医保支付方式', value: d.insurance_type },
+    { label: '结算状态', value: d.settlement_status },
+  ]
+})
+
+async function loadConcatText(visitId: string) {
+  concatLoading.value = true
+  concatText.value = ''
+  try {
+    const { data } = await axios.get(`/api/medical-records/documents/${visitId}`, { params: { mode: 'concat' } })
+    concatText.value = data.text || ''
+  } catch (err) {
+    console.error('加载病历详情失败:', err)
+  } finally {
+    concatLoading.value = false
+  }
+}
+
+async function loadSettlement(patientId: string, visitId: string) {
+  settlementLoading.value = true
+  settlementData.value = null
+  settlementQcReport.value = null
+  try {
+    const { data } = await axios.get(`/api/medical-records/settlement/${patientId}/${visitId}`)
+    settlementData.value = data
+  } catch (err: any) {
+    if (err?.response?.status !== 404) {
+      console.error('加载结算清单失败:', err)
+    }
+  } finally {
+    settlementLoading.value = false
+  }
+}
+
+async function runSettlementQc() {
+  if (!selectedRecord.value) return
+  settlementQcLoading.value = true
+  try {
+    const { data } = await axios.post(`/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`)
+    settlementQcReport.value = data
+    message.success(`质控完成: ${data.summary.passed}/${data.summary.total} 通过`)
+  } catch (err) {
+    message.error('结算清单质控执行失败')
+    console.error(err)
+  } finally {
+    settlementQcLoading.value = false
+  }
+}
+
 // ========== AI画像 & DRG Modal ==========
 const aiProfileModalVisible = ref(false)
 const profileAnalyzed = ref(false)
@@ -840,17 +1139,27 @@ onMounted(() => {
   fetchAssistNotifications()
 })
 
-// 切换病历时清除上次生成结果 + 加载文书列表
+// 切换病历时清除上次生成结果 + 加载文书列表 + 加载结算清单
 watch(selectedId, (newId) => {
   setDraftEmpty()
   resetPerRecordTransient()
   assistIssues.value = []
   suggestionDrawerVisible.value = false
   docDrawerVisible.value = false
+  settlementQcReport.value = null
+  detailMainTab.value = 'records'
   if (newId) {
     loadDocuments(newId)
+    loadConcatText(newId)
+    // 加载结算清单（需要 patientId）
+    const record = allRecords.value.find(r => r.id === newId)
+    if (record?.patientId) {
+      loadSettlement(record.patientId, newId)
+    }
   } else {
     documentsList.value = []
+    concatText.value = ''
+    settlementData.value = null
   }
 })
 
@@ -1113,4 +1422,14 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(203, 213, 225, 0.4); border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.6); }
+
+/* 详情主 Tab 样式 */
+.detail-main-tabs .ant-tabs-content {
+  flex: 1;
+  overflow: hidden;
+}
+.detail-main-tabs .ant-tabs-tabpane {
+  height: 100%;
+  overflow-y: auto;
+}
 </style>
