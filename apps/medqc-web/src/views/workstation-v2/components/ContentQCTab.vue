@@ -345,8 +345,8 @@ async function runContentQC() {
 
   // 逐文书调用后端 LLM 质控
   let allIssues: ContentIssue[] = []
-  let totalRules = 0
-  let totalCompliant = 0
+  const allRuleIds = new Set<string>()       // 按 rule_id 去重
+  const nonCompliantRuleIds = new Set<string>() // 不合规的 rule_id
   const startTime = Date.now()
 
   for (let i = 0; i < sectionTimeline.value.length; i++) {
@@ -389,6 +389,17 @@ async function runContentQC() {
         const evalSummary = data.evaluation_summary || {}
         const secIssues = parseEvalResults(data, sec.label)
 
+        // 收集唯一 rule_id（去重统计）
+        const evalResults = data.evaluation_results || []
+        for (const r of evalResults) {
+          if (r.rule_id) {
+            allRuleIds.add(r.rule_id)
+            if (r.is_compliant === false || r.compliance === '不合规') {
+              nonCompliantRuleIds.add(r.rule_id)
+            }
+          }
+        }
+
         // 更新时间线
         sec.status = 'done'
         sec.ruleCount = evalSummary.total_rules || 0
@@ -396,10 +407,8 @@ async function runContentQC() {
         sec.duration = secDuration
         sec.issues = secIssues
 
-        // 累加
+        // 累加问题
         allIssues = [...allIssues, ...secIssues]
-        totalRules += evalSummary.total_rules || 0
-        totalCompliant += evalSummary.compliant_rules || 0
 
         completedSections.value.push({ ...sec })
 
@@ -424,11 +433,13 @@ async function runContentQC() {
     }
   }
 
-  // 3. 汇总
+  // 3. 汇总（按 rule_id 去重后的唯一规则数）
   const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1)
+  const uniqueRuleCount = allRuleIds.size
+  const compliantCount = uniqueRuleCount - nonCompliantRuleIds.size
   summary.value = {
-    totalRules,
-    complianceRate: totalRules > 0 ? Math.round((totalCompliant / totalRules) * 10000) / 100 : 100,
+    totalRules: uniqueRuleCount,
+    complianceRate: uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : 100,
     issuesFound: allIssues.length,
     docCount: sectionTimeline.value.length,
   }
