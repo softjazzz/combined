@@ -134,7 +134,7 @@
                 <!-- 性别/年龄 + 保险标签（浅彩色） -->
                 <div class="flex items-center gap-2 text-xs">
                   <span class="text-slate-500 dark:text-slate-400 font-medium">{{ record.sex }} / {{ record.age }}岁</span>
-                  <span v-if="record.insurance" class="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded dark:bg-indigo-900/20 dark:text-indigo-300 text-[10px] font-medium">
+                  <span v-if="record.insurance" class="px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded dark:bg-blue-900/20 dark:text-blue-300 text-[10px] font-medium">
                     {{ record.insurance }}
                   </span>
                 </div>

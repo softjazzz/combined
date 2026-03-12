@@ -119,22 +119,23 @@ export function frontPageDraftToDeMap(frontpageDraft: any): {
     'DE02.01.009.01': basic?.birthplace, // 出生地-省
     'DE02.01.009.01.007': basic?.birthplace, // 出生地-市
     'DE02.01.009.01.008': basic?.birthplace, // 出生地-县
-    // 籍贯
+    // 籍贯（省/市/县）
     'DE02.01.009.02': basic?.nativeplace, // 籍贯-省
     'DE02.01.009.02.006': basic?.nativeplace, // 籍贯-市
+    'DE02.01.009.02.007': basic?.nativeplace, // 籍贯-县
     // 现住址
     'DE02.01.009.06.005': basic?.current_address, // 现住址
     'DE02.01.010.00.009': basic?.contact_phone, // 电话号码
-    // 户口地址
+    // 户口地址（省/市/县）
     'DE02.01.009.03': basic?.household_address, // 户口地址-省
     'DE02.01.009.03.006': basic?.household_address, // 户口地址-市
     // 工作单位
-    'DE02.01.009.06.006': basic?.work_unit, // 工作单位及地址
+    'DE02.01.009.06.007': basic?.work_unit, // 工作单位及地址
     // 联系人
     'DE02.01.039.00.144': basic?.contact_name, // 联系人姓名
     'DE02.10.024.00.005': coalesce(basic?.contact_relation_code, basic?.contact_relation), // 联系人关系
     'DE02.01.010.00.017': basic?.contact_phone, // 联系人电话
-    'DE02.01.009.06.007': basic?.contact_address, // 联系人地址
+    'DE02.01.009.06.008': basic?.contact_address, // 联系人地址
 
     // 诊断 — 门急诊诊断（有 data-hm-code 元素）
     'DE05.01.025.00.016': Array.isArray(edDiagnosisTexts) ? edDiagnosisTexts[0] : undefined, // 门急诊诊断名称
