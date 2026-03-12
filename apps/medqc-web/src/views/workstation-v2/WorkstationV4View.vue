@@ -141,21 +141,21 @@
 
                 <!-- 住院信息区块 -->
                 <div class="bg-slate-50/80 dark:bg-slate-700/20 rounded-lg p-2.5 flex justify-between items-center">
-                  <div class="flex flex-col gap-1 text-[11px] text-slate-400 dark:text-slate-500">
-                    <div class="flex gap-2">
-                      <span>入院</span>
-                      <span class="text-slate-600 dark:text-slate-300 font-medium font-mono">{{ record.admissionDate }}</span>
+                  <div class="flex flex-col gap-1 text-[11px]">
+                    <div class="flex gap-2 items-baseline">
+                      <span class="text-slate-400 dark:text-slate-500">入院</span>
+                      <span class="text-slate-700 dark:text-slate-200 font-semibold font-mono">{{ record.admissionDate }}</span>
                     </div>
-                    <div class="flex gap-2">
-                      <span>出院</span>
-                      <span class="text-slate-600 dark:text-slate-300 font-medium font-mono">{{ record.dischargeDate }}</span>
+                    <div class="flex gap-2 items-baseline">
+                      <span class="text-slate-400 dark:text-slate-500">出院</span>
+                      <span class="text-slate-700 dark:text-slate-200 font-semibold font-mono">{{ record.dischargeDate }}</span>
                     </div>
                   </div>
-                  <!-- 住院天数（高风险背景高亮） -->
+                  <!-- 住院天数（高风险背景高亮，加大背景块） -->
                   <div class="flex flex-col items-end">
                     <span class="text-[10px] text-slate-400 mb-0.5">住院</span>
                     <span :class="[
-                      'text-base font-bold px-2 py-0.5 rounded-md leading-none',
+                      'text-base font-bold px-2.5 py-1 rounded-md leading-none',
                       record.days > 14 ? 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400' :
                       record.days > 7 ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' :
                       'text-slate-700 bg-slate-100 dark:bg-slate-700/50 dark:text-slate-300'
@@ -163,14 +163,12 @@
                   </div>
                 </div>
 
-                <!-- 主治医生 -->
-                <div class="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-                  <UserOutlined class="text-[11px]" />
-                  <span class="font-medium text-slate-600 dark:text-slate-300">{{ record.doctor || '未分配' }}</span>
-                </div>
-
-                <!-- 底部状态文字（去边框化） -->
-                <div class="pt-2 border-t border-slate-50 dark:border-slate-700/30 flex items-center">
+                <!-- 底部：主治医生(左) + 状态(右) — 合并为一行节省垂直空间 -->
+                <div class="flex items-center justify-between pt-2 border-t border-slate-50 dark:border-slate-700/30">
+                  <div class="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                    <UserOutlined class="text-[11px]" />
+                    <span class="font-medium text-slate-600 dark:text-slate-300">{{ record.doctor || '未分配' }}</span>
+                  </div>
                   <span
                     v-if="record.status === 'completed'"
                     class="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-semibold"
