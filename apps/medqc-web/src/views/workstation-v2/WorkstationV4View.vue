@@ -16,7 +16,7 @@
             :class="[
               'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
               activeDept === dept.name
-                ? 'bg-blue-500/10 text-blue-700 font-bold dark:bg-blue-500/20 dark:text-blue-300 shadow-sm ring-1 ring-blue-200/60 dark:ring-blue-500/20'
+                ? 'bg-blue-100 text-blue-700 font-bold dark:bg-blue-500/20 dark:text-blue-300 shadow-sm ring-1 ring-blue-200 dark:ring-blue-500/20'
                 : 'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
             ]"
           >
