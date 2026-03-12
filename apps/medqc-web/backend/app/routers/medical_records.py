@@ -260,16 +260,17 @@ async def get_departments():
 async def get_workstation_data(
     dept: Optional[str] = Query(None, description="科室筛选，不传则返回全部"),
     keyword: Optional[str] = Query(None, description="搜索姓名/病案号"),
-    page_size: int = Query(200, ge=1, le=1000, description="每页条数"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(50, ge=1, le=200, description="每页条数"),
 ):
-    """V4 工作台专用接口 — 返回病案列表 + 科室统计 + 主诊断 + 床号"""
+    """V4 工作台专用接口 — 返回病案列表 + 科室统计 + 床号（分页）"""
     from ..database.connection import engine
-    from ..database.models.cdm import MedicalRecordFrontpage, Diagnosis, AdmissionRecord, QCResult
+    from ..database.models.cdm import MedicalRecordFrontpage, AdmissionRecord, QCResult
     from sqlalchemy.orm import Session
     from sqlalchemy import func
 
     with Session(engine) as session:
-        # 1. 查病案首页
+        # 1. 构建基础查询
         q = session.query(MedicalRecordFrontpage)
         if dept:
             q = q.filter(MedicalRecordFrontpage.discharge_dept_name == dept)
@@ -280,39 +281,37 @@ async def get_workstation_data(
                 MedicalRecordFrontpage.mr_no.like(kw) |
                 MedicalRecordFrontpage.inpat_no.like(kw)
             )
-        records = q.order_by(MedicalRecordFrontpage.admission_datetime.desc()).limit(page_size).all()
 
-        # 2. 批量查主诊断
+        # 总条数（分页用）
+        total_count = q.count()
+
+        # 分页查询
+        offset = (page - 1) * page_size
+        records = q.order_by(
+            MedicalRecordFrontpage.admission_datetime.desc()
+        ).offset(offset).limit(page_size).all()
+
+        # 2. 批量查床号（仅当前页的记录）
         pids = [(r.patient_id, r.visit_id) for r in records]
-        diag_map = {}
-        if pids:
-            diags = session.query(Diagnosis).filter(
-                Diagnosis.diagnosis_type == "出院主要诊断"
-            ).all()
-            for d in diags:
-                diag_map[(d.patient_id, d.visit_id)] = {
-                    "name": d.diagnosis_name,
-                    "code": d.diagnosis_code,
-                }
-
-        # 3. 批量查床号
         bed_map = {}
         if pids:
             beds = session.query(
                 AdmissionRecord.patient_id,
                 AdmissionRecord.visit_id,
                 AdmissionRecord.bed_no,
+            ).filter(
+                AdmissionRecord.visit_id.in_([r.visit_id for r in records])
             ).all()
             for b in beds:
                 bed_map[(b.patient_id, b.visit_id)] = b.bed_no
 
-        # 4. 组装科室统计
+        # 3. 科室统计（全量，不受分页影响）
         dept_stats = session.query(
             MedicalRecordFrontpage.discharge_dept_name,
             func.count().label("total"),
         ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
 
-        # 批量查病案质控状态
+        # 4. 批量查病案质控状态（仅当前页）
         visit_ids = [r.visit_id for r in records]
         status_map = {}
         if visit_ids:
@@ -333,12 +332,11 @@ async def get_workstation_data(
         departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
         dept_warning_counts = {}
 
-        # 5. 组装响应
+        # 5. 组装响应（不含诊断，诊断在详情页展示）
         items = []
         for r in records:
             key = (r.patient_id, r.visit_id)
-            diag = diag_map.get(key, {})
-            
+
             # 判断质控状态
             qc_info = status_map.get(r.visit_id)
             if qc_info is None:
@@ -352,7 +350,7 @@ async def get_workstation_data(
             if record_status == "has_defects":
                 dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
                 departments[0]["warningCount"] += 1
-                
+
             items.append({
                 "id": r.visit_id,
                 "instituteId": r.institute_id,
@@ -366,8 +364,6 @@ async def get_workstation_data(
                 "admissionDate": r.admission_datetime.strftime("%m-%d") if r.admission_datetime else "",
                 "dischargeDate": r.discharge_datetime.strftime("%m-%d") if r.discharge_datetime else "",
                 "days": int(r.hospital_duration) if r.hospital_duration else 0,
-                "diagnosis": diag.get("name", ""),
-                "diagnosisCode": diag.get("code", ""),
                 "doctor": r.attending_physician_sign or "",
                 "status": record_status,
             })
@@ -379,7 +375,10 @@ async def get_workstation_data(
     return {
         "departments": departments,
         "records": items,
-        "total": len(items),
+        "total": total_count,
+        "page": page,
+        "pageSize": page_size,
+        "totalPages": (total_count + page_size - 1) // page_size,
     }
 
 

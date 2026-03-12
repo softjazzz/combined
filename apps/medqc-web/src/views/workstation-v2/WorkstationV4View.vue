@@ -138,8 +138,8 @@
                   </div>
                 </div>
                 <div class="bg-slate-50/80 dark:bg-slate-800/40 rounded p-2 text-[10px] text-slate-500 dark:text-slate-400 flex items-center h-[26px] overflow-hidden mb-3.5 border border-slate-50 dark:border-slate-700/30">
-                  <span class="shrink-0 mr-1.5 font-medium text-slate-400">诊断:</span>
-                  <span class="truncate font-medium text-slate-600 dark:text-slate-300" :title="record.diagnosis">{{ record.diagnosis }}</span>
+                  <span class="shrink-0 mr-1.5 font-medium text-slate-400">主治:</span>
+                  <span class="truncate font-medium text-slate-600 dark:text-slate-300">{{ record.doctor || '未分配' }}</span>
                 </div>
                 <div class="mt-auto flex items-center">
                   <span
@@ -169,6 +169,18 @@
                 </div>
               </div>
             </div>
+          </div>
+          <!-- 分页器 -->
+          <div v-if="serverTotalPages > 1" class="flex justify-center py-4">
+            <a-pagination
+              v-model:current="currentPage"
+              :total="serverTotal"
+              :page-size="50"
+              size="small"
+              show-quick-jumper
+              :show-total="(total: number) => `共 ${total} 例`"
+              @change="handlePageChange"
+            />
           </div>
         </div>
       </main>
@@ -445,6 +457,17 @@
                         </div>
                       </a-tab-pane>
                       <a-tab-pane key="preview" tab="首页预览/打印">
+                        <!-- AI 生成成功提示条 -->
+                        <div v-if="completedModules.length > 0" class="mb-4 px-4 py-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 flex items-center gap-3">
+                          <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                            <CheckCircleOutlined class="text-white text-sm" />
+                          </div>
+                          <div class="flex-1">
+                            <div class="text-sm font-medium text-green-800">AI 已自动生成病案首页</div>
+                            <div class="text-xs text-green-600 mt-0.5">从 {{ completedModules.length }} 个模块中提取字段信息并填入下方首页，请核对后确认</div>
+                          </div>
+                          <a-button size="small" type="link" @click="frontpageTab = 'fields'" class="text-green-600 hover:text-green-800">查看提取详情</a-button>
+                        </div>
                         <HmFrontpagePreview :draft="frontpageDraft" />
                       </a-tab-pane>
                       <a-tab-pane key="official" tab="官方格式">
@@ -867,7 +890,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import axios from 'axios'
 import { message } from 'ant-design-vue'
 import {
@@ -929,7 +952,10 @@ const {
 // ========== 数据（从 API 加载） ==========
 const allRecords = ref<PatientRecord[]>([])
 const departments = ref<DeptInfo[]>([])
-const totalCount = computed(() => allRecords.value.length)
+const currentPage = ref(1)
+const serverTotal = ref(0)
+const serverTotalPages = ref(1)
+const totalCount = computed(() => serverTotal.value)
 
 // ========== 筛选状态 ==========
 const activeDept = ref('全部科室')
@@ -1199,6 +1225,16 @@ function getModuleStatus(m: string): 'done' | 'active' | 'pending' {
   return 'pending'
 }
 
+// 生成完成后自动切到 "首页预览/打印" tab
+watch(frontpageGenerating, (generating, wasGenerating) => {
+  if (wasGenerating && !generating && frontpageDraft.value) {
+    // 延迟一帧确保 DOM 已更新
+    nextTick(() => {
+      frontpageTab.value = 'preview'
+    })
+  }
+})
+
 const statusOptions = [
   { value: 'all', label: '全部状态' },
   { value: 'pending', label: '待处理' },
@@ -1208,17 +1244,39 @@ const statusOptions = [
 ]
 
 // ========== API 加载 ==========
-async function fetchData() {
+async function fetchData(page = 1) {
   loading.value = true
   try {
-    const { data } = await axios.get('/api/medical-records/workstation')
+    const { data } = await axios.get('/api/medical-records/workstation', {
+      params: { page, page_size: 50 }
+    })
     allRecords.value = data.records || []
     departments.value = data.departments || []
+    serverTotal.value = data.total || 0
+    serverTotalPages.value = data.totalPages || 1
+    currentPage.value = data.page || 1
   } catch (err) {
     console.error('加载工作台数据失败:', err)
   } finally {
     loading.value = false
   }
+}
+
+function handlePageChange(page: number) {
+  currentPage.value = page
+  fetchData(page)
+  // 翻页后滚动到顶部
+  document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function refreshData() {
+  fetchData(currentPage.value)
+}
+
+function selectDept(deptName: string) {
+  activeDept.value = deptName
+  currentPage.value = 1
+  // 科室筛选在前端做，不需要重新请求
 }
 
 onMounted(() => {
@@ -1339,10 +1397,6 @@ const filteredAssistNotifications = computed(() => {
   return assistNotifications.value.filter(item => !!item.is_read === expectRead)
 })
 
-// ========== 方法 ==========
-function selectDept(name: string) {
-  activeDept.value = name
-}
 
 function openRecord(record: PatientRecord) {
   openSessionRecord(record.id)
@@ -1358,9 +1412,6 @@ function goBackToList() {
   // 不清空 selectedId，方便返回后还能看到高亮
 }
 
-function refreshData() {
-  fetchData()
-}
 
 async function fetchAssistNotifications() {
   notificationLoading.value = true
