@@ -35,8 +35,8 @@ const iframeRef = ref<HTMLIFrameElement | null>(null)
 const srcdoc = computed(() => {
   // Always render the template, use empty object if no draft data
   const draftData = props.draft || {}
-  const valuesByDe = frontPageDraftToDeMap(draftData)
-  const filledBodyHtml = applyDeValuesToHmTemplateBody(templateBodyHtml, valuesByDe)
+  const { deMap, diagnosisRows, procedureRows } = frontPageDraftToDeMap(draftData)
+  const filledBodyHtml = applyDeValuesToHmTemplateBody(templateBodyHtml, deMap, diagnosisRows, procedureRows)
   return buildHmTemplateSrcdoc({ filledBodyHtml, contentsCss, printCss })
 })
 

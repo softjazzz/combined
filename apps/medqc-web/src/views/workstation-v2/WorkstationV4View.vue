@@ -3,44 +3,49 @@
     <!-- ====== 列表模式 ====== -->
     <template v-if="viewMode === 'list'">
       <!-- 左侧科室导航 -->
-      <aside class="w-56 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-slate-50 dark:bg-slate-900">
-        <div class="h-14 flex items-center gap-2 px-5 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
+      <aside class="w-56 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 flex flex-col bg-slate-50/70 dark:bg-slate-900">
+        <div class="h-14 flex items-center gap-2.5 px-5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
           <MedicineBoxOutlined class="text-blue-500 text-lg" />
           <span class="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight">病案工作台</span>
         </div>
-        <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
+        <div class="flex-1 overflow-y-auto py-2.5 custom-scrollbar">
           <div
             v-for="dept in departments"
             :key="dept.name"
             @click="selectDept(dept.name)"
             :class="[
-              'mx-2 mb-0.5 flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer text-sm transition-all duration-150',
+              'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
               activeDept === dept.name
-                ? 'bg-blue-50 text-blue-700 font-semibold dark:bg-blue-900/30 dark:text-blue-300 shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                ? 'bg-blue-500/10 text-blue-700 font-bold dark:bg-blue-500/20 dark:text-blue-300 shadow-sm ring-1 ring-blue-200/60 dark:ring-blue-500/20'
+                : 'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
             ]"
           >
             <span class="truncate">{{ dept.name }}</span>
             <div class="flex items-center gap-1.5">
               <span
                 v-if="dept.warningCount > 0"
-                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-100 text-red-600 text-[10px] font-bold px-1 dark:bg-red-900/30 dark:text-red-400"
+                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1"
               >{{ dept.warningCount }}</span>
               <span
-                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold px-1 dark:bg-slate-700 dark:text-slate-400"
+                :class="[
+                  'min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5',
+                  activeDept === dept.name
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                ]"
               >{{ dept.total }}</span>
             </div>
           </div>
         </div>
-        <div class="border-t border-slate-200 dark:border-slate-800 px-5 py-3 flex-shrink-0">
+        <div class="border-t border-slate-100 dark:border-slate-800 px-5 py-3.5 flex-shrink-0">
           <div class="text-[11px] text-slate-400 mb-1">本周出院总计</div>
           <div class="text-2xl font-black text-slate-800 dark:text-white">{{ totalCount }}</div>
         </div>
       </aside>
 
       <!-- 右侧主内容 -->
-      <main class="flex-1 flex flex-col min-w-0">
-        <header class="h-14 flex items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-900">
+      <main class="flex-1 flex flex-col min-w-0 bg-slate-50/40 dark:bg-slate-900">
+        <header class="h-14 flex items-center justify-between px-6 border-b border-slate-100 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-900">
           <div class="flex items-center gap-4">
             <h2 class="text-lg font-bold text-slate-800 dark:text-white">{{ activeDept }}</h2>
             <span class="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
@@ -67,27 +72,20 @@
           </div>
         </header>
 
-        <!-- 状态统计条 -->
-        <div class="h-10 flex items-center gap-6 px-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex-shrink-0">
-          <div class="flex items-center gap-1.5 text-xs">
-            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span class="text-slate-500">已完成</span>
-            <span class="font-bold text-slate-700 dark:text-slate-300">{{ statusCounts.completed }}</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-xs">
-            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-            <span class="text-slate-500">有缺陷</span>
-            <span class="font-bold text-slate-700 dark:text-slate-300">{{ statusCounts.warning }}</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-xs">
-            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-            <span class="text-slate-500">处理中</span>
-            <span class="font-bold text-slate-700 dark:text-slate-300">{{ statusCounts.processing }}</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-xs">
-            <span class="w-2 h-2 rounded-full bg-slate-300"></span>
-            <span class="text-slate-500">待处理</span>
-            <span class="font-bold text-slate-700 dark:text-slate-300">{{ statusCounts.pending }}</span>
+        <!-- 状态统计条 — 可点击的分段控制器风格 -->
+        <div class="h-11 flex items-center gap-2 px-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/80 flex-shrink-0">
+          <div
+            v-for="st in statusPills"
+            :key="st.key"
+            @click="statusFilter = st.key"
+            :class="[
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-150',
+              statusFilter === st.key ? st.activeClass : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'
+            ]"
+          >
+            <span v-if="st.dotClass" :class="['w-1.5 h-1.5 rounded-full', st.dotClass]"></span>
+            <span>{{ st.label }}</span>
+            <span class="font-bold">{{ st.count }}</span>
           </div>
           <div class="ml-auto text-[11px] text-slate-400">
             完成率
@@ -101,70 +99,101 @@
             <InboxOutlined class="text-4xl mb-3" />
             <div class="text-sm">暂无病历记录</div>
           </div>
-          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+            <!-- ===== 重构后的病案卡片 ===== -->
             <div
               v-for="record in filteredRecords"
               :key="record.id"
               @click="openRecord(record)"
-              class="bg-white dark:bg-slate-800 rounded-xl shadow-[0_1px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.1)] cursor-pointer transition-all duration-200 border border-slate-200 dark:border-slate-700/80 group overflow-hidden"
+              class="relative bg-white dark:bg-slate-800 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 cursor-pointer transition-all duration-300 border border-transparent hover:border-blue-100 dark:hover:border-blue-900/30 group"
             >
-              <div class="p-3.5 flex flex-col h-full">
-                <div class="flex items-start justify-between mb-2">
-                  <div class="flex items-baseline gap-2">
-                    <span class="font-black text-slate-800 dark:text-slate-100 text-xl tracking-tighter leading-none">
-                      {{ record.bedNo }}<span class="text-xs font-bold text-slate-500 ml-0.5">床</span>
+              <div class="p-4 flex flex-col gap-3">
+                <!-- 头部：姓名为主标题，床号为辅标签 -->
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <span v-if="record.bedNo" class="px-2 py-0.5 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-md dark:bg-blue-900/30 dark:text-blue-300">
+                      {{ record.bedNo }}床
                     </span>
-                    <span class="font-extrabold text-slate-800 dark:text-slate-200 text-base tracking-wide ml-1 leading-none">
+                    <h3 class="text-[17px] font-bold text-slate-800 dark:text-slate-100 leading-none m-0 tracking-tight">
                       {{ record.name }}
-                    </span>
+                    </h3>
                   </div>
+                  <!-- 右上角状态圆点 -->
+                  <span
+                    :class="[
+                      'w-2.5 h-2.5 rounded-full flex-shrink-0',
+                      record.status === 'completed' ? 'bg-emerald-400' :
+                      record.status === 'has_defects' || record.status === 'warning' ? 'bg-amber-400' :
+                      record.status === 'processing' ? 'bg-blue-400 animate-pulse' :
+                      'bg-slate-200 dark:bg-slate-600'
+                    ]"
+                    :title="record.status === 'completed' ? '已完成' : record.status === 'has_defects' || record.status === 'warning' ? '有缺陷' : record.status === 'processing' ? '处理中' : '待处理'"
+                  ></span>
                 </div>
-                <div class="flex items-center gap-2 mb-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  <span>{{ record.sex }}/{{ record.age }}岁</span>
-                  <span class="bg-slate-50 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 px-1.5 py-[1px] rounded border border-slate-100 dark:border-slate-600/50">
+
+                <!-- 性别/年龄 + 保险标签（浅彩色） -->
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="text-slate-500 dark:text-slate-400 font-medium">{{ record.sex }} / {{ record.age }}岁</span>
+                  <span v-if="record.insurance" class="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded dark:bg-indigo-900/20 dark:text-indigo-300 text-[10px] font-medium">
                     {{ record.insurance }}
                   </span>
                 </div>
-                <div class="bg-slate-50/80 dark:bg-slate-800/40 rounded p-2 mb-1.5 flex flex-col justify-center border border-slate-50 dark:border-slate-700/30">
-                  <div class="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 mb-1">
-                    <span>入院: <span class="text-slate-600 dark:text-slate-300 font-mono ml-1">{{ record.admissionDate }}</span></span>
-                    <div :class="[
-                      'font-bold text-[11px]',
-                      record.days > 14 ? 'text-red-500' : record.days > 7 ? 'text-amber-500' : 'text-slate-700 dark:text-slate-200'
-                    ]">{{ record.days }} 天</div>
+
+                <!-- 住院信息区块 -->
+                <div class="bg-slate-50/80 dark:bg-slate-700/20 rounded-lg p-2.5 flex justify-between items-center">
+                  <div class="flex flex-col gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+                    <div class="flex gap-2">
+                      <span>入院</span>
+                      <span class="text-slate-600 dark:text-slate-300 font-medium font-mono">{{ record.admissionDate }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                      <span>出院</span>
+                      <span class="text-slate-600 dark:text-slate-300 font-medium font-mono">{{ record.dischargeDate }}</span>
+                    </div>
                   </div>
-                  <div class="flex items-center text-[10px] text-slate-400 dark:text-slate-500">
-                    <span>出院: <span class="text-slate-600 dark:text-slate-300 font-mono ml-1">{{ record.dischargeDate }}</span></span>
+                  <!-- 住院天数（高风险背景高亮） -->
+                  <div class="flex flex-col items-end">
+                    <span class="text-[10px] text-slate-400 mb-0.5">住院</span>
+                    <span :class="[
+                      'text-base font-bold px-2 py-0.5 rounded-md leading-none',
+                      record.days > 14 ? 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400' :
+                      record.days > 7 ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' :
+                      'text-slate-700 bg-slate-100 dark:bg-slate-700/50 dark:text-slate-300'
+                    ]">{{ record.days }}<span class="text-[10px] font-medium ml-0.5">天</span></span>
                   </div>
                 </div>
-                <div class="bg-slate-50/80 dark:bg-slate-800/40 rounded p-2 text-[10px] text-slate-500 dark:text-slate-400 flex items-center h-[26px] overflow-hidden mb-3.5 border border-slate-50 dark:border-slate-700/30">
-                  <span class="shrink-0 mr-1.5 font-medium text-slate-400">主治:</span>
-                  <span class="truncate font-medium text-slate-600 dark:text-slate-300">{{ record.doctor || '未分配' }}</span>
+
+                <!-- 主治医生 -->
+                <div class="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                  <UserOutlined class="text-[11px]" />
+                  <span class="font-medium text-slate-600 dark:text-slate-300">{{ record.doctor || '未分配' }}</span>
                 </div>
-                <div class="mt-auto flex items-center">
+
+                <!-- 底部状态文字（去边框化） -->
+                <div class="pt-2 border-t border-slate-50 dark:border-slate-700/30 flex items-center">
                   <span
                     v-if="record.status === 'completed'"
-                    class="inline-flex items-center gap-1.5 text-[#10b981] bg-[#ecfdf5] border border-[#d1fae5] dark:bg-[#10b981]/10 dark:border-[#10b981]/20 px-2 py-0.5 rounded text-[10px] font-bold"
+                    class="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-semibold"
                   >
-                    <CheckCircleOutlined /> 提取完成
+                    <CheckCircleOutlined /> 质控完成
                   </span>
                   <span
-                    v-else-if="record.status === 'warning'"
-                    class="inline-flex items-center gap-1.5 text-[#f59e0b] bg-[#fffbeb] border border-[#fef3c7] dark:bg-[#f59e0b]/10 dark:border-[#f59e0b]/20 px-2 py-0.5 rounded text-[10px] font-bold"
+                    v-else-if="record.status === 'has_defects' || record.status === 'warning'"
+                    class="inline-flex items-center gap-1 text-amber-600 text-[11px] font-semibold"
                   >
                     <WarningOutlined /> 存在缺陷
                   </span>
                   <span
                     v-else-if="record.status === 'processing'"
-                    class="inline-flex items-center gap-1.5 text-[#3b82f6] bg-[#eff6ff] border border-[#dbeafe] dark:bg-[#3b82f6]/10 dark:border-[#3b82f6]/20 px-2 py-0.5 rounded text-[10px] font-bold"
+                    class="inline-flex items-center gap-1 text-blue-500 text-[11px] font-semibold"
                   >
                     <SyncOutlined spin /> AI 提取中
                   </span>
                   <span
                     v-else
-                    class="inline-flex items-center gap-1.5 text-slate-400 bg-slate-50 border border-slate-100 dark:bg-slate-800 dark:border-slate-700/80 px-2 py-0.5 rounded text-[10px] font-bold group-hover:bg-white transition-colors"
+                    class="inline-flex items-center gap-1 text-slate-400 text-[11px] font-medium group-hover:text-blue-500 transition-colors"
                   >
-                    <InboxOutlined /> 待发提取
+                    <InboxOutlined /> 待处理
                   </span>
                 </div>
               </div>
@@ -1348,6 +1377,20 @@ const completionRate = computed(() => {
   if (all.length === 0) return 0
   return Math.round((all.filter(r => r.status === 'completed').length / all.length) * 100)
 })
+
+// 状态分段控制器配置（预定义完整 class，避免 Tailwind 动态类名被 purge）
+const statusPills = computed(() => [
+  { key: 'all', label: '全部', count: filteredRecords.value.length,
+    activeClass: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dotClass: '' },
+  { key: 'completed', label: '已完成', count: statusCounts.value.completed,
+    activeClass: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dotClass: 'bg-emerald-500' },
+  { key: 'has_defects', label: '有缺陷', count: statusCounts.value.warning,
+    activeClass: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200', dotClass: 'bg-amber-500' },
+  { key: 'processing', label: '处理中', count: statusCounts.value.processing,
+    activeClass: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dotClass: 'bg-blue-500' },
+  { key: 'pending', label: '待处理', count: statusCounts.value.pending,
+    activeClass: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200', dotClass: 'bg-slate-400' },
+])
 
 const detailItems = computed(() => {
   const r = selectedRecord.value

@@ -1142,6 +1142,114 @@ class FrontPageExtractionService:
                 except Exception as e:
                     logger.warning(f"  mr_cost 查询失败: {e}")
 
+                # ---- 7. mr 表 → 病案首页已有结构化字段（补充源头表没有的字段） ----
+                # 注意：mr 是首页本身（目标表），但 patient_information / inpat_registration
+                # 在当前 CDM 对接中无独立存储过程（0 行数据），所以从 mr 表补充。
+                try:
+                    mr_row = session.execute(sql_text(
+                        "SELECT * FROM mr WHERE visit_id = :vid LIMIT 1"
+                    ), {"vid": visit_id}).mappings().first()
+
+                    if mr_row:
+                        mr_d = dict(mr_row)
+                        # --- 基本信息补充 ---
+                        _fill_if_empty = lambda fp_dict, key, val: (
+                            fp_dict.__setitem__(key, val) if val and str(val).strip()
+                            and str(val).strip() != '-'
+                            and not fp_dict.get(key)
+                            else None
+                        )
+                        bi = fp_data["basic_info"]
+                        _fill_if_empty(bi, "patient_name", mr_d.get("name"))
+                        sex_text = mr_d.get("sex") or ""
+                        if sex_text and not bi.get("gender_text"):
+                            bi["gender_text"] = sex_text
+                            bi["gender"] = _text_to_code("sex", sex_text)
+                        _fill_if_empty(bi, "birth_date", str(mr_d.get("birthday") or ""))
+                        if mr_d.get("age_year") and not bi.get("age_years"):
+                            try:
+                                bi["age_years"] = int(str(mr_d["age_year"]).strip())
+                            except (ValueError, TypeError):
+                                pass
+                        _fill_if_empty(bi, "nationality", mr_d.get("nationality"))
+                        _fill_if_empty(bi, "ethnicity", mr_d.get("ethnicity"))
+                        if mr_d.get("marital_status") and not bi.get("marital_status_text"):
+                            ms = mr_d["marital_status"]
+                            if ms.isdigit():
+                                bi["marital_status"] = ms
+                                bi["marital_status_text"] = _code_to_text("marital_status", ms)
+                            else:
+                                bi["marital_status_text"] = ms
+                                bi["marital_status"] = _text_to_code("marital_status", ms)
+                        _fill_if_empty(bi, "id_number", mr_d.get("id_card_no"))
+                        _fill_if_empty(bi, "occupation", mr_d.get("occupation_category"))
+                        _fill_if_empty(bi, "current_address", mr_d.get("currentaddress"))
+                        _fill_if_empty(bi, "contact_phone", mr_d.get("contact_number"))
+                        _fill_if_empty(bi, "contact_name", mr_d.get("contact_name"))
+                        _fill_if_empty(bi, "contact_relation", mr_d.get("contact_relationship"))
+                        _fill_if_empty(bi, "contact_phone", mr_d.get("contact_telephone"))
+                        # 新增必填地址字段
+                        bi["birthplace"] = mr_d.get("birthplace") or mr_d.get("nativeplace") or ""
+                        bi["nativeplace"] = mr_d.get("nativeplace") or ""
+                        bi["contact_address"] = mr_d.get("contact_address") or ""
+                        bi["work_unit"] = mr_d.get("work_unit") or ""
+
+                        # --- 住院信息补充 ---
+                        hosp = fp_data["hospitalization"]
+                        _fill_if_empty(hosp, "hospital_name", mr_d.get("institute_county_desc"))
+                        _fill_if_empty(hosp, "organization_code", mr_d.get("institute_code"))
+                        _fill_if_empty(hosp, "medical_record_no", mr_d.get("mr_no"))
+                        _fill_if_empty(hosp, "admission_times_in_hospital", mr_d.get("visit_cnt"))
+                        pm = mr_d.get("medical_payment_method") or ""
+                        if pm and not hosp.get("payment_method_text"):
+                            hosp["payment_method_text"] = pm
+                            hosp["payment_method"] = _text_to_code("payment_method", pm)
+                        route = mr_d.get("admission_route") or ""
+                        if route and not hosp.get("admission_way_text"):
+                            hosp["admission_way_text"] = route
+                            hosp["admission_way"] = _text_to_code("admission_route", route)
+                        _fill_if_empty(hosp, "admission_dept", mr_d.get("admission_dept_name"))
+                        _fill_if_empty(hosp, "admission_ward", mr_d.get("admission_ward_name"))
+                        _fill_if_empty(hosp, "admission_datetime", str(mr_d.get("admission_datetime") or ""))
+                        _fill_if_empty(hosp, "discharge_dept", mr_d.get("discharge_dept_name"))
+                        _fill_if_empty(hosp, "discharge_ward", mr_d.get("discharge_ward_name"))
+                        _fill_if_empty(hosp, "discharge_datetime", str(mr_d.get("discharge_datetime") or ""))
+                        if mr_d.get("hospital_duration") and not hosp.get("actual_hospital_days"):
+                            try:
+                                hosp["actual_hospital_days"] = int(str(mr_d["hospital_duration"]).strip())
+                            except (ValueError, TypeError):
+                                pass
+                        _fill_if_empty(hosp, "transfer_dept", mr_d.get("transfer_dept_name"))
+                        _fill_if_empty(hosp, "leaving_way", mr_d.get("leaving_hospital_way"))
+                        _fill_if_empty(hosp, "rehospital_flag", mr_d.get("rehospital_with_month"))
+                        _fill_if_empty(hosp, "rehospital_purpose", mr_d.get("rehospital_with_month_purpose"))
+
+                        # --- 其他医疗信息补充 ---
+                        omi = fp_data["other_medical_info"]
+                        if mr_d.get("abo_blood_code") and not omi.get("abo_blood_type"):
+                            omi["abo_blood_type"] = _text_to_code("blood_abo", mr_d["abo_blood_code"])
+                        if mr_d.get("rh_blood_code") and not omi.get("rh_blood_type"):
+                            rh_text = mr_d["rh_blood_code"]
+                            omi["rh_blood_type"] = _text_to_code("blood_rh", rh_text)
+                            omi["rh_blood_type_text"] = rh_text
+                        if mr_d.get("allergy_sign") and not omi.get("drug_allergy_flag"):
+                            omi["drug_allergy_flag"] = _text_to_code("allergy", mr_d["allergy_sign"])
+                            omi["drug_allergy_flag_text"] = mr_d["allergy_sign"]
+                        _fill_if_empty(omi, "pathology_no", mr_d.get("pathology_id"))
+
+                        # --- 人员签名补充 ---
+                        staff = fp_data["staff"]
+                        _fill_if_empty(staff, "dept_director", mr_d.get("deptdirector_sign"))
+                        _fill_if_empty(staff, "chief_physician", mr_d.get("chief_physician_sign"))
+                        _fill_if_empty(staff, "attending_physician", mr_d.get("attending_physician_sign"))
+                        _fill_if_empty(staff, "resident_physician", mr_d.get("resident_physician_sign"))
+                        _fill_if_empty(staff, "responsible_nurse", mr_d.get("responsible_nurse_sign"))
+                        _fill_if_empty(staff, "coder", mr_d.get("coder_sign"))
+
+                        logger.info("  mr 表（首页已有字段）读取成功")
+                except Exception as e:
+                    logger.warning(f"  mr 表查询失败: {e}")
+
         except Exception as e:
             logger.error(f"_prefill_from_cdm 整体异常: {e}")
 
