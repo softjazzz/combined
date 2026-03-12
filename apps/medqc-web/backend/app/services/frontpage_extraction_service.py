@@ -1149,6 +1149,82 @@ class FrontPageExtractionService:
                 except Exception as e:
                     logger.warning(f"  mr_cost 查询失败: {e}")
 
+                # ---- 6b. mr_surgery 表 → 手术及操作明细 ----
+                try:
+                    surg_rows = session.execute(sql_text(
+                        "SELECT * FROM mr_surgery WHERE visit_id = :vid ORDER BY surgery_begin_datetime"
+                    ), {"vid": visit_id}).mappings().all()
+
+                    if surg_rows:
+                        main_proc = None
+                        other_procs = []
+                        for s in surg_rows:
+                            is_main = (s.get("main_surgery_sign") or "").strip() in ("是", "1", "Y", "yes", "true")
+                            proc_item = {
+                                "text": s.get("surgery_name") or "",
+                                "code": s.get("surgery_code") or "",
+                                "date": str(s.get("surgery_begin_datetime") or "")[:10],
+                                "level": s.get("surgical_level") or "",
+                                "start_time": str(s.get("surgery_begin_datetime") or ""),
+                                "end_time": str(s.get("surgery_end_datetime") or ""),
+                                "surgeon": s.get("surgeon") or "",
+                                "assistant1": s.get("first_assistant") or "",
+                                "assistant2": s.get("second_assistant") or "",
+                                "anesthesia_method": s.get("anesthesia_method") or "",
+                                "anesthesiologist": s.get("anesthesiologist") or "",
+                                "incision_grade": s.get("surgial_incision_level") or "",
+                                "incision_healing_grade": s.get("surgical_incisionheal_level") or "",
+                                "unplanned_reoperation": s.get("unplanned_reoperation") or "",
+                            }
+                            if is_main and main_proc is None:
+                                main_proc = proc_item
+                            else:
+                                other_procs.append(proc_item)
+
+                        # 如果没有标记主手术，取第一个
+                        if main_proc is None and surg_rows:
+                            main_proc = {
+                                "text": surg_rows[0].get("surgery_name") or "",
+                                "code": surg_rows[0].get("surgery_code") or "",
+                                "date": str(surg_rows[0].get("surgery_begin_datetime") or "")[:10],
+                                "level": surg_rows[0].get("surgical_level") or "",
+                                "start_time": str(surg_rows[0].get("surgery_begin_datetime") or ""),
+                                "end_time": str(surg_rows[0].get("surgery_end_datetime") or ""),
+                                "surgeon": surg_rows[0].get("surgeon") or "",
+                                "assistant1": surg_rows[0].get("first_assistant") or "",
+                                "assistant2": surg_rows[0].get("second_assistant") or "",
+                                "anesthesia_method": surg_rows[0].get("anesthesia_method") or "",
+                                "anesthesiologist": surg_rows[0].get("anesthesiologist") or "",
+                                "incision_grade": surg_rows[0].get("surgial_incision_level") or "",
+                                "incision_healing_grade": surg_rows[0].get("surgical_incisionheal_level") or "",
+                                "unplanned_reoperation": surg_rows[0].get("unplanned_reoperation") or "",
+                            }
+
+                        if main_proc:
+                            fp_data["procedures"] = {
+                                "main_procedure_text": main_proc["text"],
+                                "main_procedure_code": main_proc["code"],
+                                "main_procedure_date": main_proc["date"],
+                                "main_procedure_level": main_proc["level"],
+                                "main_procedure_start_time": main_proc["start_time"],
+                                "main_procedure_end_time": main_proc["end_time"],
+                                "surgeon_name": main_proc["surgeon"],
+                                "assistant1_name": main_proc["assistant1"],
+                                "assistant2_name": main_proc["assistant2"],
+                                "anesthesia_method": main_proc["anesthesia_method"],
+                                "anesthetist_name": main_proc["anesthesiologist"],
+                                "incision_grade": main_proc["incision_grade"],
+                                "incision_healing_grade": main_proc["incision_healing_grade"],
+                                "is_main_surgery": "是",
+                                "unplanned_reoperation": main_proc["unplanned_reoperation"],
+                                "other_procedures_texts": [p["text"] for p in other_procs],
+                                "other_procedures": other_procs,
+                            }
+
+                        logger.info(f"  mr_surgery 读取成功: {len(surg_rows)} 条（主手术: {'有' if main_proc else '无'}）")
+                except Exception as e:
+                    logger.warning(f"  mr_surgery 查询失败: {e}")
+
                 # ---- 7. mr 表 → 病案首页已有结构化字段（补充源头表没有的字段） ----
                 # 注意：mr 是首页本身（目标表），但 patient_information / inpat_registration
                 # 在当前 CDM 对接中无独立存储过程（0 行数据），所以从 mr 表补充。
