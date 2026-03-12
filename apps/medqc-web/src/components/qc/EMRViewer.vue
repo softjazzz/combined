@@ -195,6 +195,18 @@ function resetViewerState() {
   activeDocId.value = null
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token =
+    localStorage.getItem('medqc_access_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token')
+
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
 async function fetchDocuments() {
   const url = buildUrl('documents')
   if (!url) {
@@ -205,9 +217,13 @@ async function fetchDocuments() {
 
   try {
     const response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
     })
     const result = await response.json()
+    if (response.status === 401 || response.status === 403) {
+      emit('error', 'unauthorized')
+      return
+    }
     if (result?.success !== false) {
       documents.value = result?.data || []
       if (documents.value.length > 0) {
@@ -239,9 +255,13 @@ async function loadDocument(doc?: any) {
       return
     }
     const response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
     })
     const result = await response.json()
+    if (response.status === 401 || response.status === 403) {
+      emit('error', 'unauthorized')
+      return
+    }
 
     if (result?.success !== false && result?.data) {
       const data = result.data
