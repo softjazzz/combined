@@ -200,6 +200,9 @@ export function useFrontpageDraft(
   async function generateFrontpage() {
     if (!selectedRecord.value) return
 
+    // 如果已有草稿，说明是"重新生成"，需强制走 LLM
+    const isRegenerate = !!frontpageDraft.value
+
     frontpageGenerating.value = true
     frontpageDraft.value = null
     frontpageModule.value = ''
@@ -213,6 +216,7 @@ export function useFrontpageDraft(
         body: JSON.stringify({
           visit_id: selectedId.value,
           medical_text: '',
+          force_llm: isRegenerate,
         }),
       })
 

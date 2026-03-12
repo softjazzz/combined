@@ -37,10 +37,7 @@
             </div>
           </div>
         </div>
-        <div class="border-t border-slate-100 dark:border-slate-800 px-5 py-3.5 flex-shrink-0">
-          <div class="text-[11px] text-slate-400 mb-1">本周出院总计</div>
-          <div class="text-2xl font-black text-slate-800 dark:text-white">{{ totalCount }}</div>
-        </div>
+
       </aside>
 
       <!-- 右侧主内容 -->
@@ -348,26 +345,44 @@
                   <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
                 </template>
                 <div class="p-6">
-                  <div v-if="concatLoading" class="flex flex-col items-center py-20">
-                    <a-spin size="large" />
-                    <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
-                  </div>
-                  <div v-else-if="concatText" class="medical-record-document">
-                    <div v-for="(section, idx) in concatSections" :key="idx" class="mb-8">
-                      <div class="flex items-center gap-2 mb-3 pb-2 border-b-2 border-blue-100">
-                        <FileTextOutlined class="text-blue-500" />
-                        <h3 class="text-base font-bold text-slate-800 dark:text-white m-0">{{ section.title }}</h3>
+                  <EMRViewer
+                    v-if="selectedRecord && emrRenderState !== 'fallback'"
+                    ref="emrViewerRef"
+                    :record-id="selectedRecord.id"
+                    :visit-id="selectedRecord.visitId || selectedRecord.id"
+                    :patient-id="selectedRecord.patientId"
+                    :institute-id="selectedRecord.instituteId"
+                    :max-height="650"
+                    @loaded="handleEmrLoaded"
+                    @error="handleEmrError"
+                    @defect-click="handleEmrDefectClick"
+                  />
+                  <template v-else>
+                    <div v-if="concatLoading" class="flex flex-col items-center py-20">
+                      <a-spin size="large" />
+                      <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
+                    </div>
+                    <div v-else-if="concatText" class="medical-record-document">
+                      <div class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        <WarningOutlined />
+                        <span>EMR 高亮视图暂不可用，已自动切换到原始文书预览。</span>
                       </div>
-                      <pre class="whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-300 leading-7 m-0 bg-slate-50/50 dark:bg-slate-800/30 rounded-lg p-4 border border-slate-100 dark:border-slate-700/30">{{ section.content }}</pre>
+                      <div v-for="(section, idx) in concatSections" :key="idx" class="mb-8">
+                        <div class="flex items-center gap-2 mb-3 pb-2 border-b-2 border-blue-100">
+                          <FileTextOutlined class="text-blue-500" />
+                          <h3 class="text-base font-bold text-slate-800 dark:text-white m-0">{{ section.title }}</h3>
+                        </div>
+                        <pre class="whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-300 leading-7 m-0 bg-slate-50/50 dark:bg-slate-800/30 rounded-lg p-4 border border-slate-100 dark:border-slate-700/30">{{ section.content }}</pre>
+                      </div>
                     </div>
-                  </div>
-                  <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
-                    <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
-                      <FileTextOutlined class="text-3xl" />
+                    <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                      <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                        <FileTextOutlined class="text-3xl" />
+                      </div>
+                      <div class="text-sm font-medium mb-1">暂无病历文书</div>
+                      <div class="text-xs text-slate-400">该患者尚无可展示的病历文书内容</div>
                     </div>
-                    <div class="text-sm font-medium mb-1">暂无病历文书</div>
-                    <div class="text-xs text-slate-400">该患者尚无可展示的病历文书内容</div>
-                  </div>
+                  </template>
                 </div>
               </a-tab-pane>
 
@@ -940,6 +955,7 @@ import {
 } from '@ant-design/icons-vue'
 import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
 import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
+import EMRViewer from '@/components/qc/EMRViewer.vue'
 import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
 import QCResultTab from './components/QCResultTab.vue'
 import ContentQCTab from './components/ContentQCTab.vue'
@@ -1024,6 +1040,8 @@ const docDrawerContent = ref('')
 
 // ========== 详情主 Tab ==========
 const detailMainTab = ref('records')  // records | frontpage | settlement
+const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
+const emrRenderState = ref<'idle' | 'loading' | 'ready' | 'fallback'>('idle')
 
 // ========== 病历详情（拼接文本） ==========
 const concatText = ref('')
@@ -1320,6 +1338,7 @@ watch(selectedId, (newId) => {
   docDrawerVisible.value = false
   settlementQcReport.value = null
   detailMainTab.value = 'records'
+  emrRenderState.value = newId ? 'loading' : 'idle'
   if (newId) {
     loadDocuments(newId)
     loadConcatText(newId)
@@ -1558,6 +1577,25 @@ function handleJumpEvidenceFromQC(issue: QCIssueLike) {
   docDrawerTitle.value = `依据文书：${doc.label}`
   docDrawerContent.value = findEvidenceSnippet(issue, doc.content) || (doc.content || '暂无内容')
   docDrawerVisible.value = true
+}
+
+function handleEmrLoaded(payload: { content?: string }) {
+  emrRenderState.value = payload?.content ? 'ready' : 'fallback'
+}
+
+function handleEmrError() {
+  if (selectedId.value) {
+    emrRenderState.value = 'fallback'
+  }
+}
+
+function handleEmrDefectClick(defectId: string) {
+  assistPanelVisible.value = true
+  assistTab.value = 'form'
+  const matched = assistIssues.value.find(issue => issue?.id === defectId)
+  if (matched?.description) {
+    message.info(`已定位质控问题：${matched.description}`)
+  }
 }
 
 function handleAssistTabChange(tab: 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message') {

@@ -7,13 +7,14 @@ EMR 文书渲染 API
 """
 
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterable
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
+from ..database.repository import get_repository
 
 router = APIRouter(prefix="/api/v1/emr", tags=["emr"])
 logger = logging.getLogger(__name__)
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 async def get_record_documents(
     request: Request,
     record_id: str,
+    patient_id: Optional[str] = Query(None, description="患者号（兼容工作台）"),
+    visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
+    institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -49,17 +53,22 @@ async def get_record_documents(
     if not documents:
         from ..storage.memory import qc_results_db
 
-        if record_id in qc_results_db:
-            result = qc_results_db[record_id]
+        lookup_key = _pick_lookup_key(record_id, visit_id)
+        if lookup_key in qc_results_db:
+            result = qc_results_db[lookup_key]
             doc_type = result.get("document_type", "入院记录")
             documents = [
                 {
-                    "id": f"doc_{record_id}",
+                    "id": f"doc_{lookup_key}",
                     "doc_type": doc_type,
                     "doc_name": doc_type,
                     "created_at": result.get("analyzed_at", ""),
                 }
             ]
+
+    # 回退：从 CDM 三元键构造文书列表
+    if not documents and institute_id and patient_id and visit_id:
+        documents = _build_repository_documents(institute_id, patient_id, visit_id)
 
     return success_response(
         data=documents,
@@ -74,6 +83,9 @@ async def render_document(
     record_id: str,
     doc_type: Optional[str] = Query(None, description="文书类型"),
     doc_id: Optional[str] = Query(None, description="文书ID"),
+    patient_id: Optional[str] = Query(None, description="患者号（兼容工作台）"),
+    visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
+    institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -157,15 +169,31 @@ async def render_document(
     if not content:
         from ..storage.memory import qc_results_db
 
-        if record_id in qc_results_db:
-            result = qc_results_db[record_id]
+        lookup_key = _pick_lookup_key(record_id, visit_id)
+        if lookup_key in qc_results_db:
+            result = qc_results_db[lookup_key]
             content = result.get("medical_text", "")
             metadata = {
                 "doc_type": result.get("document_type", "入院记录"),
                 "patient_name": result.get("patient_name", ""),
             }
-        else:
-            raise HTTPException(status_code=404, detail=f"未找到病历 {record_id} 的文书内容")
+
+    # 2.5 从 CDM repository 回退
+    if not content and institute_id and patient_id and visit_id:
+        repo_content, repo_metadata = _load_repository_document(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            doc_type=doc_type,
+            doc_id=doc_id,
+        )
+        if repo_content:
+            content = repo_content
+            metadata = {**metadata, **repo_metadata}
+
+    if not content:
+        lookup_key = visit_id or record_id
+        raise HTTPException(status_code=404, detail=f"未找到病历 {lookup_key} 的文书内容")
 
     # 3. 获取缺陷标注
     if sb is not None:
@@ -201,13 +229,34 @@ async def render_document(
     if not annotations:
         from ..storage.memory import qc_results_db
 
-        if record_id in qc_results_db:
-            result = qc_results_db[record_id]
+        lookup_key = _pick_lookup_key(record_id, visit_id)
+        if lookup_key in qc_results_db:
+            result = qc_results_db[lookup_key]
             issues = result.get("issues", [])
             for i, issue in enumerate(issues):
                 annotation = _build_annotation_from_issue(content, issue, i)
                 if annotation:
                     annotations.append(annotation)
+
+    # 3.5 从 CDM repository 回退质控结果
+    if not annotations and institute_id and patient_id and visit_id:
+        try:
+            repo = get_repository()
+            repo_qc_results = repo.get_qc_results(institute_id, patient_id, visit_id) or []
+            latest = repo_qc_results[0] if repo_qc_results else {}
+            issues = latest.get("issues", []) or []
+            eval_results = latest.get("evaluation_results", []) or []
+            for i, issue in enumerate(issues):
+                annotation = _build_annotation_from_issue(content, issue, i)
+                if annotation:
+                    annotations.append(annotation)
+            for result in eval_results:
+                if result.get("status") == "non_compliant" or not result.get("is_compliant", True):
+                    annotation = _build_annotation_from_result(content, result, len(annotations))
+                    if annotation:
+                        annotations.append(annotation)
+        except Exception as e:
+            logger.warning(f"从 repository 获取缺陷标注失败: {e}")
 
     return success_response(
         data={
@@ -285,3 +334,85 @@ def _build_annotation_from_result(
         "category": "语义质控",
         "suggestion": result.get("suggestion", ""),
     }
+
+
+def _pick_lookup_key(record_id: str, visit_id: Optional[str]) -> str:
+    return visit_id or record_id
+
+
+def _normalize_repo_doc_type(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    normalized = value.lower()
+    if "discharge" in normalized or "出院" in value:
+        return "discharge"
+    if "admission" in normalized or "入院" in value:
+        return "admission"
+    return None
+
+
+def _load_repository_document(
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    doc_type: Optional[str],
+    doc_id: Optional[str],
+) -> tuple[str, Dict[str, Any]]:
+    repo = get_repository()
+    normalized_doc_type = _normalize_repo_doc_type(doc_type or doc_id) or "admission"
+
+    candidates: Iterable[tuple[str, str]] = (
+        ((normalized_doc_type, "入院记录"), ("discharge", "出院记录"))
+        if normalized_doc_type == "admission"
+        else ((normalized_doc_type, "出院记录"), ("admission", "入院记录"))
+    )
+
+    content = ""
+    resolved_doc_name = ""
+    for candidate_type, candidate_name in candidates:
+        content = repo.get_record_content(institute_id, patient_id, visit_id, candidate_type) or ""
+        if content:
+            normalized_doc_type = candidate_type
+            resolved_doc_name = candidate_name
+            break
+
+    metadata: Dict[str, Any] = {
+        "doc_type": normalized_doc_type,
+        "doc_name": resolved_doc_name or ("出院记录" if normalized_doc_type == "discharge" else "入院记录"),
+        "doc_id": f"{visit_id}-{normalized_doc_type}",
+    }
+
+    try:
+        frontpage = repo.get_frontpage(institute_id, patient_id, visit_id) or {}
+        metadata.update({
+            "patient_name": frontpage.get("name", ""),
+            "department": frontpage.get("admission_dept_name", "") or frontpage.get("discharge_dept_name", ""),
+            "admission_date": frontpage.get("admission_datetime", ""),
+        })
+    except Exception as e:
+        logger.warning(f"从 repository 获取病历元信息失败: {e}")
+
+    return content, metadata
+
+
+def _build_repository_documents(institute_id: str, patient_id: str, visit_id: str) -> List[Dict[str, Any]]:
+    repo = get_repository()
+    docs: List[Dict[str, Any]] = []
+    candidates = [
+        ("admission", "admission_record", "入院记录"),
+        ("discharge", "discharge_record", "出院记录"),
+    ]
+    for repo_doc_type, doc_type, doc_name in candidates:
+        try:
+            content = repo.get_record_content(institute_id, patient_id, visit_id, repo_doc_type)
+        except Exception as e:
+            logger.warning(f"从 repository 获取 {repo_doc_type} 文书失败: {e}")
+            content = None
+        if content:
+            docs.append({
+                "id": f"{visit_id}-{doc_type}",
+                "doc_type": doc_type,
+                "doc_name": doc_name,
+                "created_at": "",
+            })
+    return docs

@@ -463,7 +463,7 @@ class FrontPageExtractionService:
             return await self._load_demo_frontpage()
 
     async def extract_from_text_stream(
-        self, medical_text: str, visit_id: str = None
+        self, medical_text: str, visit_id: str = None, force_llm: bool = False
     ) -> AsyncGenerator[Tuple[str, Dict[str, Any]], None]:
         """
         逐步抽取首页信息，按模块产出结果（用于前端分批展示）。
@@ -557,16 +557,22 @@ class FrontPageExtractionService:
             llm_text = medical_text or ""
 
         if not llm_text or not llm_text.strip():
-            if cdm_prefilled:
-                # SQL 已有足够数据，无需 LLM
+            if cdm_prefilled and not force_llm:
+                # SQL 已有足够数据且未强制 LLM，直接返回
+                logger.info("stream: SQL 数据充足且未强制 LLM，跳过 LLM 提取")
                 yield ("done", {"frontpage": fp_data})
                 return
-            demo = await self._load_demo_frontpage()
-            yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
-            return
+            if not cdm_prefilled:
+                demo = await self._load_demo_frontpage()
+                yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
+                return
+            # force_llm=True 但无文本 → 记录日志，继续尝试
+            logger.warning("stream: force_llm=True 但 LLM 文本为空，无法调用 LLM")
 
         if not self._use_llm:
             if cdm_prefilled:
+                if force_llm:
+                    logger.warning("stream: force_llm=True 但 LLM 未配置，仅返回 SQL 数据")
                 yield ("done", {"frontpage": fp_data})
                 return
             demo = await self._load_demo_frontpage()
@@ -577,11 +583,12 @@ class FrontPageExtractionService:
         validation_info: Dict[str, Any] = {}
 
         # 判断哪些模块需要 LLM 补缺
-        need_basic_llm = not cdm_prefilled or not fp_data.get("basic_info", {}).get("patient_name")
-        need_hosp_llm = not cdm_prefilled or not fp_data.get("hospitalization", {}).get("admission_datetime")
-        need_diag_llm = not fp_data.get("diagnoses", {}).get("discharge_main_diagnosis_text")
-        need_staff_llm = not fp_data.get("staff", {}).get("attending_physician")
-        need_costs_llm = not fp_data.get("costs", {}).get("total_cost")
+        # force_llm=True 时，所有模块都强制走 LLM
+        need_basic_llm = force_llm or not cdm_prefilled or not fp_data.get("basic_info", {}).get("patient_name")
+        need_hosp_llm = force_llm or not cdm_prefilled or not fp_data.get("hospitalization", {}).get("admission_datetime")
+        need_diag_llm = force_llm or not fp_data.get("diagnoses", {}).get("discharge_main_diagnosis_text")
+        need_staff_llm = force_llm or not fp_data.get("staff", {}).get("attending_physician")
+        need_costs_llm = force_llm or not fp_data.get("costs", {}).get("total_cost")
         # 手术和其他医疗信息始终需要 LLM（源头表只有 record_content）
         need_proc_llm = True
         need_other_llm = True

@@ -111,14 +111,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { UserOutlined, ApartmentOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import { useDefectHighlight } from '@/composables/useDefectHighlight'
 import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 
 // ============= Props =============
 const props = withDefaults(defineProps<{
-  recordId: string
+  recordId?: string
+  visitId?: string
+  patientId?: string
+  instituteId?: string
   docType?: string
   maxHeight?: number
 }>(), {
@@ -128,6 +131,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'defect-click', defectId: string): void
   (e: 'loaded', data: any): void
+  (e: 'error', reason?: string): void
 }>()
 
 // ============= 状态 =============
@@ -146,6 +150,17 @@ const contentRef = ref<HTMLElement>()
 // 高亮 composable
 const { activeDefectId, highlightDefects, scrollToDefect, onDefectClick, bindClickEvents } = useDefectHighlight()
 
+const effectiveRecordId = computed(() => props.recordId || props.visitId || '')
+const hasTripletContext = computed(() => !!(props.visitId && props.patientId && props.instituteId))
+
+const baseQueryString = computed(() => {
+  const params = new URLSearchParams()
+  if (props.visitId) params.append('visit_id', props.visitId)
+  if (props.patientId) params.append('patient_id', props.patientId)
+  if (props.instituteId) params.append('institute_id', props.instituteId)
+  return params.toString()
+})
+
 // ============= 计算属性 =============
 const renderedContent = computed(() => {
   if (!rawContent.value) return ''
@@ -160,9 +175,36 @@ const renderedContent = computed(() => {
 })
 
 // ============= 方法 =============
+function buildUrl(path: 'documents' | 'render', extraParams?: Record<string, string>) {
+  const baseId = effectiveRecordId.value
+  if (!baseId) return ''
+  const params = new URLSearchParams(baseQueryString.value)
+  Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (value) params.append(key, value)
+  })
+  const query = params.toString()
+  return `/api/v1/emr/${encodeURIComponent(baseId)}/${path}${query ? `?${query}` : ''}`
+}
+
+function resetViewerState() {
+  rawContent.value = ''
+  contentType.value = 'text'
+  metadata.value = {}
+  annotations.value = []
+  documents.value = []
+  activeDocId.value = null
+}
+
 async function fetchDocuments() {
+  const url = buildUrl('documents')
+  if (!url) {
+    resetViewerState()
+    emit('error', 'missing-identifiers')
+    return
+  }
+
   try {
-    const response = await fetch(`/api/v1/emr/${props.recordId}/documents`, {
+    const response = await fetch(url, {
       headers: { 'Content-Type': 'application/json' },
     })
     const result = await response.json()
@@ -171,21 +213,31 @@ async function fetchDocuments() {
       if (documents.value.length > 0) {
         activeDocId.value = documents.value[0].id
         await loadDocument(documents.value[0])
+      } else {
+        rawContent.value = ''
+        annotations.value = []
+        emit('error', 'no-documents')
       }
+    } else {
+      emit('error', result?.message || 'load-documents-failed')
     }
   } catch (err) {
     console.error('获取文书列表失败:', err)
+    emit('error', 'load-documents-failed')
   }
 }
 
 async function loadDocument(doc?: any) {
   loading.value = true
   try {
-    const params = new URLSearchParams()
-    if (doc?.doc_type) params.append('doc_type', doc.doc_type)
-    if (doc?.id) params.append('doc_id', doc.id)
-
-    const url = `/api/v1/emr/${props.recordId}/render${params.toString() ? '?' + params.toString() : ''}`
+    const extraParams: Record<string, string> = {}
+    if (doc?.doc_type) extraParams.doc_type = doc.doc_type
+    if (doc?.id) extraParams.doc_id = doc.id
+    const url = buildUrl('render', extraParams)
+    if (!url) {
+      emit('error', 'missing-identifiers')
+      return
+    }
     const response = await fetch(url, {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -198,7 +250,11 @@ async function loadDocument(doc?: any) {
       metadata.value = data.metadata || {}
       annotations.value = data.defect_annotations || []
 
-      emit('loaded', data)
+      if (rawContent.value) {
+        emit('loaded', data)
+      } else {
+        emit('error', 'empty-content')
+      }
 
       // 绑定高亮点击事件
       nextTick(() => {
@@ -206,9 +262,12 @@ async function loadDocument(doc?: any) {
           bindClickEvents(contentRef.value)
         }
       })
+    } else {
+      emit('error', result?.message || 'load-document-failed')
     }
   } catch (err) {
     console.error('加载文书内容失败:', err)
+    emit('error', 'load-document-failed')
   } finally {
     loading.value = false
   }
@@ -231,11 +290,17 @@ onDefectClick((defectId) => {
   emit('defect-click', defectId)
 })
 
-watch(() => props.recordId, () => {
-  if (props.recordId) {
-    fetchDocuments()
-  }
-}, { immediate: true })
+watch(
+  () => [props.recordId, props.visitId, props.patientId, props.instituteId, props.docType],
+  () => {
+    if (effectiveRecordId.value || hasTripletContext.value) {
+      fetchDocuments()
+    } else {
+      resetViewerState()
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
