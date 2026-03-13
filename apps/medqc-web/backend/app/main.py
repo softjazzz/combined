@@ -51,6 +51,7 @@ from .routers import scoring_rules as scoring_rules_router
 from .routers import staff_ranking as staff_ranking_router
 from .routers import notifications as notifications_router
 from .routers import settlement as settlement_router
+# from .routers import scoring_config as scoring_config_router  # TODO: 依赖 app.auth/app.utils 暂未就绪
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -266,6 +267,8 @@ def create_app() -> FastAPI:
     app.include_router(notifications_router.router)
     # 医保结算清单（查询+质控+导出）
     app.include_router(settlement_router.router)
+    # 甲乙丙阈值配置（TODO: 依赖 app.auth/app.utils）
+    # app.include_router(scoring_config_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

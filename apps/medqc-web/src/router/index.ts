@@ -191,6 +191,16 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'qc/scoring-config',
+        name: 'ScoringConfig',
+        component: () => import('@/views/qc/ScoringConfigView.vue'),
+        meta: {
+          title: '评分阈值配置',
+          icon: 'SettingOutlined',
+          permission: ['admin', 'qc_manager']
+        }
+      },
+      {
         path: 'qc/rectifications',
         name: 'RectificationList',
         component: () => import('@/views/qc/RectificationList.vue'),
