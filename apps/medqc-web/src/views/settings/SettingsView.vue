@@ -325,93 +325,9 @@
         </div>
       </a-card>
 
-      <a-card
-        v-if="activeTab === 'system'"
-        title="系统配置"
-        class="settings-card"
-        :bordered="false"
-      >
-        <a-form :model="systemConfig" layout="vertical">
-          <a-row :gutter="[24, 24]">
-            <a-col :xs="24" :md="12">
-              <a-form-item label="系统名称">
-                <a-input v-model:value="systemConfig.systemName" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12">
-              <a-form-item label="系统版本">
-                <a-input v-model:value="systemConfig.version" readonly />
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-row :gutter="[24, 24]">
-            <a-col :xs="24" :md="12">
-              <a-form-item label="会话超时时间(分钟)">
-                <a-input-number
-                  v-model:value="systemConfig.sessionTimeout"
-                  :min="5"
-                  :max="1440"
-                  style="width: 100%"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12">
-              <a-form-item label="密码最小长度">
-                <a-input-number
-                  v-model:value="systemConfig.passwordMinLength"
-                  :min="6"
-                  :max="20"
-                  style="width: 100%"
-                />
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-row :gutter="[24, 24]">
-            <a-col :xs="24" :md="12">
-              <a-form-item label="启用多因素认证">
-                <a-switch v-model:checked="systemConfig.enableMFA" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12">
-              <a-form-item label="启用审计日志">
-                <a-switch v-model:checked="systemConfig.enableAuditLog" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-divider orientation="left">LLM 解析优化</a-divider>
-
-          <a-row :gutter="[24, 24]">
-            <a-col :xs="24" :md="12">
-              <a-form-item label="启用指针模式（Pointer Mode）">
-                <a-switch v-model:checked="systemConfig.llmPointerMode" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="12">
-              <a-form-item label="摘要长度上限">
-                <a-select v-model:value="systemConfig.llmSummaryMaxLen" style="width: 100%">
-                  <a-select-option :value="0">禁用摘要（0）</a-select-option>
-                  <a-select-option :value="40">40 字符</a-select-option>
-                  <a-select-option :value="80">80 字符</a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-form-item class="settings-form__actions">
-            <a-button
-              type="primary"
-              class="elevated-action"
-              @click="saveSystemConfig"
-              :loading="loading.systemConfig"
-            >
-              保存配置
-            </a-button>
-          </a-form-item>
-        </a-form>
-      </a-card>
+      <div v-if="activeTab === 'system'">
+        <SystemConfig />
+      </div>
 
       <a-card
         v-if="activeTab === 'llm'"
@@ -431,76 +347,9 @@
       </a-card>
 
       <!-- 质控引擎配置 -->
-      <a-card
-        v-if="activeTab === 'qc_engine'"
-        title="质控引擎配置"
-        class="settings-card"
-        :bordered="false"
-      >
-        <template #extra>
-          <a-space>
-            <a-button size="small" @click="resetQcSettings">恢复默认</a-button>
-            <a-button type="primary" size="small" @click="saveQcSettings" :loading="loading.qcSettings">保存配置</a-button>
-          </a-space>
-        </template>
-
-        <a-alert
-          message="质控引擎高级配置"
-          description="以下参数控制 LLM 质控引擎的行为。修改后点击“保存配置”生效，会影响所有质控评估请求。"
-          type="info"
-          show-icon
-          class="settings-alert"
-          style="margin-bottom: 24px;"
-        />
-
-        <a-form layout="vertical">
-          <a-divider orientation="left">Prompt 策略</a-divider>
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :md="8">
-              <a-form-item label="Prompt 模式">
-                <a-select v-model:value="qcSettings.prompt_mode" style="width: 100%">
-                  <a-select-option value="plan_a">plan_a（标准，推荐）</a-select-option>
-                  <a-select-option value="current">current（精简）</a-select-option>
-                  <a-select-option value="plan_c">plan_c（详细）</a-select-option>
-                </a-select>
-                <div class="qc-setting-hint">控制发送给 LLM 的规则信息量。plan_a 在准确性和 Token 消耗之间取得最佳平衡。</div>
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-divider orientation="left">分段引擎</a-divider>
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :md="8">
-              <a-form-item label="每批规则数">
-                <a-input-number v-model:value="qcSettings.max_rules_per_batch" :min="3" :max="50" style="width: 100%" />
-                <div class="qc-setting-hint">分段模式下每次发给 LLM 的最大规则数量（3-50）。越少越精确但调用次数越多。</div>
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="8">
-              <a-form-item label="LLM 并发数">
-                <a-input-number v-model:value="qcSettings.max_concurrency" :min="1" :max="10" style="width: 100%" />
-                <div class="qc-setting-hint">同时请求 LLM 的最大数量（1-10）。增加并发可加快速度，但可能触发限流。</div>
-              </a-form-item>
-            </a-col>
-          </a-row>
-
-          <a-divider orientation="left">LLM 参数</a-divider>
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :md="8">
-              <a-form-item :label="'Temperature: ' + qcSettings.temperature">
-                <a-slider v-model:value="qcSettings.temperature" :min="0" :max="1" :step="0.05" />
-                <div class="qc-setting-hint">越低越确定性（推荐 0.1-0.3）。质控场景建议使用较低温度以保证一致性。</div>
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :md="8">
-              <a-form-item label="Max Tokens">
-                <a-input-number v-model:value="qcSettings.max_tokens" :min="1024" :max="65536" :step="1024" style="width: 100%" />
-                <div class="qc-setting-hint">LLM 最大输出 token 数。规则较多时需要更大的输出空间。</div>
-              </a-form-item>
-            </a-col>
-          </a-row>
-        </a-form>
-      </a-card>
+      <div v-if="activeTab === 'qc_engine'">
+        <QcEngineConfig />
+      </div>
 
       <!-- 数据同步配置 -->
       <div v-if="activeTab === 'data_sync'">
@@ -527,7 +376,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h, watch } from 'vue'
+import { ref, reactive, computed, h } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SettingOutlined,
@@ -553,19 +402,15 @@ import RoleEditModal from '@/components/settings/RoleEditModal.vue'
 import ClassificationVersionManager from '@/components/settings/ClassificationVersionManager.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import DataSyncConfig from '@/components/settings/DataSyncConfig.vue'
+import SystemConfig from '@/components/settings/SystemConfig.vue'
+import QcEngineConfig from '@/components/settings/QcEngineConfig.vue'
 
 const activeTab = ref('users')
 
-// 切换到质控配置 Tab 时自动加载
-watch(activeTab, (tab) => {
-  if (tab === 'qc_engine') loadQcSettings()
-})
 const loading = reactive({
   users: false,
   roles: false,
   permissions: false,
-  systemConfig: false,
-  qcSettings: false
 })
 
 const modals = reactive({
@@ -702,16 +547,6 @@ const permissionMatrix = ref([
   }
 ])
 
-const systemConfig = reactive({
-  systemName: '病案质控系统',
-  version: '1.0.0',
-  sessionTimeout: 30,
-  passwordMinLength: 6,
-  enableMFA: false,
-  enableAuditLog: true,
-  llmPointerMode: true,
-  llmSummaryMaxLen: 80
-})
 
 const userColumns = [
   {
@@ -855,25 +690,6 @@ const handlePermissionChange = (resource: string, role: string, checked: boolean
   message.info(`${resource} - ${role}: ${checked ? '授权' : '取消授权'}`)
 }
 
-const saveSystemConfig = async () => {
-  loading.systemConfig = true
-  try {
-    const { llmService } = await import('@/services/llmService')
-    const pointerMode = !!systemConfig.llmPointerMode
-    const summaryMaxLength = Number(systemConfig.llmSummaryMaxLen) || 0
-    llmService.updateConfig({ pointerMode, summaryMaxLength })
-
-    const { llmConfigService } = await import('@/services/llmConfigService')
-    await llmConfigService.saveUserPointerPrefs({ pointerMode, summaryMaxLength })
-
-    await new Promise(resolve => setTimeout(resolve, 600))
-    message.success('系统配置保存成功（已全局持久化至数据库）')
-  } catch (error) {
-    message.error('保存失败')
-  } finally {
-    loading.systemConfig = false
-  }
-}
 
 const exportConfig = () => {
   message.info('导出配置功能开发中')
@@ -883,57 +699,6 @@ const importConfig = () => {
   message.info('导入配置功能开发中')
 }
 
-// ── 质控引擎配置 ──
-const qcSettings = reactive({
-  prompt_mode: 'plan_a',
-  max_rules_per_batch: 15,
-  max_concurrency: 3,
-  temperature: 0.2,
-  max_tokens: 16384,
-})
-
-const loadQcSettings = async () => {
-  try {
-    const resp = await fetch('/api/v1/qc/settings')
-    if (resp.ok) {
-      const data = await resp.json()
-      Object.assign(qcSettings, data.settings)
-    }
-  } catch {}
-}
-
-const saveQcSettings = async () => {
-  loading.qcSettings = true
-  try {
-    const resp = await fetch('/api/v1/qc/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(qcSettings),
-    })
-    if (resp.ok) {
-      message.success('质控配置已保存')
-    } else {
-      message.error('保存失败')
-    }
-  } catch {
-    message.error('保存异常')
-  } finally {
-    loading.qcSettings = false
-  }
-}
-
-const resetQcSettings = async () => {
-  try {
-    const resp = await fetch('/api/v1/qc/settings/reset', { method: 'POST' })
-    if (resp.ok) {
-      const data = await resp.json()
-      Object.assign(qcSettings, data.settings)
-      message.success('已恢复默认质控配置')
-    }
-  } catch {
-    message.error('重置失败')
-  }
-}
 
 const getUserAvatarColor = (email: string) => {
   const palette = ['#0B64D4', '#2C8EAA', '#52C41A', '#FAAD14', '#13C2C2']
@@ -966,20 +731,6 @@ const formatDateTime = (dateString: string) => {
   return new Date(dateString).toLocaleString()
 }
 
-onMounted(async () => {
-  try {
-    const { llmConfigService } = await import('@/services/llmConfigService')
-    const prefs = await llmConfigService.getUserPointerPrefs()
-    if (prefs) {
-      systemConfig.llmPointerMode = !!prefs.pointerMode
-      systemConfig.llmSummaryMaxLen = Number(prefs.summaryMaxLength) || 0
-      const { llmService } = await import('@/services/llmService')
-      llmService.updateConfig(prefs)
-    }
-  } catch (e) {
-    console.warn('加载全局LLM解析优化配置失败（可忽略）:', e)
-  }
-})
 </script>
 
 <style scoped lang="less">
