@@ -656,6 +656,138 @@ def _build_rules() -> List[SettlementQCRule]:
       Severity.ERROR, Category.LOGIC, True,
       lambda fp: _check_perinatal_age(fp))
 
+    # ============ 结算清单专用规则（Phase 1 新增）============
+
+    # --- 住院类型 & 治疗类别 ---
+    R("200", "住院医疗类型", "住院类型必填", "住院医疗类型为必填项",
+      Severity.WARNING, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("inpat_type") or fp.get("medical_type")))
+
+    R("201", "住院医疗类型", "住院类型值域", "住院医疗类型应为'住院'或'日间手术'",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("inpat_type"))) or
+                 str(fp.get("inpat_type")).strip() in ("住院", "日间手术", "1", "2"))
+
+    R("202", "治疗类别", "治疗类别值域", "治疗类别编码不在值域范围内",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("therapy_type"))) or
+                 str(fp.get("therapy_type")).strip() in ("1", "2", "2.1", "2.2", "3",
+                                                         "西医", "中医", "民族医", "中西医"))
+
+    # --- 昏迷时间 ---
+    R("203", "入院前昏迷天数", "昏迷天数非负整数", "入院前昏迷天数应为非负整数",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("coma_timebefadm_d"))) or
+                 (_is_number(fp.get("coma_timebefadm_d")) and _to_num(fp.get("coma_timebefadm_d")) >= 0))
+
+    R("204", "入院前昏迷小时", "昏迷小时0-23", "入院前昏迷小时应为0-23",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("coma_timebefadm_h"))) or
+                 (_is_number(fp.get("coma_timebefadm_h")) and 0 <= _to_num(fp.get("coma_timebefadm_h")) <= 23))
+
+    R("205", "入院前昏迷分钟", "昏迷分钟0-59", "入院前昏迷分钟应为0-59",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("coma_timebefadm_min"))) or
+                 (_is_number(fp.get("coma_timebefadm_min")) and 0 <= _to_num(fp.get("coma_timebefadm_min")) <= 59))
+
+    R("206", "入院后昏迷天数", "昏迷天数非负整数", "入院后昏迷天数应为非负整数",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("coma_timeaftadm_d"))) or
+                 (_is_number(fp.get("coma_timeaftadm_d")) and _to_num(fp.get("coma_timeaftadm_d")) >= 0))
+
+    R("207", "入院后昏迷小时", "昏迷小时0-23", "入院后昏迷小时应为0-23",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("coma_timeaftadm_h"))) or
+                 (_is_number(fp.get("coma_timeaftadm_h")) and 0 <= _to_num(fp.get("coma_timeaftadm_h")) <= 23))
+
+    R("208", "入院后昏迷分钟", "昏迷分钟0-59", "入院后昏迷分钟应为0-59",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("coma_timeaftadm_min"))) or
+                 (_is_number(fp.get("coma_timeaftadm_min")) and 0 <= _to_num(fp.get("coma_timeaftadm_min")) <= 59))
+
+    # --- 护理天数 ---
+    R("209", "特级护理天数", "护理天数非负", "特级护理天数应为非负整数",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("intensive_care_days"))) or
+                 (_is_number(fp.get("intensive_care_days")) and _to_num(fp.get("intensive_care_days")) >= 0))
+
+    R("210", "一级护理天数", "护理天数非负", "一级护理天数应为非负整数",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("primary_care_days"))) or
+                 (_is_number(fp.get("primary_care_days")) and _to_num(fp.get("primary_care_days")) >= 0))
+
+    R("211", "二级护理天数", "护理天数非负", "二级护理天数应为非负整数",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("secondary_care_days"))) or
+                 (_is_number(fp.get("secondary_care_days")) and _to_num(fp.get("secondary_care_days")) >= 0))
+
+    R("212", "三级护理天数", "护理天数非负", "三级护理天数应为非负整数",
+      Severity.WARNING, Category.FORMAT, False,
+      lambda fp: (not _ne(fp.get("tertiary_care_days"))) or
+                 (_is_number(fp.get("tertiary_care_days")) and _to_num(fp.get("tertiary_care_days")) >= 0))
+
+    R("213", "护理天数", "护理天数≤住院天数", "各级护理天数之和不应超过住院天数",
+      Severity.WARNING, Category.LOGIC, False,
+      lambda fp: _check_nursing_days_sum(fp))
+
+    # --- 费用交叉校验 ---
+    R("214", "总费用", "总费用必填", "结算总费用为必填项",
+      Severity.ERROR, Category.REQUIRED, True,
+      lambda fp: _ne(fp.get("total_cost")))
+
+    R("215", "结算期间", "结算开始日期必填", "结算开始日期为必填项",
+      Severity.WARNING, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("start_date")))
+
+    R("216", "结算期间", "结算结束日期必填", "结算结束日期为必填项",
+      Severity.WARNING, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("end_date")))
+
+    R("217", "结算期间", "结算期间顺序", "结算开始日期应≤结束日期",
+      Severity.WARNING, Category.LOGIC, False,
+      lambda fp: (not (_parse_dt(fp.get("start_date")) and _parse_dt(fp.get("end_date"))))
+                 or _parse_dt(fp.get("start_date")) <= _parse_dt(fp.get("end_date")))
+
+    # --- 转科 / 转院补充 ---
+    R("218", "转科科别", "转科须有科别", "有转科记录时，转科科别不能为空",
+      Severity.WARNING, Category.LOGIC, False,
+      lambda fp: (fp.get("admission_dept") == fp.get("discharge_dept"))
+                 or _ne(fp.get("transfer_dept_name") or fp.get("transfer_dept")))
+
+    # --- 出院科别 ---
+    R("219", "出院科别", "出院科别必填", "出院科别为必填项",
+      Severity.ERROR, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("discharge_dept") or fp.get("discharge_dept_name")))
+
+    R("220", "出院时间", "出院时间必填", "出院时间为必填项",
+      Severity.ERROR, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("discharge_datetime")))
+
+    # --- 医保编号 / 清单流水号 ---
+    R("221", "医保编号", "医保编号必填", "医保编号为必填项",
+      Severity.WARNING, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("insurance_no")))
+
+    R("222", "清单流水号", "清单流水号必填", "医保结算清单流水号为必填项",
+      Severity.WARNING, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("medinsur_serial_no")))
+
+    # --- 接收机构联动 ---
+    R("223", "接收机构", "转院须填机构名称", "离院方式为转院时，拟接收机构名称不能为空",
+      Severity.WARNING, Category.LOGIC, False,
+      lambda fp: (str(fp.get("leaving_hospital_way")).strip() not in ("2", "医嘱转院")) or
+                 _ne(fp.get("receiving_institution_name") or fp.get("transfer_hospital")))
+
+    # --- 生日 ---
+    R("224", "出生日期", "出生日期必填", "出生日期为必填项",
+      Severity.ERROR, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("birth_date") or fp.get("patient_birthday")))
+
+    # --- 证件号码 ---
+    R("225", "证件号码", "证件号码必填", "患者证件号码为必填项",
+      Severity.WARNING, Category.REQUIRED, False,
+      lambda fp: _ne(fp.get("id_number") or fp.get("patient_id_card")))
+
     return rules
 
 
@@ -794,6 +926,18 @@ def _check_perinatal_age(fp: dict) -> bool:
     if admit and birth:
         return (admit - birth).days < 365
     return True
+
+def _check_nursing_days_sum(fp: dict) -> bool:
+    """各级护理天数之和不超过住院天数。"""
+    hosp_days = _to_num(fp.get("actual_hospital_days") or fp.get("hospital_duration"))
+    if hosp_days is None or hosp_days <= 0:
+        return True
+    total = 0
+    for key in ("intensive_care_days", "primary_care_days", "secondary_care_days", "tertiary_care_days"):
+        val = fp.get(key)
+        if _ne(val) and _is_number(val):
+            total += _to_num(val)
+    return total == 0 or total <= hosp_days
 
 
 # ============================================================
