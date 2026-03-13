@@ -238,6 +238,40 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
+            <!-- 快捷翻页 -->
+            <div class="flex items-center gap-1 mr-2">
+              <a-tooltip title="上一例 (Alt+←)">
+                <button
+                  @click="goToPrevRecord"
+                  :disabled="currentRecordIndex <= 0"
+                  :class="[
+                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all text-sm',
+                    currentRecordIndex <= 0
+                      ? 'text-slate-300 cursor-not-allowed'
+                      : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                  ]"
+                >
+                  <LeftOutlined />
+                </button>
+              </a-tooltip>
+              <span class="text-xs text-slate-400 font-mono min-w-[48px] text-center">
+                {{ currentRecordIndex + 1 }} / {{ filteredRecords.length }}
+              </span>
+              <a-tooltip title="下一例 (Alt+→)">
+                <button
+                  @click="goToNextRecord"
+                  :disabled="currentRecordIndex >= filteredRecords.length - 1"
+                  :class="[
+                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all text-sm',
+                    currentRecordIndex >= filteredRecords.length - 1
+                      ? 'text-slate-300 cursor-not-allowed'
+                      : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                  ]"
+                >
+                  <RightOutlined />
+                </button>
+              </a-tooltip>
+            </div>
             <a-button
               @click="icdDrawerVisible = true"
               class="!rounded-lg"
@@ -944,6 +978,7 @@ import {
   FileTextOutlined,
   ThunderboltOutlined,
   LeftOutlined,
+  RightOutlined,
   UserOutlined,
   FileSearchOutlined,
   EyeOutlined,
@@ -1462,6 +1497,26 @@ function openRecord(record: PatientRecord) {
   openSessionRecord(record.id)
   assistPanelVisible.value = false
   icdDrawerVisible.value = false
+}
+
+// 快捷翻页
+const currentRecordIndex = computed(() => {
+  if (!selectedRecord.value) return -1
+  return filteredRecords.value.findIndex(r => r.id === selectedRecord.value!.id)
+})
+
+function goToPrevRecord() {
+  const idx = currentRecordIndex.value
+  if (idx > 0) {
+    openRecord(filteredRecords.value[idx - 1])
+  }
+}
+
+function goToNextRecord() {
+  const idx = currentRecordIndex.value
+  if (idx < filteredRecords.value.length - 1) {
+    openRecord(filteredRecords.value[idx + 1])
+  }
 }
 
 function goBackToList() {
