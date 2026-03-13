@@ -629,6 +629,15 @@
                     <div class="text-sm text-slate-400 mt-4">加载结算清单中...</div>
                   </div>
                   <div v-else-if="settlementData">
+                    <!-- AI 草稿横幅 -->
+                    <div v-if="settlementData?.data_source === 'generated_from_frontpage'" class="mx-2 mb-3 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+                      <span class="text-amber-500 text-lg">⚠️</span>
+                      <div>
+                        <div class="text-sm font-semibold text-amber-700">AI 生成草稿</div>
+                        <div class="text-xs text-amber-600">本清单由病案首页 AI 抽取结果 + CDM 数据自动组装，需人工审核后方可上传医保系统</div>
+                      </div>
+                      <a-tag color="orange" class="ml-auto flex-shrink-0">Draft</a-tag>
+                    </div>
                     <!-- 操作栏 -->
                     <div class="flex items-center justify-between mb-4 px-2">
                       <div class="text-sm text-slate-500">
@@ -1231,7 +1240,15 @@ async function loadSettlement(patientId: string, visitId: string) {
     const { data } = await axios.get(`/api/medical-records/settlement/${patientId}/${visitId}`)
     settlementData.value = data
   } catch (err: any) {
-    if (err?.response?.status !== 404) {
+    if (err?.response?.status === 404) {
+      // Fallback: 从首页抽取 + CDM SQL 生成草稿
+      try {
+        const { data: draft } = await axios.post(`/api/medical-records/settlement/${patientId}/${visitId}/generate`)
+        settlementData.value = draft
+      } catch (genErr) {
+        console.warn('草稿生成也失败，显示空白样表:', genErr)
+      }
+    } else {
       console.error('加载结算清单失败:', err)
     }
   } finally {
@@ -1243,9 +1260,14 @@ async function runSettlementQc() {
   if (!selectedRecord.value) return
   settlementQcLoading.value = true
   try {
-    const { data } = await axios.post(`/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`)
+    // 根据数据来源选择对应的 QC 端点
+    const isGenerated = settlementData.value?.data_source === 'generated_from_frontpage'
+    const qcUrl = isGenerated
+      ? `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/generate/qc`
+      : `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`
+    const { data } = await axios.post(qcUrl)
     settlementQcReport.value = data
-    message.success(`质控完成: ${data.summary.passed}/${data.summary.total} 通过`)
+    message.success(`质控完成: ${data.summary.passed}/${data.summary.total_rules} 通过`)
   } catch (err) {
     message.error('结算清单质控执行失败')
     console.error(err)
