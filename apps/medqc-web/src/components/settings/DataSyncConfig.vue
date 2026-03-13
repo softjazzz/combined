@@ -445,7 +445,8 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .ds-card__body {
-  /* 容器 */
+  /* 行容器，结构由子元素决定 */
+  position: relative;
 }
 .ds-divide > * {
   border-bottom: 1px solid #f1f5f9;
@@ -657,27 +658,39 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
   line-height: 1.4;
 }
 
-/* ---- 复合 InputGroup ---- */
-.ds-input-group { display: flex; align-items: stretch; }
+/* ---- 复合 InputGroup（值+单位无缝合体） ---- */
+.ds-input-group {
+  display: flex;
+  align-items: stretch;
+}
+/* 打穿 Ant Design 根元素：.ant-input-number 是渲染出的最外层 div */
 .ds-input-group__input {
   flex: 1;
-  border-top-right-radius: 0 !important;
-  border-bottom-right-radius: 0 !important;
 }
 .ds-input-group__input :deep(.ant-input-number) {
+  width: 100%;
   border-top-right-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
+  border-right: 0 !important;
 }
 .ds-input-group__input :deep(.ant-input-number-input) {
   text-align: center;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  height: 34px;
+  line-height: 34px;
+}
+.ds-input-group__input :deep(.ant-input-number-focused),
+.ds-input-group__input :deep(.ant-input-number:focus) {
+  box-shadow: none !important;
 }
 .ds-input-group__suffix {
   display: inline-flex;
   align-items: center;
-  padding: 0 10px;
-  background: #f8fafc;
+  padding: 0 12px;
+  background: #f1f5f9;
   border: 1px solid #d9d9d9;
   border-left: 0;
   border-radius: 0 6px 6px 0;
@@ -685,6 +698,8 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
   font-weight: 600;
   color: #64748b;
   white-space: nowrap;
+  min-width: 40px;
+  justify-content: center;
 }
 
 /* Cron */
@@ -692,9 +707,12 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
 .ds-cron-input__field { width: 100% !important; }
 .ds-cron-input__field :deep(.ant-input) {
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
   background: #f8fafc;
   padding-right: 160px;
+  height: 34px;
 }
 .ds-cron-input__hint {
   position: absolute;
@@ -708,14 +726,19 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
 }
 
 /* Time range */
-.ds-time-range { display: flex; align-items: center; gap: 4px; }
-.ds-time-range__input { width: 68px !important; }
+.ds-time-range { display: flex; align-items: center; gap: 6px; }
+.ds-time-range__input { width: 76px !important; }
 .ds-time-range__input :deep(.ant-input) {
   text-align: center;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  height: 34px;
+  background: #f8fafc;
+  border-radius: 6px;
 }
-.ds-time-range__sep { color: #94a3b8; font-size: 13px; }
+.ds-time-range__sep { color: #94a3b8; font-size: 14px; font-weight: 500; }
 
 /* ---- 按钮系统 ---- */
 .ds-btn {
