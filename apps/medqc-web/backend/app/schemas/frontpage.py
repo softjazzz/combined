@@ -100,6 +100,10 @@ class FrontPageHospitalization(BaseModel):
     leaving_hospital_way: Optional[str] = Field(None, description="离院方式（医嘱离院/自动出院等）")
     rehospital_within_month: Optional[str] = Field(None, description="31天内再住院标志（有/无）")
     rehospital_purpose: Optional[str] = Field(None, description="再住院目的")
+    # ---- 结算清单专用（A2 类新增字段）----
+    inpat_type: Optional[str] = Field(None, description="住院医疗类型：住院/日间手术")
+    therapy_type: Optional[str] = Field(None, description="治疗类别：1=西医, 2=中医(2.1中医,2.2民族医), 3=中西医")
+    receiving_institution: Optional[str] = Field(None, description="拟接收机构名称（转院时填写）")
 
 
 class FrontPageDiagnoses(BaseModel):
@@ -235,7 +239,16 @@ class FrontPageOtherMedicalInfo(BaseModel):
 
     brain_injury_coma_in: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="颅脑损伤患者昏迷信息（入院前/入院后小时数等），结构后续细化",
+        description="颅脑损伤患者昏迷信息（旧结构，兼容保留）",
+    )
+    # ---- 昏迷时间结构化字段（新增，结算清单专用）----
+    coma_before_admission: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="入院前昏迷时间: {days: int, hours: int, minutes: int}",
+    )
+    coma_after_admission: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="入院后昏迷时间: {days: int, hours: int, minutes: int}",
     )
 
     @field_validator("drug_allergy_flag", "rh_blood_type", "injury_poison_flag", mode="before")

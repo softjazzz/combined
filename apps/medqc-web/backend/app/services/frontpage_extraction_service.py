@@ -192,7 +192,10 @@ HOSPITALIZATION_PROMPT = """从以下病历中提取住院相关信息。
   "leaving_hospital_way": "离院方式(医嘱离院/自动出院等)",
   "rehospital_within_month": "31天内再住院计划(有/无)",
   "daily_ability_admission": "日常生活能力Barthel指数(入院时,数字)",
-  "daily_ability_discharge": "日常生活能力Barthel指数(出院时,数字)"
+  "daily_ability_discharge": "日常生活能力Barthel指数(出院时,数字)",
+  "inpat_type": "住院医疗类型(住院/日间手术)",
+  "therapy_type": "治疗类别(1=西医, 2=中医, 3=中西医)",
+  "receiving_institution": "拟接收机构名称(转院时填写,无则null)"
 }}
 ```
 
@@ -261,6 +264,7 @@ OTHER_MEDICAL_INFO_PROMPT = """从以下病历中提取其他医疗信息。
 【提取规则】
 - 损伤中毒外部原因：仅当诊断包含外伤、中毒、烧伤等V/W/X/Y章编码相关诊断时填写
   常见外因：交通事故、跌落、自残、他人殴打、火灾、药物中毒等
+- 昏迷时间：仅当颅脑损伤患者存在昏迷记录时填写，分入院前和入院后两组
 
 【输出格式】
 ```json
@@ -278,10 +282,13 @@ OTHER_MEDICAL_INFO_PROMPT = """从以下病历中提取其他医疗信息。
   "icu_leave_time": "退出ICU时间",
   "injury_poison_flag": "1=无, 2=有（仅外伤/中毒等诊断时填2）",
   "injury_poison_cause_text": "损伤中毒外部原因名称（如：机动车交通事故、意外跌落）",
-  "injury_poison_cause_icd": "损伤中毒外部原因ICD编码（V/W/X/Y章节，如V01-V99）"
+  "injury_poison_cause_icd": "损伤中毒外部原因ICD编码（V/W/X/Y章节，如V01-V99）",
+  "coma_before_admission": {{"days": 天数, "hours": 小时, "minutes": 分钟}},
+  "coma_after_admission": {{"days": 天数, "hours": 小时, "minutes": 分钟}}
 }}
 ```
 
+注意：coma_before_admission 和 coma_after_admission 仅在颅脑损伤昏迷患者中填写，非昏迷患者填 null。
 直接输出 JSON，不要添加说明："""
 
 
