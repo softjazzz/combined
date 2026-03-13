@@ -1,43 +1,53 @@
 <template>
   <div class="emr-viewer" ref="viewerRef">
-    <!-- 文书标签页 -->
-    <div v-if="documents.length > 1" class="doc-tabs flex border-b border-gray-200 mb-4 overflow-x-auto">
-      <button
-        v-for="doc in documents"
-        :key="doc.id"
-        @click="activeDocId = doc.id; loadDocument(doc)"
-        :class="[
-          'px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2',
-          activeDocId === doc.id
-            ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-        ]"
-      >
-        {{ doc.doc_name || doc.doc_type }}
-      </button>
+    <!-- 文书标签页（仅在没有外部导航时显示） -->
+    <div v-if="!hideDocTabs && documents.length > 1" class="mb-5">
+      <div class="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl border border-gray-100/50">
+        <button
+          v-for="doc in documents"
+          :key="doc.id"
+          @click="activeDocId = doc.id; loadDocument(doc)"
+          :class="[
+            'px-4 py-1.5 text-[13px] font-medium whitespace-nowrap rounded-lg transition-all duration-200',
+            activeDocId === doc.id
+              ? 'bg-white text-blue-700 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+              : 'text-gray-500 hover:text-gray-700'
+          ]"
+        >
+          {{ doc.doc_name || doc.doc_type }}
+        </button>
+      </div>
     </div>
 
-    <!-- 工具栏 -->
-    <div class="toolbar flex items-center justify-between px-4 py-2 bg-gray-50 rounded-lg border border-gray-200 mb-4">
-      <div class="flex items-center gap-3 text-sm text-gray-600">
-        <span v-if="metadata.patient_name">
-          <UserOutlined /> {{ metadata.patient_name }}
+    <!-- 工具栏：去边框，改为极淡灰底通栏 -->
+    <div class="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 rounded-xl mb-5">
+      <div class="flex items-center gap-2.5 text-[13px] text-gray-600">
+        <span v-if="metadata.patient_name" class="flex items-center gap-1 font-semibold text-gray-900">
+          <UserOutlined class="text-gray-400" /> {{ metadata.patient_name }}
         </span>
-        <span v-if="metadata.department" class="text-gray-400">|</span>
-        <span v-if="metadata.department">
-          <ApartmentOutlined /> {{ metadata.department }}
+        <span v-if="metadata.department" class="w-px h-3 bg-gray-200"></span>
+        <span v-if="metadata.department" class="flex items-center gap-1">
+          <ApartmentOutlined class="text-gray-400" /> {{ metadata.department }}
         </span>
-        <span v-if="metadata.doc_type" class="text-gray-400">|</span>
-        <span v-if="metadata.doc_type" class="text-blue-600 font-medium">
+        <span v-if="metadata.doc_type" class="w-px h-3 bg-gray-200"></span>
+        <span v-if="metadata.doc_type" class="text-blue-500 font-medium font-mono text-[12px]">
           {{ metadata.doc_type }}
         </span>
       </div>
 
       <div class="flex items-center gap-2">
-        <a-tag v-if="annotations.length > 0" :color="annotations.length > 3 ? 'red' : 'orange'">
+        <span
+          v-if="annotations.length > 0"
+          :class="[
+            'px-2.5 py-1 text-[11px] font-bold rounded-full',
+            annotations.length > 3
+              ? 'bg-red-50 text-red-600'
+              : 'bg-orange-50 text-orange-600'
+          ]"
+        >
           {{ annotations.length }} 个缺陷
-        </a-tag>
-        <a-tag v-else color="green">无缺陷</a-tag>
+        </span>
+        <span v-else class="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[11px] font-bold rounded-full">无缺陷</span>
       </div>
     </div>
 
@@ -50,10 +60,11 @@
     <div
       v-else-if="renderedContent"
       ref="contentRef"
-      class="emr-content prose prose-sm max-w-none p-6 bg-white rounded-xl border border-gray-200 shadow-sm overflow-auto"
+      class="emr-content overflow-auto"
       :style="{ maxHeight: maxHeight + 'px' }"
       v-html="renderedContent"
     />
+
 
     <!-- 空状态 -->
     <div v-else class="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -124,8 +135,10 @@ const props = withDefaults(defineProps<{
   instituteId?: string
   docType?: string
   maxHeight?: number
+  hideDocTabs?: boolean  // 外部已有文书导航时，隐藏内部 Tab
 }>(), {
   maxHeight: 600,
+  hideDocTabs: false,
 })
 
 const emit = defineEmits<{
@@ -324,17 +337,109 @@ watch(
 </script>
 
 <style scoped>
+/* ============ 阅读区外壳 ============ */
 .emr-content {
-  font-family: 'SimSun', 'STSong', serif;
-  font-size: 14px;
-  line-height: 2;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 40px 48px;
+  /* 文字排版黄金参数 */
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
+  font-size: 15px;
+  line-height: 1.78;
+  color: #475569; /* slate-600：不用纯黑，减少长时间阅读视网膜疲劳 */
   white-space: pre-wrap;
   word-break: break-all;
+  /* 人体工学最大宽度，自动居中 */
+  max-width: 82ch;
+  margin: 0 auto;
 }
 
-.emr-content :deep(.defect-highlight:hover) {
-  filter: brightness(0.95);
-  outline: 2px solid currentColor;
-  outline-offset: 1px;
+/* ============ 段落标题（块级视觉锚点） ============ */
+.emr-content :deep(.emr-section-title) {
+  display: block;
+  font-weight: 700;
+  color: #1e293b;     /* slate-900：比正文深，立刻抓住视线 */
+  font-size: 14.5px;
+  margin-top: 1.4em;
+  margin-bottom: 0.2em;
+  letter-spacing: 0.01em;
+}
+
+/* ============ 缺陷高亮（虚线下划线，克制） ============ */
+.emr-content :deep(.emr-defect) {
+  position: relative;
+  cursor: help;
+  border-bottom: 1.5px dashed;
+  padding-bottom: 1px;
+  transition: background-color 0.15s;
+}
+.emr-content :deep(.emr-defect--critical) {
+  background-color: #fef2f2;
+  border-color: #ef4444;
+}
+.emr-content :deep(.emr-defect--error) {
+  background-color: #fff7ed;
+  border-color: #f97316;
+}
+.emr-content :deep(.emr-defect--warning) {
+  background-color: #fffbeb;
+  border-color: #d97706;
+}
+.emr-content :deep(.emr-defect--info) {
+  background-color: #eff6ff;
+  border-color: #3b82f6;
+}
+.emr-content :deep(.emr-defect:hover) {
+  filter: brightness(0.97);
+}
+
+/* ============ Tooltip 卡片（pure CSS hover） ============ */
+.emr-content :deep(.emr-defect-tip) {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 200;
+  width: 260px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
+  padding: 12px 14px;
+  pointer-events: none;
+  white-space: normal;
+  word-break: break-all;
+}
+.emr-content :deep(.emr-defect:hover .emr-defect-tip) {
+  display: block;
+}
+.emr-content :deep(.emr-defect-tip__header) {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 7px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.emr-content :deep(.emr-defect-tip__header--critical) { color: #dc2626; }
+.emr-content :deep(.emr-defect-tip__header--error)    { color: #ea580c; }
+.emr-content :deep(.emr-defect-tip__header--warning)  { color: #d97706; }
+.emr-content :deep(.emr-defect-tip__header--info)     { color: #2563eb; }
+.emr-content :deep(.emr-defect-tip__body) {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #475569;
+}
+.emr-content :deep(.emr-defect-tip__suggest) {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.55;
 }
 </style>
+

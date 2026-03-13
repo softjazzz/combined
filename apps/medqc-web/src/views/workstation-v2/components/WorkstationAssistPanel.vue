@@ -259,11 +259,23 @@ function changeTab(tab: AssistTabKey) {
   gap: 10px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
   color: #fff;
   padding: 12px 16px;
-  box-shadow: 0 18px 40px rgba(37, 99, 235, 0.22);
+  box-shadow:
+    0 2px 8px rgba(37, 99, 235, 0.25),
+    0 8px 24px rgba(37, 99, 235, 0.30),
+    0 20px 48px rgba(79, 70, 229, 0.20);
   cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.assist-trigger:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px rgba(37, 99, 235, 0.30),
+    0 12px 32px rgba(37, 99, 235, 0.35),
+    0 24px 56px rgba(79, 70, 229, 0.25);
 }
 
 .assist-trigger__icon {

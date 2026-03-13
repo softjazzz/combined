@@ -149,10 +149,20 @@ BASIC_INFO_PROMPT = """从以下病历中提取患者基本信息。
   "marital_status_text": "婚姻状况文本",
   "id_number": "身份证号",
   "occupation": "职业",
-  "current_address": "现住址",
+  "birthplace": "出生地（省市县）",
+  "nativeplace": "籍贯",
+  "current_address": "现住址（省市县街道）",
+  "current_address_phone": "现住址电话",
+  "current_address_zip": "现住址邮编",
+  "household_address": "户口地址（省市县街道）",
+  "household_address_zip": "户口地址邮编",
+  "work_unit": "工作单位及地址",
+  "work_unit_phone": "工作单位电话",
+  "work_unit_zip": "工作单位邮编",
   "contact_name": "联系人姓名",
   "contact_relation": "联系人关系",
-  "contact_phone": "联系人电话"
+  "contact_phone": "联系人电话",
+  "contact_address": "联系人地址"
 }}
 ```
 
@@ -178,9 +188,11 @@ HOSPITALIZATION_PROMPT = """从以下病历中提取住院相关信息。
   "discharge_ward": "出院病房",
   "discharge_datetime": "YYYY-MM-DD HH:MM:SS",
   "actual_hospital_days": 住院天数(数字),
+  "transfer_dept": "转科科别(无则填-)",
   "leaving_hospital_way": "离院方式(医嘱离院/自动出院等)",
-  "rehospital_within_month": "31天内再住院标志(有/无)",
-  "rehospital_purpose": "再住院目的"
+  "rehospital_within_month": "31天内再住院计划(有/无)",
+  "daily_ability_admission": "日常生活能力Barthel指数(入院时,数字)",
+  "daily_ability_discharge": "日常生活能力Barthel指数(出院时,数字)"
 }}
 ```
 
@@ -491,10 +503,20 @@ class FrontPageExtractionService:
                     "marital_status_text": "",
                     "id_number": "",
                     "occupation": "",
+                    "birthplace": "",
+                    "nativeplace": "",
                     "current_address": "",
+                    "current_address_phone": "",
+                    "current_address_zip": "",
+                    "household_address": "",
+                    "household_address_zip": "",
+                    "work_unit": "",
+                    "work_unit_phone": "",
+                    "work_unit_zip": "",
                     "contact_name": "",
                     "contact_relation": "",
                     "contact_phone": "",
+                    "contact_address": "",
                 },
                 "hospitalization": {},
                 "diagnoses": {
@@ -529,14 +551,14 @@ class FrontPageExtractionService:
                 if fp_data.get("hospitalization", {}).get("admission_datetime"):
                     yield ("update", {"module": "hospitalization", "frontpage": fp_data})
 
-                if fp_data.get("diagnoses", {}).get("discharge_main_diagnosis_text"):
-                    yield ("update", {"module": "diagnoses", "frontpage": fp_data})
-
                 if fp_data.get("staff", {}).get("attending_physician"):
                     yield ("update", {"module": "staff", "frontpage": fp_data})
 
                 if fp_data.get("costs", {}).get("total_cost"):
                     yield ("update", {"module": "costs", "frontpage": fp_data})
+
+                if fp_data.get("other_medical_info", {}).get("drug_allergy_flag"):
+                    yield ("update", {"module": "other_medical_info", "frontpage": fp_data})
 
             except Exception as exc:
                 logger.warning(f"stream: SQL 层异常，回退到纯 LLM 模式: {exc}")
@@ -586,10 +608,10 @@ class FrontPageExtractionService:
         # force_llm=True 时，所有模块都强制走 LLM
         need_basic_llm = force_llm or not cdm_prefilled or not fp_data.get("basic_info", {}).get("patient_name")
         need_hosp_llm = force_llm or not cdm_prefilled or not fp_data.get("hospitalization", {}).get("admission_datetime")
-        need_diag_llm = force_llm or not fp_data.get("diagnoses", {}).get("discharge_main_diagnosis_text")
         need_staff_llm = force_llm or not fp_data.get("staff", {}).get("attending_physician")
         need_costs_llm = force_llm or not fp_data.get("costs", {}).get("total_cost")
-        # 手术和其他医疗信息始终需要 LLM（源头表只有 record_content）
+        # 诊断/手术/其他医疗：始终从病历文书 LLM 提取（不从首页目标表读取）
+        need_diag_llm = True
         need_proc_llm = True
         need_other_llm = True
 
@@ -870,10 +892,22 @@ class FrontPageExtractionService:
     async def _prefill_from_cdm(self, visit_id: str) -> Dict[str, Any]:
         """
         三层架构 - 第一层 + 第二层：
-        从 CDM 源头表（patient_information / inpat_registration / admission_record
-        / discharge_record / diagnosis）直接读取结构化数据，并通过码表映射补充文本。
+        从 CDM 源头表直接读取结构化数据，并通过码表映射补充文本。
 
-        注意：不读 mr 表（那是首页本身 = 目标表），只读源头文书/登记表。
+        数据源（仅上游源头表，不读首页目标表）：
+        - inpat_registration → 住院登记（patient_id、入出院时间等）
+        - patient_information → 人口学信息（姓名、性别、民族等）
+        - admission_record → 入院记录（科别、过敏史、签名等）
+        - discharge_record → 出院记录（出院科别、转归等）
+        - inpat_bill_item → 住院费用明细（按 item_type 汇总为首页 24 项费用）
+
+        不读取的表（首页目标表 = 我们要填写的表）：
+        - mr（病案首页主表）
+        - mr_cost（病案首页费用明细）
+        - mr_surgery（病案首页手术明细）
+        - diagnosis（诊断表，可能属于首页填写流程）
+
+        诊断/手术/其他医疗信息 → 由第三层 LLM 从病历文书中提取。
         """
         logger.info(f"_prefill_from_cdm: visit_id={visit_id}")
 
@@ -882,8 +916,12 @@ class FrontPageExtractionService:
                 "patient_name": "", "gender": "0", "gender_text": "",
                 "birth_date": "", "age_years": 0, "nationality": "",
                 "ethnicity": "", "marital_status": "9", "marital_status_text": "",
-                "id_number": "", "occupation": "", "current_address": "",
-                "contact_name": "", "contact_relation": "", "contact_phone": "",
+                "id_number": "", "occupation": "",
+                "birthplace": "", "nativeplace": "",
+                "current_address": "", "current_address_phone": "", "current_address_zip": "",
+                "household_address": "", "household_address_zip": "",
+                "work_unit": "", "work_unit_phone": "", "work_unit_zip": "",
+                "contact_name": "", "contact_relation": "", "contact_phone": "", "contact_address": "",
             },
             "hospitalization": {},
             "diagnoses": {
@@ -929,6 +967,8 @@ class FrontPageExtractionService:
                             "admission_dept": reg.get("admission_dept_name") or "",
                             "discharge_dept": reg.get("discharge_dept_name") or "",
                             "payment_method_text": reg.get("insurance_type") or "",
+                            "hospital_name": reg.get("hospital_name") or "",
+                            "organization_code": reg.get("organization_code") or "",
                         })
                         # 计算住院天数
                         adm_dt = reg.get("admission_datetime")
@@ -973,10 +1013,22 @@ class FrontPageExtractionService:
                                 "marital_status": pi.get("marital_status") or "9",
                                 "id_number": pi.get("id_card_no") or "",
                                 "occupation": pi.get("occupation_category") or "",
+                                # 地址类字段（HIS 补充）
+                                "birthplace": pi.get("birthplace") or "",
+                                "nativeplace": pi.get("nativeplace") or "",
                                 "current_address": pi.get("currentaddress") or "",
+                                "current_address_phone": pi.get("contact_number") or "",
+                                "current_address_zip": pi.get("currentaddress_zip") or "",
+                                "household_address": pi.get("household_address") or "",
+                                "household_address_zip": pi.get("household_address_zip") or "",
+                                "work_unit": pi.get("work_unit") or "",
+                                "work_unit_phone": pi.get("work_unit_phone") or "",
+                                "work_unit_zip": pi.get("work_unit_zip") or "",
+                                # 联系人
                                 "contact_name": pi.get("contact_name") or "",
                                 "contact_relation": pi.get("contact_relationship") or "",
                                 "contact_phone": pi.get("contact_telephone") or "",
+                                "contact_address": pi.get("contact_address") or "",
                             })
                             # 码表映射：婚姻状况文本
                             ms = pi.get("marital_status") or ""
@@ -1050,286 +1102,124 @@ class FrontPageExtractionService:
                                 fp_data["hospitalization"]["actual_hospital_days"] = int(str(duration).strip())
                             except (ValueError, TypeError):
                                 pass
-                        # 转归
-                        fp_data["diagnoses"]["discharge_main_outcome"] = dis.get("condition_transform") or ""
+                        # 注：转归(condition_transform)属于诊断信息，
+                        # 由 LLM 从病历文书独立提取，不从 SQL 读取，以便质控对照
                         logger.info("  discharge_record 读取成功")
                 except Exception as e:
                     logger.warning(f"  discharge_record 查询失败: {e}")
 
-                # ---- 5. diagnosis 表 → 诊断（如果 HIS 在住院期间已录入） ----
+                # ---- 5. inpat_bill_item 表 → 费用汇总（HIS 计费系统源头数据） ----
+                # 从住院费用明细按 item_type 分类汇总，映射到首页 24 项费用
                 try:
-                    diag_rows = session.execute(sql_text(
-                        "SELECT * FROM diagnosis WHERE visit_id = :vid ORDER BY diagnosis_no"
+                    bill_rows = session.execute(sql_text(
+                        "SELECT item_type, SUM(CAST(cost AS NUMERIC)) as total "
+                        "FROM inpat_bill_item WHERE visit_id = :vid "
+                        "GROUP BY item_type"
                     ), {"vid": visit_id}).mappings().all()
 
-                    if diag_rows:
-                        for d in diag_rows:
-                            dtype = (d.get("diagnosis_type") or "").strip()
-                            dname = d.get("diagnosis_name") or ""
-                            dcode = d.get("diagnosis_code") or ""
-
-                            if "主要" in dtype or "主诊" in dtype:
-                                fp_data["diagnoses"]["discharge_main_diagnosis_text"] = dname
-                                fp_data["diagnoses"]["discharge_main_icd"] = dcode
-                                fp_data["diagnoses"]["admission_condition"] = d.get("admission_condition") or ""
-                                fp_data["diagnoses"]["discharge_main_outcome"] = (
-                                    d.get("discharge_condition")
-                                    or fp_data["diagnoses"].get("discharge_main_outcome")
-                                    or ""
-                                )
-                            elif "其他" in dtype:
-                                fp_data["diagnoses"]["discharge_other_diagnoses_texts"].append(dname)
-                                if dcode:
-                                    if not fp_data["diagnoses"].get("discharge_other_icds"):
-                                        fp_data["diagnoses"]["discharge_other_icds"] = []
-                                    fp_data["diagnoses"]["discharge_other_icds"].append(dcode)
-                                if d.get("discharge_condition"):
-                                    if not fp_data["diagnoses"].get("discharge_other_outcomes"):
-                                        fp_data["diagnoses"]["discharge_other_outcomes"] = []
-                                    fp_data["diagnoses"]["discharge_other_outcomes"].append(
-                                        d.get("discharge_condition")
-                                    )
-                            elif "门诊" in dtype or "急诊" in dtype or "门" in dtype:
-                                fp_data["diagnoses"]["ed_diagnosis_texts"].append(dname)
-                                if dcode:
-                                    if not fp_data["diagnoses"].get("ed_diagnosis_codes"):
-                                        fp_data["diagnoses"]["ed_diagnosis_codes"] = []
-                                    fp_data["diagnoses"]["ed_diagnosis_codes"].append(dcode)
-
-                        logger.info(f"  diagnosis 表读取成功: {len(diag_rows)} 条")
-                except Exception as e:
-                    logger.warning(f"  diagnosis 查询失败: {e}")
-
-                # ---- 6. mr_cost 表 → 费用（HIS 计费系统生成，通常出院结算后就有） ----
-                try:
-                    cost = session.execute(sql_text(
-                        "SELECT * FROM mr_cost WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
-
-                    if cost:
-                        cost_d = dict(cost)
-                        fp_data["costs"]["total_cost"] = cost_d.get("total_cost")
-                        fp_data["costs"]["self_paid"] = cost_d.get("self_pay")
-                        # 分类费用映射
-                        cat_mapping = {
-                            "1": "general_medical_service_fee",
-                            "2": "general_treatment_fee",
-                            "3": "nursing_care_fee",
-                            "4": "other_service_fee",
-                            "5": "pathological_diagnostic_fee",
-                            "6": "laboratory_diagnostic_fee",
-                            "7": "imaging_diagnostic_fee",
-                            "8": "clinical_diagnostic_fee",
-                            "9": "nonsurgical_treatment_fee",
-                            "10": "clinical_physical_therapy_fee",
-                            "11": "surgery_treatment_fee",
-                            "12": "anesthesia_fee",
-                            "13": "surgery_fee",
-                            "14": "rehabilitation_fee",
-                            "15": "western_medicine_fee",
-                            "16": "antibacterial_drug_fee",
-                            "17": "chinese_patent_medcine_fee",
-                            "18": "chinese_herbal_medicine_fee",
-                            "19": "blood_fee",
-                            "20": "treat_disposable_mat_fee",
-                            "21": "exam_disposable_mat_fee",
-                            "22": "surgery_disposable_mat_fee",
-                            "23": "other_fee",
+                    if bill_rows:
+                        # item_type 中文名 → 首页费用分类索引的映射
+                        type_to_cat = {
+                            "一般医疗服务费": "1",
+                            "床位费": "1",
+                            "一般治疗操作费": "2",
+                            "治疗操作费": "2",
+                            "护理费": "3",
+                            "其他费用": "4",
+                            "其他服务费": "4",
+                            "病理诊断费": "5",
+                            "实验室诊断费": "6",
+                            "检验费": "6",
+                            "化验费": "6",
+                            "影像学诊断费": "7",
+                            "影像费": "7",
+                            "放射费": "7",
+                            "CT费": "7",
+                            "MRI费": "7",
+                            "临床诊断项目费": "8",
+                            "非手术治疗项目费": "9",
+                            "临床物理治疗费": "10",
+                            "手术治疗费": "11",
+                            "麻醉费": "12",
+                            "手术费": "13",
+                            "康复费": "14",
+                            "中医治疗费": "15_cm",
+                            "西药费": "15",
+                            "抗菌药物费": "16",
+                            "抗菌药物费用": "16",
+                            "中成药费": "17",
+                            "中草药费": "18",
+                            "血费": "19",
+                            "输血费": "19",
+                            "白蛋白类制品费": "20",
+                            "球蛋白类制品费": "21",
+                            "凝血因子类制品费": "22",
+                            "细胞因子类制品费": "23",
+                            "检查用一次性医用材料费": "24",
+                            "治疗用一次性医用材料费": "25",
+                            "手术用一次性医用材料费": "26",
                         }
+
                         cats = {}
-                        for idx, col_name in cat_mapping.items():
-                            val = cost_d.get(col_name)
-                            if val is not None:
-                                try:
-                                    cats[idx] = float(str(val).replace(",", ""))
-                                except (ValueError, TypeError):
-                                    pass
-                        fp_data["costs"]["categories"] = cats
-                        logger.info("  mr_cost 读取成功")
-                except Exception as e:
-                    logger.warning(f"  mr_cost 查询失败: {e}")
+                        total_cost = 0.0
+                        for row in bill_rows:
+                            item_type = (row.get("item_type") or "").strip()
+                            amount = float(row.get("total") or 0)
+                            total_cost += amount
 
-                # ---- 6b. mr_surgery 表 → 手术及操作明细 ----
-                try:
-                    surg_rows = session.execute(sql_text(
-                        "SELECT * FROM mr_surgery WHERE visit_id = :vid ORDER BY surgery_begin_datetime"
-                    ), {"vid": visit_id}).mappings().all()
-
-                    if surg_rows:
-                        main_proc = None
-                        other_procs = []
-                        for s in surg_rows:
-                            is_main = (s.get("main_surgery_sign") or "").strip() in ("是", "1", "Y", "yes", "true")
-                            proc_item = {
-                                "text": s.get("surgery_name") or "",
-                                "code": s.get("surgery_code") or "",
-                                "date": str(s.get("surgery_begin_datetime") or "")[:10],
-                                "level": s.get("surgical_level") or "",
-                                "start_time": str(s.get("surgery_begin_datetime") or ""),
-                                "end_time": str(s.get("surgery_end_datetime") or ""),
-                                "surgeon": s.get("surgeon") or "",
-                                "assistant1": s.get("first_assistant") or "",
-                                "assistant2": s.get("second_assistant") or "",
-                                "anesthesia_method": s.get("anesthesia_method") or "",
-                                "anesthesiologist": s.get("anesthesiologist") or "",
-                                "incision_grade": s.get("surgial_incision_level") or "",
-                                "incision_healing_grade": s.get("surgical_incisionheal_level") or "",
-                                "unplanned_reoperation": s.get("unplanned_reoperation") or "",
-                            }
-                            if is_main and main_proc is None:
-                                main_proc = proc_item
+                            cat_key = type_to_cat.get(item_type)
+                            if cat_key:
+                                if cat_key == "15_cm":
+                                    # 中医治疗费独立处理
+                                    cats["chinese_medicine_treatment"] = cats.get("chinese_medicine_treatment", 0) + amount
+                                else:
+                                    cats[cat_key] = cats.get(cat_key, 0) + amount
                             else:
-                                other_procs.append(proc_item)
+                                # 未匹配的费用归入"其他"
+                                cats["other"] = cats.get("other", 0) + amount
+                                logger.info(f"  费用类型未映射: {item_type} = {amount}")
 
-                        # 如果没有标记主手术，取第一个
-                        if main_proc is None and surg_rows:
-                            main_proc = {
-                                "text": surg_rows[0].get("surgery_name") or "",
-                                "code": surg_rows[0].get("surgery_code") or "",
-                                "date": str(surg_rows[0].get("surgery_begin_datetime") or "")[:10],
-                                "level": surg_rows[0].get("surgical_level") or "",
-                                "start_time": str(surg_rows[0].get("surgery_begin_datetime") or ""),
-                                "end_time": str(surg_rows[0].get("surgery_end_datetime") or ""),
-                                "surgeon": surg_rows[0].get("surgeon") or "",
-                                "assistant1": surg_rows[0].get("first_assistant") or "",
-                                "assistant2": surg_rows[0].get("second_assistant") or "",
-                                "anesthesia_method": surg_rows[0].get("anesthesia_method") or "",
-                                "anesthesiologist": surg_rows[0].get("anesthesiologist") or "",
-                                "incision_grade": surg_rows[0].get("surgial_incision_level") or "",
-                                "incision_healing_grade": surg_rows[0].get("surgical_incisionheal_level") or "",
-                                "unplanned_reoperation": surg_rows[0].get("unplanned_reoperation") or "",
-                            }
-
-                        if main_proc:
-                            fp_data["procedures"] = {
-                                "main_procedure_text": main_proc["text"],
-                                "main_procedure_code": main_proc["code"],
-                                "main_procedure_date": main_proc["date"],
-                                "main_procedure_level": main_proc["level"],
-                                "main_procedure_start_time": main_proc["start_time"],
-                                "main_procedure_end_time": main_proc["end_time"],
-                                "surgeon_name": main_proc["surgeon"],
-                                "assistant1_name": main_proc["assistant1"],
-                                "assistant2_name": main_proc["assistant2"],
-                                "anesthesia_method": main_proc["anesthesia_method"],
-                                "anesthetist_name": main_proc["anesthesiologist"],
-                                "incision_grade": main_proc["incision_grade"],
-                                "incision_healing_grade": main_proc["incision_healing_grade"],
-                                "is_main_surgery": "是",
-                                "unplanned_reoperation": main_proc["unplanned_reoperation"],
-                                "other_procedures_texts": [p["text"] for p in other_procs],
-                                "other_procedures": other_procs,
-                            }
-
-                        logger.info(f"  mr_surgery 读取成功: {len(surg_rows)} 条（主手术: {'有' if main_proc else '无'}）")
+                        fp_data["costs"]["total_cost"] = round(total_cost, 2)
+                        fp_data["costs"]["categories"] = cats
+                        logger.info(f"  inpat_bill_item 汇总成功: {len(bill_rows)} 类, 总费用={total_cost:.2f}")
                 except Exception as e:
-                    logger.warning(f"  mr_surgery 查询失败: {e}")
+                    logger.warning(f"  inpat_bill_item 查询失败: {e}")
 
-                # ---- 7. mr 表 → 病案首页已有结构化字段（补充源头表没有的字段） ----
-                # 注意：mr 是首页本身（目标表），但 patient_information / inpat_registration
-                # 在当前 CDM 对接中无独立存储过程（0 行数据），所以从 mr 表补充。
+                # ---- 7. mr 表 → 住院过程补充信息（离院方式、转科、Barthel 等） ----
+                # 注：mr 是首页目标表，此处仅读取源头文书中无法获取的管理类字段
                 try:
                     mr_row = session.execute(sql_text(
                         "SELECT * FROM mr WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
 
                     if mr_row:
-                        mr_d = dict(mr_row)
-                        # --- 基本信息补充 ---
-                        _fill_if_empty = lambda fp_dict, key, val: (
-                            fp_dict.__setitem__(key, val) if val and str(val).strip()
-                            and str(val).strip() != '-'
-                            and not fp_dict.get(key)
-                            else None
-                        )
-                        bi = fp_data["basic_info"]
-                        _fill_if_empty(bi, "patient_name", mr_d.get("name"))
-                        sex_text = mr_d.get("sex") or ""
-                        if sex_text and not bi.get("gender_text"):
-                            bi["gender_text"] = sex_text
-                            bi["gender"] = _text_to_code("sex", sex_text)
-                        _fill_if_empty(bi, "birth_date", str(mr_d.get("birthday") or ""))
-                        if mr_d.get("age_year") and not bi.get("age_years"):
-                            try:
-                                bi["age_years"] = int(str(mr_d["age_year"]).strip())
-                            except (ValueError, TypeError):
-                                pass
-                        _fill_if_empty(bi, "nationality", mr_d.get("nationality"))
-                        _fill_if_empty(bi, "ethnicity", mr_d.get("ethnicity"))
-                        if mr_d.get("marital_status") and not bi.get("marital_status_text"):
-                            ms = mr_d["marital_status"]
-                            if ms.isdigit():
-                                bi["marital_status"] = ms
-                                bi["marital_status_text"] = _code_to_text("marital_status", ms)
-                            else:
-                                bi["marital_status_text"] = ms
-                                bi["marital_status"] = _text_to_code("marital_status", ms)
-                        _fill_if_empty(bi, "id_number", mr_d.get("id_card_no"))
-                        _fill_if_empty(bi, "occupation", mr_d.get("occupation_category"))
-                        _fill_if_empty(bi, "current_address", mr_d.get("currentaddress"))
-                        _fill_if_empty(bi, "contact_phone", mr_d.get("contact_number"))
-                        _fill_if_empty(bi, "contact_name", mr_d.get("contact_name"))
-                        _fill_if_empty(bi, "contact_relation", mr_d.get("contact_relationship"))
-                        _fill_if_empty(bi, "contact_phone", mr_d.get("contact_telephone"))
-                        # 新增必填地址字段
-                        bi["birthplace"] = mr_d.get("birthplace") or mr_d.get("nativeplace") or ""
-                        bi["nativeplace"] = mr_d.get("nativeplace") or ""
-                        bi["contact_address"] = mr_d.get("contact_address") or ""
-                        bi["work_unit"] = mr_d.get("work_unit") or ""
+                        # 离院方式
+                        leaving_way = mr_row.get("leaving_hospital_way") or ""
+                        if leaving_way:
+                            fp_data["hospitalization"]["leaving_hospital_way"] = leaving_way
+                        # 转科科别
+                        transfer_dept = mr_row.get("transfer_dept_name") or "-"
+                        fp_data["hospitalization"]["transfer_dept"] = transfer_dept
+                        # 31 天内再住院
+                        rehospital = mr_row.get("rehospital_with_month") or ""
+                        fp_data["hospitalization"]["rehospital_within_month"] = rehospital
+                        # 日常生活能力评定量表得分（Barthel 指数）
+                        daily_adm = mr_row.get("daily_ability_admission")
+                        daily_dis = mr_row.get("daily_ability_discharge")
+                        if daily_adm is not None:
+                            fp_data["hospitalization"]["daily_ability_admission"] = int(daily_adm)
+                        if daily_dis is not None:
+                            fp_data["hospitalization"]["daily_ability_discharge"] = int(daily_dis)
+                        # 颅脑损伤昏迷时间
+                        for field in ("brain_injury_before_admission_hours",
+                                      "brain_injury_before_admission_minutes",
+                                      "brain_injury_after_admission_hours",
+                                      "brain_injury_after_admission_minutes"):
+                            val = mr_row.get(field)
+                            if val is not None:
+                                fp_data["other_medical_info"][field] = int(val)
 
-                        # --- 住院信息补充 ---
-                        hosp = fp_data["hospitalization"]
-                        _fill_if_empty(hosp, "hospital_name", mr_d.get("institute_county_desc"))
-                        _fill_if_empty(hosp, "organization_code", mr_d.get("institute_code"))
-                        _fill_if_empty(hosp, "medical_record_no", mr_d.get("mr_no"))
-                        _fill_if_empty(hosp, "admission_times_in_hospital", mr_d.get("visit_cnt"))
-                        pm = mr_d.get("medical_payment_method") or ""
-                        if pm and not hosp.get("payment_method_text"):
-                            hosp["payment_method_text"] = pm
-                            hosp["payment_method"] = _text_to_code("payment_method", pm)
-                        route = mr_d.get("admission_route") or ""
-                        if route and not hosp.get("admission_way_text"):
-                            hosp["admission_way_text"] = route
-                            hosp["admission_way"] = _text_to_code("admission_route", route)
-                        _fill_if_empty(hosp, "admission_dept", mr_d.get("admission_dept_name"))
-                        _fill_if_empty(hosp, "admission_ward", mr_d.get("admission_ward_name"))
-                        _fill_if_empty(hosp, "admission_datetime", str(mr_d.get("admission_datetime") or ""))
-                        _fill_if_empty(hosp, "discharge_dept", mr_d.get("discharge_dept_name"))
-                        _fill_if_empty(hosp, "discharge_ward", mr_d.get("discharge_ward_name"))
-                        _fill_if_empty(hosp, "discharge_datetime", str(mr_d.get("discharge_datetime") or ""))
-                        if mr_d.get("hospital_duration") and not hosp.get("actual_hospital_days"):
-                            try:
-                                hosp["actual_hospital_days"] = int(str(mr_d["hospital_duration"]).strip())
-                            except (ValueError, TypeError):
-                                pass
-                        _fill_if_empty(hosp, "transfer_dept", mr_d.get("transfer_dept_name"))
-                        _fill_if_empty(hosp, "leaving_way", mr_d.get("leaving_hospital_way"))
-                        _fill_if_empty(hosp, "rehospital_flag", mr_d.get("rehospital_with_month"))
-                        _fill_if_empty(hosp, "rehospital_purpose", mr_d.get("rehospital_with_month_purpose"))
-
-                        # --- 其他医疗信息补充 ---
-                        omi = fp_data["other_medical_info"]
-                        if mr_d.get("abo_blood_code") and not omi.get("abo_blood_type"):
-                            omi["abo_blood_type"] = _text_to_code("blood_abo", mr_d["abo_blood_code"])
-                        if mr_d.get("rh_blood_code") and not omi.get("rh_blood_type"):
-                            rh_text = mr_d["rh_blood_code"]
-                            omi["rh_blood_type"] = _text_to_code("blood_rh", rh_text)
-                            omi["rh_blood_type_text"] = rh_text
-                        if mr_d.get("allergy_sign") and not omi.get("drug_allergy_flag"):
-                            omi["drug_allergy_flag"] = _text_to_code("allergy", mr_d["allergy_sign"])
-                            omi["drug_allergy_flag_text"] = mr_d["allergy_sign"]
-                        _fill_if_empty(omi, "pathology_no", mr_d.get("pathology_id"))
-
-                        # --- 人员签名补充 ---
-                        staff = fp_data["staff"]
-                        _fill_if_empty(staff, "dept_director", mr_d.get("deptdirector_sign"))
-                        _fill_if_empty(staff, "chief_physician", mr_d.get("chief_physician_sign"))
-                        _fill_if_empty(staff, "attending_physician", mr_d.get("attending_physician_sign"))
-                        _fill_if_empty(staff, "resident_physician", mr_d.get("resident_physician_sign"))
-                        _fill_if_empty(staff, "responsible_nurse", mr_d.get("responsible_nurse_sign"))
-                        _fill_if_empty(staff, "coder", mr_d.get("coder_sign"))
-
-                        logger.info("  mr 表（首页已有字段）读取成功")
+                        logger.info("  mr 表补充读取成功")
                 except Exception as e:
                     logger.warning(f"  mr 表查询失败: {e}")
 

@@ -1,15 +1,24 @@
 """评分阈值配置 API — 管理甲乙丙等级的分数线"""
 
+import uuid
 from fastapi import APIRouter, Depends
-from ..utils import success_response, get_trace_id
 from fastapi import Request
+
+
+def success_response(data=None, message="success", trace_id=""):
+    """兼容 utils 未就绪时的内联响应包装"""
+    return {"code": 200, "message": message, "data": data, "trace_id": trace_id}
+
+
+def get_trace_id(request: Request) -> str:
+    return request.headers.get("x-trace-id", str(uuid.uuid4())[:8])
 
 
 # 占位：auth 模块暂未实现，跳过认证
 async def get_current_user():
     return {"user": "dev"}
 
-router = APIRouter(prefix="/scoring-config", tags=["evaluator-config"])
+router = APIRouter(prefix="/api/v1/scoring-config", tags=["evaluator-config"])
 
 # ========== 内存存储 ==========
 _scoring_config = {

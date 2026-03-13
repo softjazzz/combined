@@ -81,6 +81,7 @@ def init_db():
     """初始化数据库，创建所有表"""
     # 导入模型确保注册到 Base.metadata
     from .models import cdm  # noqa: F401
+    from .models import sync  # noqa: F401  — 同步状态追踪表
     Base.metadata.create_all(bind=engine)
     db_type = "SQLite" if DATABASE_URL.startswith("sqlite") else "PostgreSQL"
     # 使用纯 ASCII 输出，避免 Windows GBK 终端编码异常导致启动流程报错

@@ -13,7 +13,7 @@
         </div>
         
         <div class="header-line" style="position: relative; margin: 4px 0;">
-          <span style="position: absolute; left: 0; bottom: 4px;">医疗付费方式：<span class="val-box">{{ b('medical_payment_method') }}</span></span>
+          <span style="position: absolute; left: 0; bottom: 4px;">医疗付费方式：<span class="val-box">{{ paymentCode }}</span></span>
           <h1 class="fp-title">住 院 病 案 首 页</h1>
         </div>
         
@@ -393,6 +393,26 @@ function formatDateShort(val) {
   return val
 }
 
+// 医疗付费方式：文字 → 编号映射（国家标准）
+const PAYMENT_MAP = {
+  '城镇职工基本医疗保险': '1', '城镇职工': '1',
+  '城镇居民基本医疗保险': '2', '城镇居民': '2',
+  '新型农村合作医疗': '3', '新农合': '3',
+  '贫困救助': '4',
+  '商业医疗保险': '5', '商业保险': '5',
+  '全公费': '6',
+  '全自费': '7', '自费': '7',
+  '其他社会保险': '8',
+  '其他': '9',
+}
+const paymentCode = computed(() => {
+  const raw = b('medical_payment_method')
+  if (!raw) return ''
+  // 如果已经是数字直接用
+  if (/^\d$/.test(raw)) return raw
+  return PAYMENT_MAP[raw] || raw.charAt(0)
+})
+
 function parseProvCity(val) {
   if (!val) return { prov: '', city: '' }
   // 简化的省市提取
@@ -590,6 +610,7 @@ u.fill.cost-val {
   font-size: 12px;
   vertical-align: middle;
   background: transparent;
+  overflow: hidden;
 }
 
 /* 提示文字 */

@@ -197,7 +197,7 @@
         <td style="width:25%">出重症监护室时间<br/>（_年_月_日_时_分）</td>
         <td style="width:20%">合计（小时）</td>
       </tr>
-      <tr v-for="n in 3" :key="'icu'+n"><td></td><td></td><td></td><td></td></tr>
+      <tr v-for="n in 3" :key="'icu'+n" class="data-row"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
     </table>
 
     <!-- 输血、护理、离院方式、再住院计划、主诊医师 -->
@@ -412,7 +412,9 @@ const totalOther = computed(() => sumCol('other'))
   color: #000;
   line-height: 1.5;
   background: #fff;
-  padding: 24px 32px;
+  padding: 30px 40px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
 }
 
 /* 主标题 */

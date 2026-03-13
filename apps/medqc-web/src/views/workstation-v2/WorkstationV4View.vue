@@ -283,7 +283,7 @@
               type="primary"
               :loading="frontpageGenerating"
               @click="detailMainTab = 'frontpage'; generateFrontpage()"
-              class="!rounded-lg"
+              class="!rounded-lg !shadow-[0_4px_14px_rgba(59,130,246,0.4)] hover:!shadow-[0_4px_20px_rgba(99,102,241,0.5)] transition-shadow duration-300"
             >
               <template #icon><ThunderboltOutlined /></template>
               {{ frontpageDraft ? '重新生成' : 'AI 生成首页' }}
@@ -294,63 +294,100 @@
         <!-- 详情主体：左右分栏 -->
         <div class="flex-1 flex overflow-hidden">
           <!-- 左侧：患者信息 (35%) -->
-          <aside class="w-[35%] min-w-[320px] max-w-[480px] border-r border-slate-200 dark:border-slate-800 overflow-y-auto custom-scrollbar bg-slate-50/30 dark:bg-slate-900/50">
-            <div v-if="selectedRecord" class="p-6">
-              <!-- 基本信息卡片 -->
-              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <UserOutlined class="text-blue-500" />
-                患者信息
-              </h4>
-              <div class="grid grid-cols-2 gap-3 mb-6">
-                <div v-for="item in detailItems" :key="item.label" class="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50">
-                  <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">{{ item.label }}</div>
-                  <div class="text-sm font-semibold text-slate-700 dark:text-slate-200">{{ item.value }}</div>
+          <aside class="w-[27%] min-w-[260px] max-w-[340px] border-r border-slate-200 dark:border-slate-800 overflow-y-auto custom-scrollbar bg-slate-50 dark:bg-slate-900/80">
+            <div v-if="selectedRecord" class="px-4 py-5 space-y-5">
+
+              <!-- ① 住院时间轴 + 关键数字 -->
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">住院信息</span>
+                  <span v-if="selectedRecord.insurance" class="text-[11px] font-semibold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-md">{{ selectedRecord.insurance }}</span>
+                </div>
+                <!-- 入院→出院时间轴 -->
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="text-center">
+                    <div class="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5 font-medium">入院</div>
+                    <div class="text-sm font-bold text-slate-700 dark:text-slate-200">{{ selectedRecord.admissionDate || '—' }}</div>
+                  </div>
+                  <div class="flex-1 flex items-center gap-1">
+                    <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700"></div>
+                    <div class="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded-full text-xs font-bold text-slate-500 dark:text-slate-400 border border-white dark:border-slate-600">
+                      {{ selectedRecord.days }}天
+                    </div>
+                    <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700"></div>
+                  </div>
+                  <div class="text-center">
+                    <div class="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5 font-medium">出院</div>
+                    <div class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ selectedRecord.dischargeDate || '—' }}</div>
+                  </div>
+                </div>
+                <!-- 底部：科室 + 医生 -->
+                <div class="flex items-center gap-3 pt-2.5 border-t border-slate-100 dark:border-slate-700 text-[12px] text-slate-500 dark:text-slate-400">
+                  <span>{{ selectedRecord.department }}</span>
+                  <span class="opacity-40">·</span>
+                  <UserOutlined class="text-[10px]" />
+                  <span>{{ selectedRecord.doctor || '未分配' }}</span>
                 </div>
               </div>
 
-              <!-- 诊断信息 -->
-              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <FileTextOutlined class="text-blue-500" />
-                诊断信息
-              </h4>
-              <div class="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-100 dark:border-slate-700/50 mb-6">
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded font-bold">主诊断</span>
-                  <span class="text-sm text-slate-800 dark:text-slate-200 font-medium">{{ selectedRecord.diagnosis }}</span>
-                </div>
-                <div v-if="selectedRecord.diagnosisCode" class="text-xs text-slate-400 font-mono">
-                  ICD-10: {{ selectedRecord.diagnosisCode }}
+              <!-- ② 患者基本属性（只显示有值的行，grid 亲密对齐） -->
+              <div class="bg-white dark:bg-slate-800 rounded-xl px-5 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
+                <div class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3.5">患者信息</div>
+                <div class="grid grid-cols-[64px_1fr] gap-y-3 text-[13px]">
+                  <template v-for="item in detailItems" :key="item.label">
+                    <template v-if="item.value && item.value !== 'null床' && item.value !== 'null' && String(item.value).trim()">
+                      <div class="text-slate-400 dark:text-slate-500 leading-snug">{{ item.label }}</div>
+                      <div class="text-slate-800 dark:text-slate-200 font-medium leading-snug">{{ item.value }}</div>
+                    </template>
+                  </template>
                 </div>
               </div>
 
-              <!-- 病历文书预览 -->
-              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <FileSearchOutlined class="text-blue-500" />
-                病历文书
-                <span v-if="documentsLoading" class="ml-auto"><SyncOutlined spin class="text-blue-400 text-xs" /></span>
-              </h4>
-              <div class="space-y-2">
-                <div
-                  v-for="doc in documentsList"
-                  :key="doc.type + doc.label"
-                  class="bg-white dark:bg-slate-800 rounded-lg px-4 py-3 border text-sm flex items-center justify-between transition-all duration-150"
-                  :class="doc.has_content
-                    ? 'border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-300 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 dark:hover:bg-blue-950/20'
-                    : 'border-slate-50 dark:border-slate-800 text-slate-300 dark:text-slate-600'"
-                  @click="doc.has_content && openDocPreview(doc)"
-                >
-                  <span class="flex items-center gap-2">
-                    <FileTextOutlined :class="doc.has_content ? 'text-blue-400' : 'text-slate-200'" />
-                    {{ doc.label }}
-                  </span>
-                  <span v-if="doc.has_content" class="flex items-center gap-1.5">
-                    <span class="text-[10px] text-green-500">{{ doc.length }}字</span>
-                    <EyeOutlined class="text-blue-400 text-xs" />
-                  </span>
-                  <span v-else class="text-[10px] text-slate-300">—</span>
+              <!-- ③ 诊断信息 -->
+              <div v-if="selectedRecord.diagnosis">
+                <div class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3.5">诊断信息</div>
+                <div class="bg-white dark:bg-slate-800 rounded-xl px-5 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
+                  <div class="flex gap-2 items-start">
+                    <span class="mt-0.5 text-[10px] text-white bg-blue-500 px-1.5 py-0.5 rounded font-bold flex-shrink-0">主诊断</span>
+                    <span class="text-[13px] font-medium text-slate-800 dark:text-slate-100 leading-snug">{{ selectedRecord.diagnosis }}</span>
+                  </div>
+                  <div v-if="selectedRecord.diagnosisCode" class="mt-2 text-[11px] text-blue-400 font-mono pl-1">
+                    ICD-10 · {{ selectedRecord.diagnosisCode }}
+                  </div>
                 </div>
-                <div v-if="!documentsLoading && documentsList.length === 0" class="text-xs text-slate-400 text-center py-3">
-                  暂无病历文书
+              </div>
+
+              <!-- ④ 病历文书 -->
+              <div class="bg-white dark:bg-slate-800 rounded-xl px-5 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
+                <div class="flex items-center mb-2 px-1">
+                  <span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">病历文书</span>
+                  <SyncOutlined v-if="documentsLoading" spin class="ml-2 text-blue-400 text-[10px]" />
+                </div>
+                <div class="space-y-1.5">
+                  <div
+                    v-for="doc in documentsList"
+                    :key="doc.type + doc.label"
+                    :class="[
+                      'flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[13px] transition-all duration-150',
+                      doc.has_content
+                        ? 'bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer border border-transparent hover:border-blue-100 dark:hover:border-blue-900/40'
+                        : 'bg-slate-50/40 dark:bg-slate-800/20 text-slate-300 dark:text-slate-600'
+                    ]"
+                    @click="doc.has_content && openDocPreview(doc)"
+                  >
+                    <span class="flex items-center gap-2">
+                      <FileTextOutlined :class="doc.has_content ? 'text-blue-400' : 'text-slate-200 dark:text-slate-700'" />
+                      <span :class="doc.has_content ? 'text-slate-600 dark:text-slate-300' : ''">{{ doc.label }}</span>
+                    </span>
+                    <span v-if="doc.has_content" class="flex items-center gap-1.5 flex-shrink-0">
+                      <span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 text-[11px] font-semibold rounded">{{ doc.length }}字</span>
+                      <EyeOutlined class="text-blue-300 text-[11px]" />
+                    </span>
+                    <span v-else class="text-[11px] text-slate-200 dark:text-slate-700">—</span>
+                  </div>
+                  <div v-if="!documentsLoading && documentsList.length === 0" class="text-[12px] text-slate-400 text-center py-4">
+                    暂无病历文书
+                  </div>
                 </div>
               </div>
 
@@ -370,6 +407,7 @@
             </div>
           </aside>
 
+
           <!-- 右侧：三 Tab 内容区 (65%) -->
           <main class="flex-1 overflow-hidden flex flex-col bg-white dark:bg-slate-900">
             <a-tabs v-model:activeKey="detailMainTab" size="small" class="detail-main-tabs flex-1 flex flex-col overflow-hidden" :tabBarStyle="{ margin: 0, padding: '0 24px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }">
@@ -387,10 +425,12 @@
                     :patient-id="selectedRecord.patientId"
                     :institute-id="selectedRecord.instituteId"
                     :max-height="650"
+                    :hide-doc-tabs="true"
                     @loaded="handleEmrLoaded"
                     @error="handleEmrError"
                     @defect-click="handleEmrDefectClick"
                   />
+
                   <template v-else>
                     <div v-if="concatLoading" class="flex flex-col items-center py-20">
                       <a-spin size="large" />
@@ -583,7 +623,7 @@
                     <span v-if="settlementQcFailed > 0" class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-100 text-red-600 text-[10px] font-bold px-1">{{ settlementQcFailed }}</span>
                   </span>
                 </template>
-                <div class="p-6">
+                <div class="bg-slate-100 p-6 min-h-[400px]">
                   <div v-if="settlementLoading" class="flex flex-col items-center py-20">
                     <a-spin size="large" />
                     <div class="text-sm text-slate-400 mt-4">加载结算清单中...</div>
@@ -641,12 +681,9 @@
                       </div>
                     </div>
                   </div>
-                  <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
-                    <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
-                      <span style="font-size: 32px">💰</span>
-                    </div>
-                    <div class="text-sm font-medium mb-1">暂无结算清单</div>
-                    <div class="text-xs text-slate-400">该患者尚未有医保结算清单数据</div>
+                  <div v-else>
+                    <!-- 无数据时仍展示空白结算清单样表 -->
+                    <SettlementSheet :data="{}" />
                   </div>
                 </div>
               </a-tab-pane>

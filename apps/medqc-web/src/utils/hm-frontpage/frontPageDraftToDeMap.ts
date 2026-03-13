@@ -98,9 +98,11 @@ export function frontPageDraftToDeMap(frontpageDraft: any): {
     'DE01.00.019.00.004': hosp?.discharge_ward, // 出院病房
     'DE06.00.017.00': hosp?.discharge_datetime, // 出院时间
     'DE06.00.310.00': hosp?.actual_hospital_days, // 住院天数
-    'DE06.00.226.00': hosp?.leaving_way, // 离院方式
-    'DE06.00.223.00': hosp?.rehospital_flag, // 31天内再住院标志
-    'DE06.00.223.01': hosp?.rehospital_purpose, // 再住院目的
+    'DE06.00.223.00': hosp?.leaving_hospital_way, // 离院方式
+    'DE06.00.195.00': hosp?.rehospital_within_month, // 31天内再住院计划
+    // 日常生活能力评定量表得分
+    'DE05.10.148.00': hosp?.daily_ability_admission, // Barthel 指数（入院）
+    'DE05.10.152.00': hosp?.daily_ability_discharge, // Barthel 指数（出院）
 
     // 基本信息
     'DE02.01.039.00': basic?.patient_name, // 姓名
@@ -125,12 +127,18 @@ export function frontPageDraftToDeMap(frontpageDraft: any): {
     'DE02.01.009.02.007': basic?.nativeplace, // 籍贯-县
     // 现住址
     'DE02.01.009.06.005': basic?.current_address, // 现住址
-    'DE02.01.010.00.009': basic?.contact_phone, // 电话号码
+    'DE02.01.010.00.009': coalesce(basic?.current_address_phone, basic?.contact_phone), // 现住址电话
+    'DE02.01.047.00': basic?.current_address_zip, // 现住址邮编
     // 户口地址（省/市/县）
     'DE02.01.009.03': basic?.household_address, // 户口地址-省
     'DE02.01.009.03.006': basic?.household_address, // 户口地址-市
+    'DE02.01.009.06.006': basic?.household_address, // 户口地址-号码
+    'DE02.01.047.00.004': basic?.household_address_zip, // 户口地址邮编
     // 工作单位
-    'DE02.01.009.06.007': basic?.work_unit, // 工作单位及地址
+    'DE02.01.032.00': basic?.work_unit, // 工作单位名称
+    'DE02.01.009.06.007': coalesce(basic?.workplace_address, basic?.work_unit), // 工作单位地址
+    'DE02.01.010.00.016': basic?.work_unit_phone, // 工作单位电话
+    'DE02.01.047.00.005': basic?.work_unit_zip, // 工作单位邮编
     // 联系人
     'DE02.01.039.00.144': basic?.contact_name, // 联系人姓名
     'DE02.10.024.00.005': coalesce(basic?.contact_relation_code, basic?.contact_relation), // 联系人关系
@@ -160,6 +168,14 @@ export function frontPageDraftToDeMap(frontpageDraft: any): {
     'DE02.10.022.00': drugAllergyDrugsText, // 过敏药物
     'DE04.50.001.00': other?.abo_blood_type, // ABO血型代码
     'DE04.50.010.00': rhToCode({ rh: other?.rh_blood_type, rhText: other?.rh_blood_type_text }), // Rh血型代码
+    // 颅脑损伤昏迷时间（入院前）
+    'DE05.10.138.01': other?.brain_injury_before_admission_hours, // 入院前-天
+    'DE05.10.138.02': other?.brain_injury_before_admission_hours, // 入院前-小时
+    'DE05.10.138.03': other?.brain_injury_before_admission_minutes, // 入院前-分钟
+    // 颅脑损伤昏迷时间（入院后）
+    'DE05.10.138.01.002': other?.brain_injury_after_admission_hours, // 入院后-天
+    'DE05.10.138.02.002': other?.brain_injury_after_admission_hours, // 入院后-小时
+    'DE05.10.138.03.002': other?.brain_injury_after_admission_minutes, // 入院后-分钟
 
     // 费用
     'DE07.00.010.00': costs?.total_cost, // 住院总费用

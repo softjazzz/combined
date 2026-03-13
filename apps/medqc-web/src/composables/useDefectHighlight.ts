@@ -39,11 +39,42 @@ export function useDefectHighlight() {
      * 将纯文本内容注入缺陷高亮标记，返回 HTML 字符串
      */
     function highlightDefects(content: string, annotations: DefectAnnotation[]): string {
-        if (!content || !annotations?.length) {
-            return escapeHtml(content)
+        if (!content) return ''
+
+        // ① 段落标题列表（块级显示，不内联）
+        const SECTION_TITLES = [
+            '主诉', '现病史', '既往史', '个人史', '家族史', '体格检查', '辅助检查',
+            '首次病程', '病情摘要', '诊断', '入院诊断', '出院诊断', '门诊诊断',
+            '门（急）诊诊断', '处理意见', '治疗经过', '过敏史', '婚育史',
+            '手术史', '病史小结', '初步诊断', '修正诊断', '补充诊断'
+        ]
+
+        // 段落标题注入（块级 span，顶部有 margin-top）
+        const injectSectionTitles = (text: string): string => {
+            const titleRegex = new RegExp(
+                `(^|\\n)(${SECTION_TITLES.join('|')})[：:]`,
+                'g'
+            )
+            return text.replace(titleRegex, (match, prefix, title) => {
+                const colon = match.endsWith('：') ? '：' : ':'
+                const marginTop = prefix === '' ? '' : ''
+                return `${prefix}<span class="emr-section-title">${title}${colon}</span>`
+            })
         }
 
-        // 按 start_offset 排序（从后往前替换避免偏移）
+        if (!annotations?.length) {
+            const escaped = escapeHtml(content)
+            return injectSectionTitles(escaped)
+        }
+
+        // ② 缺陷高亮：极浅底色 + 虚线下划线 + hover tooltip 卡片
+        const SEVERITY_LABEL: Record<string, string> = {
+            critical: 'AI 严重缺陷',
+            error: 'AI 错误',
+            warning: 'AI 警告',
+            info: 'AI 提示',
+        }
+
         const validAnnotations = annotations
             .filter(a => a.start_offset >= 0 && a.end_offset > a.start_offset)
             .sort((a, b) => b.start_offset - a.start_offset)
@@ -51,38 +82,24 @@ export function useDefectHighlight() {
         let result = content
 
         for (const annotation of validAnnotations) {
-            const { start_offset, end_offset, defect_id, severity, description } = annotation
-            const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.warning
-
+            const { start_offset, end_offset, defect_id, severity, description, suggestion } = annotation
             const before = result.slice(0, start_offset)
             const highlighted = result.slice(start_offset, end_offset)
             const after = result.slice(end_offset)
+            const label = SEVERITY_LABEL[severity] || 'AI 提示'
 
-            const highlightTag = `<span 
-        class="defect-highlight" 
-        data-defect-id="${defect_id}" 
-        data-severity="${severity}"
-        title="${escapeAttr(description)}"
-        style="
-          background-color: ${style.bg}; 
-          border-bottom: 2px solid ${style.border}; 
-          cursor: pointer;
-          padding: 1px 2px;
-          border-radius: 2px;
-          position: relative;
-          transition: background-color 0.2s;
-        "
-      >${escapeHtml(highlighted)}<sup style="
-        color: ${style.text}; 
-        font-size: 10px; 
-        font-weight: bold;
-        margin-left: 2px;
-      ">⚠</sup></span>`
+            const tooltipContent = suggestion
+                ? `<div class="emr-defect-tip__body">${escapeHtml(description)}</div><div class="emr-defect-tip__suggest">💡 ${escapeHtml(suggestion)}</div>`
+                : `<div class="emr-defect-tip__body">${escapeHtml(description)}</div>`
 
-            result = before + highlightTag + after
+            const defectSpan = `<span class="emr-defect emr-defect--${severity}" data-defect-id="${defect_id}" data-severity="${severity}">${escapeHtml(highlighted)}<span class="emr-defect-tip"><span class="emr-defect-tip__header emr-defect-tip__header--${severity}">${label}</span>${tooltipContent}</span></span>`
+
+            result = before + defectSpan + after
         }
 
-        // 对非高亮部分做 HTML 转义（简化处理：已经包含标签的跳过）
+        // ③ 注入段落标题
+        result = injectSectionTitles(escapeHtml(result).replace(/&amp;lt;/g, '<').replace(/&amp;gt;/g, '>'))
+
         return result
     }
 

@@ -42,10 +42,26 @@ class FrontPageBasicInfo(BaseModel):
     marital_status_text: Optional[str] = Field(None, description="婚姻状况文本")
     id_number: Optional[str] = Field(None, description="身份证号")
     occupation: Optional[str] = Field(None, description="职业")
-    current_address: Optional[str] = Field(None, description="现住址")
+    # ---- 出生地 / 籍贯（#57 #58）----
+    birthplace: Optional[str] = Field(None, description="出生地（省、市、县）")
+    nativeplace: Optional[str] = Field(None, description="籍贯（省、市）")
+    # ---- 现住址（#63 #64 #65）----
+    current_address: Optional[str] = Field(None, description="现住址（省、市、县、街道）")
+    current_address_phone: Optional[str] = Field(None, description="现住址电话")
+    current_address_zip: Optional[str] = Field(None, description="现住址邮编")
+    # ---- 户口地址（#66 #67）----
+    household_address: Optional[str] = Field(None, description="户口地址（省、市、县、街道）")
+    household_address_zip: Optional[str] = Field(None, description="户口地址邮编")
+    # ---- 工作单位（#68 #69 #70）----
+    work_unit: Optional[str] = Field(None, description="工作单位名称")
+    work_unit_address: Optional[str] = Field(None, description="工作单位地址")
+    work_unit_phone: Optional[str] = Field(None, description="工作单位电话")
+    work_unit_zip: Optional[str] = Field(None, description="工作单位邮编")
+    # ---- 联系人（#71 #72 #73 #74）----
     contact_name: Optional[str] = Field(None, description="联系人姓名")
     contact_relation: Optional[str] = Field(None, description="联系人关系")
     contact_phone: Optional[str] = Field(None, description="联系人电话")
+    contact_address: Optional[str] = Field(None, description="联系人地址")
 
     @field_validator("gender", "marital_status", mode="before")
     @classmethod
@@ -61,6 +77,7 @@ class FrontPageHospitalization(BaseModel):
     """病案首页-住院相关信息"""
     model_config = ConfigDict(coerce_numbers_to_str=True)
     hospital_name: Optional[str] = Field(None, description="医疗机构名称")
+    organization_code: Optional[str] = Field(None, description="组织机构代码")
     admission_times_in_hospital: Optional[int] = Field(
         None, description="本院第几次住院"
     )
