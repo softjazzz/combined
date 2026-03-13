@@ -702,17 +702,49 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
   justify-content: center;
 }
 
-/* Cron */
+/* Cron — 从父容器 .ds-cron-input 穿透 Ant Design 的 .ant-input */
 .ds-cron-input { position: relative; }
 .ds-cron-input__field { width: 100% !important; }
-.ds-cron-input__field :deep(.ant-input) {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  background: #f8fafc;
-  padding-right: 160px;
-  height: 34px;
+/* a-input 直接渲染为 <input class="ant-input ds-cron-input__field"> */
+/* 所以必须从父容器穿透，而不是从 ds-cron-input__field 内部找 */
+.ds-cron-input :deep(.ant-input) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+  background: #fff !important;
+  border: 1px solid #d9d9d9 !important;
+  border-radius: 6px !important;
+  padding: 0 160px 0 12px !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  transition: border-color 0.2s;
+}
+.ds-cron-input :deep(.ant-input:hover) {
+  border-color: #2563eb !important;
+}
+.ds-cron-input :deep(.ant-input:focus) {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+}
+/* 如果 a-input 渲染为包裹器形式 */
+.ds-cron-input :deep(.ant-input-affix-wrapper) {
+  border-radius: 6px !important;
+  border: 1px solid #d9d9d9 !important;
+  padding: 0 160px 0 12px !important;
+  height: 34px !important;
+}
+.ds-cron-input :deep(.ant-input-affix-wrapper .ant-input) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  box-shadow: none !important;
 }
 .ds-cron-input__hint {
   position: absolute;
@@ -723,20 +755,32 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
   font-weight: 500;
   color: #16a34a;
   pointer-events: none;
+  z-index: 1;
 }
 
-/* Time range */
+/* TimeRange — 从父容器 .ds-time-range 穿透 */
 .ds-time-range { display: flex; align-items: center; gap: 6px; }
 .ds-time-range__input { width: 76px !important; }
-.ds-time-range__input :deep(.ant-input) {
-  text-align: center;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  height: 34px;
-  background: #f8fafc;
-  border-radius: 6px;
+/* a-input 直接渲染为 <input class="ant-input ds-time-range__input"> */
+.ds-time-range :deep(.ant-input) {
+  text-align: center !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+  height: 34px !important;
+  line-height: 34px !important;
+  background: #fff !important;
+  border: 1px solid #d9d9d9 !important;
+  border-radius: 6px !important;
+  transition: border-color 0.2s;
+}
+.ds-time-range :deep(.ant-input:hover) {
+  border-color: #2563eb !important;
+}
+.ds-time-range :deep(.ant-input:focus) {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
 }
 .ds-time-range__sep { color: #94a3b8; font-size: 14px; font-weight: 500; }
 
