@@ -62,6 +62,7 @@ class SyncWatermark(Base):
     )
 
     last_sync_cursor = Column(DateTime, comment="最后同步到的 update_time")
+    last_sync_id = Column(String(100), default="", comment="复合游标: 最后同步的 _id（防同毫秒漏数）")
     last_sync_status = Column(
         String(20), default="never",
         comment="never / success / partial / failed"

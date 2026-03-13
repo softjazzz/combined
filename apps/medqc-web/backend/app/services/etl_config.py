@@ -31,6 +31,8 @@ class MongoSyncConfig:
 
     # ---- 抽取策略 ----
     discharge_stable_days: int = 3       # 出院后 N 天才纳入终末抽取
+    lookback_minutes: int = 10           # [Codex FIX-1] 水位线回看窗口（分钟）对冲时钟漂移
+    rescan_recent_days: int = 7          # [Codex FIX-5] 滚动重扫: 最近 N 天修订强制重查
     tier1_interval_minutes: int = 30     # Tier1 索引发现频率
     tier2_interval_minutes: int = 120    # Tier2 结构化拉取频率
     tier3_cron: str = "0 2 * * *"        # Tier3 全文抽取 cron
