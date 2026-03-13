@@ -39,6 +39,7 @@ class QCIssue(BaseModel):
     category: str
     location: str
     suggestion: str
+    evidence: Optional[str] = None
 
 
 class QCSuggestion(BaseModel):

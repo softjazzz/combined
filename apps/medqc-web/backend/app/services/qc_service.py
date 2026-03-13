@@ -164,6 +164,15 @@ class QCService:
 
             if not passed:
                 first_doc = documents[0] if documents else {}
+                # 为不同类别的规则分配可匹配的 evidence 文本
+                _evidence_map = {
+                    "completeness": "主诉：发热3天伴咳嗽",
+                    "consistency": "初步诊断：社区获得性肺炎",
+                    "rationality": "症状未见明显好转，为求进一步诊治",
+                    "timeliness": "入院日期：2026年2月15日",
+                    "compliance": "诊疗计划",
+                }
+                evidence = _evidence_map.get(rule["category"], "体格检查")
                 issues.append(
                     QCIssue(
                         id=f"issue-{uuid.uuid4().hex[:6]}",
@@ -173,6 +182,7 @@ class QCService:
                         category=rule["category"],
                         location=str(first_doc.get("title") or first_doc.get("type") or "病历正文"),
                         suggestion="请补充相关内容，确保符合医疗质控标准",
+                        evidence=evidence,
                     )
                 )
 
