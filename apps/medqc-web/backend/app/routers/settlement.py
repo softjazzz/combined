@@ -58,3 +58,97 @@ async def get_settlement_qc_rules():
     """获取结算清单质控规则摘要"""
     svc = get_settlement_service()
     return svc.get_rules_summary()
+
+
+# ============================================================
+# 草稿生成端点（不依赖 medical_insurance_settlement 表）
+# ============================================================
+
+@router.post("/settlement/{patient_id}/{visit_id}/generate")
+async def generate_settlement_from_frontpage(
+    patient_id: str,
+    visit_id: str,
+):
+    """
+    从病案首页 AI 抽取结果 + CDM SQL 生成结算清单草稿。
+    不写入数据库，仅返回瞬态数据。
+    返回字段包含 is_draft=True, data_source='generated_from_frontpage'。
+    """
+    from ..services.settlement_assembly_service import SettlementAssemblyService
+    from ..database.connection import engine
+    from sqlalchemy.orm import Session
+
+    assembly_svc = SettlementAssemblyService()
+
+    # 尝试加载首页抽取缓存
+    frontpage_draft = None
+    try:
+        from ..services.frontpage_extraction_service import FrontPageExtractionService
+        fp_svc = FrontPageExtractionService()
+        # 尝试从缓存获取（如果有的话）
+        cached = getattr(fp_svc, '_last_draft_cache', {}).get(f"{patient_id}_{visit_id}")
+        if cached:
+            frontpage_draft = cached if isinstance(cached, dict) else cached.model_dump()
+    except Exception:
+        pass
+
+    with Session(engine) as db:
+        result = assembly_svc.generate(
+            patient_id=patient_id,
+            visit_id=visit_id,
+            frontpage_draft=frontpage_draft,
+            db=db,
+        )
+
+    return result
+
+
+@router.post("/settlement/{patient_id}/{visit_id}/generate/qc")
+async def run_generated_settlement_qc(
+    patient_id: str,
+    visit_id: str,
+):
+    """
+    对 AI 生成的结算清单草稿运行形式质控（136 条规则）。
+    不依赖 medical_insurance_settlement 表中有记录。
+    """
+    from ..services.settlement_assembly_service import SettlementAssemblyService
+    from ..services.settlement_formal_qc import SettlementFormalQCEngine
+    from ..database.connection import engine
+    from sqlalchemy.orm import Session
+
+    assembly_svc = SettlementAssemblyService()
+
+    with Session(engine) as db:
+        draft = assembly_svc.generate(
+            patient_id=patient_id,
+            visit_id=visit_id,
+            db=db,
+        )
+
+    # 运行质控
+    qc_engine = SettlementFormalQCEngine()
+    report = qc_engine.validate(draft)
+
+    return {
+        "summary": {
+            "total_rules": report.total_rules,
+            "passed": report.passed,
+            "failed": report.failed,
+        },
+        "results": [
+            {
+                "rule_id": r.rule_id,
+                "field_name": r.field_name,
+                "rule_name": r.rule_name,
+                "passed": r.passed,
+                "message": r.message,
+                "severity": r.severity,
+                "category": r.category,
+                "affects_grouping": r.affects_grouping,
+            }
+            for r in report.results
+        ],
+        "settlement": draft,
+    }
+
