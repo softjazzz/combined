@@ -370,7 +370,7 @@ def _build_rules() -> List[SettlementQCRule]:
 
     R("97", "治疗类别", "治疗类别必填", "治疗类别，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
-      lambda fp: _ne(fp.get("treatment_type")))
+      lambda fp: _ne(fp.get("therapy_type")))
 
     R("106", "主诊医师代码", "主诊医师代码必填", "主诊医师代码，为必填项",
       Severity.ERROR, Category.REQUIRED, False,
