@@ -77,6 +77,12 @@
               <span>质控配置</span>
             </template>
           </a-tab-pane>
+          <a-tab-pane key="data_sync" tab="数据同步">
+            <template #tab>
+              <SyncOutlined class="settings-tabs__icon" />
+              <span>数据同步</span>
+            </template>
+          </a-tab-pane>
         </a-tabs>
       </a-card>
 
@@ -495,6 +501,11 @@
           </a-row>
         </a-form>
       </a-card>
+
+      <!-- 数据同步配置 -->
+      <div v-if="activeTab === 'data_sync'">
+        <DataSyncConfig />
+      </div>
     </div>
 
     <UserEditModal
@@ -533,13 +544,15 @@ import {
   UploadOutlined,
   BranchesOutlined,
   ApiOutlined,
-  ExperimentOutlined
+  ExperimentOutlined,
+  SyncOutlined
 } from '@ant-design/icons-vue'
 
 import UserEditModal from '@/components/settings/UserEditModal.vue'
 import RoleEditModal from '@/components/settings/RoleEditModal.vue'
 import ClassificationVersionManager from '@/components/settings/ClassificationVersionManager.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
+import DataSyncConfig from '@/components/settings/DataSyncConfig.vue'
 
 const activeTab = ref('users')
 
