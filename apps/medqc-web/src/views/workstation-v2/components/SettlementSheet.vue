@@ -179,13 +179,13 @@
         <td colspan="3">手术及操作代码计数<u class="fill">{{ v('surgery_code_cnt') || data.surgeries?.length || '' }}</u></td>
       </tr>
       <tr>
-        <td colspan="3">呼吸机使用时间<u class="fill">{{ v('ventilator_usetime') }}</u>天<u class="fill"></u>小时<u class="fill"></u>分钟</td>
+        <td colspan="3">呼吸机使用时间<u class="fill">{{ v('ventilator_usetime') }}</u>天<u class="fill">{{ v('ventilator_usetime_h') }}</u>小时<u class="fill">{{ v('ventilator_usetime_min') }}</u>分钟</td>
       </tr>
       <tr>
-        <td colspan="3">颅脑损伤患者昏迷时间：入院前<u class="fill"></u>天<u class="fill"></u>小时<u class="fill"></u>分钟</td>
+        <td colspan="3">颅脑损伤患者昏迷时间：入院前<u class="fill">{{ v('coma_timebefadm_d') }}</u>天<u class="fill">{{ v('coma_timebefadm_h') }}</u>小时<u class="fill">{{ v('coma_timebefadm_min') }}</u>分钟</td>
       </tr>
       <tr>
-        <td colspan="3" style="padding-left:100px;">入院后<u class="fill"></u>天<u class="fill"></u>小时<u class="fill"></u>分钟</td>
+        <td colspan="3" style="padding-left:100px;">入院后<u class="fill">{{ v('coma_timeaftadm_d') }}</u>天<u class="fill">{{ v('coma_timeaftadm_h') }}</u>小时<u class="fill">{{ v('coma_timeaftadm_min') }}</u>分钟</td>
       </tr>
     </table>
 
@@ -353,41 +353,61 @@ const firstDiagCode = computed(() => {
   return d?.code || ''
 })
 
-/** 诊断表格（至少 6 行） */
+/** 诊断表格（至少 6 行，最多展示实际数量+1 空行） */
 const paddedDiagnoses = computed(() => {
   const list = props.data?.diagnoses || []
   const rows = [...list]
-  while (rows.length < 6) rows.push({ name: '', code: '', condition: '' })
+  const minRows = Math.max(6, list.length + 1)
+  while (rows.length < minRows) rows.push({ name: '', code: '', condition: '' })
   return rows
 })
 
-/** 手术表格（至少 4 行） */
+/** 手术表格（至少 4 行，最多展示实际数量+1 空行） */
 const paddedSurgeries = computed(() => {
   const list = props.data?.surgeries || []
   const rows = [...list]
-  while (rows.length < 4) rows.push({ name: '', code: '', date: '', surgeon: '', level: '' })
+  const minRows = Math.max(4, list.length + 1)
+  while (rows.length < minRows) rows.push({ name: '', code: '', date: '', surgeon: '', level: '' })
   return rows
 })
 
 // ---- 费用 ----
-const COST_TYPES = [
-  '床位费', '诊察费', '检查费', '化验费', '治疗费', '手术费',
-  '护理费', '卫生材料费', '西药费', '中药饮片费', '中成药费',
-  '一般诊疗费', '挂号费', '其他费',
+// 官方 14 大类费用项（对齐医保结算清单标准）
+const COST_CATEGORIES = [
+  { key: 'general_medical_fee',       label: '一般医疗服务费' },
+  { key: 'general_treatment_fee',     label: '一般治疗操作费' },
+  { key: 'nursing_fee',               label: '护理费' },
+  { key: 'other_service_fee',         label: '其他费用' },
+  { key: 'pathology_diagnostic_fee',  label: '病理诊断费' },
+  { key: 'lab_diagnostic_fee',        label: '实验室诊断费' },
+  { key: 'imaging_diagnostic_fee',    label: '影像学诊断费' },
+  { key: 'clinical_diagnostic_fee',   label: '临床诊断项目费' },
+  { key: 'treatment_fee',             label: '非手术治疗项目费' },
+  { key: 'surgery_fee',               label: '手术治疗费' },
+  { key: 'rehabilitation_fee',        label: '康复费' },
+  { key: 'chinese_medicine_fee',      label: '中医治疗费' },
+  { key: 'western_medicine_fee',      label: '西药费' },
+  { key: 'chinese_patent_medicine_fee', label: '中成药费' },
 ]
 
 const costRows = computed(() => {
   const details = props.data?.cost_details || []
-  return COST_TYPES.map(type => {
-    const matched = details.filter((d: any) => (d.type || '').includes(type.replace('费', '')))
+  return COST_CATEGORIES.map(cat => {
+    // 优先从 cost_details 数组匹配，其次从 data 顶层字段读取
+    const matched = details.filter((d: any) => (d.type || '').includes(cat.label.replace('费', '')))
     if (matched.length > 0) {
       const sum = (field: string) => {
         const s = matched.reduce((acc: number, m: any) => acc + (parseFloat(m[field]) || 0), 0)
         return s > 0 ? s.toFixed(2) : ''
       }
-      return { type, charge: sum('charge'), class_a: sum('class_a_amount'), class_b: sum('class_b_amount'), own_pay: sum('own_pay_amount'), other: sum('other_amount'), isCat: false }
+      return { type: cat.label, charge: sum('charge'), class_a: sum('class_a_amount'), class_b: sum('class_b_amount'), own_pay: sum('own_pay_amount'), other: sum('other_amount'), isCat: false }
     }
-    return { type, charge: '', class_a: '', class_b: '', own_pay: '', other: '', isCat: false }
+    // 从顶层字段读取（组装服务生成的草稿格式）
+    const topVal = props.data?.[cat.key]
+    if (topVal && parseFloat(topVal) > 0) {
+      return { type: cat.label, charge: parseFloat(topVal).toFixed(2), class_a: '', class_b: '', own_pay: '', other: '', isCat: false }
+    }
+    return { type: cat.label, charge: '', class_a: '', class_b: '', own_pay: '', other: '', isCat: false }
   })
 })
 
@@ -395,7 +415,12 @@ const sumCol = (field: string) => {
   const total = costRows.value.reduce((s, r) => s + (parseFloat(r[field as keyof typeof r] as string) || 0), 0)
   return total > 0 ? total.toFixed(2) : ''
 }
-const totalCharge = computed(() => sumCol('charge'))
+const totalCharge = computed(() => {
+  // 优先使用 data.total_cost，否则从分项累加
+  const top = parseFloat(props.data?.total_cost)
+  if (!isNaN(top) && top > 0) return top.toFixed(2)
+  return sumCol('charge')
+})
 const totalClassA = computed(() => sumCol('class_a'))
 const totalClassB = computed(() => sumCol('class_b'))
 const totalOwnPay = computed(() => sumCol('own_pay'))
