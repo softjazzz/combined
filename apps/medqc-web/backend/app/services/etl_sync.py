@@ -416,6 +416,21 @@ SYNC_TABLES = [
         "params": 1,
         "key_fields": ["patient_id", "visit_id", "document_id"],
     },
+    # ---- 医保结算清单（Phase 2：待医院开放存储过程后启用）----
+    {
+        "name": "medical_insurance_settlement",
+        "label": "医保结算清单",
+        "procedure": "web.medical_insurance_settlement",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "medical_insurance_settlement_cost",
+        "label": "医保结算费用明细",
+        "procedure": "web.medical_insurance_settlement_cost",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "medinsur_serial_item_id"],
+    },
 ]
 
 
