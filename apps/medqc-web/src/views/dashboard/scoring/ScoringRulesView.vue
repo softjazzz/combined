@@ -190,6 +190,12 @@ import {
 } from '@ant-design/icons-vue'
 import axios from 'axios'
 
+// 从 localStorage 读取 token（与 apiService.ts 的 TokenManager 保持一致）
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 // ============= 状态 =============
 const rules = ref<any[]>([])
 const categoryStats = ref<Record<string, any>>({})
@@ -245,7 +251,7 @@ const filteredRules = computed(() => {
 // ============= 方法 =============
 const fetchRules = async () => {
   try {
-    const res = await axios.get('/api/v1/scoring-rules')
+    const res = await axios.get('/api/v1/scoring-rules', { headers: getAuthHeader() })
     const data = res.data?.data
     if (data) {
       rules.value = data.rules || []
@@ -259,7 +265,7 @@ const fetchRules = async () => {
 const handleToggle = async (record: any) => {
   togglingId.value = record.id
   try {
-    await axios.put(`/api/v1/scoring-rules/${record.id}/toggle`)
+    await axios.put(`/api/v1/scoring-rules/${record.id}/toggle`, {}, { headers: getAuthHeader() })
     record.enabled = !record.enabled
     message.success(record.enabled ? '已启用' : '已禁用')
   } catch (err) {
@@ -271,7 +277,7 @@ const handleToggle = async (record: any) => {
 
 const handleDelete = async (id: string) => {
   try {
-    await axios.delete(`/api/v1/scoring-rules/${id}`)
+    await axios.delete(`/api/v1/scoring-rules/${id}`, { headers: getAuthHeader() })
     message.success('删除成功')
     await fetchRules()
   } catch (err) {
@@ -312,10 +318,10 @@ const handleSave = async () => {
     }
 
     if (editingRule.value) {
-      await axios.put(`/api/v1/scoring-rules/${editingRule.value.id}`, payload)
+      await axios.put(`/api/v1/scoring-rules/${editingRule.value.id}`, payload, { headers: getAuthHeader() })
       message.success('更新成功')
     } else {
-      await axios.post('/api/v1/scoring-rules', payload)
+      await axios.post('/api/v1/scoring-rules', payload, { headers: getAuthHeader() })
       message.success('创建成功')
     }
     closeDrawer()
@@ -330,7 +336,10 @@ const handleSave = async () => {
 const handleExport = async () => {
   exporting.value = true
   try {
-    const res = await axios.get('/api/v1/scoring-rules/export', { responseType: 'blob' })
+    const res = await axios.get('/api/v1/scoring-rules/export', {
+      responseType: 'blob',
+      headers: getAuthHeader(),
+    })
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
     a.href = url
@@ -351,7 +360,7 @@ const handleImport = async (options: any) => {
     const fd = new FormData()
     fd.append('file', options.file)
     const res = await axios.post('/api/v1/scoring-rules/import', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': 'multipart/form-data', ...getAuthHeader() },
     })
     const data = res.data?.data
     message.success(`导入成功: ${data?.imported || 0} 条规则`)
