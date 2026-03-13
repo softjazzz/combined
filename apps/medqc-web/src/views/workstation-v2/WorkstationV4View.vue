@@ -1267,7 +1267,7 @@ async function runSettlementQc() {
       : `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`
     const { data } = await axios.post(qcUrl)
     settlementQcReport.value = data
-    message.success(`质控完成: ${data.summary.passed}/${data.summary.total_rules} 通过`)
+    message.success(`质控完成: ${data.summary.passed}/${data.summary.total} 通过`)
   } catch (err) {
     message.error('结算清单质控执行失败')
     console.error(err)

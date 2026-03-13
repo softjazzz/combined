@@ -64,6 +64,43 @@ async def get_settlement_qc_rules():
 # 草稿生成端点（不依赖 medical_insurance_settlement 表）
 # ============================================================
 
+def _generate_draft(patient_id: str, visit_id: str) -> dict:
+    """
+    共享辅助函数：加载 frontpage draft + CDM SQL → 组装结算清单草稿。
+    /generate 和 /generate/qc 统一调用此函数，保证数据一致性。
+    """
+    import json
+    from ..services.settlement_assembly_service import SettlementAssemblyService
+    from ..database.connection import engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy import text
+
+    assembly_svc = SettlementAssemblyService()
+
+    # 尝试从 AI 结果表加载已有的首页抽取结果
+    frontpage_draft = None
+    try:
+        with Session(engine) as db:
+            row = db.execute(text(
+                "SELECT result_data FROM ai_generation_results "
+                "WHERE patient_id = :pid AND visit_id = :vid "
+                "AND task_type = 'frontpage_extraction' "
+                "ORDER BY created_at DESC LIMIT 1"
+            ), {"pid": patient_id, "vid": visit_id}).first()
+            if row and row[0]:
+                frontpage_draft = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+    except Exception:
+        pass  # 表不存在或无记录，回退到 mr 伪 draft
+
+    with Session(engine) as db:
+        return assembly_svc.generate(
+            patient_id=patient_id,
+            visit_id=visit_id,
+            frontpage_draft=frontpage_draft,
+            db=db,
+        )
+
+
 @router.post("/settlement/{patient_id}/{visit_id}/generate")
 async def generate_settlement_from_frontpage(
     patient_id: str,
@@ -74,33 +111,7 @@ async def generate_settlement_from_frontpage(
     不写入数据库，仅返回瞬态数据。
     返回字段包含 is_draft=True, data_source='generated_from_frontpage'。
     """
-    from ..services.settlement_assembly_service import SettlementAssemblyService
-    from ..database.connection import engine
-    from sqlalchemy.orm import Session
-
-    assembly_svc = SettlementAssemblyService()
-
-    # 尝试加载首页抽取缓存
-    frontpage_draft = None
-    try:
-        from ..services.frontpage_extraction_service import FrontPageExtractionService
-        fp_svc = FrontPageExtractionService()
-        # 尝试从缓存获取（如果有的话）
-        cached = getattr(fp_svc, '_last_draft_cache', {}).get(f"{patient_id}_{visit_id}")
-        if cached:
-            frontpage_draft = cached if isinstance(cached, dict) else cached.model_dump()
-    except Exception:
-        pass
-
-    with Session(engine) as db:
-        result = assembly_svc.generate(
-            patient_id=patient_id,
-            visit_id=visit_id,
-            frontpage_draft=frontpage_draft,
-            db=db,
-        )
-
-    return result
+    return _generate_draft(patient_id, visit_id)
 
 
 @router.post("/settlement/{patient_id}/{visit_id}/generate/qc")
@@ -111,30 +122,30 @@ async def run_generated_settlement_qc(
     """
     对 AI 生成的结算清单草稿运行形式质控（136 条规则）。
     不依赖 medical_insurance_settlement 表中有记录。
+    返回的 summary 结构与旧 /qc 端点保持一致：{total, passed, failed, pass_rate}。
     """
-    from ..services.settlement_assembly_service import SettlementAssemblyService
     from ..services.settlement_formal_qc import SettlementFormalQCEngine
-    from ..database.connection import engine
-    from sqlalchemy.orm import Session
 
-    assembly_svc = SettlementAssemblyService()
-
-    with Session(engine) as db:
-        draft = assembly_svc.generate(
-            patient_id=patient_id,
-            visit_id=visit_id,
-            db=db,
-        )
+    # 使用与 /generate 完全相同的数据源
+    draft = _generate_draft(patient_id, visit_id)
 
     # 运行质控
     qc_engine = SettlementFormalQCEngine()
-    report = qc_engine.validate(draft)
+    report = qc_engine.check(draft)
+
+    # 计算通过率，与旧接口 settlement_service.run_qc 保持一致
+    pass_rate = (
+        f"{report.passed / report.total_rules * 100:.1f}%"
+        if report.total_rules > 0
+        else "0%"
+    )
 
     return {
         "summary": {
-            "total_rules": report.total_rules,
+            "total": report.total_rules,
             "passed": report.passed,
             "failed": report.failed,
+            "pass_rate": pass_rate,
         },
         "results": [
             {
@@ -151,4 +162,5 @@ async def run_generated_settlement_qc(
         ],
         "settlement": draft,
     }
+
 
