@@ -1,215 +1,330 @@
 <template>
-  <div class="data-sync-config">
-    <!-- 连接状态卡片 -->
-    <div class="sync-cards">
-      <!-- MongoDB 连接 -->
-      <a-card class="sync-conn-card" :bordered="false">
-        <div class="conn-header">
-          <div class="conn-header__left">
-            <div class="conn-icon conn-icon--mongo">
-              <span class="conn-icon__text">M</span>
-            </div>
-            <div>
-              <div class="conn-title">MongoDB 数据源</div>
-              <div class="conn-subtitle">{{ mongoConfig.mongo_database || '未配置' }}</div>
-            </div>
+  <div class="data-sync-root">
+
+    <!-- ============ 区块 1: MongoDB 数据源 ============ -->
+    <div class="config-section">
+      <div class="config-section__header">
+        <h2 class="config-section__title">MongoDB 数据源</h2>
+        <p class="config-section__desc">管理对端 HIS MongoDB 的连接信息和读取偏好</p>
+      </div>
+      <div class="config-section__body divide-y divide-slate-100">
+        <!-- 连接状态 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">连接状态</h3>
+            <p class="config-row__hint">当前数据源的连通性。需要在医院内网环境才能连通。</p>
           </div>
-          <div class="conn-header__right">
-            <a-tag :color="mongoStatus.connected ? 'green' : 'default'" class="conn-status-tag">
-              {{ mongoStatus.connected ? '✅ 已连接' : '⬚ 未配置' }}
-            </a-tag>
-            <a-button size="small" type="text" @click="showMongoModal = true">
-              <template #icon><EditOutlined /></template>
-              编辑
-            </a-button>
+          <div class="config-row__right">
+            <span v-if="mongoStatus.connected" class="status-pill status-pill--ok">已连接</span>
+            <span v-else class="status-pill status-pill--off">未配置</span>
           </div>
         </div>
-        <div class="conn-details">
-          <div class="conn-detail-row">
-            <span class="conn-detail-label">URI</span>
-            <span class="conn-detail-value mono">{{ mongoConfig.mongo_uri_display || '未配置' }}</span>
+        <!-- URI -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">连接 URI</h3>
+            <p class="config-row__hint">MongoDB 连接地址（密码已脱敏）</p>
           </div>
-          <div class="conn-detail-row">
-            <span class="conn-detail-label">读偏好</span>
-            <span class="conn-detail-value">{{ mongoConfig.read_preference || '—' }}</span>
+          <div class="config-row__right">
+            <code class="config-row__mono">{{ mongoConfig.mongo_uri_display || '未配置' }}</code>
           </div>
-          <div class="conn-detail-row">
-            <span class="conn-detail-label">同步开关</span>
+        </div>
+        <!-- Database -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">数据库</h3>
+            <p class="config-row__hint">目标 MongoDB 数据库名称</p>
+          </div>
+          <div class="config-row__right">
+            <code class="config-row__mono">{{ mongoConfig.mongo_database || '—' }}</code>
+          </div>
+        </div>
+        <!-- 读偏好 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">读偏好</h3>
+            <p class="config-row__hint">
+              <code class="code-inline">secondaryPreferred</code> 可避免影响临床主库写入
+            </p>
+          </div>
+          <div class="config-row__right">
+            <span class="text-sm text-slate-700">{{ mongoConfig.read_preference || '—' }}</span>
+          </div>
+        </div>
+        <!-- 操作 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">连接配置</h3>
+            <p class="config-row__hint">修改 URI、数据库名、读偏好和超时参数</p>
+          </div>
+          <div class="config-row__right">
+            <button class="btn-outline" @click="showMongoModal = true">编辑连接</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 区块 2: 同步概览 ============ -->
+    <div class="config-section">
+      <div class="config-section__header">
+        <div>
+          <h2 class="config-section__title">同步概览</h2>
+          <p class="config-section__desc">Visit 同步状态分布与各 Tier 运行情况</p>
+        </div>
+        <div class="config-section__actions">
+          <button class="btn-outline btn-sm" @click="loadMongoStatus">
+            <ReloadOutlined style="font-size: 12px" /> 刷新
+          </button>
+        </div>
+      </div>
+      <div class="config-section__body">
+        <!-- 状态统计 — 克制版 -->
+        <div class="stats-bar">
+          <div class="stats-bar__item">
+            <span class="stats-bar__dot stats-bar__dot--slate"></span>
+            <span class="stats-bar__num">{{ mongoStats.PENDING || 0 }}</span>
+            <span class="stats-bar__label">待抽取</span>
+          </div>
+          <div class="stats-bar__divider"></div>
+          <div class="stats-bar__item">
+            <span class="stats-bar__dot stats-bar__dot--amber"></span>
+            <span class="stats-bar__num">{{ mongoStats.PARTIAL || 0 }}</span>
+            <span class="stats-bar__label">部分同步</span>
+          </div>
+          <div class="stats-bar__divider"></div>
+          <div class="stats-bar__item">
+            <span class="stats-bar__dot stats-bar__dot--green"></span>
+            <span class="stats-bar__num">{{ mongoStats.SYNCED || 0 }}</span>
+            <span class="stats-bar__label">已完成</span>
+          </div>
+          <div class="stats-bar__divider"></div>
+          <div class="stats-bar__item">
+            <span class="stats-bar__dot stats-bar__dot--orange"></span>
+            <span class="stats-bar__num">{{ mongoStats.STALE || 0 }}</span>
+            <span class="stats-bar__label">需重拉</span>
+          </div>
+          <div class="stats-bar__divider"></div>
+          <div class="stats-bar__item">
+            <span class="stats-bar__dot stats-bar__dot--red"></span>
+            <span class="stats-bar__num">{{ mongoStats.FAILED || 0 }}</span>
+            <span class="stats-bar__label">失败</span>
+          </div>
+        </div>
+
+        <!-- Tier 运行状态 -->
+        <div class="divide-y divide-slate-100 mt-1">
+          <div class="config-row config-row--compact">
+            <div class="config-row__left">
+              <h3 class="config-row__label">Tier 1 · 索引发现</h3>
+              <p class="config-row__hint">轻量扫描出院索引，发现新增 visit</p>
+            </div>
+            <div class="config-row__right config-row__right--stats">
+              <span class="stats-value">{{ mongoSyncState.tier1_discovered || 0 }} 条</span>
+              <span class="stats-time">{{ mongoSyncState.tier1_last_run || '从未运行' }}</span>
+            </div>
+          </div>
+          <div class="config-row config-row--compact">
+            <div class="config-row__left">
+              <h3 class="config-row__label">Tier 2 · 结构化数据</h3>
+              <p class="config-row__hint">首页、诊断、手术、费用 4 张核心表</p>
+            </div>
+            <div class="config-row__right config-row__right--stats">
+              <span class="stats-value">{{ mongoSyncState.tier2_synced || 0 }} 条</span>
+              <span class="stats-time">{{ mongoSyncState.tier2_last_run || '从未运行' }}</span>
+            </div>
+          </div>
+          <div class="config-row config-row--compact">
+            <div class="config-row__left">
+              <h3 class="config-row__label">Tier 3 · 病历全文</h3>
+              <p class="config-row__hint">23 类文书全量拉取（仅夜间窗口执行）</p>
+            </div>
+            <div class="config-row__right config-row__right--stats">
+              <span class="stats-value">{{ mongoSyncState.tier3_synced || 0 }} 条</span>
+              <span class="stats-time">{{ mongoSyncState.tier3_last_run || '从未运行' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 底栏：手动触发 -->
+      <div class="config-section__footer">
+        <div class="config-section__footer-hint">
+          <span v-if="!mongoConfig.enabled" class="text-amber-600 text-xs">⚠ 同步已关闭，需先在下方启用</span>
+        </div>
+        <div class="config-section__footer-actions">
+          <select v-model="mongoSyncTier" class="select-native">
+            <option value="all">全部 Tier</option>
+            <option value="tier1">Tier1 · 索引</option>
+            <option value="tier2">Tier2 · 结构</option>
+            <option value="tier3">Tier3 · 全文</option>
+          </select>
+          <button class="btn-primary" @click="triggerMongoSync" :disabled="!mongoConfig.enabled || mongoSyncState.is_running">
+            <SyncOutlined v-if="!mongoSyncState.is_running" style="font-size: 12px" />
+            <a-spin v-else size="small" />
+            执行同步
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 区块 3: 抽取策略配置 ============ -->
+    <div class="config-section">
+      <div class="config-section__header">
+        <div>
+          <h2 class="config-section__title">抽取策略配置</h2>
+          <p class="config-section__desc">控制数据抽取的节奏、窗口与速率保护参数</p>
+        </div>
+      </div>
+      <div class="config-section__body divide-y divide-slate-100">
+        <!-- 同步开关 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">同步总开关</h3>
+            <p class="config-row__hint">开启后系统将按设定频率自动执行增量抽取。关闭后仅可手动触发。</p>
+          </div>
+          <div class="config-row__right">
             <a-switch
-              :checked="mongoConfig.enabled"
+              v-model:checked="configForm.enabled"
               checked-children="启用"
               un-checked-children="关闭"
-              size="small"
-              @change="toggleEnabled"
             />
           </div>
         </div>
-      </a-card>
-
-      <!-- 同步统计 -->
-      <a-card class="sync-conn-card" :bordered="false">
-        <div class="conn-header">
-          <div class="conn-header__left">
-            <SyncOutlined class="text-blue-500" style="font-size: 20px" :spin="mongoSyncState.is_running" />
-            <div>
-              <div class="conn-title">同步统计</div>
-              <div class="conn-subtitle">Visit 同步状态分布</div>
+        <!-- 出院稳定窗口 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">出院稳定窗口</h3>
+            <p class="config-row__hint">
+              出院后等待 N 天才纳入终末质控抽取。等待期间编码员完成 ICD 编码、费用结算和文书补录。
+            </p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.discharge_stable_days" :min="0" :max="30" class="input-num" />
+              <span class="input-unit">天</span>
             </div>
           </div>
-          <a-button size="small" type="text" @click="loadMongoStatus">
-            <template #icon><ReloadOutlined /></template>
-            刷新
-          </a-button>
         </div>
-        <div class="stats-grid">
-          <div class="stat-item stat-item--blue">
-            <div class="stat-value">{{ mongoStats.PENDING || 0 }}</div>
-            <div class="stat-label">待抽取</div>
+        <!-- 回看窗口 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">回看窗口</h3>
+            <p class="config-row__hint">
+              水位线回退 N 分钟重新扫描，对冲时钟漂移和同毫秒时间戳导致的漏数风险。
+            </p>
           </div>
-          <div class="stat-item stat-item--amber">
-            <div class="stat-value">{{ mongoStats.PARTIAL || 0 }}</div>
-            <div class="stat-label">部分同步</div>
-          </div>
-          <div class="stat-item stat-item--green">
-            <div class="stat-value">{{ mongoStats.SYNCED || 0 }}</div>
-            <div class="stat-label">已完成</div>
-          </div>
-          <div class="stat-item stat-item--orange">
-            <div class="stat-value">{{ mongoStats.STALE || 0 }}</div>
-            <div class="stat-label">需重拉</div>
-          </div>
-          <div class="stat-item stat-item--red">
-            <div class="stat-value">{{ mongoStats.FAILED || 0 }}</div>
-            <div class="stat-label">失败</div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.lookback_minutes" :min="0" :max="120" class="input-num" />
+              <span class="input-unit">分钟</span>
+            </div>
           </div>
         </div>
-      </a-card>
+        <!-- 滚动重扫 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">滚动重扫</h3>
+            <p class="config-row__hint">
+              最近 N 天内有修订的已完成 visit 将被标记为
+              <code class="code-inline">STALE</code> 并强制重拉，防止晚到修订遗漏。
+            </p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.rescan_recent_days" :min="0" :max="30" class="input-num" />
+              <span class="input-unit">天</span>
+            </div>
+          </div>
+        </div>
+        <!-- Tier1 频率 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">Tier 1 索引发现频率</h3>
+            <p class="config-row__hint">轻量查询，可较高频率执行。建议 15 - 60 分钟。</p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.tier1_interval_minutes" :min="5" :max="1440" class="input-num" />
+              <span class="input-unit">分钟</span>
+            </div>
+          </div>
+        </div>
+        <!-- Tier2 频率 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">Tier 2 结构化拉取频率</h3>
+            <p class="config-row__hint">每次拉取 4 张表，开销中等。建议 60 - 240 分钟。</p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.tier2_interval_minutes" :min="10" :max="1440" class="input-num" />
+              <span class="input-unit">分钟</span>
+            </div>
+          </div>
+        </div>
+        <!-- Tier3 Cron -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">Tier 3 全文抽取定时</h3>
+            <p class="config-row__hint">
+              Cron 表达式。全文抽取开销最大，建议仅在夜间低峰执行。默认
+              <code class="code-inline">0 2 * * *</code> 即凌晨 2 点。
+            </p>
+          </div>
+          <div class="config-row__right">
+            <a-input v-model:value="configForm.tier3_cron" placeholder="0 2 * * *" class="input-text" />
+          </div>
+        </div>
+        <!-- 单批数量 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">单批处理数量</h3>
+            <p class="config-row__hint">每次同步最多处理的 visit 数。越大吞吐越高，但对端压力也越大。</p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.max_batch_size" :min="10" :max="1000" class="input-num" />
+              <span class="input-unit">条</span>
+            </div>
+          </div>
+        </div>
+        <!-- 请求间隔 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">请求间隔</h3>
+            <p class="config-row__hint">两次 MongoDB 查询之间的等待时间，防止并发过高冲击对端数据库。</p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-with-unit">
+              <a-input-number v-model:value="configForm.inter_request_delay_ms" :min="50" :max="5000" :step="50" class="input-num" />
+              <span class="input-unit">ms</span>
+            </div>
+          </div>
+        </div>
+        <!-- 夜间窗口 -->
+        <div class="config-row">
+          <div class="config-row__left">
+            <h3 class="config-row__label">夜间窗口</h3>
+            <p class="config-row__hint">仅在此时间段内允许 Tier 3 全文抽取，保护白天临床生产时段。</p>
+          </div>
+          <div class="config-row__right">
+            <div class="input-time-range">
+              <a-input v-model:value="configForm.night_window_start" placeholder="22:00" class="input-time" />
+              <span class="input-time-sep">—</span>
+              <a-input v-model:value="configForm.night_window_end" placeholder="06:00" class="input-time" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 底栏：保存 -->
+      <div class="config-section__footer">
+        <button class="btn-ghost" @click="loadMongoConfig">取消更改</button>
+        <button class="btn-primary" @click="saveMongoConfig" :disabled="configSaving">
+          保存配置
+        </button>
+      </div>
     </div>
 
-    <!-- 手动触发同步 -->
-    <a-card :bordered="false" class="sync-action-card">
-      <div class="action-bar">
-        <div class="action-bar__left">
-          <span class="action-title">手动触发同步</span>
-          <span class="action-hint">选择 Tier 级别后点击执行</span>
-        </div>
-        <div class="action-bar__right">
-          <a-select v-model:value="mongoSyncTier" size="small" style="width: 140px">
-            <a-select-option value="all">全部 Tier</a-select-option>
-            <a-select-option value="tier1">Tier1 · 索引发现</a-select-option>
-            <a-select-option value="tier2">Tier2 · 结构化</a-select-option>
-            <a-select-option value="tier3">Tier3 · 全文</a-select-option>
-          </a-select>
-          <a-button
-            type="primary"
-            size="small"
-            @click="triggerMongoSync"
-            :loading="mongoSyncState.is_running"
-            :disabled="!mongoConfig.enabled"
-          >
-            <template #icon><SyncOutlined /></template>
-            执行同步
-          </a-button>
-        </div>
-      </div>
-      <!-- Tier 运行状态 -->
-      <div class="tier-status-grid">
-        <div class="tier-item">
-          <div class="tier-item__label">Tier 1 · 索引发现</div>
-          <div class="tier-item__value">{{ mongoSyncState.tier1_discovered || 0 }} 条</div>
-          <div class="tier-item__time">{{ mongoSyncState.tier1_last_run || '从未运行' }}</div>
-        </div>
-        <div class="tier-item">
-          <div class="tier-item__label">Tier 2 · 结构化数据</div>
-          <div class="tier-item__value">{{ mongoSyncState.tier2_synced || 0 }} 条</div>
-          <div class="tier-item__time">{{ mongoSyncState.tier2_last_run || '从未运行' }}</div>
-        </div>
-        <div class="tier-item">
-          <div class="tier-item__label">Tier 3 · 病历全文</div>
-          <div class="tier-item__value">{{ mongoSyncState.tier3_synced || 0 }} 条</div>
-          <div class="tier-item__time">{{ mongoSyncState.tier3_last_run || '从未运行' }}</div>
-        </div>
-      </div>
-    </a-card>
-
-    <!-- 抽取策略配置 -->
-    <a-card title="抽取策略配置" :bordered="false" class="sync-strategy-card">
-      <template #extra>
-        <a-button type="primary" size="small" @click="saveMongoConfig" :loading="configSaving">
-          保存配置
-        </a-button>
-      </template>
-
-      <a-form layout="vertical">
-        <a-divider orientation="left">采集窗口</a-divider>
-        <a-row :gutter="[24, 16]">
-          <a-col :xs="24" :md="8">
-            <a-form-item label="出院稳定窗口 (天)">
-              <a-input-number v-model:value="configForm.discharge_stable_days" :min="0" :max="30" style="width: 100%" />
-              <div class="qc-setting-hint">出院后 N 天才纳入终末质控抽取</div>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="8">
-            <a-form-item label="回看窗口 (分钟)">
-              <a-input-number v-model:value="configForm.lookback_minutes" :min="0" :max="120" style="width: 100%" />
-              <div class="qc-setting-hint">水位线回退 N 分钟，防止同毫秒漏数</div>
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="8">
-            <a-form-item label="滚动重扫 (天)">
-              <a-input-number v-model:value="configForm.rescan_recent_days" :min="0" :max="30" style="width: 100%" />
-              <div class="qc-setting-hint">最近 N 天晚到修订强制重查</div>
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <a-divider orientation="left">调度频率</a-divider>
-        <a-row :gutter="[24, 16]">
-          <a-col :xs="24" :md="8">
-            <a-form-item label="Tier1 频率 (分钟)">
-              <a-input-number v-model:value="configForm.tier1_interval_minutes" :min="5" :max="1440" style="width: 100%" />
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="8">
-            <a-form-item label="Tier2 频率 (分钟)">
-              <a-input-number v-model:value="configForm.tier2_interval_minutes" :min="10" :max="1440" style="width: 100%" />
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="8">
-            <a-form-item label="Tier3 Cron 表达式">
-              <a-input v-model:value="configForm.tier3_cron" placeholder="0 2 * * *" />
-              <div class="qc-setting-hint">病历全文抽取定时（默认凌晨 2 点）</div>
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <a-divider orientation="left">速率保护</a-divider>
-        <a-row :gutter="[24, 16]">
-          <a-col :xs="24" :md="8">
-            <a-form-item label="单批数量">
-              <a-input-number v-model:value="configForm.max_batch_size" :min="10" :max="1000" style="width: 100%" />
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="8">
-            <a-form-item label="请求间隔 (ms)">
-              <a-input-number v-model:value="configForm.inter_request_delay_ms" :min="50" :max="5000" :step="50" style="width: 100%" />
-            </a-form-item>
-          </a-col>
-          <a-col :xs="24" :md="8">
-            <a-form-item label="夜间窗口">
-              <div style="display: flex; align-items: center; gap: 8px">
-                <a-input v-model:value="configForm.night_window_start" placeholder="22:00" style="width: 100px" />
-                <span style="color: #94a3b8">—</span>
-                <a-input v-model:value="configForm.night_window_end" placeholder="06:00" style="width: 100px" />
-              </div>
-              <div class="qc-setting-hint">Tier3 全文仅在夜间窗口执行</div>
-            </a-form-item>
-          </a-col>
-        </a-row>
-      </a-form>
-    </a-card>
-
-    <!-- MongoDB 连接编辑弹窗 -->
+    <!-- ============ MongoDB 连接编辑弹窗 ============ -->
     <a-modal
       v-model:open="showMongoModal"
       title="MongoDB 连接配置"
@@ -229,17 +344,17 @@
         <a-form layout="vertical">
           <a-form-item label="连接 URI">
             <a-input v-model:value="connForm.mongo_uri" placeholder="mongodb://user:pass@host:27017/db" />
-            <div class="qc-setting-hint">支持 mongodb:// 和 mongodb+srv://，TLS 可在 URI 中加 ?tls=true</div>
+            <div class="form-hint">支持 mongodb:// 和 mongodb+srv://，TLS 在 URI 中加 ?tls=true</div>
           </a-form-item>
           <a-form-item label="数据库名">
             <a-input v-model:value="connForm.mongo_database" placeholder="his_emr" />
           </a-form-item>
           <a-form-item label="读偏好">
             <a-select v-model:value="connForm.read_preference" style="width: 100%">
-              <a-select-option value="secondaryPreferred">secondaryPreferred（推荐：优先从库）</a-select-option>
+              <a-select-option value="secondaryPreferred">secondaryPreferred（推荐）</a-select-option>
               <a-select-option value="secondary">secondary（仅从库）</a-select-option>
-              <a-select-option value="primaryPreferred">primaryPreferred（优先主库）</a-select-option>
-              <a-select-option value="nearest">nearest（最近节点）</a-select-option>
+              <a-select-option value="primaryPreferred">primaryPreferred</a-select-option>
+              <a-select-option value="nearest">nearest</a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item label="连接超时 (ms)">
@@ -263,11 +378,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { message } from 'ant-design-vue'
-import {
-  SyncOutlined,
-  ReloadOutlined,
-  EditOutlined,
-} from '@ant-design/icons-vue'
+import { SyncOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 
 // ========== 状态 ==========
 const mongoConfig = ref<any>({})
@@ -276,7 +387,6 @@ const mongoStats = ref<any>({ PENDING: 0, PARTIAL: 0, SYNCED: 0, STALE: 0, FAILE
 const mongoStatus = ref<any>({ connected: false })
 const mongoSyncTier = ref('all')
 
-// 连接弹窗
 const showMongoModal = ref(false)
 const connSaving = ref(false)
 const connTestResult = ref<any>(null)
@@ -287,7 +397,6 @@ const connForm = ref({
   connect_timeout_ms: 5000,
 })
 
-// 策略表单
 const configSaving = ref(false)
 const configForm = ref({
   discharge_stable_days: 3,
@@ -357,7 +466,6 @@ async function saveMongoConnection() {
     }
     if (connForm.value.mongo_uri) payload.mongo_uri = connForm.value.mongo_uri
     await axios.put('/api/v1/sync/config/mongo', payload)
-
     const { data } = await axios.post('/api/v1/sync/test-connection/mongo')
     connTestResult.value = data
     if (data.connected) {
@@ -388,16 +496,6 @@ async function saveMongoConfig() {
   }
 }
 
-async function toggleEnabled(checked: boolean) {
-  try {
-    await axios.put('/api/v1/sync/config/mongo', { enabled: checked })
-    message.success(checked ? '同步已启用' : '同步已关闭')
-    await loadMongoConfig()
-  } catch (err) {
-    message.error('操作失败')
-  }
-}
-
 async function triggerMongoSync() {
   try {
     const { data } = await axios.post('/api/v1/sync/trigger', {
@@ -418,188 +516,318 @@ async function triggerMongoSync() {
   }
 }
 
-// ========== 初始化 ==========
 onMounted(async () => {
   await Promise.all([loadMongoConfig(), loadMongoStatus()])
 })
 </script>
 
 <style scoped>
-.data-sync-config {
+/* ==================== 设计系统 Token ==================== */
+.data-sync-root {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
-.sync-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+
+/* ---- 区块容器 ---- */
+.config-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
 }
-.sync-conn-card {
-  border-radius: 12px;
-  background: var(--color-bg-elevated, #fff);
+.config-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f1f5f9;
 }
-.conn-header {
+.config-section__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.4;
+}
+.config-section__desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+.config-section__body {
+  /* divide-y 由 tailwind 类驱动 */
+}
+.config-section__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+.config-section__footer-hint {
+  flex: 1;
+}
+.config-section__footer-actions {
+  display: flex;
+  gap: 8px;
+}
+.config-section__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ---- 同行配置项（核心：左文案 + 右操作） ---- */
+.config-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 24px;
+  padding: 16px 24px;
+  transition: background 0.15s ease;
 }
-.conn-header__left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.config-row:hover {
+  background: rgba(248, 250, 252, 0.6);
 }
-.conn-header__right {
+.config-row--compact {
+  padding: 12px 24px;
+}
+.config-row__left {
+  flex: 1;
+  min-width: 0;
+}
+.config-row__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+  line-height: 1.4;
+}
+.config-row__hint {
+  font-size: 12.5px;
+  color: #94a3b8;
+  margin: 2px 0 0;
+  line-height: 1.5;
+  max-width: 480px;
+}
+.config-row__right {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.conn-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.conn-icon--mongo {
-  background: linear-gradient(135deg, #10b981, #0d9488);
-}
-.conn-icon__text {
-  color: #fff;
-  font-size: 14px;
-  font-weight: 900;
-}
-.conn-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-primary, #1e293b);
-}
-.conn-subtitle {
-  font-size: 12px;
-  color: var(--color-text-tertiary, #94a3b8);
-}
-.conn-details {
-  display: flex;
+.config-row__right--stats {
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 0;
 }
-.conn-detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-.conn-detail-label {
-  color: var(--color-text-tertiary, #64748b);
-}
-.conn-detail-value {
-  color: var(--color-text-primary, #334155);
+.config-row__mono {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   font-size: 12px;
-}
-.conn-detail-value.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  max-width: 200px;
+  color: #334155;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 5px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.conn-status-tag {
-  border-radius: 12px;
+
+/* ---- 状态药丸 ---- */
+.status-pill {
   font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.01em;
 }
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+.status-pill--ok {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #dcfce7;
 }
-.stat-item {
-  text-align: center;
-  padding: 10px 4px;
-  border-radius: 10px;
-  border: 1px solid transparent;
-}
-.stat-item--blue { background: #eff6ff; border-color: #dbeafe; }
-.stat-item--amber { background: #fffbeb; border-color: #fef3c7; }
-.stat-item--green { background: #f0fdf4; border-color: #dcfce7; }
-.stat-item--orange { background: #fff7ed; border-color: #ffedd5; }
-.stat-item--red { background: #fef2f2; border-color: #fecaca; }
-.stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.stat-item--blue .stat-value { color: #2563eb; }
-.stat-item--amber .stat-value { color: #d97706; }
-.stat-item--green .stat-value { color: #16a34a; }
-.stat-item--orange .stat-value { color: #ea580c; }
-.stat-item--red .stat-value { color: #dc2626; }
-.stat-label {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
+.status-pill--off {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
 }
 
-.sync-action-card {
-  border-radius: 12px;
-}
-.action-bar {
+/* ---- 状态条（克制版：白底 + 小圆点 + 数字） ---- */
+.stats-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  justify-content: center;
+  gap: 0;
+  padding: 20px 24px;
 }
-.action-bar__right {
+.stats-bar__item {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
 }
-.action-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary, #1e293b);
+.stats-bar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
-.action-hint {
+.stats-bar__dot--slate  { background: #94a3b8; }
+.stats-bar__dot--amber  { background: #f59e0b; }
+.stats-bar__dot--green  { background: #22c55e; }
+.stats-bar__dot--orange { background: #f97316; }
+.stats-bar__dot--red    { background: #ef4444; }
+.stats-bar__num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+}
+.stats-bar__label {
   font-size: 12px;
-  color: var(--color-text-tertiary, #94a3b8);
-  margin-left: 8px;
+  color: #94a3b8;
 }
-.tier-status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+.stats-bar__divider {
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0;
 }
-.tier-item {
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--color-bg-tertiary, #f8fafc);
-  border: 1px solid var(--color-border, #e2e8f0);
-}
-.tier-item__label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-tertiary, #94a3b8);
-  margin-bottom: 4px;
-}
-.tier-item__value {
-  font-size: 14px;
+.stats-value {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary, #334155);
+  color: #334155;
 }
-.tier-item__time {
+.stats-time {
   font-size: 11px;
-  color: var(--color-text-tertiary, #94a3b8);
-  margin-top: 2px;
+  color: #94a3b8;
+  margin-top: 1px;
 }
 
-.sync-strategy-card {
-  border-radius: 12px;
+/* ---- 按钮 ---- */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 16px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.18);
 }
-.qc-setting-hint {
+.btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-outline:hover { background: #f8fafc; color: #1e293b; }
+.btn-ghost {
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.btn-ghost:hover { color: #1e293b; }
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ---- 表单控件 ---- */
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.input-num {
+  width: 90px !important;
+}
+.input-num :deep(.ant-input-number-input) {
+  text-align: center;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+}
+.input-unit {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  min-width: 28px;
+}
+.input-text {
+  width: 160px !important;
+}
+.input-text :deep(.ant-input) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+}
+.input-time-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.input-time {
+  width: 80px !important;
+}
+.input-time :deep(.ant-input) {
+  text-align: center;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+}
+.input-time-sep {
+  color: #94a3b8;
+  font-size: 14px;
+}
+.select-native {
+  appearance: none;
+  padding: 6px 28px 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2394a3b8' fill='none' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 10px center no-repeat;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  outline: none;
+}
+.select-native:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12); }
+
+/* ---- 行内 code ---- */
+.code-inline {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  border: 1px solid #e2e8f0;
+}
+.form-hint {
   font-size: 12px;
   color: #94a3b8;
   margin-top: 4px;
-  line-height: 1.4;
 }
 </style>
