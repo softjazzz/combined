@@ -673,14 +673,19 @@ onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]
   border-bottom-right-radius: 0 !important;
   border-right: 0 !important;
 }
+.ds-input-group__input :deep(.ant-input-number-input-wrap) {
+  width: 100%;
+}
 .ds-input-group__input :deep(.ant-input-number-input) {
+  width: 100%;
   text-align: center;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #0f172a;
   height: 34px;
   line-height: 34px;
+  padding: 0 8px;
 }
 .ds-input-group__input :deep(.ant-input-number-focused),
 .ds-input-group__input :deep(.ant-input-number:focus) {
