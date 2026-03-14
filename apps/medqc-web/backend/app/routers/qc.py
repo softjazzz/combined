@@ -505,14 +505,29 @@ async def check_coding_qc(
     """
     对病案首页执行编码规范质控。
 
-    POST body:
-    {
-        "frontpage": { ... 首页数据字典 ... },
-        "skip_llm": false  // 可选，跳过 LLM 语义审查
-    }
+    POST body 支持两种模式：
+    1. visit_id 模式（推荐）：直接从 PG 数据库读取诊断/手术数据
+       {"visit_id": "xxx", "patient_id": "xxx"}
+    2. frontpage 模式（兼容旧版）：前端手动传入首页数据
+       {"frontpage": { ... 首页数据字典 ... }}
     """
-    frontpage = payload.get("frontpage") or payload
+    visit_id = payload.get("visit_id")
+    patient_id = payload.get("patient_id")
     skip_llm = payload.get("skip_llm", False)
+
+    if visit_id:
+        # === 从 PG 直接读取诊断和手术数据 ===
+        frontpage = _load_frontpage_from_pg(patient_id, visit_id)
+        if not frontpage:
+            return success_response(
+                data={"total_issues": 0, "errors": 0, "warnings": 0, "infos": 0,
+                      "rule_issues": [], "llm_issues": [], "overall_assessment": "通过"},
+                message="编码质控完成：该患者无诊断/手术编码数据",
+                trace_id=get_trace_id(request),
+            )
+    else:
+        # === 兼容旧版：从请求体读取 ===
+        frontpage = payload.get("frontpage") or payload
 
     engine = _get_coding_qc_engine()
 
@@ -527,3 +542,68 @@ async def check_coding_qc(
         message=f"编码质控完成：{report.overall_assessment}（{report.total_issues} 个问题）",
         trace_id=get_trace_id(request),
     )
+
+
+def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optional[Dict[str, Any]]:
+    """从 PG 数据库直接读取诊断和手术编码数据，组装为质控引擎所需的 frontpage 格式。"""
+    from sqlalchemy.orm import Session
+    from ..database.connection import engine as db_engine
+    from ..database.models.cdm import (
+        MedicalRecordFrontpage, Diagnosis, MrSurgery
+    )
+
+    try:
+        with Session(db_engine) as session:
+            # 查询首页基本信息
+            fp_query = session.query(MedicalRecordFrontpage).filter_by(visit_id=visit_id)
+            if patient_id:
+                fp_query = fp_query.filter_by(patient_id=patient_id)
+            fp = fp_query.first()
+
+            # 查询诊断列表
+            diag_query = session.query(Diagnosis).filter_by(visit_id=visit_id)
+            if patient_id:
+                diag_query = diag_query.filter_by(patient_id=patient_id)
+            diag_rows = diag_query.order_by(
+                Diagnosis.diagnosis_type, Diagnosis.diagnosis_no
+            ).all()
+
+            # 查询手术列表
+            surg_query = session.query(MrSurgery).filter_by(visit_id=visit_id)
+            if patient_id:
+                surg_query = surg_query.filter_by(patient_id=patient_id)
+            surg_rows = surg_query.all()
+
+            if not fp and not diag_rows and not surg_rows:
+                return None
+
+            # 组装诊断（出院主诊断排第一）
+            diagnoses = []
+            for d in diag_rows:
+                diagnoses.append({
+                    "code": d.diagnosis_code or "",
+                    "name": d.diagnosis_name or "",
+                    "type": d.diagnosis_type or "",
+                })
+
+            # 组装手术（主手术排第一）
+            surgeries = []
+            main_surgeries = [s for s in surg_rows if s.main_surgery_sign == "1"]
+            other_surgeries = [s for s in surg_rows if s.main_surgery_sign != "1"]
+            for s in main_surgeries + other_surgeries:
+                surgeries.append({
+                    "code": s.surgery_code or "",
+                    "name": s.surgery_name or "",
+                })
+
+            return {
+                "sex": fp.sex if fp else "",
+                "age": fp.age_year if fp else "",
+                "diagnoses": diagnoses,
+                "surgeries": surgeries,
+                "clinical_summary": "",
+            }
+
+    except Exception as e:
+        logger.warning(f"从 PG 读取编码质控数据失败: {e}")
+        return None

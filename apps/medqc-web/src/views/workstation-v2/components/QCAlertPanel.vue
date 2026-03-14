@@ -222,6 +222,8 @@ interface PatientInfo {
 const props = defineProps<{
   frontpage?: Record<string, any> | null
   analyzing?: boolean
+  visitId?: string | null
+  patientId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -424,46 +426,51 @@ import axios from 'axios'
 const codingQCLoading = ref(false)
 
 const fetchCodingQCFromBackend = async () => {
+  // 优先使用 visit_id 模式：直接从 PG 数据库读取
+  const useVisitIdMode = !!props.visitId
   const fp = props.frontpage
-  if (!fp) return []
+  if (!useVisitIdMode && !fp) return []
 
-  // 构建后端需要的 frontpage 格式
-  const diagnoses = fp.diagnoses || {}
-  const procedures = fp.procedures || {}
-
-  // 将首页数据映射为编码质控入参
-  const diagList: any[] = []
-  if (diagnoses.discharge_main_diagnosis_text || diagnoses.discharge_main_icd) {
-    diagList.push({
-      code: diagnoses.discharge_main_icd || '',
-      name: diagnoses.discharge_main_diagnosis_text || '',
-    })
-  }
-  const otherTexts = diagnoses.discharge_other_diagnoses_texts || []
-  const otherICDs = diagnoses.discharge_other_icds || []
-  for (let i = 0; i < otherTexts.length; i++) {
-    diagList.push({
-      code: otherICDs[i] || '',
-      name: otherTexts[i] || '',
-    })
-  }
-
-  const surgList: any[] = []
-  if (procedures.main_procedure_text || procedures.main_procedure_code) {
-    surgList.push({
-      code: procedures.main_procedure_code || '',
-      name: procedures.main_procedure_text || '',
-    })
-  }
-
-  const payload = {
-    frontpage: {
-      sex: fp.sex || fp.basic_info?.sex || fp.basic_info?.gender_text || '',
-      age: fp.age || fp.basic_info?.age || fp.basic_info?.age_years || '',
-      diagnoses: diagList,
-      surgeries: surgList,
-      clinical_summary: fp.clinical_summary || '',
-    },
+  let payload: any
+  if (useVisitIdMode) {
+    payload = {
+      visit_id: props.visitId,
+      patient_id: props.patientId || '',
+    }
+  } else {
+    const diagnoses = fp!.diagnoses || {}
+    const procedures = fp!.procedures || {}
+    const diagList: any[] = []
+    if (diagnoses.discharge_main_diagnosis_text || diagnoses.discharge_main_icd) {
+      diagList.push({
+        code: diagnoses.discharge_main_icd || '',
+        name: diagnoses.discharge_main_diagnosis_text || '',
+      })
+    }
+    const otherTexts = diagnoses.discharge_other_diagnoses_texts || []
+    const otherICDs = diagnoses.discharge_other_icds || []
+    for (let i = 0; i < otherTexts.length; i++) {
+      diagList.push({
+        code: otherICDs[i] || '',
+        name: otherTexts[i] || '',
+      })
+    }
+    const surgList: any[] = []
+    if (procedures.main_procedure_text || procedures.main_procedure_code) {
+      surgList.push({
+        code: procedures.main_procedure_code || '',
+        name: procedures.main_procedure_text || '',
+      })
+    }
+    payload = {
+      frontpage: {
+        sex: fp!.sex || fp!.basic_info?.sex || fp!.basic_info?.gender_text || '',
+        age: fp!.age || fp!.basic_info?.age || fp!.basic_info?.age_years || '',
+        diagnoses: diagList,
+        surgeries: surgList,
+        clinical_summary: fp!.clinical_summary || '',
+      },
+    }
   }
 
   try {

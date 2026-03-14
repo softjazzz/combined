@@ -586,7 +586,7 @@
                         </div>
                         <HmFrontpagePreview :draft="frontpageDraft" />
                       </a-tab-pane>
-                      <a-tab-pane key="official" tab="官方格式">
+                      <a-tab-pane key="official" tab="系统首页">
                         <div v-if="frontpageSheetLoading" class="flex items-center justify-center py-12">
                           <a-spin />
                         </div>
@@ -596,7 +596,7 @@
                     </a-tabs>
                   </div>
                   <div v-else>
-                    <!-- 未AI生成时，直接显示数据库中的官方格式 -->
+                    <!-- 未AI生成时，直接显示数据库中的系统首页 -->
                     <div v-if="frontpageSheetLoading" class="flex flex-col items-center py-20">
                       <a-spin size="large" />
                       <div class="text-sm text-slate-400 mt-4">加载病案首页数据中...</div>
@@ -650,7 +650,7 @@
                         </a-button>
                       </div>
                     </div>
-                    <!-- 官方格式结算清单 -->
+                    <!-- 系统首页结算清单 -->
                     <SettlementSheet :data="settlementData" />
 
                     <!-- 质控结果摘要 -->
@@ -727,6 +727,8 @@
               :analyzing="frontpageGenerating"
               :refresh-seed="qcRefreshSeed"
               :active-tab="activeSubTab"
+              :visit-id="selectedId"
+              :patient-id="selectedRecord?.patientId"
               @issues-change="handleAssistIssuesChange"
               @locate-field="handleLocateFromQC"
               @jump-evidence="handleJumpEvidenceFromQC"

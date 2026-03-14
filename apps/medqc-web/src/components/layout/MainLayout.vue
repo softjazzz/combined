@@ -63,13 +63,7 @@
              <template #icon><CheckCircleOutlined /></template>
             <span>终末病历</span>
           </a-menu-item>
-          <a-menu-item
-            key="/dashboard/frontpage-demo"
-            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
-          >
-            <template #icon><FileTextOutlined /></template>
-            <span>首页自动生成（Demo）</span>
-          </a-menu-item>
+
         </a-sub-menu>
 
         <!-- 质控规则管理（与病案质控平级，紧挨其下） -->
@@ -153,44 +147,12 @@
             <span class="font-medium">系统管理</span>
           </template>
 
-          <!-- 测试病历管理 -->
-          <a-menu-item key="/dashboard/medical-records">
-            <template #icon>
-              <FileTextOutlined />
-            </template>
-            <span>测试病历管理</span>
-          </a-menu-item>
-
-          <!-- 数据权限配置 -->
-          <a-menu-item key="/dashboard/permissions" v-if="authStore.hasRole('admin')">
-            <template #icon>
-              <SafetyCertificateOutlined />
-            </template>
-            <span>数据权限配置</span>
-          </a-menu-item>
-
           <!-- 系统设置 -->
           <a-menu-item key="/dashboard/settings" v-if="authStore.hasRole('admin')">
             <template #icon>
               <SettingOutlined />
             </template>
             <span>系统设置</span>
-          </a-menu-item>
-
-          <!-- LLM质控演示增强版 -->
-          <a-menu-item key="/dashboard/llm-qc-demo-enhanced" v-if="authStore.hasRole('admin')">
-            <template #icon>
-              <ExperimentOutlined />
-            </template>
-            <span>LLM质控演示增强版</span>
-          </a-menu-item>
-
-          <!-- LLM质控演示新版 -->
-          <a-menu-item key="/dashboard/llm-qc-demo-new" v-if="authStore.hasRole('admin')">
-            <template #icon>
-              <ExperimentOutlined />
-            </template>
-            <span>LLM质控演示新版</span>
           </a-menu-item>
         </a-sub-menu>
         </a-menu>

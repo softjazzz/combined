@@ -139,6 +139,8 @@ const props = defineProps<{
   analyzing?: boolean
   refreshSeed?: number
   activeTab?: 'form' | 'coding' | 'cost'
+  visitId?: string | null
+  patientId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -306,44 +308,54 @@ async function handleExportDefects() {
 }
 
 async function fetchCodingQCFromBackend() {
+  // 优先使用 visit_id 模式：直接从 PG 数据库读取（不依赖 LLM 草稿）
+  const useVisitIdMode = !!props.visitId
   const fp = props.frontpage
-  if (!fp) return []
 
-  const diagnoses = fp.diagnoses || {}
-  const procedures = fp.procedures || {}
-  const diagList: any[] = []
-  if (diagnoses.discharge_main_diagnosis_text || diagnoses.discharge_main_icd) {
-    diagList.push({
-      code: diagnoses.discharge_main_icd || '',
-      name: diagnoses.discharge_main_diagnosis_text || '',
-    })
-  }
+  if (!useVisitIdMode && !fp) return []
 
-  const otherTexts = diagnoses.discharge_other_diagnoses_texts || []
-  const otherICDs = diagnoses.discharge_other_icds || []
-  for (let i = 0; i < otherTexts.length; i += 1) {
-    diagList.push({
-      code: otherICDs[i] || '',
-      name: otherTexts[i] || '',
-    })
-  }
-
-  const surgList: any[] = []
-  if (procedures.main_procedure_text || procedures.main_procedure_code) {
-    surgList.push({
-      code: procedures.main_procedure_code || '',
-      name: procedures.main_procedure_text || '',
-    })
-  }
-
-  const payload = {
-    frontpage: {
-      sex: fp.sex || fp.basic_info?.sex || fp.basic_info?.gender_text || '',
-      age: fp.age || fp.basic_info?.age || fp.basic_info?.age_years || '',
-      diagnoses: diagList,
-      surgeries: surgList,
-      clinical_summary: fp.clinical_summary || '',
-    },
+  let payload: any
+  if (useVisitIdMode) {
+    // visit_id 模式：后端自己从 PG 查诊断/手术数据
+    payload = {
+      visit_id: props.visitId,
+      patient_id: props.patientId || '',
+    }
+  } else {
+    // 兼容旧版：从 frontpage LLM 草稿组装
+    const diagnoses = fp!.diagnoses || {}
+    const procedures = fp!.procedures || {}
+    const diagList: any[] = []
+    if (diagnoses.discharge_main_diagnosis_text || diagnoses.discharge_main_icd) {
+      diagList.push({
+        code: diagnoses.discharge_main_icd || '',
+        name: diagnoses.discharge_main_diagnosis_text || '',
+      })
+    }
+    const otherTexts = diagnoses.discharge_other_diagnoses_texts || []
+    const otherICDs = diagnoses.discharge_other_icds || []
+    for (let i = 0; i < otherTexts.length; i += 1) {
+      diagList.push({
+        code: otherICDs[i] || '',
+        name: otherTexts[i] || '',
+      })
+    }
+    const surgList: any[] = []
+    if (procedures.main_procedure_text || procedures.main_procedure_code) {
+      surgList.push({
+        code: procedures.main_procedure_code || '',
+        name: procedures.main_procedure_text || '',
+      })
+    }
+    payload = {
+      frontpage: {
+        sex: fp!.sex || fp!.basic_info?.sex || fp!.basic_info?.gender_text || '',
+        age: fp!.age || fp!.basic_info?.age || fp!.basic_info?.age_years || '',
+        diagnoses: diagList,
+        surgeries: surgList,
+        clinical_summary: fp!.clinical_summary || '',
+      },
+    }
   }
 
   try {
