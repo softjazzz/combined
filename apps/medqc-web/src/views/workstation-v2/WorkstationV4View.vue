@@ -711,6 +711,7 @@
           :drg-count="drgResult ? 1 : 0"
           :message-count="notificationUnreadCount"
           @tab-change="handleAssistTabChange"
+          @refresh-tab="handleAssistTabRefresh"
         >
           <template #content>
             <ContentQCTab
@@ -723,6 +724,7 @@
           </template>
           <template #qc="{ activeSubTab }">
             <QCResultTab
+              ref="qcResultTabRef"
               :frontpage="frontpageDraft"
               :analyzing="frontpageGenerating"
               :refresh-seed="qcRefreshSeed"
@@ -732,7 +734,6 @@
               @issues-change="handleAssistIssuesChange"
               @locate-field="handleLocateFromQC"
               @jump-evidence="handleJumpEvidenceFromQC"
-              @refresh="generateFrontpage"
             />
           </template>
           <template #profile>
@@ -1089,6 +1090,22 @@ const searchText = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
 const contentQCCount = ref(0)
+
+// ========== 质控 Tab 独立刷新 ==========
+const qcResultTabRef = ref<InstanceType<typeof QCResultTab> | null>(null)
+
+function handleAssistTabRefresh(tabKey: string) {
+  if (tabKey === 'form' || tabKey === 'cost') {
+    qcResultTabRef.value?.runFormQC()
+  } else if (tabKey === 'coding') {
+    qcResultTabRef.value?.runCodingQC()
+  } else if (tabKey === 'drg') {
+    performDRGGrouping()
+  } else if (tabKey === 'content') {
+    message.info('内涵质控将在后续版本支持独立刷新')
+  }
+}
+
 
 const icdTargetOptions = [
   { label: '主诊断编码', value: 'mainDiagnosis' },

@@ -15,7 +15,30 @@
     </div>
 
     <div class="qc-result-tab__body custom-scrollbar">
-      <template v-if="currentIssues.length > 0">
+      <!-- ===== 每个 Tab 的独立初始态 ===== -->
+      <template v-if="isTabEmpty">
+        <!-- 未分析 → 居中"开始分析"按钮 -->
+        <div v-if="!isTabLoading" class="qc-start">
+          <div class="qc-start__icon-wrap">
+            <component :is="currentTabConfig.icon" class="qc-start__icon" />
+          </div>
+          <div class="qc-start__title">{{ currentTabConfig.label }}</div>
+          <div class="qc-start__desc">{{ currentTabConfig.desc }}</div>
+          <a-button type="primary" size="small" class="qc-start__btn" @click="startCurrentTab">
+            <template #icon><ThunderboltOutlined /></template>
+            开始分析
+          </a-button>
+        </div>
+        <!-- 分析中 → loading -->
+        <div v-else class="qc-start">
+          <a-spin />
+          <div class="qc-start__title" style="margin-top: 16px;">正在分析...</div>
+          <div class="qc-start__desc">{{ currentTabConfig.loadingHint }}</div>
+        </div>
+      </template>
+
+      <!-- ===== 有结果 → 问题列表 ===== -->
+      <template v-else-if="currentIssues.length > 0">
         <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="qc-group">
           <header class="qc-group__header">
             <span class="qc-group__title">
@@ -73,16 +96,18 @@
         </section>
       </template>
 
+      <!-- 已分析但无问题 -->
       <div v-else class="qc-empty">
-        <CheckCircleOutlined class="qc-empty__icon" />
-        <div class="qc-empty__title">{{ analyzing ? '正在分析...' : '未发现质控问题' }}</div>
+        <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a;" />
+        <div class="qc-empty__title">未发现质控问题</div>
+        <a-button type="link" size="small" @click="startCurrentTab" style="margin-top: 8px;"><ReloadOutlined /> 重新分析</a-button>
       </div>
     </div>
 
-    <footer class="qc-result-tab__footer">
+    <footer v-if="totalIssueCount > 0" class="qc-result-tab__footer">
       <span>共 <strong>{{ totalIssueCount }}</strong> 个问题</span>
       <div class="qc-result-tab__footer-actions">
-        <a-button type="link" size="small" @click="emit('refresh')" :loading="analyzing">
+        <a-button type="link" size="small" @click="startCurrentTab" :loading="isTabLoading">
           <ReloadOutlined /> 刷新
         </a-button>
         <a-button type="link" size="small" @click="handleExportDefects" :loading="exporting">
@@ -108,6 +133,7 @@ import {
   CloseCircleOutlined,
   DownloadOutlined,
   ReloadOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import axios from 'axios'
 import {
@@ -158,10 +184,34 @@ const exporting = ref(false)
 const codingQCLoading = ref(false)
 
 const qcTabs = [
-  { key: 'form' as const, label: '首页质控', icon: FileTextOutlined },
-  { key: 'coding' as const, label: '编码质控', icon: CodeOutlined },
-  { key: 'cost' as const, label: '控费监测', icon: DollarOutlined },
+  { key: 'form' as const, label: '首页质控', icon: FileTextOutlined, desc: '基于病案首页数据，检查完整性与一致性规则', loadingHint: '正在核验首页填报规范...' },
+  { key: 'coding' as const, label: '编码质控', icon: CodeOutlined, desc: '校验 ICD 编码的逻辑一致性与规范性', loadingHint: '正在调用后端编码校验引擎...' },
+  { key: 'cost' as const, label: '控费监测', icon: DollarOutlined, desc: '监控费用异常波动与 DRG 盈亏风险', loadingHint: '正在计算费用异常指标...' },
 ]
+
+// 每个 Tab 的「已分析」状态
+const formAnalyzed = ref(false)
+const codingAnalyzed = ref(false)
+const costAnalyzed = ref(false)
+
+const currentTabConfig = computed(() =>
+  qcTabs.find(t => t.key === currentTab.value) || qcTabs[0],
+)
+
+const isTabLoading = computed(() => {
+  const tab = currentTab.value
+  if (tab === 'form' || tab === 'cost') return formQCLoading.value
+  if (tab === 'coding') return codingQCLoading.value
+  return false
+})
+
+const isTabEmpty = computed(() => {
+  const tab = currentTab.value
+  if (tab === 'form') return !formAnalyzed.value
+  if (tab === 'coding') return !codingAnalyzed.value
+  if (tab === 'cost') return !costAnalyzed.value
+  return true
+})
 
 const currentIssues = computed(() =>
   issues.value.filter(i => i.category === currentTab.value && !i.dismissed),
@@ -359,7 +409,6 @@ async function fetchCodingQCFromBackend() {
   }
 
   try {
-    codingQCLoading.value = true
     const resp = await axios.post('/api/v1/qc/coding-qc/check', payload, { timeout: 30000 })
     const data = resp.data?.data
     if (!data) return []
@@ -404,53 +453,125 @@ async function fetchCodingQCFromBackend() {
   } catch (err) {
     console.error('后端编码质控调用失败', err)
     return []
-  } finally {
-    codingQCLoading.value = false
   }
 }
 
-async function runRealQCEngine() {
-  // 优先从 PG 读取系统首页数据，不依赖 LLM 草稿
-  let fpData: Record<string, any> | null = null
-
+// ==================== 独立的数据加载 ====================
+async function loadFrontpageData(): Promise<Record<string, any> | null> {
+  // 优先从 PG 读取系统首页数据
   if (props.visitId && props.patientId) {
     try {
       const resp = await axios.get(
         `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
       )
-      if (resp.data) {
-        fpData = resp.data
-      }
+      if (resp.data) return resp.data
     } catch (err) {
       console.warn('从 PG 读取首页数据失败，回退到 LLM 草稿:', err)
     }
   }
+  return props.frontpage || null
+}
 
-  // 回退到 LLM 草稿
-  if (!fpData) {
-    fpData = props.frontpage || null
+// ==================== 首页质控（独立） ====================
+const formQCLoading = ref(false)
+
+async function runFormQC() {
+  const fpData = await loadFrontpageData()
+  if (!fpData) return
+
+  formQCLoading.value = true
+  try {
+    const patientData = {
+      patientId: fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
+      documents: [{
+        id: `doc_${Date.now()}`,
+        type: 'admission_record' as DocumentType,
+        content: JSON.stringify(fpData),
+        timestamp: new Date().toISOString(),
+        status: 'draft',
+      }],
+    }
+    const engineResult = await integratedQCEngine.executeQualityControl(patientData)
+
+    // 移除旧的 form/cost issues，保留 coding
+    const kept = issues.value.filter(i => i.category === 'coding')
+    let issueId = 0
+    if (engineResult.ruleResults?.length > 0) {
+      engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
+        if (!ruleRes.isCompliant && ruleRes.findings?.length > 0) {
+          ruleRes.findings.forEach(finding => {
+            let sev: 'error' | 'warning' | 'info' = 'info'
+            if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
+            else if (finding.severity === 'minor') sev = 'warning'
+
+            let tabCat: 'form' | 'coding' | 'cost' = 'form'
+            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) tabCat = 'cost'
+
+            kept.push({
+              id: `sys-${issueId += 1}`,
+              category: tabCat,
+              severity: sev,
+              group: ruleRes.ruleName || '未知规则',
+              description: finding.description,
+              suggestion: finding.recommendation,
+              evidence: finding.evidence,
+              actionLabel: '查看详情',
+            })
+          })
+        }
+      })
+    }
+    issues.value = kept
+    emit('issues-change', kept.slice())
+  } catch (err) {
+    console.error('首页质控引擎异常', err)
+  } finally {
+    formQCLoading.value = false
+    formAnalyzed.value = true
+    costAnalyzed.value = true
   }
+}
 
+// ==================== 编码质控（独立） ====================
+async function runCodingQC() {
+  codingQCLoading.value = true
+  try {
+    // 移除旧的 coding issues，保留 form/cost
+    const kept = issues.value.filter(i => i.category !== 'coding')
+    const codingIssues = await fetchCodingQCFromBackend()
+    kept.push(...codingIssues)
+    issues.value = kept
+    emit('issues-change', kept.slice())
+  } catch (err) {
+    console.error('编码质控异常', err)
+  } finally {
+    codingQCLoading.value = false
+    codingAnalyzed.value = true
+  }
+}
+
+// ==================== 全部质控 ====================
+async function runAllQC() {
+  const fpData = await loadFrontpageData()
   if (!fpData) {
     issues.value = []
     emit('issues-change', [])
     return
   }
 
-  const patientData = {
-    patientId: fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
-    documents: [
-      {
+  formQCLoading.value = true
+  try {
+    const patientData = {
+      patientId: fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
+      documents: [{
         id: `doc_${Date.now()}`,
         type: 'admission_record' as DocumentType,
         content: JSON.stringify(fpData),
         timestamp: new Date().toISOString(),
         status: 'draft',
-      },
-    ],
-  }
+      }],
+    }
 
-  try {
     const [engineResult, codingIssues] = await Promise.all([
       integratedQCEngine.executeQualityControl(patientData),
       fetchCodingQCFromBackend(),
@@ -458,18 +579,16 @@ async function runRealQCEngine() {
 
     const newIssues: QCIssue[] = []
     let issueId = 0
-    if (engineResult.ruleResults && engineResult.ruleResults.length > 0) {
+    if (engineResult.ruleResults?.length > 0) {
       engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
-        if (!ruleRes.isCompliant && ruleRes.findings && ruleRes.findings.length > 0) {
+        if (!ruleRes.isCompliant && ruleRes.findings?.length > 0) {
           ruleRes.findings.forEach(finding => {
             let sev: 'error' | 'warning' | 'info' = 'info'
             if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
             else if (finding.severity === 'minor') sev = 'warning'
 
             let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) {
-              tabCat = 'cost'
-            }
+            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) tabCat = 'cost'
 
             newIssues.push({
               id: `sys-${issueId += 1}`,
@@ -485,7 +604,6 @@ async function runRealQCEngine() {
         }
       })
     }
-
     newIssues.push(...codingIssues)
     issues.value = newIssues
     emit('issues-change', newIssues.slice())
@@ -493,25 +611,53 @@ async function runRealQCEngine() {
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
+  } finally {
+    formQCLoading.value = false
   }
 }
+
+// ==================== 开始分析当前 Tab ====================
+function startCurrentTab() {
+  const tab = currentTab.value
+  if (tab === 'form' || tab === 'cost') runFormQC()
+  else if (tab === 'coding') runCodingQC()
+  else runAllQC()
+}
+
+// ==================== 暴露方法给父组件 ====================
+defineExpose({ runFormQC, runCodingQC, runAllQC, startCurrentTab })
 
 watch(
   () => props.frontpage,
   (newVal) => {
-    if (newVal) runRealQCEngine()
-    else {
+    if (!newVal) {
       issues.value = []
       emit('issues-change', [])
+      // 重置分析状态
+      formAnalyzed.value = false
+      codingAnalyzed.value = false
+      costAnalyzed.value = false
     }
   },
   { deep: true, immediate: true },
 )
 
 watch(
+  () => props.visitId,
+  () => {
+    // 切换病历时重置所有分析状态
+    formAnalyzed.value = false
+    codingAnalyzed.value = false
+    costAnalyzed.value = false
+    issues.value = []
+    emit('issues-change', [])
+  },
+)
+
+watch(
   () => props.refreshSeed,
   () => {
-    if (props.frontpage) runRealQCEngine()
+    if (props.frontpage) runAllQC()
   },
 )
 </script>
@@ -574,6 +720,53 @@ watch(
   overflow-y: auto;
   padding: 12px;
   background: #f8fafc;
+}
+
+/* ===== 各 Tab 独立「开始分析」空白态 ===== */
+.qc-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 20px;
+  min-height: 240px;
+}
+
+.qc-start__icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.qc-start__icon {
+  font-size: 24px;
+  color: #3b82f6;
+}
+
+.qc-start__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.qc-start__desc {
+  font-size: 12px;
+  color: #94a3b8;
+  max-width: 200px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.qc-start__btn {
+  border-radius: 8px !important;
 }
 
 .qc-group {

@@ -28,7 +28,7 @@
               type="text"
               size="small"
               class="assist-panel__action-btn"
-              @click="$emit('refresh')"
+              @click="$emit('refresh-tab', currentTab)"
             >
               <template #icon><ReloadOutlined /></template>
             </a-button>
@@ -184,7 +184,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
   (e: 'tab-change', value: AssistTabKey): void
-  (e: 'refresh'): void
+  (e: 'refresh-tab', tab: AssistTabKey): void
 }>()
 
 const innerVisible = ref(props.defaultVisible)

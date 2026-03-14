@@ -10,6 +10,22 @@ from .cdm import (
     DischargeRecord,
     QCResult,
 )
+from .qc import (
+    SysUser,
+    SysDepartment,
+    QCResultBiz,
+    QCDefect,
+    QCDefectHistory,
+    QCTask,
+    QCTaskRecord,
+    QCAppeal,
+    QCAppealReview,
+    QCRemediationTask,
+    QCRemediationHistory,
+    ScoringRule,
+    ScoringConfig,
+    Notification,
+)
 
 __all__ = [
     "PatientInformation",
@@ -21,4 +37,18 @@ __all__ = [
     "AdmissionRecord",
     "DischargeRecord",
     "QCResult",
+    "SysUser",
+    "SysDepartment",
+    "QCResultBiz",
+    "QCDefect",
+    "QCDefectHistory",
+    "QCTask",
+    "QCTaskRecord",
+    "QCAppeal",
+    "QCAppealReview",
+    "QCRemediationTask",
+    "QCRemediationHistory",
+    "ScoringRule",
+    "ScoringConfig",
+    "Notification",
 ]
