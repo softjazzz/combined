@@ -386,6 +386,54 @@ class CodingQCEngine:
 
         return issues
 
+    def check_bidding_scenarios(self, frontpage: dict) -> List[CodingIssue]:
+        """
+        招标专项编码规范检查（确定性规则兜底）。
+
+        覆盖招标条款 3.4.1 中 LLM 可能遗漏的场景：
+        - 场景 A：肿瘤主诊断（C/D00-D48）→ 应有病理形态学诊断编码（M 码）
+        """
+        issues = []
+        diagnoses = frontpage.get("diagnoses") or []
+        if not diagnoses:
+            return issues
+
+        # 提取所有诊断编码
+        all_codes = [
+            (d.get("code") or d.get("icd_code") or "").strip().upper()
+            for d in diagnoses
+        ]
+
+        # 场景 A：肿瘤诊断 → 检查是否有病理形态学编码（M 码）
+        tumor_codes = []
+        has_morphology = False
+        for code in all_codes:
+            if not code:
+                continue
+            # C00-C97（恶性肿瘤）和 D00-D48（原位/良性/未定性肿瘤）
+            if code.startswith("C") or (
+                code.startswith("D")
+                and len(code) >= 3
+                and code[1:3].isdigit()
+                and int(code[1:3]) <= 48
+            ):
+                tumor_codes.append(code)
+            # M 码（病理形态学编码）
+            if code.startswith("M"):
+                has_morphology = True
+
+        if tumor_codes and not has_morphology:
+            issues.append(CodingIssue(
+                dimension="consistency",
+                severity="warning",
+                code=tumor_codes[0],
+                description=f"主要诊断含肿瘤编码（{tumor_codes[0]}），但未见病理形态学诊断编码（M 码），建议补充病理诊断",
+                suggestion="肿瘤相关诊断应同时提供病理形态学编码（M 码），以确保编码完整性",
+                source="rule",
+            ))
+
+        return issues
+
     async def check_semantic(self, frontpage: dict) -> tuple:
         """
         D3-D6：LLM 语义审查。
@@ -429,7 +477,8 @@ class CodingQCEngine:
         # --- 规则层 ---
         format_issues = self.check_format(frontpage)
         existence_issues = self.check_existence(frontpage)
-        report.rule_issues = format_issues + existence_issues
+        bidding_issues = self.check_bidding_scenarios(frontpage)
+        report.rule_issues = format_issues + existence_issues + bidding_issues
 
         # --- LLM 层 ---
         llm_issues, raw_output = await self.check_semantic(frontpage)
