@@ -410,20 +410,40 @@ async function fetchCodingQCFromBackend() {
 }
 
 async function runRealQCEngine() {
-  const fp = props.frontpage
-  if (!fp) {
+  // 优先从 PG 读取系统首页数据，不依赖 LLM 草稿
+  let fpData: Record<string, any> | null = null
+
+  if (props.visitId && props.patientId) {
+    try {
+      const resp = await axios.get(
+        `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
+      )
+      if (resp.data) {
+        fpData = resp.data
+      }
+    } catch (err) {
+      console.warn('从 PG 读取首页数据失败，回退到 LLM 草稿:', err)
+    }
+  }
+
+  // 回退到 LLM 草稿
+  if (!fpData) {
+    fpData = props.frontpage || null
+  }
+
+  if (!fpData) {
     issues.value = []
     emit('issues-change', [])
     return
   }
 
   const patientData = {
-    patientId: fp.case_id || fp.patient_id || `PAT_${Date.now()}`,
+    patientId: fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
     documents: [
       {
         id: `doc_${Date.now()}`,
         type: 'admission_record' as DocumentType,
-        content: JSON.stringify(fp),
+        content: JSON.stringify(fpData),
         timestamp: new Date().toISOString(),
         status: 'draft',
       },
