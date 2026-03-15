@@ -32,6 +32,20 @@
       <nav class="-mb-px flex space-x-8 overflow-x-auto no-scrollbar border-b border-slate-200" aria-label="Tabs">
         <a
           href="#"
+          @click.prevent="handleTabClick('coding')"
+          :class="[
+            activeTab === 'coding'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors'
+          ]"
+        >
+          <MedicineBoxOutlined class="mr-2" />
+          编码质控规则
+          <span v-if="activeTab === 'coding'" class="ml-2 bg-emerald-100 text-emerald-600 py-0.5 px-2 rounded-full text-xs font-bold">18</span>
+        </a>
+        <a
+          href="#"
           @click.prevent="handleTabClick('semantic')"
           :class="[
             activeTab === 'semantic'
@@ -362,6 +376,11 @@
         </div>
         </div>
 
+      <!-- 编码质控规则标签页 -->
+      <div v-if="activeTab === 'coding'">
+        <CodingRulesTab />
+      </div>
+
       <!-- 四川省质控规则标签页 -->
       <div v-else-if="activeTab === 'semantic'">
         <SemanticRulesView :show-header="false" />
@@ -607,6 +626,7 @@ import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
   PlusOutlined,
+  MedicineBoxOutlined,
   ReloadOutlined,
   ImportOutlined,
   ExportOutlined,
@@ -642,6 +662,7 @@ import RuleTestDrawer from '@/components/rules/RuleTestDrawer.vue'
 import RuleStatsCards from '@/components/rules/RuleStatsCards.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import AIRuleCreatorDrawer from '@/components/rules/AIRuleCreatorDrawer.vue'
+import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
 import { DocumentCategoryService } from '@/services/document-category-service'
 import { DocumentCategory } from '@/types/medical'
 import { RulesService } from '@/services/rules-service'
@@ -698,8 +719,9 @@ const route = useRoute()
 const router = useRouter()
 
 // 响应式数据
-const activeTab = ref('semantic') // 默认显示四川省质控规则
+const activeTab = ref('coding') // 默认显示编码质控规则
 const TAB_DESCRIPTIONS: Record<string, string> = {
+  coding: '编码质控规则：基于ICD编码规范的18类质控规则，覆盖4万+条编码数据。',
   semantic: '四川省住院病历语义质控规则：支持规则管理、导入与语义质控评估。',
   custom: '泸县33条质控规则：维护本地自定义质控点，支持批量评估与测试。',
   department: '科室级规则管理：配置覆盖策略、科室维度的质控规则及状态。',

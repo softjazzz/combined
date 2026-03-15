@@ -1,10 +1,12 @@
 """
-评分标准配置 API
+评分标准配置 API（PG 版）
 
 功能:
 - 扣分规则 CRUD（单项扣分/最高扣分/一票否决）
 - 规则 Excel 导入/导出
 - 规则分组管理
+
+数据源：PostgreSQL scoring_rules 表
 """
 
 import io
@@ -23,55 +25,15 @@ from ..core.security import get_current_user
 router = APIRouter(prefix="/api/v1/scoring-rules", tags=["scoring-rules"])
 logger = logging.getLogger(__name__)
 
-# ==================== 内存存储（Supabase 回退） ====================
-_scoring_rules_db: List[dict] = []
 
-def _init_default_rules():
-    """初始化默认评分规则"""
-    global _scoring_rules_db
-    if _scoring_rules_db:
-        return
+# ==================== 辅助函数 ====================
 
-    defaults = [
-        # 形式质控
-        {"category": "形式质控", "name": "入院记录24h内完成", "deduction": 2, "max_deduction": 2, "veto": False, "severity": "warning"},
-        {"category": "形式质控", "name": "首次病程记录8h内完成", "deduction": 2, "max_deduction": 2, "veto": False, "severity": "warning"},
-        {"category": "形式质控", "name": "手术记录24h内完成", "deduction": 3, "max_deduction": 3, "veto": False, "severity": "error"},
-        {"category": "形式质控", "name": "出院记录24h内完成", "deduction": 2, "max_deduction": 2, "veto": False, "severity": "warning"},
-        {"category": "形式质控", "name": "知情同意书签署", "deduction": 5, "max_deduction": 5, "veto": False, "severity": "error"},
-        {"category": "形式质控", "name": "病历涂改未签名", "deduction": 1, "max_deduction": 3, "veto": False, "severity": "info"},
-        # 内涵质控
-        {"category": "内涵质控", "name": "主诊断与病程不符", "deduction": 5, "max_deduction": 5, "veto": False, "severity": "error"},
-        {"category": "内涵质控", "name": "病史采集不完整", "deduction": 3, "max_deduction": 6, "veto": False, "severity": "warning"},
-        {"category": "内涵质控", "name": "治疗方案无依据", "deduction": 5, "max_deduction": 5, "veto": False, "severity": "error"},
-        {"category": "内涵质控", "name": "抗菌药物使用不规范", "deduction": 3, "max_deduction": 6, "veto": False, "severity": "warning"},
-        # 一票否决
-        {"category": "一票否决", "name": "伪造病历记录", "deduction": 100, "max_deduction": 100, "veto": True, "severity": "critical"},
-        {"category": "一票否决", "name": "缺失关键知情同意", "deduction": 100, "max_deduction": 100, "veto": True, "severity": "critical"},
-        {"category": "一票否决", "name": "未经授权修改病历", "deduction": 100, "max_deduction": 100, "veto": True, "severity": "critical"},
-        # 编码质控
-        {"category": "编码质控", "name": "主诊断编码错误", "deduction": 5, "max_deduction": 5, "veto": False, "severity": "error"},
-        {"category": "编码质控", "name": "手术编码缺失", "deduction": 3, "max_deduction": 3, "veto": False, "severity": "warning"},
-        {"category": "编码质控", "name": "附加编码遗漏", "deduction": 2, "max_deduction": 4, "veto": False, "severity": "warning"},
-    ]
-
-    for i, rule in enumerate(defaults):
-        _scoring_rules_db.append({
-            "id": str(uuid.uuid4()),
-            "sort_order": i + 1,
-            "category": rule["category"],
-            "name": rule["name"],
-            "description": f'{rule["category"]}规则：{rule["name"]}',
-            "deduction": rule["deduction"],
-            "max_deduction": rule["max_deduction"],
-            "veto": rule["veto"],
-            "severity": rule["severity"],
-            "enabled": True,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-        })
-
-_init_default_rules()
+def _ensure_db():
+    """获取 Supabase 实例，不可用时抛 503"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    return sb
 
 
 # ==================== API ====================
@@ -85,37 +47,42 @@ async def list_scoring_rules(
     current_user: dict = Depends(get_current_user),
 ):
     """获取评分规则列表"""
-    rules = list(_scoring_rules_db)
+    sb = _ensure_db()
 
-    if category:
-        rules = [r for r in rules if r["category"] == category]
-    if enabled is not None:
-        rules = [r for r in rules if r["enabled"] == enabled]
-    if keyword:
-        rules = [r for r in rules if keyword in r["name"] or keyword in r.get("description", "")]
+    try:
+        query = sb.table('scoring_rules').select('*')
+        if category:
+            query = query.eq('category', category)
+        if enabled is not None:
+            query = query.eq('enabled', enabled)
+        if keyword and hasattr(query, 'or_'):
+            query = query.or_(f"name.ilike.%{keyword}%,description.ilike.%{keyword}%")
+        query = query.order('sort_order')
 
-    rules.sort(key=lambda r: r.get("sort_order", 999))
+        resp = await async_execute(query)
+        rules = list(getattr(resp, 'data', None) or [])
 
-    # 统计
-    categories = {}
-    for r in _scoring_rules_db:
-        cat = r["category"]
-        if cat not in categories:
-            categories[cat] = {"total": 0, "enabled": 0, "veto_count": 0}
-        categories[cat]["total"] += 1
-        if r["enabled"]:
-            categories[cat]["enabled"] += 1
-        if r.get("veto"):
-            categories[cat]["veto_count"] += 1
+        # 分类统计
+        categories = {}
+        for r in rules:
+            cat = r.get("category", "未分类")
+            if cat not in categories:
+                categories[cat] = {"total": 0, "enabled": 0, "veto_count": 0}
+            categories[cat]["total"] += 1
+            if r.get("enabled"):
+                categories[cat]["enabled"] += 1
+            if r.get("veto"):
+                categories[cat]["veto_count"] += 1
 
-    return success_response(
-        data={
-            "rules": rules,
-            "total": len(rules),
-            "categories": categories,
-        },
-        trace_id=get_trace_id(request),
-    )
+        return success_response(
+            data={"rules": rules, "total": len(rules), "categories": categories},
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询评分规则失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询评分规则失败: {str(e)}")
 
 
 @router.post("")
@@ -124,13 +91,17 @@ async def create_scoring_rule(
     current_user: dict = Depends(get_current_user),
 ):
     """创建评分规则"""
+    sb = _ensure_db()
     body = await request.json()
+
+    if not body.get("name"):
+        raise HTTPException(status_code=400, detail="规则名称不能为空")
 
     rule = {
         "id": str(uuid.uuid4()),
-        "sort_order": len(_scoring_rules_db) + 1,
+        "sort_order": body.get("sort_order", 0),
         "category": body.get("category", "形式质控"),
-        "name": body.get("name", ""),
+        "name": body["name"],
         "description": body.get("description", ""),
         "deduction": body.get("deduction", 1),
         "max_deduction": body.get("max_deduction", body.get("deduction", 1)),
@@ -141,12 +112,14 @@ async def create_scoring_rule(
         "updated_at": datetime.now().isoformat(),
     }
 
-    if not rule["name"]:
-        raise HTTPException(status_code=400, detail="规则名称不能为空")
-
-    _scoring_rules_db.append(rule)
-
-    return success_response(data=rule, message="创建成功", trace_id=get_trace_id(request))
+    try:
+        resp = await async_execute(sb.table('scoring_rules').insert(rule).select().single())
+        return success_response(data=getattr(resp, 'data', rule), message="创建成功", trace_id=get_trace_id(request))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建评分规则失败: {e}")
+        raise HTTPException(status_code=500, detail=f"创建评分规则失败: {str(e)}")
 
 
 @router.put("/{rule_id}")
@@ -156,19 +129,25 @@ async def update_scoring_rule(
     current_user: dict = Depends(get_current_user),
 ):
     """更新评分规则"""
+    sb = _ensure_db()
     body = await request.json()
 
-    rule = next((r for r in _scoring_rules_db if r["id"] == rule_id), None)
-    if not rule:
-        raise HTTPException(status_code=404, detail="规则不存在")
-
     updatable = ["category", "name", "description", "deduction", "max_deduction", "veto", "severity", "enabled", "sort_order"]
-    for key in updatable:
-        if key in body:
-            rule[key] = body[key]
-    rule["updated_at"] = datetime.now().isoformat()
+    update_data = {k: body[k] for k in updatable if k in body}
+    update_data["updated_at"] = datetime.now().isoformat()
 
-    return success_response(data=rule, message="更新成功", trace_id=get_trace_id(request))
+    try:
+        resp = await async_execute(
+            sb.table('scoring_rules').update(update_data).eq('id', rule_id).select().single()
+        )
+        if not getattr(resp, 'data', None):
+            raise HTTPException(status_code=404, detail="规则不存在")
+        return success_response(data=resp.data, message="更新成功", trace_id=get_trace_id(request))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新评分规则失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新评分规则失败: {str(e)}")
 
 
 @router.delete("/{rule_id}")
@@ -178,14 +157,20 @@ async def delete_scoring_rule(
     current_user: dict = Depends(get_current_user),
 ):
     """删除评分规则"""
-    global _scoring_rules_db
-    before = len(_scoring_rules_db)
-    _scoring_rules_db = [r for r in _scoring_rules_db if r["id"] != rule_id]
+    sb = _ensure_db()
 
-    if len(_scoring_rules_db) == before:
-        raise HTTPException(status_code=404, detail="规则不存在")
-
-    return success_response(message="删除成功", trace_id=get_trace_id(request))
+    try:
+        resp = await async_execute(
+            sb.table('scoring_rules').delete().eq('id', rule_id).select()
+        )
+        if not getattr(resp, 'data', None):
+            raise HTTPException(status_code=404, detail="规则不存在")
+        return success_response(message="删除成功", trace_id=get_trace_id(request))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除评分规则失败: {e}")
+        raise HTTPException(status_code=500, detail=f"删除评分规则失败: {str(e)}")
 
 
 @router.put("/{rule_id}/toggle")
@@ -195,18 +180,28 @@ async def toggle_scoring_rule(
     current_user: dict = Depends(get_current_user),
 ):
     """启用/禁用评分规则"""
-    rule = next((r for r in _scoring_rules_db if r["id"] == rule_id), None)
-    if not rule:
-        raise HTTPException(status_code=404, detail="规则不存在")
+    sb = _ensure_db()
 
-    rule["enabled"] = not rule["enabled"]
-    rule["updated_at"] = datetime.now().isoformat()
+    try:
+        # 先查当前状态
+        resp = await async_execute(sb.table('scoring_rules').select('enabled').eq('id', rule_id).single())
+        if not getattr(resp, 'data', None):
+            raise HTTPException(status_code=404, detail="规则不存在")
 
-    return success_response(
-        data=rule,
-        message=f'已{"启用" if rule["enabled"] else "禁用"}',
-        trace_id=get_trace_id(request),
-    )
+        new_enabled = not resp.data.get('enabled', True)
+        resp2 = await async_execute(
+            sb.table('scoring_rules').update({"enabled": new_enabled, "updated_at": datetime.now().isoformat()}).eq('id', rule_id).select().single()
+        )
+        return success_response(
+            data=getattr(resp2, 'data', None),
+            message=f'已{"启用" if new_enabled else "禁用"}',
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"切换评分规则状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
 
 
 @router.get("/export")
@@ -216,15 +211,20 @@ async def export_scoring_rules(
     current_user: dict = Depends(get_current_user),
 ):
     """导出评分规则为 Excel"""
+    sb = _ensure_db()
+
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        # 从 PG 拉取
+        resp = await async_execute(sb.table('scoring_rules').select('*').order('sort_order'))
+        rules = list(getattr(resp, 'data', None) or [])
 
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "评分标准"
 
-        # 表头样式
         header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
         header_font = Font(name="微软雅黑", size=11, bold=True, color="FFFFFF")
         thin_border = Border(
@@ -240,26 +240,21 @@ async def export_scoring_rules(
             cell.alignment = Alignment(horizontal='center')
             cell.border = thin_border
 
-        # 数据
-        rules = sorted(_scoring_rules_db, key=lambda r: r.get("sort_order", 999))
         severity_map = {"critical": "严重", "error": "错误", "warning": "警告", "info": "提示"}
         for row_idx, rule in enumerate(rules, 2):
             ws.cell(row=row_idx, column=1, value=row_idx - 1).border = thin_border
-            ws.cell(row=row_idx, column=2, value=rule["category"]).border = thin_border
-            ws.cell(row=row_idx, column=3, value=rule["name"]).border = thin_border
+            ws.cell(row=row_idx, column=2, value=rule.get("category", "")).border = thin_border
+            ws.cell(row=row_idx, column=3, value=rule.get("name", "")).border = thin_border
             ws.cell(row=row_idx, column=4, value=rule.get("description", "")).border = thin_border
-            ws.cell(row=row_idx, column=5, value=rule["deduction"]).border = thin_border
-            ws.cell(row=row_idx, column=6, value=rule["max_deduction"]).border = thin_border
+            ws.cell(row=row_idx, column=5, value=rule.get("deduction", 0)).border = thin_border
+            ws.cell(row=row_idx, column=6, value=rule.get("max_deduction", 0)).border = thin_border
             ws.cell(row=row_idx, column=7, value="是" if rule.get("veto") else "否").border = thin_border
-            ws.cell(row=row_idx, column=8, value=severity_map.get(rule["severity"], rule["severity"])).border = thin_border
-            ws.cell(row=row_idx, column=9, value="启用" if rule["enabled"] else "禁用").border = thin_border
-
-            # 一票否决行高亮
+            ws.cell(row=row_idx, column=8, value=severity_map.get(rule.get("severity", ""), rule.get("severity", ""))).border = thin_border
+            ws.cell(row=row_idx, column=9, value="启用" if rule.get("enabled") else "禁用").border = thin_border
             if rule.get("veto"):
                 for col in range(1, 10):
                     ws.cell(row=row_idx, column=col).fill = PatternFill(start_color="FFF2CC", fill_type="solid")
 
-        # 列宽
         widths = [6, 12, 24, 30, 10, 10, 10, 10, 8]
         for i, w in enumerate(widths, 1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
@@ -276,6 +271,11 @@ async def export_scoring_rules(
         )
     except ImportError:
         raise HTTPException(status_code=500, detail="需要安装 openpyxl: pip install openpyxl")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"导出评分规则失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
 
 
 @router.post("/import")
@@ -285,6 +285,8 @@ async def import_scoring_rules(
     current_user: dict = Depends(get_current_user),
 ):
     """从 Excel 导入评分规则"""
+    sb = _ensure_db()
+
     try:
         import openpyxl
 
@@ -297,7 +299,7 @@ async def import_scoring_rules(
         skipped = 0
 
         for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or not row[2]:  # 跳过空行
+            if not row or not row[2]:
                 continue
 
             name = str(row[2]).strip()
@@ -305,42 +307,36 @@ async def import_scoring_rules(
                 skipped += 1
                 continue
 
-            # 检查是否已存在
-            existing = next((r for r in _scoring_rules_db if r["name"] == name), None)
-            if existing:
-                # 更新
-                existing["category"] = str(row[1]).strip() if row[1] else existing["category"]
-                existing["description"] = str(row[3]).strip() if row[3] else existing.get("description", "")
-                existing["deduction"] = float(row[4]) if row[4] else existing["deduction"]
-                existing["max_deduction"] = float(row[5]) if row[5] else existing["max_deduction"]
-                existing["veto"] = str(row[6]).strip() == "是" if row[6] else existing.get("veto", False)
-                existing["severity"] = severity_map.get(str(row[7]).strip(), existing["severity"]) if row[7] else existing["severity"]
-                existing["updated_at"] = datetime.now().isoformat()
-            else:
-                # 新增
-                _scoring_rules_db.append({
-                    "id": str(uuid.uuid4()),
-                    "sort_order": len(_scoring_rules_db) + 1,
-                    "category": str(row[1]).strip() if row[1] else "形式质控",
-                    "name": name,
-                    "description": str(row[3]).strip() if row[3] else "",
-                    "deduction": float(row[4]) if row[4] else 1,
-                    "max_deduction": float(row[5]) if row[5] else float(row[4] or 1),
-                    "veto": str(row[6]).strip() == "是" if row[6] else False,
-                    "severity": severity_map.get(str(row[7]).strip(), "warning") if row[7] else "warning",
-                    "enabled": True,
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat(),
-                })
+            rule_data = {
+                "id": str(uuid.uuid4()),
+                "sort_order": imported + 1,
+                "category": str(row[1]).strip() if row[1] else "形式质控",
+                "name": name,
+                "description": str(row[3]).strip() if row[3] else "",
+                "deduction": float(row[4]) if row[4] else 1,
+                "max_deduction": float(row[5]) if row[5] else float(row[4] or 1),
+                "veto": str(row[6]).strip() == "是" if row[6] else False,
+                "severity": severity_map.get(str(row[7]).strip(), "warning") if row[7] else "warning",
+                "enabled": True,
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+            }
 
-            imported += 1
+            try:
+                await async_execute(sb.table('scoring_rules').insert(rule_data))
+                imported += 1
+            except Exception:
+                # upsert 失败（如重名）则跳过
+                skipped += 1
 
         return success_response(
-            data={"imported": imported, "skipped": skipped, "total": len(_scoring_rules_db)},
+            data={"imported": imported, "skipped": skipped},
             message=f"成功导入 {imported} 条规则",
             trace_id=get_trace_id(request),
         )
     except ImportError:
         raise HTTPException(status_code=500, detail="需要安装 openpyxl")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"导入失败: {str(e)}")

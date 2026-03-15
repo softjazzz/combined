@@ -573,6 +573,77 @@ async def list_formal_qc_rules(request: Request):
     )
 
 
+# ==================== 编码质控规则管理 API ====================
+
+import os as _os
+
+def _load_coding_rules() -> list:
+    """从 JSON 文件加载编码质控规则数据。"""
+    json_path = _os.path.join(
+        _os.path.dirname(_os.path.dirname(__file__)),
+        "data", "coding_rules.json"
+    )
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"加载编码质控规则失败: {e}")
+        return []
+
+
+@router.get("/coding-rules")
+async def list_coding_rules(
+    request: Request,
+    keyword: Optional[str] = Query(None, description="搜索关键词"),
+    category: Optional[str] = Query(None, description="规则分类"),
+    severity: Optional[str] = Query(None, description="严重程度"),
+    source: Optional[str] = Query(None, description="规则来源"),
+):
+    """获取编码质控规则列表（从 JSON 文件加载）。"""
+    rules = _load_coding_rules()
+
+    # 筛选
+    if keyword:
+        kw = keyword.lower()
+        rules = [r for r in rules if kw in r.get("name", "").lower()
+                 or kw in r.get("description", "").lower()
+                 or kw in r.get("rule_id", "").lower()]
+    if category:
+        rules = [r for r in rules if r.get("category") == category]
+    if severity:
+        rules = [r for r in rules if r.get("severity") == severity]
+    if source:
+        rules = [r for r in rules if r.get("source") == source]
+
+    # 统计信息
+    all_rules = _load_coding_rules()
+    total_rule_count = sum(r.get("rule_count", 0) for r in all_rules)
+    categories_set = set(r.get("category") for r in all_rules)
+    severity_counts = {}
+    source_counts = {}
+    for r in all_rules:
+        s = r.get("severity", "info")
+        severity_counts[s] = severity_counts.get(s, 0) + 1
+        src = r.get("source", "unknown")
+        source_counts[src] = source_counts.get(src, 0) + 1
+
+    return success_response(
+        data={
+            "items": rules,
+            "total": len(rules),
+            "statistics": {
+                "total_types": len(all_rules),
+                "total_rule_count": total_rule_count,
+                "categories": len(categories_set),
+                "severity_counts": severity_counts,
+                "source_counts": source_counts,
+            }
+        },
+        message=f"获取编码质控规则成功（{len(rules)} 条）",
+        trace_id=get_trace_id(request),
+    )
+
+
 # ==================== 编码质控 API ====================
 
 from ..services.coding_qc_service import CodingQCEngine

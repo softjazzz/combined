@@ -1,27 +1,26 @@
-"""评分阈值配置 API — 管理甲乙丙等级的分数线"""
+"""
+评分阈值配置 API（PG 版）— 管理甲乙丙等级的分数线
 
+数据源：PostgreSQL scoring_config 表
+每条记录为一个 config_key（如 'grade_thresholds'）及其 JSON config_value。
+"""
+
+import json
+import logging
 import uuid
-from fastapi import APIRouter, Depends
-from fastapi import Request
+from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-def success_response(data=None, message="success", trace_id=""):
-    """兼容 utils 未就绪时的内联响应包装"""
-    return {"code": 200, "message": message, "data": data, "trace_id": trace_id}
-
-
-def get_trace_id(request: Request) -> str:
-    return request.headers.get("x-trace-id", str(uuid.uuid4())[:8])
-
-
-# 占位：auth 模块暂未实现，跳过认证
-async def get_current_user():
-    return {"user": "dev"}
+from ..core.supabase_client import get_supabase, async_execute
+from ..core.response import success_response, get_trace_id
+from ..core.security import get_current_user
 
 router = APIRouter(prefix="/api/v1/scoring-config", tags=["evaluator-config"])
+logger = logging.getLogger(__name__)
 
-# ========== 内存存储 ==========
-_scoring_config = {
+# 默认配置（当 PG 表为空时作为 seed 数据的模板）
+_DEFAULT_CONFIG = {
     "grade_thresholds": {
         "甲": {"min_score": 90, "label": "甲级", "color": "#52c41a", "description": "病历质量优秀"},
         "乙": {"min_score": 70, "label": "乙级", "color": "#faad14", "description": "病历质量合格"},
@@ -37,9 +36,67 @@ _scoring_config = {
 }
 
 
+def _ensure_db():
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    return sb
+
+
+async def _load_config(sb) -> dict:
+    """从 PG 加载所有 scoring_config 行组装为完整配置 dict。"""
+    resp = await async_execute(sb.table('scoring_config').select('*'))
+    rows = list(getattr(resp, 'data', None) or [])
+    if not rows:
+        return dict(_DEFAULT_CONFIG)
+
+    config = {}
+    for row in rows:
+        key = row.get('config_key', '')
+        raw = row.get('config_value', '{}')
+        try:
+            config[key] = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            config[key] = raw
+    # 补全不存在于 PG 的默认键
+    for k, v in _DEFAULT_CONFIG.items():
+        if k not in config:
+            config[k] = v
+    return config
+
+
+async def _save_config_key(sb, key: str, value, user_id: str = "system"):
+    """保存/更新单个 config_key 到 PG。"""
+    val_str = json.dumps(value, ensure_ascii=False, default=str)
+    now = datetime.now().isoformat()
+
+    # 尝试更新
+    resp = await async_execute(
+        sb.table('scoring_config').update({
+            "config_value": val_str,
+            "updated_by": user_id,
+            "updated_at": now,
+        }).eq('config_key', key).select()
+    )
+    if getattr(resp, 'data', None):
+        return
+
+    # 不存在则插入
+    await async_execute(
+        sb.table('scoring_config').insert({
+            "id": str(uuid.uuid4()),
+            "config_key": key,
+            "config_value": val_str,
+            "description": "",
+            "updated_by": user_id,
+            "updated_at": now,
+        })
+    )
+
+
 def get_grade(score: int) -> str:
-    """根据配置的阈值计算等级"""
-    thresholds = _scoring_config["grade_thresholds"]
+    """根据默认阈值计算等级（同步辅助函数，供其他模块调用）。"""
+    thresholds = _DEFAULT_CONFIG["grade_thresholds"]
     if score >= thresholds["甲"]["min_score"]:
         return "甲"
     elif score >= thresholds["乙"]["min_score"]:
@@ -49,61 +106,87 @@ def get_grade(score: int) -> str:
 
 
 @router.get("")
-async def get_scoring_config(request: Request, _user=Depends(get_current_user)):
+async def get_scoring_config(request: Request, current_user: dict = Depends(get_current_user)):
     """获取当前评分阈值配置"""
-    return success_response(
-        data=_scoring_config,
-        message="获取评分配置成功",
-        trace_id=get_trace_id(request),
-    )
+    sb = _ensure_db()
+    try:
+        config = await _load_config(sb)
+        return success_response(data=config, message="获取评分配置成功", trace_id=get_trace_id(request))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取评分配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取评分配置失败: {str(e)}")
 
 
 @router.put("")
-async def update_scoring_config(request: Request, _user=Depends(get_current_user)):
+async def update_scoring_config(request: Request, current_user: dict = Depends(get_current_user)):
     """更新评分阈值配置"""
+    sb = _ensure_db()
     body = await request.json()
+    user_id = current_user.get("id") or current_user.get("user_id") or "system"
 
-    # 更新等级阈值
-    if "grade_thresholds" in body:
-        for grade, config in body["grade_thresholds"].items():
-            if grade in _scoring_config["grade_thresholds"]:
-                _scoring_config["grade_thresholds"][grade].update(config)
+    try:
+        config = await _load_config(sb)
 
-    # 更新扣分规则
-    if "deduction_rules" in body:
-        for severity, config in body["deduction_rules"].items():
-            if severity in _scoring_config["deduction_rules"]:
-                _scoring_config["deduction_rules"][severity].update(config)
+        # 合并更新
+        if "grade_thresholds" in body:
+            for grade, cfg in body["grade_thresholds"].items():
+                if grade in config.get("grade_thresholds", {}):
+                    config["grade_thresholds"][grade].update(cfg)
+            await _save_config_key(sb, "grade_thresholds", config["grade_thresholds"], user_id)
 
-    # 更新基础分/及格线
-    if "base_score" in body:
-        _scoring_config["base_score"] = body["base_score"]
-    if "pass_score" in body:
-        _scoring_config["pass_score"] = body["pass_score"]
+        if "deduction_rules" in body:
+            for sev, cfg in body["deduction_rules"].items():
+                if sev in config.get("deduction_rules", {}):
+                    config["deduction_rules"][sev].update(cfg)
+            await _save_config_key(sb, "deduction_rules", config["deduction_rules"], user_id)
 
-    return success_response(
-        data=_scoring_config,
-        message="评分配置更新成功",
-        trace_id=get_trace_id(request),
-    )
+        for key in ("base_score", "pass_score"):
+            if key in body:
+                config[key] = body[key]
+                await _save_config_key(sb, key, body[key], user_id)
+
+        return success_response(data=config, message="评分配置更新成功", trace_id=get_trace_id(request))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新评分配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新评分配置失败: {str(e)}")
 
 
 @router.post("/preview")
-async def preview_grade(request: Request, _user=Depends(get_current_user)):
+async def preview_grade(request: Request, current_user: dict = Depends(get_current_user)):
     """预览分数对应的等级"""
+    sb = _ensure_db()
     body = await request.json()
     score = body.get("score", 0)
-    grade = get_grade(score)
-    threshold_info = _scoring_config["grade_thresholds"][grade]
 
-    return success_response(
-        data={
-            "score": score,
-            "grade": grade,
-            "label": threshold_info["label"],
-            "color": threshold_info["color"],
-            "description": threshold_info["description"],
-        },
-        message="等级预览成功",
-        trace_id=get_trace_id(request),
-    )
+    try:
+        config = await _load_config(sb)
+        thresholds = config.get("grade_thresholds", _DEFAULT_CONFIG["grade_thresholds"])
+
+        if score >= thresholds["甲"]["min_score"]:
+            grade = "甲"
+        elif score >= thresholds["乙"]["min_score"]:
+            grade = "乙"
+        else:
+            grade = "丙"
+
+        info = thresholds[grade]
+        return success_response(
+            data={
+                "score": score,
+                "grade": grade,
+                "label": info.get("label", ""),
+                "color": info.get("color", ""),
+                "description": info.get("description", ""),
+            },
+            message="等级预览成功",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"等级预览失败: {e}")
+        raise HTTPException(status_code=500, detail=f"等级预览失败: {str(e)}")
