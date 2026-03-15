@@ -87,22 +87,10 @@ async def _update_defect_status(defect_id: str, status: str, extra_fields: Dict 
             if db_data:
                 return db_data[0]
         except Exception as e:
-            logger.warning(f"Supabase 更新缺陷状态失败，回退到内存模式: {e}")
+            logger.error(f"更新缺陷状态失败: {e}")
+            raise HTTPException(status_code=500, detail=f"更新缺陷状态失败: {str(e)}")
 
-    # 内存回退：模拟状态更新（演示模式）
-    from ..storage.memory import qc_results_db
-    for rid, result in qc_results_db.items():
-        issues = result.get("issues", [])
-        for issue in issues:
-            if issue.get("id") == defect_id:
-                issue["status"] = status
-                if extra_fields:
-                    issue.update(extra_fields)
-                update_data["record_id"] = rid
-                return update_data
-
-    # 未找到也返回模拟成功（兼容演示场景）
-    return update_data
+    raise HTTPException(status_code=503, detail="数据库不可用")
 
 
 async def _record_defect_action(
@@ -160,57 +148,8 @@ async def list_defects(
     """
     sb = get_supabase()
     if sb is None:
-        # 回退：返回内存中的质控结果缺陷
-        from ..storage.memory import qc_results_db
-        all_defects = []
-        for rid, result in qc_results_db.items():
-            issues = result.get("issues", [])
-            for issue in issues:
-                defect = {
-                    "id": issue.get("id", str(uuid.uuid4())),
-                    "record_id": rid,
-                    "rule_name": issue.get("rule_name", ""),
-                    "description": issue.get("description", ""),
-                    "severity": issue.get("severity", "warning"),
-                    "category": issue.get("category", "other"),
-                    "location": issue.get("location", ""),
-                    "suggestion": issue.get("suggestion", ""),
-                    "status": "pending",
-                    "created_at": result.get("analysis_date", datetime.now().isoformat()),
-                }
-                all_defects.append(defect)
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
-        # 应用筛选
-        if record_id:
-            all_defects = [d for d in all_defects if d["record_id"] == record_id]
-        if severity:
-            all_defects = [d for d in all_defects if d["severity"] == severity]
-        if category:
-            all_defects = [d for d in all_defects if d["category"] == category]
-        if status:
-            all_defects = [d for d in all_defects if d["status"] == status]
-        if keyword:
-            kw = keyword.lower()
-            all_defects = [
-                d for d in all_defects
-                if kw in d.get("rule_name", "").lower()
-                or kw in d.get("description", "").lower()
-            ]
-
-        total = len(all_defects)
-        offset = (page - 1) * page_size
-        items = all_defects[offset:offset + page_size]
-
-        return paginated_response(
-            items=items,
-            total=total,
-            page=page,
-            page_size=page_size,
-            message=f"获取缺陷列表成功（共 {total} 条）",
-            trace_id=get_trace_id(request),
-        )
-
-    # Supabase 查询
     try:
         query = sb.table('qc_defects').select('*', count='exact')
         if record_id:
@@ -240,40 +179,6 @@ async def list_defects(
         data = list(getattr(resp, 'data', None) or [])
         total = getattr(resp, 'count', None) or len(data)
 
-        # 若数据库无结果，补充内存中 QC 分析产生的缺陷
-        if not data:
-            from ..storage.memory import qc_results_db
-            mem_defects = []
-            for rid, result in qc_results_db.items():
-                issues = result.get("issues", [])
-                for issue in issues:
-                    defect = {
-                        "id": issue.get("id", str(uuid.uuid4())),
-                        "record_id": rid,
-                        "rule_name": issue.get("rule_name", ""),
-                        "description": issue.get("description", ""),
-                        "severity": issue.get("severity", "warning"),
-                        "category": issue.get("category", "other"),
-                        "location": issue.get("location", ""),
-                        "suggestion": issue.get("suggestion", ""),
-                        "status": issue.get("status", "pending"),
-                        "created_at": result.get("analysis_date", datetime.now().isoformat()),
-                    }
-                    mem_defects.append(defect)
-            if mem_defects:
-                # 应用筛选
-                if record_id:
-                    mem_defects = [d for d in mem_defects if d["record_id"] == record_id]
-                if severity:
-                    mem_defects = [d for d in mem_defects if d["severity"] == severity]
-                if category:
-                    mem_defects = [d for d in mem_defects if d["category"] == category]
-                if status:
-                    mem_defects = [d for d in mem_defects if d["status"] == status]
-                total = len(mem_defects)
-                offset_mem = (page - 1) * page_size
-                data = mem_defects[offset_mem:offset_mem + page_size]
-
         return paginated_response(
             items=data,
             total=total,
@@ -284,14 +189,7 @@ async def list_defects(
         )
     except Exception as e:
         logger.error(f"查询缺陷列表失败: {e}")
-        return paginated_response(
-            items=[],
-            total=0,
-            page=page,
-            page_size=page_size,
-            message=f"查询失败: {str(e)}",
-            trace_id=get_trace_id(request),
-        )
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
 
 
 # ============================
@@ -648,37 +546,42 @@ async def get_defect_stats(
     获取缺陷统计数据
     """
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
-    # 回退：从内存质控结果聚合统计
-    from ..storage.memory import qc_results_db
-    all_defects = []
-    for rid, result in qc_results_db.items():
-        if record_id and rid != record_id:
-            continue
-        issues = result.get("issues", [])
-        for issue in issues:
-            all_defects.append({
-                "severity": issue.get("severity", "warning"),
-                "category": issue.get("category", "other"),
-                "status": "pending",
-            })
+    try:
+        query = sb.table('qc_defects').select('severity,category,status')
+        if record_id:
+            query = query.eq('record_id', record_id)
+        if department:
+            query = query.eq('department', department)
+        if start_date:
+            query = query.gte('created_at', start_date)
+        if end_date:
+            query = query.lte('created_at', end_date)
+
+        resp = await async_execute(query)
+        all_defects = list(getattr(resp, 'data', None) or [])
+    except Exception as e:
+        logger.error(f"查询缺陷统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
 
     # 按严重程度统计
     severity_stats = {}
     for d in all_defects:
-        sev = d["severity"]
+        sev = d.get("severity", "unknown")
         severity_stats[sev] = severity_stats.get(sev, 0) + 1
 
     # 按分类统计
     category_stats = {}
     for d in all_defects:
-        cat = d["category"]
+        cat = d.get("category", "other")
         category_stats[cat] = category_stats.get(cat, 0) + 1
 
     # 按状态统计
     status_stats = {}
     for d in all_defects:
-        st = d["status"]
+        st = d.get("status", "unknown")
         status_stats[st] = status_stats.get(st, 0) + 1
 
     return success_response(

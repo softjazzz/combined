@@ -42,9 +42,6 @@ from ..core.permissions import (
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 logger = logging.getLogger(__name__)
 
-# 内存存储（Supabase 不可用时的回退）
-_tasks_memory: Dict[str, Dict] = {}
-_task_records_memory: Dict[str, List[Dict]] = {}
 
 
 def _generate_task_number() -> str:
@@ -96,15 +93,15 @@ async def create_task(
     }
 
     sb = get_supabase()
-    if sb is not None:
-        try:
-            resp = await async_execute(sb.table('qc_tasks').insert(task))
-            task = (getattr(resp, 'data', None) or [task])[0]
-        except Exception as e:
-            logger.warning(f"Supabase 插入任务失败，回退到内存: {e}")
-            _tasks_memory[task_id] = task
-    else:
-        _tasks_memory[task_id] = task
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
+    try:
+        resp = await async_execute(sb.table('qc_tasks').insert(task))
+        task = (getattr(resp, 'data', None) or [task])[0]
+    except Exception as e:
+        logger.error(f"创建任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
 
     return success_response(
         data=task,
@@ -134,72 +131,53 @@ async def list_tasks(
     user_id = current_user.get("user_id", "")
 
     sb = get_supabase()
-    if sb is not None:
-        try:
-            query = sb.table('qc_tasks').select('*', count='exact')
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
-            if tab == "created":
-                query = query.eq('creator_id', user_id)
-            elif tab == "received":
-                # 收到的任务：在 qc_task_records 中有分配记录
-                # 先查出分配给当前用户的 task_id
-                assigned_resp = await async_execute(
-                    sb.table('qc_task_records')
-                    .select('task_id')
-                    .eq('assignee_id', user_id)
-                )
-                assigned_task_ids = list(set(
-                    r.get('task_id') for r in (getattr(assigned_resp, 'data', None) or [])
-                    if r.get('task_id')
-                ))
-                if assigned_task_ids:
-                    query = query.in_('id', assigned_task_ids)
-                else:
-                    return paginated_response(
-                        items=[], total=0, page=page, page_size=page_size,
-                        message="暂无收到的任务", trace_id=get_trace_id(request),
-                    )
+    try:
+        query = sb.table('qc_tasks').select('*', count='exact')
 
-            if status:
-                query = query.eq('status', status)
-            if keyword:
-                query = query.or_(
-                    f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
-                )
-
-            offset = (page - 1) * page_size
-            query = query.order('created_at', desc=True).range(offset, offset + page_size - 1)
-
-            resp = await async_execute(query)
-            data = list(getattr(resp, 'data', None) or [])
-            total = getattr(resp, 'count', None) or len(data)
-
-            return paginated_response(
-                items=data, total=total, page=page, page_size=page_size,
-                message="获取任务列表成功", trace_id=get_trace_id(request),
+        if tab == "created":
+            query = query.eq('creator_id', user_id)
+        elif tab == "received":
+            assigned_resp = await async_execute(
+                sb.table('qc_task_records')
+                .select('task_id')
+                .eq('assignee_id', user_id)
             )
-        except Exception as e:
-            logger.warning(f"Supabase 查询任务失败: {e}")
+            assigned_task_ids = list(set(
+                r.get('task_id') for r in (getattr(assigned_resp, 'data', None) or [])
+                if r.get('task_id')
+            ))
+            if assigned_task_ids:
+                query = query.in_('id', assigned_task_ids)
+            else:
+                return paginated_response(
+                    items=[], total=0, page=page, page_size=page_size,
+                    message="暂无收到的任务", trace_id=get_trace_id(request),
+                )
 
-    # 回退到内存
-    tasks = list(_tasks_memory.values())
-    if tab == "created":
-        tasks = [t for t in tasks if t.get("creator_id") == user_id]
-    if status:
-        tasks = [t for t in tasks if t.get("status") == status]
-    if keyword:
-        kw = keyword.lower()
-        tasks = [t for t in tasks if kw in t.get("task_name", "").lower() or kw in t.get("task_number", "").lower()]
+        if status:
+            query = query.eq('status', status)
+        if keyword:
+            query = query.or_(
+                f"task_name.ilike.%{keyword}%,task_number.ilike.%{keyword}%"
+            )
 
-    tasks.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-    total = len(tasks)
-    offset = (page - 1) * page_size
-    items = tasks[offset:offset + page_size]
+        offset = (page - 1) * page_size
+        query = query.order('created_at', desc=True).range(offset, offset + page_size - 1)
 
-    return paginated_response(
-        items=items, total=total, page=page, page_size=page_size,
-        message="获取任务列表成功", trace_id=get_trace_id(request),
-    )
+        resp = await async_execute(query)
+        data = list(getattr(resp, 'data', None) or [])
+        total = getattr(resp, 'count', None) or len(data)
+
+        return paginated_response(
+            items=data, total=total, page=page, page_size=page_size,
+            message="获取任务列表成功", trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        logger.error(f"查询任务列表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
 
 
 # ============================
@@ -216,25 +194,21 @@ async def get_task_stats(
     获取任务统计数据（各状态数量）
     """
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
     status_counts = {}
-
-    if sb is not None:
-        try:
-            resp = await async_execute(
-                sb.table('qc_tasks').select('status', count='exact')
-            )
-            rows = list(getattr(resp, 'data', None) or [])
-            for r in rows:
-                st = r.get('status', 'unknown')
-                status_counts[st] = status_counts.get(st, 0) + 1
-        except Exception as e:
-            logger.warning(f"获取任务统计失败: {e}")
-
-    if not status_counts:
-        # 从内存聚合
-        for task in _tasks_memory.values():
-            st = task.get("status", "unknown")
+    try:
+        resp = await async_execute(
+            sb.table('qc_tasks').select('status', count='exact')
+        )
+        rows = list(getattr(resp, 'data', None) or [])
+        for r in rows:
+            st = r.get('status', 'unknown')
             status_counts[st] = status_counts.get(st, 0) + 1
+    except Exception as e:
+        logger.error(f"获取任务统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取任务统计失败: {str(e)}")
 
     total = sum(status_counts.values())
 
@@ -267,33 +241,31 @@ async def get_task_detail(
     获取任务详情 + 包含的病历列表
     """
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
     task = None
     records = []
 
-    if sb is not None:
+    try:
+        resp = await async_execute(
+            sb.table('qc_tasks').select('*').eq('id', task_id).single()
+        )
+        task = getattr(resp, 'data', None)
+    except Exception:
+        pass
+
+    if task:
         try:
             resp = await async_execute(
-                sb.table('qc_tasks').select('*').eq('id', task_id).single()
+                sb.table('qc_task_records')
+                .select('*')
+                .eq('task_id', task_id)
+                .order('created_at')
             )
-            task = getattr(resp, 'data', None)
+            records = list(getattr(resp, 'data', None) or [])
         except Exception:
             pass
-
-        if task:
-            try:
-                resp = await async_execute(
-                    sb.table('qc_task_records')
-                    .select('*')
-                    .eq('task_id', task_id)
-                    .order('created_at')
-                )
-                records = list(getattr(resp, 'data', None) or [])
-            except Exception:
-                pass
-
-    if task is None:
-        task = _tasks_memory.get(task_id)
-        records = _task_records_memory.get(task_id, [])
 
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -332,25 +304,18 @@ async def update_task(
             update_fields[key] = update_fields[key].value
 
     sb = get_supabase()
-    if sb is not None:
-        try:
-            resp = await async_execute(
-                sb.table('qc_tasks').update(update_fields).eq('id', task_id)
-            )
-            data = (getattr(resp, 'data', None) or [{}])[0]
-            return success_response(data=data, message="任务更新成功", trace_id=get_trace_id(request))
-        except Exception as e:
-            logger.warning(f"Supabase 更新失败: {e}")
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
-    if task_id in _tasks_memory:
-        _tasks_memory[task_id].update(update_fields)
-        return success_response(
-            data=_tasks_memory[task_id],
-            message="任务更新成功",
-            trace_id=get_trace_id(request),
+    try:
+        resp = await async_execute(
+            sb.table('qc_tasks').update(update_fields).eq('id', task_id)
         )
-
-    raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+        data = (getattr(resp, 'data', None) or [{}])[0]
+        return success_response(data=data, message="任务更新成功", trace_id=get_trace_id(request))
+    except Exception as e:
+        logger.error(f"更新任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
 
 
 # ============================
@@ -371,19 +336,17 @@ async def execute_sampling(
 
     # 获取任务信息
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
     task = None
-
-    if sb is not None:
-        try:
-            resp = await async_execute(
-                sb.table('qc_tasks').select('*').eq('id', task_id).single()
-            )
-            task = getattr(resp, 'data', None)
-        except Exception:
-            pass
-
-    if task is None:
-        task = _tasks_memory.get(task_id)
+    try:
+        resp = await async_execute(
+            sb.table('qc_tasks').select('*').eq('id', task_id).single()
+        )
+        task = getattr(resp, 'data', None)
+    except Exception:
+        pass
 
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -407,14 +370,12 @@ async def execute_sampling(
         task_records.append(tr)
 
     # 保存到数据库
-    if sb is not None and task_records:
+    if task_records:
         try:
             await async_execute(sb.table('qc_task_records').insert(task_records))
         except Exception as e:
-            logger.warning(f"保存任务病历关联失败: {e}")
-            _task_records_memory[task_id] = task_records
-    else:
-        _task_records_memory[task_id] = task_records
+            logger.error(f"保存任务病历关联失败: {e}")
+            raise HTTPException(status_code=500, detail=f"保存抽样结果失败: {str(e)}")
 
     # 更新任务状态
     update_data = {
@@ -422,20 +383,16 @@ async def execute_sampling(
         "total_records": len(task_records),
         "updated_at": datetime.now().isoformat(),
     }
-
-    if sb is not None:
-        try:
-            await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-        except Exception:
-            pass
-    if task_id in _tasks_memory:
-        _tasks_memory[task_id].update(update_data)
+    try:
+        await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
+    except Exception:
+        pass
 
     return success_response(
         data={
             "task_id": task_id,
             "sampled_count": len(task_records),
-            "records": task_records[:20],  # 只返回前20条预览
+            "records": task_records[:20],
         },
         message=f"抽样完成，共抽取 {len(task_records)} 条病历",
         trace_id=get_trace_id(request),
@@ -458,23 +415,21 @@ async def assign_task(
     分配任务 — 将抽样好的病历分配给质控员
     """
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
     # 获取任务下所有待分配病历
     records = []
-    if sb is not None:
-        try:
-            resp = await async_execute(
-                sb.table('qc_task_records')
-                .select('*')
-                .eq('task_id', task_id)
-                .eq('status', 'pending')
-            )
-            records = list(getattr(resp, 'data', None) or [])
-        except Exception:
-            pass
-
-    if not records:
-        records = [r for r in _task_records_memory.get(task_id, []) if r.get('status') == 'pending']
+    try:
+        resp = await async_execute(
+            sb.table('qc_task_records')
+            .select('*')
+            .eq('task_id', task_id)
+            .eq('status', 'pending')
+        )
+        records = list(getattr(resp, 'data', None) or [])
+    except Exception:
+        pass
 
     if not records:
         raise HTTPException(status_code=400, detail="没有待分配的病历，请先执行抽样")
@@ -503,29 +458,25 @@ async def assign_task(
                 idx += 1
 
     # 更新数据库
-    if sb is not None:
-        for update in updates:
-            try:
-                await async_execute(
-                    sb.table('qc_task_records')
-                    .update({"assignee_id": update["assignee_id"], "assignee_name": update["assignee_name"]})
-                    .eq('id', update["id"])
-                )
-            except Exception:
-                pass
+    for update in updates:
+        try:
+            await async_execute(
+                sb.table('qc_task_records')
+                .update({"assignee_id": update["assignee_id"], "assignee_name": update["assignee_name"]})
+                .eq('id', update["id"])
+            )
+        except Exception:
+            pass
 
     # 更新任务状态为已分配
     status_update = {
         "status": TaskStatus.ASSIGNED.value,
         "updated_at": datetime.now().isoformat(),
     }
-    if sb is not None:
-        try:
-            await async_execute(sb.table('qc_tasks').update(status_update).eq('id', task_id))
-        except Exception:
-            pass
-    if task_id in _tasks_memory:
-        _tasks_memory[task_id].update(status_update)
+    try:
+        await async_execute(sb.table('qc_tasks').update(status_update).eq('id', task_id))
+    except Exception:
+        pass
 
     # 汇总分配结果
     assignment_summary = {}
@@ -558,49 +509,20 @@ async def get_task_progress(
 ):
     """获取任务执行进度"""
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
-    if sb is not None:
-        try:
-            # 使用视图
-            resp = await async_execute(
-                sb.table('v_qc_task_progress').select('*').eq('task_id', task_id).single()
-            )
-            data = getattr(resp, 'data', None)
-            if data:
-                return success_response(data=data, message="获取进度成功", trace_id=get_trace_id(request))
-        except Exception as e:
-            logger.warning(f"查询任务进度视图失败: {e}")
+    try:
+        resp = await async_execute(
+            sb.table('v_qc_task_progress').select('*').eq('task_id', task_id).single()
+        )
+        data = getattr(resp, 'data', None)
+        if data:
+            return success_response(data=data, message="获取进度成功", trace_id=get_trace_id(request))
+    except Exception as e:
+        logger.warning(f"查询任务进度视图失败: {e}")
 
-    # 回退：从内存计算
-    task = _tasks_memory.get(task_id)
-    records = _task_records_memory.get(task_id, [])
-
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
-
-    total = len(records)
-    done = sum(1 for r in records if r.get("status") == "completed")
-    working = sum(1 for r in records if r.get("status") == "in_progress")
-    pending = sum(1 for r in records if r.get("status") == "pending")
-    scores = [r.get("score") for r in records if r.get("score") is not None]
-    total_defects = sum(r.get("defect_count", 0) for r in records)
-
-    return success_response(
-        data={
-            "task_id": task_id,
-            "task_name": task.get("task_name", ""),
-            "total_records": total,
-            "completed_records": done,
-            "progress_pct": round(done / max(total, 1) * 100, 1),
-            "pending_count": pending,
-            "working_count": working,
-            "done_count": done,
-            "avg_score": round(sum(scores) / max(len(scores), 1), 1) if scores else None,
-            "total_defects": total_defects,
-        },
-        message="获取进度成功",
-        trace_id=get_trace_id(request),
-    )
+    raise HTTPException(status_code=404, detail=f"任务 {task_id} 进度不存在")
 
 
 # ============================
@@ -618,31 +540,29 @@ async def re_analyze_task(
     对任务内所有病历重新执行质控分析
     """
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
     records = []
-
-    if sb is not None:
-        try:
-            resp = await async_execute(
-                sb.table('qc_task_records').select('record_id').eq('task_id', task_id)
-            )
-            records = list(getattr(resp, 'data', None) or [])
-        except Exception:
-            pass
-
-    if not records:
-        records = _task_records_memory.get(task_id, [])
+    try:
+        resp = await async_execute(
+            sb.table('qc_task_records').select('record_id').eq('task_id', task_id)
+        )
+        records = list(getattr(resp, 'data', None) or [])
+    except Exception:
+        pass
 
     record_ids = [r.get("record_id") for r in records if r.get("record_id")]
 
     if not record_ids:
         raise HTTPException(status_code=400, detail="任务中没有病历")
 
-    # 触发批量质控（异步，通过已有的 QC 服务）
+    # 触发批量质控
     from ..services.qc_service import QCService
     qc_service = QCService()
 
     started = []
-    for rid in record_ids[:50]:  # 限制单次最多50条
+    for rid in record_ids[:50]:
         try:
             result = await qc_service.evaluate({"record_id": rid})
             started.append({"record_id": rid, "status": "started"})
@@ -656,13 +576,10 @@ async def re_analyze_task(
         "progress": 0,
         "updated_at": datetime.now().isoformat(),
     }
-    if sb is not None:
-        try:
-            await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-        except Exception:
-            pass
-    if task_id in _tasks_memory:
-        _tasks_memory[task_id].update(update_data)
+    try:
+        await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
+    except Exception:
+        pass
 
     return success_response(
         data={
@@ -689,18 +606,13 @@ async def delete_task(
 ):
     """删除任务（仅限管理员和质控主管）"""
     sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
 
-    if sb is not None:
-        try:
-            await async_execute(sb.table('qc_tasks').delete().eq('id', task_id))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
-    else:
-        if task_id in _tasks_memory:
-            del _tasks_memory[task_id]
-            _task_records_memory.pop(task_id, None)
-        else:
-            raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+    try:
+        await async_execute(sb.table('qc_tasks').delete().eq('id', task_id))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
     return success_response(
         data={"task_id": task_id},
@@ -723,16 +635,13 @@ async def cancel_task(
     }
 
     sb = get_supabase()
-    if sb is not None:
-        try:
-            await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"取消失败: {str(e)}")
-    else:
-        if task_id in _tasks_memory:
-            _tasks_memory[task_id].update(update_data)
-        else:
-            raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+
+    try:
+        await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"取消失败: {str(e)}")
 
     return success_response(
         data={"task_id": task_id, "status": TaskStatus.CANCELLED.value},
