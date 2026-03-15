@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import type { IcdApplyTarget } from '../types'
 
-type ViewMode = 'list' | 'detail'
+type ViewMode = 'list' | 'detail' | 'rules'
 type AssistTabKey = 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PersistedState {

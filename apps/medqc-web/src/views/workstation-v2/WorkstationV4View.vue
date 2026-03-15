@@ -38,6 +38,21 @@
           </div>
         </div>
 
+        <!-- 底部：质控规则入口 -->
+        <div class="flex-shrink-0 border-t border-slate-100 dark:border-slate-800 px-2 py-2.5">
+          <div
+            @click="viewMode = 'rules'"
+            :class="[
+              'flex items-center gap-2.5 px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
+              viewMode === 'rules'
+                ? 'bg-blue-100 text-blue-700 font-bold dark:bg-blue-500/20 dark:text-blue-300 shadow-sm ring-1 ring-blue-200'
+                : 'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
+            ]"
+          >
+            <SafetyCertificateOutlined class="text-base" />
+            <span>质控规则</span>
+          </div>
+        </div>
       </aside>
 
       <!-- 右侧主内容 -->
@@ -211,7 +226,7 @@
     </template>
 
     <!-- ====== 详情模式（全屏） ====== -->
-    <template v-else>
+    <template v-else-if="viewMode === 'detail'">
       <div class="flex-1 flex flex-col min-w-0 h-full">
         <!-- 详情顶部栏 -->
         <header class="h-14 flex items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-900">
@@ -1011,6 +1026,96 @@
         </a-drawer>
       </div>
     </template>
+
+    <!-- ====== 质控规则模式 ====== -->
+    <template v-else-if="viewMode === 'rules'">
+      <aside class="w-56 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 flex flex-col bg-slate-50/70 dark:bg-slate-900">
+        <div class="h-14 flex items-center gap-2.5 px-5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+          <MedicineBoxOutlined class="text-blue-500 text-lg" />
+          <span class="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight">病案工作台</span>
+        </div>
+        <div class="flex-1 overflow-y-auto py-2.5 custom-scrollbar">
+          <div
+            v-for="dept in departments"
+            :key="dept.name"
+            @click="viewMode = 'list'; selectDept(dept.name)"
+            :class="[
+              'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
+              'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
+            ]"
+          >
+            <span class="truncate">{{ dept.name }}</span>
+            <div class="flex items-center gap-1.5">
+              <span
+                v-if="dept.warningCount > 0"
+                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1"
+              >{{ dept.warningCount }}</span>
+              <span class="min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+              >{{ dept.total }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex-shrink-0 border-t border-slate-100 dark:border-slate-800 px-2 py-2.5">
+          <div class="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-sm bg-blue-100 text-blue-700 font-bold shadow-sm ring-1 ring-blue-200">
+            <SafetyCertificateOutlined class="text-base" />
+            <span>质控规则</span>
+          </div>
+        </div>
+      </aside>
+      <main class="flex-1 flex flex-col min-w-0 bg-slate-50/40 dark:bg-slate-900 overflow-y-auto">
+        <header class="px-8 pt-6 pb-4 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800 dark:text-white tracking-tight">质控规则管理</h2>
+              <p class="text-sm text-slate-500 mt-1">{{ rulesSubTabDescription }}</p>
+            </div>
+            <button
+              @click="viewMode = 'list'"
+              class="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50"
+            >
+              <LeftOutlined />
+              返回病历列表
+            </button>
+          </div>
+          <nav class="mt-4 -mb-px flex space-x-6 border-b border-slate-200 dark:border-slate-700">
+            <a
+              v-for="tab in rulesSubTabs"
+              :key="tab.key"
+              href="#"
+              @click.prevent="rulesSubTab = tab.key"
+              :class="[
+                rulesSubTab === tab.key
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300',
+                'whitespace-nowrap pb-3 border-b-2 font-semibold text-sm flex items-center gap-1.5 transition-colors'
+              ]"
+            >
+              <component :is="tab.icon" />
+              {{ tab.label }}
+            </a>
+          </nav>
+        </header>
+        <div class="flex-1 p-6">
+          <CodingRulesTab v-if="rulesSubTab === 'coding'" />
+          <div v-else-if="rulesSubTab === 'frontpage'" class="bg-white rounded-xl border border-slate-200 p-8 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+              <FileSearchOutlined class="text-3xl text-blue-400" />
+            </div>
+            <h3 class="text-lg font-bold text-slate-700 mb-2">首页质控规则</h3>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">基于病案首页数据的质控规则，自动校验首页字段的完整性、一致性和编码规范性。</p>
+            <a-tag color="blue" class="mt-4">规划中</a-tag>
+          </div>
+          <div v-else-if="rulesSubTab === 'settlement'" class="bg-white rounded-xl border border-slate-200 p-8 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+              <SafetyCertificateOutlined class="text-3xl text-emerald-400" />
+            </div>
+            <h3 class="text-lg font-bold text-slate-700 mb-2">医保结算清单质控规则</h3>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">针对医保结算清单数据的质控规则，覆盖必填项校验、逻辑一致性、编码合规性等检查维度。</p>
+            <a-tag color="blue" class="mt-4">规划中</a-tag>
+          </div>
+        </div>
+      </main>
+    </template>
   </div>
 </template>
 
@@ -1036,6 +1141,7 @@ import {
   NotificationOutlined,
   ScanOutlined,
   NodeIndexOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
 import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
@@ -1048,6 +1154,7 @@ import SettlementSheet from './components/SettlementSheet.vue'
 import FrontpageSheet from './components/FrontpageSheet.vue'
 import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
 import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
+import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
 import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
 import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
 import { useWorkstationSession } from './composables/useWorkstationSession'
@@ -1075,6 +1182,22 @@ const {
   goBackToList: backToList,
   resetPerRecordTransient,
 } = useWorkstationSession()
+
+// ========== 质控规则 Tab ==========
+const rulesSubTab = ref<'coding' | 'frontpage' | 'settlement'>('coding')
+const rulesSubTabs = [
+  { key: 'coding' as const, label: '编码质控规则', icon: MedicineBoxOutlined },
+  { key: 'frontpage' as const, label: '首页质控规则', icon: FileSearchOutlined },
+  { key: 'settlement' as const, label: '医保结算清单质控规则', icon: SafetyCertificateOutlined },
+]
+const rulesSubTabDescription = computed(() => {
+  const map: Record<string, string> = {
+    coding: '基于 ICD 编码规范的 18 类质控规则，覆盖 9.4 万+条编码数据。',
+    frontpage: '基于病案首页数据的质控规则，校验首页字段的完整性和一致性。',
+    settlement: '针对医保结算清单数据的质控规则，覆盖必填项校验及逻辑一致性。',
+  }
+  return map[rulesSubTab.value] || ''
+})
 
 // ========== 数据（从 API 加载） ==========
 const allRecords = ref<PatientRecord[]>([])
