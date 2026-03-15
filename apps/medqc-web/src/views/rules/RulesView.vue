@@ -1949,7 +1949,7 @@ const exportRules = async () => {
 onMounted(async () => {
   // 从 query 参数中读取标签页
   const tabFromQuery = route.query.tab as string
-  if (tabFromQuery && ['traditional', 'semantic', 'department'].includes(tabFromQuery)) {
+  if (tabFromQuery && ['coding', 'traditional', 'semantic', 'custom', 'lx_legacy', 'department', 'frontpage', 'settlement'].includes(tabFromQuery)) {
     activeTab.value = tabFromQuery
   }
 
