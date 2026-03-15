@@ -991,7 +991,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'rules',
         name: 'WorkstationV4Rules',
-        component: () => import('@/views/rules/RulesView.vue'),
+        component: () => import('@/views/workstation-v2/WorkstationRulesView.vue'),
         meta: { title: '质控规则管理' }
       },
       {
