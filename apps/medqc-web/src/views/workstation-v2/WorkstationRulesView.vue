@@ -31,24 +31,8 @@
     <!-- Tab 内容 -->
     <div class="flex-1 p-6">
       <CodingRulesTab v-if="activeTab === 'coding'" />
-
-      <div v-else-if="activeTab === 'frontpage'" class="bg-white rounded-xl border border-slate-200 p-8 text-center">
-        <div class="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
-          <FileSearchOutlined class="text-3xl text-blue-400" />
-        </div>
-        <h3 class="text-lg font-bold text-slate-700 mb-2">首页质控规则</h3>
-        <p class="text-sm text-slate-500 max-w-md mx-auto">基于病案首页数据的质控规则，自动校验首页字段的完整性、一致性和编码规范性。</p>
-        <a-tag color="blue" class="mt-4">规划中</a-tag>
-      </div>
-
-      <div v-else-if="activeTab === 'settlement'" class="bg-white rounded-xl border border-slate-200 p-8 text-center">
-        <div class="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
-          <SafetyCertificateOutlined class="text-3xl text-emerald-400" />
-        </div>
-        <h3 class="text-lg font-bold text-slate-700 mb-2">医保结算清单质控规则</h3>
-        <p class="text-sm text-slate-500 max-w-md mx-auto">针对医保结算清单数据的质控规则，覆盖必填项校验、逻辑一致性、编码合规性等检查维度。</p>
-        <a-tag color="blue" class="mt-4">规划中</a-tag>
-      </div>
+      <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
+      <SettlementRulesTab v-else-if="activeTab === 'settlement'" />
     </div>
   </div>
 </template>
@@ -62,6 +46,8 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
+import FrontpageRulesTab from '@/components/rules/FrontpageRulesTab.vue'
+import SettlementRulesTab from '@/components/rules/SettlementRulesTab.vue'
 
 const route = useRoute()
 const router = useRouter()

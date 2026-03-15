@@ -60,6 +60,26 @@ async def get_settlement_qc_rules():
     return svc.get_rules_summary()
 
 
+@router.get("/settlement/rules/list")
+async def list_settlement_qc_rules():
+    """获取结算清单质控规则平铺列表（用于前端展示）"""
+    svc = get_settlement_service()
+    engine = svc._qc_engine
+    rules_data = [
+        {
+            "rule_id": r.rule_id,
+            "field_name": r.field_name,
+            "rule_name": r.rule_name,
+            "description": r.description,
+            "severity": r.severity,
+            "category": r.category,
+            "affects_grouping": r.affects_grouping,
+        }
+        for r in engine.rules
+    ]
+    return {"success": True, "data": rules_data, "message": f"共 {len(rules_data)} 条结算清单质控规则"}
+
+
 # ============================================================
 # 草稿生成端点（不依赖 medical_insurance_settlement 表）
 # ============================================================
