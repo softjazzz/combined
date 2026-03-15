@@ -523,6 +523,8 @@ async def export_defects(
             filename=result["file_name"],
             media_type=result["media_type"],
         )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"导出缺陷列表失败: {e}")
         raise HTTPException(status_code=500, detail=f"导出失败: {str(e)}")
