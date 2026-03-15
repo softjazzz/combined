@@ -367,14 +367,57 @@ watch(
   display: none;
 }
 
-/* 子菜单容器 */
+/* 子菜单容器 — 深色内嵌 + 左侧蓝色连接线 */
 :deep(.ant-menu-sub.ant-menu-inline) {
-  background: rgba(0, 0, 0, 0.2) !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-radius: 0 0 8px 8px;
+  margin: 0 8px 4px 8px;
+  padding: 4px 0 4px 0 !important;
+  border-left: 2px solid rgba(59, 130, 246, 0.4);
+  margin-left: 24px;
 }
 
-/* 子菜单项缩进 */
-:deep(.ant-menu-inline .ant-menu-item) {
-  padding-left: 48px !important;
+/* 子菜单项 — 更紧凑、缩进更深、字体更小 */
+:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+  height: 36px !important;
+  line-height: 36px !important;
+  font-size: 13px !important;
+  padding-left: 20px !important;
+  margin: 1px 4px !important;
+  border-radius: 6px;
+  color: #94a3b8 !important;
+}
+
+/* 子菜单项图标缩小 */
+:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .anticon) {
+  font-size: 14px;
+}
+
+/* 子菜单项悬停 */
+:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item:hover) {
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* 子菜单项选中 */
+:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
+  background: rgba(37, 99, 235, 0.3) !important;
+  color: #93c5fd !important;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+/* 展开的父菜单标题高亮 */
+:deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  color: #e2e8f0 !important;
+}
+
+/* 展开箭头 */
+:deep(.ant-menu-submenu-arrow) {
+  color: #64748b !important;
+}
+:deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow) {
+  color: #93c5fd !important;
 }
 
 /* 图标样式 */
