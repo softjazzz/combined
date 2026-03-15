@@ -240,7 +240,9 @@ async def get_all(
             page_size=page_size,
             trace_id=get_trace_id(request),
         )
-    except Exception:
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).warning(f"[semantic_rules] 查询 qc_rules 失败: {e}")
         return _build_rules_list_response(
             items=[],
             total=0,

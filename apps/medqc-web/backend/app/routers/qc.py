@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 
 from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
-from ..storage.memory import qc_results_db, qc_rules_db
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
 from ..core.security import get_current_user
@@ -21,6 +20,31 @@ from ..core.permissions import (
 
 router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
+
+import logging as _logging
+logger = _logging.getLogger(__name__)
+
+
+async def _save_qc_result(record_id: str, result: Dict[str, Any]) -> None:
+    """将质控分析结果写入 PG qc_results 表。失败时记录日志但不阻塞主流程。"""
+    sb = get_supabase()
+    if sb is None:
+        logger.warning(f"[qc] 数据库不可用，qc_results 未持久化: record_id={record_id}")
+        return
+    try:
+        payload = {
+            "record_id": record_id,
+            "overall_score": result.get("overall_score") or result.get("score"),
+            "grade": result.get("grade"),
+            "status": result.get("status", "completed"),
+            "result_data": result,
+            "analyzer_version": result.get("version", "1.0"),
+        }
+        # 移除 None 值
+        payload = {k: v for k, v in payload.items() if v is not None}
+        await async_execute(sb.table("qc_results").insert(payload))
+    except Exception as e:
+        logger.warning(f"[qc] 写入 qc_results 失败（非阻塞）: {e}")
 
 
 @router.post("/analyze/batch")
@@ -41,13 +65,13 @@ async def analyze_batch(
             entry_payload = dict(entry)
             entry_payload["record_id"] = rid
             res = await service.evaluate(entry_payload)
-            qc_results_db[rid] = res
+            await _save_qc_result(rid, res)
             started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
     else:
         record_ids: List[str] = payload.get("record_ids", [])
         for rid in record_ids:
             res = await service.evaluate({"record_id": rid})
-            qc_results_db[rid] = res
+            await _save_qc_result(rid, res)
             started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
 
     return success_response(
@@ -72,7 +96,7 @@ async def analyze_record(
     request_payload = dict(payload or {})
     request_payload["record_id"] = record_id
     result = await service.evaluate(request_payload)
-    qc_results_db[record_id] = result
+    await _save_qc_result(record_id, result)
     analysis_id = result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
 
     return success_response(
@@ -89,14 +113,23 @@ async def analyze_record(
 @router.get("/result/{record_id}", response_model=QCResult)
 @require_permission(ResourceType.QC_RESULTS, PermissionAction.READ)
 async def get_result(record_id: str, current_user: dict = Depends(get_current_user)):
-    """获取质控结果"""
-    res = qc_results_db.get(record_id)
-    if not res:
+    """获取质控结果，从 PG qc_results 表读取"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    try:
+        resp = await async_execute(
+            sb.table('qc_results').select('*').eq('record_id', record_id).order('created_at', desc=True).limit(1)
+        )
+        data = list(getattr(resp, 'data', None) or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询质控结果失败: {str(e)}")
+    if not data:
         raise HTTPException(
             status_code=StatusCode.NOT_FOUND,
             detail="质控结果不存在"
         )
-    return res
+    return data[0]
 
 
 @router.get("/progress/{analysis_id}")
@@ -311,55 +344,87 @@ async def get_document_category_config(request: Request):
 
 @router.post("/rules", response_model=QCRule)
 @require_role([UserRole.ADMIN, UserRole.QC_MANAGER])
-async def create_rule(rule: QCRule, current_user: dict = Depends(get_current_user)):
-    """创建质控规则"""
-    if rule.id in qc_rules_db:
-        raise HTTPException(
-            status_code=StatusCode.BAD_REQUEST,
-            detail="质控规则已存在"
-        )
-    qc_rules_db[rule.id] = rule.model_dump()
-    return rule
+async def create_rule(rule: QCRule, request: Request, current_user: dict = Depends(get_current_user)):
+    """创建质控规则，委托到 semantic_rules.py 的 PG 实现"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    try:
+        body = rule.model_dump(exclude_none=True)
+        body.setdefault("is_active", True)
+        resp = sb.table("qc_rules").insert(body).execute()
+        data = (resp.data or [body])[0]
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建规则失败: {str(e)}")
 
 
 @router.put("/rules/{rule_id}", response_model=QCRule)
 @require_role([UserRole.ADMIN, UserRole.QC_MANAGER])
 async def update_rule(rule_id: str, rule: QCRule, current_user: dict = Depends(get_current_user)):
-    """更新质控规则"""
-    if rule_id not in qc_rules_db:
-        raise HTTPException(
-            status_code=StatusCode.NOT_FOUND,
-            detail="质控规则不存在"
-        )
-    qc_rules_db[rule_id] = rule.model_dump()
-    return rule
+    """更新质控规则，委托到 semantic_rules.py 的 PG 实现"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    try:
+        body = rule.model_dump(exclude_none=True)
+        resp = sb.table("qc_rules").update(body).eq("id", rule_id).execute()
+        data = resp.data or []
+        if not data:
+            resp2 = sb.table("qc_rules").update(body).eq("rule_code", rule_id).execute()
+            data = resp2.data or []
+        if not data:
+            raise HTTPException(status_code=404, detail="规则不存在")
+        return data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新规则失败: {str(e)}")
 
 
 @router.delete("/rules/{rule_id}")
 @require_admin()
 async def delete_rule(request: Request, rule_id: str, current_user: dict = Depends(get_current_user)):
-    """删除质控规则"""
-    if rule_id not in qc_rules_db:
-        raise HTTPException(
-            status_code=StatusCode.NOT_FOUND,
-            detail="质控规则不存在"
+    """删除质控规则，委托到 semantic_rules.py 的 PG 实现"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    try:
+        resp = sb.table("qc_rules").delete().eq("id", rule_id).execute()
+        rows = resp.data or []
+        if not rows:
+            resp2 = sb.table("qc_rules").delete().eq("rule_code", rule_id).execute()
+            rows = resp2.data or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="规则不存在")
+        return success_response(
+            data={"rule_id": rule_id},
+            message="质控规则删除成功",
+            trace_id=get_trace_id(request)
         )
-    del qc_rules_db[rule_id]
-    return success_response(
-        data={"rule_id": rule_id},
-        message="质控规则删除成功",
-        trace_id=get_trace_id(request)
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除规则失败: {str(e)}")
 
 
 @router.get("/history")
 async def get_history(request: Request):
-    """获取质控历史"""
-    # Simplified history: return all results summary
+    """获取质控历史，从 PG qc_results 表读取"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    try:
+        resp = await async_execute(
+            sb.table('qc_results').select('*').order('created_at', desc=True).limit(100)
+        )
+        items = list(getattr(resp, 'data', None) or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询历史失败: {str(e)}")
     return success_response(
         data={
-            "items": list(qc_results_db.values()),
-            "total": len(qc_results_db)
+            "items": items,
+            "total": len(items)
         },
         message="获取历史记录成功",
         trace_id=get_trace_id(request)

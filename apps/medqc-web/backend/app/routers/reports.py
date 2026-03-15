@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
+import logging
 from datetime import datetime
 from typing import List, Dict, Any
 import time
@@ -10,6 +11,8 @@ from ..core.response import success_response, error_response, get_trace_id, Erro
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..services.sichuan_qc_service import SichuanQCService
+
+logger = logging.getLogger(__name__)
 
 # naive in-memory cache for summary
 _QC_SUMMARY_CACHE: Dict[str, Any] | None = None
@@ -64,14 +67,14 @@ async def qc_summary(request: Request):
                 avg_list = [float(r.get("avg_qc_score", 0) or 0) for r in rows if r.get("avg_qc_score") is not None]
                 if avg_list:
                     totals["avg_qc_score"] = sum(avg_list) / len(avg_list)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[reports] 查询 qc_statistics_view 失败: {e}")
 
         try:
             rr = await async_execute(sb.table("qc_rules").select("*").eq("is_active", True).limit(1000))
             active_rules = len(rr.data or [])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[reports] 查询 qc_rules 失败: {e}")
 
     qc_stats = SichuanQCService().stats()
 

@@ -67,7 +67,7 @@ async def create_remediation_task(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -185,7 +185,7 @@ async def list_remediation_tasks(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -263,7 +263,7 @@ async def get_remediation_task(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -325,7 +325,7 @@ async def update_remediation_task(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -445,7 +445,7 @@ async def submit_remediation(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -550,7 +550,7 @@ async def review_remediation(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -663,7 +663,7 @@ async def close_remediation_task(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -766,7 +766,7 @@ async def get_remediation_statistics(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -857,7 +857,7 @@ async def get_assignee_workload(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -902,7 +902,7 @@ async def get_overdue_tasks(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 

@@ -63,7 +63,7 @@ async def create_appeal(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -165,7 +165,7 @@ async def list_appeals(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -235,7 +235,7 @@ async def get_appeal(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -297,7 +297,7 @@ async def update_appeal(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -399,7 +399,7 @@ async def withdraw_appeal(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -495,7 +495,7 @@ async def review_appeal(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
@@ -612,7 +612,7 @@ async def get_appeal_statistics(
 
     if not supabase:
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.SERVICE_UNAVAILABLE,
             detail="数据库连接失败"
         )
 
