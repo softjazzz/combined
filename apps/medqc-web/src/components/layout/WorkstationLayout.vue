@@ -72,6 +72,28 @@
           </a-menu-item>
         </a-sub-menu>
 
+        <!-- 质控规则 -->
+        <a-sub-menu key="qc-rules-sub" class="menu-item-base">
+          <template #icon>
+            <SafetyCertificateOutlined />
+          </template>
+          <template #title>
+            <span class="font-medium">质控规则</span>
+          </template>
+          <a-menu-item key="/dashboard/rules?tab=coding">
+            <template #icon><MedicineBoxOutlined /></template>
+            <span>编码质控规则</span>
+          </a-menu-item>
+          <a-menu-item key="/dashboard/rules?tab=frontpage">
+            <template #icon><FileSearchOutlined /></template>
+            <span>首页质控规则</span>
+          </a-menu-item>
+          <a-menu-item key="/dashboard/rules?tab=settlement">
+            <template #icon><DollarOutlined /></template>
+            <span>医保结算清单规则</span>
+          </a-menu-item>
+        </a-sub-menu>
+
         <!-- 数据上传 -->
         <a-menu-item key="/workstation-v2/upload" class="menu-item-base">
           <template #icon>
@@ -242,6 +264,7 @@ import {
   LogoutOutlined,
   MedicineBoxOutlined,
   DatabaseOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -273,7 +296,15 @@ const breadcrumbItems = computed(() => {
 
 // 方法
 const handleMenuSelect = ({ key }: { key: string }) => {
-  router.push(key)
+  if (key.includes('?')) {
+    const [path, queryStr] = key.split('?')
+    const params = new URLSearchParams(queryStr)
+    const query: Record<string, string> = {}
+    params.forEach((v, k) => { query[k] = v })
+    router.push({ path, query })
+  } else {
+    router.push(key)
+  }
 }
 
 const handleLogout = async () => {
