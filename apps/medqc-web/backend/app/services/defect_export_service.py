@@ -61,53 +61,21 @@ class DefectExportService:
         from ..core.supabase_client import get_supabase, async_execute
 
         sb = get_supabase()
+        if sb is None:
+            raise RuntimeError("数据库不可用")
 
-        if sb is not None:
-            try:
-                query = sb.table('qc_defects').select('*')
-                for key, value in filters.items():
-                    if key == "start_date":
-                        query = query.gte('created_at', value)
-                    elif key == "end_date":
-                        query = query.lte('created_at', value)
-                    else:
-                        query = query.eq(key, value)
+        query = sb.table('qc_defects').select('*')
+        for key, value in filters.items():
+            if key == "start_date":
+                query = query.gte('created_at', value)
+            elif key == "end_date":
+                query = query.lte('created_at', value)
+            else:
+                query = query.eq(key, value)
 
-                query = query.order('created_at', desc=True).limit(max_rows)
-                resp = await async_execute(query)
-                return list(getattr(resp, 'data', None) or [])
-            except Exception as e:
-                logger.warning(f"从数据库获取缺陷失败，回退到内存: {e}")
-
-        # 回退到内存数据
-        from ..storage.memory import qc_results_db
-        all_defects = []
-        for rid, result in qc_results_db.items():
-            if "record_id" in filters and rid != filters["record_id"]:
-                continue
-            issues = result.get("issues", [])
-            for issue in issues:
-                defect = {
-                    "record_id": rid,
-                    "patient_name": result.get("patient_name", ""),
-                    "department": result.get("department", ""),
-                    "rule_name": issue.get("rule_name", ""),
-                    "description": issue.get("description", ""),
-                    "severity": issue.get("severity", "warning"),
-                    "category": issue.get("category", "other"),
-                    "location": issue.get("location", ""),
-                    "suggestion": issue.get("suggestion", ""),
-                    "status": "pending",
-                    "created_at": result.get("analysis_date", ""),
-                }
-                all_defects.append(defect)
-
-        # 应用筛选
-        for key in ["severity", "category", "status", "department"]:
-            if key in filters:
-                all_defects = [d for d in all_defects if d.get(key) == filters[key]]
-
-        return all_defects[:max_rows]
+        query = query.order('created_at', desc=True).limit(max_rows)
+        resp = await async_execute(query)
+        return list(getattr(resp, 'data', None) or [])
 
     def _translate_row(self, row: Dict[str, Any]) -> Dict[str, str]:
         """翻译行数据为中文"""

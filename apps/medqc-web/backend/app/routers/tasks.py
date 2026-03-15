@@ -345,8 +345,8 @@ async def execute_sampling(
             sb.table('qc_tasks').select('*').eq('id', task_id).single()
         )
         task = getattr(resp, 'data', None)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"查询任务失败: {e}")
 
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")
@@ -385,8 +385,8 @@ async def execute_sampling(
     }
     try:
         await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"更新任务抽样状态失败（非阻塞）: {e}")
 
     return success_response(
         data={
@@ -428,8 +428,9 @@ async def assign_task(
             .eq('status', 'pending')
         )
         records = list(getattr(resp, 'data', None) or [])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"查询待分配病历失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询待分配病历失败: {str(e)}")
 
     if not records:
         raise HTTPException(status_code=400, detail="没有待分配的病历，请先执行抽样")
@@ -458,6 +459,7 @@ async def assign_task(
                 idx += 1
 
     # 更新数据库
+    fail_count = 0
     for update in updates:
         try:
             await async_execute(
@@ -465,8 +467,11 @@ async def assign_task(
                 .update({"assignee_id": update["assignee_id"], "assignee_name": update["assignee_name"]})
                 .eq('id', update["id"])
             )
-        except Exception:
-            pass
+        except Exception as e:
+            fail_count += 1
+            logger.warning(f"分配记录 {update['id']} 更新失败: {e}")
+    if fail_count:
+        logger.error(f"分配任务时 {fail_count}/{len(updates)} 条记录更新失败")
 
     # 更新任务状态为已分配
     status_update = {
@@ -475,8 +480,8 @@ async def assign_task(
     }
     try:
         await async_execute(sb.table('qc_tasks').update(status_update).eq('id', task_id))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"更新任务分配状态失败（非阻塞）: {e}")
 
     # 汇总分配结果
     assignment_summary = {}
@@ -549,8 +554,9 @@ async def re_analyze_task(
             sb.table('qc_task_records').select('record_id').eq('task_id', task_id)
         )
         records = list(getattr(resp, 'data', None) or [])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"查询任务病历失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询任务病历失败: {str(e)}")
 
     record_ids = [r.get("record_id") for r in records if r.get("record_id")]
 
@@ -578,8 +584,8 @@ async def re_analyze_task(
     }
     try:
         await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"更新任务重新质控状态失败（非阻塞）: {e}")
 
     return success_response(
         data={
