@@ -31,27 +31,11 @@
           @select="handleMenuSelect"
         >
         <!-- 工作台 -->
-        <a-menu-item key="/workstation-v2" class="menu-item-base">
-          <template #icon>
-            <ThunderboltOutlined />
-          </template>
-          <span class="font-medium">工作台</span>
-        </a-menu-item>
-
-        <!-- 工作台 V3 (卡片版) -->
-        <a-menu-item key="/workstation-v3" class="menu-item-base">
-          <template #icon>
-            <AppstoreOutlined />
-          </template>
-          <span class="font-medium">工作台 V3</span>
-        </a-menu-item>
-
-        <!-- 工作台 V4 (全屏详情版) -->
         <a-menu-item key="/workstation-v4" class="menu-item-base">
           <template #icon>
             <DesktopOutlined />
           </template>
-          <span class="font-medium">工作台 V4</span>
+          <span class="font-medium">工作台</span>
         </a-menu-item>
 
         <!-- ICD 编码查询 -->
@@ -272,9 +256,7 @@ const selectedKeys = ref<string[]>([])
 const breadcrumbItems = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
-    '/workstation-v2': '工作台',
-    '/workstation-v3': '工作台 V3',
-    '/workstation-v4': '工作台 V4',
+    '/workstation-v4': '工作台',
     '/workstation-v2/icd': 'ICD 编码查询',
     '/workstation-v2/upload': '数据上传',
     '/workstation-v2/stats': '统计分析',
