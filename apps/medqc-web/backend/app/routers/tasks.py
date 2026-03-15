@@ -252,8 +252,9 @@ async def get_task_detail(
             sb.table('qc_tasks').select('*').eq('id', task_id).single()
         )
         task = getattr(resp, 'data', None)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"查询任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询任务失败: {str(e)}")
 
     if task:
         try:
@@ -264,8 +265,9 @@ async def get_task_detail(
                 .order('created_at')
             )
             records = list(getattr(resp, 'data', None) or [])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"查询任务记录失败: {e}")
+            raise HTTPException(status_code=500, detail=f"查询任务记录失败: {str(e)}")
 
     if task is None:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在")

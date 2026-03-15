@@ -33,18 +33,19 @@ BASE_DIR = Path(__file__).parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# 默认使用 SQLite
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"sqlite:///{DATA_DIR / 'medqc.db'}"
-)
+# 必须显式配置 DATABASE_URL（PostgreSQL），不再默认 SQLite
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if not DATABASE_URL:
+    import logging as _log
+    _log.getLogger(__name__).warning(
+        "[connection] DATABASE_URL 未配置，数据库功能不可用。"
+        "请设置环境变量 DATABASE_URL 指向 PostgreSQL 实例。"
+    )
 
 # ==================== 引擎配置 ====================
 _engine_kwargs = {}
 
-if DATABASE_URL.startswith("sqlite"):
-    _engine_kwargs["connect_args"] = {"check_same_thread": False}
-else:
+if DATABASE_URL and not DATABASE_URL.startswith("sqlite"):
     # PostgreSQL 默认不要无限等待。连接失败或连接池拿不到连接时，应尽快报错，
     # 否则在 Windows 开发环境里会表现成“进程还活着，但所有接口都 pending”。
     _engine_kwargs.update(
@@ -178,19 +179,24 @@ def _create_views():
     fail_list = []
 
     for stmt in stmts:
-        # 从 SQL 中提取视图名用于日志
-        m = re.search(r'CREATE\s+VIEW\s+(\S+)', stmt, re.IGNORECASE)
-        view_name = m.group(1) if m else "unknown"
+        # 仅统计 CREATE VIEW 语句，避免把普通 SQL 误记为 "unknown"
+        m = re.search(
+            r'^\s*CREATE\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?("?[\w\.]+"?)',
+            stmt,
+            re.IGNORECASE,
+        )
+        is_create_view = m is not None
+        view_name = m.group(1).strip('"') if m else None
 
         with engine.connect() as conn:
             try:
                 conn.execute(text(stmt))
                 conn.commit()
-                if "CREATE" in stmt.upper() and "VIEW" in stmt.upper():
+                if is_create_view and view_name:
                     ok_list.append(view_name)
             except Exception as e:
                 conn.rollback()
-                if "CREATE" in stmt.upper() and "VIEW" in stmt.upper():
+                if is_create_view and view_name:
                     fail_list.append(view_name)
                     logger.warning(f"[views] SKIP {view_name}: {e}")
 

@@ -340,6 +340,18 @@ class _Query:
 
         return _Response(data=data, count=count)
 
+    @staticmethod
+    def _serialize_params(row: dict) -> dict:
+        """将 dict/list 类型的值序列化为 JSON 字符串，防止 psycopg2 报错。"""
+        import json as _json
+        out = {}
+        for k, v in row.items():
+            if isinstance(v, (dict, list)):
+                out[k] = _json.dumps(v, ensure_ascii=False, default=str)
+            else:
+                out[k] = v
+        return out
+
     def _exec_insert(self, session) -> _Response:
         payload = self._payload
         if isinstance(payload, dict):
@@ -354,7 +366,7 @@ class _Query:
             col_str = ", ".join(f'"{c}"' for c in cols)
             val_str = ", ".join(f":{c}" for c in cols)
             sql = f'INSERT INTO "{self._table}" ({col_str}) VALUES ({val_str}) RETURNING *'
-            result = session.execute(text(sql), row)
+            result = session.execute(text(sql), self._serialize_params(row))
             inserted = [dict(r._mapping) for r in result]
             results.extend(inserted)
 
@@ -370,7 +382,12 @@ class _Query:
         for key, val in self._payload.items():
             pname = f"set_{key}"
             set_parts.append(f'"{key}" = :{pname}')
-            params[pname] = val
+            # dict/list 需序列化为 JSON 字符串
+            if isinstance(val, (dict, list)):
+                import json as _json
+                params[pname] = _json.dumps(val, ensure_ascii=False, default=str)
+            else:
+                params[pname] = val
 
         sql = f'UPDATE "{self._table}" SET {", ".join(set_parts)}'
         if where:
