@@ -78,15 +78,92 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
-    """初始化数据库，创建所有表"""
+    """初始化数据库：建表 → 补齐列 → 创建视图（可重复执行、幂等）"""
     # 导入模型确保注册到 Base.metadata
     from .models import cdm  # noqa: F401
     from .models import sync  # noqa: F401  — 同步状态追踪表
     from .models import qc  # noqa: F401  — 质控业务层表
+
+    # Step 1: 建表（已存在的表会跳过）
     Base.metadata.create_all(bind=engine)
+
+    # Step 2: 补齐已有表与 ORM 定义的列差异（ALTER TABLE ADD COLUMN）
+    if not DATABASE_URL.startswith("sqlite"):
+        _sync_missing_columns()
+
+    # Step 3: 创建/重建视图
+    if not DATABASE_URL.startswith("sqlite"):
+        _create_views()
+
     db_type = "SQLite" if DATABASE_URL.startswith("sqlite") else "PostgreSQL"
     # 使用纯 ASCII 输出，避免 Windows GBK 终端编码异常导致启动流程报错
     print(f"[OK] CDM database initialized ({db_type}): {DATABASE_URL}")
+
+
+def _sync_missing_columns():
+    """检测 ORM 定义 vs PG 实际列差异，用 ALTER TABLE ADD COLUMN 补齐。
+
+    幂等操作：已存在的列不会重复添加。
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
+    inspector = sa_inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue
+        db_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        orm_cols = {c.name for c in table.columns}
+        missing = orm_cols - db_cols
+        if not missing:
+            continue
+
+        with engine.connect() as conn:
+            for col_name in sorted(missing):
+                col = table.c[col_name]
+                col_type = col.type.compile(dialect=engine.dialect)
+                sql = f'ALTER TABLE "{table.name}" ADD COLUMN "{col_name}" {col_type}'
+                try:
+                    conn.execute(text(sql))
+                except Exception:
+                    pass  # 列已存在或其他非致命错误
+            conn.commit()
+
+
+def _create_views():
+    """执行 qc_views.sql，创建/重建所有视图。
+
+    幂等操作：使用 DROP VIEW IF EXISTS + CREATE VIEW。
+    单条失败不影响其他视图。
+
+    qc_statistics_view 依赖文书表名，通过 DOCUMENTS_TABLE 配置动态替换，
+    避免硬编码 medical_documents vs medical_documents_test 的偏差。
+    """
+    from sqlalchemy import text
+
+    sql_path = Path(__file__).parent / "sql" / "qc_views.sql"
+    if not sql_path.exists():
+        return
+
+    sql_text = sql_path.read_text(encoding="utf-8")
+
+    # 动态替换 qc_statistics_view 中的表名为 settings 配置值
+    documents_table = os.getenv("DOCUMENTS_TABLE", "medical_documents_test")
+    sql_text = sql_text.replace(
+        "FROM medical_documents d",
+        f"FROM {documents_table} d",
+    )
+
+    stmts = [s.strip() for s in sql_text.split(";") if s.strip()]
+
+    for stmt in stmts:
+        with engine.connect() as conn:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # 单条失败不阻断
 
 
 def get_db() -> Generator[Session, None, None]:

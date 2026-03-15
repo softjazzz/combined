@@ -398,7 +398,8 @@ GROUP BY assignee_id, assignee_name, assignee_department;
 
 > reports.py:53 / reports.py:116 查询 `supabase.table("qc_statistics_view").select("*")`
 > 对齐 `reports.py` 导出字段：`record_id` / `total_documents` / `passed_count` / `warning_count` / `failed_count` / `pending_count` / `avg_qc_score` / `last_analyzed_time`
-> 过渡期兼容：当前实现依赖 `medical_documents` 的 `qc_status/qc_score/qc_last_analyzed` 字段，后续再切换到 CDM + QC 正式聚合链路
+> **表名策略**：SQL 模板中写 `medical_documents`，`init_db()` 运行时会用 `DOCUMENTS_TABLE` 环境变量（默认 `medical_documents_test`）动态替换，确保新环境不会因表名偏差而建视图失败
+> 过渡期兼容：当前实现依赖文书表的 `qc_status/qc_score/qc_last_analyzed` 字段，后续再切换到 CDM + QC 正式聚合链路
 
 ```sql
 CREATE VIEW qc_statistics_view AS
