@@ -1,4 +1,5 @@
 import uuid
+import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -25,6 +26,98 @@ import logging as _logging
 logger = _logging.getLogger(__name__)
 
 
+def _parse_json_field(value: Any) -> Any:
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except Exception:
+            return None
+    return None
+
+
+def _normalize_issue(item: Any) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        item = {}
+    return {
+        "id": str(item.get("id") or f"issue-{uuid.uuid4().hex[:8]}"),
+        "rule_name": str(item.get("rule_name") or item.get("ruleName") or "未知规则"),
+        "description": str(item.get("description") or ""),
+        "severity": str(item.get("severity") or "warning"),
+        "category": str(item.get("category") or "general"),
+        "location": str(item.get("location") or "病历正文"),
+        "suggestion": str(item.get("suggestion") or "请补充相关记录"),
+        "evidence": item.get("evidence"),
+    }
+
+
+def _normalize_rule_result(item: Any) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        item = {}
+    return {
+        "rule_id": str(item.get("rule_id") or item.get("ruleId") or f"rule-{uuid.uuid4().hex[:8]}"),
+        "rule_name": str(item.get("rule_name") or item.get("ruleName") or "未知规则"),
+        "passed": bool(item.get("passed", False)),
+        "score": int(item.get("score", 0) or 0),
+        "details": str(item.get("details") or ""),
+        "max_score": item.get("max_score"),
+        "execution_time": item.get("execution_time"),
+        "confidence": item.get("confidence"),
+    }
+
+
+def _normalize_suggestion(item: Any) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        item = {}
+    return {
+        "id": str(item.get("id") or f"sug-{uuid.uuid4().hex[:8]}"),
+        "category": str(item.get("category") or "general"),
+        "title": str(item.get("title") or "整改建议"),
+        "description": str(item.get("description") or ""),
+        "priority": str(item.get("priority") or "medium"),
+    }
+
+
+def _row_to_qc_result(row: Dict[str, Any]) -> Dict[str, Any]:
+    raw_payload = _parse_json_field(row.get("raw_output")) or {}
+    metadata = _parse_json_field(row.get("metadata")) or {}
+    issues_src = row.get("issues")
+    issues_parsed = _parse_json_field(issues_src)
+    if not isinstance(issues_parsed, list):
+        issues_parsed = raw_payload.get("issues", [])
+    suggestions_src = raw_payload.get("suggestions", [])
+    rule_results_src = raw_payload.get("rule_results", [])
+    analysis_steps_src = raw_payload.get("analysis_steps", [])
+
+    issues = [_normalize_issue(x) for x in issues_parsed if x is not None]
+    suggestions = [_normalize_suggestion(x) for x in suggestions_src if x is not None]
+    rule_results = [_normalize_rule_result(x) for x in rule_results_src if x is not None]
+    analysis_steps = analysis_steps_src if isinstance(analysis_steps_src, list) else []
+
+    overall_score = row.get("overall_score")
+    if overall_score is None:
+        overall_score = raw_payload.get("overall_score", 0)
+    grade = row.get("grade") or raw_payload.get("overall_grade") or "C"
+    analysis_date = row.get("analysis_date") or row.get("created_at") or datetime.utcnow().isoformat() + "Z"
+
+    return {
+        "id": str(row.get("id") or raw_payload.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"),
+        "record_id": str(row.get("record_id") or raw_payload.get("record_id") or ""),
+        "overall_score": int(overall_score or 0),
+        "overall_grade": str(grade),
+        "analysis_date": str(analysis_date),
+        "issues": issues,
+        "suggestions": suggestions,
+        "rule_results": rule_results,
+        "analysis_steps": analysis_steps,
+        "metadata": metadata,
+    }
+
+
 async def _save_qc_result(record_id: str, result: Dict[str, Any]) -> None:
     """将质控分析结果写入 PG qc_results 表。失败时记录日志但不阻塞主流程。"""
     sb = get_supabase()
@@ -32,13 +125,21 @@ async def _save_qc_result(record_id: str, result: Dict[str, Any]) -> None:
         logger.warning(f"[qc] 数据库不可用，qc_results 未持久化: record_id={record_id}")
         return
     try:
+        issues = result.get("issues") if isinstance(result.get("issues"), list) else []
+        raw_output = json.dumps(result, ensure_ascii=False)
+        metadata = result.get("metadata")
         payload = {
             "record_id": record_id,
             "overall_score": result.get("overall_score") or result.get("score"),
-            "grade": result.get("grade"),
+            "total_score": result.get("overall_score") or result.get("score"),
+            "grade": result.get("overall_grade") or result.get("grade"),
             "status": result.get("status", "completed"),
-            "result_data": result,
-            "analyzer_version": result.get("version", "1.0"),
+            "analysis_date": result.get("analysis_date"),
+            "analysis_engine": (metadata or {}).get("engine") if isinstance(metadata, dict) else "demo-qc-engine",
+            "issues": issues,
+            "defect_count": len(issues),
+            "metadata": metadata if isinstance(metadata, dict) else {},
+            "raw_output": raw_output,
         }
         # 移除 None 值
         payload = {k: v for k, v in payload.items() if v is not None}
@@ -129,7 +230,7 @@ async def get_result(record_id: str, current_user: dict = Depends(get_current_us
             status_code=StatusCode.NOT_FOUND,
             detail="质控结果不存在"
         )
-    return data[0]
+    return _row_to_qc_result(data[0])
 
 
 @router.get("/progress/{analysis_id}")
