@@ -1,125 +1,150 @@
 <template>
-  <div class="icd-detail-panel">
+  <div class="h-full bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
     <!-- 空状态 -->
-    <div v-if="!selectedCode" class="detail-empty">
-      <div class="empty-icon-wrapper">
-        <FileSearchOutlined class="empty-icon" />
+    <div v-if="!selectedCode" class="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center mb-4">
+        <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z" />
+        </svg>
       </div>
-      <h4>选择编码查看详情</h4>
-      <p>从左侧列表点击任意编码，<br/>即可在此处查看完整信息</p>
+      <h4 class="text-[15px] font-semibold text-slate-700 mb-2">选择编码查看详情</h4>
+      <p class="text-[13px] text-slate-400 leading-relaxed">从左侧列表点击任意编码<br/>即可在此处查看完整信息</p>
     </div>
 
-    <!-- 已选编码信息 -->
-    <div v-else class="detail-content custom-scrollbar">
-      <!-- 编码头部 -->
-      <div class="detail-header">
-        <div class="code-badge" :class="selectedCode.type === 'icd10' ? 'code-badge--blue' : 'code-badge--green'">
+    <!-- 已选编码：知识卡片 -->
+    <template v-else>
+      <!-- 卡片头部 -->
+      <div class="p-6 border-b border-slate-100 bg-gradient-to-b from-slate-50/50 to-white">
+        <div class="flex items-start justify-between mb-3">
+          <span
+            :class="[
+              'px-2.5 py-1 text-[11px] font-bold rounded-md border',
+              selectedCode.type === 'icd10'
+                ? 'bg-indigo-50 text-indigo-600 border-indigo-100/50'
+                : 'bg-emerald-50 text-emerald-600 border-emerald-100/50'
+            ]"
+          >
+            {{ selectedCode.type === 'icd10' ? 'ICD-10 诊断' : 'ICD-9-CM-3 手术' }}
+          </span>
+
+          <!-- 操作按钮组 -->
+          <div class="flex items-center gap-2">
+            <button
+              @click="$emit('copy', selectedCode.code)"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 text-[12px] font-semibold rounded-lg shadow-sm transition-all cursor-pointer group"
+            >
+              <CopyOutlined class="text-slate-400 group-hover:text-blue-500 transition-colors" />
+              复制
+            </button>
+            <button
+              v-if="allowApply"
+              @click="$emit('apply', selectedCode)"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[12px] font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+            >
+              <CheckCircleOutlined />
+              {{ applyLabel || '采用' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 大号编码 + 名称 -->
+        <div
+          class="font-mono text-3xl font-extrabold tracking-tight mb-2"
+          :class="selectedCode.type === 'icd10' ? 'text-blue-700' : 'text-emerald-700'"
+        >
           {{ selectedCode.code }}
         </div>
-        <div class="code-meta">
-          <h3 class="code-title">{{ selectedCode.name }}</h3>
-          <a-tag :color="selectedCode.type === 'icd10' ? 'blue' : 'green'" size="small">
-            {{ selectedCode.type === 'icd10' ? 'ICD-10 诊断' : 'ICD-9-CM-3 手术' }}
-          </a-tag>
-        </div>
+        <h2 class="text-lg font-bold text-slate-900 leading-snug">
+          {{ selectedCode.name }}
+        </h2>
       </div>
 
-      <!-- 分类路径（面包屑） -->
-      <div v-if="selectedCode.category_path?.length" class="detail-section">
-        <div class="section-label">
-          <ApartmentOutlined />
-          分类路径
+      <!-- 卡片内容区（可滚动） -->
+      <div class="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-5">
+        <!-- 层级归属 -->
+        <div v-if="selectedCode.category_path?.length">
+          <h4 class="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">层级归属</h4>
+          <div class="flex flex-col gap-1.5 text-[13px]">
+            <div
+              v-for="(item, i) in selectedCode.category_path"
+              :key="i"
+              class="flex items-center gap-2 text-slate-500"
+            >
+              <span class="font-mono text-slate-400 text-[12px]">{{ i === selectedCode.category_path.length - 1 ? '└' : '├' }}</span>
+              <span :class="i === selectedCode.category_path.length - 1 ? 'font-medium text-slate-700' : ''">{{ item }}</span>
+            </div>
+          </div>
         </div>
-        <div class="breadcrumb-path">
-          <span
-            v-for="(item, index) in selectedCode.category_path"
-            :key="index"
-            class="breadcrumb-item"
+
+        <!-- 版本对照 -->
+        <div v-if="selectedCode.mapped_code">
+          <div class="w-full h-px bg-slate-100 mb-5"></div>
+          <h4 class="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">版本对照</h4>
+          <div
+            :class="[
+              'rounded-lg p-3 text-[13px] border',
+              selectedCode.is_diff
+                ? 'bg-amber-50 border-amber-100'
+                : 'bg-slate-50 border-slate-100'
+            ]"
           >
-            <span class="breadcrumb-text">{{ item }}</span>
-            <RightOutlined v-if="index < selectedCode.category_path.length - 1" class="breadcrumb-sep" />
-          </span>
-        </div>
-      </div>
-
-      <!-- 版本映射对照 -->
-      <div v-if="selectedCode.mapped_code" class="detail-section">
-        <div class="section-label">
-          <SwapOutlined />
-          版本对照
-        </div>
-        <div class="mapping-card" :class="{ 'mapping-diff': selectedCode.is_diff }">
-          <div class="mapping-row">
-            <span class="mapping-from-label">当前版本</span>
-            <span class="mapping-arrow">→</span>
-            <span class="mapping-to-label">{{ selectedCode.mapped_version }}</span>
+            <div class="flex items-center gap-3 mb-1">
+              <span class="font-mono font-semibold text-slate-700">{{ selectedCode.code }}</span>
+              <span class="text-slate-400">→</span>
+              <span class="font-mono font-semibold" :class="selectedCode.is_diff ? 'text-amber-700' : 'text-slate-700'">
+                {{ selectedCode.mapped_code }}
+              </span>
+            </div>
+            <div class="flex items-center gap-1 text-[12px]">
+              <span :class="selectedCode.is_diff ? 'text-amber-600' : 'text-emerald-600'">
+                {{ selectedCode.is_diff ? '⚠ 编码不同' : '✓ 编码相同' }}
+              </span>
+              <span v-if="selectedCode.mapped_name && selectedCode.is_diff" class="text-amber-600 ml-2">
+                {{ selectedCode.mapped_name }}
+              </span>
+            </div>
           </div>
-          <div class="mapping-row">
-            <span class="mapping-from-code">{{ selectedCode.code }}</span>
-            <span class="mapping-arrow">→</span>
-            <span class="mapping-to-code">{{ selectedCode.mapped_code }}</span>
+        </div>
+
+        <!-- 包含说明 -->
+        <div v-if="selectedCode.inclusions?.length">
+          <div class="w-full h-px bg-slate-100 mb-5"></div>
+          <h4 class="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <span class="text-emerald-500 mr-1">●</span> 包含
+          </h4>
+          <ul class="space-y-1 pl-4 text-[13px] text-slate-600 list-disc marker:text-emerald-400">
+            <li v-for="(item, i) in selectedCode.inclusions" :key="i">{{ item }}</li>
+          </ul>
+        </div>
+
+        <!-- 排除说明 -->
+        <div v-if="selectedCode.exclusions?.length">
+          <div class="w-full h-px bg-slate-100 mb-5"></div>
+          <h4 class="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <span class="text-red-500 mr-1">●</span> 排除
+          </h4>
+          <ul class="space-y-1 pl-4 text-[13px] text-slate-600 list-disc marker:text-red-400">
+            <li v-for="(item, i) in selectedCode.exclusions" :key="i">{{ item }}</li>
+          </ul>
+        </div>
+
+        <!-- 编码规则提示（结构占位） -->
+        <div v-if="!selectedCode.category_path?.length && !selectedCode.mapped_code && !selectedCode.inclusions?.length">
+          <div class="w-full h-px bg-slate-100 mb-5"></div>
+          <h4 class="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">编码信息</h4>
+          <div class="bg-slate-50 border border-slate-100 rounded-lg p-3 text-[13px] text-slate-500 leading-relaxed">
+            点击树形节点中的叶子编码，可查看更多层级归属和版本对照信息。
           </div>
-          <div v-if="selectedCode.is_diff && selectedCode.mapped_name" class="mapping-diff-name">
-            <WarningOutlined style="color: #d46b08" />
-            <span>{{ selectedCode.mapped_name }}</span>
-          </div>
-          <a-tag
-            :color="selectedCode.is_diff ? 'orange' : 'green'"
-            size="small"
-            style="margin-top: 8px"
-          >
-            {{ selectedCode.is_diff ? '⚠ 编码不同' : '✓ 编码相同' }}
-          </a-tag>
         </div>
       </div>
-
-      <!-- 包含说明 -->
-      <div v-if="selectedCode.inclusions?.length" class="detail-section">
-        <div class="section-label">
-          <CheckCircleOutlined style="color: #00A651" />
-          包含
-        </div>
-        <ul class="inclusion-list">
-          <li v-for="(item, i) in selectedCode.inclusions" :key="i">{{ item }}</li>
-        </ul>
-      </div>
-
-      <!-- 排除说明 -->
-      <div v-if="selectedCode.exclusions?.length" class="detail-section">
-        <div class="section-label">
-          <CloseCircleOutlined style="color: #FF3B30" />
-          排除
-        </div>
-        <ul class="exclusion-list">
-          <li v-for="(item, i) in selectedCode.exclusions" :key="i">{{ item }}</li>
-        </ul>
-      </div>
-
-      <!-- 操作按钮 -->
-      <div class="detail-actions">
-        <a-button type="primary" block @click="$emit('copy', selectedCode.code)">
-          <template #icon><CopyOutlined /></template>
-          复制编码
-        </a-button>
-        <a-button v-if="allowApply" block style="margin-top: 8px" @click="$emit('apply', selectedCode)">
-          <template #icon><CheckCircleOutlined /></template>
-          {{ applyLabel || '回填当前字段' }}
-        </a-button>
-      </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import {
-  FileSearchOutlined,
-  ApartmentOutlined,
-  RightOutlined,
-  SwapOutlined,
-  WarningOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   CopyOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 
 export interface ICDCodeDetail {
@@ -148,225 +173,6 @@ defineEmits<{
 </script>
 
 <style scoped>
-.icd-detail-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #f0f0f0;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  overflow: hidden;
-}
-
-.detail-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 24px;
-  text-align: center;
-}
-
-.empty-icon-wrapper {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f0f7ff, #e8f1fd);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-
-.empty-icon {
-  font-size: 32px;
-  color: #0066CC;
-  opacity: 0.6;
-}
-
-.detail-empty h4 {
-  font-size: 15px;
-  font-weight: 600;
-  color: #333;
-  margin: 0 0 8px;
-}
-
-.detail-empty p {
-  font-size: 13px;
-  color: #999;
-  margin: 0;
-  line-height: 1.6;
-}
-
-.detail-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.detail-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f5f5f5;
-}
-
-.code-badge {
-  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-  font-size: 16px;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 8px;
-  white-space: nowrap;
-  letter-spacing: 0.5px;
-}
-.code-badge--blue {
-  background: linear-gradient(135deg, #e8f4ff, #d6ebff);
-  color: #0050A0;
-  border: 1px solid rgba(0, 102, 204, 0.15);
-}
-.code-badge--green {
-  background: linear-gradient(135deg, #e8f8ee, #d6f0e0);
-  color: #006630;
-  border: 1px solid rgba(0, 166, 81, 0.15);
-}
-
-.code-meta {
-  flex: 1;
-  min-width: 0;
-}
-
-.code-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 6px;
-  line-height: 1.4;
-}
-
-.detail-section {
-  margin-bottom: 16px;
-}
-
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.breadcrumb-path {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 12px;
-  background: #fafafa;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
-}
-
-.breadcrumb-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.breadcrumb-text {
-  font-size: 12px;
-  color: #555;
-}
-
-.breadcrumb-sep {
-  font-size: 10px;
-  color: #ccc;
-}
-
-.mapping-card {
-  padding: 12px;
-  background: #fafafa;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
-}
-.mapping-card.mapping-diff {
-  background: #fffbf0;
-  border-color: rgba(212, 107, 8, 0.15);
-}
-
-.mapping-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
-.mapping-from-label, .mapping-to-label {
-  font-size: 12px;
-  color: #999;
-  font-weight: 500;
-}
-
-.mapping-arrow {
-  color: #ccc;
-  font-size: 12px;
-}
-
-.mapping-from-code, .mapping-to-code {
-  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.mapping-diff-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: #d46b08;
-}
-
-.inclusion-list, .exclusion-list {
-  margin: 0;
-  padding: 10px 12px 10px 28px;
-  border-radius: 8px;
-  list-style-type: disc;
-  font-size: 13px;
-  line-height: 1.8;
-  color: #444;
-}
-
-.inclusion-list {
-  background: #f6fff9;
-  border: 1px solid rgba(0, 166, 81, 0.1);
-}
-.inclusion-list li::marker {
-  color: #00A651;
-}
-
-.exclusion-list {
-  background: #fff5f5;
-  border: 1px solid rgba(255, 59, 48, 0.1);
-}
-.exclusion-list li::marker {
-  color: #FF3B30;
-}
-
-.detail-actions {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #f5f5f5;
-}
-
-/* 滚动条 */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
@@ -374,10 +180,10 @@ defineEmits<{
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e0e0e0;
+  background: #e2e8f0;
   border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #ccc;
+  background: #cbd5e1;
 }
 </style>

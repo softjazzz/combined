@@ -1,5 +1,5 @@
 <template>
-  <div class="icd-workspace">
+  <div class="flex flex-col h-full bg-slate-50 font-sans">
     <!-- 顶部 Hero 搜索区 -->
     <ICDSearchHero
       :code-version="codeVersion"
@@ -13,91 +13,121 @@
     />
 
     <!-- 主内容区：双栏 -->
-    <div class="workspace-body">
+    <div class="flex-1 flex max-w-7xl w-full mx-auto px-6 py-5 gap-5 min-h-0">
+      
       <!-- 左栏：搜索结果 / 树形浏览 -->
-      <div class="workspace-left custom-scrollbar">
+      <div class="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-y-auto custom-scrollbar">
         <!-- 搜索中 -->
-        <div v-if="searchLoading" class="state-hint">
+        <div v-if="searchLoading" class="flex flex-col items-center justify-center py-20 text-slate-400">
           <a-spin />
-          <p>搜索中…</p>
+          <p class="mt-3 text-sm">搜索中…</p>
         </div>
 
         <!-- 搜索结果 -->
-        <div v-else-if="searchQuery.length >= 2 && searchResults.length > 0" class="search-results">
-          <div class="results-header">
-            <span>搜索结果</span>
+        <div v-else-if="searchQuery.length >= 2 && searchResults.length > 0">
+          <div class="flex items-center justify-between px-4 py-3 bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10">
+            <span class="text-[13px] font-semibold text-slate-500">搜索结果</span>
             <a-tag color="blue">{{ searchTotal }} 条</a-tag>
           </div>
-          <div
-            v-for="item in searchResults"
-            :key="item.code + item.type"
-            class="result-card"
-            :class="{ 'result-card--active': selectedCode?.code === item.code }"
-            @click="selectCode(item)"
-          >
-            <div class="result-main">
-              <span class="result-code">{{ item.code }}</span>
-              <span class="result-name" v-html="highlightMatch(item.name, searchQuery)" />
+          <div class="p-1">
+            <div
+              v-for="item in searchResults"
+              :key="item.code + item.type"
+              :class="[
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150',
+                selectedCode?.code === item.code
+                  ? 'bg-blue-50/70 border border-blue-100/60'
+                  : 'hover:bg-slate-50 border border-transparent'
+              ]"
+              @click="selectCode(item)"
+            >
+              <span
+                :class="[
+                  'font-mono text-[13px] font-semibold shrink-0 min-w-[90px]',
+                  selectedCode?.code === item.code ? 'text-blue-700' : 'text-slate-500'
+                ]"
+              >{{ item.code }}</span>
+              <span class="text-[14px] text-slate-700 truncate flex-1" v-html="highlightMatch(item.name, searchQuery)" />
               <a-tag
                 :color="item.type === 'icd10' ? 'blue' : 'green'"
                 size="small"
-                class="result-type-tag"
+                class="shrink-0"
               >
                 {{ item.type === 'icd10' ? 'ICD-10' : 'ICD-9' }}
               </a-tag>
             </div>
-            <!-- 映射附注 -->
-            <div v-if="item.mapped_code" class="result-mapping" :class="{ 'mapping-diff': item.is_diff }">
-              <span class="mapping-label">{{ item.mapped_version }}:</span>
-              <span class="mapping-code">{{ item.mapped_code }}</span>
-              <a-tag v-if="item.is_diff" color="orange" size="small">编码不同</a-tag>
-              <a-tag v-else color="default" size="small">相同</a-tag>
-            </div>
           </div>
-          <div v-if="searchTotal > searchResults.length" class="load-more">
+          <div v-if="searchTotal > searchResults.length" class="text-center py-3">
             <a-button type="link" size="small" @click="loadMoreResults">加载更多…</a-button>
           </div>
         </div>
 
         <!-- 无搜索结果 -->
-        <div v-else-if="searchQuery.length >= 2 && searchResults.length === 0 && !searchLoading" class="state-hint">
-          <SearchOutlined style="font-size: 40px; color: #d9d9d9" />
-          <p>未找到匹配 "{{ searchQuery }}" 的编码</p>
+        <div v-else-if="searchQuery.length >= 2 && searchResults.length === 0 && !searchLoading" class="flex flex-col items-center justify-center py-20 text-slate-400">
+          <SearchOutlined style="font-size: 40px; opacity: 0.3" />
+          <p class="mt-3 text-sm">未找到匹配 "{{ searchQuery }}" 的编码</p>
         </div>
 
-        <!-- 树形浏览（默认） -->
-        <div v-else class="tree-browser">
+        <!-- 树形浏览（极简箭头 + 双拼排版） -->
+        <div v-else class="p-3">
           <a-spin :spinning="treeLoading">
-            <a-tree
-              v-if="treeData.length > 0"
-              :tree-data="treeData"
-              :load-data="onLoadChildren"
-              show-icon
-              block-node
-              :selectable="true"
-              @select="onTreeSelect"
-            >
-              <template #icon="{ data }">
-                <FolderOutlined v-if="!data.isLeaf" class="tree-folder-icon" />
-                <FileTextOutlined v-else class="tree-leaf-icon" />
-              </template>
-              <template #title="{ title, data }">
-                <span class="tree-node" :class="{ 'tree-node--leaf': data.isLeaf }">
-                  <span v-if="data.code_range" class="tree-range-tag">{{ data.code_range }}</span>
-                  {{ title }}
-                </span>
-              </template>
-            </a-tree>
-            <div v-else class="state-hint">
-              <FolderOpenOutlined style="font-size: 40px; color: #d9d9d9" />
-              <p>暂无编码数据</p>
+            <div v-if="treeData.length > 0" class="space-y-0.5">
+              <a-tree
+                :tree-data="treeData"
+                :load-data="onLoadChildren"
+                block-node
+                :selectable="true"
+                :show-icon="false"
+                :show-line="false"
+                @select="onTreeSelect"
+                class="icd-tree-modern"
+              >
+                <template #switcherIcon="{ expanded }">
+                  <svg
+                    :class="['w-4 h-4 transition-transform duration-200 shrink-0', expanded ? 'text-blue-500 rotate-90' : 'text-slate-400']"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                </template>
+                <template #title="{ title, data }">
+                  <div
+                    :class="[
+                      'flex items-center gap-2 py-0.5',
+                      data.isLeaf ? '' : ''
+                    ]"
+                  >
+                    <span v-if="data.isLeaf" class="w-1 h-1 rounded-full bg-slate-300 shrink-0 mx-0.5"></span>
+                    <span
+                      v-if="data.code_range || data.code"
+                      :class="[
+                        'font-mono text-[13px] shrink-0',
+                        data.isLeaf ? 'font-medium text-slate-500' : 'font-semibold text-slate-600',
+                        'min-w-[70px]'
+                      ]"
+                    >{{ data.code_range || data.code }}</span>
+                    <span
+                      :class="[
+                        'text-[14px] truncate',
+                        data.isLeaf ? 'text-slate-600' : 'font-semibold text-slate-800'
+                      ]"
+                    >{{ title }}</span>
+                  </div>
+                </template>
+              </a-tree>
+            </div>
+            <div v-else class="flex flex-col items-center justify-center py-20 text-slate-400">
+              <svg class="w-10 h-10 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <p class="mt-3 text-sm">暂无编码数据</p>
             </div>
           </a-spin>
         </div>
       </div>
 
-      <!-- 右栏：编码详情 -->
-      <div class="workspace-right">
+      <!-- 右栏：编码详情知识卡片 -->
+      <div class="w-[400px] shrink-0">
         <ICDDetailPanel
           :selected-code="selectedCode"
           :allow-apply="allowApply"
@@ -120,12 +150,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import {
-  SearchOutlined,
-  FolderOutlined,
-  FolderOpenOutlined,
-  FileTextOutlined,
-} from '@ant-design/icons-vue'
+import { SearchOutlined } from '@ant-design/icons-vue'
 import type { TreeProps } from 'ant-design-vue'
 
 import ICDSearchHero from './ICDSearchHero.vue'
@@ -203,7 +228,7 @@ function loadMoreResults() {
 function highlightMatch(text: string, query: string): string {
   if (!query) return text
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>')
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="bg-amber-200/70 px-0.5 rounded font-medium">$1</mark>')
 }
 
 // ==================== 编码选择 ====================
@@ -229,7 +254,6 @@ function addToRecent(item: any) {
     name: item.name || item.title || '',
     type: item.type || codeType.value,
   }
-  // 去重并限制最多8条
   recentCodes.value = [
     entry,
     ...recentCodes.value.filter((r) => r.code !== entry.code),
@@ -265,7 +289,6 @@ async function loadTree() {
           children: undefined,
         })) || [],
       }))
-      // 更新统计
       if (json.data.stats) {
         codeStats.value = {
           icd10Count: json.data.stats.icd10_count,
@@ -336,203 +359,49 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ==================== 工作台容器 ==================== */
-.icd-workspace {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: #f5f7fa;
-}
-
-/* ==================== 主体双栏 ==================== */
-.workspace-body {
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
-  padding: 16px 20px;
-}
-
-.workspace-left {
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #f0f0f0;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.workspace-right {
-  min-height: 0;
-}
-
-/* ==================== 状态提示 ==================== */
-.state-hint {
-  display: flex;
-  flex-direction: column;
+/* 极简树样式覆盖 */
+.icd-tree-modern :deep(.ant-tree-switcher) {
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: #999;
-}
-.state-hint p {
-  margin: 12px 0 0;
-  font-size: 14px;
+  width: 24px !important;
 }
 
-/* ==================== 搜索结果 ==================== */
-.results-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  font-weight: 600;
-  font-size: 13px;
-  color: #666;
-  background: #fafafa;
-  border-bottom: 1px solid #f0f0f0;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  border-radius: 12px 12px 0 0;
+.icd-tree-modern :deep(.ant-tree-node-content-wrapper) {
+  padding: 4px 8px !important;
+  border-radius: 8px !important;
+  transition: background 0.15s !important;
 }
 
-.result-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 16px;
-  cursor: pointer;
-  border-bottom: 1px solid #f8f8f8;
-  border-left: 3px solid transparent;
-  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-.result-card:hover {
-  background: #f0f7ff;
-  border-left-color: #0066CC;
-}
-.result-card--active {
-  background: #e8f4ff;
-  border-left-color: #0066CC;
+.icd-tree-modern :deep(.ant-tree-node-content-wrapper:hover) {
+  background: #f8fafc !important;
 }
 
-.result-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.icd-tree-modern :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper),
+.icd-tree-modern :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
+  background: rgba(59, 130, 246, 0.06) !important;
 }
 
-.result-code {
-  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-  font-weight: 700;
-  color: #0066CC;
-  min-width: 80px;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.3px;
-  flex-shrink: 0;
+.icd-tree-modern :deep(.ant-tree-treenode) {
+  padding: 1px 0 !important;
 }
 
-.result-name {
-  flex: 1;
-  font-size: 14px;
-  color: #333;
-  min-width: 0;
-}
-.result-name :deep(mark) {
-  background: #ffe58f;
-  padding: 0 2px;
-  border-radius: 2px;
-  font-weight: 500;
+.icd-tree-modern :deep(.ant-tree-indent-unit) {
+  width: 20px !important;
 }
 
-.result-type-tag {
-  flex-shrink: 0;
-}
-
-.result-mapping {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-left: 90px;
-  font-size: 12px;
-  color: #999;
-}
-.result-mapping.mapping-diff {
-  color: #d46b08;
-}
-
-.mapping-label {
-  font-weight: 500;
-  color: #8c8c8c;
-}
-.mapping-code {
-  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-  font-weight: 500;
-}
-
-.load-more {
-  text-align: center;
-  padding: 12px;
-}
-
-/* ==================== 树形浏览 ==================== */
-.tree-browser {
-  padding: 12px 8px;
-}
-
-.tree-folder-icon {
-  color: #0066CC;
-}
-.tree-leaf-icon {
-  color: #00A651;
-}
-
-.tree-node {
-  font-size: 14px;
-  color: #333;
-}
-.tree-node--leaf {
-  color: #444;
-}
-
-.tree-range-tag {
-  display: inline-block;
-  font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: #0066CC;
-  background: #e8f4ff;
-  padding: 1px 6px;
-  border-radius: 4px;
-  margin-right: 6px;
-  letter-spacing: 0.3px;
-}
-
-/* ==================== 滚动条 ==================== */
+/* 滚动条 */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e0e0e0;
+  background: #e2e8f0;
   border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #ccc;
-}
-
-/* ==================== 响应式 ==================== */
-@media (max-width: 1024px) {
-  .workspace-body {
-    grid-template-columns: 1fr;
-  }
-  .workspace-right {
-    display: none;
-  }
+  background: #cbd5e1;
 }
 </style>

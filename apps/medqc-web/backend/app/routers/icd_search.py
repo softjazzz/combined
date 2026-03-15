@@ -31,31 +31,7 @@ _initialized: bool = False
 _PINYIN_MAP: dict = {}
 
 
-def _init_pinyin_map():
-    """初始化简易拼音首字母映射（避免依赖 pypinyin 库）"""
-    global _PINYIN_MAP
-    # 按拼音首字母的 Unicode 区间粗略映射
-    # 这里用更可靠的方式：尝试导入 pypinyin，否则跳过拼音功能
-    try:
-        from pypinyin import lazy_pinyin, Style
-        _PINYIN_MAP['_available'] = True
-        _PINYIN_MAP['_lazy_pinyin'] = lazy_pinyin
-        _PINYIN_MAP['_Style'] = Style
-        logger.info("✅ pypinyin 可用，启用拼音搜索")
-    except ImportError:
-        _PINYIN_MAP['_available'] = False
-        logger.info("ℹ️ pypinyin 未安装，跳过拼音搜索功能")
-
-
-def _get_pinyin_initials(text: str) -> str:
-    """获取拼音首字母"""
-    if not _PINYIN_MAP.get('_available'):
-        return ''
-    try:
-        initials = _PINYIN_MAP['_lazy_pinyin'](text, style=_PINYIN_MAP['_Style'].FIRST_LETTER)
-        return ''.join(initials).lower()
-    except Exception:
-        return ''
+# 拼音搜索已移除（加速冷启动）
 
 
 def _load_data():
@@ -65,7 +41,7 @@ def _load_data():
     if _initialized:
         return
 
-    _init_pinyin_map()
+    # 拼音功能已移除，无需初始化
 
     # __file__ = app/routers/icd_search.py
     # data 在 backend/data/ 目录（即 app 的上一级）
@@ -77,7 +53,6 @@ def _load_data():
         with open(icd10_path, 'r', encoding='utf-8') as f:
             raw = json.load(f)
             for item in raw:
-                item['pinyin'] = _get_pinyin_initials(item.get('name', ''))
                 item['name_lower'] = item.get('name', '').lower()
                 item['code_lower'] = item.get('code', '').lower()
             _icd10_data = raw
@@ -91,11 +66,62 @@ def _load_data():
         with open(icd10_cl_path, 'r', encoding='utf-8') as f:
             raw = json.load(f)
             for item in raw:
-                item['pinyin'] = _get_pinyin_initials(item.get('name', ''))
                 item['name_lower'] = item.get('name', '').lower()
                 item['code_lower'] = item.get('code', '').lower()
             _icd10_clinical_data = raw
-            logger.info(f"✅ ICD-10 国临版: {len(_icd10_clinical_data)} 条")
+            logger.info(f"✅ ICD-10 国临版原始: {len(_icd10_clinical_data)} 条")
+
+    # 从 code_mapping 补充医保→国临一对多映射中遗漏的国临上级码
+    # 原因：insurance_to_clinical 是 dict（单值），当医保码对应多个国临码时
+    #       建库时只记录了最后一条，导致部分国临上级码（如E78.200混合型高脂血症）未被收录
+    # 修复：用 clinical_to_insurance 的所有 key（全集国临码）补充缺失条目
+    mapping_path = os.path.join(data_dir, 'icd10_code_mapping.json')
+    if os.path.exists(mapping_path) and _icd10_clinical_data:
+        try:
+            with open(mapping_path, 'r', encoding='utf-8') as f:
+                mapping = json.load(f)
+            c2i = mapping.get('clinical_to_insurance', {})
+            existing_codes = {item['code'] for item in _icd10_clinical_data}
+            i2c = mapping.get('insurance_to_clinical', {})
+            # insurance_to_clinical 里每个值的 name 就是该国临码的中文名
+            # 但我们更需要从 c2i 恢复：c2i key=国临码, value={'code':医保码,'name':医保名}
+            # 国临码的名称需从原始数据或 icd10_diagnoses.json 里找
+            补充_count = 0
+            for clinical_code, ins_info in c2i.items():
+                if clinical_code not in existing_codes:
+                    # 国临码不在当前列表中，尝试从医保版数据中找到对应名称
+                    # 通过反查 insurance_to_clinical：医保码 ins_code → 国临名
+                    ins_code = ins_info.get('code', '')
+                    # 先看 insurance_to_clinical 中有没有直接映射到该国临码的
+                    # 实际上最可靠的是：国临码对应相同编码的医保版名称（当 diff=False）或保持原编码
+                    clinical_name = None
+                    # 若 diff=False，说明两版本名称一致，直接用医保版名称
+                    if not ins_info.get('diff', False):
+                        clinical_name = ins_info.get('name', '')
+                    else:
+                        # diff=True 说明两版本名称不同，需要从医保版里找国临码的独立名称
+                        # 查 insurance_to_clinical 看有没有直接映射到 clinical_code 的医保码
+                        for ins_k, ins_v in i2c.items():
+                            if ins_v.get('code') == clinical_code:
+                                # ins_k 是医保码，ins_v['name'] 是国临版名称
+                                clinical_name = ins_v.get('name', '')
+                                break
+                    if clinical_name:
+                        new_item = {
+                            'code': clinical_code,
+                            'name': clinical_name,
+                            'name_lower': clinical_name.lower(),
+                            'code_lower': clinical_code.lower(),
+                            '_from_mapping': True,  # 标记来源
+                        }
+                        _icd10_clinical_data.append(new_item)
+                        existing_codes.add(clinical_code)
+                        补充_count += 1
+            if 补充_count > 0:
+                logger.info(f"✅ 从编码映射补充国临码: +{补充_count} 条 (共 {len(_icd10_clinical_data)} 条)")
+        except Exception as e:
+            logger.warning(f"⚠️ 补充国临码时出错: {e}")
+
 
     # ICD-9-CM-3
     icd9_path = os.path.join(data_dir, 'icd9cm3_procedures.json')
@@ -103,7 +129,6 @@ def _load_data():
         with open(icd9_path, 'r', encoding='utf-8') as f:
             raw = json.load(f)
             for item in raw:
-                item['pinyin'] = _get_pinyin_initials(item.get('name', ''))
                 item['name_lower'] = item.get('name', '').lower()
                 item['code_lower'] = item.get('code', '').lower()
             _icd9cm3_data = raw
@@ -156,13 +181,7 @@ def _search_dataset(data: List[dict], query: str, ds_type: str) -> List[dict]:
                 score = 85
             else:
                 score = 80
-        # 4. 拼音首字母匹配（仅当输入是纯字母时）
-        elif is_alpha and item.get('pinyin') and query_lower in item['pinyin']:
-            if item['pinyin'].startswith(query_lower):
-                score = 75
-            else:
-                score = 60
-        # 5. 编码部分包含
+        # 4. 编码部分包含
         elif query_lower in item['code_lower']:
             score = 50
 
@@ -223,16 +242,31 @@ async def search_icd_codes(
                 # 当前是国临版 → 显示医保版对应
                 lookup = _code_mapping.get('clinical_to_insurance', {})
                 mapped_label = '医保版'
+                if code in lookup:
+                    m = lookup[code]
+                    r['mapped_code'] = m['code']
+                    r['mapped_name'] = m['name']
+                    r['mapped_version'] = mapped_label
+                    r['is_diff'] = m.get('diff', False)
             else:
                 # 当前是医保版 → 显示国临版对应
-                lookup = _code_mapping.get('insurance_to_clinical', {})
+                # 修复：insurance_to_clinical 因一对多建库问题可能存错
+                # 优先判断：该医保码自身是否也是有效国临码（两版本编码相同）
+                c2i = _code_mapping.get('clinical_to_insurance', {})
+                i2c = _code_mapping.get('insurance_to_clinical', {})
                 mapped_label = '国临版'
-            if code in lookup:
-                m = lookup[code]
-                r['mapped_code'] = m['code']
-                r['mapped_name'] = m['name']
-                r['mapped_version'] = mapped_label
-                r['is_diff'] = m.get('diff', False)
+                if code in c2i and c2i[code].get('code') == code:
+                    # 医保码同时也是国临码，两版编码一致
+                    r['mapped_code'] = code
+                    r['mapped_name'] = r['name']
+                    r['mapped_version'] = mapped_label
+                    r['is_diff'] = False
+                elif code in i2c:
+                    m = i2c[code]
+                    r['mapped_code'] = m['code']
+                    r['mapped_name'] = m['name']
+                    r['mapped_version'] = mapped_label
+                    r['is_diff'] = m.get('diff', False)
 
     return {
         'success': True,
