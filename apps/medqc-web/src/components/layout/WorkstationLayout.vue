@@ -39,7 +39,7 @@
         </a-menu-item>
 
         <!-- ICD 编码查询 -->
-        <a-menu-item key="/workstation-v2/icd" class="menu-item-base">
+        <a-menu-item key="/workstation-v4/icd" class="menu-item-base">
           <template #icon>
             <SearchOutlined />
           </template>
@@ -54,21 +54,25 @@
           <template #title>
             <span class="font-medium">DRG/DIP 分析</span>
           </template>
-          <a-menu-item key="/workstation-v2/drg/pre">
+          <a-menu-item key="/workstation-v4/drg/pre">
              <template #icon><FileSearchOutlined /></template>
             <span>事前分析</span>
           </a-menu-item>
-          <a-menu-item key="/workstation-v2/drg/mid">
+          <a-menu-item key="/workstation-v4/drg/mid">
              <template #icon><DashboardOutlined /></template>
             <span>事中监控</span>
           </a-menu-item>
-          <a-menu-item key="/workstation-v2/drg/payment">
+          <a-menu-item key="/workstation-v4/drg/payment">
              <template #icon><DollarOutlined /></template>
             <span>付费监测</span>
           </a-menu-item>
-          <a-menu-item key="/workstation-v2/drg/post">
+          <a-menu-item key="/workstation-v4/drg/post">
              <template #icon><BarChartOutlined /></template>
             <span>事后分析</span>
+          </a-menu-item>
+          <a-menu-item key="/workstation-v4/drg/grouper">
+             <template #icon><ForkOutlined /></template>
+            <span>分组器</span>
           </a-menu-item>
         </a-sub-menu>
 
@@ -80,22 +84,22 @@
           <template #title>
             <span class="font-medium">质控规则</span>
           </template>
-          <a-menu-item key="/dashboard/rules?tab=coding">
+          <a-menu-item key="/workstation-v4/rules?tab=coding">
             <template #icon><MedicineBoxOutlined /></template>
             <span>编码质控规则</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/rules?tab=frontpage">
+          <a-menu-item key="/workstation-v4/rules?tab=frontpage">
             <template #icon><FileSearchOutlined /></template>
             <span>首页质控规则</span>
           </a-menu-item>
-          <a-menu-item key="/dashboard/rules?tab=settlement">
+          <a-menu-item key="/workstation-v4/rules?tab=settlement">
             <template #icon><DollarOutlined /></template>
             <span>医保结算清单规则</span>
           </a-menu-item>
         </a-sub-menu>
 
         <!-- 数据上传 -->
-        <a-menu-item key="/workstation-v2/upload" class="menu-item-base">
+        <a-menu-item key="/workstation-v4/upload" class="menu-item-base">
           <template #icon>
             <CloudUploadOutlined />
           </template>
@@ -103,7 +107,7 @@
         </a-menu-item>
 
         <!-- 统计分析 -->
-        <a-menu-item key="/workstation-v2/stats" class="menu-item-base">
+        <a-menu-item key="/workstation-v4/stats" class="menu-item-base">
           <template #icon>
             <BarChartOutlined />
           </template>
@@ -111,7 +115,7 @@
         </a-menu-item>
 
         <!-- 数据管理 -->
-        <a-menu-item key="/workstation-v2/data" class="menu-item-base">
+        <a-menu-item key="/workstation-v4/data" class="menu-item-base">
           <template #icon>
             <DatabaseOutlined />
           </template>
@@ -119,7 +123,7 @@
         </a-menu-item>
 
         <!-- 数据库配置 -->
-        <a-menu-item key="/system-config" class="menu-item-base">
+        <a-menu-item key="/workstation-v4/system-config" class="menu-item-base">
           <template #icon>
             <SettingOutlined />
           </template>
@@ -265,6 +269,7 @@ import {
   MedicineBoxOutlined,
   DatabaseOutlined,
   SafetyCertificateOutlined,
+  ForkOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -280,15 +285,17 @@ const breadcrumbItems = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
     '/workstation-v4': '工作台',
-    '/workstation-v2/icd': 'ICD 编码查询',
-    '/workstation-v2/upload': '数据上传',
-    '/workstation-v2/stats': '统计分析',
-    '/workstation-v2/drg/pre': '事前分析',
-    '/workstation-v2/drg/mid': '事中监控',
-    '/workstation-v2/drg/payment': '付费监测',
-    '/workstation-v2/drg/post': '事后分析',
-    '/workstation-v2/data': '数据管理',
-    '/system-config': '数据库配置',
+    '/workstation-v4/icd': 'ICD 编码查询',
+    '/workstation-v4/upload': '数据上传',
+    '/workstation-v4/stats': '统计分析',
+    '/workstation-v4/drg/pre': '事前分析',
+    '/workstation-v4/drg/mid': '事中监控',
+    '/workstation-v4/drg/payment': '付费监测',
+    '/workstation-v4/drg/post': '事后分析',
+    '/workstation-v4/drg/grouper': '分组器',
+    '/workstation-v4/data': '数据管理',
+    '/workstation-v4/rules': '质控规则管理',
+    '/workstation-v4/system-config': '数据库配置',
   }
   const title = titleMap[path] || '工作台'
   return [{ title }]

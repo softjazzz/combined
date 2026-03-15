@@ -925,7 +925,80 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'WorkstationV4Index',
         component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
-        meta: { title: '工作台 V4', permission: ['admin', 'qc_manager', 'doctor'] }
+        meta: { title: '工作台', permission: ['admin', 'qc_manager', 'doctor'] }
+      },
+      {
+        path: 'icd',
+        name: 'WorkstationV4ICD',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'icd-search' },
+        meta: { title: 'ICD 编码查询' }
+      },
+      {
+        path: 'upload',
+        name: 'WorkstationV4Upload',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'upload' },
+        meta: { title: '数据上传' }
+      },
+      {
+        path: 'stats',
+        name: 'WorkstationV4Stats',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'workbench' },
+        meta: { title: '统计分析' }
+      },
+      {
+        path: 'drg/pre',
+        name: 'WorkstationV4DRGPre',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'pre-analysis' },
+        meta: { title: '事前分析' }
+      },
+      {
+        path: 'drg/mid',
+        name: 'WorkstationV4DRGMid',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'mid-analysis' },
+        meta: { title: '事中监控' }
+      },
+      {
+        path: 'drg/payment',
+        name: 'WorkstationV4DRGPayment',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'payment' },
+        meta: { title: '付费监测' }
+      },
+      {
+        path: 'drg/post',
+        name: 'WorkstationV4DRGPost',
+        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        props: { embedded: true, initialView: 'post-analysis' },
+        meta: { title: '事后分析' }
+      },
+      {
+        path: 'drg/grouper',
+        name: 'WorkstationV4DRGGrouper',
+        component: () => import('@/views/drg-grouper/DrgGrouperView.vue'),
+        meta: { title: 'DRG 分组器' }
+      },
+      {
+        path: 'data',
+        name: 'WorkstationV4Data',
+        component: () => import('@/views/workstation-v2/CDMDataView.vue'),
+        meta: { title: '数据管理' }
+      },
+      {
+        path: 'rules',
+        name: 'WorkstationV4Rules',
+        component: () => import('@/views/rules/RulesView.vue'),
+        meta: { title: '质控规则管理' }
+      },
+      {
+        path: 'system-config',
+        name: 'WorkstationV4SystemConfig',
+        component: () => import('@/views/workstation-v2/SystemConfigView.vue'),
+        meta: { title: '数据库配置', permission: ['admin'] }
       }
     ]
   },
