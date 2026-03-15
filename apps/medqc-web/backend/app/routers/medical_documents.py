@@ -10,7 +10,6 @@ from ..core.response import success_response, get_trace_id, ErrorCode, StatusCod
 from ..services.records_ingest_service import get_classification_mapping
 from ..services.qc_service import QCService
 from ..core.security import get_current_user
-from ..storage.memory import qc_results_db
 from ..core.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -490,7 +489,12 @@ async def batch_qc_analysis(request: Request, record_id: str, current_user: dict
         started = []
         for d in docs:
             res = await qc_service.evaluate({"record_id": d["id"]})
-            qc_results_db[d["id"]] = res
+            # 写入 PG qc_results （复用 qc.py 的辅助函数）
+            try:
+                from .qc import _save_qc_result
+                await _save_qc_result(d["id"], res)
+            except Exception as e:
+                logger.warning(f"写入 qc_results 失败（非阻塞）: {e}")
             started.append({"document_id": d["id"], "status": "started"})
         return success_response(
             data={"record_id": record_id, "started": started, "count": len(started)},
@@ -513,7 +517,12 @@ async def analyze_medical_document(request: Request, document_id: str, current_u
         if not data:
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="文档不存在")
         res = await qc_service.evaluate({"record_id": document_id})
-        qc_results_db[document_id] = res
+        # 写入 PG qc_results
+        try:
+            from .qc import _save_qc_result
+            await _save_qc_result(document_id, res)
+        except Exception as e:
+            logger.warning(f"写入 qc_results 失败（非阻塞）: {e}")
         return success_response(
             data={"analysis_id": res.get("id"), "status": "started"},
             message="质控分析已启动",
@@ -527,7 +536,17 @@ async def analyze_medical_document(request: Request, document_id: str, current_u
 
 @router.get("/medical-documents/{document_id}/qc-results")
 async def get_document_qc_results(request: Request, document_id: str):
-    res = qc_results_db.get(document_id)
-    if not res:
-        raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="质控结果不存在")
-    return success_response(data=res, trace_id=get_trace_id(request))
+    """获取文书质控结果，从 PG qc_results 表读取"""
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=503, detail="数据库不可用")
+    try:
+        resp = await async_execute(
+            sb.table('qc_results').select('*').eq('record_id', document_id).order('created_at', desc=True).limit(1)
+        )
+        data = list(getattr(resp, 'data', None) or [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询质控结果失败: {str(e)}")
+    if not data:
+        raise HTTPException(status_code=404, detail="质控结果不存在")
+    return success_response(data=data[0], trace_id=get_trace_id(request))

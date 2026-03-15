@@ -30,20 +30,30 @@ _DB_STATS_TIMEOUT_SECONDS = float(os.getenv("DASHBOARD_DB_STATS_TIMEOUT_SECONDS"
 # ============================
 
 async def _aggregate_from_memory() -> Dict[str, Any]:
-    """从内存中的质控结果聚合统计（开发回退模式）"""
-    from ..storage.memory import qc_results_db
-
-    total_records = len(qc_results_db)
+    """从 PG qc_results 聚合统计（原为内存模式，已迁移至 PG）"""
+    sb = get_supabase()
+    total_records = 0
     total_defects = 0
     severity_counts = {"critical": 0, "error": 0, "warning": 0, "info": 0}
 
-    for rid, result in qc_results_db.items():
-        issues = result.get("issues", [])
-        total_defects += len(issues)
-        for issue in issues:
-            sev = issue.get("severity", "warning")
-            if sev in severity_counts:
-                severity_counts[sev] += 1
+    if sb is not None:
+        try:
+            resp = await async_execute(sb.table("qc_results").select("issues,defect_count").limit(1000))
+            rows = list(getattr(resp, "data", None) or [])
+            total_records = len(rows)
+            for row in rows:
+                issues = row.get("issues") or []
+                if isinstance(issues, list):
+                    total_defects += len(issues)
+                    for issue in issues:
+                        sev = issue.get("severity", "warning") if isinstance(issue, dict) else "warning"
+                        if sev in severity_counts:
+                            severity_counts[sev] += 1
+                elif isinstance(row.get("defect_count"), int):
+                    total_defects += row["defect_count"]
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"[dashboard] 聚合 qc_results 失败: {e}")
 
     return {
         "total_records": total_records,
