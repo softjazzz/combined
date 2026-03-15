@@ -7,7 +7,7 @@ router code paths to minimize migration risk.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, Index, Integer, String, Text
 
 from ..connection import Base
 
@@ -331,6 +331,84 @@ class QCRemediationHistory(Base):
         Index("ix_qc_remediation_history_action", "action"),
         Index("ix_qc_remediation_history_actor", "actor_id"),
         Index("ix_qc_remediation_history_created_at", "created_at"),
+    )
+
+
+class QCRule(Base):
+    """质控规则主表 — 语义规则 / 科室规则 / 编码质控规则共用。
+
+    PRD 2.18: semantic_rules.py / department_qc_rules.py / qc.py /
+              qc_sichuan.py / reports.py 共同依赖。
+    编码质控规则仅用于提醒编码员，不扣分。
+    """
+
+    __tablename__ = "qc_rules"
+
+    id = Column(String(36), primary_key=True)
+    rule_code = Column(String(50), nullable=False, unique=True, comment="规则编码")
+    name = Column(String(200), nullable=False, comment="规则名称")
+    description = Column(Text, comment="规则描述")
+    category = Column(String(50), nullable=False, comment="规则分类（含编码质控）")
+    severity = Column(String(20), comment="严重程度")
+    scope = Column(String(20), default="global", comment="global / department")
+    department_id = Column(String(36), comment="科室规则时必填")
+    parent_rule_id = Column(String(36), comment="覆盖全局规则时关联父规则")
+    override_action = Column(String(20), comment="override / disable")
+    override_config = Column(Text, comment="JSON（覆盖配置）")
+    priority = Column(Integer, default=0, comment="优先级")
+    status = Column(String(20), default="published", comment="draft / published / archived")
+    version = Column(String(20), default="1.0", comment="规则版本")
+    effective_from = Column(DateTime, comment="生效开始")
+    effective_to = Column(DateTime, comment="生效结束")
+    check_logic = Column(Text, comment="JSON（规则逻辑）")
+    scoring_config_json = Column("scoring_config", Text, comment="JSON（评分配置；编码质控可为空）")
+    applicable_documents = Column(Text, comment="JSON array（适用文书）")
+    primary_document_category = Column(String(50), comment="qc.py 聚合查询依赖")
+    is_active = Column(Boolean, default=True, nullable=False, comment="是否启用")
+    metadata_json = Column("metadata", Text, comment="JSON 扩展字段")
+    approved_by = Column(String(36), comment="审批人")
+    approved_at = Column(DateTime, comment="审批时间")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_qc_rules_category", "category"),
+        Index("ix_qc_rules_scope", "scope"),
+        Index("ix_qc_rules_department", "department_id"),
+        Index("ix_qc_rules_is_active", "is_active"),
+        Index("ix_qc_rules_status", "status"),
+    )
+
+
+class QCCoderWorkloadDaily(Base):
+    """编码员日工作量统计表 — PRD 2.16。
+
+    替代 staff_ranking.py 的内置 mock 数据。
+    v_qc_coder_ranking 视图依赖本表。
+    """
+
+    __tablename__ = "qc_coder_workload_daily"
+
+    id = Column(String(36), primary_key=True)
+    stat_date = Column(Date, nullable=False, comment="统计日期")
+    coder_id = Column(String(36), nullable=False, comment="编码员用户 ID")
+    coder_name = Column(String(50), nullable=False, comment="编码员姓名")
+    department_id = Column(String(36), comment="科室 ID")
+    department_name = Column(String(50), comment="科室名")
+    qc_count = Column(Integer, default=0, nullable=False, comment="质控病历数")
+    recheck_count = Column(Integer, default=0, nullable=False, comment="复审病历数")
+    defect_found = Column(Integer, default=0, nullable=False, comment="编码质控提醒数（不扣分）")
+    passed_count = Column(Integer, default=0, nullable=False, comment="通过数")
+    warning_count = Column(Integer, default=0, nullable=False, comment="警告数")
+    failed_count = Column(Integer, default=0, nullable=False, comment="失败数")
+    avg_handle_seconds = Column(Float, default=0.0, nullable=False, comment="平均处理时长（秒）")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_qc_coder_workload_stat_date", "stat_date"),
+        Index("ix_qc_coder_workload_coder", "coder_id"),
+        Index("uq_qc_coder_workload_daily", "stat_date", "coder_id", unique=True),
     )
 
 
