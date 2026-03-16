@@ -2,9 +2,13 @@
 数据访问抽象层（Repository Pattern）
 
 设计目标：
-- SQLite（测试）和 MongoDB API（生产）共用同一套接口
-- 上层业务代码和路由不关心数据从哪来
-- 切换数据源只需改 DATA_SOURCE 配置
+- 统一 PostgreSQL 读写层（开发/演示/生产共用）
+- 数据来源按环境区分：Demo 用 mock seed，Prod 用 Mongo 同步入 PG
+- 业务代码不直连 Mongo API，数据由 ETL 管道同步入 PG
+
+架构决策（ADR-2026-03-16）：
+    唯一生产链路：Mongo → ETL 同步 → PG → 业务读写
+    DATA_SOURCE=mongo_api 已弃用，启动即失败
 
 使用方式：
     from app.database.repository import get_repository
@@ -19,7 +23,7 @@ from datetime import date, datetime
 
 
 # ==================== 数据传输对象 ====================
-# 用 dict 做 DTO，兼容 SQLAlchemy 和 MongoDB API 两种来源
+# 用 dict 做 DTO，兼容各种来源
 
 class MedicalRecordRepository(ABC):
     """病案数据访问接口 - 所有实现必须遵循此接口"""
@@ -96,10 +100,14 @@ class MedicalRecordRepository(ABC):
         ...
 
 
-# ==================== SQLite 实现 ====================
+# ==================== PostgreSQL 实现 ====================
 
 class SqliteRepository(MedicalRecordRepository):
-    """SQLite 实现 - 开发/测试用"""
+    """PostgreSQL 实现 — 开发/演示/生产统一读写入口
+
+    历史说明：类名保留 SqliteRepository 以兼容已有引用，
+    实际通过 SessionLocal 连接 PostgreSQL。
+    """
 
     def __init__(self):
         from .connection import SessionLocal
@@ -298,13 +306,15 @@ class SqliteRepository(MedicalRecordRepository):
             session.close()
 
 
-# ==================== MongoDB API 实现（骨架）====================
+# ==================== MongoDB API 实现（已弃用）====================
 
 class MongoApiRepository(MedicalRecordRepository):
-    """MongoDB API 实现 - 生产用，对接医院真实 API
+    """[DEPRECATED] MongoDB API 直读 — 已弃用，禁止生产使用。
 
-    TODO: 对接真实 MongoDB API 时实现以下方法
-    预期 API 格式参考 CDM V1.0 字段命名
+    架构决策（ADR-2026-03-16）：
+    生产链路为 Mongo → ETL 同步 → PG，不做运行时直读 Mongo API。
+
+    此类保留仅供代码考古参考，get_repository() 已禁止实例化此类。
     """
 
     def __init__(self, base_url: str, api_key: Optional[str] = None):
@@ -312,34 +322,34 @@ class MongoApiRepository(MedicalRecordRepository):
         self.api_key = api_key
 
     def list_patients(self, **kwargs):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用，请使用 Mongo Sync → PG 链路")
 
     def get_frontpage(self, institute_id, patient_id, visit_id):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def save_frontpage(self, data):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_diagnoses(self, institute_id, patient_id, visit_id):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_surgeries(self, institute_id, patient_id, visit_id):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_cost(self, institute_id, patient_id, visit_id):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_record_content(self, institute_id, patient_id, visit_id, record_type="admission"):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def save_qc_results(self, results):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_qc_results(self, institute_id, patient_id, visit_id):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_stats(self, **kwargs):
-        raise NotImplementedError("MongoDB API 对接待实现")
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
 
 # ==================== 工厂函数 ====================
@@ -348,19 +358,36 @@ _repo_instance: Optional[MedicalRecordRepository] = None
 
 
 def get_repository() -> MedicalRecordRepository:
-    """获取 Repository 单例
+    """获取 Repository 单例（统一 PG 读写）
 
-    通过 DATA_SOURCE 环境变量切换:
-    - sqlite（默认）: 使用本地 SQLite
-    - mongo_api: 对接 MongoDB API
+    DATA_SOURCE 环境变量策略：
+    - 未设置 / "pg" / "sqlite"（兼容）：走 PostgreSQL 读写（推荐）
+    - "mongo_api"：启动即失败（已弃用，见 ADR-2026-03-16）
+    - 其他值：启动即失败（配置错误前置暴露）
     """
     global _repo_instance
     if _repo_instance is None:
-        source = os.getenv("DATA_SOURCE", "sqlite").lower()
+        source = os.getenv("DATA_SOURCE", "pg").lower().strip()
+
         if source == "mongo_api":
-            mongo_url = os.getenv("MONGO_API_URL", "http://localhost:8080")
-            mongo_key = os.getenv("MONGO_API_KEY")
-            _repo_instance = MongoApiRepository(base_url=mongo_url, api_key=mongo_key)
+            raise RuntimeError(
+                "DATA_SOURCE=mongo_api 已弃用。"
+                "生产链路为 Mongo → ETL 同步 → PG，请移除 DATA_SOURCE 或设为 'pg'。"
+                "详见 docs/ADR-data-source-pg-only.md"
+            )
+        elif source not in ("pg", "sqlite", ""):
+            raise ValueError(
+                f"DATA_SOURCE='{source}' 不是合法值。"
+                f"允许值: 'pg'（推荐）, 'sqlite'（兼容别名）。"
+                f"不再支持: 'mongo_api'（已弃用）。"
+            )
         else:
             _repo_instance = SqliteRepository()
+
     return _repo_instance
+
+
+def reset_repository():
+    """重置单例（仅测试用）"""
+    global _repo_instance
+    _repo_instance = None
