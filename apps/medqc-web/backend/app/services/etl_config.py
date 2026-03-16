@@ -103,16 +103,16 @@ TIER3_COLLECTIONS = [c for c in MONGO_COLLECTION_MAP if c not in TIER2_COLLECTIO
 
 # 每张表的主键字段（用于 UPSERT 去重），与 etl_sync.py 保持一致
 COLLECTION_KEY_FIELDS = {
-    "mr": ["patient_id", "visit_id"],
-    "diagnosis": ["patient_id", "visit_id", "diagnosis_id"],
-    "mr_surgery": ["patient_id", "visit_id"],
-    "mr_cost": ["patient_id", "visit_id"],
-    "admission_record": ["patient_id", "visit_id"],
-    "discharge_record": ["patient_id", "visit_id"],
-    "death_record": ["patient_id", "visit_id"],
+    "mr": ["institute_id", "patient_id", "visit_id"],
+    "diagnosis": ["institute_id", "patient_id", "visit_id", "diagnosis_id"],
+    "mr_surgery": ["institute_id", "patient_id", "visit_id", "surgery_id"],
+    "mr_cost": ["institute_id", "patient_id", "visit_id"],
+    "admission_record": ["institute_id", "patient_id", "visit_id"],
+    "discharge_record": ["institute_id", "patient_id", "visit_id"],
+    "death_record": ["institute_id", "patient_id", "visit_id"],
 }
 # 所有文书类默认主键
-_DOC_KEY = ["patient_id", "visit_id", "document_id"]
+_DOC_KEY = ["institute_id", "patient_id", "visit_id", "document_id"]
 for coll in TIER3_COLLECTIONS:
     if coll not in COLLECTION_KEY_FIELDS:
         COLLECTION_KEY_FIELDS[coll] = _DOC_KEY
