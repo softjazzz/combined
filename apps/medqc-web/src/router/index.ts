@@ -977,10 +977,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '事后分析' }
       },
       {
-        path: 'drg/grouper',
-        name: 'WorkstationV4DRGGrouper',
-        component: () => import('@/views/drg-grouper/DrgGrouperView.vue'),
-        meta: { title: 'DRG 分组器' }
+        path: 'grouper',
+        name: 'WorkstationV4Grouper',
+        component: () => import('@/views/drg-grouper/GrouperTabsView.vue'),
+        meta: { title: '医保分组器' }
       },
       {
         path: 'data',

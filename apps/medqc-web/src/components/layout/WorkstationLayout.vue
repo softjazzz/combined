@@ -70,7 +70,7 @@
              <template #icon><BarChartOutlined /></template>
             <span>事后分析</span>
           </a-menu-item>
-          <a-menu-item key="/workstation-v4/drg/grouper">
+          <a-menu-item key="/workstation-v4/grouper">
              <template #icon><ForkOutlined /></template>
             <span>分组器</span>
           </a-menu-item>
@@ -292,7 +292,7 @@ const breadcrumbItems = computed(() => {
     '/workstation-v4/drg/mid': '事中监控',
     '/workstation-v4/drg/payment': '付费监测',
     '/workstation-v4/drg/post': '事后分析',
-    '/workstation-v4/drg/grouper': '分组器',
+    '/workstation-v4/grouper': '医保分组器',
     '/workstation-v4/data': '数据管理',
     '/workstation-v4/rules': '质控规则管理',
     '/workstation-v4/system-config': '数据库配置',
