@@ -12,6 +12,7 @@ Repository 数据源策略行为测试
 import os
 import pytest
 from unittest.mock import patch, MagicMock
+from fastapi.testclient import TestClient
 
 
 # 每个测试前重置单例
@@ -89,3 +90,28 @@ class TestDataSourcePolicy:
             from app.database.repository import get_repository, SqliteRepository
             repo = get_repository()
             assert isinstance(repo, SqliteRepository)
+
+
+class TestStartupIntegration:
+    """验证 create_app() 启动阶段的 DATA_SOURCE 校验"""
+
+    @pytest.mark.integration
+    def test_startup_fails_with_mongo_api(self):
+        """DATA_SOURCE=mongo_api → create_app() 启动即失败（RuntimeError）"""
+        with patch.dict(os.environ, {"DATA_SOURCE": "mongo_api"}):
+            from app.main import create_app
+            app = create_app()
+            with pytest.raises(RuntimeError, match="已弃用"):
+                # startup 事件在 TestClient 进入上下文时触发
+                with TestClient(app):
+                    pass  # 不应到达此处
+
+    @pytest.mark.integration
+    def test_startup_fails_with_unknown_source(self):
+        """DATA_SOURCE=redis → create_app() 启动即失败（ValueError）"""
+        with patch.dict(os.environ, {"DATA_SOURCE": "redis"}):
+            from app.main import create_app
+            app = create_app()
+            with pytest.raises(ValueError, match="不是合法值"):
+                with TestClient(app):
+                    pass
