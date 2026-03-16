@@ -13,6 +13,7 @@
 import sys
 import os
 import argparse
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -129,23 +130,46 @@ def check_api_endpoints(
         headers["Authorization"] = f"Bearer {token}"
         results.append({"check": "API 鉴权", "status": "PASS", "detail": "使用 --api-token"})
     elif api_email and api_password:
-        try:
-            login_resp = client.post(
-                "/api/v1/auth/login",
-                json={"email": api_email, "password": api_password},
-            )
-            if login_resp.status_code == 200:
-                payload = login_resp.json()
-                token = payload.get("access_token") or payload.get("data", {}).get("access_token")
-                if token:
-                    headers["Authorization"] = f"Bearer {token}"
-                    results.append({"check": "API 鉴权", "status": "PASS", "detail": "登录成功并获取 token"})
-                else:
-                    results.append({"check": "API 鉴权", "status": "WARN", "detail": "登录成功但未返回 access_token"})
-            else:
-                results.append({"check": "API 鉴权", "status": f"WARN {login_resp.status_code}", "detail": "登录失败，继续无鉴权检查"})
-        except Exception as e:
-            results.append({"check": "API 鉴权", "status": "WARN", "detail": f"登录异常: {str(e)[:80]}"})
+        login_ok = False
+        for attempt in range(1, 4):
+            try:
+                login_resp = client.post(
+                    "/api/v1/auth/login",
+                    json={"email": api_email, "password": api_password},
+                )
+                if login_resp.status_code == 200:
+                    payload = login_resp.json()
+                    token = payload.get("access_token") or payload.get("data", {}).get("access_token")
+                    if token:
+                        headers["Authorization"] = f"Bearer {token}"
+                        results.append({
+                            "check": "API 鉴权",
+                            "status": "PASS",
+                            "detail": f"登录成功并获取 token（attempt={attempt}）",
+                        })
+                    else:
+                        results.append({
+                            "check": "API 鉴权",
+                            "status": "WARN",
+                            "detail": "登录成功但未返回 access_token",
+                        })
+                    login_ok = True
+                    break
+                if attempt == 3:
+                    results.append({
+                        "check": "API 鉴权",
+                        "status": f"WARN {login_resp.status_code}",
+                        "detail": "登录失败，继续无鉴权检查",
+                    })
+            except Exception as e:
+                if attempt == 3:
+                    results.append({
+                        "check": "API 鉴权",
+                        "status": "WARN",
+                        "detail": f"登录异常: {str(e)[:80]}",
+                    })
+            if not login_ok:
+                time.sleep(1.0)
     else:
         results.append({"check": "API 鉴权", "status": "SKIP", "detail": "未提供 token 或登录账号，按匿名检查"})
 

@@ -137,6 +137,15 @@ def plan_actions(conn) -> Tuple[List[str], List[str]]:
     # Ensure sys schema exists for bootstrap.
     actions.append('CREATE SCHEMA IF NOT EXISTS "sys"')
 
+    # Views must be handled before tables to avoid dependency failures.
+    for view in QC_VIEWS:
+        in_public = view_exists(conn, "public", view)
+        in_qc = view_exists(conn, "qc", view)
+        if in_public and in_qc:
+            actions.append(f'DROP VIEW "public"."{view}"')
+        elif in_public and not in_qc:
+            actions.append(f'ALTER VIEW "public"."{view}" SET SCHEMA "qc"')
+
     for table, target_schema in TABLE_TARGET_SCHEMA.items():
         in_public = table_exists(conn, "public", table)
         in_target = table_exists(conn, target_schema, table)
@@ -151,14 +160,6 @@ def plan_actions(conn) -> Tuple[List[str], List[str]]:
                 )
         elif target_schema != "public" and in_public and not in_target:
             actions.append(f'ALTER TABLE "public"."{table}" SET SCHEMA "{target_schema}"')
-
-    for view in QC_VIEWS:
-        in_public = view_exists(conn, "public", view)
-        in_qc = view_exists(conn, "qc", view)
-        if in_public and in_qc:
-            actions.append(f'DROP VIEW "public"."{view}"')
-        elif in_public and not in_qc:
-            actions.append(f'ALTER VIEW "public"."{view}" SET SCHEMA "qc"')
 
     # Bootstrap required sys tables if missing.
     for tbl, ddl in SYS_BOOTSTRAP_SQL.items():
@@ -180,9 +181,11 @@ def execute_actions(conn, actions: List[str]) -> Tuple[int, int]:
     for stmt in actions:
         try:
             conn.execute(text(stmt))
+            conn.commit()
             executed += 1
             print(f"[EXEC] {stmt}")
         except Exception as e:
+            conn.rollback()
             failed += 1
             print(f"[FAIL] {stmt} -> {e}")
     return executed, failed
@@ -197,7 +200,7 @@ def main() -> None:
         raise RuntimeError("DATABASE_URL is not configured")
 
     engine = sa.create_engine(DATABASE_URL)
-    with engine.begin() as conn:
+    with engine.connect() as conn:
         actions, warnings = plan_actions(conn)
 
         print("[PLAN] split residual cleanup")
@@ -220,4 +223,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
