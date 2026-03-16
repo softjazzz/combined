@@ -109,7 +109,7 @@ async def create_remediation_task(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="创建整改任务失败"
             )
 
@@ -143,7 +143,7 @@ async def create_remediation_task(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"创建整改任务失败: {str(e)}"
         )
 
@@ -224,11 +224,11 @@ async def list_remediation_tasks(
         result = query.execute()
 
         return paginated_response(
-            data=result.data or [],
+            items=result.data or [],
             total=result.count or 0,
             page=page,
             page_size=page_size,
-            request=request
+            trace_id=trace_id,
         )
 
     except Exception as e:
@@ -237,7 +237,7 @@ async def list_remediation_tasks(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取整改任务列表失败: {str(e)}"
         )
 
@@ -297,7 +297,7 @@ async def get_remediation_task(
             extra={"trace_id": trace_id, "task_id": task_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取整改任务详情失败: {str(e)}"
         )
 
@@ -380,7 +380,7 @@ async def update_remediation_task(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="更新整改任务失败"
             )
 
@@ -413,7 +413,7 @@ async def update_remediation_task(
             extra={"trace_id": trace_id, "task_id": task_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"更新整改任务失败: {str(e)}"
         )
 
@@ -487,7 +487,7 @@ async def submit_remediation(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="提交整改失败"
             )
 
@@ -522,7 +522,7 @@ async def submit_remediation(
             extra={"trace_id": trace_id, "task_id": task_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"提交整改失败: {str(e)}"
         )
 
@@ -599,7 +599,7 @@ async def review_remediation(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="验收整改失败"
             )
 
@@ -635,7 +635,7 @@ async def review_remediation(
             extra={"trace_id": trace_id, "task_id": task_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"验收整改失败: {str(e)}"
         )
 
@@ -699,7 +699,7 @@ async def close_remediation_task(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="关闭整改任务失败"
             )
 
@@ -734,7 +734,7 @@ async def close_remediation_task(
             extra={"trace_id": trace_id, "task_id": task_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"关闭整改任务失败: {str(e)}"
         )
 
@@ -833,7 +833,7 @@ async def get_remediation_statistics(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取统计数据失败: {str(e)}"
         )
 
@@ -878,7 +878,7 @@ async def get_assignee_workload(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取工作负载失败: {str(e)}"
         )
 
@@ -941,6 +941,7 @@ async def get_overdue_tasks(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取逾期任务失败: {str(e)}"
         )
+

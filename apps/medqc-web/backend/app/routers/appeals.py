@@ -104,7 +104,7 @@ async def create_appeal(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="创建申诉失败"
             )
 
@@ -127,7 +127,7 @@ async def create_appeal(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"创建申诉失败: {str(e)}"
         )
 
@@ -196,11 +196,11 @@ async def list_appeals(
         result = query.execute()
 
         return paginated_response(
-            data=result.data or [],
+            items=result.data or [],
             total=result.count or 0,
             page=page,
             page_size=page_size,
-            request=request
+            trace_id=trace_id,
         )
 
     except Exception as e:
@@ -209,7 +209,7 @@ async def list_appeals(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取申诉列表失败: {str(e)}"
         )
 
@@ -269,7 +269,7 @@ async def get_appeal(
             extra={"trace_id": trace_id, "appeal_id": appeal_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取申诉详情失败: {str(e)}"
         )
 
@@ -348,7 +348,7 @@ async def update_appeal(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="更新申诉失败"
             )
 
@@ -371,7 +371,7 @@ async def update_appeal(
             extra={"trace_id": trace_id, "appeal_id": appeal_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"更新申诉失败: {str(e)}"
         )
 
@@ -440,7 +440,7 @@ async def withdraw_appeal(
 
         if not result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="撤回申诉失败"
             )
 
@@ -463,7 +463,7 @@ async def withdraw_appeal(
             extra={"trace_id": trace_id, "appeal_id": appeal_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"撤回申诉失败: {str(e)}"
         )
 
@@ -557,7 +557,7 @@ async def review_appeal(
 
         if not appeal_result.data:
             raise HTTPException(
-                status_code=StatusCode.INTERNAL_ERROR,
+                status_code=StatusCode.INTERNAL_SERVER_ERROR,
                 detail="更新申诉状态失败"
             )
 
@@ -580,7 +580,7 @@ async def review_appeal(
             extra={"trace_id": trace_id, "appeal_id": appeal_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"审核申诉失败: {str(e)}"
         )
 
@@ -677,6 +677,7 @@ async def get_appeal_statistics(
             extra={"trace_id": trace_id}
         )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_ERROR,
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取统计数据失败: {str(e)}"
         )
+
