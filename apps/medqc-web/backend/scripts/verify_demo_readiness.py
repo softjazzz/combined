@@ -13,7 +13,6 @@
 import sys
 import os
 import argparse
-import json
 from pathlib import Path
 from datetime import datetime
 
@@ -56,14 +55,14 @@ EXPECTED_TABLES_WITH_DATA = [
 ]
 
 API_ENDPOINTS = [
-    ("/api/v1/system/health", "系统健康"),
+    ("/api/v1/health", "系统健康"),
     ("/api/v1/tasks", "质控任务列表"),
-    ("/api/v1/defects", "缺陷列表"),
+    ("/api/v1/qc/defects", "缺陷列表"),
     ("/api/v1/appeals", "申诉列表"),
-    ("/api/v1/remediation/tasks", "整改任务列表"),
+    ("/api/v1/remediation", "整改任务列表"),
     ("/api/v1/notifications", "通知列表"),
     ("/api/v1/scoring-rules", "评分规则"),
-    ("/api/v1/staff-ranking/summary", "质控员排名"),
+    ("/api/v1/staff-ranking", "质控员排名"),
 ]
 
 
@@ -110,22 +109,57 @@ def check_demo_data(conn) -> list:
     return results
 
 
-def check_api_endpoints(base_url: str) -> list:
+def check_api_endpoints(
+    base_url: str,
+    api_token: str = "",
+    api_email: str = "",
+    api_password: str = "",
+) -> list:
     """检查关键 API 端点是否返回 200"""
     if not HAS_HTTPX:
         return [{"check": "API 检查", "status": "SKIP", "detail": "httpx 未安装"}]
 
     results = []
-    client = httpx.Client(base_url=base_url, timeout=10)
+    client = httpx.Client(base_url=base_url, timeout=10, trust_env=False)
+    headers = {}
+
+    # Optional auth bootstrap: use provided token first, then email/password login.
+    token = (api_token or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        results.append({"check": "API 鉴权", "status": "PASS", "detail": "使用 --api-token"})
+    elif api_email and api_password:
+        try:
+            login_resp = client.post(
+                "/api/v1/auth/login",
+                json={"email": api_email, "password": api_password},
+            )
+            if login_resp.status_code == 200:
+                payload = login_resp.json()
+                token = payload.get("access_token") or payload.get("data", {}).get("access_token")
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+                    results.append({"check": "API 鉴权", "status": "PASS", "detail": "登录成功并获取 token"})
+                else:
+                    results.append({"check": "API 鉴权", "status": "WARN", "detail": "登录成功但未返回 access_token"})
+            else:
+                results.append({"check": "API 鉴权", "status": f"WARN {login_resp.status_code}", "detail": "登录失败，继续无鉴权检查"})
+        except Exception as e:
+            results.append({"check": "API 鉴权", "status": "WARN", "detail": f"登录异常: {str(e)[:80]}"})
+    else:
+        results.append({"check": "API 鉴权", "status": "SKIP", "detail": "未提供 token 或登录账号，按匿名检查"})
 
     for path, desc in API_ENDPOINTS:
         try:
-            resp = client.get(path)
+            resp = client.get(path, headers=headers or None)
             ok = resp.status_code == 200
+            detail = f"GET {path} -> {resp.status_code}"
+            if resp.status_code in (401, 403):
+                detail += " (鉴权限制)"
             results.append({
                 "check": f"API {desc}",
                 "status": "PASS" if ok else f"WARN {resp.status_code}",
-                "detail": f"GET {path} -> {resp.status_code}",
+                "detail": detail,
             })
         except Exception as e:
             results.append({
@@ -195,6 +229,12 @@ def main():
     parser = argparse.ArgumentParser(description="MedQC 演示验收脚本")
     parser.add_argument("--api-base", default="http://localhost:8001",
                         help="API 基地址（默认 http://localhost:8001）")
+    parser.add_argument("--api-token", default=os.getenv("DEMO_API_TOKEN", ""),
+                        help="可选：API Bearer token（优先于账号密码）")
+    parser.add_argument("--api-email", default=os.getenv("DEMO_API_EMAIL", ""),
+                        help="可选：登录邮箱（用于自动获取 token）")
+    parser.add_argument("--api-password", default=os.getenv("DEMO_API_PASSWORD", ""),
+                        help="可选：登录密码（用于自动获取 token）")
     parser.add_argument("--skip-api", action="store_true",
                         help="跳过 API 检查（仅检查 DB）")
     parser.add_argument("--allow-empty", action="store_true",
@@ -221,7 +261,14 @@ def main():
     # 3. API 检查
     if not args.skip_api:
         print("检查 API 端点...")
-        all_results.extend(check_api_endpoints(args.api_base))
+        all_results.extend(
+            check_api_endpoints(
+                args.api_base,
+                api_token=args.api_token,
+                api_email=args.api_email,
+                api_password=args.api_password,
+            )
+        )
     else:
         all_results.append({"check": "API 检查", "status": "SKIP", "detail": "用户跳过"})
 
