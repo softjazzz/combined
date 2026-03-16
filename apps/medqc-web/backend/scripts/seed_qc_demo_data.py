@@ -81,12 +81,18 @@ RECORDS = [
 ]
 
 # 质控员
+# 质控员（所有 ID 加 demo-seed 前缀，清理时严格匹配）
+DEMO_CODER_PREFIX = "demo-seed-"
 CODERS = [
-    ("QC001", "王质控", "质控科"),
-    ("QC002", "李审查", "质控科"),
-    ("QC003", "张编码", "病案室"),
-    ("QC004", "刘核查", "质控科"),
+    (f"{DEMO_CODER_PREFIX}QC001", "王质控", "质控科"),
+    (f"{DEMO_CODER_PREFIX}QC002", "李审查", "质控科"),
+    (f"{DEMO_CODER_PREFIX}QC003", "张编码", "病案室"),
+    (f"{DEMO_CODER_PREFIX}QC004", "刘核查", "质控科"),
 ]
+
+# scoring_rules 和 scoring_config 用 demo 前缀
+DEMO_SR_PREFIX = "demo-seed-SR-"
+DEMO_SC_KEY_PREFIX = "demo_"
 
 # 缺陷模板
 DEFECT_TEMPLATES = [
@@ -118,15 +124,15 @@ SCORING_RULES = [
     (10, "编码质控", "手术编码完整性", "有手术的病历须包含手术编码", 0.0, 0.0, False, "info"),
 ]
 
-# 评分配置
+# 评分配置（key 加 demo_ 前缀，不覆盖真实配置）
 SCORING_CONFIG = {
-    "grade_thresholds": {
+    f"{DEMO_SC_KEY_PREFIX}grade_thresholds": {
         "甲": {"min_score": 90, "label": "甲级病历"},
         "乙": {"min_score": 75, "label": "乙级病历"},
         "丙": {"min_score": 0, "label": "丙级病历"},
     },
-    "base_score": 100,
-    "veto_rules": ["病程记录及时性", "诊断一致性", "手术记录及时性", "上级查房及时性"],
+    f"{DEMO_SC_KEY_PREFIX}base_score": 100,
+    f"{DEMO_SC_KEY_PREFIX}veto_rules": ["病程记录及时性", "诊断一致性", "手术记录及时性", "上级查房及时性"],
 }
 
 
@@ -162,8 +168,8 @@ def clean_demo_data(dry_run: bool = False):
         ("qc_task_records", "task_id IN (SELECT id FROM qc_tasks WHERE creator_id = :marker)"),
         ("qc_tasks", "creator_id = :marker"),
         ("qc_results", "created_by = :marker"),
-        ("qc_coder_workload_daily", "coder_id LIKE 'QC%'"),
-        ("scoring_rules", "id LIKE 'SR-%'"),
+        ("qc_coder_workload_daily", "coder_id LIKE 'demo-seed-%'"),
+        ("scoring_rules", "id LIKE 'demo-seed-SR-%'"),
         ("scoring_config", "updated_by = :marker"),
     ]
 
@@ -199,41 +205,38 @@ def seed_qc_demo(dry_run: bool = False):
 
     if dry_run:
         print("[DRY-RUN] 将生成以下数据（不写 DB）：")
-
-    init_db()
+    else:
+        init_db()
+        # 幂等保护：先清理已有 demo 数据再写入
+        print("  🔄 清理已有 demo 数据...")
+        clean_demo_data(dry_run=False)
 
     with get_db_context() as db:
         # ---------- 0. Scoring Rules ----------
         if not dry_run:
-            cnt = db.execute(text("SELECT count(*) FROM scoring_rules WHERE id LIKE 'SR-%'")).scalar()
-            if cnt == 0:
-                for sr in SCORING_RULES:
-                    db.execute(text("""
-                        INSERT INTO scoring_rules (id, sort_order, category, name, description,
-                            deduction, max_deduction, veto, severity, enabled)
-                        VALUES (:id, :sort, :cat, :name, :desc, :ded, :maxd, :veto, :sev, true)
-                    """), {
-                        "id": f"SR-{sr[0]:03d}", "sort": sr[0], "cat": sr[1], "name": sr[2],
-                        "desc": sr[3], "ded": sr[4], "maxd": sr[5],
-                        "veto": sr[6], "sev": sr[7],
-                    })
+            for sr in SCORING_RULES:
+                db.execute(text("""
+                    INSERT INTO scoring_rules (id, sort_order, category, name, description,
+                        deduction, max_deduction, veto, severity, enabled)
+                    VALUES (:id, :sort, :cat, :name, :desc, :ded, :maxd, :veto, :sev, true)
+                """), {
+                    "id": f"{DEMO_SR_PREFIX}{sr[0]:03d}", "sort": sr[0], "cat": sr[1], "name": sr[2],
+                    "desc": sr[3], "ded": sr[4], "maxd": sr[5],
+                    "veto": sr[6], "sev": sr[7],
+                })
         stats["scoring_rules"] = len(SCORING_RULES)
         print(f"  ✅ scoring_rules: +{len(SCORING_RULES)}")
 
-        # ---------- 0b. Scoring Config ----------
+        # ---------- 0b. Scoring Config（demo 专用 key，不覆盖真实配置） ----------
         if not dry_run:
-            cnt = db.execute(text("SELECT count(*) FROM scoring_config WHERE updated_by = :m"),
-                             {"m": DEMO_SEED_MARKER}).scalar()
-            if cnt == 0:
-                for key, value in SCORING_CONFIG.items():
-                    db.execute(text("""
-                        INSERT INTO scoring_config (id, config_key, config_value, description, updated_by)
-                        VALUES (:id, :key, :val, :desc, :by)
-                        ON CONFLICT (config_key) DO UPDATE SET config_value = :val, updated_by = :by
-                    """), {
-                        "id": uid(), "key": key, "val": json.dumps(value, ensure_ascii=False),
-                        "desc": f"演示配置: {key}", "by": DEMO_SEED_MARKER,
-                    })
+            for key, value in SCORING_CONFIG.items():
+                db.execute(text("""
+                    INSERT INTO scoring_config (id, config_key, config_value, description, updated_by)
+                    VALUES (:id, :key, :val, :desc, :by)
+                """), {
+                    "id": uid(), "key": key, "val": json.dumps(value, ensure_ascii=False),
+                    "desc": f"演示配置: {key}", "by": DEMO_SEED_MARKER,
+                })
         stats["scoring_config"] = len(SCORING_CONFIG)
         print(f"  ✅ scoring_config: +{len(SCORING_CONFIG)}")
 
