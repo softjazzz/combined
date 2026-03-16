@@ -352,6 +352,32 @@ class MongoApiRepository(MedicalRecordRepository):
         raise NotImplementedError("MongoDB API 直读已弃用")
 
 
+# ==================== 数据源校验 ====================
+
+_VALID_SOURCES = {"pg", "sqlite", ""}
+
+
+def validate_data_source():
+    """校验 DATA_SOURCE 环境变量（启动阶段调用，前置暴露配置错误）
+
+    合法值: pg（推荐）、sqlite（兼容别名）、未设置
+    非法值: mongo_api → RuntimeError，其他 → ValueError
+    """
+    source = os.getenv("DATA_SOURCE", "pg").lower().strip()
+    if source == "mongo_api":
+        raise RuntimeError(
+            "DATA_SOURCE=mongo_api 已弃用。"
+            "生产链路为 Mongo → ETL 同步 → PG，请移除 DATA_SOURCE 或设为 'pg'。"
+            "详见 docs/ADR-data-source-pg-only.md"
+        )
+    if source not in _VALID_SOURCES:
+        raise ValueError(
+            f"DATA_SOURCE='{source}' 不是合法值。"
+            f"允许值: 'pg'（推荐）, 'sqlite'（兼容别名）。"
+            f"不再支持: 'mongo_api'（已弃用）。"
+        )
+
+
 # ==================== 工厂函数 ====================
 
 _repo_instance: Optional[MedicalRecordRepository] = None
@@ -360,30 +386,13 @@ _repo_instance: Optional[MedicalRecordRepository] = None
 def get_repository() -> MedicalRecordRepository:
     """获取 Repository 单例（统一 PG 读写）
 
-    DATA_SOURCE 环境变量策略：
-    - 未设置 / "pg" / "sqlite"（兼容）：走 PostgreSQL 读写（推荐）
-    - "mongo_api"：启动即失败（已弃用，见 ADR-2026-03-16）
-    - 其他值：启动即失败（配置错误前置暴露）
+    DATA_SOURCE 校验在 startup 阶段已完成（validate_data_source），
+    此处做防御性二次校验。
     """
     global _repo_instance
     if _repo_instance is None:
-        source = os.getenv("DATA_SOURCE", "pg").lower().strip()
-
-        if source == "mongo_api":
-            raise RuntimeError(
-                "DATA_SOURCE=mongo_api 已弃用。"
-                "生产链路为 Mongo → ETL 同步 → PG，请移除 DATA_SOURCE 或设为 'pg'。"
-                "详见 docs/ADR-data-source-pg-only.md"
-            )
-        elif source not in ("pg", "sqlite", ""):
-            raise ValueError(
-                f"DATA_SOURCE='{source}' 不是合法值。"
-                f"允许值: 'pg'（推荐）, 'sqlite'（兼容别名）。"
-                f"不再支持: 'mongo_api'（已弃用）。"
-            )
-        else:
-            _repo_instance = SqliteRepository()
-
+        validate_data_source()  # 防御性校验
+        _repo_instance = SqliteRepository()
     return _repo_instance
 
 

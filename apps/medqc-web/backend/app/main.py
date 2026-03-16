@@ -90,8 +90,9 @@ def create_app() -> FastAPI:
         >>> import uvicorn
         >>> uvicorn.run(app, host="0.0.0.0", port=8001)
     """
-    settings = get_settings()
     configure_logging()
+    settings = get_settings()
+    logger.info("LLM diagnostics at startup: %s", settings.llm_diagnostics())
 
     app = FastAPI(
         title="医疗质控系统API",
@@ -286,8 +287,13 @@ def create_app() -> FastAPI:
     # Startup event: 初始化四川质控服务
     @app.on_event("startup")
     async def startup_event():
-        """应用启动时初始化四川质控服务"""
+        """应用启动时初始化"""
         logger.info("🚀 应用启动中...")
+
+        # 前置校验 DATA_SOURCE（ADR-2026-03-16：启动即失败）
+        from .database.repository import validate_data_source
+        validate_data_source()
+
         try:
             # 初始化 CDM 数据库
             from .database import init_db
