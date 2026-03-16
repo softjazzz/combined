@@ -7,7 +7,7 @@ QC 业务态演示数据 Seed 脚本
   1. qc_results        — 35 条质控结果
   2. qc_defects         — ~80 条缺陷
   3. qc_tasks           — 3 个抽检任务
-  4. qc_task_records    — 35 条任务分配
+  4. qc_task_records    — 20 条任务分配
   5. qc_appeals         — 5 条申诉
   6. qc_remediation_tasks — 10 条整改
   7. notifications      — ~15 条通知
@@ -17,19 +17,20 @@ QC 业务态演示数据 Seed 脚本
 
 数据隔离：
   - created_by / creator_id = 'demo-seed'
+  - task/appeal/remediation 编号使用 DEMO 命名空间 + run_tag
   - 清理: python -m scripts.seed_qc_demo_data --clean
 
-运行: python -m scripts.seed_qc_demo_data [--clean] [--dry-run]
+运行: python -m scripts.seed_qc_demo_data [--clean] [--dry-run] [--run-tag TAG]
 """
 
 import sys
-import os
 import uuid
 import json
 import random
 import argparse
 from pathlib import Path
 from datetime import datetime, date, timedelta
+from typing import Optional, Dict, Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -40,6 +41,9 @@ from sqlalchemy import text
 
 DEMO_SEED_MARKER = "demo-seed"
 INSTITUTE_ID = "LX001"
+DEMO_TASK_NO_PREFIX = "DEMO-QCT"
+DEMO_APPEAL_NO_PREFIX = "DEMO-AP"
+DEMO_REMED_NO_PREFIX = "DEMO-RT"
 
 # 复用 seed_full_testdata 的病历列表
 RECORDS = [
@@ -153,20 +157,34 @@ def grade_from_score(score: float) -> str:
     return "丙"
 
 
+def resolve_run_tag(run_tag: Optional[str] = None) -> str:
+    """Resolve per-run tag for demo business numbers."""
+    if run_tag and run_tag.strip():
+        return run_tag.strip()
+    return datetime.now().strftime("%Y%m%d%H%M%S")
+
+
+def make_business_no(prefix: str, run_tag: str, seq: int) -> str:
+    return f"{prefix}-{run_tag}-{seq:03d}"
+
+
 # ==================== 清理 ====================
 
-def clean_demo_data(dry_run: bool = False):
+def clean_demo_data(dry_run: bool = False) -> Dict[str, Any]:
     """清理所有 demo-seed 标记的数据"""
     tables_and_conditions = [
         ("notifications", "sender_id = :marker"),
         ("qc_remediation_history", "actor_id = :marker"),
-        ("qc_remediation_tasks", "reviewer_id = :marker OR assignee_id = :marker"),
+        ("qc_remediation_tasks",
+         f"reviewer_id = :marker OR assignee_id = :marker OR task_number LIKE '{DEMO_REMED_NO_PREFIX}-%'"),
         ("qc_appeal_reviews", "reviewer_id = :marker"),
-        ("qc_appeals", "appellant_id = :marker"),
+        ("qc_appeals",
+         f"appellant_id = :marker OR appeal_number LIKE '{DEMO_APPEAL_NO_PREFIX}-%'"),
         ("qc_defect_history", "actor_id = :marker"),
         ("qc_defects", "result_id IN (SELECT id FROM qc_results WHERE created_by = :marker)"),
         ("qc_task_records", "task_id IN (SELECT id FROM qc_tasks WHERE creator_id = :marker)"),
-        ("qc_tasks", "creator_id = :marker"),
+        ("qc_tasks",
+         f"creator_id = :marker OR task_number LIKE '{DEMO_TASK_NO_PREFIX}-%'"),
         ("qc_results", "created_by = :marker"),
         ("qc_coder_workload_daily", "coder_id LIKE 'demo-seed-%'"),
         ("scoring_rules", "id LIKE 'demo-seed-SR-%'"),
@@ -177,8 +195,10 @@ def clean_demo_data(dry_run: bool = False):
         print("[DRY-RUN] 以下表将被清理：")
         for tbl, _ in tables_and_conditions:
             print(f"  - {tbl}")
-        return
+        return {"tables": len(tables_and_conditions), "deleted_rows": 0, "by_table": {}}
 
+    deleted_rows = 0
+    by_table = {}
     with get_db_context() as db:
         for tbl, cond in tables_and_conditions:
             try:
@@ -188,28 +208,39 @@ def clean_demo_data(dry_run: bool = False):
                 )
                 cnt = result.rowcount
                 if cnt > 0:
-                    print(f"  🧹 {tbl}: 删除 {cnt} 行")
+                    by_table[tbl] = cnt
+                    deleted_rows += cnt
+                    print(f"  [CLEAN] {tbl}: 删除 {cnt} 行")
             except Exception as e:
-                print(f"  ⚠️ {tbl}: {e}")
+                print(f"  [WARN] {tbl}: {e}")
 
-    print("✅ 演示数据清理完成")
+    print(f"[OK] 演示数据清理完成（共删除 {deleted_rows} 行）")
+    return {"tables": len(tables_and_conditions), "deleted_rows": deleted_rows, "by_table": by_table}
 
 
 # ==================== 生成 ====================
 
-def seed_qc_demo(dry_run: bool = False):
+def seed_qc_demo(dry_run: bool = False, run_tag: Optional[str] = None):
     """生成 QC 全链路演示数据"""
 
     random.seed(42)  # 可复现
     stats = {}
+    resolved_tag = resolve_run_tag(run_tag)
+    task_no_sample = make_business_no(DEMO_TASK_NO_PREFIX, resolved_tag, 1)
+    appeal_no_sample = make_business_no(DEMO_APPEAL_NO_PREFIX, resolved_tag, 1)
+    remed_no_sample = make_business_no(DEMO_REMED_NO_PREFIX, resolved_tag, 1)
 
     if dry_run:
         print("[DRY-RUN] 将生成以下数据（不写 DB）：")
+        print(f"  run_tag={resolved_tag}")
+        print(f"  示例编号: {task_no_sample} / {appeal_no_sample} / {remed_no_sample}")
+        clean_stats = {"deleted_rows": 0}
     else:
+        print(f"  run_tag={resolved_tag}")
         init_db()
         # 幂等保护：先清理已有 demo 数据再写入
-        print("  🔄 清理已有 demo 数据...")
-        clean_demo_data(dry_run=False)
+        print("  清理已有 demo 数据...")
+        clean_stats = clean_demo_data(dry_run=False)
 
     with get_db_context() as db:
         # ---------- 0. Scoring Rules ----------
@@ -225,20 +256,21 @@ def seed_qc_demo(dry_run: bool = False):
                     "veto": sr[6], "sev": sr[7],
                 })
         stats["scoring_rules"] = len(SCORING_RULES)
-        print(f"  ✅ scoring_rules: +{len(SCORING_RULES)}")
+        print(f"  [OK] scoring_rules: +{len(SCORING_RULES)}")
 
         # ---------- 0b. Scoring Config（demo 专用 key，不覆盖真实配置） ----------
         if not dry_run:
             for key, value in SCORING_CONFIG.items():
                 db.execute(text("""
-                    INSERT INTO scoring_config (id, config_key, config_value, description, updated_by)
-                    VALUES (:id, :key, :val, :desc, :by)
+                    INSERT INTO scoring_config (id, config_key, config_value, description, updated_by, updated_at)
+                    VALUES (:id, :key, :val, :desc, :by, :updated_at)
                 """), {
                     "id": uid(), "key": key, "val": json.dumps(value, ensure_ascii=False),
                     "desc": f"演示配置: {key}", "by": DEMO_SEED_MARKER,
+                    "updated_at": datetime.utcnow(),
                 })
         stats["scoring_config"] = len(SCORING_CONFIG)
-        print(f"  ✅ scoring_config: +{len(SCORING_CONFIG)}")
+        print(f"  [OK] scoring_config: +{len(SCORING_CONFIG)}")
 
         # ---------- 1. QC Results ----------
         result_ids = []  # [(result_id, record_id, patient_name, dept, score, grade)]
@@ -303,19 +335,20 @@ def seed_qc_demo(dry_run: bool = False):
 
         stats["qc_results"] = len(result_ids)
         stats["qc_defects"] = len(defect_all)
-        print(f"  ✅ qc_results: +{len(result_ids)}")
-        print(f"  ✅ qc_defects: +{len(defect_all)}")
+        print(f"  [OK] qc_results: +{len(result_ids)}")
+        print(f"  [OK] qc_defects: +{len(defect_all)}")
 
         # ---------- 2. QC Tasks ----------
         tasks = [
-            ("QCT-2026-001", "2026年1月心内科终末质控", "one_time", "心血管内科"),
-            ("QCT-2026-002", "2026年1月全院运行质控", "one_time", None),
-            ("QCT-2026-003", "2026年1月骨科专项质控", "one_time", "骨科"),
+            (1, "2026年1月心内科终末质控", "one_time", "心血管内科"),
+            (2, "2026年1月全院运行质控", "one_time", None),
+            (3, "2026年1月骨科专项质控", "one_time", "骨科"),
         ]
         task_ids = []
 
-        for t_num, t_name, t_type, t_dept in tasks:
+        for t_seq, t_name, t_type, t_dept in tasks:
             t_id = uid()
+            t_num = make_business_no(DEMO_TASK_NO_PREFIX, resolved_tag, t_seq)
             # 按科室筛选记录分配
             if t_dept:
                 assigned = [(r, d) for r, d in zip(result_ids, RECORDS) if d[3] == t_dept]
@@ -377,8 +410,8 @@ def seed_qc_demo(dry_run: bool = False):
             len([r for r in RECORDS if r[3] == t[3]]) if t[3] else 10
             for t in tasks
         )
-        print(f"  ✅ qc_tasks: +{len(tasks)}")
-        print(f"  ✅ qc_task_records: +{stats['qc_task_records']}")
+        print(f"  [OK] qc_tasks: +{len(tasks)}")
+        print(f"  [OK] qc_task_records: +{stats['qc_task_records']}")
 
         # ---------- 3. Appeals ----------
         appeal_defects = random.sample(defect_all, min(5, len(defect_all)))
@@ -399,7 +432,7 @@ def seed_qc_demo(dry_run: bool = False):
                         :aid, :aname, :adept,
                         :status, :date)
                 """), {
-                    "id": a_id, "num": f"AP-2026-{i+1:03d}",
+                    "id": a_id, "num": make_business_no(DEMO_APPEAL_NO_PREFIX, resolved_tag, i + 1),
                     "rid": r_id, "recid": rec_id,
                     "item": tmpl[1], "reason": f"对「{tmpl[1]}」有异议：实际已按规范完成",
                     "pri": "medium", "aid": DEMO_SEED_MARKER,
@@ -422,7 +455,7 @@ def seed_qc_demo(dry_run: bool = False):
                     })
 
         stats["qc_appeals"] = len(appeal_defects)
-        print(f"  ✅ qc_appeals: +{len(appeal_defects)}")
+        print(f"  [OK] qc_appeals: +{len(appeal_defects)}")
 
         # ---------- 4. Remediation Tasks ----------
         remed_defects = random.sample(defect_all, min(10, len(defect_all)))
@@ -445,7 +478,7 @@ def seed_qc_demo(dry_run: bool = False):
                         :aid, :aname, :adept,
                         :status, :revid, :revname, :date)
                 """), {
-                    "id": rt_id, "num": f"RT-2026-{i+1:03d}",
+                    "id": rt_id, "num": make_business_no(DEMO_REMED_NO_PREFIX, resolved_tag, i + 1),
                     "rid": r_id, "recid": rec_id,
                     "dtype": tmpl[3], "ddesc": tmpl[2], "sev": tmpl[4],
                     "req": f"请在48小时内修正「{tmpl[1]}」问题",
@@ -467,7 +500,7 @@ def seed_qc_demo(dry_run: bool = False):
                 })
 
         stats["qc_remediation_tasks"] = len(remed_defects)
-        print(f"  ✅ qc_remediation_tasks: +{len(remed_defects)}")
+        print(f"  [OK] qc_remediation_tasks: +{len(remed_defects)}")
 
         # ---------- 5. Notifications ----------
         notif_data = [
@@ -504,7 +537,7 @@ def seed_qc_demo(dry_run: bool = False):
                 })
 
         stats["notifications"] = len(notif_data)
-        print(f"  ✅ notifications: +{len(notif_data)}")
+        print(f"  [OK] notifications: +{len(notif_data)}")
 
         # ---------- 6. Coder Workload ----------
         base_date = date(2026, 1, 20)
@@ -524,12 +557,12 @@ def seed_qc_demo(dry_run: bool = False):
                             department_id, department_name,
                             qc_count, recheck_count, defect_found,
                             passed_count, warning_count, failed_count,
-                            avg_handle_seconds)
+                            avg_handle_seconds, created_at, updated_at)
                         VALUES (:id, :date, :cid, :cname,
                             :did, :dname,
                             :qc, :recheck, :defect,
                             :passed, :warning, :failed,
-                            :avg)
+                            :avg, :created_at, :updated_at)
                     """), {
                         "id": uid(), "date": stat_date,
                         "cid": coder_id, "cname": coder_name,
@@ -537,19 +570,25 @@ def seed_qc_demo(dry_run: bool = False):
                         "qc": qc_count, "recheck": recheck, "defect": defect_found,
                         "passed": passed, "warning": warning, "failed": failed,
                         "avg": round(random.uniform(180, 600), 1),
+                        "created_at": datetime.utcnow(),
+                        "updated_at": datetime.utcnow(),
                     })
 
         stats["qc_coder_workload_daily"] = len(CODERS) * 5
-        print(f"  ✅ qc_coder_workload_daily: +{len(CODERS) * 5}")
+        print(f"  [OK] qc_coder_workload_daily: +{len(CODERS) * 5}")
 
     # 汇总
     print(f"\n{'='*50}")
     total = sum(stats.values())
     mode = "[DRY-RUN]" if dry_run else ""
-    print(f"✅ {mode} QC 演示数据生成完成")
+    print(f"[OK] {mode} QC 演示数据生成完成")
+    print(f"  run_tag: {resolved_tag}")
+    print(f"  示例编号: {task_no_sample} / {appeal_no_sample} / {remed_no_sample}")
+    if not dry_run:
+        print(f"  本次清理: -{clean_stats.get('deleted_rows', 0)} 行")
     print(f"  覆盖 {len(stats)} 张表, 合计 +{total} 行")
     print(f"{'='*50}")
-    print(f"💡 清理: python -m scripts.seed_qc_demo_data --clean")
+    print(f"Hint: 清理命令 python -m scripts.seed_qc_demo_data --clean")
 
 
 # ==================== 入口 ====================
@@ -558,12 +597,13 @@ def main():
     parser = argparse.ArgumentParser(description="QC 业务态演示数据 Seed")
     parser.add_argument("--clean", action="store_true", help="清理已有演示数据")
     parser.add_argument("--dry-run", action="store_true", help="仅打印统计不写 DB")
+    parser.add_argument("--run-tag", type=str, default=None, help="本次演示编号批次标签（默认自动生成 YYYYMMDDHHMMSS）")
     args = parser.parse_args()
 
     if args.clean:
         clean_demo_data(dry_run=args.dry_run)
     else:
-        seed_qc_demo(dry_run=args.dry_run)
+        seed_qc_demo(dry_run=args.dry_run, run_tag=args.run_tag)
 
 
 if __name__ == "__main__":
