@@ -247,7 +247,7 @@
                       </button>
                       <template #overlay>
                         <a-menu @click="({key}: any) => handleMenuAction(key, record)">
-                          <a-menu-item key="reanalyze"><ThunderboltOutlined /> 重新质控</a-menu-item>
+                          <a-menu-item v-if="currentView === 'records'" key="reanalyze"><ThunderboltOutlined /> 重新质控</a-menu-item>
                           <a-menu-item key="export"><FilePdfOutlined /> 导出报告</a-menu-item>
                           <a-menu-item key="delete" class="!text-rose-500"><DeleteOutlined /> 删除记录</a-menu-item>
                         </a-menu>
@@ -372,6 +372,7 @@ const selectedRowKeys = ref<string[]>([])
 const queryConditions = reactive({
   timeRange: 'recent7',
   status: undefined as string | undefined,
+  severity: undefined as string | undefined,
   searchValue: ''
 })
 
@@ -458,6 +459,7 @@ const fetchRecords = async () => {
       // 缺陷视图 — 调用缺陷列表 API
       const res = await getDefectList({
         status: queryConditions.status !== 'all' ? queryConditions.status : undefined,
+        severity: queryConditions.severity || undefined,
         keyword: queryConditions.searchValue || undefined,
         page: pagination.current,
         page_size: pagination.pageSize,
@@ -558,10 +560,11 @@ const handleRefresh = () => {
 /** P2: KPI 卡片快速筛选 */
 const handleQuickFilter = (filter: string) => {
   if (filter === 'critical') {
-    // 切换到缺陷视图，筛选严重缺陷
+    // 切换到缺陷视图，筛选 severity=critical|error
     currentView.value = 'defects'
     queryConditions.status = undefined
-    message.info('已切换到缺陷视图，显示高风险病历')
+    queryConditions.severity = 'critical'
+    message.info('已筛选高风险缺陷')
     fetchRecords()
   }
 }
@@ -569,8 +572,14 @@ const handleQuickFilter = (filter: string) => {
 /** P2: 操作菜单分发 */
 const handleMenuAction = async (key: string, record: any) => {
   if (key === 'reanalyze') {
+    // 仅病历视图可用，缺陷视图已在模板中隐藏菜单项
+    const taskId = record.task_id
+    if (!taskId) {
+      message.warning('此记录无关联任务，无法重新质控')
+      return
+    }
     message.loading('正在重新质控...', 1)
-    const res = await reAnalyzeQCTask(record.task_id || record.id)
+    const res = await reAnalyzeQCTask(taskId)
     if (res.success) {
       message.success('重新质控已触发')
       fetchRecords()
