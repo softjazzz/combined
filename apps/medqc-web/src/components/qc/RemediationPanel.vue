@@ -160,6 +160,7 @@ const fetchList = async () => {
     }
   } catch {
     list.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

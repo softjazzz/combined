@@ -152,8 +152,8 @@
         </div>
       </div>
 
-      <!-- 表格区域 -->
-      <div class="flex-1 overflow-hidden px-6 py-2">
+      <!-- 表格区域（仅在病历/缺陷视图时显示） -->
+      <div v-if="currentView !== 'remediation'" class="flex-1 overflow-hidden px-6 py-2">
         <a-table
           :columns="currentColumns"
           :data-source="tableDataSource"
@@ -276,6 +276,12 @@
              <button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2" @click="handleBatchPass">
                <CheckOutlined /> 批量通过
              </button>
+              <button class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-medium transition-colors flex items-center gap-2" @click="handleBatchAssign">
+                <SendOutlined /> 派发整改
+              </button>
+              <button class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-xs font-medium transition-colors flex items-center gap-2" @click="handleExportDefects">
+                <FilePdfOutlined /> 导出
+              </button>
              <button class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2" @click="selectedRowKeys = []">
                <CloseOutlined />
              </button>
@@ -561,7 +567,12 @@ const handleBatchAssign = async () => {
     remediation_requirement: '请尽快完成整改',
   })
   if (res.success) {
-    message.success(res.message)
+    const data = res.data as any
+    if (data?.failed > 0) {
+      message.warning(`派发部分成功：${data.success}/${data.total} 成功，${data.failed} 失败`)
+    } else {
+      message.success(res.message)
+    }
   } else {
     message.error(res.message || '派发失败')
   }
