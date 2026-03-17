@@ -77,7 +77,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
         meta: {
           title: '运行病历',
-          icon: 'PlayCircleOutlined'
+          icon: 'PlayCircleOutlined',
+          permission: ['admin', 'qc_manager']
         }
       },
       {
@@ -86,7 +87,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/records/FinalRecordsView.vue'),
         meta: {
           title: '终末病历',
-          icon: 'CheckCircleOutlined'
+          icon: 'CheckCircleOutlined',
+          permission: ['admin', 'qc_manager']
         }
       },
       // 智能质控工作站 V4（主质控工作台）
@@ -997,27 +999,19 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-config',
         name: 'WorkstationV4SystemConfig',
-        component: () => import('@/views/workstation-v2/SystemConfigView.vue'),
-        meta: { title: '数据库配置', permission: ['admin'] }
+        component: () => import('@/views/workstation-v2/DataSyncConfigPage.vue'),
+        meta: { title: '数据同步配置', permission: ['admin'] }
       }
     ]
   },
   // 系统配置（数据库连接、同步管理）
   {
     path: '/system-config',
-    component: () => import('@/components/layout/WorkstationLayout.vue'),
+    redirect: { path: '/workstation-v4/system-config' },
     meta: {
       requiresAuth: false,
-      title: '数据源配置'
-    },
-    children: [
-      {
-        path: '',
-        name: 'SystemConfigIndex',
-        component: () => import('@/views/workstation-v2/SystemConfigView.vue'),
-        meta: { title: '数据源配置', permission: ['admin'] }
-      }
-    ]
+      title: '数据同步配置'
+    }
   },
   {
     path: '/demo/clinical-workstation',

@@ -36,7 +36,7 @@
         </div>
       </div>
       
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all cursor-pointer" @click="handleQuickFilter('critical')">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">高风险病历</div>
           <div class="text-2xl font-bold text-rose-600 font-mono">{{ overviewStats.defects_by_severity?.critical || 0 }}</div>
@@ -246,9 +246,10 @@
                         <MoreOutlined />
                       </button>
                       <template #overlay>
-                        <a-menu>
-                          <a-menu-item key="1"><FilePdfOutlined /> 导出报告</a-menu-item>
-                          <a-menu-item key="2" class="!text-rose-500"><DeleteOutlined /> 删除记录</a-menu-item>
+                        <a-menu @click="({key}: any) => handleMenuAction(key, record)">
+                          <a-menu-item key="reanalyze"><ThunderboltOutlined /> 重新质控</a-menu-item>
+                          <a-menu-item key="export"><FilePdfOutlined /> 导出报告</a-menu-item>
+                          <a-menu-item key="delete" class="!text-rose-500"><DeleteOutlined /> 删除记录</a-menu-item>
                         </a-menu>
                       </template>
                    </a-dropdown>
@@ -350,6 +351,7 @@ import {
   fetchTaskProgress,
   batchCreateRemediation,
   exportDefectsDownload,
+  reAnalyzeQCTask,
   type TaskProgressData,
 } from '@/api/qcAdmin'
 
@@ -551,6 +553,35 @@ const handleQuery = () => {
 const handleRefresh = () => {
   fetchRecords()
   loadOverview()
+}
+
+/** P2: KPI 卡片快速筛选 */
+const handleQuickFilter = (filter: string) => {
+  if (filter === 'critical') {
+    // 切换到缺陷视图，筛选严重缺陷
+    currentView.value = 'defects'
+    queryConditions.status = undefined
+    message.info('已切换到缺陷视图，显示高风险病历')
+    fetchRecords()
+  }
+}
+
+/** P2: 操作菜单分发 */
+const handleMenuAction = async (key: string, record: any) => {
+  if (key === 'reanalyze') {
+    message.loading('正在重新质控...', 1)
+    const res = await reAnalyzeQCTask(record.task_id || record.id)
+    if (res.success) {
+      message.success('重新质控已触发')
+      fetchRecords()
+    } else {
+      message.error(res.message || '重新质控失败')
+    }
+  } else if (key === 'export') {
+    handleExportDefects()
+  } else if (key === 'delete') {
+    message.warning('删除功能待后端接入')
+  }
 }
 
 /** P1: 批量派发整改 */
