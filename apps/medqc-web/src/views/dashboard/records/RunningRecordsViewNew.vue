@@ -169,63 +169,41 @@
             <template v-if="column.key === 'caseInfo'">
               <div class="flex flex-col">
                 <div class="flex items-center gap-2">
-                   <span class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer" @click="handleViewDetail(record)">{{ record.record_id || record.caseNo }}</span>
-                   <a-tag v-if="record.isUrgent" color="error" class="!rounded-md !text-[10px] !px-1 !mr-0">急</a-tag>
+                   <span class="font-mono font-bold text-slate-700 text-sm cursor-pointer hover:text-blue-600 transition-colors" @click="handleViewDetail(record)">{{ record.task_number || record.task_name || record.id }}</span>
+                   <a-tag v-if="record.status === 'completed'" color="success" class="!rounded-md !text-[10px] !px-1 !mr-0">完成</a-tag>
                 </div>
-                <div class="text-xs text-slate-400 mt-0.5">{{ record.registrationNo }}</div>
+                <div class="text-xs text-slate-400 mt-0.5">{{ record.task_name || '' }}</div>
               </div>
             </template>
             
-            <template v-if="column.key === 'patientInfo'">
-               <div class="flex items-center gap-2">
-                 <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
-                   {{ (record.patient_name || record.patientName || '').charAt(0) }}
-                 </div>
-                 <div>
-                   <div class="text-sm font-medium text-slate-700">{{ record.patient_name || record.patientName }}</div>
-                   <div class="text-xs text-slate-400">{{ record.patientAge }}岁 / {{ record.patientGender }}</div>
-                 </div>
-               </div>
-            </template>
-
-            <template v-if="column.key === 'doctorInfo'">
-              <div class="text-sm text-slate-700">{{ record.doctorName }}</div>
-              <div class="text-xs text-slate-400">{{ record.department }}</div>
+            <template v-if="column.key === 'sampling_method'">
+               <a-tag :color="record.sampling_method === 'all' ? 'blue' : 'green'" class="!rounded-md">{{ record.sampling_method === 'all' ? '全量' : record.sampling_method === 'count' ? '按数量' : record.sampling_method || '-' }}</a-tag>
             </template>
 
             <template v-if="column.key === 'auditStatus'">
               <span 
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
                 :class="{
-                  'bg-amber-50 text-amber-600 border-amber-100': getStatusField(record) === 'pending',
-                  'bg-blue-50 text-blue-600 border-blue-100': getStatusField(record) === 'reviewing' || getStatusField(record) === 'urged',
-                  'bg-emerald-50 text-emerald-600 border-emerald-100': getStatusField(record) === 'approved',
-                  'bg-rose-50 text-rose-600 border-rose-100': getStatusField(record) === 'rejected',
-                  'bg-slate-100 text-slate-600 border-slate-200': getStatusField(record) === 'remediated'
+                  'bg-amber-50 text-amber-600 border-amber-100': getStatusField(record) === 'pending' || getStatusField(record) === 'assigned',
+                  'bg-blue-50 text-blue-600 border-blue-100': getStatusField(record) === 'in_progress' || getStatusField(record) === 'reviewing',
+                  'bg-emerald-50 text-emerald-600 border-emerald-100': getStatusField(record) === 'completed' || getStatusField(record) === 'approved',
+                  'bg-rose-50 text-rose-600 border-rose-100': getStatusField(record) === 'rejected' || getStatusField(record) === 'failed',
+                  'bg-slate-100 text-slate-600 border-slate-200': !getStatusField(record)
                 }"
               >
                 <span class="w-1.5 h-1.5 rounded-full" :class="{
-                  'bg-amber-500': getStatusField(record) === 'pending',
-                  'bg-blue-500': getStatusField(record) === 'reviewing' || getStatusField(record) === 'urged',
-                  'bg-emerald-500': getStatusField(record) === 'approved',
-                  'bg-rose-500': getStatusField(record) === 'rejected',
-                  'bg-slate-400': getStatusField(record) === 'remediated'
+                  'bg-amber-500': getStatusField(record) === 'pending' || getStatusField(record) === 'assigned',
+                  'bg-blue-500': getStatusField(record) === 'in_progress' || getStatusField(record) === 'reviewing',
+                  'bg-emerald-500': getStatusField(record) === 'completed' || getStatusField(record) === 'approved',
+                  'bg-rose-500': getStatusField(record) === 'rejected' || getStatusField(record) === 'failed',
+                  'bg-slate-400': !getStatusField(record)
                 }"></span>
                 {{ getAuditStatusText(getStatusField(record)) }}
               </span>
             </template>
-            
-            <template v-if="column.key === 'score'">
-               <div class="flex items-center gap-2">
-                 <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
-                 <a-progress 
-                   :percent="record.score" 
-                   :show-info="false" 
-                   :stroke-color="getScoreColor(record.score)" 
-                   size="small" 
-                   class="w-16"
-                 />
-               </div>
+
+            <template v-if="column.key === 'createdAt'">
+               <span class="text-xs text-slate-500">{{ record.created_at?.slice(0, 16)?.replace('T', ' ') || '-' }}</span>
             </template>
 
             <template v-if="column.key === 'action'">
@@ -392,13 +370,12 @@ const records = ref<any[]>([])
 // 缺陷列表数据（缺陷 Tab 用）
 const defects = ref<DefectItem[]>([])
 
-// 表格列配置 — 病历视图
+// 表格列配置 — 病历/任务视图（后端返回任务级数据）
 const recordColumns = [
-  { title: '病案信息', key: 'caseInfo', width: 140 },
-  { title: '患者', key: 'patientInfo', width: 180 },
-  { title: '科室/医生', key: 'doctorInfo', width: 160 },
+  { title: '任务信息', key: 'caseInfo', width: 200 },
+  { title: '抽样方式', dataIndex: 'sampling_method', key: 'sampling_method', width: 120 },
   { title: '状态', key: 'auditStatus', width: 120 },
-  { title: '质控评分', key: 'score', width: 160 },
+  { title: '创建时间', key: 'createdAt', width: 160 },
   { title: '操作', key: 'action', width: 140, align: 'right' as const }
 ]
 
@@ -704,12 +681,16 @@ const getStatusField = (record: any): string => {
 
 const getAuditStatusText = (status: string) => {
   const textMap: Record<string, string> = {
-    pending: '待审核',
+    pending: '待处理',
+    assigned: '已分配',
+    in_progress: '进行中',
+    completed: '已完成',
     approved: '已通过',
     rejected: '已驳回',
     reviewing: '审核中',
     urged: '已催办',
     remediated: '已整改',
+    failed: '失败',
   }
   return textMap[status] || status
 }
