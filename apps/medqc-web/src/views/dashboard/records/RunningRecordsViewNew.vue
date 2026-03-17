@@ -166,19 +166,21 @@
               <span 
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
                 :class="{
-                  'bg-amber-50 text-amber-600 border-amber-100': record.auditStatus === 'pending',
-                  'bg-blue-50 text-blue-600 border-blue-100': record.auditStatus === 'reviewing',
-                  'bg-emerald-50 text-emerald-600 border-emerald-100': record.auditStatus === 'approved',
-                  'bg-rose-50 text-rose-600 border-rose-100': record.auditStatus === 'rejected'
+                  'bg-amber-50 text-amber-600 border-amber-100': getStatusField(record) === 'pending',
+                  'bg-blue-50 text-blue-600 border-blue-100': getStatusField(record) === 'reviewing' || getStatusField(record) === 'urged',
+                  'bg-emerald-50 text-emerald-600 border-emerald-100': getStatusField(record) === 'approved',
+                  'bg-rose-50 text-rose-600 border-rose-100': getStatusField(record) === 'rejected',
+                  'bg-slate-100 text-slate-600 border-slate-200': getStatusField(record) === 'remediated'
                 }"
               >
                 <span class="w-1.5 h-1.5 rounded-full" :class="{
-                  'bg-amber-500': record.auditStatus === 'pending',
-                  'bg-blue-500': record.auditStatus === 'reviewing',
-                  'bg-emerald-500': record.auditStatus === 'approved',
-                  'bg-rose-500': record.auditStatus === 'rejected'
+                  'bg-amber-500': getStatusField(record) === 'pending',
+                  'bg-blue-500': getStatusField(record) === 'reviewing' || getStatusField(record) === 'urged',
+                  'bg-emerald-500': getStatusField(record) === 'approved',
+                  'bg-rose-500': getStatusField(record) === 'rejected',
+                  'bg-slate-400': getStatusField(record) === 'remediated'
                 }"></span>
-                {{ getAuditStatusText(record.auditStatus) }}
+                {{ getAuditStatusText(getStatusField(record)) }}
               </span>
             </template>
             
@@ -202,7 +204,7 @@
                     <EyeOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip title="催办" v-if="!record.isUrgent && record.auditStatus === 'pending'">
+                <a-tooltip title="催办" v-if="getStatusField(record) === 'pending'">
                   <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-all" @click="handleUrgeRecord(record)">
                     <SendOutlined />
                   </button>
@@ -454,11 +456,15 @@ const handleViewDetail = (record: any) => {
 }
 
 const handleUrgeRecord = async (record: any) => {
-  // 缺陷视图直接用 defect id，病历视图用 record 的关联 id（正确语义需后端支持按病历 ID 催办）
-  const targetId = currentView.value === 'defects' ? record.id : record.id
-  const res = await urgeDefect(targetId, { message: '请尽快完成审核' })
+  if (currentView.value !== 'defects') {
+    // 病历视图下 record.id 不是 defect_id，引导用户通过 Drawer 操作
+    drawerRecord.value = record
+    drawerVisible.value = true
+    return
+  }
+  const res = await urgeDefect(record.id, { message: '请尽快完成审核' })
   if (res.success) {
-    message.success(`已发送催办提醒: ${record.doctorName || record.rule_name || ''}`.trim())
+    message.success(`已发送催办提醒: ${record.rule_name || record.id}`)
     fetchRecords()
   } else {
     message.error(res.message || '催办失败')
@@ -500,6 +506,11 @@ const handleBatchPass = async () => {
   }
   selectedRowKeys.value = []
   fetchRecords()
+}
+
+/** 兼容病历(auditStatus)和缺陷(status)两种数据模型的状态字段取值 */
+const getStatusField = (record: any): string => {
+  return record.status || record.auditStatus || 'pending'
 }
 
 const getAuditStatusText = (status: string) => {
