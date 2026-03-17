@@ -5,7 +5,7 @@
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">今日待审核</div>
-          <div class="text-2xl font-bold text-slate-800 font-mono">24</div>
+          <div class="text-2xl font-bold text-slate-800 font-mono">{{ overviewStats.pending_count || 0 }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <ClockCircleOutlined class="text-lg" />
@@ -15,7 +15,7 @@
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">高风险病历</div>
-          <div class="text-2xl font-bold text-rose-600 font-mono">3</div>
+          <div class="text-2xl font-bold text-rose-600 font-mono">{{ overviewStats.defects_by_severity?.critical || 0 }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <AlertOutlined class="text-lg" />
@@ -25,7 +25,7 @@
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">审核通过率</div>
-          <div class="text-2xl font-bold text-emerald-600 font-mono">94.2%</div>
+          <div class="text-2xl font-bold text-emerald-600 font-mono">{{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <CheckCircleOutlined class="text-lg" />
@@ -34,8 +34,8 @@
 
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">平均质控时长</div>
-          <div class="text-2xl font-bold text-indigo-600 font-mono">1.2h</div>
+          <div class="text-slate-500 text-xs font-medium mb-1">总缺陷数</div>
+          <div class="text-2xl font-bold text-indigo-600 font-mono">{{ overviewStats.total_defects || 0 }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <ThunderboltOutlined class="text-lg" />
@@ -138,7 +138,7 @@
             <template v-if="column.key === 'caseInfo'">
               <div class="flex flex-col">
                 <div class="flex items-center gap-2">
-                   <span class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer" @click="handleViewDetail(record)">{{ record.caseNo }}</span>
+                   <span class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer" @click="handleViewDetail(record)">{{ record.record_id || record.caseNo }}</span>
                    <a-tag v-if="record.isUrgent" color="error" class="!rounded-md !text-[10px] !px-1 !mr-0">急</a-tag>
                 </div>
                 <div class="text-xs text-slate-400 mt-0.5">{{ record.registrationNo }}</div>
@@ -148,10 +148,10 @@
             <template v-if="column.key === 'patientInfo'">
                <div class="flex items-center gap-2">
                  <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
-                   {{ record.patientName.charAt(0) }}
+                   {{ (record.patient_name || record.patientName || '').charAt(0) }}
                  </div>
                  <div>
-                   <div class="text-sm font-medium text-slate-700">{{ record.patientName }}</div>
+                   <div class="text-sm font-medium text-slate-700">{{ record.patient_name || record.patientName }}</div>
                    <div class="text-xs text-slate-400">{{ record.patientAge }}岁 / {{ record.patientGender }}</div>
                  </div>
                </div>
@@ -250,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
@@ -271,8 +271,20 @@ import {
   CheckOutlined,
   CloseOutlined
 } from '@ant-design/icons-vue'
+import {
+  getAdminRecordList,
+  getAdminOverview,
+  getDefectList,
+  batchDefectAction,
+  urgeDefect,
+  approveDefect,
+  batchCreateQCTask,
+  type AdminRecordItem,
+  type AdminOverviewStats,
+  type DefectItem,
+} from '@/api/qcAdmin'
 
-// 响应式数据
+// ============= 响应式数据 =============
 const loading = ref(false)
 const showFilterModal = ref(false)
 const currentView = ref('records')
@@ -281,83 +293,25 @@ const selectedRowKeys = ref<string[]>([])
 // 查询条件
 const queryConditions = reactive({
   timeRange: 'recent7',
-  status: undefined,
+  status: undefined as string | undefined,
   searchValue: ''
 })
 
+// KPI 统计
+const overviewStats = ref<AdminOverviewStats>({
+  total_records: 0,
+  archived_count: 0,
+  pending_count: 0,
+  pass_rate: 0,
+  total_defects: 0,
+  defects_by_severity: {},
+})
+
 // 表格数据
-const records = ref([
-  {
-    id: '1',
-    registrationNo: 'R2024001',
-    serialNo: 'S2024001',
-    caseNo: 'C2024001',
-    patientName: '张三',
-    patientAge: 45,
-    patientGender: '男',
-    doctorName: '李医生',
-    department: '心内科',
-    auditStatus: 'pending',
-    score: 85,
-    isUrgent: true
-  },
-  {
-    id: '2',
-    registrationNo: 'R2024002',
-    serialNo: 'S2024002',
-    caseNo: 'C2024002',
-    patientName: '李四',
-    patientAge: 32,
-    patientGender: '女',
-    doctorName: '王医生',
-    department: '消化内科',
-    auditStatus: 'reviewing',
-    score: 92,
-    isUrgent: false
-  },
-  {
-    id: '3',
-    registrationNo: 'R2024003',
-    serialNo: 'S2024003',
-    caseNo: 'C2024003',
-    patientName: '王五',
-    patientAge: 67,
-    patientGender: '男',
-    doctorName: '赵医生',
-    department: '呼吸内科',
-    auditStatus: 'approved',
-    score: 98,
-    isUrgent: false
-  },
-  {
-    id: '4',
-    registrationNo: 'R2024004',
-    serialNo: 'S2024004',
-    caseNo: 'C2024004',
-    patientName: '赵六',
-    patientAge: 28,
-    patientGender: '女',
-    doctorName: '钱医生',
-    department: '妇产科',
-    auditStatus: 'rejected',
-    score: 55,
-    isUrgent: false
-  },
-  {
-    id: '5',
-    registrationNo: 'R2024005',
-    serialNo: 'S2024005',
-    caseNo: 'C2024005',
-    patientName: '孙七',
-    patientAge: 55,
-    patientGender: '男',
-    doctorName: '孙医生',
-    department: '骨科',
-    auditStatus: 'pending',
-    score: 78,
-    isUrgent: false
-  }
-])
+const records = ref<any[]>([])
+
+// 缺陷列表数据（缺陷 Tab 用）
+const defects = ref<DefectItem[]>([])
 
 // 表格列配置
 const recordColumns = [
@@ -366,14 +320,14 @@ const recordColumns = [
   { title: '科室/医生', key: 'doctorInfo', width: 160 },
   { title: '状态', key: 'auditStatus', width: 120 },
   { title: '质控评分', key: 'score', width: 160 },
-  { title: '操作', key: 'action', width: 140, align: 'right' }
+  { title: '操作', key: 'action', width: 140, align: 'right' as const }
 ]
 
 // 分页配置
 const pagination = reactive({
   current: 1,
   pageSize: 20,
-  total: 100,
+  total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
   showTotal: (total: number) => `共 ${total} 条`
@@ -387,45 +341,122 @@ const rowSelection = computed(() => ({
   }
 }))
 
-// 方法
-const handleQuery = () => {
+// ============= 数据加载 =============
+
+/** 加载 KPI 概览 */
+const loadOverview = async () => {
+  const res = await getAdminOverview()
+  if (res.success && res.data) {
+    overviewStats.value = res.data
+  }
+}
+
+/** 加载病历列表 */
+const fetchRecords = async () => {
   loading.value = true
-  setTimeout(() => {
+  try {
+    if (currentView.value === 'defects') {
+      // 缺陷视图 — 调用缺陷列表 API
+      const res = await getDefectList({
+        status: queryConditions.status !== 'all' ? queryConditions.status : undefined,
+        keyword: queryConditions.searchValue || undefined,
+        page: pagination.current,
+        page_size: pagination.pageSize,
+      })
+      if (res.success && res.data) {
+        defects.value = (res.data as any).items || []
+        pagination.total = (res.data as any).total || 0
+      }
+    } else {
+      // 病历列表视图
+      const res = await getAdminRecordList({
+        status: queryConditions.status !== 'all' ? queryConditions.status : undefined,
+        keyword: queryConditions.searchValue || undefined,
+        page: pagination.current,
+        page_size: pagination.pageSize,
+      })
+      if (res.success && res.data) {
+        records.value = res.data.items || []
+        pagination.total = res.data.total || 0
+      } else {
+        // API 未就绪时 mock 兜底
+        records.value = [
+          { id: '1', record_id: 'C2024001', registrationNo: 'R2024001', patient_name: '张三', patientAge: 45, patientGender: '男', doctorName: '李医生', department: '心内科', auditStatus: 'pending', score: 85, isUrgent: true },
+          { id: '2', record_id: 'C2024002', registrationNo: 'R2024002', patient_name: '李四', patientAge: 32, patientGender: '女', doctorName: '王医生', department: '消化内科', auditStatus: 'reviewing', score: 92, isUrgent: false },
+          { id: '3', record_id: 'C2024003', registrationNo: 'R2024003', patient_name: '王五', patientAge: 67, patientGender: '男', doctorName: '赵医生', department: '呼吸内科', auditStatus: 'approved', score: 98, isUrgent: false },
+          { id: '4', record_id: 'C2024004', registrationNo: 'R2024004', patient_name: '赵六', patientAge: 28, patientGender: '女', doctorName: '钱医生', department: '妇产科', auditStatus: 'rejected', score: 55, isUrgent: false },
+          { id: '5', record_id: 'C2024005', registrationNo: 'R2024005', patient_name: '孙七', patientAge: 55, patientGender: '男', doctorName: '孙医生', department: '骨科', auditStatus: 'pending', score: 78, isUrgent: false },
+        ] as any[]
+        pagination.total = 5
+      }
+    }
+  } catch (error) {
+    message.error('获取数据失败')
+  } finally {
     loading.value = false
-    message.success('查询完成')
-  }, 500)
+  }
+}
+
+// ============= 事件处理 =============
+
+const handleQuery = () => {
+  pagination.current = 1
+  fetchRecords()
 }
 
 const handleRefresh = () => {
-  loading.value = true
-  setTimeout(() => {
-    loading.value = false
-    message.success('刷新完成')
-  }, 500)
+  fetchRecords()
+  loadOverview()
 }
 
 const handleTableChange = (pag: any) => {
   pagination.current = pag.current
   pagination.pageSize = pag.pageSize
-  handleQuery()
+  fetchRecords()
 }
 
 const handleViewDetail = (record: any) => {
-  message.info(`查看病案: ${record.caseNo}`)
+  // TODO: Phase 4 — 打开 QCReviewDrawer
+  message.info(`查看病案: ${record.record_id || record.caseNo}`)
 }
 
-const handleUrgeRecord = (record: any) => {
-  message.success(`已发送催办提醒: ${record.doctorName}`)
+const handleUrgeRecord = async (record: any) => {
+  const res = await urgeDefect(record.id, { message: '请尽快完成审核' })
+  if (res.success) {
+    message.success(`已发送催办提醒: ${record.doctorName}`)
+    fetchRecords()
+  } else {
+    message.error(res.message || '催办失败')
+  }
 }
 
-const handleBatchUrge = () => {
-  message.success(`批量催办 ${selectedRowKeys.value.length} 条记录`)
+const handleBatchUrge = async () => {
+  const res = await batchDefectAction({
+    defect_ids: selectedRowKeys.value,
+    action: 'urge',
+    message: '请尽快完成审核',
+  })
+  if (res.success) {
+    message.success(`批量催办 ${selectedRowKeys.value.length} 条记录`)
+  } else {
+    message.error(res.message || '批量催办失败')
+  }
   selectedRowKeys.value = []
+  fetchRecords()
 }
 
-const handleBatchPass = () => {
-  message.success(`批量通过 ${selectedRowKeys.value.length} 条记录`)
+const handleBatchPass = async () => {
+  const res = await batchDefectAction({
+    defect_ids: selectedRowKeys.value,
+    action: 'approve',
+  })
+  if (res.success) {
+    message.success(`批量通过 ${selectedRowKeys.value.length} 条记录`)
+  } else {
+    message.error(res.message || '批量通过失败')
+  }
   selectedRowKeys.value = []
+  fetchRecords()
 }
 
 const getAuditStatusText = (status: string) => {
@@ -433,20 +464,29 @@ const getAuditStatusText = (status: string) => {
     pending: '待审核',
     approved: '已通过',
     rejected: '已驳回',
-    reviewing: '审核中'
+    reviewing: '审核中',
+    urged: '已催办',
+    remediated: '已整改',
   }
   return textMap[status] || status
 }
 
 const getScoreColor = (score: number) => {
-  if (score >= 90) return '#10b981' // emerald-500
-  if (score >= 80) return '#3b82f6' // blue-500
-  if (score >= 60) return '#f59e0b' // amber-500
-  return '#f43f5e' // rose-500
+  if (score >= 90) return '#10b981'
+  if (score >= 80) return '#3b82f6'
+  if (score >= 60) return '#f59e0b'
+  return '#f43f5e'
 }
 
+// 视图切换时重新加载数据
+watch(currentView, () => {
+  pagination.current = 1
+  fetchRecords()
+})
+
 onMounted(() => {
-  handleQuery()
+  loadOverview()
+  fetchRecords()
 })
 </script>
 

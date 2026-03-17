@@ -5,7 +5,7 @@
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">总病历数</div>
-          <div class="text-2xl font-bold text-blue-600 font-mono">1,247</div>
+          <div class="text-2xl font-bold text-blue-600 font-mono">{{ overviewStats.total_records.toLocaleString() }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <FileTextOutlined class="text-lg" />
@@ -15,7 +15,7 @@
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">已归档</div>
-          <div class="text-2xl font-bold text-emerald-600 font-mono">1,156</div>
+          <div class="text-2xl font-bold text-emerald-600 font-mono">{{ overviewStats.archived_count.toLocaleString() }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <CheckCircleOutlined class="text-lg" />
@@ -24,8 +24,8 @@
       
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">待归档</div>
-          <div class="text-2xl font-bold text-amber-600 font-mono">91</div>
+          <div class="text-slate-500 text-xs font-medium mb-1">待处理</div>
+          <div class="text-2xl font-bold text-amber-600 font-mono">{{ overviewStats.pending_count.toLocaleString() }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <ClockCircleOutlined class="text-lg" />
@@ -35,7 +35,7 @@
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">质控通过率</div>
-          <div class="text-2xl font-bold text-purple-600 font-mono">94.2%</div>
+          <div class="text-2xl font-bold text-purple-600 font-mono">{{ overviewStats.pass_rate.toFixed(1) }}%</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <TrophyOutlined class="text-lg" />
@@ -124,16 +124,16 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
               <div class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer" @click="handleView(record)">
-                {{ record.recordNumber }}
+                {{ record.record_id }}
               </div>
             </template>
             
             <template v-if="column.key === 'patientInfo'">
                <div class="flex items-center gap-2">
                  <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
-                   {{ record.patientName.charAt(0) }}
+                   {{ (record.patient_name || '').charAt(0) }}
                  </div>
-                 <div class="text-sm font-medium text-slate-700">{{ record.patientName }}</div>
+                 <div class="text-sm font-medium text-slate-700">{{ record.patient_name }}</div>
                </div>
             </template>
 
@@ -141,43 +141,41 @@
               <span 
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
                 :class="{
-                  'bg-emerald-50 text-emerald-600 border-emerald-100': record.qcStatus === 'passed',
-                  'bg-rose-50 text-rose-600 border-rose-100': record.qcStatus === 'failed',
-                  'bg-amber-50 text-amber-600 border-amber-100': record.qcStatus === 'pending'
+                  'bg-emerald-50 text-emerald-600 border-emerald-100': record.status === 'completed' || record.status === 'passed',
+                  'bg-rose-50 text-rose-600 border-rose-100': record.status === 'failed',
+                  'bg-amber-50 text-amber-600 border-amber-100': record.status === 'pending'
                 }"
               >
                 <span class="w-1.5 h-1.5 rounded-full" :class="{
-                  'bg-emerald-500': record.qcStatus === 'passed',
-                  'bg-rose-500': record.qcStatus === 'failed',
-                  'bg-amber-500': record.qcStatus === 'pending'
+                  'bg-emerald-500': record.status === 'completed' || record.status === 'passed',
+                  'bg-rose-500': record.status === 'failed',
+                  'bg-amber-500': record.status === 'pending'
                 }"></span>
-                {{ getQCStatusText(record.qcStatus) }}
+                {{ getQCStatusText(record.status) }}
               </span>
             </template>
 
-            <template v-if="column.key === 'archiveStatus'">
+            <template v-if="column.key === 'defectCount'">
               <span 
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
                 :class="{
-                  'bg-slate-100 text-slate-600 border-slate-200': record.archiveStatus === 'archived',
-                  'bg-amber-50 text-amber-600 border-amber-100': record.archiveStatus === 'pending'
+                  'bg-slate-100 text-slate-600 border-slate-200': record.defect_count === 0,
+                  'bg-amber-50 text-amber-600 border-amber-100': record.defect_count > 0 && record.defect_count <= 3,
+                  'bg-rose-50 text-rose-600 border-rose-100': record.defect_count > 3
                 }"
               >
-                 <span class="w-1.5 h-1.5 rounded-full" :class="{
-                  'bg-slate-500': record.archiveStatus === 'archived',
-                  'bg-amber-500': record.archiveStatus === 'pending'
-                }"></span>
-                {{ getArchiveStatusText(record.archiveStatus) }}
+                {{ record.defect_count || 0 }}
               </span>
             </template>
             
             <template v-if="column.key === 'qcScore'">
                <div class="flex items-center gap-2">
-                 <span class="font-mono font-bold text-slate-700">{{ record.qcScore || '-' }}</span>
+                 <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
                  <a-progress 
-                   :percent="record.qcScore" 
+                   v-if="record.score"
+                   :percent="record.score" 
                    :show-info="false" 
-                   :stroke-color="getScoreColor(record.qcScore)" 
+                   :stroke-color="getScoreColor(record.score)" 
                    size="small" 
                    class="w-16"
                  />
@@ -196,7 +194,7 @@
                     <FileSearchOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip title="归档" v-if="record.archiveStatus === 'pending'">
+                <a-tooltip title="归档" v-if="record.status === 'pending'">
                   <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all" @click="handleArchive(record)">
                     <FolderOutlined />
                   </button>
@@ -227,7 +225,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
@@ -242,15 +240,34 @@ import {
   TrophyOutlined,
   CloseOutlined
 } from '@ant-design/icons-vue'
+import {
+  getAdminRecordList,
+  getAdminOverview,
+  getDepartmentList,
+  exportDefects,
+  batchDefectAction,
+  type AdminRecordItem,
+  type AdminOverviewStats,
+} from '@/api/qcAdmin'
 
-// 响应式数据
+// ============= 响应式数据 =============
 const loading = ref(false)
 const searchKeyword = ref('')
 const selectedDepartment = ref(undefined)
 const selectedQCStatus = ref(undefined)
 const dateRange = ref([])
-const records = ref([])
+const records = ref<AdminRecordItem[]>([])
 const selectedRowKeys = ref<string[]>([])
+
+// KPI 卡片数据
+const overviewStats = ref<AdminOverviewStats>({
+  total_records: 0,
+  archived_count: 0,
+  pending_count: 0,
+  pass_rate: 0,
+  total_defects: 0,
+  defects_by_severity: {},
+})
 
 // 分页配置
 const pagination = ref({
@@ -270,14 +287,8 @@ const rowSelection = computed(() => ({
   }
 }))
 
-// 科室选项
-const departmentOptions = [
-  { value: 'internal', label: '内科' },
-  { value: 'surgery', label: '外科' },
-  { value: 'pediatrics', label: '儿科' },
-  { value: 'obstetrics', label: '妇产科' },
-  { value: 'emergency', label: '急诊科' }
-]
+// 科室选项 — 动态加载
+const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 
 // 质控状态选项
 const qcStatusOptions = [
@@ -286,11 +297,11 @@ const qcStatusOptions = [
   { value: 'pending', label: '待质控' }
 ]
 
-// 表格列配置
+// 表格列配置 — 增加缺陷数列
 const columns = [
   {
     title: '病历号',
-    dataIndex: 'recordNumber',
+    dataIndex: 'record_id',
     key: 'recordNumber',
     width: 120
   },
@@ -307,27 +318,29 @@ const columns = [
   },
   {
     title: '出院日期',
-    dataIndex: 'dischargeDate',
+    dataIndex: 'discharge_date',
     key: 'dischargeDate',
     width: 120
   },
   {
     title: '质控状态',
-    dataIndex: 'qcStatus',
+    dataIndex: 'status',
     key: 'qcStatus',
     width: 120
   },
   {
-    title: '归档状态',
-    dataIndex: 'archiveStatus',
-    key: 'archiveStatus',
-    width: 120
+    title: '缺陷数',
+    dataIndex: 'defect_count',
+    key: 'defectCount',
+    width: 100,
+    sorter: true,
   },
   {
     title: '质控得分',
-    dataIndex: 'qcScore',
+    dataIndex: 'score',
     key: 'qcScore',
-    width: 150
+    width: 150,
+    sorter: true,
   },
   {
     title: '操作',
@@ -340,16 +353,9 @@ const columns = [
 const getQCStatusText = (status: string) => {
   const textMap: Record<string, string> = {
     passed: '通过',
+    completed: '通过',
     failed: '未通过',
     pending: '待质控'
-  }
-  return textMap[status] || status
-}
-
-const getArchiveStatusText = (status: string) => {
-  const textMap: Record<string, string> = {
-    archived: '已归档',
-    pending: '待归档'
   }
   return textMap[status] || status
 }
@@ -361,101 +367,54 @@ const getScoreColor = (score: number) => {
   return '#f43f5e' // rose-500
 }
 
-// 事件处理函数
-const handleSearch = () => {
-  pagination.value.current = 1
-  fetchRecords()
-}
+// ============= 数据加载 =============
 
-const handleRefresh = () => {
-  fetchRecords()
-}
-
-const handleBatchArchive = () => {
-  if (selectedRowKeys.value.length === 0) {
-    message.warning('请选择要归档的病历')
-    return
+/** 加载科室列表 */
+const loadDepartments = async () => {
+  const res = await getDepartmentList()
+  if (res.success && res.data) {
+    departmentOptions.value = res.data.map(d => ({ value: d.code || d.name, label: d.name }))
   }
-  message.success(`批量归档 ${selectedRowKeys.value.length} 条病历成功`)
-  selectedRowKeys.value = []
 }
 
-const handleExport = () => {
-  message.loading('正在导出...', 1)
-  setTimeout(() => {
-    message.success('导出成功')
-  }, 1000)
+/** 加载 KPI 概览 */
+const loadOverview = async () => {
+  const res = await getAdminOverview({
+    department: selectedDepartment.value,
+    start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
+    end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
+  })
+  if (res.success && res.data) {
+    overviewStats.value = res.data
+  }
 }
 
-const handleView = (record) => {
-  message.info(`查看病历: ${record.recordNumber}`)
-}
-
-const handleQCReport = (record) => {
-  message.info(`查看质控报告: ${record.recordNumber}`)
-}
-
-const handleArchive = (record) => {
-  message.success(`归档成功: ${record.recordNumber}`)
-}
-
-const handleTableChange = (pag) => {
-  pagination.value.current = pag.current
-  pagination.value.pageSize = pag.pageSize
-  fetchRecords()
-}
-
-// 获取数据
+/** 加载病历列表 */
 const fetchRecords = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 600))
-    
-    // 模拟数据
-    records.value = [
-      {
-        id: 1,
-        recordNumber: 'F2024001',
-        patientName: '王五',
-        department: '内科',
-        dischargeDate: '2024-01-10',
-        qcStatus: 'passed',
-        archiveStatus: 'archived',
-        qcScore: 95
-      },
-      {
-        id: 2,
-        recordNumber: 'F2024002',
-        patientName: '赵六',
-        department: '外科',
-        dischargeDate: '2024-01-12',
-        qcStatus: 'failed',
-        archiveStatus: 'pending',
-        qcScore: 72
-      },
-      {
-        id: 3,
-        recordNumber: 'F2024003',
-        patientName: '李四',
-        department: '儿科',
-        dischargeDate: '2024-01-15',
-        qcStatus: 'passed',
-        archiveStatus: 'pending',
-        qcScore: 88
-      },
-      {
-        id: 4,
-        recordNumber: 'F2024004',
-        patientName: '张三',
-        department: '内科',
-        dischargeDate: '2024-01-18',
-        qcStatus: 'pending',
-        archiveStatus: 'pending',
-        qcScore: null
-      }
-    ]
-    
-    pagination.value.total = 100
+    const res = await getAdminRecordList({
+      department: selectedDepartment.value,
+      status: selectedQCStatus.value,
+      keyword: searchKeyword.value || undefined,
+      start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
+      end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
+      page: pagination.value.current,
+      page_size: pagination.value.pageSize,
+    })
+    if (res.success && res.data) {
+      records.value = res.data.items || []
+      pagination.value.total = res.data.total || 0
+    } else {
+      // API 未就绪时使用 mock 数据兜底
+      records.value = [
+        { id: '1', task_id: '', record_id: 'F2024001', patient_name: '王五', department: '内科', discharge_date: '2024-01-10', status: 'completed', defect_count: 2, score: 95, created_at: '' },
+        { id: '2', task_id: '', record_id: 'F2024002', patient_name: '赵六', department: '外科', discharge_date: '2024-01-12', status: 'failed', defect_count: 5, score: 72, created_at: '' },
+        { id: '3', task_id: '', record_id: 'F2024003', patient_name: '李四', department: '儿科', discharge_date: '2024-01-15', status: 'completed', defect_count: 1, score: 88, created_at: '' },
+        { id: '4', task_id: '', record_id: 'F2024004', patient_name: '张三', department: '内科', discharge_date: '2024-01-18', status: 'pending', defect_count: 0, score: undefined, created_at: '' },
+      ] as any[]
+      pagination.value.total = 4
+    }
   } catch (error) {
     message.error('获取数据失败')
   } finally {
@@ -463,7 +422,73 @@ const fetchRecords = async () => {
   }
 }
 
+// ============= 事件处理 =============
+
+const handleSearch = () => {
+  pagination.value.current = 1
+  fetchRecords()
+}
+
+const handleRefresh = () => {
+  fetchRecords()
+  loadOverview()
+}
+
+const handleBatchArchive = () => {
+  if (selectedRowKeys.value.length === 0) {
+    message.warning('请选择要操作的病历')
+    return
+  }
+  // TODO: 对接批量归档 API
+  message.success(`批量归档 ${selectedRowKeys.value.length} 条病历成功`)
+  selectedRowKeys.value = []
+}
+
+const handleExport = async () => {
+  message.loading('正在导出...', 1)
+  const res = await exportDefects({
+    department: selectedDepartment.value,
+    start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
+    end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
+  })
+  if (res.success) {
+    message.success('导出成功')
+  } else {
+    message.error(res.message || '导出失败')
+  }
+}
+
+const handleView = (record: AdminRecordItem) => {
+  // TODO: Phase 4 — 打开 QCReviewDrawer
+  message.info(`查看病历: ${record.record_id}`)
+}
+
+const handleQCReport = (record: AdminRecordItem) => {
+  // TODO: 导航到质控报告页
+  message.info(`查看质控报告: ${record.record_id}`)
+}
+
+const handleArchive = (record: AdminRecordItem) => {
+  // TODO: 对接单条归档 API
+  message.success(`归档成功: ${record.record_id}`)
+}
+
+const handleTableChange = (pag: any) => {
+  pagination.value.current = pag.current
+  pagination.value.pageSize = pag.pageSize
+  fetchRecords()
+}
+
+// 筛选条件变化时自动刷新
+watch([selectedDepartment, selectedQCStatus, dateRange], () => {
+  pagination.value.current = 1
+  fetchRecords()
+  loadOverview()
+})
+
 onMounted(() => {
+  loadDepartments()
+  loadOverview()
   fetchRecords()
 })
 </script>
