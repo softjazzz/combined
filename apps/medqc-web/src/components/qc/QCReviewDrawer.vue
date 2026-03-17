@@ -59,7 +59,7 @@
         </div>
         <div class="flex-1 overflow-y-auto p-5">
           <a-spin :spinning="docLoading">
-            <div v-if="currentDocContent" class="doc-content text-sm leading-relaxed text-slate-700" v-html="currentDocContent" />
+            <div v-if="currentDocContent" class="doc-content text-sm leading-relaxed text-slate-700" v-html="sanitizeHtml(currentDocContent)" />
             <div v-else class="text-center py-12 text-slate-400">
               <FileTextOutlined style="font-size: 36px" class="mb-3 block" />
               <p class="text-sm">{{ docLoading ? '加载中...' : '暂无文书内容' }}</p>
@@ -181,17 +181,37 @@ const docTabs = [
   { label: '手术记录', value: 'surgery' },
 ]
 
-// 当前文书内容（根据 Tab 切换）
+// 当前文书内容（根据 Tab 切换，兼容多种后端字段名）
 const currentDocContent = computed(() => {
   if (!recordDetail.value) return ''
+  const d = recordDetail.value
   const tabMap: Record<string, string> = {
-    admission: recordDetail.value.admissionNote || recordDetail.value.admission_note || '',
-    discharge: recordDetail.value.dischargeNote || recordDetail.value.discharge_note || '',
-    progress: recordDetail.value.progressNote || recordDetail.value.progress_note || '',
-    surgery: recordDetail.value.surgeryNote || recordDetail.value.surgery_note || '',
+    admission: d.admissionNote || d.admission_note || d.admission_record || '',
+    discharge: d.dischargeNote || d.discharge_note || d.discharge_record || d.discharge_summary || '',
+    progress: d.progressNote || d.progress_note || d.progress_record || d.course_record || '',
+    surgery: d.surgeryNote || d.surgery_note || d.surgery_record || d.operation_record || '',
   }
   return tabMap[activeDocTab.value] || ''
 })
+
+/**
+ * HTML 净化：移除 script/iframe/事件属性，防止 XSS
+ * 生产环境建议替换为 DOMPurify 等专业库
+ */
+const sanitizeHtml = (html: string): string => {
+  if (!html) return ''
+  return html
+    // 移除 script 标签及内容
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    // 移除 iframe
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<iframe[^>]*\/>/gi, '')
+    // 移除事件属性（on*="...")
+    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]*/gi, '')
+    // 移除 javascript: 协议
+    .replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"')
+}
 
 // 状态样式计算
 const statusClass = computed(() => {

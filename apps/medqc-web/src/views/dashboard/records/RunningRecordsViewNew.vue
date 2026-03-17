@@ -20,7 +20,7 @@
         <div v-if="taskProgress.progress_pct >= 100" class="flex items-center gap-4 mt-2 text-xs text-slate-500">
           <span>平均分: <b class="text-slate-700">{{ taskProgress.avg_score?.toFixed(1) || '-' }}</b></span>
           <span>缺陷数: <b class="text-slate-700">{{ taskProgress.total_defects || 0 }}</b></span>
-          <a-button size="small" type="link" @click="taskProgress = null">关闭</a-button>
+          <a-button size="small" type="link" @click="handleCloseProgress">关闭</a-button>
         </div>
       </div>
     </transition>
@@ -356,6 +356,8 @@ const drawerVisible = ref(false)
 const drawerRecord = ref<any>(null)
 const taskProgress = ref<TaskProgressData | null>(null)
 let progressTimer: ReturnType<typeof setInterval> | null = null
+let pollFailCount = 0
+const MAX_POLL_FAILURES = 5
 const selectedRowKeys = ref<string[]>([])
 
 // 查询条件
@@ -504,6 +506,7 @@ const startProgressPolling = (taskId: string) => {
 const pollProgress = async (taskId: string) => {
   const res = await fetchTaskProgress(taskId)
   if (res.success && res.data) {
+    pollFailCount = 0
     taskProgress.value = res.data
     // 进度完成时停止轮询 + 刷新列表
     if (res.data.progress_pct >= 100) {
@@ -511,7 +514,20 @@ const pollProgress = async (taskId: string) => {
       fetchRecords()
       loadOverview()
     }
+  } else {
+    // 失败计数 + 退避
+    pollFailCount++
+    if (pollFailCount >= MAX_POLL_FAILURES) {
+      stopProgressPolling()
+      message.warning('进度查询失败次数过多，已停止轮询。请手动刷新。')
+    }
   }
+}
+
+/** 关闭进度条（同时停止轮询） */
+const handleCloseProgress = () => {
+  stopProgressPolling()
+  taskProgress.value = null
 }
 
 const stopProgressPolling = () => {

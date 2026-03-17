@@ -313,6 +313,15 @@ export async function createQCTaskAndSample(params: CreateTaskParams) {
         method: 'POST',
     })
 
+    // 抽样失败时返回失败，不误报成功
+    if (!sampleRes.success) {
+        return {
+            success: false,
+            data: { task_id: taskId },
+            message: sampleRes.message || '任务已创建，但抽样执行失败',
+        }
+    }
+
     return {
         success: true,
         data: {
