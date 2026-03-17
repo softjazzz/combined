@@ -1,5 +1,29 @@
 <template>
   <div class="running-records-page min-h-screen bg-slate-50/50 p-6">
+    <!-- 任务进度条（创建任务后显示） -->
+    <transition name="slide-down">
+      <div v-if="taskProgress" class="bg-white rounded-2xl p-4 border border-blue-100 shadow-sm mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <ThunderboltOutlined class="text-blue-500" />
+            <span class="text-sm font-medium text-slate-700">{{ taskProgress.task_name || '质控任务执行中' }}</span>
+          </div>
+          <span class="text-xs text-slate-400">
+            {{ taskProgress.completed_records }}/{{ taskProgress.total_records }} 条
+          </span>
+        </div>
+        <a-progress
+          :percent="Math.round(taskProgress.progress_pct || 0)"
+          :status="taskProgress.progress_pct >= 100 ? 'success' : 'active'"
+          :stroke-color="{ from: '#3b82f6', to: '#10b981' }"
+        />
+        <div v-if="taskProgress.progress_pct >= 100" class="flex items-center gap-4 mt-2 text-xs text-slate-500">
+          <span>平均分: <b class="text-slate-700">{{ taskProgress.avg_score?.toFixed(1) || '-' }}</b></span>
+          <span>缺陷数: <b class="text-slate-700">{{ taskProgress.total_defects || 0 }}</b></span>
+          <a-button size="small" type="link" @click="taskProgress = null">关闭</a-button>
+        </div>
+      </div>
+    </transition>
     <!-- 1. 顶部 KPI 概览卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
@@ -109,7 +133,7 @@
               </button>
            </div>
 
-           <a-button type="primary" class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9">
+           <a-button type="primary" class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9" @click="showCreateTaskModal = true">
              <PlusOutlined /> 新建任务
            </a-button>
            
@@ -257,11 +281,18 @@
       @close="drawerVisible = false"
       @refresh="fetchRecords"
     />
+
+    <!-- 新建质控任务弹窗 -->
+    <CreateTaskModal
+      :visible="showCreateTaskModal"
+      @update:visible="showCreateTaskModal = $event"
+      @created="handleTaskCreated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SearchOutlined,
@@ -295,13 +326,21 @@ import {
   type DefectItem,
 } from '@/api/qcAdmin'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
+import CreateTaskModal from '@/components/qc/CreateTaskModal.vue'
+import {
+  fetchTaskProgress,
+  type TaskProgressData,
+} from '@/api/qcAdmin'
 
 // ============= 响应式数据 =============
 const loading = ref(false)
 const showFilterModal = ref(false)
+const showCreateTaskModal = ref(false)
 const currentView = ref('records')
 const drawerVisible = ref(false)
 const drawerRecord = ref<any>(null)
+const taskProgress = ref<TaskProgressData | null>(null)
+let progressTimer: ReturnType<typeof setInterval> | null = null
 const selectedRowKeys = ref<string[]>([])
 
 // 查询条件
@@ -434,6 +473,39 @@ const fetchRecords = async () => {
 
 // ============= 事件处理 =============
 
+/** 任务创建成功后：启动进度轮询 */
+const handleTaskCreated = (data: { task_id: string; task_number: string }) => {
+  startProgressPolling(data.task_id)
+}
+
+/** 启动进度轮询（3 秒一次） */
+const startProgressPolling = (taskId: string) => {
+  stopProgressPolling()
+  // 立即查询一次
+  pollProgress(taskId)
+  progressTimer = setInterval(() => pollProgress(taskId), 3000)
+}
+
+const pollProgress = async (taskId: string) => {
+  const res = await fetchTaskProgress(taskId)
+  if (res.success && res.data) {
+    taskProgress.value = res.data
+    // 进度完成时停止轮询 + 刷新列表
+    if (res.data.progress_pct >= 100) {
+      stopProgressPolling()
+      fetchRecords()
+      loadOverview()
+    }
+  }
+}
+
+const stopProgressPolling = () => {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+}
+
 const handleQuery = () => {
   pagination.current = 1
   fetchRecords()
@@ -541,6 +613,10 @@ watch(currentView, () => {
 onMounted(() => {
   loadOverview()
   fetchRecords()
+})
+
+onUnmounted(() => {
+  stopProgressPolling()
 })
 </script>
 

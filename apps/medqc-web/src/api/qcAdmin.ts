@@ -258,3 +258,86 @@ export async function getDepartmentList() {
     // 兜底：返回空列表
     return { success: true, data: [] as Array<{ code: string; name: string }> }
 }
+
+// ============= P0: 批量质控任务管理 =============
+
+/** 任务创建请求体（对齐后端 TaskCreateRequest） */
+export interface CreateTaskParams {
+    task_name: string
+    task_type?: 'one_time' | 'scheduled'
+    date_range?: { start: string; end: string }
+    department_filter?: string[]
+    record_ids?: string[]
+    sampling_method?: 'all' | 'count' | 'percentage'
+    sampling_config?: Record<string, any>
+    deadline?: string
+}
+
+/** 任务进度响应 */
+export interface TaskProgressData {
+    task_id: string
+    task_name: string
+    total_records: number
+    completed_records: number
+    progress_pct: number
+    pending_count: number
+    working_count: number
+    done_count: number
+    avg_score?: number
+    total_defects: number
+}
+
+/**
+ * 创建质控任务 + 自动触发抽样（组合操作）
+ * 后端流程：POST /tasks → POST /tasks/{id}/sample
+ */
+export async function createQCTaskAndSample(params: CreateTaskParams) {
+    // Step 1: 创建任务
+    const createRes = await request<any>(`${TASKS_URL}`, {
+        method: 'POST',
+        body: JSON.stringify({
+            task_type: params.task_type || 'one_time',
+            sampling_method: params.sampling_method || 'all',
+            assign_method: 'keep',
+            ...params,
+        }),
+    })
+    if (!createRes.success || !createRes.data?.id) {
+        return createRes
+    }
+
+    const taskId = createRes.data.id
+
+    // Step 2: 自动执行抽样
+    const sampleRes = await request<any>(`${TASKS_URL}/${taskId}/sample`, {
+        method: 'POST',
+    })
+
+    return {
+        success: true,
+        data: {
+            task_id: taskId,
+            task_number: createRes.data.task_number,
+            sampled_count: sampleRes.data?.sampled_count || 0,
+        },
+        message: sampleRes.message || createRes.message,
+    }
+}
+
+/** 获取任务执行进度（用于轮询） */
+export async function fetchTaskProgress(taskId: string) {
+    return request<TaskProgressData>(`${TASKS_URL}/${taskId}/progress`)
+}
+
+/** 重新质控任务 */
+export async function reAnalyzeQCTask(taskId: string) {
+    return request<any>(`${TASKS_URL}/${taskId}/re-analyze`, {
+        method: 'POST',
+    })
+}
+
+/** 获取单病历详情（文书内容，用于联审 Drawer） */
+export async function getRecordDetail(recordId: string) {
+    // 从 medical_records 或后端聚合接口获取病历文书
+    return request<any>(`/api/v1/records/${recordId}`)
+}
