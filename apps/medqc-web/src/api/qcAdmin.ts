@@ -341,3 +341,143 @@ export async function getRecordDetail(recordId: string) {
     // 从 medical_records 或后端聚合接口获取病历文书
     return request<any>(`/api/v1/records/${recordId}`)
 }
+
+// ============= P1: 整改闭环 =============
+
+/** 整改任务项 */
+export interface RemediationItem {
+    id: string
+    qc_result_id: string
+    record_id: string
+    defect_type: string
+    defect_description: string
+    severity: string
+    status: string   // pending/in_progress/submitted/approved/rejected/overdue/closed
+    assignee_id?: string
+    assignee_name?: string
+    assignee_department?: string
+    remediation_requirement?: string
+    deadline?: string
+    submitted_at?: string
+    reviewed_at?: string
+    closed_at?: string
+    created_at: string
+}
+
+/** 获取整改任务列表 */
+export async function getRemediationList(params?: {
+    status?: string
+    severity?: string
+    assignee_id?: string
+    is_overdue?: boolean
+    page?: number
+    page_size?: number
+}) {
+    const queryParams = new URLSearchParams()
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, String(value))
+            }
+        })
+    }
+    const url = `${REMEDIATION_URL}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    return request<{ items: RemediationItem[]; total: number }>(`${url}`)
+}
+
+/** 获取整改统计 */
+export async function getRemediationStats() {
+    return request<any>(`${REMEDIATION_URL}/statistics/summary`)
+}
+
+/** 验收整改（通过/驳回） */
+export async function reviewRemediation(taskId: string, data: { action: 'approve' | 'reject'; review_comment?: string }) {
+    return request(`${REMEDIATION_URL}/${taskId}/review`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    })
+}
+
+/** 关闭整改任务 */
+export async function closeRemediation(taskId: string, reason?: string) {
+    return request(`${REMEDIATION_URL}/${taskId}/close`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+    })
+}
+
+// ============= P1: 批量派发整改 =============
+
+/** 批量创建整改任务（从选中的缺陷列表生成） */
+export async function batchCreateRemediation(data: {
+    defect_ids: string[]
+    assignee_id: string
+    assignee_name: string
+    assignee_department?: string
+    remediation_requirement: string
+    deadline?: string
+}) {
+    // 逐条创建整改任务（后端暂无 batch 接口）
+    const results: any[] = []
+    for (const defectId of data.defect_ids) {
+        const res = await request(`${REMEDIATION_URL}`, {
+            method: 'POST',
+            body: JSON.stringify({
+                defect_id: defectId,
+                assignee_id: data.assignee_id,
+                assignee_name: data.assignee_name,
+                assignee_department: data.assignee_department,
+                remediation_requirement: data.remediation_requirement,
+                deadline: data.deadline,
+            }),
+        })
+        results.push(res)
+    }
+    const successCount = results.filter(r => r.success).length
+    return {
+        success: successCount > 0,
+        data: { total: data.defect_ids.length, success: successCount, failed: data.defect_ids.length - successCount },
+        message: `派发完成：${successCount}/${data.defect_ids.length} 成功`,
+    }
+}
+
+// ============= P1: 导出 =============
+
+/** 导出缺陷报告（触发下载） */
+export async function exportDefectsDownload(params?: {
+    department?: string
+    status?: string
+    start_date?: string
+    end_date?: string
+}) {
+    const queryParams = new URLSearchParams()
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, String(value))
+            }
+        })
+    }
+    const url = `${DEFECTS_URL}/export${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+
+    try {
+        const response = await fetch(url, { headers: getHeaders() })
+        if (!response.ok) {
+            return { success: false, message: '导出失败' }
+        }
+
+        // 尝试获取 blob 下载
+        const blob = await response.blob()
+        const downloadUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = downloadUrl
+        a.download = `质控缺陷报告_${new Date().toISOString().slice(0, 10)}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(downloadUrl)
+        return { success: true, message: '导出成功' }
+    } catch {
+        return { success: false, message: '导出失败，请重试' }
+    }
+}

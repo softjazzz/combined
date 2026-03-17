@@ -131,6 +131,13 @@
               >
                 <ExclamationCircleOutlined class="mr-1" />缺陷
               </button>
+              <button 
+                @click="currentView = 'remediation'"
+                class="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                :class="currentView === 'remediation' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+              >
+                <CheckCircleOutlined class="mr-1" />整改
+              </button>
            </div>
 
            <a-button type="primary" class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9" @click="showCreateTaskModal = true">
@@ -251,6 +258,11 @@
           </template>
         </a-table>
       </div>
+
+      <!-- 整改闭环视图 -->
+      <div v-if="currentView === 'remediation'" class="flex-1 overflow-hidden px-6 py-2">
+        <RemediationPanel />
+      </div>
       
       <!-- 底部批量操作栏 (有选中时显示) -->
       <transition name="slide-up">
@@ -327,8 +339,11 @@ import {
 } from '@/api/qcAdmin'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import CreateTaskModal from '@/components/qc/CreateTaskModal.vue'
+import RemediationPanel from '@/components/qc/RemediationPanel.vue'
 import {
   fetchTaskProgress,
+  batchCreateRemediation,
+  exportDefectsDownload,
   type TaskProgressData,
 } from '@/api/qcAdmin'
 
@@ -514,6 +529,41 @@ const handleQuery = () => {
 const handleRefresh = () => {
   fetchRecords()
   loadOverview()
+}
+
+/** P1: 批量派发整改 */
+const handleBatchAssign = async () => {
+  if (currentView.value !== 'defects') {
+    message.warning('批量派发仅在缺陷视图下可用')
+    return
+  }
+  // 简化版：使用默认整改要求派发
+  const res = await batchCreateRemediation({
+    defect_ids: selectedRowKeys.value,
+    assignee_id: 'default',
+    assignee_name: '责任科室',
+    remediation_requirement: '请尽快完成整改',
+  })
+  if (res.success) {
+    message.success(res.message)
+  } else {
+    message.error(res.message || '派发失败')
+  }
+  selectedRowKeys.value = []
+  fetchRecords()
+}
+
+/** P1: 导出缺陷报告 */
+const handleExportDefects = async () => {
+  message.loading('正在导出...', 1)
+  const res = await exportDefectsDownload({
+    status: queryConditions.status,
+  })
+  if (res.success) {
+    message.success('导出成功')
+  } else {
+    message.error(res.message || '导出失败')
+  }
 }
 
 const handleTableChange = (pag: any) => {
