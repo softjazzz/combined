@@ -124,8 +124,8 @@
       <!-- 表格区域 -->
       <div class="flex-1 overflow-hidden px-6 py-2">
         <a-table
-          :columns="recordColumns"
-          :data-source="records"
+          :columns="currentColumns"
+          :data-source="tableDataSource"
           :loading="loading"
           :pagination="pagination"
           :row-selection="rowSelection"
@@ -246,6 +246,15 @@
       </transition>
 
     </div>
+
+    <!-- 联审详情抽屉 -->
+    <QCReviewDrawer
+      :visible="drawerVisible"
+      :record="drawerRecord"
+      @update:visible="drawerVisible = $event"
+      @close="drawerVisible = false"
+      @refresh="fetchRecords"
+    />
   </div>
 </template>
 
@@ -283,11 +292,14 @@ import {
   type AdminOverviewStats,
   type DefectItem,
 } from '@/api/qcAdmin'
+import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 
 // ============= 响应式数据 =============
 const loading = ref(false)
 const showFilterModal = ref(false)
 const currentView = ref('records')
+const drawerVisible = ref(false)
+const drawerRecord = ref<any>(null)
 const selectedRowKeys = ref<string[]>([])
 
 // 查询条件
@@ -313,7 +325,7 @@ const records = ref<any[]>([])
 // 缺陷列表数据（缺陷 Tab 用）
 const defects = ref<DefectItem[]>([])
 
-// 表格列配置
+// 表格列配置 — 病历视图
 const recordColumns = [
   { title: '病案信息', key: 'caseInfo', width: 140 },
   { title: '患者', key: 'patientInfo', width: 180 },
@@ -322,6 +334,27 @@ const recordColumns = [
   { title: '质控评分', key: 'score', width: 160 },
   { title: '操作', key: 'action', width: 140, align: 'right' as const }
 ]
+
+// 表格列配置 — 缺陷视图
+const defectColumns = [
+  { title: '规则名称', dataIndex: 'rule_name', key: 'rule_name', width: 200 },
+  { title: '病案号', dataIndex: 'record_id', key: 'record_id', width: 140 },
+  { title: '严重程度', dataIndex: 'severity', key: 'severity', width: 100 },
+  { title: '分类', dataIndex: 'category', key: 'category', width: 100 },
+  { title: '状态', key: 'auditStatus', width: 120 },
+  { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+  { title: '操作', key: 'action', width: 140, align: 'right' as const }
+]
+
+// 根据当前 Tab 返回列配置
+const currentColumns = computed(() =>
+  currentView.value === 'defects' ? defectColumns : recordColumns
+)
+
+// 根据当前 Tab 返回数据源
+const tableDataSource = computed(() =>
+  currentView.value === 'defects' ? defects.value : records.value
+)
 
 // 分页配置
 const pagination = reactive({
@@ -416,14 +449,16 @@ const handleTableChange = (pag: any) => {
 }
 
 const handleViewDetail = (record: any) => {
-  // TODO: Phase 4 — 打开 QCReviewDrawer
-  message.info(`查看病案: ${record.record_id || record.caseNo}`)
+  drawerRecord.value = record
+  drawerVisible.value = true
 }
 
 const handleUrgeRecord = async (record: any) => {
-  const res = await urgeDefect(record.id, { message: '请尽快完成审核' })
+  // 缺陷视图直接用 defect id，病历视图用 record 的关联 id（正确语义需后端支持按病历 ID 催办）
+  const targetId = currentView.value === 'defects' ? record.id : record.id
+  const res = await urgeDefect(targetId, { message: '请尽快完成审核' })
   if (res.success) {
-    message.success(`已发送催办提醒: ${record.doctorName}`)
+    message.success(`已发送催办提醒: ${record.doctorName || record.rule_name || ''}`.trim())
     fetchRecords()
   } else {
     message.error(res.message || '催办失败')
@@ -431,6 +466,10 @@ const handleUrgeRecord = async (record: any) => {
 }
 
 const handleBatchUrge = async () => {
+  if (currentView.value !== 'defects') {
+    message.warning('批量催办仅在缺陷视图下可用')
+    return
+  }
   const res = await batchDefectAction({
     defect_ids: selectedRowKeys.value,
     action: 'urge',
@@ -446,6 +485,10 @@ const handleBatchUrge = async () => {
 }
 
 const handleBatchPass = async () => {
+  if (currentView.value !== 'defects') {
+    message.warning('批量通过仅在缺陷视图下可用')
+    return
+  }
   const res = await batchDefectAction({
     defect_ids: selectedRowKeys.value,
     action: 'approve',

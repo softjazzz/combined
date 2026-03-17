@@ -221,6 +221,15 @@
         </div>
       </transition>
     </div>
+
+    <!-- 联审详情抽屉 -->
+    <QCReviewDrawer
+      :visible="drawerVisible"
+      :record="drawerRecord"
+      @update:visible="drawerVisible = $event"
+      @close="drawerVisible = false"
+      @refresh="fetchRecords"
+    />
   </div>
 </template>
 
@@ -249,6 +258,7 @@ import {
   type AdminRecordItem,
   type AdminOverviewStats,
 } from '@/api/qcAdmin'
+import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 
 // ============= 响应式数据 =============
 const loading = ref(false)
@@ -258,6 +268,8 @@ const selectedQCStatus = ref(undefined)
 const dateRange = ref([])
 const records = ref<AdminRecordItem[]>([])
 const selectedRowKeys = ref<string[]>([])
+const drawerVisible = ref(false)
+const drawerRecord = ref<AdminRecordItem | null>(null)
 
 // KPI 卡片数据
 const overviewStats = ref<AdminOverviewStats>({
@@ -459,8 +471,8 @@ const handleExport = async () => {
 }
 
 const handleView = (record: AdminRecordItem) => {
-  // TODO: Phase 4 — 打开 QCReviewDrawer
-  message.info(`查看病历: ${record.record_id}`)
+  drawerRecord.value = record
+  drawerVisible.value = true
 }
 
 const handleQCReport = (record: AdminRecordItem) => {
