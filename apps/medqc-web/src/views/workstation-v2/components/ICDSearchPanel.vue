@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full bg-slate-50 font-sans">
+  <div class="flex flex-col h-full bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] font-sans">
     <!-- 顶部 Hero 搜索区 -->
     <ICDSearchHero
       :code-version="codeVersion"
@@ -16,7 +16,7 @@
     <div class="flex-1 flex max-w-7xl w-full mx-auto px-6 py-5 gap-5 min-h-0">
       
       <!-- 左栏：搜索结果 / 树形浏览 -->
-      <div class="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-y-auto custom-scrollbar">
+      <div class="flex-1 bg-white/92 rounded-[24px] border border-white/80 shadow-[0_18px_40px_rgba(15,23,42,0.06)] overflow-y-auto custom-scrollbar">
         <!-- 搜索中 -->
         <div v-if="searchLoading" class="flex flex-col items-center justify-center py-20 text-slate-400">
           <a-spin />
@@ -127,7 +127,7 @@
       </div>
 
       <!-- 右栏：编码详情知识卡片 -->
-      <div class="w-[400px] shrink-0">
+      <div class="w-[400px] shrink-0 rounded-[24px] border border-white/80 bg-white/86 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.05)]">
         <ICDDetailPanel
           :selected-code="selectedCode"
           :allow-apply="allowApply"

@@ -465,9 +465,9 @@ const computedAge = computed(() => {
 
 const diagnosisPairs = computed(() => {
   const diags = props.data?.diagnoses || []
-  const mainDiag = diags.filter(d => d.diagnosis_type?.includes('主要'))
-  const otherDiag = diags.filter(d => !d.diagnosis_type?.includes('主要'))
-
+  const mainIdx = diags.findIndex(d => String(d?.diagnosis_type || '').includes('主要'))
+  const mainDiag = mainIdx >= 0 ? [diags[mainIdx]] : []
+  const otherDiag = diags.filter((_, idx) => idx !== mainIdx)
   const leftItems = [...mainDiag, ...otherDiag.slice(0, Math.ceil(otherDiag.length / 2))]
   const rightItems = otherDiag.slice(Math.ceil(otherDiag.length / 2))
 
@@ -501,8 +501,8 @@ function formatIncision(s) {
 <style scoped>
 /* ===== 住院病案首页 — 像素级还原官方PDF长相 ===== */
 .fp-wrapper {
-  background: #f1f5f9; /* 外层背景，模拟看纸张 */
-  padding: 30px 10px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  padding: 22px 18px 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -516,7 +516,9 @@ function formatIncision(s) {
   width: 794px; /* A4 宽度 210mm 以 96dpi 计算 */
   min-height: 1123px; /* A4 高度 */
   padding: 30px 40px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-radius: 24px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   position: relative;
   box-sizing: border-box;
 }

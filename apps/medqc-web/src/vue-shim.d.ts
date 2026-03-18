@@ -6,6 +6,13 @@ declare module '*.vue' {
 }
 
 declare module '@vue/runtime-core' {
+  import type { Component } from 'vue'
+
+  // 兼容部分第三方库（如 ant-design-vue）对 GlobalComponents 的索引约束
+  interface GlobalComponents {
+    [key: string]: Component
+  }
+
   interface ComponentCustomProperties {
     $message: {
       success: (content: string) => void

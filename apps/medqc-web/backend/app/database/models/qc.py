@@ -60,7 +60,6 @@ class QCResultBiz(Base):
     record_id = Column(String(100), nullable=False)
     rule_set = Column(String(100))
     overall_score = Column(Float, comment="Used by dashboard router")
-    total_score = Column(Float, comment="Reserved for PRD compatibility")
     grade = Column(String(10))
     defect_count = Column(Integer, default=0, nullable=False)
     analysis_engine = Column(String(30))
@@ -86,7 +85,6 @@ class QCDefect(Base):
     result_id = Column(String(36))
     record_id = Column(String(100), nullable=False)
     department = Column(String(100))
-    department_code = Column(String(20))
     rule_code = Column(String(100))
     rule_name = Column(String(200))
     description = Column(Text)
@@ -409,6 +407,29 @@ class QCCoderWorkloadDaily(Base):
         Index("ix_qc_coder_workload_stat_date", "stat_date"),
         Index("ix_qc_coder_workload_coder", "coder_id"),
         Index("uq_qc_coder_workload_daily", "stat_date", "coder_id", unique=True),
+    )
+
+
+class MedicalDocument(Base):
+    """Document-level QC source table for qc_statistics_view."""
+
+    __tablename__ = "medical_documents"
+
+    id = Column(String(36), primary_key=True)
+    record_id = Column(String(100), nullable=False)
+    document_type = Column(String(50))
+    content = Column(Text)
+    qc_status = Column(String(20), default="pending", nullable=False)
+    qc_score = Column(Float)
+    qc_last_analyzed = Column(DateTime)
+    status = Column(String(20), default="active", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_medical_documents_record", "record_id"),
+        Index("ix_medical_documents_status", "status"),
+        Index("ix_medical_documents_qc_status", "qc_status"),
     )
 
 

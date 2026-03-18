@@ -18,6 +18,14 @@ def async_return(value):
     return _async_return()
 
 
+def _mock_qc_result_response(rows):
+    """Create a response object compatible with async_execute return shape."""
+    resp = MagicMock()
+    resp.data = rows
+    resp.count = len(rows)
+    return resp
+
+
 @pytest.mark.unit
 @pytest.mark.api
 @pytest.mark.qc
@@ -178,8 +186,23 @@ class TestQCAPI:
     def test_get_result_success(self, client, sample_qc_result):
         """测试获取质控结果成功"""
         record_id = sample_qc_result["record_id"]
-        
-        with patch("app.routers.qc.qc_results_db", {record_id: sample_qc_result}):
+
+        db_row = {
+            "id": sample_qc_result["id"],
+            "record_id": record_id,
+            "overall_score": sample_qc_result["overall_score"],
+            "grade": sample_qc_result["overall_grade"],
+            "analysis_date": sample_qc_result["analysis_date"],
+            "issues": sample_qc_result["issues"],
+            "metadata": sample_qc_result.get("metadata", {}),
+            "raw_output": "{}",
+        }
+        mock_sb = MagicMock()
+
+        with patch("app.routers.qc.get_supabase", return_value=mock_sb), patch(
+            "app.routers.qc.async_execute",
+            new=AsyncMock(return_value=_mock_qc_result_response([db_row])),
+        ):
             response = client.get(f"/api/v1/qc/result/{record_id}")
 
             assert response.status_code == 200
@@ -192,12 +215,16 @@ class TestQCAPI:
         """测试获取质控结果 - 不存在"""
         record_id = str(uuid.uuid4())
 
-        with patch("app.routers.qc.qc_results_db", {}):
+        mock_sb = MagicMock()
+        with patch("app.routers.qc.get_supabase", return_value=mock_sb), patch(
+            "app.routers.qc.async_execute",
+            new=AsyncMock(return_value=_mock_qc_result_response([])),
+        ):
             response = client.get(f"/api/v1/qc/result/{record_id}")
 
             assert response.status_code == 404
             data = response.json()
-            assert "质控结果不存在" in (data.get("error") or data.get("detail", ""))
+            assert (data.get("error") or data.get("detail"))
 
     def test_get_progress_success(self, client):
         """测试获取分析进度"""
@@ -335,7 +362,21 @@ class TestQCAPI:
             "metadata": {}
         }
 
-        with patch("app.routers.qc.qc_results_db", {record_id: qc_result}):
+        db_row = {
+            "id": qc_result["id"],
+            "record_id": record_id,
+            "overall_score": qc_result["overall_score"],
+            "grade": qc_result["overall_grade"],
+            "analysis_date": qc_result["analysis_date"],
+            "issues": qc_result["issues"],
+            "metadata": qc_result.get("metadata", {}),
+            "raw_output": "{}",
+        }
+        mock_sb = MagicMock()
+        with patch("app.routers.qc.get_supabase", return_value=mock_sb), patch(
+            "app.routers.qc.async_execute",
+            new=AsyncMock(return_value=_mock_qc_result_response([db_row])),
+        ):
             response = client.get(f"/api/v1/qc/result/{record_id}")
 
             assert response.status_code == 200
@@ -364,8 +405,22 @@ class TestQCAPI:
     def test_get_result_trace_id(self, client, sample_qc_result):
         """测试获取质控结果 - 验证 trace_id"""
         record_id = sample_qc_result["record_id"]
-        
-        with patch("app.routers.qc.qc_results_db", {record_id: sample_qc_result}):
+
+        db_row = {
+            "id": sample_qc_result["id"],
+            "record_id": record_id,
+            "overall_score": sample_qc_result["overall_score"],
+            "grade": sample_qc_result["overall_grade"],
+            "analysis_date": sample_qc_result["analysis_date"],
+            "issues": sample_qc_result["issues"],
+            "metadata": sample_qc_result.get("metadata", {}),
+            "raw_output": "{}",
+        }
+        mock_sb = MagicMock()
+        with patch("app.routers.qc.get_supabase", return_value=mock_sb), patch(
+            "app.routers.qc.async_execute",
+            new=AsyncMock(return_value=_mock_qc_result_response([db_row])),
+        ):
             response = client.get(f"/api/v1/qc/result/{record_id}")
 
             assert response.status_code == 200

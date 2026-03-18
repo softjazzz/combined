@@ -15,9 +15,19 @@
     </div>
 
     <div class="qc-result-tab__body custom-scrollbar">
-      <!-- ===== 每个 Tab 的独立初始态 ===== -->
+      <div class="qc-overview">
+        <div>
+          <div class="qc-overview__eyebrow">当前质控</div>
+          <div class="qc-overview__title">{{ currentTabConfig.label }}</div>
+          <div class="qc-overview__desc">{{ currentTabConfig.desc }}</div>
+        </div>
+        <div v-if="!isTabEmpty || totalIssueCount > 0" class="qc-overview__status">
+          <span class="qc-overview__status-label">{{ currentIssues.length > 0 ? '当前问题' : '当前状态' }}</span>
+          <strong class="qc-overview__status-value">{{ currentIssues.length > 0 ? currentIssues.length : '待分析' }}</strong>
+        </div>
+      </div>
+
       <template v-if="isTabEmpty">
-        <!-- 未分析 → 居中"开始分析"按钮 -->
         <div v-if="!isTabLoading" class="qc-start">
           <div class="qc-start__icon-wrap">
             <component :is="currentTabConfig.icon" class="qc-start__icon" />
@@ -29,7 +39,6 @@
             开始分析
           </a-button>
         </div>
-        <!-- 分析中 → loading -->
         <div v-else class="qc-start">
           <a-spin />
           <div class="qc-start__title" style="margin-top: 16px;">正在分析...</div>
@@ -37,14 +46,11 @@
         </div>
       </template>
 
-      <!-- ===== 有结果 → 问题列表 ===== -->
       <template v-else-if="currentIssues.length > 0">
         <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="qc-group">
           <header class="qc-group__header">
-            <span class="qc-group__title">
-              <span class="qc-group__dot" :style="{ background: severityColor(group.severity) }"></span>
-              {{ group.title }} ({{ group.items.length }})
-            </span>
+            <span class="qc-group__dot" :style="{ background: severityColor(group.severity) }"></span>
+            <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
           </header>
 
           <article
@@ -53,50 +59,49 @@
             :class="['qc-issue', { 'qc-issue--dismissed': issue.dismissed }]"
           >
             <div class="qc-issue__content">
-              <a-tag :color="severityTagColor(issue.severity)" size="small">{{ severityLabel(issue.severity) }}</a-tag>
-              <button
-                type="button"
-                class="qc-issue__desc qc-issue__desc--link"
-                @click="locateIssue(issue)"
-                :title="`定位到相关字段：${issue.description}`"
-              >
+              <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{ severityLabel(issue.severity) }}</span>
+              <p class="qc-issue__desc" @click="locateIssue(issue)" title="定位到相关字段">
                 {{ issue.description }}
-              </button>
-              <div v-if="issue.suggestion" class="qc-issue__suggestion">
-                {{ issue.suggestion }}
-              </div>
+              </p>
             </div>
 
-            <div class="qc-issue__actions">
-              <a-button type="link" size="small" @click="locateIssue(issue)">定位字段</a-button>
-              <a-button type="link" size="small" @click="$emit('jump-evidence', issue)">文书依据</a-button>
-              <a-dropdown v-if="issue.id" :trigger="['click']">
-                <a-button type="link" size="small">操作 <DownOutlined /></a-button>
-                <template #overlay>
-                  <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                    <a-menu-item key="urge"><SendOutlined /> 催办</a-menu-item>
-                    <a-menu-item key="mark_remediated"><EditOutlined /> 标记已整改</a-menu-item>
-                    <a-menu-divider />
-                    <a-menu-item key="approve"><CheckOutlined style="color: #52c41a" /> 审核通过</a-menu-item>
-                    <a-menu-item key="reject"><CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑</a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
-              <a-button
-                v-else-if="issue.actionLabel"
-                type="link"
-                size="small"
-                @click="$emit('action', issue)"
-              >
-                {{ issue.actionLabel }}
-              </a-button>
-              <a-button type="text" size="small" @click="dismissIssue(issue)">忽略</a-button>
+            <div v-if="issue.suggestion" class="qc-issue__ai-suggestion">
+              <div class="qc-issue__ai-label">
+                <ThunderboltOutlined class="qc-issue__ai-icon" />
+                <span>AI 修正建议</span>
+              </div>
+              <p class="qc-issue__ai-text">{{ issue.suggestion }}</p>
+            </div>
+
+            <div class="qc-issue__action-bar">
+              <div class="qc-issue__action-group">
+                <button type="button" class="qc-issue__ghost-btn" @click="locateIssue(issue)">
+                  <svg class="qc-issue__btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                  定位字段
+                </button>
+                <button type="button" class="qc-issue__ghost-btn" @click="$emit('jump-evidence', issue)">
+                  <svg class="qc-issue__btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                  文书依据
+                </button>
+                <a-dropdown v-if="issue.id" :trigger="['click']">
+                  <button type="button" class="qc-issue__ghost-btn">操作 <DownOutlined /></button>
+                  <template #overlay>
+                    <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
+                      <a-menu-item key="urge"><SendOutlined /> 催办</a-menu-item>
+                      <a-menu-item key="mark_remediated"><EditOutlined /> 标记已整改</a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item key="approve"><CheckOutlined style="color: #52c41a" /> 审核通过</a-menu-item>
+                      <a-menu-item key="reject"><CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑</a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+              </div>
+              <button type="button" class="qc-issue__ghost-btn qc-issue__ghost-btn--muted" @click="dismissIssue(issue)">忽略</button>
             </div>
           </article>
         </section>
       </template>
 
-      <!-- 已分析但无问题 -->
       <div v-else class="qc-empty">
         <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a;" />
         <div class="qc-empty__title">未发现质控问题</div>
@@ -182,17 +187,34 @@ const currentTab = computed(() => props.activeTab || internalTab.value)
 const issues = ref<QCIssue[]>([])
 const exporting = ref(false)
 const codingQCLoading = ref(false)
-
-const qcTabs = [
-  { key: 'form' as const, label: '首页质控', icon: FileTextOutlined, desc: '基于病案首页数据，检查完整性与一致性规则', loadingHint: '正在核验首页填报规范...' },
-  { key: 'coding' as const, label: '编码质控', icon: CodeOutlined, desc: '校验 ICD 编码的逻辑一致性与规范性', loadingHint: '正在调用后端编码校验引擎...' },
-  { key: 'cost' as const, label: '控费监测', icon: DollarOutlined, desc: '监控费用异常波动与 DRG 盈亏风险', loadingHint: '正在计算费用异常指标...' },
-]
-
-// 每个 Tab 的「已分析」状态
+const formQCLoading = ref(false)
 const formAnalyzed = ref(false)
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
+
+const qcTabs = [
+  {
+    key: 'form' as const,
+    label: '首页质控',
+    icon: FileTextOutlined,
+    desc: '基于病案首页数据，检查完整性与一致性规则',
+    loadingHint: '正在核验首页填报规范...',
+  },
+  {
+    key: 'coding' as const,
+    label: '编码质控',
+    icon: CodeOutlined,
+    desc: '校验 ICD 编码的逻辑一致性与规范性',
+    loadingHint: '正在调用后端编码校验引擎...',
+  },
+  {
+    key: 'cost' as const,
+    label: '控费监测',
+    icon: DollarOutlined,
+    desc: '监控费用异常波动与 DRG 盈亏风险',
+    loadingHint: '正在计算费用异常指标...',
+  },
+]
 
 const currentTabConfig = computed(() =>
   qcTabs.find(t => t.key === currentTab.value) || qcTabs[0],
@@ -244,14 +266,6 @@ function severityColor(sev: string) {
   }[sev] || '#94a3b8'
 }
 
-function severityTagColor(sev: string) {
-  return {
-    error: 'error',
-    warning: 'warning',
-    info: 'processing',
-  }[sev] || 'default'
-}
-
 function severityLabel(sev: string) {
   return {
     error: '严重',
@@ -292,7 +306,7 @@ async function handleDefectAction(action: string, issue: QCIssue) {
   try {
     switch (action) {
       case 'urge': {
-        const res = await urgeDefect(issue.id, { message: `请尽快处理: ${issue.description}` })
+        const res = await urgeDefect(issue.id, { message: `请尽快处理：${issue.description}` })
         if (res.success) message.success('催办成功')
         else message.error(res.message || '催办失败')
         break
@@ -322,7 +336,7 @@ async function handleDefectAction(action: string, issue: QCIssue) {
       case 'reject': {
         Modal.confirm({
           title: '审核存疑',
-          content: `确认将缺陷「${issue.description.slice(0, 30)}...」标记为存疑？`,
+          content: `确认将缺陷“${issue.description.slice(0, 30)}...”标记为存疑？`,
           okText: '确认',
           cancelText: '取消',
           okType: 'danger',
@@ -358,7 +372,6 @@ async function handleExportDefects() {
 }
 
 async function fetchCodingQCFromBackend() {
-  // 优先使用 visit_id 模式：直接从 PG 数据库读取（不依赖 LLM 草稿）
   const useVisitIdMode = !!props.visitId
   const fp = props.frontpage
 
@@ -366,13 +379,11 @@ async function fetchCodingQCFromBackend() {
 
   let payload: any
   if (useVisitIdMode) {
-    // visit_id 模式：后端自己从 PG 查诊断/手术数据
     payload = {
       visit_id: props.visitId,
       patient_id: props.patientId || '',
     }
   } else {
-    // 兼容旧版：从 frontpage LLM 草稿组装
     const diagnoses = fp!.diagnoses || {}
     const procedures = fp!.procedures || {}
     const diagList: any[] = []
@@ -456,9 +467,7 @@ async function fetchCodingQCFromBackend() {
   }
 }
 
-// ==================== 独立的数据加载 ====================
 async function loadFrontpageData(): Promise<Record<string, any> | null> {
-  // 优先从 PG 读取系统首页数据
   if (props.visitId && props.patientId) {
     try {
       const resp = await axios.get(
@@ -471,9 +480,6 @@ async function loadFrontpageData(): Promise<Record<string, any> | null> {
   }
   return props.frontpage || null
 }
-
-// ==================== 首页质控（独立） ====================
-const formQCLoading = ref(false)
 
 async function runFormQC() {
   const fpData = await loadFrontpageData()
@@ -493,7 +499,6 @@ async function runFormQC() {
     }
     const engineResult = await integratedQCEngine.executeQualityControl(patientData)
 
-    // 移除旧的 form/cost issues，保留 coding
     const kept = issues.value.filter(i => i.category === 'coding')
     let issueId = 0
     if (engineResult.ruleResults?.length > 0) {
@@ -532,11 +537,9 @@ async function runFormQC() {
   }
 }
 
-// ==================== 编码质控（独立） ====================
 async function runCodingQC() {
   codingQCLoading.value = true
   try {
-    // 移除旧的 coding issues，保留 form/cost
     const kept = issues.value.filter(i => i.category !== 'coding')
     const codingIssues = await fetchCodingQCFromBackend()
     kept.push(...codingIssues)
@@ -550,7 +553,6 @@ async function runCodingQC() {
   }
 }
 
-// ==================== 全部质控 ====================
 async function runAllQC() {
   const fpData = await loadFrontpageData()
   if (!fpData) {
@@ -616,7 +618,6 @@ async function runAllQC() {
   }
 }
 
-// ==================== 开始分析当前 Tab ====================
 function startCurrentTab() {
   const tab = currentTab.value
   if (tab === 'form' || tab === 'cost') runFormQC()
@@ -624,7 +625,6 @@ function startCurrentTab() {
   else runAllQC()
 }
 
-// ==================== 暴露方法给父组件 ====================
 defineExpose({ runFormQC, runCodingQC, runAllQC, startCurrentTab })
 
 watch(
@@ -633,7 +633,6 @@ watch(
     if (!newVal) {
       issues.value = []
       emit('issues-change', [])
-      // 重置分析状态
       formAnalyzed.value = false
       codingAnalyzed.value = false
       costAnalyzed.value = false
@@ -645,7 +644,6 @@ watch(
 watch(
   () => props.visitId,
   () => {
-    // 切换病历时重置所有分析状态
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
@@ -667,15 +665,20 @@ watch(
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  border-radius: 14px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .qc-result-tab__tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  padding: 12px;
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 0 0 12px;
+  background: transparent;
+  border-bottom: none;
 }
 
 .qc-result-tab__tab {
@@ -683,20 +686,27 @@ watch(
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-  color: #2563eb;
+  border: 1px solid rgba(203, 213, 225, 0.74);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 247, 252, 0.96));
+  color: #475569;
   border-radius: 12px;
-  padding: 9px 8px;
+  padding: 10px 8px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 4px 12px rgba(148, 163, 184, 0.06);
 }
 
 .qc-result-tab__tab--active {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
+  background: linear-gradient(180deg, #ffffff, #edf4ff);
+  color: #1d4ed8;
+  border-color: rgba(147, 197, 253, 0.92);
+  box-shadow:
+    0 12px 22px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .qc-result-tab__tab-icon {
@@ -718,136 +728,331 @@ watch(
 .qc-result-tab__body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
-  background: #f8fafc;
+  padding: 0;
+  background: transparent;
 }
 
-/* ===== 各 Tab 独立「开始分析」空白态 ===== */
+.qc-overview {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 248, 254, 0.98));
+  border: 1px solid rgba(203, 213, 225, 0.76);
+  box-shadow:
+    0 12px 28px rgba(148, 163, 184, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.qc-overview__eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.qc-overview__title {
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+
+.qc-overview__desc {
+  max-width: 250px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.qc-overview__status {
+  display: flex;
+  min-width: 96px;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 245, 249, 0.98));
+  border: 1px solid rgba(203, 213, 225, 0.74);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.qc-overview__status-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.qc-overview__status-value {
+  display: block;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 800;
+  color: #0f172a;
+}
+
 .qc-start {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 48px 20px;
-  min-height: 240px;
+  padding: 40px 22px;
+  min-height: 268px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 251, 255, 0.98));
+  border: 1px dashed rgba(147, 197, 253, 0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 16px 34px rgba(148, 163, 184, 0.1);
 }
 
 .qc-start__icon-wrap {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #eef4ff, #dbeafe);
+  border: 1px solid #bfdbfe;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  box-shadow:
+    0 10px 20px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .qc-start__icon {
   font-size: 24px;
-  color: #3b82f6;
+  color: #2563eb;
 }
 
 .qc-start__title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   color: #1e293b;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .qc-start__desc {
   font-size: 12px;
-  color: #94a3b8;
-  max-width: 200px;
+  color: #6b7f96;
+  max-width: 228px;
   line-height: 1.6;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .qc-start__btn {
-  border-radius: 8px !important;
+  border-radius: 999px !important;
+  box-shadow:
+    0 10px 20px rgba(37, 99, 235, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
 }
 
 .qc-group {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .qc-group__header {
-  padding: 7px 10px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 2px 6px;
+  margin-bottom: 6px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .qc-group__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .qc-group__dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
+  flex-shrink: 0;
+  transform: translateY(1px);
 }
 
 .qc-issue {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98));
+  border: 1px solid rgba(203, 213, 225, 0.68);
   border-radius: 12px;
-  padding: 12px;
   margin-bottom: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.07);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.qc-issue::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.9), rgba(96, 165, 250, 0.56));
+}
+
+.qc-issue:hover {
+  border-color: rgba(147, 197, 253, 0.95);
+  box-shadow: 0 12px 24px rgba(148, 163, 184, 0.11);
 }
 
 .qc-issue--dismissed {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .qc-issue__content {
+  padding: 12px 12px 9px 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.qc-issue__desc {
-  font-size: 13px;
-  color: #0f172a;
-  line-height: 1.6;
+.qc-issue__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  width: fit-content;
+  letter-spacing: 0.01em;
 }
 
-.qc-issue__desc--link {
-  text-align: left;
+.qc-issue__badge--error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.qc-issue__badge--warning {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.qc-issue__badge--info {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.qc-issue__desc {
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.66;
+  margin: 0;
+  cursor: pointer;
   border: none;
   background: transparent;
+  text-align: left;
   padding: 0;
-  cursor: pointer;
 }
 
-.qc-issue__desc--link:hover {
-  color: #2563eb;
-  text-decoration: underline;
+.qc-issue__desc:hover {
+  color: #1d4ed8;
 }
 
-.qc-issue__suggestion {
-  background: #fff7ed;
-  border-left: 3px solid #f59e0b;
-  color: #9a3412;
-  font-size: 12px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  line-height: 1.5;
+.qc-issue__ai-suggestion {
+  margin: 0 12px 10px 14px;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.78), rgba(248, 250, 252, 0.94));
+  border-left: 3px solid #3b82f6;
+  border-radius: 0 10px 10px 0;
+  padding: 8px 10px;
 }
 
-.qc-issue__actions {
+.qc-issue__ai-label {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.qc-issue__ai-label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.qc-issue__ai-icon {
+  font-size: 12px;
+  color: #2563eb;
+}
+
+.qc-issue__ai-text {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.55;
+  margin: 0;
+  font-weight: 500;
+}
+
+.qc-issue__action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 8px 7px 10px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.98));
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.qc-issue__action-group {
+  display: flex;
+  align-items: center;
   gap: 4px;
-  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.qc-issue__ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.78);
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.qc-issue__ghost-btn:hover {
+  color: #1d4ed8;
+  background: #eaf2ff;
+}
+
+.qc-issue__ghost-btn--muted {
+  color: #94a3b8;
+}
+
+.qc-issue__ghost-btn--muted:hover {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.qc-issue__btn-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .qc-empty {
@@ -858,11 +1063,14 @@ watch(
   justify-content: center;
   text-align: center;
   color: #64748b;
+  border-radius: 14px;
+  background: #f7fbff;
+  border: 1px dashed rgba(147, 197, 253, 0.92);
 }
 
 .qc-empty__icon {
   font-size: 30px;
-  color: #22c55e;
+  color: #2563eb;
   margin-bottom: 10px;
 }
 
@@ -876,9 +1084,9 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
+  padding: 10px 2px 0;
+  border-top: none;
+  background: transparent;
   font-size: 12px;
   color: #475569;
 }
@@ -887,6 +1095,21 @@ watch(
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+@media (max-width: 520px) {
+  .qc-overview {
+    flex-direction: column;
+  }
+
+  .qc-overview__desc {
+    max-width: none;
+  }
+
+  .qc-overview__status {
+    width: 100%;
+    align-items: flex-start;
+  }
 }
 
 .custom-scrollbar::-webkit-scrollbar {

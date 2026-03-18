@@ -162,9 +162,9 @@ class DiagnosisSurgeryProfilingService:
             self.model = llm_config.get("model", "qwen-max")
         else:
             s = get_settings()
-            self.api_endpoint = str(s.SICHUAN_API_ENDPOINT) if s.SICHUAN_API_ENDPOINT else None
-            self.api_key = s.SICHUAN_API_KEY
-            self.model = s.SICHUAN_MODEL
+            self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
+            self.api_key = s.LLM_API_KEY
+            self.model = s.LLM_MODEL
 
         self._use_llm = bool(self.api_endpoint and self.api_key)
         logger.info(f"DiagnosisSurgeryProfilingService 初始化: use_llm={self._use_llm}")

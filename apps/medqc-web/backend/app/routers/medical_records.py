@@ -71,6 +71,87 @@ async def save_frontpage(data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# ==================== AI 首页草稿（副表，不覆盖原始数据）====================
+
+@router.post("/ai-frontpage-draft")
+async def save_ai_frontpage_draft(data: dict):
+    """
+    保存 AI 生成的病案首页草稿到独立副表（ai_frontpage_draft）。
+
+    此接口不修改原始 CDM 首页表（mr），草稿与原始数据完全隔离。
+    同一 visit_id 草稿会被 upsert（覆盖最新内容）。
+    body: {"institute_id": str|null, "patient_id": str, "visit_id": str, "draft_json": str}
+    """
+    from ..database.connection import engine
+    from ..database.models.cdm import AiFrontpageDraft
+    from sqlalchemy.orm import Session
+    from datetime import datetime
+    import json
+
+    patient_id = data.get("patient_id", "").strip()
+    visit_id   = data.get("visit_id", "").strip()
+    draft_json = data.get("draft_json", "")
+
+    if not patient_id or not visit_id:
+        raise HTTPException(status_code=400, detail="patient_id 和 visit_id 不能为空")
+    if not draft_json:
+        raise HTTPException(status_code=400, detail="draft_json 不能为空")
+
+    if isinstance(draft_json, dict):
+        draft_json = json.dumps(draft_json, ensure_ascii=False)
+
+    try:
+        with Session(engine) as session:
+            AiFrontpageDraft.__table__.create(bind=engine, checkfirst=True)
+            existing = session.query(AiFrontpageDraft).filter_by(visit_id=visit_id).first()
+            if existing:
+                existing.draft_json   = draft_json
+                existing.institute_id = data.get("institute_id") or existing.institute_id
+                existing.patient_id   = patient_id
+                existing.updated_at   = datetime.utcnow()
+                session.commit()
+                return {"success": True, "action": "updated", "visit_id": visit_id}
+            else:
+                record = AiFrontpageDraft(
+                    institute_id=data.get("institute_id"),
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    draft_json=draft_json,
+                )
+                session.add(record)
+                session.commit()
+                return {"success": True, "action": "created", "visit_id": visit_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存 AI 草稿失败: {str(e)}")
+
+
+@router.get("/ai-frontpage-draft/{visit_id}")
+async def get_ai_frontpage_draft(visit_id: str):
+    """读取指定就诊号的 AI 首页草稿，返回 {draft: {...}} 或 404。"""
+    from ..database.connection import engine
+    from ..database.models.cdm import AiFrontpageDraft
+    from sqlalchemy.orm import Session
+    import json
+
+    try:
+        with Session(engine) as session:
+            record = session.query(AiFrontpageDraft).filter_by(visit_id=visit_id).first()
+            if not record:
+                raise HTTPException(status_code=404, detail="未找到 AI 首页草稿")
+            draft = json.loads(record.draft_json) if isinstance(record.draft_json, str) else record.draft_json
+            return {
+                "draft": draft,
+                "visit_id": visit_id,
+                "patient_id": record.patient_id,
+                "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取 AI 草稿失败: {str(e)}")
+
+
 # ==================== 诊断 ====================
 
 @router.get("/diagnoses/{institute_id}/{patient_id}/{visit_id}")
@@ -510,9 +591,21 @@ async def get_frontpage_sheet(patient_id: str, visit_id: str):
         ).order_by(Diagnosis.diagnosis_type, Diagnosis.diagnosis_no).all()
 
         diagnoses = []
+        main_diag_seen = False
         for d in diag_rows:
+            diagnosis_type = d.diagnosis_type
+            if diagnosis_type and "主要" in diagnosis_type:
+                if main_diag_seen:
+                    # Keep exactly one "主要" diagnosis in serialized sheet data.
+                    diagnosis_type = diagnosis_type.replace("主要诊断", "其他诊断")
+                    if "主要" in diagnosis_type:
+                        diagnosis_type = diagnosis_type.replace("主要", "其他")
+                    if "主要" in diagnosis_type:
+                        diagnosis_type = "出院诊断-其他诊断"
+                else:
+                    main_diag_seen = True
             diagnoses.append({
-                "diagnosis_type": d.diagnosis_type,
+                "diagnosis_type": diagnosis_type,
                 "diagnosis_no": d.diagnosis_no,
                 "diagnosis_name": d.diagnosis_name,
                 "diagnosis_code": d.diagnosis_code,

@@ -1,37 +1,70 @@
 <template>
-  <div class="h-full flex bg-white dark:bg-slate-900 overflow-hidden">
+  <div class="workstation-shell relative h-full flex overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_48%,#edf2f7_100%)] dark:bg-slate-950">
     <!-- ====== 列表模式 ====== -->
     <template v-if="viewMode === 'list'">
       <!-- 左侧科室导航 -->
-      <aside class="w-56 flex-shrink-0 border-r border-slate-100 dark:border-slate-800 flex flex-col bg-slate-50/70 dark:bg-slate-900">
-        <div class="h-14 flex items-center gap-2.5 px-5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
-          <MedicineBoxOutlined class="text-blue-500 text-lg" />
-          <span class="font-bold text-slate-800 dark:text-slate-100 text-base tracking-tight">病案工作台</span>
+      <aside class="relative z-10 w-48 flex-shrink-0 border-r border-slate-200/75 flex flex-col bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,248,252,0.94))] backdrop-blur-xl shadow-[8px_0_18px_rgba(15,23,42,0.02)]">
+        <div class="border-b border-slate-200/75 px-4 py-3.5 flex-shrink-0">
+          <div class="flex items-center gap-2.5">
+            <div class="flex h-8 w-8 items-center justify-center rounded-[14px] border border-blue-100 bg-blue-50/90">
+              <MedicineBoxOutlined class="text-blue-700 text-base" />
+            </div>
+            <div>
+              <div class="text-[11px] tracking-[0.12em] text-slate-400">病案管理</div>
+              <span class="font-black text-slate-800 text-[16px] tracking-tight">病案工作台</span>
+            </div>
+          </div>
+          <p class="mt-2 text-[11px] leading-5 text-slate-500">
+            先筛异常病历，再进入单案处理。
+          </p>
         </div>
-        <div class="flex-1 overflow-y-auto py-2.5 custom-scrollbar">
+        <div class="px-3.5 pb-2 pt-3">
+          <div class="grid grid-cols-1 gap-2">
+            <div class="rounded-[16px] border border-slate-200 bg-slate-50/88 px-3 py-2">
+              <div class="text-[11px] text-slate-400">总病历</div>
+              <div class="mt-1 text-[18px] font-black text-slate-900">{{ totalCount }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="px-3.5 pb-1">
+          <div class="relative">
+            <SearchOutlined class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-400" />
+            <input
+              v-model="deptKeyword"
+              type="text"
+              placeholder="搜索科室"
+              class="h-8 w-full rounded-[12px] border border-slate-200 bg-white/85 pl-8 pr-2 text-[12px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-blue-300"
+            />
+          </div>
+          <div class="mt-1 text-[10px] text-slate-400">显示 {{ sidebarDepartments.length }} / {{ departments.length }}</div>
+        </div>
+        <div class="custom-scrollbar flex-1 overflow-y-auto py-2.5">
           <div
-            v-for="dept in departments"
+            v-for="dept in sidebarDepartments"
             :key="dept.name"
             @click="selectDept(dept.name)"
             :class="[
-              'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
+              'relative mx-2.5 mb-1.5 flex items-center justify-between rounded-[14px] border px-3 py-1.5 text-sm transition-all duration-200 cursor-pointer',
               activeDept === dept.name
-                ? 'bg-blue-100 text-blue-700 font-bold dark:bg-blue-500/20 dark:text-blue-300 shadow-sm ring-1 ring-blue-200 dark:ring-blue-500/20'
-                : 'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
+                ? 'bg-blue-50/90 border-blue-200 text-slate-800 font-bold'
+                : 'border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-200 hover:text-slate-900'
             ]"
           >
-            <span class="truncate">{{ dept.name }}</span>
+            <div v-if="activeDept === dept.name" class="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-blue-500"></div>
+            <div class="min-w-0">
+              <div class="truncate font-semibold">{{ dept.name }}</div>
+            </div>
             <div class="flex items-center gap-1.5">
               <span
                 v-if="dept.warningCount > 0"
-                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1"
+                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold px-1"
               >{{ dept.warningCount }}</span>
               <span
                 :class="[
-                  'min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5',
+                  'min-w-[24px] h-[24px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5',
                   activeDept === dept.name
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-500'
                 ]"
               >{{ dept.total }}</span>
             </div>
@@ -39,399 +72,152 @@
         </div>
 
         <!-- 底部：质控规则入口 -->
-        <div class="flex-shrink-0 border-t border-slate-100 dark:border-slate-800 px-2 py-2.5">
+        <div class="flex-shrink-0 border-t border-slate-200/80 px-2.5 py-2.5">
           <div
             @click="viewMode = 'rules'"
             :class="[
-              'flex items-center gap-2.5 px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
+              'flex items-center gap-2.5 rounded-[16px] border px-3 py-2.5 text-sm transition-all duration-200 cursor-pointer',
               viewMode === 'rules'
-                ? 'bg-blue-100 text-blue-700 font-bold dark:bg-blue-500/20 dark:text-blue-300 shadow-sm ring-1 ring-blue-200'
-                : 'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
+                ? 'bg-blue-600 text-white font-bold border-blue-600'
+                : 'border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-200 hover:text-slate-900'
             ]"
           >
             <SafetyCertificateOutlined class="text-base" />
-            <span>质控规则</span>
+            <div>
+              <div class="font-semibold">质控规则</div>
+              <div class="text-[11px] opacity-70">查看规则目录与口径</div>
+            </div>
           </div>
         </div>
       </aside>
 
       <!-- 右侧主内容 -->
-      <main class="flex-1 flex flex-col min-w-0 bg-slate-50/40 dark:bg-slate-900">
-        <header class="h-14 flex items-center justify-between px-6 border-b border-slate-100 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-900">
-          <div class="flex items-center gap-4">
-            <h2 class="text-lg font-bold text-slate-800 dark:text-white">{{ activeDept }}</h2>
-            <span class="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-              {{ filteredRecords.length }} 例
-            </span>
-          </div>
-          <div class="flex items-center gap-3">
-            <a-input-search
-              v-model:value="searchText"
-              placeholder="搜索姓名/病案号"
-              style="width: 200px"
-              size="small"
-              allow-clear
-            />
-            <a-select
-              v-model:value="statusFilter"
-              style="width: 110px"
-              size="small"
-              :options="statusOptions"
-            />
-            <a-button size="small" @click="refreshData" :loading="loading">
-              <template #icon><SyncOutlined /></template>
-            </a-button>
-          </div>
-        </header>
+      <main class="relative z-10 flex-1 flex flex-col min-w-0 bg-transparent">
+        <!-- 控制台：合并标题栏与统计栏 -->
+        <div class="sticky top-0 z-10 flex-shrink-0 border-b border-slate-200/60 bg-white/60 px-4 pb-2 pt-2.5 backdrop-blur-xl">
+          <div class="rounded-[18px] border border-white/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(247,250,252,0.92))] px-4 py-2.5 shadow-[0_5px_14px_rgba(15,23,42,0.03)]">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-[11px] tracking-[0.12em] text-slate-400">病案列表</div>
+                <div class="mt-1 flex items-center gap-2">
+                  <h2 class="text-[22px] font-black text-slate-800 tracking-[-0.03em]">{{ activeDept }}</h2>
+                  <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-500">{{ filteredRecords.length }} 例</span>
+                </div>
+                <p class="mt-1 max-w-[640px] text-[11px] leading-5 text-slate-500">
+                  优先处理高风险与长住院病历，快速进入单案详情，完成首页生成、文书审阅与质控动作。
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="relative group">
+                  <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                  <a-input-search
+                    v-model:value="searchText"
+                    placeholder="搜索姓名 / 病案号"
+                    style="width: 208px"
+                    size="large"
+                    allow-clear
+                  />
+                </div>
+                <a-select v-model:value="hospFilter" style="width: 112px" size="large" :options="hospOptions" />
+                <button @click="refreshData" class="flex h-10 w-10 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:text-slate-800 hover:shadow-[0_6px_14px_rgba(15,23,42,0.06)] cursor-pointer" title="刷新">
+                  <SyncOutlined :spin="loading" />
+                </button>
+              </div>
+            </div>
 
-        <!-- 状态统计条 — 可点击的分段控制器风格 -->
-        <div class="h-11 flex items-center gap-2 px-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/80 flex-shrink-0">
-          <div
-            v-for="st in statusPills"
-            :key="st.key"
-            @click="statusFilter = st.key"
-            :class="[
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-150',
-              statusFilter === st.key ? st.activeClass : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'
-            ]"
-          >
-            <span v-if="st.dotClass" :class="['w-1.5 h-1.5 rounded-full', st.dotClass]"></span>
-            <span>{{ st.label }}</span>
-            <span class="font-bold">{{ st.count }}</span>
-          </div>
-          <div class="ml-auto text-[11px] text-slate-400">
-            完成率
-            <span class="ml-1 font-bold text-emerald-600 dark:text-emerald-400">{{ completionRate }}%</span>
           </div>
         </div>
 
         <!-- 病历卡片网格 -->
-        <div class="flex-1 overflow-y-auto p-5 custom-scrollbar">
-          <div v-if="filteredRecords.length === 0" class="flex flex-col items-center justify-center h-full text-slate-400">
-            <InboxOutlined class="text-4xl mb-3" />
-            <div class="text-sm">暂无病历记录</div>
-          </div>
-          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-            <!-- ===== 重构后的病案卡片 ===== -->
-            <div
-              v-for="record in filteredRecords"
-              :key="record.id"
-              @click="openRecord(record)"
-              class="relative bg-white dark:bg-slate-800 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 cursor-pointer transition-all duration-300 border border-transparent hover:border-blue-100 dark:hover:border-blue-900/30 group"
-            >
-              <div class="p-4 flex flex-col gap-3">
-                <!-- 头部：姓名为主标题，床号为辅标签 -->
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2.5">
-                    <span v-if="record.bedNo" class="px-2 py-0.5 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-md dark:bg-blue-900/30 dark:text-blue-300">
-                      {{ record.bedNo }}床
-                    </span>
-                    <h3 class="text-[17px] font-bold text-slate-800 dark:text-slate-100 leading-none m-0 tracking-tight">
-                      {{ record.name }}
-                    </h3>
-                  </div>
-                  <!-- 右上角状态圆点 -->
-                  <span
-                    :class="[
-                      'w-2.5 h-2.5 rounded-full flex-shrink-0',
-                      record.status === 'completed' ? 'bg-emerald-400' :
-                      record.status === 'has_defects' || record.status === 'warning' ? 'bg-amber-400' :
-                      record.status === 'processing' ? 'bg-blue-400 animate-pulse' :
-                      'bg-slate-200 dark:bg-slate-600'
-                    ]"
-                    :title="record.status === 'completed' ? '已完成' : record.status === 'has_defects' || record.status === 'warning' ? '有缺陷' : record.status === 'processing' ? '处理中' : '待处理'"
-                  ></span>
-                </div>
-
-                <!-- 性别/年龄 + 保险标签（浅彩色） -->
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="text-slate-500 dark:text-slate-400 font-medium">{{ record.sex }} / {{ record.age }}岁</span>
-                  <span v-if="record.insurance" class="px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded dark:bg-blue-900/20 dark:text-blue-300 text-[10px] font-medium">
-                    {{ record.insurance }}
-                  </span>
-                </div>
-
-                <!-- 住院信息区块 -->
-                <div class="bg-slate-50/80 dark:bg-slate-700/20 rounded-lg p-2.5 flex justify-between items-center">
-                  <div class="flex flex-col gap-1 text-[11px]">
-                    <div class="flex gap-2 items-baseline">
-                      <span class="text-slate-400 dark:text-slate-500">入院</span>
-                      <span class="text-slate-700 dark:text-slate-200 font-semibold font-mono">{{ record.admissionDate }}</span>
-                    </div>
-                    <div class="flex gap-2 items-baseline">
-                      <span class="text-slate-400 dark:text-slate-500">出院</span>
-                      <span class="text-slate-700 dark:text-slate-200 font-semibold font-mono">{{ record.dischargeDate }}</span>
-                    </div>
-                  </div>
-                  <!-- 住院天数（高风险背景高亮，加大背景块） -->
-                  <div class="flex flex-col items-end">
-                    <span class="text-[10px] text-slate-400 mb-0.5">住院</span>
-                    <span :class="[
-                      'text-base font-bold px-2.5 py-1 rounded-md leading-none',
-                      record.days > 14 ? 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400' :
-                      record.days > 7 ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' :
-                      'text-slate-700 bg-slate-100 dark:bg-slate-700/50 dark:text-slate-300'
-                    ]">{{ record.days }}<span class="text-[10px] font-medium ml-0.5">天</span></span>
-                  </div>
-                </div>
-
-                <!-- 底部：主治医生(左) + 状态(右) — 合并为一行节省垂直空间 -->
-                <div class="flex items-center justify-between pt-2 border-t border-slate-50 dark:border-slate-700/30">
-                  <div class="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-                    <UserOutlined class="text-[11px]" />
-                    <span class="font-medium text-slate-600 dark:text-slate-300">{{ record.doctor || '未分配' }}</span>
-                  </div>
-                  <span
-                    v-if="record.status === 'completed'"
-                    class="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-semibold"
-                  >
-                    <CheckCircleOutlined /> 质控完成
-                  </span>
-                  <span
-                    v-else-if="record.status === 'has_defects' || record.status === 'warning'"
-                    class="inline-flex items-center gap-1 text-amber-600 text-[11px] font-semibold"
-                  >
-                    <WarningOutlined /> 存在缺陷
-                  </span>
-                  <span
-                    v-else-if="record.status === 'processing'"
-                    class="inline-flex items-center gap-1 text-blue-500 text-[11px] font-semibold"
-                  >
-                    <SyncOutlined spin /> AI 提取中
-                  </span>
-                  <span
-                    v-else
-                    class="inline-flex items-center gap-1 text-slate-400 text-[11px] font-medium group-hover:text-blue-500 transition-colors"
-                  >
-                    <InboxOutlined /> 待处理
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- 分页器 -->
-          <div v-if="serverTotalPages > 1" class="flex justify-center py-4">
-            <a-pagination
-              v-model:current="currentPage"
-              :total="serverTotal"
-              :page-size="50"
-              size="small"
-              show-quick-jumper
-              :show-total="(total: number) => `共 ${total} 例`"
-              @change="handlePageChange"
-            />
-          </div>
-        </div>
+        <PatientCardGrid
+          :records="filteredRecords"
+          :current-page="currentPage"
+          :total="serverTotal"
+          :total-pages="serverTotalPages"
+          @select="openRecord"
+          @page-change="handlePageChange"
+        />
       </main>
     </template>
 
     <!-- ====== 详情模式（全屏） ====== -->
     <template v-else-if="viewMode === 'detail'">
-      <div class="flex-1 flex flex-col min-w-0 h-full">
+      <div class="relative z-10 flex-1 flex flex-col min-w-0 h-full">
         <!-- 详情顶部栏 -->
-        <header class="h-14 flex items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-900">
-          <div class="flex items-center gap-4">
-            <button
-              @click="goBackToList"
-              class="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium"
-            >
-              <LeftOutlined />
-              <span>返回列表</span>
-            </button>
-            <div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
-            <div v-if="selectedRecord" class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-base">
-                {{ selectedRecord.name.charAt(0) }}
-              </div>
-              <div>
-                <div class="font-bold text-slate-800 dark:text-white text-base leading-tight">{{ selectedRecord.name }}</div>
-                <div class="text-[11px] text-slate-400 font-mono">{{ selectedRecord.id }}</div>
-              </div>
-              <span class="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full ml-2">
-                {{ selectedRecord.department }}
-              </span>
-            </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <!-- 快捷翻页 -->
-            <div class="flex items-center gap-1 mr-2">
-              <a-tooltip title="上一例 (Alt+←)">
-                <button
-                  @click="goToPrevRecord"
-                  :disabled="currentRecordIndex <= 0"
-                  :class="[
-                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all text-sm',
-                    currentRecordIndex <= 0
-                      ? 'text-slate-300 cursor-not-allowed'
-                      : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                  ]"
-                >
-                  <LeftOutlined />
-                </button>
-              </a-tooltip>
-              <span class="text-xs text-slate-400 font-mono min-w-[48px] text-center">
-                {{ currentRecordIndex + 1 }} / {{ filteredRecords.length }}
-              </span>
-              <a-tooltip title="下一例 (Alt+→)">
-                <button
-                  @click="goToNextRecord"
-                  :disabled="currentRecordIndex >= filteredRecords.length - 1"
-                  :class="[
-                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all text-sm',
-                    currentRecordIndex >= filteredRecords.length - 1
-                      ? 'text-slate-300 cursor-not-allowed'
-                      : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                  ]"
-                >
-                  <RightOutlined />
-                </button>
-              </a-tooltip>
-            </div>
-            <a-button
-              @click="icdDrawerVisible = true"
-              class="!rounded-lg"
-            >
-              <template #icon><SearchOutlined /></template>
-              ICD 查询
-            </a-button>
-            <a-button
-              type="primary"
-              :loading="frontpageGenerating"
-              @click="detailMainTab = 'frontpage'; generateFrontpage()"
-              class="!rounded-lg !shadow-[0_4px_14px_rgba(59,130,246,0.4)] hover:!shadow-[0_4px_20px_rgba(99,102,241,0.5)] transition-shadow duration-300"
-            >
-              <template #icon><ThunderboltOutlined /></template>
-              {{ frontpageDraft ? '重新生成' : 'AI 生成首页' }}
-            </a-button>
-          </div>
-        </header>
+        <DetailHeader
+          :record="selectedRecord"
+          :current-index="currentRecordIndex"
+          :total-count="filteredRecords.length"
+          :generating="frontpageGenerating"
+          :has-draft="!!frontpageDraft"
+          :can-generate="canGenerateFrontpage"
+          :disabled-reason="frontpageDisabledReason"
+          @back="goBackToList"
+          @prev="goToPrevRecord"
+          @next="goToNextRecord"
+          @open-icd="icdDrawerVisible = true"
+          @generate-frontpage="handleGenerateFrontpage"
+        />
 
         <!-- 详情主体：左右分栏 -->
-        <div class="flex-1 flex overflow-hidden">
-          <!-- 左侧：患者信息 (35%) -->
-          <aside class="w-[27%] min-w-[260px] max-w-[340px] border-r border-slate-200 dark:border-slate-800 overflow-y-auto custom-scrollbar bg-slate-50 dark:bg-slate-900/80">
-            <div v-if="selectedRecord" class="px-4 py-5 space-y-5">
+        <div class="flex flex-1 overflow-hidden">
+          <!-- 左侧：患者信息 -->
+          <DetailSidebar
+            :record="selectedRecord"
+            :documents="documentsList"
+            :documents-loading="documentsLoading"
+            @preview-doc="openDocPreview"
+          />
 
-              <!-- ① 住院时间轴 + 关键数字 -->
-              <div class="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
-                <div class="flex items-center justify-between mb-3">
-                  <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">住院信息</span>
-                  <span v-if="selectedRecord.insurance" class="text-[11px] font-semibold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-md">{{ selectedRecord.insurance }}</span>
-                </div>
-                <!-- 入院→出院时间轴 -->
-                <div class="flex items-center gap-2 mb-3">
-                  <div class="text-center">
-                    <div class="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5 font-medium">入院</div>
-                    <div class="text-sm font-bold text-slate-700 dark:text-slate-200">{{ selectedRecord.admissionDate || '—' }}</div>
-                  </div>
-                  <div class="flex-1 flex items-center gap-1">
-                    <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700"></div>
-                    <div class="px-2.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded-full text-xs font-bold text-slate-500 dark:text-slate-400 border border-white dark:border-slate-600">
-                      {{ selectedRecord.days }}天
-                    </div>
-                    <div class="flex-1 h-px bg-slate-100 dark:bg-slate-700"></div>
-                  </div>
-                  <div class="text-center">
-                    <div class="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5 font-medium">出院</div>
-                    <div class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ selectedRecord.dischargeDate || '—' }}</div>
-                  </div>
-                </div>
-                <!-- 底部：科室 + 医生 -->
-                <div class="flex items-center gap-3 pt-2.5 border-t border-slate-100 dark:border-slate-700 text-[12px] text-slate-500 dark:text-slate-400">
-                  <span>{{ selectedRecord.department }}</span>
-                  <span class="opacity-40">·</span>
-                  <UserOutlined class="text-[10px]" />
-                  <span>{{ selectedRecord.doctor || '未分配' }}</span>
-                </div>
-              </div>
-
-              <!-- ② 患者基本属性（只显示有值的行，grid 亲密对齐） -->
-              <div class="bg-white dark:bg-slate-800 rounded-xl px-5 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
-                <div class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3.5">患者信息</div>
-                <div class="grid grid-cols-[64px_1fr] gap-y-3 text-[13px]">
-                  <template v-for="item in detailItems" :key="item.label">
-                    <template v-if="item.value && item.value !== 'null床' && item.value !== 'null' && String(item.value).trim()">
-                      <div class="text-slate-400 dark:text-slate-500 leading-snug">{{ item.label }}</div>
-                      <div class="text-slate-800 dark:text-slate-200 font-medium leading-snug">{{ item.value }}</div>
-                    </template>
-                  </template>
-                </div>
-              </div>
-
-              <!-- ③ 诊断信息 -->
-              <div v-if="selectedRecord.diagnosis">
-                <div class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-3.5">诊断信息</div>
-                <div class="bg-white dark:bg-slate-800 rounded-xl px-5 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
-                  <div class="flex gap-2 items-start">
-                    <span class="mt-0.5 text-[10px] text-white bg-blue-500 px-1.5 py-0.5 rounded font-bold flex-shrink-0">主诊断</span>
-                    <span class="text-[13px] font-medium text-slate-800 dark:text-slate-100 leading-snug">{{ selectedRecord.diagnosis }}</span>
-                  </div>
-                  <div v-if="selectedRecord.diagnosisCode" class="mt-2 text-[11px] text-blue-400 font-mono pl-1">
-                    ICD-10 · {{ selectedRecord.diagnosisCode }}
-                  </div>
-                </div>
-              </div>
-
-              <!-- ④ 病历文书 -->
-              <div class="bg-white dark:bg-slate-800 rounded-xl px-5 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-slate-100/80 dark:border-slate-700/50">
-                <div class="flex items-center mb-2 px-1">
-                  <span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">病历文书</span>
-                  <SyncOutlined v-if="documentsLoading" spin class="ml-2 text-blue-400 text-[10px]" />
-                </div>
-                <div class="space-y-1.5">
-                  <div
-                    v-for="doc in documentsList"
-                    :key="doc.type + doc.label"
-                    :class="[
-                      'flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[13px] transition-all duration-150',
-                      doc.has_content
-                        ? 'bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer border border-transparent hover:border-blue-100 dark:hover:border-blue-900/40'
-                        : 'bg-slate-50/40 dark:bg-slate-800/20 text-slate-300 dark:text-slate-600'
-                    ]"
-                    @click="doc.has_content && openDocPreview(doc)"
-                  >
-                    <span class="flex items-center gap-2">
-                      <FileTextOutlined :class="doc.has_content ? 'text-blue-400' : 'text-slate-200 dark:text-slate-700'" />
-                      <span :class="doc.has_content ? 'text-slate-600 dark:text-slate-300' : ''">{{ doc.label }}</span>
-                    </span>
-                    <span v-if="doc.has_content" class="flex items-center gap-1.5 flex-shrink-0">
-                      <span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400 text-[11px] font-semibold rounded">{{ doc.length }}字</span>
-                      <EyeOutlined class="text-blue-300 text-[11px]" />
-                    </span>
-                    <span v-else class="text-[11px] text-slate-200 dark:text-slate-700">—</span>
-                  </div>
-                  <div v-if="!documentsLoading && documentsList.length === 0" class="text-[12px] text-slate-400 text-center py-4">
-                    暂无病历文书
-                  </div>
-                </div>
-              </div>
-
-              <!-- 文书预览抽屉 -->
-              <a-drawer
-                v-model:open="docDrawerVisible"
-                :title="docDrawerTitle"
-                placement="right"
-                :width="600"
-                :headerStyle="{ borderBottom: '1px solid #e2e8f0' }"
-                :bodyStyle="{ padding: '20px', backgroundColor: '#fafbfc' }"
-              >
-                <div class="bg-white rounded-lg border border-slate-200 p-5 shadow-sm">
-                  <pre class="whitespace-pre-wrap font-sans text-sm text-slate-700 leading-7 m-0">{{ docDrawerContent }}</pre>
-                </div>
-              </a-drawer>
+          <!-- 文书预览抽屉 -->
+          <a-drawer
+            v-model:open="docDrawerVisible"
+            :title="docDrawerTitle"
+            placement="right"
+            :width="560"
+            :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+            :bodyStyle="{ padding: '16px', background: 'linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%)' }"
+          >
+            <div class="rounded-[20px] border border-slate-200/70 bg-white/92 p-4 shadow-[0_8px_18px_rgba(15,23,42,0.045)]">
+              <pre class="m-0 whitespace-pre-wrap font-sans text-[13px] leading-7 text-slate-700">{{ docDrawerContent }}</pre>
             </div>
-          </aside>
+          </a-drawer>
 
 
-          <!-- 右侧：三 Tab 内容区 (65%) -->
-          <main class="flex-1 overflow-hidden flex flex-col bg-white dark:bg-slate-900">
-            <a-tabs v-model:activeKey="detailMainTab" size="small" class="detail-main-tabs flex-1 flex flex-col overflow-hidden" :tabBarStyle="{ margin: 0, padding: '0 24px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }">
+          <!-- 右侧：三 Tab 内容区 -->
+          <main class="relative flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] dark:bg-slate-950">
+            <!-- 自定义 Tab 栏 -->
+            <div class="sticky top-0 z-10 border-b border-slate-200/70 bg-white/46 px-3 pb-1 pt-1.5 backdrop-blur-xl lg:px-4">
+              <div class="inline-flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/74 p-1">
+              <button @click="detailMainTab = 'records'" :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'records' ? 'font-bold text-slate-950 bg-white border-slate-200/80 shadow-[0_3px_8px_rgba(15,23,42,0.035)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']">
+                <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
+              </button>
+              <button @click="detailMainTab = 'frontpage'" :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'frontpage' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']">
+                <span class="flex items-center gap-1.5"><FileSearchOutlined />病案首页</span>
+              </button>
+              <button @click="detailMainTab = 'settlement'" :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'settlement' ? 'font-bold text-amber-900 bg-amber-50 border-amber-200 shadow-[0_3px_8px_rgba(217,119,6,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']">
+                <span class="flex items-center gap-1.5">
+                  <span style="font-size:14px">💰</span>结算清单
+                  <span v-if="settlementQcFailed > 0" class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-100 text-red-600 text-[10px] font-bold px-1">{{ settlementQcFailed }}</span>
+                </span>
+              </button>
+              </div>
+            </div>
+
+            <!-- Tab 内容区 -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar">
               <!-- ====== Tab 1: 病历详情 ====== -->
-              <a-tab-pane key="records" class="flex-1 overflow-y-auto custom-scrollbar">
-                <template #tab>
-                  <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
-                </template>
-                <div class="p-6">
+              <div v-if="detailMainTab === 'records'" class="px-1 pb-3 pt-1 lg:px-2 lg:pb-4">
+                <div class="relative mx-auto w-full max-w-[1280px] rounded-[16px] border border-slate-200/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(252,253,255,0.94))] px-1.5 py-2 shadow-[0_2px_8px_rgba(15,23,42,0.02)] lg:px-2 lg:py-2.5">
+                  <!-- AI 预审状态小标签 -->
+                  <div v-if="selectedRecord" class="absolute right-4 top-0 flex items-center gap-1 rounded-b-md border-x border-b px-2 py-0.5 text-[10px] font-bold opacity-75"
+                    :class="selectedRecord.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100/50' : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning' ? 'bg-rose-50 text-rose-600 border-rose-100/50' : 'bg-blue-50 text-blue-600 border-blue-100/50'">
+                    <CheckCircleOutlined v-if="selectedRecord.status === 'completed'" />
+                    <WarningOutlined v-else-if="selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning'" />
+                    <ThunderboltOutlined v-else />
+                    {{ selectedRecord.status === 'completed' ? 'AI 预审通过' : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning' ? 'AI 发现缺陷' : 'AI 待审' }}
+                  </div>
+
                   <EMRViewer
                     v-if="selectedRecord && emrRenderState !== 'fallback'"
                     ref="emrViewerRef"
@@ -439,7 +225,7 @@
                     :visit-id="selectedRecord.visitId || selectedRecord.id"
                     :patient-id="selectedRecord.patientId"
                     :institute-id="selectedRecord.instituteId"
-                    :max-height="650"
+                    :max-height="760"
                     :hide-doc-tabs="true"
                     @loaded="handleEmrLoaded"
                     @error="handleEmrError"
@@ -451,17 +237,17 @@
                       <a-spin size="large" />
                       <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
                     </div>
-                    <div v-else-if="concatText" class="medical-record-document">
-                      <div class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    <div v-else-if="concatText" class="medical-record-document mx-auto max-w-[132ch] px-5 py-1">
+                      <div class="mb-4 flex items-center gap-2 rounded-[10px] border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs text-amber-700">
                         <WarningOutlined />
                         <span>EMR 高亮视图暂不可用，已自动切换到原始文书预览。</span>
                       </div>
                       <div v-for="(section, idx) in concatSections" :key="idx" class="mb-8">
-                        <div class="flex items-center gap-2 mb-3 pb-2 border-b-2 border-blue-100">
-                          <FileTextOutlined class="text-blue-500" />
-                          <h3 class="text-base font-bold text-slate-800 dark:text-white m-0">{{ section.title }}</h3>
+                        <div class="mb-3 flex items-center gap-2 border-b border-slate-200/80 pb-2">
+                          <FileTextOutlined class="text-sky-500" />
+                          <h3 class="text-[17px] font-bold text-slate-800 dark:text-white m-0">{{ section.title }}</h3>
                         </div>
-                        <pre class="whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-300 leading-7 m-0 bg-slate-50/50 dark:bg-slate-800/30 rounded-lg p-4 border border-slate-100 dark:border-slate-700/30">{{ section.content }}</pre>
+                        <pre class="m-0 whitespace-pre-wrap rounded-[8px] border border-slate-200/30 bg-white/36 p-2 font-sans text-[14px] leading-9 text-slate-700 dark:border-slate-700/30 dark:bg-slate-800/30 dark:text-slate-300">{{ section.content }}</pre>
                       </div>
                     </div>
                     <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
@@ -469,231 +255,88 @@
                         <FileTextOutlined class="text-3xl" />
                       </div>
                       <div class="text-sm font-medium mb-1">暂无病历文书</div>
-                      <div class="text-xs text-slate-400">该患者尚无可展示的病历文书内容</div>
+                      <div class="text-xs text-slate-400">该患者当前暂无可展示的病历文书内容</div>
                     </div>
                   </template>
                 </div>
-              </a-tab-pane>
+              </div>
 
               <!-- ====== Tab 2: 病案首页 ====== -->
-              <a-tab-pane key="frontpage" class="flex-1 overflow-y-auto custom-scrollbar">
-                <template #tab>
-                  <span class="flex items-center gap-1.5"><FileSearchOutlined />病案首页</span>
-                </template>
-                <div class="p-6">
-                  <div v-if="frontpageGenerating" class="py-8">
-                    <!-- 进度头部 -->
-                    <div class="flex items-center gap-3 mb-6 px-2">
-                      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200">
-                        <ThunderboltOutlined class="text-white text-lg" />
-                      </div>
-                      <div>
-                        <div class="text-sm font-bold text-slate-800">正在从病历中提取首页信息</div>
-                        <div class="text-xs text-slate-400 mt-0.5">已完成 {{ completedModules.length }} / 8 个模块</div>
-                      </div>
-                      <a-spin class="ml-auto" />
-                    </div>
-
-                    <!-- 进度条 -->
-                    <div class="mb-6 px-2">
-                      <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500" :style="{ width: `${Math.round(completedModules.length / 8 * 100)}%` }"></div>
-                      </div>
-                    </div>
-
-                    <!-- 模块时间线 -->
-                    <div class="space-y-1 px-2">
-                      <div
-                        v-for="m in ALL_MODULE_KEYS"
-                        :key="m"
-                        class="flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all duration-300"
-                        :class="getModuleStatus(m) === 'done' ? 'bg-green-50/80' : getModuleStatus(m) === 'active' ? 'bg-blue-50 animate-pulse' : 'bg-slate-50/50'"
-                      >
-                        <!-- 状态图标 -->
-                        <div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                          :class="getModuleStatus(m) === 'done' ? 'bg-green-500' : getModuleStatus(m) === 'active' ? 'bg-blue-500' : 'bg-slate-200'"
-                        >
-                          <CheckCircleOutlined v-if="getModuleStatus(m) === 'done'" class="text-white text-[10px]" />
-                          <span v-else-if="getModuleStatus(m) === 'active'" class="w-2 h-2 rounded-full bg-white animate-ping"></span>
-                          <span v-else class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                        </div>
-                        <!-- 内容 -->
-                        <div class="flex-1 min-w-0">
-                          <div class="flex items-center gap-2">
-                            <span class="text-sm font-medium"
-                              :class="getModuleStatus(m) === 'done' ? 'text-green-700' : getModuleStatus(m) === 'active' ? 'text-blue-600' : 'text-slate-400'"
-                            >{{ MODULE_LABELS_MAP[m] || m }}</span>
-                            <span v-if="getModuleEntry(m)?.timestamp" class="text-[10px] text-slate-400 tabular-nums">{{ (getModuleEntry(m).timestamp / 1000).toFixed(1) }}s</span>
-                            <span v-if="getModuleStatus(m) === 'active'" class="text-[10px] text-blue-400 font-medium">提取中...</span>
-                          </div>
-                          <!-- 提取结果预览 -->
-                          <div v-if="getModuleEntry(m)?.preview?.length" class="flex flex-wrap gap-1.5 mt-1">
-                            <span
-                              v-for="(p, pi) in getModuleEntry(m).preview"
-                              :key="pi"
-                              class="text-[11px] px-1.5 py-0.5 rounded bg-white border border-green-200 text-green-700 truncate max-w-[200px]"
-                            >{{ p }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-else-if="frontpageDraft">
-                    <a-tabs v-model:activeKey="frontpageTab" size="small">
-                      <a-tab-pane key="fields" tab="提取结果">
-                        <!-- 完成头部 -->
-                        <div class="flex items-center gap-3 mb-4">
-                          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md shadow-green-200">
-                            <CheckCircleOutlined class="text-white text-base" />
-                          </div>
-                          <div class="flex-1">
-                            <div class="text-sm font-bold text-slate-800">首页信息提取完成</div>
-                            <div class="text-xs text-slate-400 mt-0.5">已从病历中提取 {{ completedModules.length }} 个模块的字段信息</div>
-                          </div>
-                          <div class="flex gap-2">
-                            <a-button size="small" @click="handleExportFrontpage('health')">
-                              <template #icon><DownloadOutlined /></template>
-                              导出
-                            </a-button>
-                            <a-button size="small" type="primary" @click="handleSaveFrontpage">
-                              <template #icon><SaveOutlined /></template>
-                              保存到数据库
-                            </a-button>
-                          </div>
-                        </div>
-
-                        <!-- 完成后的模块清单 -->
-                        <div class="space-y-1.5">
-                          <div
-                            v-for="m in ALL_MODULE_KEYS"
-                            :key="m"
-                            class="px-3 py-2.5 rounded-lg bg-slate-50/80 border border-slate-100"
-                          >
-                            <div class="flex items-center gap-2 mb-1.5">
-                              <div class="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                                <CheckCircleOutlined class="text-white text-[9px]" />
-                              </div>
-                              <span class="text-sm font-medium text-slate-700">{{ MODULE_LABELS_MAP[m] || m }}</span>
-                              <span v-if="getModuleEntry(m)?.timestamp" class="text-[10px] text-slate-400 tabular-nums">{{ (getModuleEntry(m).timestamp / 1000).toFixed(1) }}s</span>
-                              <span v-if="!getModuleEntry(m)?.preview?.length" class="text-[10px] text-slate-400 italic">未提取到数据</span>
-                            </div>
-                            <div v-if="getModuleEntry(m)?.preview?.length" class="flex flex-wrap gap-1.5 pl-6">
-                              <span
-                                v-for="(p, pi) in getModuleEntry(m).preview"
-                                :key="pi"
-                                class="text-[11px] px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 leading-tight max-w-[260px] truncate"
-                              >{{ p }}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </a-tab-pane>
-                      <a-tab-pane key="preview" tab="首页预览/打印">
-                        <!-- AI 生成成功提示条 -->
-                        <div v-if="completedModules.length > 0" class="mb-4 px-4 py-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 flex items-center gap-3">
-                          <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                            <CheckCircleOutlined class="text-white text-sm" />
-                          </div>
-                          <div class="flex-1">
-                            <div class="text-sm font-medium text-green-800">AI 已自动生成病案首页</div>
-                            <div class="text-xs text-green-600 mt-0.5">从 {{ completedModules.length }} 个模块中提取字段信息并填入下方首页，请核对后确认</div>
-                          </div>
-                          <a-button size="small" type="link" @click="frontpageTab = 'fields'" class="text-green-600 hover:text-green-800">查看提取详情</a-button>
-                        </div>
-                        <HmFrontpagePreview :draft="frontpageDraft" />
-                      </a-tab-pane>
-                      <a-tab-pane key="official" tab="系统首页">
-                        <div v-if="frontpageSheetLoading" class="flex items-center justify-center py-12">
-                          <a-spin />
-                        </div>
-                        <FrontpageSheet v-else-if="frontpageSheetData" :data="frontpageSheetData" />
-                        <div v-else class="text-center text-slate-400 py-12">暂无数据库首页数据</div>
-                      </a-tab-pane>
-                    </a-tabs>
-                  </div>
-                  <div v-else>
-                    <!-- 未AI生成时，直接显示数据库中的系统首页 -->
-                    <div v-if="frontpageSheetLoading" class="flex flex-col items-center py-20">
-                      <a-spin size="large" />
-                      <div class="text-sm text-slate-400 mt-4">加载病案首页数据中...</div>
-                    </div>
-                    <div v-else-if="frontpageSheetData">
-                      <FrontpageSheet :data="frontpageSheetData" />
-                    </div>
-                    <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
-                      <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
-                        <FileTextOutlined class="text-3xl" />
-                      </div>
-                      <div class="text-sm font-medium mb-1">暂无病案首页数据</div>
-                      <div class="text-xs text-slate-400">可点击右上角「AI 生成首页」按钮从病历中自动提取</div>
-                    </div>
-                  </div>
+              <div v-if="detailMainTab === 'frontpage'" class="px-3 pb-5 pt-2 lg:px-4 lg:pb-6">
+                <div class="mx-auto w-full max-w-[1180px] rounded-[22px] border border-slate-200/65 bg-[linear-gradient(180deg,#ffffff,#fbfdff)] p-3 shadow-[0_10px_24px_rgba(15,23,42,0.035)]">
+                  <FrontpageWorkspacePanel
+                    :generating="frontpageGenerating"
+                    :draft="frontpageDraft"
+                    :frontpage-tab="frontpageTab"
+                    :module-cards="frontpageModuleCards"
+                    :completed-count="completedModules.length"
+                    :total-count="ALL_MODULE_KEYS.length"
+                    :sheet-loading="frontpageSheetLoading"
+                    :sheet-data="frontpageSheetData"
+                    @update:frontpage-tab="frontpageTab = $event"
+                    @export-frontpage="handleExportFrontpage"
+                    @save-frontpage="handleSaveFrontpage"
+                  />
                 </div>
-              </a-tab-pane>
-
+              </div>
               <!-- ====== Tab 3: 结算清单 ====== -->
-              <a-tab-pane key="settlement" class="flex-1 overflow-y-auto custom-scrollbar">
-                <template #tab>
-                  <span class="flex items-center gap-1.5">
-                    <span style="font-size:14px">💰</span>结算清单
-                    <span v-if="settlementQcFailed > 0" class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-100 text-red-600 text-[10px] font-bold px-1">{{ settlementQcFailed }}</span>
-                  </span>
-                </template>
-                <div class="bg-slate-100 p-6 min-h-[400px]">
+              <div v-if="detailMainTab === 'settlement'" class="min-h-[400px] px-3 pb-5 pt-2 lg:px-4 lg:pb-6">
+                <div class="mx-auto w-full max-w-[1180px] rounded-[22px] border border-slate-200/65 bg-[linear-gradient(180deg,#ffffff,#fbfdff)] p-2 shadow-[0_10px_24px_rgba(15,23,42,0.035)]">
                   <div v-if="settlementLoading" class="flex flex-col items-center py-20">
                     <a-spin size="large" />
                     <div class="text-sm text-slate-400 mt-4">加载结算清单中...</div>
                   </div>
                   <div v-else-if="settlementData">
                     <!-- AI 草稿横幅 -->
-                    <div v-if="settlementData?.data_source === 'generated_from_frontpage'" class="mx-2 mb-3 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
-                      <span class="text-amber-500 text-lg">⚠️</span>
-                      <div>
+                    <div v-if="settlementData?.data_source === 'generated_from_frontpage'" class="mx-1 mb-3 flex items-center gap-3 rounded-[14px] border border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.94),rgba(255,255,255,0.98))] px-4 py-3">
+                      <span class="text-base text-amber-500">⚠</span>
+                      <div class="min-w-0">
                         <div class="text-sm font-semibold text-amber-700">AI 生成草稿</div>
-                        <div class="text-xs text-amber-600">本清单由病案首页 AI 抽取结果 + CDM 数据自动组装，需人工审核后方可上传医保系统</div>
+                        <div class="text-xs text-amber-600">本清单由病案首页 AI 抽取结果与 CDM 数据自动组装，需人工审核后方可上传医保系统</div>
                       </div>
-                      <a-tag color="orange" class="ml-auto flex-shrink-0">Draft</a-tag>
+                      <a-tag color="orange" class="ml-auto flex-shrink-0 !rounded-full">Draft</a-tag>
                     </div>
                     <!-- 操作栏 -->
-                    <div class="flex items-center justify-between mb-4 px-2">
-                      <div class="text-sm text-slate-500">
+                    <div class="mb-4 flex items-center justify-between rounded-[14px] border border-slate-200/80 bg-white/72 px-4 py-3">
+                      <div class="text-[13px] text-slate-500">
                         清单流水号: <span class="font-mono font-bold text-slate-700">{{ settlementData.medinsur_serial_no || '-' }}</span>
                       </div>
                       <div class="flex items-center gap-2">
-                        <a-button size="small" @click="runSettlementQc" :loading="settlementQcLoading">
+                        <a-button size="small" class="!rounded-full !border-slate-200/80 !shadow-none" @click="runSettlementQc" :loading="settlementQcLoading">
                           <template #icon><CheckOutlined /></template>
                           执行质控
                         </a-button>
                       </div>
                     </div>
-                    <!-- 系统首页结算清单 -->
+                    <!-- 系统结算清单 -->
                     <SettlementSheet :data="settlementData" />
 
                     <!-- 质控结果摘要 -->
                     <div v-if="settlementQcReport" class="mb-6">
-                      <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <h4 class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
                         <CheckCircleOutlined class="text-green-500" /> 质控结果
                       </h4>
-                      <div class="grid grid-cols-4 gap-3 mb-4">
-                        <div class="bg-blue-50 rounded-lg p-3 text-center border border-blue-100">
+                      <div class="mb-4 grid grid-cols-4 gap-2.5">
+                        <div class="rounded-[14px] border border-blue-100 bg-blue-50/88 p-3 text-center">
                           <div class="text-2xl font-black text-blue-600">{{ settlementQcReport.summary.total }}</div>
                           <div class="text-[10px] text-slate-400 mt-1">总规则数</div>
                         </div>
-                        <div class="bg-green-50 rounded-lg p-3 text-center border border-green-100">
+                        <div class="rounded-[14px] border border-green-100 bg-green-50/88 p-3 text-center">
                           <div class="text-2xl font-black text-green-600">{{ settlementQcReport.summary.passed }}</div>
                           <div class="text-[10px] text-slate-400 mt-1">通过</div>
                         </div>
-                        <div class="bg-red-50 rounded-lg p-3 text-center border border-red-100">
+                        <div class="rounded-[14px] border border-red-100 bg-red-50/88 p-3 text-center">
                           <div class="text-2xl font-black text-red-600">{{ settlementQcReport.summary.failed }}</div>
-                          <div class="text-[10px] text-slate-400 mt-1">不通过</div>
+                          <div class="text-[10px] text-slate-400 mt-1">未通过</div>
                         </div>
-                        <div class="bg-amber-50 rounded-lg p-3 text-center border border-amber-100">
+                        <div class="rounded-[14px] border border-amber-100 bg-amber-50/88 p-3 text-center">
                           <div class="text-2xl font-black text-amber-600">{{ settlementQcReport.summary.pass_rate }}</div>
                           <div class="text-[10px] text-slate-400 mt-1">通过率</div>
                         </div>
                       </div>
                       <div class="space-y-2">
                         <div v-for="r in settlementQcReport.results.filter((x: any) => !x.passed)" :key="r.rule_id"
-                          class="bg-white dark:bg-slate-800 rounded-lg px-4 py-3 border flex items-start gap-3"
+                          class="flex items-start gap-3 rounded-[14px] border bg-white/88 px-4 py-3 dark:bg-slate-800"
                           :class="r.severity === 'error' ? 'border-red-200' : 'border-amber-200'"
                         >
                           <a-tag :color="r.severity === 'error' ? 'red' : 'orange'" class="mt-0.5 flex-shrink-0">{{ r.rule_id }}</a-tag>
@@ -706,12 +349,12 @@
                     </div>
                   </div>
                   <div v-else>
-                    <!-- 无数据时仍展示空白结算清单样表 -->
+                    <!-- 无数据时展示空白结算清单样表 -->
                     <SettlementSheet :data="{}" />
                   </div>
                 </div>
-              </a-tab-pane>
-            </a-tabs>
+              </div>
+            </div>
           </main>
         </div>
 
@@ -752,15 +395,29 @@
             />
           </template>
           <template #profile>
-            <div class="p-3 space-y-3">
-              <!-- 未分析状态 -->
-              <div v-if="!profileAnalyzed && !profileAnalyzing" class="flex flex-col items-center text-center py-6">
-                <div class="w-14 h-14 bg-blue-50 rounded-xl mb-4 flex items-center justify-center border border-blue-100">
-                  <ScanOutlined class="text-2xl text-blue-500" />
+            <div class="space-y-3 p-3">
+              <div class="rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,252,0.98))] p-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
+                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">当前分析</div>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-[15px] font-black text-slate-900">AI 深度画像</div>
+                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">对病历全文进行深度阅读，生成时间轴、风险线索与结构化患者画像。</div>
+                  </div>
+                  <div v-if="profileAnalyzed" class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">状态</div>
+                    <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
+                  </div>
                 </div>
-                <div class="text-sm font-bold text-slate-700 mb-1">AI 深度画像</div>
-                <div class="text-xs text-slate-400 mb-4 max-w-[200px] leading-5">对病历全文进行深度阅读，构建诊断时间轴与风险画像</div>
-                <a-button type="primary" size="small" @click="aiProfileModalVisible = true; profileAnalyzed = true" :disabled="!combinedMedicalText" class="!rounded-lg">
+              </div>
+
+              <!-- 未分析状态 -->
+              <div v-if="!profileAnalyzed && !profileAnalyzing" class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]">
+                <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_10px_20px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.72)]">
+                  <ScanOutlined class="text-[24px] text-blue-600" />
+                </div>
+                <div class="mb-1 text-[15px] font-black text-slate-800">AI 深度画像</div>
+                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">对病历全文进行深度阅读，构建诊断时间轴与患者风险画像。</div>
+                <a-button type="primary" size="small" @click="aiProfileModalVisible = true; profileAnalyzed = true" :disabled="!combinedMedicalText" class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]">
                   <template #icon><ThunderboltOutlined /></template>
                   开始分析
                 </a-button>
@@ -768,24 +425,24 @@
 
               <!-- 已分析 / 摘要卡 -->
               <template v-else>
-                <div class="rounded-lg border border-blue-200 bg-blue-50/50 p-3">
-                  <div class="flex items-center gap-2 mb-2">
+                <div class="rounded-[18px] border border-slate-200/80 bg-white/80 p-3.5">
+                  <div class="mb-2 flex items-center gap-2">
                     <ScanOutlined class="text-blue-500" />
                     <span class="text-xs font-bold text-slate-700">画像摘要</span>
-                    <span class="ml-auto text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-bold">已生成</span>
+                    <span class="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">已生成</span>
                   </div>
                   <div class="space-y-1.5 text-xs text-slate-600">
-                    <div v-if="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text" class="flex items-center gap-1.5">
+                    <div v-if="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text" class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2">
                       <span class="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
                       <span class="truncate">{{ frontpageDraft.diagnoses.discharge_main_diagnosis_text }}</span>
                     </div>
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2">
                       <span class="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"></span>
                       <span>诊断时间轴 + 人体透视 + 器官画像</span>
                     </div>
                   </div>
                 </div>
-                <a-button block @click="aiProfileModalVisible = true" class="!rounded-lg !text-sm !font-bold">
+                <a-button block @click="aiProfileModalVisible = true" class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700">
                   <template #icon><EyeOutlined /></template>
                   查看完整 AI 画像
                 </a-button>
@@ -798,29 +455,45 @@
               title="AI 深度画像分析"
               :width="1100"
               :footer="null"
-              :bodyStyle="{ padding: 0, height: '78vh', overflow: 'hidden' }"
+              :bodyStyle="{ padding: '12px', height: '78vh', overflow: 'hidden', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
               centered
               destroyOnClose
             >
-              <AIProfileDashboard
-                :frontpage="frontpageDraft"
-                :medical-text="combinedMedicalText"
-                style="height: 100%; overflow-y: auto;"
-              />
+              <div class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]">
+                <AIProfileDashboard
+                  :frontpage="frontpageDraft"
+                  :medical-text="combinedMedicalText"
+                  style="height: 100%; overflow-y: auto;"
+                />
+              </div>
             </a-modal>
           </template>
           <template #drg>
-            <div class="p-3 space-y-3">
-              <!-- DRG 未分组状态 -->
-              <div v-if="!drgResult && !drgLoading" class="flex flex-col items-center text-center py-6">
-                <div class="w-14 h-14 bg-emerald-50 rounded-xl mb-4 flex items-center justify-center border border-emerald-100">
-                  <NodeIndexOutlined class="text-2xl text-emerald-500" />
+            <div class="space-y-3 p-3">
+              <div class="rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,252,0.98))] p-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
+                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">当前分析</div>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-[15px] font-black text-slate-900">DRG 分组分析</div>
+                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">基于首页诊断与手术编码，生成分组结果、权重与支付风险判断。</div>
+                  </div>
+                  <div v-if="drgResult" class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">状态</div>
+                    <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
+                  </div>
                 </div>
-                <div class="text-sm font-bold text-slate-700 mb-1">DRG 分组分析</div>
-                <div class="text-xs text-slate-400 mb-4 max-w-[200px] leading-5">基于诊断和手术编码进行 DRG 分组与盈亏预测</div>
-                <a-button type="primary" size="small" @click="performDRGGrouping" :disabled="!frontpageDraft" class="!rounded-lg">
+              </div>
+
+              <!-- DRG 未分组状态 -->
+              <div v-if="!drgResult && !drgLoading" class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]">
+                <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_10px_20px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.72)]">
+                  <NodeIndexOutlined class="text-[24px] text-blue-600" />
+                </div>
+                <div class="mb-1 text-[15px] font-black text-slate-800">DRG 分组分析</div>
+                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">基于诊断与手术编码进行 DRG 分组，输出分组结果与盈亏风险判断。</div>
+                <a-button type="primary" size="small" @click="performDRGGrouping" :disabled="!frontpageDraft" class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]">
                   <template #icon><ThunderboltOutlined /></template>
-                  开始分组
+                  开始分析
                 </a-button>
               </div>
 
@@ -832,31 +505,31 @@
 
               <!-- DRG 已分组 / 摘要卡 -->
               <template v-else-if="drgResult">
-                <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
-                  <div class="flex items-center gap-2 mb-2">
-                    <NodeIndexOutlined class="text-emerald-500" />
+                <div class="rounded-[18px] border border-slate-200/80 bg-white/80 p-3.5">
+                  <div class="mb-2 flex items-center gap-2">
+                    <NodeIndexOutlined class="text-blue-500" />
                     <span class="text-xs font-bold text-slate-700">分组结果</span>
                   </div>
                   <div class="space-y-1.5">
-                    <div class="flex justify-between text-xs">
+                    <div class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
                       <span class="text-slate-500">DRG 分组</span>
                       <span class="font-bold text-slate-800">{{ drgResult.drg_code || '-' }}</span>
                     </div>
-                    <div class="flex justify-between text-xs">
+                    <div class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
                       <span class="text-slate-500">权重</span>
                       <span class="font-bold text-blue-600">{{ drgResult.weight || '-' }}</span>
                     </div>
-                    <div v-if="drgResult.payment" class="flex justify-between text-xs">
+                    <div v-if="drgResult.payment" class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
                       <span class="text-slate-500">支付标准</span>
-                      <span class="font-bold text-emerald-600">¥{{ drgResult.payment }}</span>
+                      <span class="font-bold text-blue-600">¥{{ drgResult.payment }}</span>
                     </div>
                   </div>
                 </div>
-                <a-button block @click="drgDetailModalVisible = true" class="!rounded-lg !text-sm !font-bold">
+                <a-button block @click="drgDetailModalVisible = true" class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700">
                   <template #icon><EyeOutlined /></template>
                   查看 DRG 详情
                 </a-button>
-                <a-button block type="link" size="small" @click="performDRGGrouping">
+                <a-button block type="link" size="small" @click="performDRGGrouping" class="!h-8 !rounded-full !text-xs !font-semibold">
                   <SyncOutlined /> 重新分组
                 </a-button>
               </template>
@@ -868,26 +541,28 @@
               title="DRG 分组详情"
               :width="960"
               :footer="null"
-              :bodyStyle="{ padding: '16px', maxHeight: '78vh', overflowY: 'auto' }"
+              :bodyStyle="{ padding: '12px', maxHeight: '78vh', overflowY: 'auto', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
               centered
               destroyOnClose
             >
-              <DRGGroupingTab
-                :drg-result="drgResult"
-                :loading="drgLoading"
-                :has-frontpage="!!frontpageDraft"
-                :main-diagnosis-code="frontpageDraft?.diagnoses?.discharge_main_icd || ''"
-                :main-diagnosis-text="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text || ''"
-                :main-procedure-code="frontpageDraft?.procedures?.main_procedure_code || ''"
-                :main-procedure-name="frontpageDraft?.procedures?.main_procedure_text || ''"
-                @group="performDRGGrouping"
-                @open-optimization="openOptimization"
-              />
+              <div class="rounded-[18px] border border-white/85 bg-white/88 p-1 shadow-[0_10px_22px_rgba(15,23,42,0.05)]">
+                <DRGGroupingTab
+                  :drg-result="drgResult"
+                  :loading="drgLoading"
+                  :has-frontpage="!!frontpageDraft"
+                  :main-diagnosis-code="frontpageDraft?.diagnoses?.discharge_main_icd || ''"
+                  :main-diagnosis-text="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text || ''"
+                  :main-procedure-code="frontpageDraft?.procedures?.main_procedure_code || ''"
+                  :main-procedure-name="frontpageDraft?.procedures?.main_procedure_text || ''"
+                  @group="performDRGGrouping"
+                  @open-optimization="openOptimization"
+                />
+              </div>
             </a-modal>
           </template>
           <template #message>
-            <div class="p-3 space-y-3">
-              <div class="flex items-center justify-between gap-2">
+            <div class="space-y-3 p-3">
+              <div class="flex items-center justify-between gap-2 rounded-[16px] border border-slate-200/80 bg-white/72 px-3 py-2">
                 <a-segmented
                   v-model:value="notificationReadFilter"
                   size="small"
@@ -897,7 +572,7 @@
                     { label: '已读', value: 'read' },
                   ]"
                 />
-                <a-button type="link" size="small" :disabled="notificationUnreadCount === 0" @click="markAllAssistNotificationsRead">
+                <a-button type="link" size="small" :disabled="notificationUnreadCount === 0" @click="markAllAssistNotificationsRead" class="!h-7 !rounded-full !px-2 !text-xs">
                   <CheckOutlined /> 全部已读
                 </a-button>
               </div>
@@ -908,12 +583,12 @@
                 <div
                   v-for="notif in filteredAssistNotifications"
                   :key="notif.id"
-                  class="rounded-lg border p-3"
-                  :class="notif.is_read ? 'border-slate-200 bg-slate-50/50' : 'border-blue-200 bg-blue-50/50'"
+                  class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"
+                  :class="notif.is_read ? 'border-slate-200/80 bg-white/74' : 'border-blue-200/80 bg-blue-50/72'"
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
-                      <div class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                      <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
                         <NotificationOutlined class="text-blue-500" />
                         <span class="truncate">{{ notif.title || '通知消息' }}</span>
                       </div>
@@ -927,11 +602,13 @@
                     <a-tag v-if="!notif.is_read" color="blue">未读</a-tag>
                   </div>
                   <div class="mt-2 flex items-center justify-end gap-2">
-                    <a-button size="small" @click="handleAssistNotificationClick(notif)">去处理</a-button>
-                    <a-button v-if="!notif.is_read" type="link" size="small" @click="markAssistNotificationRead(notif)">标记已读</a-button>
+                    <a-button size="small" class="!h-8 !rounded-full !border-slate-200/90 !shadow-none" @click="handleAssistNotificationClick(notif)">去处理</a-button>
+                    <a-button v-if="!notif.is_read" type="link" size="small" class="!h-8 !rounded-full !text-xs" @click="markAssistNotificationRead(notif)">标记已读</a-button>
                   </div>
                 </div>
-                <a-empty v-if="filteredAssistNotifications.length === 0" description="暂无消息" />
+                <div v-if="filteredAssistNotifications.length === 0" class="rounded-[18px] border border-dashed border-slate-200 bg-white/70 py-8">
+                  <a-empty description="暂无消息" />
+                </div>
               </div>
             </div>
           </template>
@@ -942,12 +619,14 @@
           title="DRG 优化建议"
           placement="right"
           :width="560"
+          :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+          :bodyStyle="{ padding: '16px', background: 'linear-gradient(180deg,#f8fafc 0%,#f3f6fa 100%)' }"
         >
           <div class="space-y-3">
             <div
               v-for="item in suggestions"
               :key="item.suggestion_id"
-              class="rounded-lg border border-slate-200 bg-white p-4"
+              class="rounded-[18px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.03)]"
             >
               <div class="mb-2 flex items-center justify-between gap-3">
                 <div class="text-sm font-semibold text-slate-800">
@@ -960,12 +639,13 @@
               <div class="text-sm text-slate-700 leading-6">
                 {{ item.message }}
               </div>
-              <div v-if="item.evidence" class="mt-2 rounded bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              <div v-if="item.evidence" class="mt-2 rounded-[12px] bg-slate-50/88 px-3 py-2 text-xs text-slate-500">
                 依据：{{ item.evidence }}
               </div>
               <div class="mt-3 flex justify-end gap-2">
                 <a-button
                   size="small"
+                  class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
                   @click="handleDRGSuggestion('reject', item.suggestion_id)"
                 >
                   忽略
@@ -973,6 +653,7 @@
                 <a-button
                   type="primary"
                   size="small"
+                  class="!h-8 !rounded-full !border-0 !shadow-[0_6px_14px_rgba(37,99,235,0.14)]"
                   @click="handleDRGSuggestion('accept', item.suggestion_id)"
                 >
                   采纳并重算
@@ -995,34 +676,41 @@
           title="ICD 编码查询"
           placement="right"
           :width="920"
-          :bodyStyle="{ padding: '0', backgroundColor: '#f8fafc' }"
+          :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+          :bodyStyle="{ padding: '0', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
         >
-          <div class="border-b border-slate-200 bg-white px-5 py-4">
-            <div class="text-xs font-bold tracking-wider text-slate-400 uppercase mb-2">回填目标</div>
-            <div class="flex items-center gap-3 flex-wrap">
-              <a-segmented
-                v-model:value="icdApplyTarget"
-                :options="icdTargetOptions"
-                size="small"
-              />
-              <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
-                <span>第</span>
-                <a-input-number
-                  v-model:value="icdApplyIndex"
-                  :min="1"
-                  :max="20"
+          <div class="border-b border-slate-200/70 bg-white/82 px-4 py-3">
+            <div class="rounded-[16px] border border-slate-200/80 bg-slate-50/78 px-3 py-3">
+              <div class="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">回填目标</div>
+              <div class="flex flex-wrap items-center gap-3">
+                <a-segmented
+                  v-model:value="icdApplyTarget"
+                  :options="icdTargetOptions"
                   size="small"
-                  style="width: 78px"
                 />
-                <span>条</span>
+                <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
+                  <span>第</span>
+                  <a-input-number
+                    v-model:value="icdApplyIndex"
+                    :min="1"
+                    :max="20"
+                    size="small"
+                    style="width: 78px"
+                  />
+                  <span>条</span>
+                </div>
               </div>
             </div>
           </div>
-          <ICDSearchPanel
-            allow-apply
-            :apply-label="icdApplyLabel"
-            @apply="handleApplyICDCode"
-          />
+          <div class="p-3">
+            <div class="overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_8px_18px_rgba(15,23,42,0.04)]">
+              <ICDSearchPanel
+                allow-apply
+                :apply-label="icdApplyLabel"
+                @apply="handleApplyICDCode"
+              />
+            </div>
+          </div>
         </a-drawer>
       </div>
     </template>
@@ -1102,7 +790,7 @@
               <FileSearchOutlined class="text-3xl text-blue-400" />
             </div>
             <h3 class="text-lg font-bold text-slate-700 mb-2">首页质控规则</h3>
-            <p class="text-sm text-slate-500 max-w-md mx-auto">基于病案首页数据的质控规则，自动校验首页字段的完整性、一致性和编码规范性。</p>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">基于病案首页数据的质控规则，自动校验首页字段的完整性、一致性与编码规范性。</p>
             <a-tag color="blue" class="mt-4">规划中</a-tag>
           </div>
           <div v-else-if="rulesSubTab === 'settlement'" class="bg-white rounded-xl border border-slate-200 p-8 text-center">
@@ -1110,7 +798,7 @@
               <SafetyCertificateOutlined class="text-3xl text-emerald-400" />
             </div>
             <h3 class="text-lg font-bold text-slate-700 mb-2">医保结算清单质控规则</h3>
-            <p class="text-sm text-slate-500 max-w-md mx-auto">针对医保结算清单数据的质控规则，覆盖必填项校验、逻辑一致性、编码合规性等检查维度。</p>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">针对医保结算清单数据的质控规则，覆盖必填项校验、逻辑一致性与编码合规性等检查维度。</p>
             <a-tag color="blue" class="mt-4">规划中</a-tag>
           </div>
         </div>
@@ -1122,7 +810,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import axios from 'axios'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import {
   MedicineBoxOutlined,
   SyncOutlined,
@@ -1144,22 +832,26 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
-import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
 import EMRViewer from '@/components/qc/EMRViewer.vue'
 import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
 import QCResultTab from './components/QCResultTab.vue'
 import ContentQCTab from './components/ContentQCTab.vue'
 import ICDSearchPanel from './components/ICDSearchPanel.vue'
 import SettlementSheet from './components/SettlementSheet.vue'
-import FrontpageSheet from './components/FrontpageSheet.vue'
+import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
 import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
 import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
 import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
+import PatientCardGrid from './components/PatientCardGrid.vue'
+import DetailHeader from './components/DetailHeader.vue'
+import DetailSidebar from './components/DetailSidebar.vue'
 import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
 import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
 import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
+import { usePatientRecords } from './composables/usePatientRecords'
+import { useNotifications } from './composables/useNotifications'
 import type {
   PatientRecord,
   DeptInfo,
@@ -1192,26 +884,42 @@ const rulesSubTabs = [
 ]
 const rulesSubTabDescription = computed(() => {
   const map: Record<string, string> = {
-    coding: '基于 ICD 编码规范的 18 类质控规则，覆盖 9.4 万+条编码数据。',
-    frontpage: '基于病案首页数据的质控规则，校验首页字段的完整性和一致性。',
-    settlement: '针对医保结算清单数据的质控规则，覆盖必填项校验及逻辑一致性。',
+    coding: '基于 ICD 编码规范的质控规则，覆盖诊断与手术编码的完整性、格式与逻辑校验。',
+    frontpage: '基于病案首页数据的质控规则，校验首页字段的完整性、一致性和填写规范。',
+    settlement: '针对医保结算清单数据的质控规则，覆盖必填项校验及清单逻辑一致性检查。',
   }
   return map[rulesSubTab.value] || ''
 })
 
-// ========== 数据（从 API 加载） ==========
-const allRecords = ref<PatientRecord[]>([])
-const departments = ref<DeptInfo[]>([])
-const currentPage = ref(1)
-const serverTotal = ref(0)
-const serverTotalPages = ref(1)
-const totalCount = computed(() => serverTotal.value)
+// ========== 病历列表（来自 composable） ==========
+const {
+  allRecords,
+  departments,
+  currentPage,
+  serverTotal,
+  serverTotalPages,
+  totalCount,
+  loading,
+  activeDept,
+  searchText,
+  statusFilter,
+  hospFilter,
+  hospOptions,
+  filteredRecords,
+  statusCounts,
+  fetchData,
+  handlePageChange,
+  refreshData,
+  selectDept,
+} = usePatientRecords()
 
-// ========== 筛选状态 ==========
-const activeDept = ref('全部科室')
-const searchText = ref('')
-const statusFilter = ref('all')
-const loading = ref(false)
+const deptKeyword = ref('')
+const sidebarDepartments = computed(() => {
+  const keyword = deptKeyword.value.trim().toLowerCase()
+  if (!keyword) return departments.value
+  return departments.value.filter((dept) => dept.name.toLowerCase().includes(keyword))
+})
+
 const contentQCCount = ref(0)
 
 // ========== 质控 Tab 独立刷新 ==========
@@ -1249,10 +957,25 @@ const {
   getSuggestionTitle,
 } = useDRGGrouping()
 
-const assistNotifications = ref<any[]>([])
-const notificationUnreadCount = ref(0)
-const notificationLoading = ref(false)
-const notificationReadFilter = ref<'all' | 'unread' | 'read'>('unread')
+// ========== 消息通知（来自 composable） ==========
+const {
+  assistNotifications,
+  notificationUnreadCount,
+  notificationLoading,
+  notificationReadFilter,
+  filteredAssistNotifications,
+  fetchAssistNotifications,
+  markAssistNotificationRead,
+  markAllAssistNotificationsRead,
+  handleAssistNotificationClick,
+  formatRelativeTime,
+} = useNotifications(
+  allRecords,
+  openSessionRecord,
+  assistPanelVisible,
+  assistTab,
+  frontpageTab,
+)
 
 // ========== 病历文书预览 ==========
 const documentsList = ref<DocItem[]>([])
@@ -1266,22 +989,29 @@ const detailMainTab = ref('records')  // records | frontpage | settlement
 const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
 const emrRenderState = ref<'idle' | 'loading' | 'ready' | 'fallback'>('idle')
 
-// ========== 病历详情（拼接文本） ==========
+// ========== 病历详情（拼接文书） ==========
 const concatText = ref('')
 const concatLoading = ref(false)
 const concatSections = computed(() => {
   if (!concatText.value) return []
-  const parts = concatText.value.split(/={40}/)
   const sections: { title: string; content: string }[] = []
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim()
-    if (part.startsWith('📋')) {
-      const title = part.replace('📋', '').trim()
-      const nextContent = parts[i + 1] || ''
-      sections.push({ title, content: nextContent.trim() })
-      i++ // skip next part since it's content
-    }
+  const pattern = /={40}\s*\r?\n(?:📋\s*)?([^\r\n]+)\r?\n={40}\s*\r?\n\r?\n([\s\S]*?)(?=(?:\r?\n){3}={40}|$)/g
+
+  for (const match of concatText.value.matchAll(pattern)) {
+    const [, rawTitle = '', rawContent = ''] = match
+    sections.push({
+      title: rawTitle.trim(),
+      content: rawContent.trim(),
+    })
   }
+
+  if (!sections.length) {
+    sections.push({
+      title: '完整病历',
+      content: concatText.value.trim(),
+    })
+  }
+
   return sections
 })
 
@@ -1312,6 +1042,36 @@ async function loadFrontpageSheet(patientId: string, visitId: string) {
   }
 }
 const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
+
+// ========== 功能可用性判断（PRD 6） ==========
+// AI 生成首页：仅要求已出院，已有首页数据时弹确认框覆盖
+const isDischarged = computed(() => !!selectedRecord.value?.dischargeDate)
+const hasExistingFrontpage = computed(() => !!frontpageSheetData.value)
+const canGenerateFrontpage = computed(() => isDischarged.value)
+const frontpageDisabledReason = computed(() => {
+  if (!isDischarged.value) return '在院患者暂不支持生成首页'
+  return ''
+})
+function handleGenerateFrontpage() {
+  if (hasExistingFrontpage.value) {
+    Modal.confirm({
+      title: '该患者已有病案首页数据',
+      content: '重新生成将覆盖已有的首页数据，是否继续？',
+      okText: '重新生成',
+      cancelText: '取消',
+      onOk: () => {
+        detailMainTab.value = 'frontpage'
+        generateFrontpage()
+      },
+    })
+  } else {
+    detailMainTab.value = 'frontpage'
+    generateFrontpage()
+  }
+}
+// 结算清单生成：仅对已出院且无结算数据的病历可用
+const hasExistingSettlement = computed(() => !!settlementData.value && settlementData.value?.data_source !== 'generated_from_frontpage')
+const canGenerateSettlement = computed(() => isDischarged.value && !hasExistingSettlement.value)
 
 const costColumns = [
   { title: '收费类别', dataIndex: 'type', width: 120 },
@@ -1383,7 +1143,7 @@ async function loadSettlement(patientId: string, visitId: string) {
     settlementData.value = data
   } catch (err: any) {
     if (err?.response?.status === 404) {
-      // Fallback: 从首页抽取 + CDM SQL 生成草稿
+      // Fallback: 从首页抽取结果与 CDM SQL 生成草稿
       try {
         const { data: draft } = await axios.post(`/api/medical-records/settlement/${patientId}/${visitId}/generate`)
         settlementData.value = draft
@@ -1429,7 +1189,7 @@ async function loadDocuments(visitId: string) {
   documentsList.value = []
   try {
     const { data } = await axios.get(`/api/medical-records/documents/${visitId}`)
-    // 只显示有内容的 + 前 3 个核心文书类型（即使没内容也展示）
+    // 只显示有内容的与前 3 个核心文书类型（即使无内容也展示）
     const coreTypes = ['admission_record', 'discharge_record', 'surgery_record']
     const docs: DocItem[] = data.documents || []
     documentsList.value = docs.filter(
@@ -1496,6 +1256,15 @@ import { MODULE_LABELS, type CompletedModule } from './composables/useFrontpageD
 const ALL_MODULE_KEYS = ['basic_info', 'hospitalization', 'diagnoses', 'procedures', 'other_medical_info', 'staff', 'costs', 'confidence']
 const MODULE_LABELS_MAP = MODULE_LABELS
 
+const frontpageModuleCards = computed(() =>
+  ALL_MODULE_KEYS.map((key) => ({
+    key,
+    label: MODULE_LABELS_MAP[key] || key,
+    status: getModuleStatus(key),
+    entry: getModuleEntry(key),
+  })),
+)
+
 function getModuleEntry(m: string): CompletedModule | undefined {
   return completedModules.value.find(c => c.name === m)
 }
@@ -1506,7 +1275,7 @@ function getModuleStatus(m: string): 'done' | 'active' | 'pending' {
   return 'pending'
 }
 
-// 生成完成后自动切到 "首页预览/打印" tab
+// 生成完成后自动切到“首页预览/打印” tab
 watch(frontpageGenerating, (generating, wasGenerating) => {
   if (wasGenerating && !generating && frontpageDraft.value) {
     // 延迟一帧确保 DOM 已更新
@@ -1516,56 +1285,15 @@ watch(frontpageGenerating, (generating, wasGenerating) => {
   }
 })
 
-const statusOptions = [
-  { value: 'all', label: '全部状态' },
-  { value: 'pending', label: '待处理' },
-  { value: 'processing', label: '处理中' },
-  { value: 'completed', label: '已完成' },
-  { value: 'warning', label: '有缺陷' },
-]
 
-// ========== API 加载 ==========
-async function fetchData(page = 1) {
-  loading.value = true
-  try {
-    const { data } = await axios.get('/api/medical-records/workstation', {
-      params: { page, page_size: 50 }
-    })
-    allRecords.value = data.records || []
-    departments.value = data.departments || []
-    serverTotal.value = data.total || 0
-    serverTotalPages.value = data.totalPages || 1
-    currentPage.value = data.page || 1
-  } catch (err) {
-    console.error('加载工作台数据失败:', err)
-  } finally {
-    loading.value = false
-  }
-}
 
-function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchData(page)
-  // 翻页后滚动到顶部
-  document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function refreshData() {
-  fetchData(currentPage.value)
-}
-
-function selectDept(deptName: string) {
-  activeDept.value = deptName
-  currentPage.value = 1
-  // 科室筛选在前端做，不需要重新请求
-}
 
 onMounted(() => {
   fetchData()
   fetchAssistNotifications()
 })
 
-// 切换病历时清除上次生成结果 + 加载文书列表 + 加载结算清单
+// 切换病历时清除上次生成结果，并加载文书列表与结算清单
 watch(selectedId, (newId) => {
   setDraftEmpty()
   resetPerRecordTransient()
@@ -1593,68 +1321,17 @@ watch(selectedId, (newId) => {
 })
 
 // ========== 计算 ==========
-const filteredRecords = computed(() => {
-  let list = allRecords.value
-  if (activeDept.value !== '全部科室') {
-    list = list.filter(r => r.department === activeDept.value)
-  }
-  if (statusFilter.value !== 'all') {
-    list = list.filter(r => r.status === statusFilter.value)
-  }
-  if (searchText.value.trim()) {
-    const keyword = searchText.value.trim().toLowerCase()
-    list = list.filter(r =>
-      r.name.toLowerCase().includes(keyword) ||
-      r.id.toLowerCase().includes(keyword)
-    )
-  }
-  return list
-})
-
-const statusCounts = computed(() => {
-  const all = activeDept.value === '全部科室'
-    ? allRecords.value
-    : allRecords.value.filter(r => r.department === activeDept.value)
-  return {
-    completed: all.filter(r => r.status === 'completed').length,
-    warning: all.filter(r => r.status === 'warning').length,
-    processing: all.filter(r => r.status === 'processing').length,
-    pending: all.filter(r => r.status === 'pending').length,
-  }
-})
-
-const completionRate = computed(() => {
-  const all = activeDept.value === '全部科室'
-    ? allRecords.value
-    : allRecords.value.filter(r => r.department === activeDept.value)
-  if (all.length === 0) return 0
-  return Math.round((all.filter(r => r.status === 'completed').length / all.length) * 100)
-})
-
-// 状态分段控制器配置（预定义完整 class，避免 Tailwind 动态类名被 purge）
-const statusPills = computed(() => [
-  { key: 'all', label: '全部', count: filteredRecords.value.length,
-    activeClass: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dotClass: '' },
-  { key: 'completed', label: '已完成', count: statusCounts.value.completed,
-    activeClass: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dotClass: 'bg-emerald-500' },
-  { key: 'has_defects', label: '有缺陷', count: statusCounts.value.warning,
-    activeClass: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200', dotClass: 'bg-amber-500' },
-  { key: 'processing', label: '处理中', count: statusCounts.value.processing,
-    activeClass: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dotClass: 'bg-blue-500' },
-  { key: 'pending', label: '待处理', count: statusCounts.value.pending,
-    activeClass: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200', dotClass: 'bg-slate-400' },
-])
 
 const detailItems = computed(() => {
   const r = selectedRecord.value
   if (!r) return []
   return [
     { label: '科室', value: r.department },
-    { label: '床号', value: r.bedNo + '床' },
+    { label: '床号', value: r.bedNo ? `${r.bedNo}床` : '' },
     { label: '性别/年龄', value: `${r.sex} / ${r.age}岁` },
     { label: '医保类型', value: r.insurance },
     { label: '入院日期', value: r.admissionDate },
-    { label: '住院天数', value: r.days + '天' },
+    { label: '住院天数', value: `${r.days}天` },
     { label: '主管医生', value: r.doctor },
     { label: '出院日期', value: r.dischargeDate },
     { label: '病案号', value: r.id },
@@ -1687,11 +1364,6 @@ const icdApplyLabel = computed(() => {
   return `回填其他手术编码（第 ${icdApplyIndex.value} 条）`
 })
 
-const filteredAssistNotifications = computed(() => {
-  if (notificationReadFilter.value === 'all') return assistNotifications.value
-  const expectRead = notificationReadFilter.value === 'read'
-  return assistNotifications.value.filter(item => !!item.is_read === expectRead)
-})
 
 
 function openRecord(record: PatientRecord) {
@@ -1725,79 +1397,10 @@ function goBackToList() {
   assistPanelVisible.value = false
   icdDrawerVisible.value = false
   suggestionDrawerVisible.value = false
-  // 不清空 selectedId，方便返回后还能看到高亮
+  // 不清空 selectedId，方便返回后仍能看到高亮
 }
 
 
-async function fetchAssistNotifications() {
-  notificationLoading.value = true
-  try {
-    const res = await axios.get('/api/v1/notifications', { params: { page_size: 30 } })
-    const data = res.data?.data || {}
-    assistNotifications.value = Array.isArray(data.items) ? data.items : []
-    notificationUnreadCount.value = Number(data.unread_count || 0)
-  } catch (err) {
-    console.error('加载消息概览失败:', err)
-  } finally {
-    notificationLoading.value = false
-  }
-}
-
-async function markAssistNotificationRead(notif: any) {
-  if (!notif?.id || notif.is_read) return
-  try {
-    await axios.put(`/api/v1/notifications/${notif.id}/read`)
-    notif.is_read = true
-    notificationUnreadCount.value = Math.max(0, notificationUnreadCount.value - 1)
-  } catch (err) {
-    console.error('标记消息已读失败:', err)
-    message.error('标记已读失败')
-  }
-}
-
-async function markAllAssistNotificationsRead() {
-  try {
-    await axios.put('/api/v1/notifications/read-all')
-    await fetchAssistNotifications()
-    message.success('已全部标记为已读')
-  } catch (err) {
-    console.error('全部已读失败:', err)
-    message.error('全部已读失败')
-  }
-}
-
-async function handleAssistNotificationClick(notif: any) {
-  await markAssistNotificationRead(notif)
-  const targetRecordId = notif?.record_id
-  if (!targetRecordId) {
-    assistTab.value = 'form'
-    frontpageTab.value = 'fields'
-    message.info('该消息未绑定病历，已切换到质控页')
-    return
-  }
-
-  const record = allRecords.value.find(item => item.id === targetRecordId)
-  if (!record) {
-    message.warning(`未找到病历 ${targetRecordId}`)
-    return
-  }
-
-  openSessionRecord(record.id)
-  assistPanelVisible.value = true
-  assistTab.value = 'form'
-  frontpageTab.value = 'fields'
-}
-
-function formatRelativeTime(iso: string) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
-}
 
 function handleLocateFromQC(payload: { target: FrontpageFocusTarget; issue: { description?: string } }) {
   if (!frontpageDraft.value) {
@@ -1898,6 +1501,26 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(203, 213, 225, 0.4); border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.6); }
 
+.workstation-shell :deep(.ant-input-affix-wrapper),
+.workstation-shell :deep(.ant-input-search .ant-input),
+.workstation-shell :deep(.ant-select-selector) {
+  border-radius: 16px !important;
+}
+
+.workstation-shell :deep(.ant-input-affix-wrapper),
+.workstation-shell :deep(.ant-select-selector) {
+  min-height: 44px !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.workstation-shell :deep(.ant-input-affix-wrapper:hover),
+.workstation-shell :deep(.ant-select-focused .ant-select-selector),
+.workstation-shell :deep(.ant-select-selector:hover) {
+  border-color: rgba(34, 211, 238, 0.4) !important;
+}
+
 /* 详情主 Tab 样式 */
 .detail-main-tabs .ant-tabs-content {
   flex: 1;
@@ -1908,3 +1531,5 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   overflow-y: auto;
 }
 </style>
+
+

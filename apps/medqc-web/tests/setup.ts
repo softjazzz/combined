@@ -29,6 +29,17 @@ global.fetch = vi.fn(() =>
   })
 ) as unknown as typeof fetch
 
+// jsdom 不提供 ResizeObserver，图表组件（如 vue-echarts）测试需要最小实现
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (!('ResizeObserver' in globalThis)) {
+  ;(globalThis as unknown as { ResizeObserver: typeof MockResizeObserver }).ResizeObserver = MockResizeObserver
+}
+
 afterEach(() => {
   vi.clearAllMocks()
   vi.resetModules()

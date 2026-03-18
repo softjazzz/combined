@@ -2,12 +2,23 @@
   <div class="content-qc-tab">
     <!-- 顶部操作栏 -->
     <div class="content-qc-tab__header">
-      <div class="header-left">
-        <SafetyCertificateOutlined class="header-icon" />
-        <span class="header-title">内涵质控</span>
-        <a-tag v-if="totalCount > 0" color="error" size="small">{{ totalCount }}</a-tag>
+      <div class="content-qc-tab__header-main">
+        <div class="content-qc-tab__eyebrow">当前质控</div>
+        <div class="header-left">
+          <SafetyCertificateOutlined class="header-icon" />
+          <span class="header-title">内涵质控</span>
+          <a-tag v-if="totalCount > 0" color="error" size="small">{{ totalCount }}</a-tag>
+        </div>
+        <div class="content-qc-tab__header-desc">基于病历文书内容，检查诊疗逻辑、记录完整性与内涵一致性。</div>
       </div>
-      <a-button type="link" size="small" @click="runContentQC" :loading="loading" :disabled="!patientId">
+      <a-button
+        type="link"
+        size="small"
+        class="content-qc-tab__header-action"
+        @click="runContentQC"
+        :loading="loading"
+        :disabled="!patientId"
+      >
         <ReloadOutlined /> {{ loading ? '分析中...' : '开始分析' }}
       </a-button>
     </div>
@@ -85,7 +96,7 @@
         <SafetyCertificateOutlined class="empty-icon" />
       </div>
       <div class="empty-title">内涵质控分析</div>
-      <div class="empty-desc">基于 LLM 大模型，对病历文书内容进行深度语义分析，<br/>检查诊疗逻辑、病程记录完整性、知情同意等内涵质量</div>
+      <div class="empty-desc">基于 LLM 对病历全文进行深度语义校验，聚焦诊疗逻辑、病程记录完整性与知情同意等内涵质量。</div>
       <a-button
         type="primary"
         size="small"
@@ -102,6 +113,13 @@
     <div v-else class="content-qc-tab__body custom-scrollbar">
       <!-- 汇总卡片 -->
       <div v-if="summary" class="summary-card">
+        <div class="summary-card__hero">
+          <div>
+            <div class="summary-card__eyebrow">本次内涵质控</div>
+            <div class="summary-card__title">逐文书语义校验结果</div>
+          </div>
+          <div class="summary-card__progress">{{ summary.complianceRate }}%</div>
+        </div>
         <div class="summary-row">
           <span class="summary-label">总规则数</span>
           <span class="summary-value">{{ summary.totalRules }}</span>
@@ -259,7 +277,7 @@ const progressPercent = computed(() =>
 const complianceClass = computed(() => {
   if (!summary.value) return ''
   const rate = summary.value.complianceRate
-  if (rate >= 90) return 'text-green-600'
+  if (rate >= 90) return 'text-blue-600'
   if (rate >= 70) return 'text-amber-500'
   return 'text-red-500'
 })
@@ -470,31 +488,77 @@ watch(() => props.patientId, () => {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: transparent;
+  border: none;
+  border-radius: 18px;
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .content-qc-tab__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 12px;
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 250, 252, 0.98));
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+}
+
+.content-qc-tab__header-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.content-qc-tab__eyebrow {
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.content-qc-tab__header-desc {
+  margin-top: 6px;
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7f96;
+}
+
+.content-qc-tab__header-action {
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding-inline: 0 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+@media (max-width: 520px) {
+  .content-qc-tab__header {
+    flex-direction: column;
+  }
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .header-icon {
-  color: #7c3aed;
-  font-size: 14px;
+  color: #2563eb;
+  font-size: 15px;
 }
 
 .header-title {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
   color: #0f172a;
 }
@@ -503,7 +567,8 @@ watch(() => props.patientId, () => {
 .content-qc-tab__progress {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 12px;
+  padding: 0;
+  background: transparent;
 }
 
 .progress-header {
@@ -511,33 +576,39 @@ watch(() => props.patientId, () => {
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 }
 
 .progress-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.18);
 }
 
 .progress-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   color: #0f172a;
 }
 
 .progress-sub {
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
   margin-top: 2px;
 }
 
 .progress-bar-wrap {
   margin-bottom: 14px;
+  padding: 0 2px;
 }
 
 .progress-bar-bg {
@@ -550,28 +621,30 @@ watch(() => props.patientId, () => {
 .progress-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  background: linear-gradient(90deg, #0ea5e9, #2563eb);
   transition: width 0.5s ease;
 }
 
 .progress-timeline {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .timeline-item {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.035);
   transition: all 0.3s ease;
 }
 
-.timeline-done { background: #f0fdf4; }
-.timeline-active { background: #eff6ff; animation: pulse-bg 2s infinite; }
-.timeline-pending { background: rgba(248, 250, 252, 0.5); }
+.timeline-done { background: linear-gradient(180deg, #eff6ff, #f8fbff); }
+.timeline-active { background: linear-gradient(180deg, #eff6ff, #f8fbff); animation: pulse-bg 2s infinite; }
+.timeline-pending { background: rgba(255, 255, 255, 0.72); }
 
 @keyframes pulse-bg {
   0%, 100% { background: #eff6ff; }
@@ -589,7 +662,7 @@ watch(() => props.patientId, () => {
   margin-top: 1px;
 }
 
-.timeline-dot--done { background: #22c55e; }
+.timeline-dot--done { background: #2563eb; }
 .timeline-dot--active { background: #3b82f6; }
 .timeline-dot--pending { background: #e2e8f0; }
 
@@ -631,7 +704,7 @@ watch(() => props.patientId, () => {
   font-weight: 700;
 }
 
-.timeline-label--done { color: #15803d; }
+.timeline-label--done { color: #2563eb; }
 .timeline-label--active { color: #2563eb; }
 .timeline-label--pending { color: #94a3b8; }
 
@@ -672,8 +745,8 @@ watch(() => props.patientId, () => {
 }
 
 .result-tag--pass {
-  background: #dcfce7;
-  color: #16a34a;
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .timeline-issues {
@@ -710,30 +783,47 @@ watch(() => props.patientId, () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 20px;
+  min-height: 268px;
+  padding: 40px 22px;
   text-align: center;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 251, 255, 0.98));
+  border: 1px dashed rgba(147, 197, 253, 0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 16px 34px rgba(148, 163, 184, 0.1);
 }
 
 .empty-icon-wrap {
   width: 56px;
   height: 56px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #eef4ff, #dbeafe);
+  border: 1px solid #bfdbfe;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  box-shadow:
+    0 10px 20px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-.empty-icon { font-size: 24px; color: #7c3aed; }
-.empty-title { font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
-.empty-desc { font-size: 12px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px; max-width: 240px; }
-.empty-btn { border-radius: 10px !important; }
+.empty-icon { font-size: 24px; color: #2563eb; }
+.empty-title { font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 6px; }
+.empty-desc { font-size: 12px; color: #6b7f96; line-height: 1.6; margin-bottom: 18px; max-width: 228px; }
+.empty-btn {
+  border-radius: 999px !important;
+  box-shadow:
+    0 10px 20px rgba(37, 99, 235, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+}
 
 .content-qc-tab__body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 0;
+  background: transparent;
 }
 
 .summary-card {
@@ -741,10 +831,51 @@ watch(() => props.patientId, () => {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   padding: 12px;
-  background: #fff;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%),
+    #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 16px;
   margin-bottom: 12px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.summary-card__hero {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 8px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+  margin-bottom: 2px;
+}
+
+.summary-card__eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.summary-card__title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.summary-card__progress {
+  min-width: 64px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #eff6ff, #dbeafe);
+  color: #2563eb;
+  text-align: center;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 800;
 }
 
 .summary-row {
@@ -764,9 +895,9 @@ watch(() => props.patientId, () => {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   margin-bottom: 8px;
 }
 
@@ -777,9 +908,17 @@ watch(() => props.patientId, () => {
 .issue-item {
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px;
   margin-bottom: 8px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.035);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.issue-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(147, 197, 253, 0.95);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
 }
 
 .issue-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -787,12 +926,12 @@ watch(() => props.patientId, () => {
 .issue-desc { font-size: 13px; color: #0f172a; line-height: 1.6; }
 .issue-suggestion {
   margin-top: 6px;
-  background: #fff7ed;
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.9), rgba(255, 251, 235, 0.9));
   border-left: 3px solid #f59e0b;
   color: #9a3412;
   font-size: 12px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: 0 8px 8px 0;
   line-height: 1.5;
 }
 
@@ -803,20 +942,33 @@ watch(() => props.patientId, () => {
   align-items: center;
   justify-content: center;
   text-align: center;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px dashed rgba(147, 197, 253, 0.52);
 }
 
-.empty-result-icon { font-size: 30px; color: #22c55e; margin-bottom: 10px; }
+.empty-result-icon { font-size: 30px; color: #2563eb; margin-bottom: 10px; }
 .empty-result-text { font-size: 13px; font-weight: 700; color: #334155; }
 
 .content-qc-tab__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
+  padding: 12px 0 0;
+  border-top: none;
+  background: transparent;
   font-size: 12px;
   color: #475569;
+}
+
+@media (max-width: 520px) {
+  .summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card__hero {
+    flex-direction: column;
+  }
 }
 
 .ml-auto { margin-left: auto; }

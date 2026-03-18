@@ -1,211 +1,272 @@
 <template>
-  <div class="drg-grouper-page">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          <ForkOutlined class="title-icon" />
-          DRG 分组器
-        </h1>
-        <a-tag color="blue" class="scheme-tag">{{ currentScheme.label }} · {{ currentScheme.drgs }} 组</a-tag>
-      </div>
-    </div>
+  <div class="h-full bg-slate-50 flex overflow-hidden">
+    <div class="flex-1 flex w-full max-w-[1440px] mx-auto p-6 gap-6">
 
-    <div class="grouper-layout">
-      <!-- 左侧：输入区域 -->
-      <div class="input-section">
-        <!-- 基本信息 -->
-        <a-card size="small" class="input-card">
-          <template #title>
-            <UserOutlined /> 基本信息
-          </template>
-          <a-row :gutter="12">
-            <a-col :span="6">
-              <div class="field-label">性别</div>
-              <a-select v-model:value="formData.gender" style="width: 100%">
-                <a-select-option value="1">男</a-select-option>
-                <a-select-option value="2">女</a-select-option>
-              </a-select>
-            </a-col>
-            <a-col :span="6">
-              <div class="field-label">年龄</div>
-              <a-input-number v-model:value="formData.age" :min="0" :max="150" style="width: 100%" placeholder="岁" />
-            </a-col>
-            <a-col :span="6">
-              <div class="field-label">住院天数</div>
-              <a-input-number v-model:value="formData.days" :min="0" style="width: 100%" placeholder="天" />
-            </a-col>
-            <a-col :span="6">
-              <div class="field-label">离院方式</div>
-              <a-select v-model:value="formData.leavingType" style="width: 100%">
-                <a-select-option value="1">医嘱离院</a-select-option>
-                <a-select-option value="5">死亡</a-select-option>
-                <a-select-option value="2">医嘱转院</a-select-option>
-                <a-select-option value="3">医嘱转社区</a-select-option>
-                <a-select-option value="4">非医嘱离院</a-select-option>
-              </a-select>
-            </a-col>
-          </a-row>
-        </a-card>
+      <!-- ========== 左侧：输入面板 ========== -->
+      <div class="w-[420px] bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-y-auto flex flex-col shrink-0">
+
+        <!-- 患者病案特征 -->
+        <div class="px-5 py-3.5 border-b border-slate-100">
+          <h3 class="text-[13px] font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+            患者病案特征
+          </h3>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="ghost-field">
+              <div class="ghost-label">性别</div>
+              <select v-model="formData.gender" class="ghost-select">
+                <option value="1">男</option>
+                <option value="2">女</option>
+              </select>
+            </div>
+            <div class="ghost-field">
+              <div class="ghost-label">年龄</div>
+              <input v-model.number="formData.age" type="number" class="ghost-input font-mono font-semibold" placeholder="岁">
+            </div>
+            <div class="ghost-field">
+              <div class="ghost-label">住院天数</div>
+              <input v-model.number="formData.days" type="number" class="ghost-input font-mono font-semibold" placeholder="天">
+            </div>
+            <div class="ghost-field">
+              <div class="ghost-label">离院方式</div>
+              <select v-model="formData.leavingType" class="ghost-select">
+                <option value="1">医嘱离院</option>
+                <option value="5">死亡</option>
+                <option value="2">医嘱转院</option>
+                <option value="3">医嘱转社区</option>
+                <option value="4">非医嘱离院</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
         <!-- 诊断编码 -->
-        <a-card size="small" class="input-card">
-          <template #title>
-            <MedicineBoxOutlined /> 诊断编码
-          </template>
-          <div class="code-input-area">
-            <div class="code-row" v-for="(zd, index) in formData.zdList" :key="'zd-' + index">
-              <a-tag :color="index === 0 ? 'red' : 'default'" class="code-tag">
-                {{ index === 0 ? '主诊断' : `其他${index}` }}
-              </a-tag>
-              <a-input
-                v-model:value="formData.zdList[index]"
-                placeholder="输入 ICD-10 编码（如 K80.501）"
-                class="code-input"
-                @pressEnter="addDiagnosis"
-              />
-              <a-button
-                v-if="index > 0"
+        <div class="px-5 py-3.5 border-b border-slate-100">
+          <h3 class="text-[13px] font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+            诊断编码提取
+          </h3>
+          <div class="space-y-2">
+            <div
+              v-for="(_, index) in formData.zdList"
+              :key="'zd-' + index"
+              class="relative flex items-center rounded-lg p-1.5 group transition-colors"
+              :class="index === 0
+                ? 'bg-indigo-50/50 border border-indigo-100'
+                : 'bg-slate-50/80 border border-slate-100 hover:bg-slate-100/80'"
+            >
+              <!-- 主诊断左侧竖线 -->
+              <div v-if="index === 0" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-3/4 bg-indigo-500 rounded-r-full" />
+              <span
+                class="w-14 text-center text-[11px] font-bold shrink-0"
+                :class="index === 0 ? 'text-indigo-600' : 'text-slate-500 font-medium'"
+              >
+                {{ index === 0 ? '主诊断' : `其他 ${index}` }}
+              </span>
+              <input
+                v-model="formData.zdList[index]"
                 type="text"
-                danger
-                size="small"
+                class="flex-1 bg-white rounded py-1.5 px-3 text-[13px] font-mono text-slate-800 outline-none shadow-sm transition-all"
+                :class="index === 0
+                  ? 'border border-indigo-100/50 font-semibold focus:ring-1 focus:ring-indigo-400'
+                  : 'border border-slate-200/60 focus:ring-1 focus:ring-blue-400'"
+                placeholder="输入 ICD-10 编码"
+                @keyup.enter="addDiagnosis"
+              >
+              <button
+                v-if="index > 0"
+                class="w-8 flex justify-center text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 transition-all cursor-pointer"
                 @click="formData.zdList.splice(index, 1)"
               >
-                <DeleteOutlined />
-              </a-button>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
             </div>
-            <a-button type="dashed" size="small" block @click="addDiagnosis" class="add-btn">
-              <PlusOutlined /> 添加诊断
-            </a-button>
+            <button class="ghost-add-btn" @click="addDiagnosis">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+              增加其他诊断
+            </button>
           </div>
-        </a-card>
+        </div>
 
         <!-- 手术操作编码 -->
-        <a-card size="small" class="input-card">
-          <template #title>
-            <ToolOutlined /> 手术操作编码
-          </template>
-          <div class="code-input-area">
-            <div class="code-row" v-for="(ss, index) in formData.ssList" :key="'ss-' + index">
-              <a-tag :color="index === 0 ? 'blue' : 'default'" class="code-tag">
-                {{ index === 0 ? '主手术' : `其他${index}` }}
-              </a-tag>
-              <a-input
-                v-model:value="formData.ssList[index]"
-                placeholder="输入手术操作编码（如 51.8803）"
-                class="code-input"
-                @pressEnter="addProcedure"
-              />
-              <a-button
-                v-if="formData.ssList.length > 1 || (formData.ssList.length === 1 && formData.ssList[0])"
+        <div class="px-5 py-3.5 border-b border-slate-100">
+          <h3 class="text-[13px] font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            手术操作编码
+          </h3>
+          <div class="space-y-2">
+            <div
+              v-for="(_, index) in formData.ssList"
+              :key="'ss-' + index"
+              class="flex items-center bg-slate-50/80 border border-slate-100 rounded-lg p-1.5 group hover:bg-slate-100/80 transition-colors"
+            >
+              <span class="w-14 text-center text-[11px] font-medium text-slate-500 shrink-0">
+                {{ index === 0 ? '主手术' : `其他 ${index}` }}
+              </span>
+              <input
+                v-model="formData.ssList[index]"
                 type="text"
-                danger
-                size="small"
+                class="flex-1 bg-white border border-slate-200/60 rounded py-1.5 px-3 text-[13px] font-mono text-slate-700 outline-none focus:ring-1 focus:ring-blue-400 shadow-sm"
+                placeholder="输入手术操作编码"
+                @keyup.enter="addProcedure"
+              >
+              <button
+                v-if="formData.ssList.length > 1 || (formData.ssList.length === 1 && formData.ssList[0])"
+                class="w-8 flex justify-center text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 transition-all cursor-pointer"
                 @click="formData.ssList.splice(index, 1)"
               >
-                <DeleteOutlined />
-              </a-button>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
             </div>
-            <a-button type="dashed" size="small" block @click="addProcedure" class="add-btn">
-              <PlusOutlined /> 添加手术操作
-            </a-button>
+            <button class="ghost-add-btn" @click="addProcedure">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+              增加手术操作
+            </button>
           </div>
-        </a-card>
+        </div>
 
         <!-- 操作按钮 -->
-        <div class="action-bar">
-          <a-button
-            type="primary"
-            size="large"
-            :loading="grouping"
+        <div class="px-5 py-3.5 flex gap-3">
+          <button
+            class="flex-1 h-11 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold text-[14px] rounded-lg shadow-[0_4px_14px_rgba(37,99,235,0.3)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.4)] hover:from-blue-500 hover:to-blue-400 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            :disabled="grouping"
             @click="doGrouping"
-            class="group-btn"
           >
-            <ThunderboltOutlined />
-            DRG 分组
-          </a-button>
-          <a-button size="large" @click="resetForm">
-            <ReloadOutlined />
-            重置
-          </a-button>
-          <a-button size="large" @click="fillTestCase">
-            <ExperimentOutlined />
-            填入测试用例
-          </a-button>
+            <svg v-if="!grouping" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <svg v-else class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+            {{ grouping ? '分组中...' : 'DRG 分组' }}
+          </button>
+          <button class="h-11 px-4 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer" @click="resetForm">重置</button>
+          <button class="h-11 px-4 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer" @click="fillTestCase">测试</button>
         </div>
       </div>
 
-      <!-- 右侧：结果区域 -->
-      <div class="result-section">
-        <!-- 结果为空 -->
-        <div v-if="!result && !grouping" class="result-empty">
-          <div class="empty-icon-wrap">
-            <ClusterOutlined class="empty-icon" />
+      <!-- ========== 右侧：结果区域 ========== -->
+      <div class="flex-1 flex flex-col gap-5 overflow-y-auto">
+
+        <!-- 空状态 -->
+        <div v-if="!result && !grouping" class="flex-1 flex flex-col items-center justify-center text-slate-400">
+          <div class="w-20 h-20 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center mb-5">
+            <svg class="w-9 h-9 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
           </div>
-          <h3>等待分组</h3>
-          <p>请在左侧输入病案信息，然后点击"DRG 分组"按钮</p>
+          <h3 class="text-lg font-semibold text-slate-500 mb-1">等待分组</h3>
+          <p class="text-[13px] text-slate-400">输入病案信息，点击「DRG 分组」开始</p>
         </div>
 
         <!-- 加载中 -->
-        <div v-else-if="grouping" class="result-loading">
-          <a-spin size="large" />
-          <p>正在分组...</p>
+        <div v-else-if="grouping" class="flex-1 flex flex-col items-center justify-center text-slate-400">
+          <svg class="w-10 h-10 animate-spin text-blue-500 mb-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          <p class="text-[13px]">分组计算中...</p>
         </div>
 
         <!-- 分组结果 -->
         <template v-else-if="result">
-          <!-- 分组路径卡片 -->
-          <a-card size="small" class="result-card" :class="result.status === '分组成功' ? 'success' : 'fail'">
-            <template #title>
-              <CheckCircleOutlined v-if="result.status === '分组成功'" style="color: #52c41a" />
-              <CloseCircleOutlined v-else style="color: #ff4d4f" />
-              {{ result.status }}
-            </template>
 
-            <!-- 分组路径 -->
-            <div v-if="result.status === '分组成功'" class="group-path">
-              <div class="path-step">
-                <div class="path-label">MDC</div>
-                <div class="path-value mdc">{{ result.mdc }}</div>
-                <div class="path-name">{{ mdcName }}</div>
+          <!-- 分组结果（Pipeline） -->
+          <div class="bg-white rounded-xl border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-8 relative overflow-hidden">
+            <!-- 背景光晕 -->
+            <div class="absolute right-0 top-0 w-64 h-64 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"
+              :class="result.status === '分组成功' ? 'bg-emerald-50/50' : 'bg-rose-50/50'" />
+
+            <div class="flex items-center gap-2 mb-10">
+              <span v-if="result.status === '分组成功'"
+                class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
+              </span>
+              <span v-else class="flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" /></svg>
+              </span>
+              <h2 class="text-[16px] font-bold text-slate-800">
+                {{ result.status === '分组成功' ? 'DRG 分组成功' : '未能入组' }}
+              </h2>
+            </div>
+
+            <!-- MDC → ADRG → DRG 管线 -->
+            <div v-if="result.status === '分组成功'" class="flex items-center justify-center gap-4 relative z-10 py-4">
+              <!-- MDC -->
+              <div class="flex flex-col items-center group cursor-default">
+                <div class="text-[11px] font-bold text-slate-400 mb-2 tracking-widest uppercase">MDC</div>
+                <div class="w-16 h-16 rounded-2xl border-2 border-slate-200 bg-slate-50 flex items-center justify-center text-2xl font-black text-slate-700 font-mono shadow-sm group-hover:border-blue-400 transition-colors">
+                  {{ result.mdc }}
+                </div>
+                <div class="text-[12px] font-medium text-slate-500 mt-3 text-center max-w-[120px] leading-snug">{{ mdcName }}</div>
               </div>
-              <div class="path-arrow">→</div>
-              <div class="path-step">
-                <div class="path-label">ADRG</div>
-                <div class="path-value adrg">{{ result.adrg }}</div>
+
+              <!-- 箭头 -->
+              <div class="pipe-arrow" />
+
+              <!-- ADRG -->
+              <div class="flex flex-col items-center group cursor-default">
+                <div class="text-[11px] font-bold text-slate-400 mb-2 tracking-widest uppercase">ADRG</div>
+                <div class="w-20 h-16 rounded-2xl border-2 border-blue-200 bg-blue-50 flex items-center justify-center text-2xl font-black text-blue-700 font-mono shadow-sm group-hover:border-blue-500 transition-colors">
+                  {{ result.adrg }}
+                </div>
               </div>
-              <div class="path-arrow">→</div>
-              <div class="path-step">
-                <div class="path-label">DRG</div>
-                <div class="path-value drg">{{ result.drg }}</div>
+
+              <!-- 箭头 -->
+              <div class="pipe-arrow" />
+
+              <!-- DRG (放大高亮) -->
+              <div class="flex flex-col items-center transform scale-110 -translate-y-2">
+                <div class="text-[12px] font-black text-emerald-600 mb-2 tracking-widest uppercase">DRG Result</div>
+                <div class="px-8 h-20 rounded-2xl border-2 border-emerald-400 bg-emerald-500 flex items-center justify-center text-4xl font-black text-white font-mono shadow-[0_8px_30px_rgba(16,185,129,0.3)]">
+                  {{ result.drg }}
+                </div>
+                <!-- DRG 名称 -->
+                <div v-if="result.drgName" class="text-[13px] font-bold text-slate-800 mt-4 text-center max-w-[220px] leading-snug">
+                  {{ result.drgName }}
+                </div>
+                <!-- RW 权重 -->
+                <div v-if="result.rw" class="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200">
+                  <span class="text-[11px] text-amber-600 font-medium">RW</span>
+                  <span class="text-[15px] font-black text-amber-700 font-mono">{{ result.rw }}</span>
+                </div>
               </div>
             </div>
-          </a-card>
+
+            <!-- 未入组时的消息 -->
+            <div v-else class="text-slate-500 text-[14px] py-4">
+              <p v-for="(msg, idx) in result.messages" :key="idx">{{ msg }}</p>
+            </div>
+          </div>
 
           <!-- 分组过程 -->
-          <a-card size="small" class="result-card" title="分组过程">
-            <a-timeline>
-              <a-timeline-item
+          <div class="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col overflow-hidden">
+            <h3 class="text-[13px] font-bold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              分组过程 (Execution Trace)
+            </h3>
+            <div class="flex-1 overflow-y-auto space-y-0 pl-2">
+              <div
                 v-for="(msg, idx) in result.messages"
                 :key="idx"
-                :color="idx === result.messages.length - 1 ? 'green' : 'blue'"
+                class="relative pl-6 pb-5 last:pb-0"
+                :class="idx < result.messages.length - 1 ? 'border-l-2 border-slate-200' : 'border-l-2 border-transparent'"
               >
-                {{ msg }}
-              </a-timeline-item>
-            </a-timeline>
-          </a-card>
+                <span
+                  class="absolute top-1 w-2.5 h-2.5 rounded-full ring-4 ring-white"
+                  :class="idx === result.messages.length - 1
+                    ? (result.status === '分组成功' ? 'left-[-6px] bg-emerald-500 shadow-sm' : 'left-[-6px] bg-rose-500 shadow-sm')
+                    : idx === 0 ? 'left-[-5px] bg-slate-400' : 'left-[-6px] bg-blue-500 shadow-sm'"
+                />
+                <div class="text-[13px] font-medium" :class="idx === result.messages.length - 1 ? 'text-slate-800 font-bold' : 'text-slate-700'">
+                  {{ msg }}
+                </div>
+              </div>
+            </div>
+          </div>
 
-          <!-- 质控消息 -->
-          <a-card v-if="result.qcMessages.length > 0" size="small" class="result-card qc-card" title="质控提醒">
-            <a-alert
-              v-for="(msg, idx) in result.qcMessages"
-              :key="idx"
-              :message="msg"
-              type="warning"
-              show-icon
-              class="qc-alert"
-            />
-          </a-card>
+          <!-- 质控提醒 -->
+          <div v-if="result.qcMessages.length > 0" class="bg-amber-50 rounded-xl border border-amber-200/80 shadow-sm p-5">
+            <h3 class="text-[13px] font-bold text-amber-800 mb-3 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+              质控提醒
+            </h3>
+            <div v-for="(msg, idx) in result.qcMessages" :key="idx" class="text-[13px] text-amber-700 py-1">
+              ⚠ {{ msg }}
+            </div>
+          </div>
+
         </template>
       </div>
     </div>
@@ -216,27 +277,12 @@
 import { ref, reactive, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  ForkOutlined,
-  UserOutlined,
-  MedicineBoxOutlined,
-  ToolOutlined,
-  PlusOutlined,
-  DeleteOutlined,
-  ThunderboltOutlined,
-  ReloadOutlined,
-  ExperimentOutlined,
-  ClusterOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-} from '@ant-design/icons-vue'
-import {
   performGrouping,
   getAvailableSchemes,
   getMdcName,
   type GrouperResult,
 } from './drgGrouper'
 
-// ==================== 状态 ====================
 const schemes = getAvailableSchemes()
 const currentScheme = schemes[0]
 
@@ -257,14 +303,8 @@ const mdcName = computed(() => {
   return getMdcName(result.value.mdc)
 })
 
-// ==================== 操作 ====================
-function addDiagnosis() {
-  formData.zdList.push('')
-}
-
-function addProcedure() {
-  formData.ssList.push('')
-}
+function addDiagnosis() { formData.zdList.push('') }
+function addProcedure() { formData.ssList.push('') }
 
 function resetForm() {
   formData.gender = '2'
@@ -276,7 +316,6 @@ function resetForm() {
   result.value = null
 }
 
-/** 填入 OpenDRG 截图中的测试用例 */
 function fillTestCase() {
   formData.gender = '2'
   formData.age = 30
@@ -289,28 +328,17 @@ function fillTestCase() {
 }
 
 async function doGrouping() {
-  // 过滤空编码
   const zdList = formData.zdList.filter(z => z.trim())
   const ssList = formData.ssList.filter(s => s.trim())
-
-  if (zdList.length === 0) {
-    message.warning('请至少输入一个诊断编码')
-    return
-  }
+  if (zdList.length === 0) { message.warning('请至少输入一个诊断编码'); return }
 
   grouping.value = true
   result.value = null
-
   try {
     result.value = await performGrouping({
-      gender: formData.gender,
-      age: formData.age,
-      zdList,
-      ssList,
-      days: formData.days,
-      leavingType: formData.leavingType,
+      gender: formData.gender, age: formData.age, zdList, ssList,
+      days: formData.days, leavingType: formData.leavingType,
     })
-
     if (result.value.status === '分组成功') {
       message.success(`分组成功: ${result.value.drg}`)
     } else {
@@ -325,282 +353,47 @@ async function doGrouping() {
 </script>
 
 <style scoped>
-/* ==================== 页面布局 ==================== */
-.drg-grouper-page {
-  height: calc(100vh - 64px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: linear-gradient(135deg, #f0f5ff 0%, #f5f7fa 100%);
+/* Ghost form field — 底线风格 */
+.ghost-field {
+  padding: 6px 2px 4px;
+  border-bottom: 1.5px solid #e2e8f0;
+  transition: border-color 0.2s;
+}
+.ghost-field:focus-within {
+  border-bottom-color: #3b82f6;
+}
+.ghost-label {
+  font-size: 11px; color: #94a3b8; font-weight: 500;
+  margin-bottom: 2px; padding-left: 1px;
+}
+.ghost-input {
+  width: 100%; background: transparent;
+  font-size: 14px; color: #1e293b; font-weight: 600;
+  padding: 2px 1px; outline: none; border: none;
+}
+.ghost-select {
+  width: 100%; background: transparent;
+  font-size: 14px; color: #1e293b; font-weight: 600;
+  padding: 2px 1px; outline: none; border: none;
+  appearance: none; cursor: pointer;
+}
+.ghost-add-btn {
+  @apply w-full mt-2 py-2 border border-dashed border-slate-300 rounded-lg text-xs font-medium text-slate-500
+    hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer
+    flex items-center justify-center gap-1.5;
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: white;
-  border-bottom: 1px solid #e8e8e8;
-  flex-shrink: 0;
+/* Pipeline arrow */
+.pipe-arrow {
+  @apply w-14 h-px bg-slate-300 relative -translate-y-4;
 }
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.page-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.title-icon {
-  color: #1677ff;
-  font-size: 22px;
-}
-.scheme-tag {
-  font-size: 12px;
+.pipe-arrow::after {
+  content: '';
+  @apply absolute right-0 top-1/2 -translate-y-1/2 translate-x-0.5 w-2 h-2 border-t-2 border-r-2 border-slate-300 transform rotate-45;
 }
 
-/* ==================== 主体双栏 ==================== */
-.grouper-layout {
-  flex: 1;
-  display: flex;
-  gap: 16px;
-  padding: 16px 24px;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.input-section {
-  width: 480px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.result-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  min-width: 0;
-}
-
-/* ==================== 输入卡片 ==================== */
-.input-card {
-  border-radius: 10px;
-  border: 1px solid #e6e9f0;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-}
-.input-card :deep(.ant-card-head) {
-  min-height: 40px;
-  padding: 0 16px;
-  font-size: 13px;
-  font-weight: 600;
-  border-bottom: 1px solid #f0f2f5;
-}
-.input-card :deep(.ant-card-body) {
-  padding: 12px 16px;
-}
-
-.field-label {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-/* ==================== 编码输入 ==================== */
-.code-input-area {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.code-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.code-tag {
-  flex-shrink: 0;
-  min-width: 56px;
-  text-align: center;
-  font-size: 11px;
-}
-.code-input {
-  flex: 1;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 13px;
-}
-.add-btn {
-  margin-top: 4px;
-  border-style: dashed;
-  color: #999;
-}
-
-/* ==================== 操作按钮 ==================== */
-.action-bar {
-  display: flex;
-  gap: 10px;
-  padding-top: 4px;
-}
-.group-btn {
-  flex: 1;
-  font-weight: 600;
-  font-size: 15px;
-  height: 44px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #1677ff, #4096ff);
-  border: none;
-  box-shadow: 0 4px 12px rgba(22,119,255,0.3);
-}
-.group-btn:hover {
-  background: linear-gradient(135deg, #4096ff, #69b1ff);
-  box-shadow: 0 6px 16px rgba(22,119,255,0.4);
-}
-
-/* ==================== 结果区域 ==================== */
-.result-empty,
-.result-loading {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: #999;
-}
-.empty-icon-wrap {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f0f5ff, #e6f4ff);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-.empty-icon {
-  font-size: 36px;
-  color: #91caff;
-}
-.result-empty h3 {
-  font-size: 18px;
-  color: #333;
-  margin: 0 0 8px;
-}
-.result-empty p {
-  font-size: 13px;
-  color: #aaa;
-  margin: 0;
-}
-
-.result-card {
-  border-radius: 10px;
-  border: 1px solid #e6e9f0;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-}
-.result-card.success {
-  border-color: #b7eb8f;
-  background: linear-gradient(135deg, #f6ffed, white);
-}
-.result-card.fail {
-  border-color: #ffccc7;
-  background: linear-gradient(135deg, #fff2f0, white);
-}
-.result-card :deep(.ant-card-head) {
-  min-height: 40px;
-  padding: 0 16px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* ==================== 分组路径 ==================== */
-.group-path {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 0;
-  justify-content: center;
-}
-.path-step {
-  text-align: center;
-}
-.path-label {
-  font-size: 11px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-.path-value {
-  display: inline-block;
-  font-size: 22px;
-  font-weight: 800;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  padding: 6px 16px;
-  border-radius: 8px;
-  letter-spacing: 1px;
-}
-.path-value.mdc {
-  background: linear-gradient(135deg, #e6f4ff, #bae0ff);
-  color: #0958d9;
-}
-.path-value.adrg {
-  background: linear-gradient(135deg, #fff7e6, #ffe58f);
-  color: #d46b08;
-}
-.path-value.drg {
-  background: linear-gradient(135deg, #f6ffed, #b7eb8f);
-  color: #389e0d;
-  font-size: 28px;
-}
-.path-name {
-  font-size: 11px;
-  color: #666;
-  margin-top: 4px;
-  max-width: 160px;
-}
-.path-arrow {
-  font-size: 24px;
-  color: #bbb;
-  font-weight: 300;
-  margin-top: 16px;
-}
-
-/* ==================== 质控消息 ==================== */
-.qc-card :deep(.ant-card-head) {
-  border-bottom-color: #fff1b8;
-}
-.qc-alert {
-  margin-bottom: 6px;
-  border-radius: 6px;
-}
-.qc-alert:last-child {
-  margin-bottom: 0;
-}
-
-/* ==================== 滚动条 ==================== */
-.input-section::-webkit-scrollbar,
-.result-section::-webkit-scrollbar {
-  width: 5px;
-}
-.input-section::-webkit-scrollbar-track,
-.result-section::-webkit-scrollbar-track {
-  background: transparent;
-}
-.input-section::-webkit-scrollbar-thumb,
-.result-section::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
-  border-radius: 3px;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
 </style>

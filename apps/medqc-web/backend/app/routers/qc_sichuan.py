@@ -634,8 +634,8 @@ async def stats(
             },
             "real_time_status": {
                 "service_health": "healthy",
-                "api_endpoint": str(s.SICHUAN_API_ENDPOINT) if s.SICHUAN_API_ENDPOINT else None,
-                "model": s.SICHUAN_MODEL,
+                "api_endpoint": str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None,
+                "model": s.LLM_MODEL,
                 "last_updated": datetime.now(timezone.utc).isoformat(),
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),

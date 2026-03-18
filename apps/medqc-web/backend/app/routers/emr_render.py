@@ -9,11 +9,10 @@ EMR 文书渲染 API
 import logging
 from typing import Optional, List, Dict, Any, Iterable
 
-from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from fastapi import APIRouter, Request, Query
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
-from ..core.security import get_current_user
 from ..database.repository import get_repository
 
 router = APIRouter(prefix="/api/v1/emr", tags=["emr"])
@@ -27,7 +26,6 @@ async def get_record_documents(
     patient_id: Optional[str] = Query(None, description="患者号（兼容工作台）"),
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
-    current_user: dict = Depends(get_current_user),
 ):
     """
     获取病历下所有文书类型列表
@@ -49,23 +47,6 @@ async def get_record_documents(
         except Exception as e:
             logger.warning(f"获取文书列表失败: {e}")
 
-    # 回退：从内存中的质控结果获取文书类型
-    if not documents:
-        from ..storage.memory import qc_results_db
-
-        lookup_key = _pick_lookup_key(record_id, visit_id)
-        if lookup_key in qc_results_db:
-            result = qc_results_db[lookup_key]
-            doc_type = result.get("document_type", "入院记录")
-            documents = [
-                {
-                    "id": f"doc_{lookup_key}",
-                    "doc_type": doc_type,
-                    "doc_name": doc_type,
-                    "created_at": result.get("analyzed_at", ""),
-                }
-            ]
-
     # 回退：从 CDM 三元键构造文书列表
     if not documents and institute_id and patient_id and visit_id:
         documents = _build_repository_documents(institute_id, patient_id, visit_id)
@@ -86,7 +67,6 @@ async def render_document(
     patient_id: Optional[str] = Query(None, description="患者号（兼容工作台）"),
     visit_id: Optional[str] = Query(None, description="就诊号（兼容工作台）"),
     institute_id: Optional[str] = Query(None, description="机构号（兼容工作台）"),
-    current_user: dict = Depends(get_current_user),
 ):
     """
     获取文书内容 + 缺陷位置标注（用于前端 EMRViewer 高亮渲染）
@@ -165,19 +145,6 @@ async def render_document(
         except Exception as e:
             logger.warning(f"获取文书内容失败: {e}")
 
-    # 2. 从内存回退
-    if not content:
-        from ..storage.memory import qc_results_db
-
-        lookup_key = _pick_lookup_key(record_id, visit_id)
-        if lookup_key in qc_results_db:
-            result = qc_results_db[lookup_key]
-            content = result.get("medical_text", "")
-            metadata = {
-                "doc_type": result.get("document_type", "入院记录"),
-                "patient_name": result.get("patient_name", ""),
-            }
-
     # 2.5 从 CDM repository 回退
     if not content and institute_id and patient_id and visit_id:
         repo_content, repo_metadata = _load_repository_document(
@@ -244,23 +211,6 @@ async def render_document(
                             annotations.append(annotation)
         except Exception as e:
             logger.warning(f"获取缺陷标注失败: {e}")
-
-    # 从内存 QC 结果构建标注
-    if not annotations:
-        from ..storage.memory import qc_results_db
-
-        # 尝试多个 key 查找 QC 结果
-        qc_result = None
-        for key in [_pick_lookup_key(record_id, visit_id), record_id, visit_id]:
-            if key and key in qc_results_db:
-                qc_result = qc_results_db[key]
-                break
-        if qc_result:
-            issues = qc_result.get("issues", [])
-            for i, issue in enumerate(issues):
-                annotation = _build_annotation_from_issue(content, issue, i)
-                if annotation:
-                    annotations.append(annotation)
 
     # 3.5 从 CDM repository 回退质控结果
     if not annotations and institute_id and patient_id and visit_id:

@@ -61,8 +61,8 @@ class CodingQCReport:
 # D1：编码格式校验（规则层）
 # ============================================================
 
-# ICD-10 格式：字母 + 2位数字 + 可选（.1-4位数字 + 可选 x 扩展码），如 I21.001 或 J06.900x003
-ICD10_PATTERN = re.compile(r'^[A-Za-z]\d{2}(\.\d{1,4}(x\d{3})?)?$')
+# ICD-10 格式（国临版2.0）：字母 + 2位数字 + 可选（.1-7位数字/x混合），如 I21.001、I10.x02、J06.900x003
+ICD10_PATTERN = re.compile(r'^[A-Za-z]\d{2}(\.[\dx]{1,7})?$', re.IGNORECASE)
 
 # ICD-9-CM-3 格式：2位数字.2-4位数字，如 36.0701
 ICD9CM3_PATTERN = re.compile(r'^\d{2}\.\d{2,4}$')
@@ -123,44 +123,107 @@ def check_diagnosis_existence(code: str, name: str = "") -> Optional[CodingIssue
     """
     验证诊断编码是否在本地编码库中存在，编码与名称是否匹配。
 
-    Args:
-        code: ICD-10 编码
-        name: 诊断名称（可选，用于交叉验证）
+    策略：
+      1. 精确匹配 → 直接通过
+      2. 病历用上级码，库里有更精确子码 → 通过，但给 info 级推荐建议
+      3. 编码库中完全找不到 → warning，按名称反查给出建议
     """
     lookup_diag, _ = _get_icd_lookup()
     if not lookup_diag or not code:
         return None
 
-    # 通过名称反查编码
+    code = code.strip()
+
+    try:
+        from .local_icd_service import _get_icd_data
+        clinical_data, insurance_data, _, _ = _get_icd_data()
+        source = clinical_data if clinical_data else insurance_data
+        if source:
+            # 先查精确匹配
+            for item in source:
+                if item['code'] == code:
+                    return None  # 精确命中，无需任何提示
+
+            # 再查上级码匹配（库中有以 code 为前缀的更精确子码）
+            specific_candidates = [
+                item for item in source
+                if item['code'].startswith(code) and item['code'] != code
+            ]
+            if specific_candidates:
+                # 按编码长度升序，取最短（即最直接的子码）
+                specific_candidates.sort(key=lambda x: len(x['code']))
+                best = specific_candidates[0]
+                return CodingIssue(
+                    dimension="existence",
+                    severity="info",
+                    code=code,
+                    description=(
+                        f"编码 '{code}' 为上级类目码，编码库中存在更精确的子码 "
+                        f"'{best['code']}'（{best['name']}）"
+                    ),
+                    suggestion=f"建议使用更精确的编码 {best['code']}（{best['name']}），以提升编码质量",
+                    source="rule",
+                )
+    except Exception:
+        pass
+
+    # 编码库中完全找不到该编码 → 按名称反查给出建议
     if name:
         result = lookup_diag(name)
-        if result and result["code"] != code.strip():
+        if result:
             return CodingIssue(
                 dimension="existence",
                 severity="warning",
                 code=code,
-                description=f"编码 '{code}' 与诊断名称 '{name}' 不匹配，编码库中该诊断的标准编码为 '{result['code']}'",
+                description=f"编码 '{code}' 未在本地编码库中找到，根据诊断名称 '{name}' 查询，建议编码为 '{result['code']}'",
                 suggestion=f"建议将编码修正为 {result['code']}（{result['name']}）",
+                source="rule",
+            )
+        else:
+            return CodingIssue(
+                dimension="existence",
+                severity="info",
+                code=code,
+                description=f"编码 '{code}'（{name}）未在本地编码库中找到，请人工核实",
+                suggestion="请核实该编码是否正确",
                 source="rule",
             )
 
     return None
 
 
+
+
 def check_procedure_existence(code: str, name: str = "") -> Optional[CodingIssue]:
-    """验证手术编码是否在本地编码库中存在。"""
+    """验证手术编码是否在本地编码库中存在（编码优先正查）。"""
     _, lookup_proc = _get_icd_lookup()
     if not lookup_proc or not code:
         return None
 
+    code = code.strip()
+
+    # 1. 先按编码正查
+    try:
+        from .local_icd_service import _get_icd_data
+        _, _, icd9_data, _ = _get_icd_data()
+        if icd9_data:
+            for item in icd9_data:
+                lib_code = item['code']
+                # 精确匹配 或 库码是病历码的扩展（病历用上级码兜底）
+                if lib_code == code or lib_code.startswith(code):
+                    return None  # 编码存在，直接通过
+    except Exception:
+        pass
+
+    # 2. 编码不存在 → 名称反查
     if name:
         result = lookup_proc(name)
-        if result and result["code"] != code.strip():
+        if result:
             return CodingIssue(
                 dimension="existence",
                 severity="warning",
                 code=code,
-                description=f"手术编码 '{code}' 与手术名称 '{name}' 不匹配，编码库中标准编码为 '{result['code']}'",
+                description=f"手术编码 '{code}' 未在本地编码库中找到，根据手术名称 '{name}' 查询，建议编码为 '{result['code']}'",
                 suggestion=f"建议将编码修正为 {result['code']}（{result['name']}）",
                 source="rule",
             )
@@ -172,24 +235,73 @@ def check_procedure_existence(code: str, name: str = "") -> Optional[CodingIssue
 # D3-D6：LLM 语义审查
 # ============================================================
 
-CODING_QC_SYSTEM_PROMPT = """你是医院病案编码质控专家，精通 ICD-10（国临版2.0）和 ICD-9-CM-3（2011临床修改版）编码规范。
+CODING_QC_SYSTEM_PROMPT = """你是一位具有临床医学知识和 ICD 病案信息学知识的资深编码质控专家。
+你精通《疾病分类与代码国家临床版2.0》(ICD-10) 和《手术操作分类代码国家临床版3.0》(ICD-9-CM-3) 编码规范。
 
-你的任务是对病案首页的诊断编码和手术操作编码进行语义层面的质控审查，重点检查以下维度：
+你的任务是对病案首页的诊断编码和手术操作编码进行质控审查。请逐条检查以下维度：
 
-1. **编码合并**：是否存在应使用合并编码的情况（如糖尿病+并发症应用合并码）
-2. **编码互斥**：是否存在不能同时出现的编码（如1型+2型糖尿病）
-3. **主诊断选择**：主诊断选择是否合理（症状码R码不应做主诊、消耗资源最大的诊断应做主诊）
-4. **编码与临床一致性**：编码与患者信息是否一致（性别、年龄）、是否有遗漏
+## 1. 编码合并 (merge)
+当以下情况出现时，应使用合并编码而非分别编码：
+- 同一疾病及其并发症：如2型糖尿病伴肾病应编 E11.2，不应分编 E11.9 + N08.3
+- 病因与器官损害：如高血压性心脏病应编 I11，不应分编 I10 + I51
+- 感染病原体+部位：如肺炎链球菌性肺炎应编 J13，不应分编 B95.3 + J18
+- 阑尾炎伴腹膜炎 → 应用合并码 K35.2/K35.8，不应分编 K35.9 + K65.0
 
-请严格按以下 JSON 格式输出审查结果，不要输出任何其他内容：
+## 2. 编码互斥 (exclusion)
+以下编码不能同时出现：
+- 同一疾病的不同阶段：急性 vs 慢性（如急性心梗 I21 与慢性缺血性心脏病 I25）
+- 不同性质：良性 vs 恶性肿瘤不应同一部位共存
+- 不同病因分类：1型糖尿病 E10 与 2型糖尿病 E11 互斥
+- 上下级包含关系：具体诊断已包含上级分类时，不应重复编码上级
+
+## 3. 主诊断选择 (primary)
+依据《病案首页填写规范》主要诊断选择原则：
+- 主诊断应为本次住院对健康危害最大、消耗医疗资源最多、住院时间最长的疾病
+- 病因诊断能包括临床表现时，选病因诊断（如有明确肺炎，不应选R50发热做主诊断）
+- 以手术治疗为目的的，选与手术一致的疾病做主诊断
+- 症状码(R码)仅在出院时诊断仍不明确时才可做主诊断
+- 仅针对并发症治疗时，该并发症可做主诊断
+- 肿瘤规则：
+  · 针对肿瘤手术/确诊 → 肿瘤为主诊断
+  · 针对继发肿瘤手术 → 继发肿瘤为主诊断（即使原发仍在）
+  · 仅做放疗/化疗 → Z51（放化疗）**可以且应当**做主诊断
+  · 针对肿瘤并发症治疗 → 并发症为主诊断
+- 中毒以治疗中毒为目的时，中毒为主诊断
+- 疾病的临终状态不能做主诊断
+
+## 3b. 主手术选择 (primary_surgery)
+- 主手术应与主诊断相对应
+- 多个手术时，选择技术难度最大、过程最复杂、风险最高的手术
+- 治疗性手术优先于诊断性操作（如支架植入优先于造影术）
+- 既有手术又有操作时，手术优先
+
+## 4. 编码一致性 (consistency)
+- 编码与患者性别是否一致（如妇科诊断/手术不应出现在男性患者）
+- 编码与患者年龄是否一致（如围产期编码P码不应出现在成人）
+- 主手术与主诊断在解剖部位/系统上应对应
+
+## 5. 另编码/附加编码 (additional)
+以下手术操作必须附加相应编码：
+- 冠状动脉支架植入术(36.06/36.07) → 必须附加 00.66(支架数目) 和 00.40(血管内操作数目)
+- 全髋关节置换术(81.51) → 必须附加 00.70(假体类型) 和 00.73(假体轴承面类型)
+- 全膝关节置换术(81.54) → 必须附加 00.80(膝关节假体类型)
+- 椎体融合术(81.0x) → 必须附加 81.62-81.64(融合节段数) 和 84.51(脊柱内固定装置植入)
+- 经皮血管成形术 → 必须附加 00.40(血管内操作数目)
+
+以下诊断必须附加相应编码：
+- 损伤/中毒(S00-T98) → 必须附加外部原因编码(V01-Y98)
+- 肿瘤**作为主诊断**(C00-C97) → 必须附加病理形态学编码(M码，如 M8140/3)
+  M码仅主诊断为肿瘤时必需；次诊断、既往史中提及的肿瘤不需要M码
+
+请严格按以下 JSON 格式输出，不要输出任何其他内容：
 {
   "issues": [
     {
-      "dimension": "merge|exclusion|primary|consistency",
+      "dimension": "merge|exclusion|primary|consistency|additional",
       "severity": "error|warning|info",
       "code": "涉及的编码",
-      "description": "问题描述",
-      "suggestion": "修改建议"
+      "description": "问题描述（含编码规则依据）",
+      "suggestion": "具体的修改建议（含推荐编码）"
     }
   ],
   "summary": {
@@ -198,10 +310,11 @@ CODING_QC_SYSTEM_PROMPT = """你是医院病案编码质控专家，精通 ICD-1
   }
 }
 
-注意事项：
+重要原则：
+- 只审查已编码的内容，不要基于临床推测或常识假设来报告未编码的问题
 - 只报告确实存在的问题，不要过度报告
-- 如果编码正确合理，issues 数组应为空
-- severity 分级：error=必须修改, warning=建议修改, info=提示信息"""
+- 非肿瘤疾病不需要M码；肿瘤仅在**主诊断**时才需要M码，次诊断/既往史不需要
+- severity 分级：error=编码规则明确禁止, warning=建议修改, info=可优化"""
 
 
 def _build_llm_user_prompt(frontpage: dict) -> str:

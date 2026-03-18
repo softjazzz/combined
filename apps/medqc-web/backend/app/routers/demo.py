@@ -134,9 +134,9 @@ def _build_rule_generation_prompt(payload: RuleGenerationRequest) -> str:
 async def _call_llm_for_rule(payload: RuleGenerationRequest) -> DemoCustomRule:
     """调用 LLM 生成规则并做结构化解析"""
     settings = get_settings()
-    endpoint = os.getenv("DEMO_RULE_LLM_ENDPOINT") or settings.SICHUAN_API_ENDPOINT
-    api_key = os.getenv("DEMO_RULE_LLM_API_KEY") or settings.SICHUAN_API_KEY
-    model = os.getenv("DEMO_RULE_LLM_MODEL") or settings.SICHUAN_MODEL
+    endpoint = os.getenv("DEMO_RULE_LLM_ENDPOINT") or settings.LLM_API_ENDPOINT
+    api_key = os.getenv("DEMO_RULE_LLM_API_KEY") or settings.LLM_API_KEY
+    model = os.getenv("DEMO_RULE_LLM_MODEL") or settings.LLM_MODEL
 
     if not endpoint or not api_key:
         raise HTTPException(

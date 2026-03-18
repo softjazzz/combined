@@ -15,23 +15,18 @@ logger = logging.getLogger(__name__)
 
 def _get_icd_data():
     """获取已加载的 ICD 编码数据（延迟导入避免循环依赖）"""
-    from ..routers.icd_search import (
-        _load_data,
-        _icd10_clinical_data,
-        _icd10_data,
-        _icd9cm3_data,
-        _code_mapping,
-    )
-    _load_data()
-    return _icd10_clinical_data, _icd10_data, _icd9cm3_data, _code_mapping
+    from ..routers import icd_search as _icd_mod
+    _icd_mod._load_data()
+    return _icd_mod._icd10_clinical_data, _icd_mod._icd10_data, _icd_mod._icd9cm3_data, _icd_mod._code_mapping
 
 
-def lookup_diagnosis_code(diagnosis_name: str) -> Optional[Dict[str, str]]:
+def lookup_diagnosis_code(diagnosis_name: str, prefer_insurance: bool = False) -> Optional[Dict[str, str]]:
     """
-    根据诊断名称查询 ICD-10 国临版编码
+    根据诊断名称查询 ICD-10 编码
 
     Args:
         diagnosis_name: 诊断名称（如"冠状动脉粥样硬化性心脏病"）
+        prefer_insurance: 是否优先使用医保版编码（用于 DRG/DIP 入组）
 
     Returns:
         {"code": "I25.103", "name": "冠状动脉粥样硬化性心脏病"} 或 None
@@ -39,12 +34,49 @@ def lookup_diagnosis_code(diagnosis_name: str) -> Optional[Dict[str, str]]:
     if not diagnosis_name or not diagnosis_name.strip():
         return None
 
-    clinical_data, insurance_data, _, _ = _get_icd_data()
+    clinical_data, insurance_data, _, code_mapping = _get_icd_data()
 
-    # 优先使用国临版
-    source = clinical_data if clinical_data else insurance_data
+    if prefer_insurance:
+        # ===== 医保版优先策略 =====
+        # 注意：医保版数据库可能混入国临版编码，因此任何搜索结果
+        # 都需要通过映射表验证并转换
+
+        c2i = code_mapping.get('clinical_to_insurance', {}) if code_mapping else {}
+
+        def _ensure_insurance_code(result):
+            """确保返回的是真正的医保版编码（而非混入的国临版编码）"""
+            if not result:
+                return None
+            mapped = c2i.get(result['code'])
+            if mapped:
+                # 映射表中存在该编码 → 说明是国临版编码，转换为医保版
+                logger.info(f"编码映射：{result['code']} → {mapped['code']}")
+                return {'code': mapped['code'], 'name': mapped.get('name', result['name'])}
+            return result
+
+        # 步骤1: 先在医保版数据中直接查
+        result = _search_in_dataset(insurance_data, diagnosis_name) if insurance_data else None
+        if result:
+            return _ensure_insurance_code(result)
+
+        # 步骤2: 医保版未匹配 → 在国临版中查名称 → 通过映射表转医保版编码
+        clinical_result = _search_in_dataset(clinical_data, diagnosis_name) if clinical_data else None
+        if clinical_result:
+            return _ensure_insurance_code(clinical_result)
+
+        return None
+    else:
+        # ===== 国临版优先策略 =====
+        result = _search_in_dataset(clinical_data, diagnosis_name) if clinical_data else None
+        if result:
+            return result
+        result = _search_in_dataset(insurance_data, diagnosis_name) if insurance_data else None
+        return result
+
+
+def _search_in_dataset(source: List, diagnosis_name: str) -> Optional[Dict[str, str]]:
+    """在单个编码数据集中搜索诊断名称"""
     if not source:
-        logger.warning("ICD-10 编码数据未加载")
         return None
 
     query = diagnosis_name.strip().lower()
@@ -63,13 +95,11 @@ def lookup_diagnosis_code(diagnosis_name: str) -> Optional[Dict[str, str]]:
         if name_lower == query:
             score = 100
         elif query in name_lower:
-            # 名称以关键词开头得更高分
             if name_lower.startswith(query):
                 score = 90
             else:
                 score = 80
         elif name_lower in query:
-            # 编码库名称是输入的子串（如"冠心病"在"冠状动脉粥样硬化性心脏病"中）
             score = 70
 
         if score > 0:
@@ -81,7 +111,6 @@ def lookup_diagnosis_code(diagnosis_name: str) -> Optional[Dict[str, str]]:
             })
 
     if candidates:
-        # 按分数降序，同分则取名称长度最接近的
         candidates.sort(key=lambda x: (-x['_score'], x['_len_diff']))
         best = candidates[0]
         return {'code': best['code'], 'name': best['name']}

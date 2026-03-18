@@ -18,6 +18,12 @@ export interface GrouperResult {
   mdc?: string
   adrg?: string
   drg?: string
+  /** DRG 名称（从引擎 messages 中解析） */
+  drgName?: string
+  /** ADRG 名称（从 MDC/ADRG 匹配规则中解析） */
+  adrgName?: string
+  /** 权重值 RW（从引擎 messages 中解析） */
+  rw?: number
   messages: string[]
   qcMessages: string[]
 }
@@ -95,7 +101,31 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
       ssValidList,
     }) as OpenDrgResult
 
-    const messages = normalizeMessages(raw)
+    // 在引擎 messages 前面注入预处理详细信息（与 OpenDRG 原版一致）
+    const preMessages: string[] = []
+    // 1. 排除表
+    if (cce) {
+      preMessages.push(`主诊断${zdList[0]}排除表${cce}`)
+    }
+    // 2. 有效手术操作
+    if (ssValidList.length > 0) {
+      preMessages.push(`以下手术操作有效：${ssValidList.join(' ')}`)
+    } else if (ssList.length > 0) {
+      preMessages.push(`未找到有效手术操作`)
+    }
+    // 3. MCC/CC 信息
+    if (mccList.length > 0) {
+      preMessages.push(`严重合并症(MCC)：${mccList.join(' ')}`)
+    }
+    if (ccList.length > 0) {
+      preMessages.push(`合并症/并发症(CC)：${ccList.join(' ')}`)
+    }
+    if (mccList.length === 0 && ccList.length === 0 && zdList.length > 1) {
+      preMessages.push(`未检出 MCC/CC 合并症或并发症`)
+    }
+
+    const engineMessages = normalizeMessages(raw)
+    const messages = [...preMessages, ...engineMessages]
     const qcMessages: string[] = []
     if (raw.status === '歧义病案') {
       qcMessages.push('该病例被标记为歧义病案，请人工复核。')
@@ -110,11 +140,17 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
       messages.push(success ? '分组成功' : raw.status || '无法入组')
     }
 
+    // 从 messages 中解析 DRG 名称和 RW
+    const { drgName, adrgName, rw } = parseDrgDetails(messages, drg, adrg)
+
     return {
       status: success ? '分组成功' : '未入组',
       mdc,
       adrg,
       drg,
+      drgName,
+      adrgName,
+      rw,
       messages,
       qcMessages,
     }
@@ -199,4 +235,60 @@ export function getAvailableSchemes() {
   return [
     { key: 'sichuan_2024', label: 'CHS-DRG 2.0（四川）', drgs: 794, adrgs: 252 },
   ]
+}
+
+/**
+ * 从引擎 messages 中解析 DRG 名称和 RW 权重
+ *
+ * 引擎 messages 格式示例：
+ *   - "主诊断K80.501排除表113"
+ *   - "以下手术操作有效：51.8803 51.8701 51.2300"
+ *   - "符合MDCH入组条件，匹配规则：主诊断匹配"
+ *   - "符合HC1入组条件，匹配规则：主手术匹配"
+ *   - "HC15胆总管手术，不伴严重合并症或并发症 2.19"
+ */
+function parseDrgDetails(
+  messages: string[],
+  drg?: string,
+  adrg?: string,
+): { drgName?: string; adrgName?: string; rw?: number } {
+  let drgName: string | undefined
+  let adrgName: string | undefined
+  let rw: number | undefined
+
+  for (const msg of messages) {
+    // 最后一条通常是 "HC15胆总管手术，不伴严重合并症或并发症 2.19"
+    // 尝试匹配: DRG编码 + 名称 + RW
+    if (drg && msg.startsWith(drg)) {
+      const rest = msg.slice(drg.length)
+      // rest = "胆总管手术，不伴严重合并症或并发症 2.19"
+      const rwMatch = rest.match(/\s+([\d.]+)\s*$/)
+      if (rwMatch) {
+        rw = parseFloat(rwMatch[1])
+        drgName = rest.slice(0, rwMatch.index).trim()
+      } else {
+        drgName = rest.trim()
+      }
+    }
+
+    // 匹配 ADRG 名称: "符合HC1入组条件，匹配规则：主手术匹配"
+    if (adrg && msg.includes(`${adrg}入组条件`)) {
+      // 不需要提取名称，ADRG 名称在 DRG 结果中已有
+    }
+  }
+
+  // 如果上面没解析到，尝试从最后一条 message 直接取
+  if (!drgName && messages.length > 0) {
+    const last = messages[messages.length - 1]
+    // 尝试匹配 "XXXX名称 数字" 格式
+    const fullMatch = last.match(/^([A-Z]{2}\d+)(.+?)\s+([\d.]+)\s*$/)
+    if (fullMatch) {
+      if (!drg || fullMatch[1] === drg) {
+        drgName = fullMatch[2].trim()
+        rw = parseFloat(fullMatch[3])
+      }
+    }
+  }
+
+  return { drgName, adrgName, rw }
 }

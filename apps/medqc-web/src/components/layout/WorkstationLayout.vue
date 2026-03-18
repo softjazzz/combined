@@ -122,12 +122,12 @@
           <span class="font-medium">数据管理</span>
         </a-menu-item>
 
-        <!-- 数据库配置 -->
+        <!-- 数据同步配置 -->
         <a-menu-item key="/workstation-v4/system-config" class="menu-item-base">
           <template #icon>
             <SettingOutlined />
           </template>
-          <span class="font-medium">数据库配置</span>
+          <span class="font-medium">数据同步配置</span>
         </a-menu-item>
 
         </a-menu>
@@ -295,7 +295,7 @@ const breadcrumbItems = computed(() => {
     '/workstation-v4/grouper': '医保分组器',
     '/workstation-v4/data': '数据管理',
     '/workstation-v4/rules': '质控规则管理',
-    '/workstation-v4/system-config': '数据库配置',
+    '/workstation-v4/system-config': '数据同步配置',
   }
   const title = titleMap[path] || '工作台'
   return [{ title }]

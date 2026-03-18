@@ -438,7 +438,9 @@ const totalOther = computed(() => sumCol('other'))
   line-height: 1.5;
   background: #fff;
   padding: 30px 40px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 24px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   box-sizing: border-box;
 }
 

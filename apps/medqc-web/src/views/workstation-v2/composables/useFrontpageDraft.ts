@@ -335,47 +335,26 @@ export function useFrontpageDraft(
       message.warning('请先生成首页后再保存')
       return
     }
-    if (!record.instituteId || !record.patientId || !record.id) {
-      message.error('缺少保存主键（机构号/患者号/就诊号），请刷新后重试')
+    if (!record.patientId || !record.id) {
+      message.error('缺少保存主键（患者号/就诊号），请刷新后重试')
       return
     }
 
-    const bi = draft.basic_info || {}
-    const hosp = draft.hospitalization || {}
-    const staff = draft.staff || {}
-
-    const payload = {
-      institute_id: record.instituteId,
-      patient_id: record.patientId,
-      visit_id: record.id,
-      name: bi.patient_name || record.name || '',
-      sex: bi.gender_text || record.sex || '',
-      age_year: bi.age_years != null ? String(bi.age_years) : (record.age != null ? String(record.age) : ''),
-      birthday: bi.birth_date || null,
-      ethnicity: bi.ethnicity || null,
-      marital_status: bi.marital_status_text || null,
-      id_card_no: bi.id_number || null,
-      occupation_category: bi.occupation || null,
-      inpat_no: hosp.medical_record_no || null,
-      institute_county_desc: hosp.hospital_name || null,
-      admission_datetime: hosp.admission_datetime || null,
-      discharge_datetime: hosp.discharge_datetime || null,
-      hospital_duration: hosp.actual_hospital_days != null ? String(hosp.actual_hospital_days) : null,
-      admission_dept_name: hosp.admission_dept || null,
-      discharge_dept_name: hosp.discharge_dept || null,
-      attending_physician_sign: staff.attending_physician_name || null,
-      chief_physician_sign: staff.chief_physician_name || null,
-      record_content: combinedMedicalText.value || null,
-    }
-
     try {
-      await axios.put('/api/medical-records/frontpage', payload)
-      message.success('首页保存成功')
+      // ⚠️ 注意：AI 草稿保存到独立副表 ai_frontpage_draft，不覆盖原始 HIS 首页数据（mr 表）
+      await axios.post('/api/medical-records/ai-frontpage-draft', {
+        institute_id: record.instituteId || null,
+        patient_id: record.patientId,
+        visit_id: record.id,
+        draft_json: JSON.stringify(draft),
+      })
+      message.success('AI 首页草稿已保存')
     } catch (err: any) {
-      console.error('首页保存失败:', err)
+      console.error('AI 草稿保存失败:', err)
       message.error(`保存失败: ${err?.response?.data?.detail || err?.message || '未知错误'}`)
     }
   }
+
 
   function focusFrontpageSection(target: FrontpageFocusTarget) {
     if (frontpageFocusTarget.value === target) {

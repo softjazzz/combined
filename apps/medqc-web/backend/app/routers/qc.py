@@ -131,7 +131,6 @@ async def _save_qc_result(record_id: str, result: Dict[str, Any]) -> None:
         payload = {
             "record_id": record_id,
             "overall_score": result.get("overall_score") or result.get("score"),
-            "total_score": result.get("overall_score") or result.get("score"),
             "grade": result.get("overall_grade") or result.get("grade"),
             "status": result.get("status", "completed"),
             "analysis_date": result.get("analysis_date"),
@@ -737,9 +736,7 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
             diag_query = session.query(Diagnosis).filter_by(visit_id=visit_id)
             if patient_id:
                 diag_query = diag_query.filter_by(patient_id=patient_id)
-            diag_rows = diag_query.order_by(
-                Diagnosis.diagnosis_type, Diagnosis.diagnosis_no
-            ).all()
+            diag_rows = diag_query.all()
 
             # 查询手术列表
             surg_query = session.query(MrSurgery).filter_by(visit_id=visit_id)
@@ -751,8 +748,53 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 return None
 
             # 组装诊断（出院主诊断排第一）
+            def _parse_diag_no(v: Any) -> int:
+                try:
+                    return int(str(v).strip())
+                except Exception:
+                    return 9999
+
+            def _diag_sort_key(row: Any) -> tuple[int, int]:
+                diag_type = str(getattr(row, "diagnosis_type", "") or "").strip()
+                diag_type_l = diag_type.lower()
+                diag_no = _parse_diag_no(getattr(row, "diagnosis_no", None))
+
+                is_discharge = ("出院" in diag_type) or ("discharge" in diag_type_l)
+                is_main = (
+                    ("主诊断" in diag_type)
+                    or ("主要诊断" in diag_type)
+                    or ("出院主要" in diag_type)
+                    or ("discharge_main" in diag_type_l)
+                    or ("main_discharge" in diag_type_l)
+                    or (diag_type_l in {"main", "primary"})
+                )
+                is_other = (
+                    ("其他" in diag_type)
+                    or ("次诊断" in diag_type)
+                    or ("other" in diag_type_l)
+                    or ("secondary" in diag_type_l)
+                )
+
+                if is_discharge and is_main:
+                    return (0, diag_no)
+                if diag_no == 1 and is_main:
+                    return (1, diag_no)
+                if diag_no == 1:
+                    return (2, diag_no)
+                if is_main:
+                    return (3, diag_no)
+                if is_discharge and diag_no == 1:
+                    return (4, diag_no)
+                if is_discharge and is_other:
+                    return (5, diag_no)
+                if is_discharge:
+                    return (6, diag_no)
+                return (7, diag_no)
+
+            sorted_diag_rows = sorted(diag_rows, key=_diag_sort_key)
+
             diagnoses = []
-            for d in diag_rows:
+            for d in sorted_diag_rows:
                 diagnoses.append({
                     "code": d.diagnosis_code or "",
                     "name": d.diagnosis_name or "",
@@ -760,9 +802,13 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 })
 
             # 组装手术（主手术排第一）
+            def _is_main_surgery_flag(v: Any) -> bool:
+                text = str(v or "").strip().lower()
+                return text in {"1", "是", "y", "yes", "true", "t", "main", "主"}
+
             surgeries = []
-            main_surgeries = [s for s in surg_rows if s.main_surgery_sign == "1"]
-            other_surgeries = [s for s in surg_rows if s.main_surgery_sign != "1"]
+            main_surgeries = [s for s in surg_rows if _is_main_surgery_flag(s.main_surgery_sign)]
+            other_surgeries = [s for s in surg_rows if not _is_main_surgery_flag(s.main_surgery_sign)]
             for s in main_surgeries + other_surgeries:
                 surgeries.append({
                     "code": s.surgery_code or "",

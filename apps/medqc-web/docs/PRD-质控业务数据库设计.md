@@ -398,7 +398,7 @@ GROUP BY assignee_id, assignee_name, assignee_department;
 
 > reports.py:53 / reports.py:116 查询 `supabase.table("qc_statistics_view").select("*")`
 > 对齐 `reports.py` 导出字段：`record_id` / `total_documents` / `passed_count` / `warning_count` / `failed_count` / `pending_count` / `avg_qc_score` / `last_analyzed_time`
-> **表名策略**：SQL 模板中写 `medical_documents`，`init_db()` 运行时会用 `DOCUMENTS_TABLE` 环境变量（默认 `medical_documents_test`）动态替换，确保新环境不会因表名偏差而建视图失败
+> **表名策略**：SQL 模板中写 `medical_documents`，`init_db()` 运行时会用 `DOCUMENTS_TABLE` 环境变量（默认 `medical_documents`）动态替换，确保新环境不会因表名偏差而建视图失败
 > 过渡期兼容：当前实现依赖文书表的 `qc_status/qc_score/qc_last_analyzed` 字段，后续再切换到 CDM + QC 正式聚合链路
 
 ```sql
@@ -726,7 +726,7 @@ P1 表：
 
 ### 4.2 遗留对象（从 CDM 契约迁入）
 
-1. `medical_records_test` / `medical_documents_test`（配置默认值遗留）。
+1. `medical_records_test` / `medical_documents_test`（历史遗留表名；配置默认值已切换到正式表名）。
 2. `medical_records` / `medical_documents`（Supabase 兼容路径）。
 3. `qc_result`（repository 历史表）与 `qc_results`（新质控域）并存。
 4. `qc_rules` 为在用规则主表（语义规则、科室规则、规则管理均依赖），不得按“重复表”清理。
@@ -745,7 +745,7 @@ P1 表：
 2. D2：`emr_render.py` 去 Supabase 主路径，改为 CDM 主路径。
 3. D3：`repository.py` 从“SQLite/Mongo 文案”更新为“PostgreSQL/CDM 文案”。
 4. D4：评估 `qc_result` 与 `qc_results` 合并策略（字段映射+回填脚本）。
-5. D5：移除 `RECORDS_TABLE/DOCUMENTS_TABLE` 默认 `*_test` 依赖。
+5. D5：移除 `RECORDS_TABLE/DOCUMENTS_TABLE` 默认 `*_test` 依赖（已完成）。
 6. D6：明确 `qc_rules` / `scoring_rules` / `scoring_config` 分工边界，补充落库改造计划与弃用路径。
 
 ---

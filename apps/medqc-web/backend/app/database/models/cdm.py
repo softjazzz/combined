@@ -1459,8 +1459,38 @@ class SurgeryInventoryRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base)
     document_id = Column(String(100), primary_key=True, comment="文档编号")
     visit_type = Column(String(100), comment="就诊类型")
 
+
     dept_name = Column(String(100), comment="科室名称")
     surgery_room_name = Column(String(100), comment="手术间")
     surgery_date = Column(Date, comment="手术日期")
     surgery_name = Column(String(100), comment="手术名称")
     record_content = Column(Text, comment="记录内容")
+
+
+# ==================== 系统扩展表：AI 首页草稿（非 CDM 标准）====================
+
+class AiFrontpageDraft(Base):
+    """
+    AI 首页草稿（ai_frontpage_draft）- 系统自有表，非 CDM 标准
+
+    设计原则：
+    - 专用于存储 AI 从病历文书中抽取生成的首页草稿（FrontPageDraft JSON）
+    - 与原始 CDM 病案首页表（mr）完全隔离，绝不覆盖原始数据
+    - 以 visit_id 为核心索引，支持 upsert（同一就诊号只保留最新草稿）
+    - draft_json 保存完整的 FrontPageDraft dict，便于直接恢复前端状态
+    """
+    __tablename__ = "ai_frontpage_draft"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True, comment="自增主键")
+    institute_id = Column(String(100), nullable=True,  comment="机构号")
+    patient_id   = Column(String(100), nullable=False, comment="患者号")
+    visit_id     = Column(String(100), nullable=False, comment="就诊号（全局唯一索引）")
+    draft_json   = Column(Text, nullable=False, comment="AI 抽取首页草稿（完整 FrontPageDraft JSON）")
+    created_at   = Column(DateTime, default=datetime.utcnow, comment="首次生成时间")
+    updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="最近更新时间")
+
+    __table_args__ = (
+        Index("ix_ai_draft_visit", "visit_id", unique=True),
+        Index("ix_ai_draft_patient", "patient_id"),
+    )
+

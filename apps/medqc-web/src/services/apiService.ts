@@ -1066,6 +1066,26 @@ export class ApiService {
   }
 
   /**
+   * 通用 PUT 请求方法
+   */
+  static async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.put<T>(url, data, config)
+      return {
+        success: true,
+        data: response.data,
+        message: '请求成功'
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.response?.data?.detail || (error.code === 'ECONNABORTED' ? '请求超时' : '请求失败'),
+        data: null
+      }
+    }
+  }
+
+  /**
    * 通用 GET 请求方法
    */
   static async get<T = any>(url: string, params?: any): Promise<ApiResponse<T>> {

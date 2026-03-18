@@ -1,0 +1,31 @@
+{
+  "mongo_uri": "mongodb://127.0.0.1:27017/admin",
+  "mongo_database": "his_emr",
+  "read_preference": "secondaryPreferred",
+  "max_pool_size": 2,
+  "socket_timeout_ms": 30000,
+  "connect_timeout_ms": 5000,
+  "discharge_stable_days": 3,
+  "lookback_minutes": 10,
+  "rescan_recent_days": 7,
+  "tier1_interval_minutes": 30,
+  "tier2_interval_minutes": 120,
+  "tier3_cron": "0 2 * * *",
+  "max_batch_size": 100,
+  "tier3_batch_size": 50,
+  "inter_request_delay_ms": 200,
+  "max_concurrent": 2,
+  "query_timeout_s": 30,
+  "retry_max": 3,
+  "retry_backoff": [
+    5,
+    30,
+    120
+  ],
+  "night_window_start": "22:00",
+  "night_window_end": "06:00",
+  "target_departments": [
+    "*"
+  ],
+  "enabled": true
+}

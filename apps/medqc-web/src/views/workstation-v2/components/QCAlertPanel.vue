@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="qc-alert-wrapper">
     <!-- 浮动触发按钮 -->
     <div
@@ -97,7 +97,7 @@
                   </div>
                   <div class="issue-desc">{{ issue.description }}</div>
                   <div v-if="issue.suggestion" class="issue-suggestion">
-                    💡 {{ issue.suggestion }}
+                    AI 建议：{{ issue.suggestion }}
                   </div>
                 </div>
                 <div class="issue-actions">
@@ -265,8 +265,8 @@ const patientInfo = computed<PatientInfo | null>(() => {
   if (!fp) return null
   return {
     name: fp.patient_name || fp.basic_info?.name || '未知患者',
-    sex: fp.sex || fp.basic_info?.sex || '—',
-    age: fp.age || fp.basic_info?.age || '—',
+    sex: fp.sex || fp.basic_info?.sex || '--',
+    age: fp.age || fp.basic_info?.age || '--',
     diagnosis: fp.primary_diagnosis_name
       || fp.diagnoses?.discharge_main_diagnosis_text
       || fp.diagnoses?.discharge_main_diagnosis
@@ -330,7 +330,7 @@ const handleDefectAction = async (action: string, issue: QCIssue) => {
   try {
     switch (action) {
       case 'urge': {
-        const res = await urgeDefect(defectId, { message: `请尽快处理: ${issue.description}` })
+        const res = await urgeDefect(defectId, { message: `请尽快处理：${issue.description}` })
         if (res.success) message.success('催办成功')
         else message.error(res.message || '催办失败')
         break
@@ -358,7 +358,7 @@ const handleDefectAction = async (action: string, issue: QCIssue) => {
       case 'reject': {
         Modal.confirm({
           title: '审核存疑',
-          content: `确认将缺陷「${issue.description.slice(0, 30)}...」标记为存疑？`,
+          content: `确认将缺陷“${issue.description.slice(0, 30)}...”标记为存疑？`,
           okText: '确认',
           cancelText: '取消',
           okType: 'danger',
@@ -499,8 +499,10 @@ const fetchCodingQCFromBackend = async () => {
 
     // LLM 层问题
     const dimensionLabels: Record<string, string> = {
-      merge: '编码合并', exclusion: '编码互斥',
-      primary: '主诊断选择', consistency: '编码一致性',
+      merge: '编码合并',
+      exclusion: '编码互斥',
+      primary: '主诊断选择',
+      consistency: '编码一致性',
     }
     for (const issue of (data.llm_issues || [])) {
       codingIssues.push({
@@ -554,7 +556,7 @@ const runRealQCEngine = async () => {
     const newIssues: QCIssue[] = []
     let issueId = 0
 
-    // 前端引擎结果 → 首页质控 + 控费 Tab
+    // 前端引擎结果 -> 首页质控 + 控费 Tab
     if (engineResult.ruleResults && engineResult.ruleResults.length > 0) {
       engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
         if (!ruleRes.isCompliant && ruleRes.findings && ruleRes.findings.length > 0) {
@@ -564,10 +566,10 @@ const runRealQCEngine = async () => {
             else if (finding.severity === 'minor') sev = 'warning'
 
             let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) {
+            if (ruleRes.ruleName.includes('璐圭敤') || finding.description.includes('DRG')) {
               tabCat = 'cost'
             }
-            // 不再把编码相关问题放到 coding Tab（由后端 API 负责）
+            // 不再把编码相关问题放到 coding Tab，由后端 API 负责
 
             newIssues.push({
               id: `sys-${issueId++}`,
@@ -583,7 +585,7 @@ const runRealQCEngine = async () => {
       })
     }
 
-    // 后端 API 结果 → 编码质控 Tab
+    // 后端 API 结果 -> 编码质控 Tab
     newIssues.push(...codingIssues)
 
     issues.value = newIssues
@@ -615,7 +617,7 @@ watch(
 </script>
 
 <style scoped>
-/* ==================== 触发按钮 ==================== */
+/* trigger */
 .qc-trigger-btn {
   position: fixed;
   right: 24px;
@@ -625,47 +627,49 @@ watch(
   transition: transform 0.2s;
 }
 .qc-trigger-btn:hover {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 .trigger-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.4);
+  box-shadow: 0 16px 32px rgba(37, 99, 235, 0.28);
 }
 
-/* ==================== 浮动面板 ==================== */
+/* panel */
 .qc-alert-panel {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  width: 380px;
+  width: 392px;
   max-height: calc(100vh - 100px);
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 24px;
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.14);
   display: flex;
   flex-direction: column;
   z-index: 1000;
   overflow: hidden;
 }
 
-/* ==================== 标题栏 ==================== */
+/* title */
 .panel-titlebar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
-  color: #fff;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 72%);
+  color: #0f172a;
   cursor: grab;
   user-select: none;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
 }
 .panel-titlebar:active { cursor: grabbing; }
 .titlebar-left {
@@ -673,19 +677,19 @@ watch(
   align-items: center;
   gap: 8px;
 }
-.title-icon { font-size: 16px; }
-.title-text { font-weight: 600; font-size: 14px; }
+.title-icon { font-size: 16px; color: #0284c7; }
+.title-text { font-weight: 700; font-size: 14px; }
 .count-tag { margin-left: 4px; }
 .titlebar-actions { display: flex; gap: 2px; }
-.action-btn { color: rgba(255,255,255,0.7) !important; }
-.action-btn:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
+.action-btn { color: #64748b !important; }
+.action-btn:hover { color: #0f172a !important; background: rgba(255,255,255,0.8) !important; }
 .close-btn:hover { color: #ff4d4f !important; }
 
-/* ==================== 患者信息条 ==================== */
+/* patient */
 .patient-bar {
-  padding: 10px 16px;
-  background: #f0f5ff;
-  border-bottom: 1px solid #e6f0ff;
+  padding: 12px 18px;
+  background: linear-gradient(180deg, rgba(240,249,255,0.9) 0%, rgba(248,250,252,0.9) 100%);
+  border-bottom: 1px solid #e0f2fe;
 }
 .patient-main {
   display: flex;
@@ -693,28 +697,30 @@ watch(
   gap: 4px;
   font-size: 13px;
 }
-.patient-icon { color: #1677ff; margin-right: 4px; }
-.patient-name { font-weight: 600; color: #1a1a1a; }
-.patient-meta { color: #666; }
+.patient-icon { color: #0284c7; margin-right: 4px; }
+.patient-name { font-weight: 700; color: #1e293b; }
+.patient-meta { color: #64748b; }
 .patient-diagnosis {
   margin-top: 4px;
   font-size: 12px;
-  color: #888;
+  color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .patient-bar-empty {
   text-align: center;
-  color: #999;
+  color: #94a3b8;
 }
 .empty-hint { font-size: 12px; }
 
-/* ==================== 分类 Tab ==================== */
+/* tabs */
 .qc-tabs {
   display: flex;
-  border-bottom: 1px solid #f0f0f0;
-  padding: 0 8px;
+  gap: 6px;
+  padding: 10px 10px 6px;
+  border-bottom: 1px solid #f1f5f9;
+  background: rgba(255,255,255,0.72);
 }
 .qc-tab {
   flex: 1;
@@ -722,38 +728,43 @@ watch(
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 10px 0;
+  padding: 9px 0;
   font-size: 13px;
-  color: #666;
+  color: #64748b;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  border: 1px solid transparent;
+  border-radius: 14px;
   transition: all 0.2s;
   position: relative;
 }
-.qc-tab:hover { color: #1677ff; }
+.qc-tab:hover { color: #0369a1; background: #f8fafc; }
 .qc-tab.active {
-  color: #1677ff;
+  color: #0369a1;
   font-weight: 600;
-  border-bottom-color: #1677ff;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  box-shadow: 0 8px 18px rgba(125, 211, 252, 0.12);
 }
 .tab-icon { font-size: 14px; }
 .tab-badge { margin-left: 2px; }
 
-/* ==================== 问题列表 ==================== */
+/* issues */
 .qc-issues-container {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 12px;
+  padding: 10px 12px 12px;
   max-height: 400px;
+  background: linear-gradient(180deg, rgba(248,250,252,0.2) 0%, rgba(255,255,255,0.55) 100%);
 }
 .issue-group { margin-bottom: 12px; }
 .group-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  background: #fafafa;
-  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
   margin-bottom: 6px;
 }
 .group-title {
@@ -762,7 +773,7 @@ watch(
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: #334155;
 }
 .group-dot {
   width: 8px;
@@ -770,18 +781,17 @@ watch(
   border-radius: 50%;
   flex-shrink: 0;
 }
-
 .issue-item {
-  padding: 10px 12px;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
   margin-bottom: 6px;
   transition: all 0.2s;
-  background: #fff;
+  background: rgba(255,255,255,0.94);
 }
 .issue-item:hover {
-  border-color: #d6e4ff;
-  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.08);
+  border-color: #bae6fd;
+  box-shadow: 0 12px 22px rgba(148, 163, 184, 0.12);
 }
 .issue-item.dismissed {
   opacity: 0.4;
@@ -791,55 +801,55 @@ watch(
 .issue-severity { margin-bottom: 4px; }
 .issue-desc {
   font-size: 13px;
-  color: #333;
-  line-height: 1.5;
+  color: #334155;
+  line-height: 1.55;
 }
 .issue-suggestion {
   font-size: 12px;
-  color: #888;
+  color: #64748b;
   margin-top: 4px;
-  padding: 4px 8px;
+  padding: 6px 9px;
   background: #fffbe6;
-  border-radius: 4px;
-  border-left: 2px solid #faad14;
+  border-radius: 12px;
+  border: 1px solid #fde68a;
 }
 .issue-actions {
   display: flex;
   justify-content: flex-end;
   gap: 4px;
 }
-.dismiss-btn { color: #999 !important; font-size: 12px; }
+.dismiss-btn { color: #94a3b8 !important; font-size: 12px; }
 
-/* 空状态 */
+/* empty */
 .no-issues {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 40px 0;
-  color: #999;
+  color: #94a3b8;
 }
-.no-issues-icon { font-size: 36px; color: #52c41a; margin-bottom: 8px; }
+.no-issues-icon { font-size: 36px; color: #22c55e; margin-bottom: 8px; }
 
-/* ==================== 底部状态栏 ==================== */
+/* footer */
 .panel-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  background: #fafafa;
-  border-top: 1px solid #f0f0f0;
+  padding: 10px 16px;
+  background: rgba(248,250,252,0.86);
+  border-top: 1px solid #e2e8f0;
   font-size: 12px;
-  color: #666;
+  color: #64748b;
 }
 .footer-detail { display: flex; gap: 8px; }
 .footer-actions { display: flex; align-items: center; gap: 4px; }
 .action-more-btn { font-size: 12px !important; padding: 0 4px !important; }
-.stat-error { color: #ff4d4f; font-weight: 600; }
-.stat-warning { color: #faad14; font-weight: 600; }
-.stat-info { color: #1677ff; }
+.stat-error { color: #ef4444; font-weight: 600; }
+.stat-warning { color: #f59e0b; font-weight: 600; }
+.stat-info { color: #0284c7; font-weight: 600; }
 
-/* ==================== 动画 ==================== */
+/* motion */
 .qc-slide-enter-active,
 .qc-slide-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -850,9 +860,10 @@ watch(
   transform: translateY(20px) scale(0.95);
 }
 
-/* ==================== 滚动条 ==================== */
+/* scrollbar */
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #bfbfbf; }
 </style>
+

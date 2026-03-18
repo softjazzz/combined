@@ -181,7 +181,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, h } from 'vue'
+import { ref, reactive, h, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   SettingOutlined,
@@ -213,7 +214,44 @@ import UserManagement from '@/components/settings/UserManagement.vue'
 import RoleManagement from '@/components/settings/RoleManagement.vue'
 import PermissionConfig from '@/components/settings/PermissionConfig.vue'
 
-const activeTab = ref('users')
+type SettingsTab =
+  | 'users'
+  | 'roles'
+  | 'permissions'
+  | 'system'
+  | 'llm'
+  | 'classification'
+  | 'qc_engine'
+  | 'data_sync'
+
+const route = useRoute()
+const activeTab = ref<SettingsTab>('users')
+const validTabs: SettingsTab[] = [
+  'users',
+  'roles',
+  'permissions',
+  'system',
+  'llm',
+  'classification',
+  'qc_engine',
+  'data_sync'
+]
+
+const resolveTab = (tab: unknown): SettingsTab => {
+  const value = Array.isArray(tab) ? tab[0] : tab
+  if (typeof value === 'string' && validTabs.includes(value as SettingsTab)) {
+    return value as SettingsTab
+  }
+  return 'users'
+}
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    activeTab.value = resolveTab(tab)
+  },
+  { immediate: true }
+)
 
 const modals = reactive({
   userEdit: false,

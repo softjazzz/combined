@@ -66,14 +66,28 @@ async def extract_frontpage_from_text(request: ExtractFrontpageRequest) -> Dict[
         # Step 2: 从提取结果中获取诊断和手术名称（防止 None 值）
         diagnoses_section = result.get("diagnoses") or {}
         procedures_section = result.get("procedures") or {}
-        
+        ed_diags = diagnoses_section.get("ed_diagnosis_texts") or []
+
         # 收集入院诊断
         admission_main_diag = diagnoses_section.get("admission_main_diagnosis_text")
         admission_other_diags = diagnoses_section.get("admission_other_diagnoses_texts") or []
-        
+
         # 收集出院诊断
         discharge_main_diag = diagnoses_section.get("discharge_main_diagnosis_text")
         discharge_other_diags = diagnoses_section.get("discharge_other_diagnoses_texts") or []
+
+        # 兼容仅有初步/门急诊诊断的场景：提升为主诊断，确保后续编码链路可执行
+        if not discharge_main_diag and isinstance(ed_diags, list) and ed_diags:
+            discharge_main_diag = ed_diags[0]
+            diagnoses_section["discharge_main_diagnosis_text"] = discharge_main_diag
+            if not discharge_other_diags and len(ed_diags) > 1:
+                discharge_other_diags = ed_diags[1:]
+                diagnoses_section["discharge_other_diagnoses_texts"] = discharge_other_diags
+            logger.info(f"兼容逻辑: 提升 ed_diagnosis_texts[0] 为出院主诊断: {discharge_main_diag}")
+
+        if not admission_main_diag and isinstance(ed_diags, list) and ed_diags:
+            admission_main_diag = ed_diags[0]
+            diagnoses_section["admission_main_diagnosis_text"] = admission_main_diag
         
         # 合并所有诊断名称用于编码
         all_diagnoses = []

@@ -19,37 +19,7 @@
       </div>
     </div>
 
-    <!-- 工具栏：去边框，改为极淡灰底通栏 -->
-    <div class="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 rounded-xl mb-5">
-      <div class="flex items-center gap-2.5 text-[13px] text-gray-600">
-        <span v-if="metadata.patient_name" class="flex items-center gap-1 font-semibold text-gray-900">
-          <UserOutlined class="text-gray-400" /> {{ metadata.patient_name }}
-        </span>
-        <span v-if="metadata.department" class="w-px h-3 bg-gray-200"></span>
-        <span v-if="metadata.department" class="flex items-center gap-1">
-          <ApartmentOutlined class="text-gray-400" /> {{ metadata.department }}
-        </span>
-        <span v-if="metadata.doc_type" class="w-px h-3 bg-gray-200"></span>
-        <span v-if="metadata.doc_type" class="text-blue-500 font-medium font-mono text-[12px]">
-          {{ metadata.doc_type }}
-        </span>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <span
-          v-if="annotations.length > 0"
-          :class="[
-            'px-2.5 py-1 text-[11px] font-bold rounded-full',
-            annotations.length > 3
-              ? 'bg-red-50 text-red-600'
-              : 'bg-orange-50 text-orange-600'
-          ]"
-        >
-          {{ annotations.length }} 个缺陷
-        </span>
-        <span v-else class="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[11px] font-bold rounded-full">无缺陷</span>
-      </div>
-    </div>
+    <!-- 工具栏已移除：患者/科室信息由外层 Header 展示 -->
 
     <!-- 加载中 -->
     <div v-if="loading" class="flex items-center justify-center h-64">
@@ -343,16 +313,16 @@ watch(
   border-radius: 12px;
   border: 1px solid #f1f5f9;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  padding: 40px 48px;
+  padding: 14px 18px 24px;
   /* 文字排版黄金参数 */
   font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
-  font-size: 15px;
-  line-height: 1.78;
+  font-size: 14px;
+  line-height: 1.72;
   color: #475569; /* slate-600：不用纯黑，减少长时间阅读视网膜疲劳 */
   white-space: pre-wrap;
   word-break: break-all;
   /* 人体工学最大宽度，自动居中 */
-  max-width: 82ch;
+  max-width: 108ch;
   margin: 0 auto;
 }
 
@@ -361,10 +331,14 @@ watch(
   display: block;
   font-weight: 700;
   color: #1e293b;     /* slate-900：比正文深，立刻抓住视线 */
-  font-size: 14.5px;
-  margin-top: 1.4em;
-  margin-bottom: 0.2em;
+  font-size: 13.5px;
+  margin-top: 1.25em;
+  margin-bottom: 0.16em;
   letter-spacing: 0.01em;
+}
+
+.emr-content :deep(.emr-section-title:first-child) {
+  margin-top: 0;
 }
 
 /* ============ 缺陷高亮（虚线下划线，克制） ============ */
@@ -441,5 +415,11 @@ watch(
   color: #64748b;
   line-height: 1.55;
 }
-</style>
 
+@media (max-width: 960px) {
+  .emr-content {
+    padding: 14px 16px 20px;
+    max-width: none;
+  }
+}
+</style>

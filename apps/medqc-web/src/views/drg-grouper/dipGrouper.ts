@@ -215,17 +215,20 @@ function performGroupingWithZd(
 
 /**
  * 模糊匹配诊断编码 — 尝试截断编码进行匹配
+ *
+ * 背景：DIP 病种库的编码版本（如 K35.2/K35.8）与医保版 ICD 编码
+ * （如 K35.000/K35.900）的亚目分类可能不同，直接截断匹配不到。
+ * 因此在截断失败后增加"前缀搜索"——按大类前缀（如 K35）在 DIP
+ * 有效编码中找所有候选，优先选"未特指/其他"类编码。
  */
 function tryFuzzyZdMatch(code: string): string | null {
-  // 尝试去掉 x 后缀的精确匹配，如 A01.000x001 → A01.0
-  // ICD-10 编码格式：X00.0, X00.00, X00.000, X00.000x000
   const parts = code.split('.')
   if (parts.length < 2) return null
 
   const prefix = parts[0]
   const suffix = parts[1]
 
-  // 尝试逐级截短
+  // 第一轮：逐级截短精确匹配（K35.900 → K35.90 → K35.9 → ...）
   for (let len = suffix.length; len >= 1; len--) {
     const tryCode = `${prefix}.${suffix.substring(0, len)}`
     if (VALID_ZD_CODES.has(tryCode)) {
@@ -233,12 +236,29 @@ function tryFuzzyZdMatch(code: string): string | null {
     }
   }
 
-  // 尝试替换末尾为 x
+  // 第二轮：尝试替换末尾为 x（如 B99.x）
   if (suffix.length >= 1) {
     const tryWithX = `${prefix}.${suffix[0]}` + (suffix.length > 1 ? suffix.substring(1).replace(/\d/g, 'x') : '')
     if (VALID_ZD_CODES.has(tryWithX)) {
       return tryWithX
     }
+  }
+
+  // 第三轮：前缀搜索 — 用大类前缀在 VALID_ZD_CODES 里找候选
+  // 解决 DIP 病种库与医保版 ICD 亚目分类不一致的问题
+  const categoryPrefix = `${prefix}.`   // 如 "K35."
+  const candidates: string[] = []
+  for (const zdCode of VALID_ZD_CODES) {
+    if (zdCode.startsWith(categoryPrefix)) {
+      candidates.push(zdCode)
+    }
+  }
+
+  if (candidates.length > 0) {
+    // 优先选"未特指/其他"类：亚目编号最大的通常是"其他/未特指"
+    // 例如 K35.8 = "其他和未特指的急性阑尾炎"
+    candidates.sort()
+    return candidates[candidates.length - 1]
   }
 
   return null

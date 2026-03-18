@@ -161,7 +161,7 @@ import {
   SettingOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons-vue'
-import axios from 'axios'
+import { ApiService } from '@/services/apiService'
 
 // ============= 状态 =============
 const activeTab = ref('notifications')
@@ -194,7 +194,8 @@ const fetchNotifications = async () => {
     const params: any = {}
     if (notifType.value) params.type = notifType.value
     if (readFilter.value !== undefined && readFilter.value !== null) params.is_read = readFilter.value
-    const res = await axios.get('/api/v1/notifications', { params })
+    const res = await ApiService.get('/api/v1/notifications', params)
+    if (!res.success) return
     const data = res.data?.data
     if (data) {
       notifications.value = data.items || []
@@ -207,7 +208,8 @@ const fetchNotifications = async () => {
 
 const fetchRectifications = async () => {
   try {
-    const res = await axios.get('/api/v1/notifications/rectifications')
+    const res = await ApiService.get('/api/v1/notifications/rectifications')
+    if (!res.success) return
     const data = res.data?.data
     if (data) {
       rectifications.value = data.items || []
@@ -225,7 +227,8 @@ const handleTabChange = (key: string) => {
 
 const markAllRead = async () => {
   try {
-    await axios.put('/api/v1/notifications/read-all')
+    const res = await ApiService.put('/api/v1/notifications/read-all')
+    if (!res.success) throw new Error(String(res.error || 'mark all read failed'))
     message.success('已全部标为已读')
     await fetchNotifications()
   } catch (err) { message.error('操作失败') }
@@ -234,7 +237,8 @@ const markAllRead = async () => {
 const handleNotifClick = async (notif: any) => {
   if (!notif.is_read) {
     try {
-      await axios.put(`/api/v1/notifications/${notif.id}/read`)
+      const res = await ApiService.put(`/api/v1/notifications/${notif.id}/read`)
+      if (!res.success) return
       notif.is_read = true
       unreadCount.value = Math.max(0, unreadCount.value - 1)
     } catch (err) { /* ignore */ }
@@ -243,7 +247,8 @@ const handleNotifClick = async (notif: any) => {
 
 const submitRect = async (id: string) => {
   try {
-    await axios.put(`/api/v1/notifications/rectifications/${id}/submit`, { note: '已完成整改' })
+    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/submit`, { note: '已完成整改' })
+    if (!res.success) throw new Error(String(res.error || 'submit rectification failed'))
     message.success('整改已提交')
     await fetchRectifications()
   } catch (err) { message.error('提交失败') }
@@ -251,7 +256,8 @@ const submitRect = async (id: string) => {
 
 const approveRect = async (id: string) => {
   try {
-    await axios.put(`/api/v1/notifications/rectifications/${id}/approve`)
+    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/approve`)
+    if (!res.success) throw new Error(String(res.error || 'approve rectification failed'))
     message.success('审核通过，问题已闭环')
     await fetchRectifications()
   } catch (err) { message.error('审核失败') }
@@ -259,7 +265,8 @@ const approveRect = async (id: string) => {
 
 const rejectRect = async (id: string) => {
   try {
-    await axios.put(`/api/v1/notifications/rectifications/${id}/reject`, { reason: '整改不充分' })
+    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/reject`, { reason: '整改不充分' })
+    if (!res.success) throw new Error(String(res.error || 'reject rectification failed'))
     message.warning('已退回整改')
     await fetchRectifications()
   } catch (err) { message.error('退回失败') }

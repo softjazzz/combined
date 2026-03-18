@@ -125,25 +125,61 @@ class TestViewsSQL:
         for view in self.REQUIRED_VIEWS:
             assert f'create view {view}' in sql, f"缺少视图: {view}"
 
+    @pytest.mark.unit
+    def test_documents_table_default_is_medical_documents(self):
+        """connection.py 中 DOCUMENTS_TABLE 默认值应为 medical_documents"""
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        conn_path = os.path.join(backend_dir, 'app', 'database', 'connection.py')
+        with open(conn_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'os.getenv("DOCUMENTS_TABLE", "medical_documents")' in source
+
+    @pytest.mark.unit
+    def test_records_table_default_is_medical_records(self):
+        """settings.py 中 RECORDS_TABLE 默认值应为 medical_records"""
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(backend_dir, 'app', 'core', 'settings.py')
+        with open(settings_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'os.getenv("RECORDS_TABLE", "medical_records")' in source
+
+    def test_required_views_materialized_in_pg(self):
+        """验收补强：真实检查 6 个视图已在 PG 中创建，创建失败应直接红灯"""
+        from sqlalchemy import text
+        from app.database.connection import engine, init_db
+
+        if engine is None:
+            pytest.skip("DATABASE_URL 未配置，跳过 PG 视图落库检查")
+
+        init_db()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT viewname FROM pg_catalog.pg_views WHERE schemaname = current_schema()")
+            ).fetchall()
+
+        existing = {row[0] for row in rows}
+        missing = [view for view in self.REQUIRED_VIEWS if view not in existing]
+        assert not missing, f"PG 缺少视图: {missing}"
+
 
 # ---------------------------------------------------------------------------
 # §3 ORM 模型完整性
 # ---------------------------------------------------------------------------
 
 class TestORMModels:
-    """验证 ORM 模型覆盖 PRD P0 14 张表"""
+    """验证 ORM 模型覆盖 PRD P0 15 张表（含 medical_documents）"""
 
     REQUIRED_TABLES = [
         'qc_tasks', 'qc_task_records', 'qc_results', 'qc_defects',
         'qc_defect_history', 'qc_appeals', 'qc_appeal_reviews',
         'qc_remediation_tasks', 'qc_remediation_history',
-        'qc_coder_workload_daily', 'qc_rules', 'scoring_rules',
+        'qc_coder_workload_daily', 'medical_documents', 'qc_rules', 'scoring_rules',
         'scoring_config', 'notifications',
     ]
 
     @pytest.mark.unit
     def test_all_tables_in_orm(self):
-        """models/qc.py 的 ORM 类覆盖 14 张表"""
+        """models/qc.py 的 ORM 类覆盖 15 张表"""
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         model_path = os.path.join(backend_dir, 'app', 'database', 'models', 'qc.py')
         with open(model_path, encoding='utf-8') as f:
@@ -153,6 +189,99 @@ class TestORMModels:
             # __tablename__ = 'xxx'
             assert f"'{table}'" in source or f'"{table}"' in source, \
                 f"ORM 缺少表名: {table}"
+
+
+# ---------------------------------------------------------------------------
+# §3.5 Alembic 基线
+# ---------------------------------------------------------------------------
+
+class TestAlembicBaseline:
+    """验证 Alembic 已接入并存在 baseline revision。"""
+
+    @pytest.mark.unit
+    def test_alembic_scaffold_exists(self):
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        required_files = [
+            os.path.join(backend_dir, "alembic.ini"),
+            os.path.join(backend_dir, "alembic", "env.py"),
+            os.path.join(backend_dir, "alembic", "script.py.mako"),
+            os.path.join(
+                backend_dir,
+                "alembic",
+                "versions",
+                "20260315_000001_baseline_pg_schema.py",
+            ),
+            os.path.join(
+                backend_dir,
+                "alembic",
+                "versions",
+                "20260315_000002_split_schema_layout.py",
+            ),
+        ]
+        for file_path in required_files:
+            assert os.path.exists(file_path), f"缺少 Alembic 文件: {file_path}"
+
+    @pytest.mark.unit
+    def test_alembic_env_targets_base_metadata(self):
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env_path = os.path.join(backend_dir, "alembic", "env.py")
+        with open(env_path, encoding="utf-8") as f:
+            source = f.read()
+        assert "target_metadata = Base.metadata" in source
+
+    @pytest.mark.unit
+    def test_baseline_revision_contains_bootstrap(self):
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        revision_path = os.path.join(
+            backend_dir,
+            "alembic",
+            "versions",
+            "20260315_000001_baseline_pg_schema.py",
+        )
+        with open(revision_path, encoding="utf-8") as f:
+            source = f.read()
+        assert 'revision: str = "20260315_000001"' in source
+        assert "Base.metadata.create_all(bind=bind)" in source
+        assert "_create_qc_views(bind)" in source
+
+    @pytest.mark.unit
+    def test_split_schema_revision_chain(self):
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        split_path = os.path.join(
+            backend_dir,
+            "alembic",
+            "versions",
+            "20260315_000002_split_schema_layout.py",
+        )
+        with open(split_path, encoding="utf-8") as f:
+            source = f.read()
+        assert 'revision: str = "20260315_000002"' in source
+        assert 'down_revision: Union[str, None] = "20260315_000001"' in source
+        assert 'SCHEMAS = ("qc", "sys", "cdm", "legacy")' in source
+
+
+class TestSplitSchemaRuntimeSupport:
+    """验证运行时具备 split schema 配置能力。"""
+
+    @pytest.mark.unit
+    def test_connection_supports_schema_mode_and_search_path(self):
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        conn_path = os.path.join(backend_dir, "app", "database", "connection.py")
+        with open(conn_path, encoding="utf-8") as f:
+            source = f.read()
+        assert "DB_SCHEMA_MODE" in source
+        assert "DB_SEARCH_PATH" in source
+        assert "public,qc,sys,cdm,legacy" in source
+
+    @pytest.mark.unit
+    def test_supabase_adapter_supports_search_path(self):
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        client_path = os.path.join(backend_dir, "app", "core", "supabase_client.py")
+        with open(client_path, encoding="utf-8") as f:
+            source = f.read()
+        assert "DB_SCHEMA_MODE" in source
+        assert "DB_SEARCH_PATH" in source
+        assert "public,qc,sys,cdm,legacy" in source
 
 
 # ---------------------------------------------------------------------------
@@ -313,10 +442,8 @@ class TestNoLegacyNames:
     LEGACY_NAMES = [
         'qc_defect_actions',   # 应为 qc_defect_history
         'department_code',     # 应为 department
+        'total_score',         # 应为 overall_score
     ]
-
-    # total_score 排除：qc.py 中作为 API 响应兼容映射（"total_score": result.get("overall_score")）
-    # 这是合理的前端兼容层，不是 DB 字段引用
 
     ROUTER_FILES = [
         'app/routers/tasks.py',
@@ -350,3 +477,15 @@ class TestNoLegacyNames:
                     # 排除字符串中的引用（如日志描述）
                     if f"'{name}'" in stripped or f'"{name}"' in stripped:
                         pytest.fail(f"{filepath}:{i} 仍使用旧名 `{name}` 作为表/字段名")
+
+    @pytest.mark.unit
+    def test_no_legacy_names_in_qc_model(self):
+        """QC ORM 不应保留旧字段名。"""
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        model_path = os.path.join(backend_dir, 'app', 'database', 'models', 'qc.py')
+        with open(model_path, encoding='utf-8') as f:
+            source = f.read()
+
+        forbidden = ['department_code', 'total_score']
+        for name in forbidden:
+            assert name not in source, f"{model_path} 仍包含旧字段 `{name}`"

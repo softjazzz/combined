@@ -42,21 +42,38 @@ def _get_session_factory():
         logger.warning("DATABASE_URL 未设置，SQLAlchemy 适配客户端不可用")
         return None
 
+    schema_mode = os.getenv("DB_SCHEMA_MODE", "single").strip().lower()
+    search_path = os.getenv("DB_SEARCH_PATH", "").strip()
+    if not search_path and schema_mode == "split":
+        search_path = "public,qc,sys,cdm,legacy"
+
     engine_kwargs = {}
     if db_url.startswith("sqlite"):
         engine_kwargs["connect_args"] = {"check_same_thread": False}
     else:
+        connect_args = {
+            "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "5")),
+        }
+        if search_path:
+            connect_args["options"] = f"-csearch_path={search_path}"
+
         engine_kwargs.update({
             "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
             "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
             "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "5")),
             "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800")),
             "pool_use_lifo": True,
+            "connect_args": connect_args,
         })
 
     _engine = create_engine(db_url, pool_pre_ping=True, **engine_kwargs)
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
-    logger.info("SQLAlchemy 适配客户端连接池就绪: %s", db_url.split("@")[-1] if "@" in db_url else db_url)
+    logger.info(
+        "SQLAlchemy 适配客户端连接池就绪: %s (schema_mode=%s, search_path=%s)",
+        db_url.split("@")[-1] if "@" in db_url else db_url,
+        schema_mode,
+        search_path or "<default>",
+    )
     return _SessionLocal
 
 

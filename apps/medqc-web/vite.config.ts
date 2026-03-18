@@ -105,8 +105,7 @@ export default defineConfig({
       'ant-design-vue',
       '@ant-design/icons-vue',
       'dayjs',
-      'lodash-es',
-      'pdfjs-dist'
+      'lodash-es'
     ]
   },
   worker: {

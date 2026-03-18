@@ -84,6 +84,7 @@ async def health(request: Request):
                 "supabase": supabase_ok,
                 "llm": llm_ok,
             },
+            "llm_config": settings.llm_diagnostics(),
             "env": settings.ENV,
         },
         trace_id=get_trace_id(request)

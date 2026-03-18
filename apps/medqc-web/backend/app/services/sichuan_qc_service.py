@@ -43,8 +43,8 @@ class SichuanQCService:
         # 截断配置 + Prompt 构建器
         from ..core.settings import get_settings
         settings = get_settings()
-        self.enable_truncate = settings.SICHUAN_ENABLE_TRUNCATE
-        self.max_content_length = settings.SICHUAN_MAX_CONTENT_LENGTH
+        self.enable_truncate = settings.LLM_ENABLE_TRUNCATE
+        self.max_content_length = settings.LLM_MAX_CONTENT_LENGTH
         self.prompt_builder = QCPromptBuilder(
             enable_truncate=self.enable_truncate,
             max_content_length=self.max_content_length,
@@ -65,8 +65,8 @@ class SichuanQCService:
         if success:
             # 同步最新截断配置到 service 与 prompt_builder
             settings = get_settings()
-            self.enable_truncate = settings.SICHUAN_ENABLE_TRUNCATE
-            self.max_content_length = settings.SICHUAN_MAX_CONTENT_LENGTH
+            self.enable_truncate = settings.LLM_ENABLE_TRUNCATE
+            self.max_content_length = settings.LLM_MAX_CONTENT_LENGTH
             self.prompt_builder.enable_truncate = self.enable_truncate
             self.prompt_builder.max_content_length = self.max_content_length
         return success

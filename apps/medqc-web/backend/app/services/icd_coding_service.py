@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """
 ICD 编码推荐服务
@@ -82,9 +82,9 @@ class ICDCodingService:
             self.model = llm_config.get("model", "qwen-max")
         else:
             s = get_settings()
-            self.api_endpoint = str(s.SICHUAN_API_ENDPOINT) if s.SICHUAN_API_ENDPOINT else None
-            self.api_key = s.SICHUAN_API_KEY
-            self.model = s.SICHUAN_MODEL
+            self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
+            self.api_key = s.LLM_API_KEY
+            self.model = s.LLM_MODEL
 
         self._use_llm = bool(self.api_endpoint and self.api_key)
         logger.info(f"ICDCodingService 初始化: use_llm={self._use_llm}")
@@ -214,6 +214,7 @@ class ICDCodingService:
             "temperature": 0.1,
             "max_tokens": 1000,
             "stream": False,
+            "enable_thinking": False,
         }
 
         result = await safe_post_json(

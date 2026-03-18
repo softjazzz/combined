@@ -169,9 +169,9 @@ class TestFrontPageExtractionService:
         monkeypatch.setattr(
             "app.services.frontpage_extraction_service.get_settings",
             lambda: type('Settings', (), {
-                'SICHUAN_API_ENDPOINT': None,
-                'SICHUAN_API_KEY': None,
-                'SICHUAN_MODEL': 'test-model'
+                'LLM_API_ENDPOINT': None,
+                'LLM_API_KEY': None,
+                'LLM_MODEL': 'test-model'
             })()
         )
         service = FrontPageExtractionService()

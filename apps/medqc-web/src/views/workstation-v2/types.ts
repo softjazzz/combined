@@ -1,5 +1,6 @@
 export interface PatientRecord {
   id: string
+  visitId?: string
   instituteId?: string
   patientId?: string
   bedNo: string
@@ -14,7 +15,7 @@ export interface PatientRecord {
   diagnosis: string
   diagnosisCode: string
   doctor: string
-  status: 'pending' | 'processing' | 'completed' | 'warning'
+  status: 'pending' | 'processing' | 'completed' | 'warning' | 'has_defects'
 }
 
 export interface DeptInfo {
