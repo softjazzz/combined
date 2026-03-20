@@ -1,13 +1,206 @@
-﻿<template>
+<template>
   <div class="fp-sheet-wrap">
     <div v-if="diagnosisGenerationPending" class="fp-pending">
       正在生成诊断编码与证据，请稍候...
     </div>
 
-    <div class="fp-frame-wrap">
-      <iframe ref="iframeRef" class="fp-frame" :srcdoc="srcdoc" />
+    <!-- ===== 原生表格渲染的病案首页 ===== -->
+    <div class="fp-wrapper">
+      <!-- 标题 -->
+      <h1 class="fp-title">住 院 病 案 首 页</h1>
+
+      <!-- 顶部：医疗机构、付费方式、病案号 -->
+      <table class="fp-tbl" style="border-top:none;">
+        <tr>
+          <td style="width:50%; border-top:none;">医疗机构:<u class="fill">{{ d.hospitalization.hospital_name }}</u></td>
+          <td style="width:50%; border-top:none;">（组织机构代码:<u class="fill">{{ d.hospitalization.organization_code }}</u>）</td>
+        </tr>
+        <tr>
+          <td colspan="2">医疗付费方式:<u class="fill">{{ d.hospitalization.payment_method_text }}</u></td>
+        </tr>
+        <tr>
+          <td>病案号:<u class="fill">{{ d.hospitalization.medical_record_no }}</u></td>
+          <td>第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u>次住院</td>
+        </tr>
+      </table>
+
+      <!-- ===== 基本信息 ===== -->
+      <div class="fp-sec-hd">基本信息</div>
+      <table class="fp-tbl">
+        <tr>
+          <td style="width:14%">姓名<u class="fill">{{ d.basic_info.patient_name }}</u></td>
+          <td style="width:16%">性别<u class="fill">{{ d.basic_info.gender }}</u></td>
+          <td style="width:20%">出生日期<u class="fill">{{ d.basic_info.birth_date }}</u></td>
+          <td style="width:14%">年龄<u class="fill">{{ d.basic_info.age_years }}</u>岁</td>
+          <td style="width:12%">国籍<u class="fill">{{ d.basic_info.nationality }}</u></td>
+          <td style="width:12%">民族<u class="fill">{{ d.basic_info.ethnicity }}</u></td>
+        </tr>
+        <tr>
+          <td colspan="3">身份证号<u class="fill">{{ d.basic_info.id_number }}</u></td>
+          <td>职业<u class="fill">{{ d.basic_info.occupation }}</u></td>
+          <td colspan="2">婚姻<u class="fill">{{ d.basic_info.marital_status }}</u></td>
+        </tr>
+        <tr>
+          <td colspan="6">现住址<u class="fill">{{ d.basic_info.current_address }}</u></td>
+        </tr>
+        <tr>
+          <td colspan="3">工作单位及地址<u class="fill">{{ d.basic_info.work_unit }}</u></td>
+          <td colspan="3">籍贯<u class="fill">{{ d.basic_info.nativeplace }}</u></td>
+        </tr>
+        <tr>
+          <td>联系人姓名<u class="fill">{{ d.basic_info.contact_name }}</u></td>
+          <td>关系<u class="fill">{{ d.basic_info.contact_relation }}</u></td>
+          <td colspan="2">地址<u class="fill">{{ d.basic_info.contact_address }}</u></td>
+          <td colspan="2">电话<u class="fill">{{ d.basic_info.contact_phone }}</u></td>
+        </tr>
+      </table>
+
+      <!-- ===== 住院信息 ===== -->
+      <div class="fp-sec-hd">住院诊疗信息</div>
+      <table class="fp-tbl">
+        <tr>
+          <td colspan="6">入院途径<u class="fill">{{ d.hospitalization.admission_way_text }}</u> □ 1.急诊 &nbsp; 2.门诊 &nbsp; 3.其他医疗机构转入 &nbsp; 9.其他</td>
+        </tr>
+        <tr>
+          <td colspan="2">入院时间<u class="fill">{{ d.hospitalization.admission_datetime }}</u></td>
+          <td>入院科别<u class="fill">{{ d.hospitalization.admission_dept }}</u></td>
+          <td>病房<u class="fill">{{ d.hospitalization.admission_ward }}</u></td>
+          <td>转科科别<u class="fill">{{ d.hospitalization.transfer_dept }}</u></td>
+          <td>&nbsp;</td>
+        </tr>
+        <tr>
+          <td colspan="2">出院时间<u class="fill">{{ d.hospitalization.discharge_datetime }}</u></td>
+          <td>出院科别<u class="fill">{{ d.hospitalization.discharge_dept }}</u></td>
+          <td>病房<u class="fill">{{ d.hospitalization.discharge_ward }}</u></td>
+          <td>实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u>天</td>
+          <td>&nbsp;</td>
+        </tr>
+      </table>
+
+      <!-- 门急诊诊断 -->
+      <table class="fp-tbl">
+        <tr>
+          <td colspan="3">门(急)诊诊断<u class="fill">{{ mainDiag?.diagnosis_name || '' }}</u></td>
+          <td colspan="3">疾病编码<u class="fill">{{ mainDiag?.diagnosis_code || '' }}</u></td>
+        </tr>
+      </table>
+
+      <!-- 入院诊断 -->
+      <table class="fp-tbl">
+        <tr>
+          <td colspan="3">入院诊断<u class="fill">{{ mainDiag?.diagnosis_name || '' }}</u></td>
+          <td colspan="3">疾病编码<u class="fill">{{ mainDiag?.diagnosis_code || '' }}</u></td>
+        </tr>
+      </table>
+
+      <!-- ===== 出院诊断 ===== -->
+      <table class="fp-tbl" v-if="diagnosisRows.length">
+        <tr class="hd-row">
+          <td style="width:30%">出院诊断</td>
+          <td style="width:15%">疾病编码</td>
+          <td style="width:10%">入院病情</td>
+          <td style="width:10%">出院情况</td>
+        </tr>
+        <tr v-for="(dd, i) in paddedDiagnoses" :key="'d'+i" class="data-row">
+          <td>{{ i === 0 ? '主要诊断: ' : (dd.diagnosis_name ? '其他诊断: ' : '') }}{{ dd.diagnosis_name || '' }}</td>
+          <td class="center mono">{{ dd.diagnosis_code || '' }}</td>
+          <td class="center">{{ dd.admission_condition || '' }}</td>
+          <td class="center"></td>
+        </tr>
+      </table>
+
+      <!-- 损伤中毒外因、病理诊断 -->
+      <table class="fp-tbl">
+        <tr>
+          <td colspan="2">损伤、中毒的外部原因<u class="fill"></u></td>
+          <td colspan="2">疾病编码<u class="fill"></u></td>
+        </tr>
+        <tr>
+          <td>病理诊断<u class="fill"></u></td>
+          <td>疾病编码<u class="fill"></u></td>
+          <td>病理号<u class="fill"></u></td>
+          <td>TNM分期<u class="fill"></u></td>
+        </tr>
+      </table>
+
+      <!-- ===== 手术信息 ===== -->
+      <table class="fp-tbl">
+        <tr class="hd-row">
+          <td rowspan="2" style="width:20%">手术及操作名称</td>
+          <td rowspan="2" style="width:12%">手术及操作编码</td>
+          <td rowspan="2" style="width:12%">手术操作日期</td>
+          <td rowspan="2" style="width:8%">手术级别</td>
+          <td colspan="3">手术及操作医师</td>
+          <td rowspan="2" style="width:8%">切口愈合<br/>等级</td>
+          <td rowspan="2" style="width:8%">麻醉方式</td>
+          <td rowspan="2" style="width:8%">麻醉医师</td>
+        </tr>
+        <tr class="hd-row">
+          <td style="width:8%">术者</td>
+          <td style="width:8%">I助</td>
+          <td style="width:8%">II助</td>
+        </tr>
+        <tr v-for="(s, i) in paddedSurgeries" :key="'s'+i" class="data-row">
+          <td>{{ s.text || '' }}</td>
+          <td class="center mono">{{ s.code || '' }}</td>
+          <td class="center">{{ s.date || '' }}</td>
+          <td class="center">{{ s.level || '' }}</td>
+          <td class="center"></td>
+          <td class="center"></td>
+          <td class="center"></td>
+          <td class="center">{{ s.healing || '' }}</td>
+          <td class="center">{{ s.anesthesia || '' }}</td>
+          <td class="center"></td>
+        </tr>
+      </table>
+
+      <!-- ===== 其他医学信息 ===== -->
+      <div class="fp-sec-hd">其他信息</div>
+      <table class="fp-tbl">
+        <tr>
+          <td colspan="3">药物过敏<u class="fill">{{ d.other_medical_info.drug_allergy_flag }}</u> □ 1.无 &nbsp; 2.有</td>
+          <td colspan="3">死亡患者尸检 □ 1.是 2.否</td>
+        </tr>
+        <tr>
+          <td colspan="3">血型<u class="fill">{{ d.other_medical_info.abo_blood_type }}</u> □ 1.A &nbsp; 2.B &nbsp; 3.O &nbsp; 4.AB &nbsp; 5.不详 &nbsp; 6.未查</td>
+          <td colspan="3">Rh<u class="fill">{{ d.other_medical_info.rh_blood_type }}</u> □ 1.阴 &nbsp; 2.阳 &nbsp; 3.不详 &nbsp; 4.未查</td>
+        </tr>
+        <tr>
+          <td colspan="6">
+            离院方式<u class="fill">{{ d.hospitalization.leaving_hospital_way }}</u>
+            □ 1.医嘱离院 &nbsp; 2.医嘱转院 &nbsp; 3.非医嘱离院 &nbsp; 4.死亡 &nbsp; 9.其他
+          </td>
+        </tr>
+        <tr>
+          <td colspan="6">
+            是否有出院31天内再住院计划<u class="fill">{{ d.hospitalization.rehospital_within_month }}</u>
+            □ 1.无 &nbsp; 2.有
+          </td>
+        </tr>
+      </table>
+
+      <!-- ===== 签名区 ===== -->
+      <div class="fp-sec-hd">签名</div>
+      <table class="fp-tbl">
+        <tr>
+          <td>科主任<u class="fill">{{ d.staff.dept_director }}</u></td>
+          <td>主(副主)任医师<u class="fill">{{ d.staff.chief_physician }}</u></td>
+          <td>主治医师<u class="fill">{{ d.staff.attending_physician }}</u></td>
+        </tr>
+        <tr>
+          <td>住院医师<u class="fill">{{ d.staff.resident_physician }}</u></td>
+          <td>责任护士<u class="fill">{{ d.staff.responsible_nurse }}</u></td>
+          <td>编码员<u class="fill">{{ d.staff.coder }}</u></td>
+        </tr>
+        <tr>
+          <td colspan="3">病案质量<u class="fill">{{ d.staff.medical_record_quality }}</u></td>
+        </tr>
+      </table>
+
+      <div class="fp-footer">（注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）</div>
     </div>
 
+    <!-- ===== 诊断证据区域（保持不变） ===== -->
     <section v-if="diagnosisRows.length" class="fp-evidence-section">
       <div class="fp-evidence-title">诊断证据</div>
       <div class="fp-evidence-list">
@@ -91,12 +284,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 
-import templateBodyHtml from '@/assets/templates/hm-frontpage/inpatient_record.html?raw'
-import contentsCss from '@/assets/templates/hm-frontpage/contents.css?raw'
-import printCss from '@/assets/templates/hm-frontpage/print.css?raw'
-import { frontPageDraftToDeMap } from '@/utils/hm-frontpage/frontPageDraftToDeMap'
-import { applyDeValuesToHmTemplateBody, buildHmTemplateSrcdoc } from '@/utils/hm-frontpage/templateRefill'
-
 interface DiagnosisItem {
   diagnosis_type?: string
   diagnosis_name?: string
@@ -108,8 +295,6 @@ const props = defineProps<{
   data: any
   postProcessing?: boolean
 }>()
-
-const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 const diagnosisRows = computed<DiagnosisItem[]>(() => {
   const arr = props.data?.diagnoses
@@ -139,15 +324,16 @@ function normalizeDate(value: any): string | null {
   return m ? m[0] : s
 }
 
-const normalizedDraft = computed(() => {
+/** 标准化后的首页数据（与之前的 normalizedDraft 相同） */
+const d = computed(() => {
   const src = props.data || {}
   const basic = src.basic || {}
   const diags: DiagnosisItem[] = Array.isArray(src.diagnoses) ? src.diagnoses : []
   const surgeries: any[] = Array.isArray(src.surgeries) ? src.surgeries : []
   const cost = src.cost || {}
 
-  const mainDiag = diags.find((d) => String(d?.diagnosis_type || '').includes('主要')) || first(diags, null)
-  const otherDiags = diags.filter((d) => d !== mainDiag)
+  const mainDiag = diags.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(diags, null)
+  const otherDiags = diags.filter((dd) => dd !== mainDiag)
 
   const mainProc = first(surgeries, null)
   const otherProcs = Array.isArray(surgeries) ? surgeries.slice(1) : []
@@ -193,8 +379,8 @@ const normalizedDraft = computed(() => {
       discharge_main_diagnosis_text: mainDiag?.diagnosis_name || null,
       discharge_main_icd: mainDiag?.diagnosis_code || null,
       admission_condition: mainDiag?.admission_condition || null,
-      discharge_other_diagnoses_texts: otherDiags.map((d) => d?.diagnosis_name || '').filter(Boolean),
-      discharge_other_icds: otherDiags.map((d) => d?.diagnosis_code || '').filter(Boolean)
+      discharge_other_diagnoses_texts: otherDiags.map((dd) => dd?.diagnosis_name || '').filter(Boolean),
+      discharge_other_icds: otherDiags.map((dd) => dd?.diagnosis_code || '').filter(Boolean)
     },
     procedures: {
       main_procedure_text: mainProc?.surgery_name || null,
@@ -230,17 +416,42 @@ const normalizedDraft = computed(() => {
   }
 })
 
-const srcdoc = computed(() => {
-  const { deMap, diagnosisRows, procedureRows } = frontPageDraftToDeMap(normalizedDraft.value)
-  const filledBodyHtml = applyDeValuesToHmTemplateBody(templateBodyHtml, deMap, diagnosisRows, procedureRows)
-  return buildHmTemplateSrcdoc({ filledBodyHtml, contentsCss, printCss })
+/** 主诊断 */
+const mainDiag = computed(() => {
+  const list = diagnosisRows.value
+  return list.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(list, null)
 })
 
+/** 诊断表格（至少 6 行） */
+const paddedDiagnoses = computed(() => {
+  const list = [...diagnosisRows.value]
+  const minRows = Math.max(6, list.length + 1)
+  while (list.length < minRows) list.push({ diagnosis_name: '', diagnosis_code: '', admission_condition: '' })
+  return list
+})
+
+/** 手术表格（至少 4 行） */
+const paddedSurgeries = computed(() => {
+  const surgeries: any[] = Array.isArray(props.data?.surgeries) ? props.data.surgeries : []
+  const rows = surgeries.map((s: any) => ({
+    text: s?.surgery_name || s?.text || '',
+    code: s?.surgery_code || s?.code || '',
+    date: normalizeDate(s?.surgery_begin_datetime || s?.date) || '',
+    level: s?.surgical_level || '',
+    healing: s?.surgical_incisionheal_level || '',
+    anesthesia: s?.anesthesia_method || '',
+  }))
+  const minRows = Math.max(4, rows.length + 1)
+  while (rows.length < minRows) rows.push({ text: '', code: '', date: '', level: '', healing: '', anesthesia: '' })
+  return rows
+})
+
+// ===== 诊断证据逻辑（保持不变） =====
 function normalizeEvidenceKey(text: string): string {
   return String(text || '')
     .trim()
     .toLowerCase()
-    .replace(/[\s\u3000，,。；;：:“”"'‘’、()（）【】\[\]\-—_]/g, '')
+    .replace(/[\s\u3000，,。；;：:""\"'''、()（）【】\[\]\-—_]/g, '')
 }
 
 const diagnosisEvidenceList = computed(() => {
@@ -307,6 +518,7 @@ function closeDiagnosisEvidence() {
 </script>
 
 <style scoped>
+/* ===== 住院病案首页 — 像素级还原官方格式（与结算清单风格统一） ===== */
 .fp-sheet-wrap {
   display: flex;
   flex-direction: column;
@@ -323,21 +535,96 @@ function closeDiagnosisEvidence() {
   font-weight: 600;
 }
 
-.fp-frame-wrap {
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+.fp-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: "SimSun", "宋体", "Songti SC", serif;
+  font-size: 12px;
+  color: #000;
+  line-height: 1.5;
   background: #fff;
-  overflow: auto;
-  max-height: calc(100vh - 220px);
+  padding: 30px 40px;
+  border-radius: 24px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
 }
 
-.fp-frame {
+/* 主标题 */
+.fp-title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 6px;
+  margin: 0 0 10px 0;
+  font-family: "SimHei", "黑体", sans-serif;
+}
+
+/* 区间大标题（蓝底） */
+.fp-sec-hd {
+  background: #c5d9ed;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: center;
+  padding: 4px 0;
+  border: 1px solid #000;
+  border-bottom: none;
+  margin-top: -1px;
+}
+
+/* 通用表格 */
+.fp-tbl {
   width: 100%;
-  min-height: 2500px;
-  border: 0;
-  background: #fff;
+  border-collapse: collapse;
+  border: 1px solid #000;
+  margin-top: -1px;
+}
+.fp-tbl td {
+  border: 1px solid #000;
+  padding: 3px 5px;
+  font-size: 11.5px;
+  vertical-align: middle;
+  line-height: 1.4;
 }
 
+/* 表头行 */
+.hd-row td {
+  background: #f0f0f0;
+  font-weight: bold;
+  text-align: center;
+  font-size: 11px;
+}
+
+/* 下划线填空 */
+u.fill {
+  border-bottom: 1px solid #000;
+  text-decoration: none;
+  display: inline;
+  padding: 0 4px;
+  font-weight: bold;
+  min-width: 40px;
+}
+
+/* 辅助类 */
+.bold { font-weight: bold; }
+.center { text-align: center; }
+.num { text-align: right; font-family: "Courier New", monospace; font-size: 11.5px; }
+.mono { font-family: "Courier New", monospace; }
+
+/* 数据行最小高度 */
+.data-row td { height: 26px; }
+
+/* 底部注 */
+.fp-footer {
+  font-size: 10px;
+  color: #666;
+  text-align: left;
+  margin-top: 6px;
+  padding-left: 4px;
+  font-weight: bold;
+}
+
+/* ===== 诊断证据样式（保持不变） ===== */
 .fp-evidence-section {
   border: 1px solid #e2e8f0;
   background: #fff;
@@ -521,5 +808,10 @@ function closeDiagnosisEvidence() {
   height: 34px;
   font-size: 14px;
   cursor: pointer;
+}
+
+/* 打印样式 */
+@media print {
+  .fp-wrapper { padding: 0; max-width: none; }
 }
 </style>
