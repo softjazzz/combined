@@ -986,6 +986,21 @@ class FrontPageExtractionService:
         except Exception:
             logger.exception("stream: infer admission conditions failed")
 
+        # ===== 主诊断规则裁决（在 ICD 编码前） =====
+        try:
+            if isinstance(fp_data.get("diagnoses"), dict) and fp_data.get("diagnoses"):
+                from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
+                fp_data["diagnoses"], _rule_trace = apply_main_diagnosis_guideline_rules(
+                    medical_text=llm_text,
+                    diagnoses=fp_data["diagnoses"],
+                    procedures=fp_data.get("procedures") or {},
+                )
+                if _rule_trace:
+                    fp_data.setdefault("evidence", {})["guideline_rule_trace"] = _rule_trace
+                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+        except Exception:
+            logger.exception("stream: main diagnosis guideline rules failed")
+
         try:
             if (
                 isinstance(fp_data.get("diagnoses"), dict)
@@ -1829,6 +1844,16 @@ class FrontPageExtractionService:
             diagnoses = await self._infer_admission_conditions(medical_text, diagnoses)
             diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
         
+
+        # ===== 主诊断规则裁决（在 ICD 编码前） =====
+        if diagnoses:
+            from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
+            diagnoses, _rule_trace_llm = apply_main_diagnosis_guideline_rules(
+                medical_text=medical_text,
+                diagnoses=diagnoses,
+                procedures=procedures or {},
+            )
+            diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
         # F5/F7: 使用本地 ICD 编码库查询国临版编码（替换 LLM 输出的编码）
         from .local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
         if diagnoses:
