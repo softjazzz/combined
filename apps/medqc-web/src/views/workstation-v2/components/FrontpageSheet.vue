@@ -93,19 +93,29 @@
         </tr>
       </table>
 
-      <!-- ===== 出院诊断 ===== -->
-      <table class="fp-tbl" v-if="diagnosisRows.length">
+      <!-- ===== 出院诊断（双列布局） ===== -->
+      <table class="fp-tbl">
         <tr class="hd-row">
-          <td style="width:30%">出院诊断</td>
-          <td style="width:15%">疾病编码</td>
-          <td style="width:10%">入院病情</td>
-          <td style="width:10%">出院情况</td>
+          <td style="width:25%">出院诊断</td>
+          <td style="width:10%">疾病编码</td>
+          <td style="width:8%">入院<br/>病情</td>
+          <td style="width:25%">出院诊断</td>
+          <td style="width:10%">疾病编码</td>
+          <td style="width:8%">入院<br/>病情</td>
         </tr>
-        <tr v-for="(dd, i) in paddedDiagnoses" :key="'d'+i" class="data-row">
-          <td>{{ i === 0 ? '主要诊断: ' : (dd.diagnosis_name ? '其他诊断: ' : '') }}{{ dd.diagnosis_name || '' }}</td>
-          <td class="center mono">{{ dd.diagnosis_code || '' }}</td>
-          <td class="center">{{ dd.admission_condition || '' }}</td>
-          <td class="center"></td>
+        <tr v-for="(row, i) in diagnosisPairedRows" :key="'d'+i" class="data-row">
+          <!-- 左列 -->
+          <td>{{ row.left.label }}{{ row.left.name }}</td>
+          <td class="center mono">{{ row.left.code }}</td>
+          <td class="center">{{ row.left.condition }}</td>
+          <!-- 右列 -->
+          <td>{{ row.right.label }}{{ row.right.name }}</td>
+          <td class="center mono">{{ row.right.code }}</td>
+          <td class="center">{{ row.right.condition }}</td>
+        </tr>
+        <tr>
+          <td colspan="3">入院病情：1.有，2.临床未确定，3.情况不明，4.无</td>
+          <td colspan="3"></td>
         </tr>
       </table>
 
@@ -422,12 +432,33 @@ const mainDiag = computed(() => {
   return list.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(list, null)
 })
 
-/** 诊断表格（至少 6 行） */
-const paddedDiagnoses = computed(() => {
-  const list = [...diagnosisRows.value]
-  const minRows = Math.max(6, list.length + 1)
-  while (list.length < minRows) list.push({ diagnosis_name: '', diagnosis_code: '', admission_condition: '' })
-  return list
+/** 诊断表格（双列布局：左列10行，右列10行，共20个诊断位） */
+const diagnosisPairedRows = computed(() => {
+  const allDiags = [...diagnosisRows.value]
+  const ROWS_PER_COL = 10
+  // 填充到至少 ROWS_PER_COL * 2 行
+  while (allDiags.length < ROWS_PER_COL * 2) {
+    allDiags.push({ diagnosis_name: '', diagnosis_code: '', admission_condition: '' })
+  }
+  const leftCol = allDiags.slice(0, ROWS_PER_COL)
+  const rightCol = allDiags.slice(ROWS_PER_COL, ROWS_PER_COL * 2)
+  return leftCol.map((leftItem, idx) => {
+    const rightItem = rightCol[idx] || { diagnosis_name: '', diagnosis_code: '', admission_condition: '' }
+    return {
+      left: {
+        label: idx === 0 ? '主要诊断：' : (leftItem.diagnosis_name ? '其他诊断：' : ''),
+        name: leftItem.diagnosis_name || '',
+        code: leftItem.diagnosis_code || '',
+        condition: leftItem.admission_condition || ''
+      },
+      right: {
+        label: idx === 0 ? '其他诊断：' : (rightItem.diagnosis_name ? '' : ''),
+        name: rightItem.diagnosis_name || '',
+        code: rightItem.diagnosis_code || '',
+        condition: rightItem.admission_condition || ''
+      }
+    }
+  })
 })
 
 /** 手术表格（至少 4 行） */
