@@ -461,7 +461,7 @@ const diagnosisPairedRows = computed(() => {
   })
 })
 
-/** 手术表格（至少 4 行） */
+/** 手术表格（至少 8 行） */
 const paddedSurgeries = computed(() => {
   const surgeries: any[] = Array.isArray(props.data?.surgeries) ? props.data.surgeries : []
   const rows = surgeries.map((s: any) => ({
@@ -472,7 +472,7 @@ const paddedSurgeries = computed(() => {
     healing: s?.surgical_incisionheal_level || '',
     anesthesia: s?.anesthesia_method || '',
   }))
-  const minRows = Math.max(4, rows.length + 1)
+  const minRows = Math.max(8, rows.length + 1)
   while (rows.length < minRows) rows.push({ text: '', code: '', date: '', level: '', healing: '', anesthesia: '' })
   return rows
 })
