@@ -15,6 +15,14 @@ import { supabase } from '@/lib/supabase'
 import { dynamicPromptGenerator } from './dynamic-prompt-generator'
 import { intelligentQCCache } from './intelligent-cache'
 
+interface GeneratedNotificationContent {
+  title: string
+  content: string
+  summary?: string
+  priority: MessagePriority
+  actions?: MessageAction[]
+}
+
 // 智能消息生成服务
 class IntelligentMessageGenerator {
   async generateSmartNotification(
@@ -38,12 +46,12 @@ class IntelligentMessageGenerator {
           llm_prompt_template: this.buildNotificationPrompt(type, recipientType, relatedData, context)
         }
       } as any, { patientId: relatedData.patient_id || 'unknown',
-        documents: context?.documents || [],
+        documents: Array.isArray(context?.documents) ? context.documents : [],
         executionId: 'notification-gen'
       })
 
       // 解析生成的内容
-      const generatedContent = await this.parseGeneratedContent(prompt.userPrompt, type)
+      const generatedContent = await this.parseGeneratedContent(prompt.userPrompt, type) as GeneratedNotificationContent
       
       return {
         type,
@@ -199,7 +207,7 @@ class IntelligentMessageGenerator {
   }
 
   private getDefaultActions(type: MessageType): MessageAction[] {
-    const actionMap: Record<MessageType, MessageAction[]> = {
+    const actionMap: Partial<Record<MessageType, MessageAction[]>> = {
       'rectification_required': [
         {
           id: 'view_defects',
@@ -439,9 +447,9 @@ export class NotificationService {
     
     // 尝试从缓存获取
     const cacheKey = `user_notifications_${userId}_${JSON.stringify(options || {})}`
-    const cached = await intelligentQCCache.getCachedResult(cacheKey)
+    const cached = await intelligentQCCache.getCachedResult<QCNotification[]>(cacheKey)
     
-    if (cached) {
+    if (Array.isArray(cached)) {
       return cached
     }
 

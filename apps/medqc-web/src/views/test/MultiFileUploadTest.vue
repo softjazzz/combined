@@ -99,6 +99,24 @@ interface UploadedFile {
   uploadTime: string
 }
 
+interface UploadFileItem {
+  originFileObj?: File
+  name?: string
+  size?: number
+}
+
+interface UploadChangeInfo {
+  fileList?: UploadFileItem[]
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 // 响应式数据
 const uploadedFiles = ref<UploadedFile[]>([])
 const debugLog = ref<string[]>([])
@@ -157,7 +175,7 @@ const beforeUpload = (file: File) => {
 }
 
 // 处理文件上传变化
-const handleUploadChange = (info: unknown) => {
+const handleUploadChange = (info: UploadChangeInfo) => {
   addDebugLog(`handleUploadChange 被调用，文件数量: ${info.fileList?.length || 0}`)
   
   const { fileList } = info
@@ -168,8 +186,8 @@ const handleUploadChange = (info: unknown) => {
   }
   
   // 处理新添加的文件
-  fileList.forEach((fileItem: unknown, index: number) => {
-    const file = fileItem.originFileObj || fileItem
+  fileList.forEach((fileItem: UploadFileItem, index: number) => {
+    const file = fileItem.originFileObj
     
     if (!file) {
       addDebugLog(`文件项 ${index} 没有文件对象`)
@@ -207,7 +225,7 @@ const addFileToList = (file: File) => {
     message.success(`文件 ${file.name} 上传成功`)
 
   } catch (error: unknown) {
-    addDebugLog(`文件处理失败: ${file.name} - ${error.message}`)
+    addDebugLog(`文件处理失败: ${file.name} - ${getErrorMessage(error)}`)
     message.error(`文件处理失败: ${file.name}`)
   }
 }

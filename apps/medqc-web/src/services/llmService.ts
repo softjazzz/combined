@@ -604,7 +604,7 @@ export class LLMService {
   // 安全获取环境变量
   private safeEnv(key: string): string | undefined {
     try {
-      const g: unknown = (globalThis as any)
+      const g: any = (globalThis as any)
       if (g && g.import && g.import.meta && g.import.meta.env) return g.import.meta.env[key]
       if (typeof process !== 'undefined' && (process as any).env) return (process as any).env[key]
       return undefined
@@ -804,7 +804,7 @@ export class LLMService {
     return `${sys}\n${rules}\n窗口文本：\n${windowText}\n\n${format}`
   }
 
-  private parsePointerItems(resp: unknown): unknown[] {
+  private parsePointerItems(resp: any): any[] {
     try {
       const txt = resp?.content || ''
       const start = txt.indexOf('[')
@@ -1425,7 +1425,7 @@ ${text.substring(0, 500)}...
   /**
    * 调用LLM API - 支持真实API和模拟模式
    */
-  private async callLLMAPI(prompt: string): Promise<unknown> {
+  private async callLLMAPI(prompt: string): Promise<any> {
     // 如果没有配置API密钥，使用模拟模式
     if (!this.apiKey || this.apiKey === '') {
       console.warn('未配置API密钥，使用模拟模式')
@@ -1445,7 +1445,7 @@ ${text.substring(0, 500)}...
   /**
    * 调用真实的LLM API
    */
-  private async callRealAPI(prompt: string): Promise<unknown> {
+  private async callRealAPI(prompt: string): Promise<any> {
     // 通过后端代理调用，避免浏览器直连厂商引发CORS
     const requestBody = this.buildAPIRequest(prompt)
 
@@ -1556,7 +1556,7 @@ ${text.substring(0, 500)}...
   /**
    * 解析API响应 - 支持多种API格式
    */
-  private parseAPIResponse(data: unknown): unknown {
+  private parseAPIResponse(data: any): any {
     let content = ''
     let tokensUsed = 0
 
@@ -1585,7 +1585,7 @@ ${text.substring(0, 500)}...
   /**
    * 模拟响应数据
    */
-  private async getMockResponse(): Promise<unknown> {
+  private async getMockResponse(): Promise<any> {
     // 模拟API调用延迟
     await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000))
 
@@ -1621,7 +1621,7 @@ ${text.substring(0, 500)}...
   /**
    * 解析LLM响应 - 智能处理各种JSON格式
    */
-  private parseResponse(response: unknown): ExtractedMedicalData {
+  private parseResponse(response: any): ExtractedMedicalData {
     try {
       // 尝试直接解析JSON
       const data = JSON.parse(response.content)
@@ -1669,7 +1669,7 @@ ${text.substring(0, 500)}...
   /**
    * 解析分类响应
    */
-  private parseClassificationResponse(response: unknown): {
+  private parseClassificationResponse(response: any): {
     type: DocumentType
     confidence: number
     title?: string
@@ -1693,7 +1693,7 @@ ${text.substring(0, 500)}...
    * 归一化类型并优先修正影像检查类型
    */
   private normalizeAndCorrectDocumentTypes(docs: ExtractedDocument[], fullText: string): ExtractedDocument[] {
-    const lc = (s: unknown) => String(s || '').toLowerCase()
+    const lc = (s: any) => String(s || '').toLowerCase()
 
     // 严格的标题模式（仅当标题匹配时才重分类，避免内容提及误命中）
     const imagingTitleRe = /(ct|mri|核磁|磁共振|计算机断层扫描|cta|mra|dr)[^\n]{0,15}(检查(报告|记录|单)?|扫描(报告|记录|单)?|影像(报告|所见)?)/i
@@ -2184,7 +2184,7 @@ ${text.substring(0, 500)}...
   /**
    * 调用支持文件上传的LLM API
    */
-  private async callLLMAPIWithFile(prompt: string, file: File): Promise<unknown> {
+  private async callLLMAPIWithFile(prompt: string, file: File): Promise<any> {
     try {
       // 构建FormData
       const formData = new FormData()

@@ -240,7 +240,8 @@ import {
 import type { 
   QCNotification, 
   MessageType, 
-  MessageAction 
+  MessageAction,
+  RecipientType
 } from '@/types/audit-module'
 
 import { useAuthStore } from '@/stores/auth'
@@ -505,11 +506,18 @@ const handleActionExecuted = () => {
   loadMessages()
 }
 
+const resolveRecipientType = (): RecipientType => {
+  const roles = authStore.user?.roles || []
+  if (roles.includes('admin')) return 'admin'
+  if (roles.includes('reviewer')) return 'reviewer'
+  return 'clinician'
+}
+
 // 实时消息监听
 const setupRealTimeListener = () => {
   // 监听新消息事件
-  window.addEventListener('new-notification', (event) => {
-    const newNotification = event.detail as QCNotification
+  window.addEventListener('new-notification', (event: Event) => {
+    const newNotification = (event as CustomEvent<QCNotification>).detail
     messages.value.unshift(newNotification)
     
     // 显示通知提示
@@ -522,8 +530,8 @@ const setupRealTimeListener = () => {
   })
   
   // 监听消息更新事件
-  window.addEventListener('notification-updated',  (event: unknown) => {
-    const updatedNotification = event.detail as QCNotification
+  window.addEventListener('notification-updated', (event: Event) => {
+    const updatedNotification = (event as CustomEvent<QCNotification>).detail
     const index = messages.value.findIndex(m => m.id === updatedNotification.id)
     if (index !== -1) {
       messages.value[index] = updatedNotification
@@ -544,7 +552,7 @@ onMounted(async () => {
   // 初始化实时通信
   await notificationService.initializeRealTime(
     authStore.user.id,
-    authStore.user.type
+    resolveRecipientType()
   )
 })
 

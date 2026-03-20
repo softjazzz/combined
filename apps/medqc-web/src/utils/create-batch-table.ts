@@ -181,9 +181,9 @@ export async function testTableAccess() {
 
 // 将函数暴露到全局对象，方便在控制台调用
 if (typeof window !== 'undefined') {
-  (window as any).createBatchTable = createBatchTable
-  (window as any).createTestData = createTestData
-  (window as any).testTableAccess = testTableAccess
+  ;(window as any).createBatchTable = createBatchTable
+  ;(window as any).createTestData = createTestData
+  ;(window as any).testTableAccess = testTableAccess
   console.log('🛠️ 批量表创建工具已加载')
   console.log('📝 在控制台中调用：')
   console.log('   window.createBatchTable() - 检查表并显示创建SQL')

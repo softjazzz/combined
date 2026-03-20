@@ -1,70 +1,80 @@
-<template>
-  <div class="space-y-6">
+﻿<template>
+  <div class="coding-rules-tab space-y-6">
 
     <!-- 一体化数据看板 -->
-    <div class="bg-white rounded-xl border border-slate-200 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col md:flex-row overflow-hidden min-h-[140px]">
+    <div class="bg-white rounded-[20px] border border-[#dce6f5] shadow-[0_6px_20px_rgba(24,58,120,0.06)] flex flex-col md:flex-row overflow-hidden">
       
       <!-- 规则大盘总览 -->
-      <div class="flex-1 p-6 md:p-8 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col justify-between">
-        <div class="flex items-center gap-1.5 text-[12px] font-bold text-slate-400 mb-6 uppercase tracking-wider">
+      <div class="flex-1 p-6 border-b md:border-b-0 md:border-r border-slate-100 min-h-[232px] flex flex-col">
+        <div class="flex items-center justify-between gap-3 h-12">
+          <div class="flex items-center gap-2 text-[13px] font-semibold text-slate-500">
           <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-          规则大盘总览
-        </div>
-        <div class="flex items-end gap-10">
-          <div class="flex flex-col">
-            <span class="text-[36px] font-bold text-slate-800 leading-none tracking-tight mb-2">{{ statistics.total_types }}</span>
-            <span class="text-[12px] font-medium text-slate-400">规则大类</span>
+          <span>规则总览</span>
           </div>
-          <div class="flex flex-col">
-            <div class="flex items-end gap-1 mb-2">
-              <span class="text-[36px] font-bold text-slate-800 leading-none tracking-tight">{{ formatNumberSplit(statistics.total_rule_count)[0] }}</span>
-              <span class="text-[14px] font-bold text-slate-400 mb-[3px]">{{ formatNumberSplit(statistics.total_rule_count)[1] }}</span>
+          <span class="h-[34px] px-3 inline-flex items-center rounded-full border border-[#dce6f5] bg-[#eef4ff] text-[#2f6bff] text-[13px] font-semibold">{{ formatNumberCount(statistics.total_rule_count) }} 条</span>
+        </div>
+        <div class="mt-2 text-[22px] leading-[30px] font-bold text-[#0f1f44]">编码质控</div>
+        <div class="mt-5 grid grid-cols-2 gap-10">
+          <div>
+            <div class="flex items-end gap-1">
+              <span class="text-[52px] leading-[52px] font-bold text-[#0f1f44]">{{ formatNumberSplit(statistics.total_rule_count)[0] }}</span>
+              <span class="text-[24px] leading-6 font-bold text-[#5f7396]">{{ formatNumberSplit(statistics.total_rule_count)[1] }}</span>
             </div>
-            <span class="text-[12px] font-medium text-slate-400">覆盖条目</span>
+            <div class="mt-2 text-[15px] leading-[22px] text-[#5f7396]">规则总数</div>
+          </div>
+          <div>
+            <div class="text-[52px] leading-[52px] font-bold text-[#0f1f44]">{{ statistics.total_types }}</div>
+            <div class="mt-2 text-[15px] leading-[22px] text-[#5f7396]">分类数</div>
+          </div>
+        </div>
+        <div class="mt-auto pt-4 text-[13px] leading-5 text-[#8fa2c2]">统一查看编码规则总量与分类覆盖情况。</div>
+      </div>
+
+      <!-- 严重度分布 -->
+      <div class="flex-1 p-6 border-b md:border-b-0 md:border-r border-slate-100 min-h-[232px] flex flex-col">
+        <div class="h-12 flex items-center text-[13px] font-semibold text-slate-500">严重度分布</div>
+        <div class="space-y-4 mt-2">
+          <div>
+            <div class="flex justify-between items-center text-[13px] text-slate-600 mb-1.5">
+              <span>严重</span>
+              <strong class="text-[16px] text-slate-800">{{ statistics.severity_counts?.error || 0 }}</strong>
+            </div>
+            <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full bg-rose-500 rounded-full transition-all duration-700" :style="{ width: severityPercent('error') }"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between items-center text-[13px] text-slate-600 mb-1.5">
+              <span>警告</span>
+              <strong class="text-[16px] text-slate-800">{{ statistics.severity_counts?.warning || 0 }}</strong>
+            </div>
+            <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full bg-amber-400 rounded-full transition-all duration-700" :style="{ width: severityPercent('warning') }"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between items-center text-[13px] text-slate-600 mb-1.5">
+              <span>提示</span>
+              <strong class="text-[16px] text-slate-800">{{ statistics.severity_counts?.info || 0 }}</strong>
+            </div>
+            <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full bg-slate-400 rounded-full transition-all duration-700" :style="{ width: severityPercent('info') }"></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- 拦截严重度 -->
-      <div class="flex-1 p-6 md:p-8 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col justify-between">
-        <div class="text-[12px] font-bold text-slate-400 mb-6 uppercase tracking-wider">拦截严重度</div>
-        <div class="space-y-4 w-full">
-          <div>
-            <div class="flex justify-between items-center mb-1.5">
-              <span class="text-[12px] text-slate-500 font-medium">阻断 (Error)</span>
-              <span class="text-[14px] font-bold text-slate-700">{{ statistics.severity_counts?.error || 0 }}</span>
-            </div>
-            <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-rose-500 rounded-full transition-all duration-1000" :style="{ width: severityPercent('error') }"></div>
-            </div>
-          </div>
-          <div>
-            <div class="flex justify-between items-center mb-1.5">
-              <span class="text-[12px] text-slate-500 font-medium">警告 (Warning)</span>
-              <span class="text-[14px] font-bold text-slate-700">{{ statistics.severity_counts?.warning || 0 }}</span>
-            </div>
-            <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-amber-400 rounded-full transition-all duration-1000" :style="{ width: severityPercent('warning') }"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 执行引擎分布 -->
-      <div class="flex-1 p-6 md:p-8 flex flex-col justify-between">
-        <div class="text-[12px] font-bold text-slate-400 mb-6 uppercase tracking-wider">执行引擎分布</div>
-        <div class="flex items-end gap-10">
+      <!-- 来源结构 -->
+      <div class="flex-1 p-6 min-h-[232px] flex flex-col">
+        <div class="h-12 flex items-center text-[13px] font-semibold text-slate-500">来源分布</div>
+        <div class="mt-2 grid grid-cols-2 gap-x-8 gap-y-4">
           <div class="flex flex-col">
-            <span class="text-[36px] font-bold text-slate-800 leading-none tracking-tight mb-2">{{ statistics.source_counts?.rule_engine || 0 }}</span>
-            <div class="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-              <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span> 常规引擎
-            </div>
+            <span class="text-[34px] leading-none font-bold text-[#0f1f44]">{{ statistics.source_counts?.rule_engine || 0 }}</span>
+            <div class="mt-2 text-[13px] text-[#5f7396]">规则引擎</div>
           </div>
           <div class="flex flex-col">
-            <span class="text-[36px] font-bold text-slate-800 leading-none tracking-tight mb-2">{{ statistics.source_counts?.ai_review || 0 }}</span>
-            <div class="flex items-center gap-1.5 text-[12px] font-bold text-indigo-600">
-              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.4)]"></span> AI 语义审查
-            </div>
+            <span class="text-[34px] leading-none font-bold text-[#0f1f44]">{{ statistics.source_counts?.ai_review || 0 }}</span>
+            <div class="mt-2 text-[13px] text-[#5f7396]">AI 审核</div>
           </div>
         </div>
       </div>
@@ -72,45 +82,57 @@
     </div>
 
     <!-- 聚合列表容器 -->
-    <div class="bg-white border border-slate-200 rounded-xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
+    <section class="table-shell">
       
       <!-- 头部操作栏 -->
-      <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-white">
-        <div class="relative w-full md:w-80">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-          <input 
-            v-model="searchText"
-            @input="handleSearch"
-            type="text" 
-            placeholder="搜索规则编号、名称、描述..." 
-            class="w-full pl-9 pr-3 py-1.5 text-[13px] border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-slate-400"
-          >
-        </div>
-        <div class="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-          <select v-model="filterCategory" @change="fetchRules" class="py-1.5 pl-3 pr-8 text-[13px] border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-slate-600 appearance-none shadow-sm cursor-pointer min-w-[120px]">
-            <option :value="undefined">规则分类</option>
+      <div class="table-toolbar">
+        <label class="field field-search">
+          <div class="search-box">
+            <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              v-model="searchText"
+              @input="handleSearch"
+              type="text"
+              placeholder="搜索规则编号、名称、字段或说明"
+            >
+          </div>
+        </label>
+
+        <label class="field">
+          <select v-model="filterCategory" @change="fetchRules">
+            <option :value="undefined">全部分类</option>
             <option v-for="cat in categoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
           </select>
-          <select v-model="filterSeverity" @change="fetchRules" class="py-1.5 pl-3 pr-8 text-[13px] border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-slate-600 appearance-none shadow-sm cursor-pointer min-w-[110px]">
-            <option :value="undefined">严重程度</option>
-            <option value="error">阻断</option>
+        </label>
+
+        <label class="field">
+          <select v-model="filterSeverity" @change="fetchRules">
+            <option :value="undefined">全部严重度</option>
+            <option value="error">严重</option>
             <option value="warning">警告</option>
             <option value="info">提示</option>
           </select>
-          <div class="hidden md:block w-px h-4 bg-slate-200"></div>
-          <button @click="fetchRules" class="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-50 text-[13px] font-medium rounded-lg transition-colors cursor-pointer shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> 刷新
+        </label>
+
+        <div class="toolbar-actions">
+          <button @click="fetchRules" class="refresh-btn">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            刷新
           </button>
         </div>
       </div>
 
       <!-- 数据表格 -->
-      <div class="overflow-x-auto relative min-h-[400px]">
+      <div class="table-scroll">
         <div v-if="loading" class="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex items-center justify-center">
           <a-spin />
         </div>
-        <table class="w-full text-left border-collapse min-w-[1000px]">
-          <thead class="bg-slate-50 border-b border-slate-200 text-[12px] font-semibold text-slate-500 uppercase tracking-wider">
+        <table class="rules-table">
+          <thead>
             <tr>
               <th class="px-5 py-3 w-20">编号</th>
               <th class="px-5 py-3 w-[28%]">规则名称</th>
@@ -123,9 +145,9 @@
           </thead>
           <tbody class="divide-y divide-slate-100 text-[13px] text-slate-700">
             
-            <tr v-for="record in filteredRules" :key="record.rule_id" @click="editRule(record)" class="hover:bg-slate-50/60 transition-colors cursor-pointer">
+            <tr v-for="record in filteredRules" :key="record.rule_id" @click="editRule(record)" class="rule-row">
               <td class="px-5 py-4 align-top">
-                <span class="font-mono text-[12px] text-slate-400 font-medium">{{ record.rule_id }}</span>
+                <span class="code-pill">{{ record.rule_id }}</span>
               </td>
               
               <td class="px-5 py-4 align-top">
@@ -134,11 +156,11 @@
               </td>
               
               <td class="px-5 py-4 align-top">
-                <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[11px] font-medium whitespace-nowrap">{{ record.category_name }}</span>
+                <span class="tag-pill">{{ record.category_name }}</span>
               </td>
               
               <td class="px-5 py-4 align-top">
-                <span :class="getSeverityBgClass(record.severity)" class="px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap">
+                <span :class="getSeverityBgClass(record.severity)" class="tag-pill whitespace-nowrap">
                   {{ getSeverityLabel(record.severity) }}
                 </span>
               </td>
@@ -185,7 +207,7 @@
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
     
     <!-- 规则编辑器抽屉 -->
     <RuleEditorDrawer
@@ -374,7 +396,7 @@ const getSeverityColor = (s: string) => {
 }
 
 const getSeverityLabel = (s: string) => {
-  return { error: '阻断', warning: '警告', info: '提示' }[s] || s
+  return { error: '严重', warning: '警告', info: '提示' }[s] || s
 }
 
 const severityPercent = (s: string) => {
@@ -420,3 +442,177 @@ onMounted(() => {
   fetchRules()
 })
 </script>
+
+<style scoped>
+.coding-rules-tab {
+  width: 100%;
+}
+
+.table-shell {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 252, 0.97));
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.table-toolbar {
+  padding: 16px 18px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  grid-template-columns: 1.4fr repeat(2, minmax(180px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.search-box,
+.field select {
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #fff;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+}
+
+.search-box input,
+.field select {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.search-box input {
+  padding: 0 16px 0 42px;
+}
+
+.field select {
+  padding: 0 14px;
+}
+
+.toolbar-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(191, 219, 254, 0.95);
+  background: linear-gradient(180deg, #fff, #eff6ff);
+  color: #2563eb;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.table-scroll {
+  position: relative;
+  min-height: 420px;
+  overflow: auto;
+}
+
+.rules-table {
+  width: 100%;
+  min-width: 1000px;
+  border-collapse: collapse;
+}
+
+.rules-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+}
+
+.rules-table th {
+  padding: 13px 18px;
+  text-align: left;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rules-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+  color: #334155;
+}
+
+.rule-row {
+  cursor: pointer;
+}
+
+.rule-row:hover {
+  background: #f8fafc;
+}
+
+.code-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 1280px) {
+  .table-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 1024px) {
+  .table-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

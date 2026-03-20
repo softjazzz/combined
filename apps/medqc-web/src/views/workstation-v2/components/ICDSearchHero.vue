@@ -1,94 +1,87 @@
 <template>
-  <div class="relative flex flex-col items-center overflow-hidden border-b border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(246,250,255,0.95)_100%)] pt-7 pb-5 z-20">
-    <div class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.12),transparent_68%)]"></div>
+  <div class="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.99)_0%,rgba(250,252,255,0.98)_100%)] px-6 py-4">
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50/60 px-3 py-1 text-[11px] font-semibold text-blue-700">
+            编码工作台
+          </div>
+          <h1 class="mt-3 text-[22px] font-black tracking-[-0.03em] text-slate-900">
+            ICD 智能检索
+          </h1>
+          <p class="mt-2 max-w-[760px] text-[13px] leading-6 text-slate-500">
+            ICD-10 诊断与 ICD-9 手术编码的检索、目录浏览和回填统一在同一工作台完成。
+          </p>
+        </div>
 
-    <div class="relative z-10 mb-5 flex flex-col items-center text-center">
-      <div class="mb-2 inline-flex items-center gap-1.5 rounded-full border border-sky-100 bg-white/90 px-3 py-1 text-[11px] font-semibold text-sky-700 shadow-[0_8px_20px_rgba(148,163,184,0.10)]">
-        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-        AI 智能编码引擎
-      </div>
-      <h1 class="mb-1 text-[28px] font-black tracking-[-0.03em] text-slate-900">
-        ICD <span class="bg-gradient-to-r from-sky-600 to-cyan-600 bg-clip-text text-transparent">智能全域检索</span>
-      </h1>
-      <p class="text-[13px] font-medium text-slate-500">
-        支持编码、名称极速匹配，精准定位诊断与手术
-      </p>
-    </div>
-
-    <div class="group relative z-10 w-full max-w-3xl px-4">
-      <SearchOutlined class="absolute left-8 top-1/2 z-10 -translate-y-1/2 text-lg text-slate-400 transition-colors group-focus-within:text-sky-600" />
-      <input
-        ref="searchInput"
-        v-model="localQuery"
-        type="text"
-        :placeholder="localType === 'icd10' ? '输入诊断名称或 ICD-10 编码...' : '输入手术名称或 ICD-9 编码...'"
-        class="w-full rounded-[22px] border border-slate-200 bg-white/95 py-3.5 pl-12 pr-16 text-[15px] font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 shadow-[0_14px_30px_rgba(148,163,184,0.10)] focus:border-sky-400 focus:shadow-[0_18px_36px_rgba(14,165,233,0.14)]"
-        @keydown.enter="$emit('search', localQuery)"
-        @input="onQueryChange"
-      />
-      <div class="absolute right-7 top-1/2 flex -translate-y-1/2 gap-1.5">
-        <span v-if="localQuery.length > 0" class="mr-1 text-[12px] font-medium text-slate-400">Enter 搜索</span>
-        <template v-else>
-          <kbd class="rounded-md border border-slate-200/80 bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-slate-400 shadow-sm">Ctrl</kbd>
-          <kbd class="rounded-md border border-slate-200/80 bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-slate-400 shadow-sm">K</kbd>
-        </template>
-      </div>
-    </div>
-
-    <div class="relative z-10 mt-4 flex w-full max-w-3xl flex-wrap items-center justify-center gap-4 px-6">
-      <div class="flex rounded-2xl border border-slate-200/80 bg-white/80 p-1 shadow-[0_8px_22px_rgba(148,163,184,0.08)]">
-        <button
-          v-for="v in versionTabs"
-          :key="v.value"
-          :class="[
-            localVersion === v.value
-              ? 'bg-sky-50 text-sky-700 font-semibold shadow-sm ring-1 ring-sky-100'
-              : 'text-slate-500 hover:text-slate-700 font-semibold',
-            'rounded-lg px-5 py-2 text-sm transition-all duration-200',
-          ]"
-          @click="localVersion = v.value; $emit('update:codeVersion', v.value)"
-        >
-          {{ v.label }}
-        </button>
+        <div class="flex flex-wrap items-center gap-2.5">
+          <span class="metric-pill">
+            <span class="metric-dot"></span>
+            ICD-10
+            <strong>{{ stats.icd10Count?.toLocaleString() || '--' }}</strong>
+          </span>
+          <span class="metric-pill">
+            <span class="metric-dot metric-dot-light"></span>
+            ICD-9
+            <strong>{{ stats.icd9Count?.toLocaleString() || '--' }}</strong>
+          </span>
+        </div>
       </div>
 
-      <div class="h-5 w-px bg-slate-300"></div>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="search-shell">
+          <SearchOutlined class="search-icon" />
+          <input
+            ref="searchInput"
+            v-model="localQuery"
+            type="text"
+            :placeholder="localType === 'icd10' ? '输入诊断名称或 ICD-10 编码...' : '输入手术名称或 ICD-9 编码...'"
+            class="search-input"
+            @keydown.enter="$emit('search', localQuery)"
+            @input="onQueryChange"
+          />
+          <div class="search-hint">
+            <span v-if="localQuery.length > 0">Enter 搜索</span>
+            <template v-else>
+              <kbd>Ctrl</kbd>
+              <kbd>K</kbd>
+            </template>
+          </div>
+        </div>
 
-      <div class="flex rounded-2xl border border-slate-200/80 bg-white/80 p-1 shadow-[0_8px_22px_rgba(148,163,184,0.08)]">
-        <button
-          v-for="t in codeTypeTabs"
-          :key="t.value"
-          :class="[
-            localType === t.value
-              ? 'bg-sky-50 text-sky-700 font-semibold shadow-sm ring-1 ring-sky-100'
-              : 'text-slate-500 hover:text-slate-700 font-semibold',
-            'rounded-lg px-5 py-2 text-sm transition-all duration-200',
-          ]"
-          @click="localType = t.value; $emit('update:codeType', t.value)"
-        >
-          {{ t.label }}
-        </button>
+        <div class="seg-shell">
+          <button
+            v-for="v in versionTabs"
+            :key="v.value"
+            :class="['seg-btn', localVersion === v.value ? 'seg-btn-active' : '']"
+            @click="localVersion = v.value; $emit('update:codeVersion', v.value)"
+          >
+            {{ v.label }}
+          </button>
+        </div>
+
+        <div class="seg-shell">
+          <button
+            v-for="t in codeTypeTabs"
+            :key="t.value"
+            :class="['seg-btn', localType === t.value ? 'seg-btn-active' : '']"
+            @click="localType = t.value; $emit('update:codeType', t.value)"
+          >
+            {{ t.label }}
+          </button>
+        </div>
+
+        <div class="help-pill">
+          <span class="help-pill__label">提示</span>
+          <span>输入 2 个字符后自动搜索，也支持按章节逐级浏览</span>
+        </div>
       </div>
-    </div>
-
-    <div class="relative z-10 mt-3 flex items-center justify-center gap-6 text-sm font-semibold text-slate-500">
-      <span class="flex items-center gap-2">
-        <span class="h-2.5 w-2.5 rounded-full bg-sky-500"></span>
-        ICD-10 诊断 <strong class="text-slate-700">{{ stats.icd10Count?.toLocaleString() || '--' }}</strong>
-      </span>
-      <span class="h-4 w-px bg-slate-300"></span>
-      <span class="flex items-center gap-2">
-        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-        ICD-9 手术 <strong class="text-slate-700">{{ stats.icd9Count?.toLocaleString() || '--' }}</strong>
-      </span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 
 const props = defineProps<{
@@ -120,14 +113,19 @@ const codeTypeTabs = [
   { label: '手术操作 (ICD-9)', value: 'icd9cm3' },
 ]
 
-onMounted(() => {
-  const handler = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault()
-      searchInput.value?.focus()
-    }
+const handleShortcut = (e: KeyboardEvent) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchInput.value?.focus()
   }
-  window.addEventListener('keydown', handler)
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleShortcut)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleShortcut)
 })
 
 watch(() => props.codeVersion, (v) => { localVersion.value = v })
@@ -142,6 +140,151 @@ function onQueryChange() {
     if (localQuery.value.length >= 2) {
       emit('search', localQuery.value)
     }
-  }, 300)
+  }, 280)
 }
 </script>
+
+<style scoped>
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.95);
+  background: rgba(239, 246, 255, 0.9);
+  padding: 8px 12px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
+}
+
+.metric-pill strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.metric-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.metric-dot-light {
+  background: #60a5fa;
+}
+
+.search-shell {
+  position: relative;
+  flex: 1 1 320px;
+  min-width: 280px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  color: #94a3b8;
+  transform: translateY(-50%);
+}
+
+.search-input {
+  width: 100%;
+  height: 46px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0 98px 0 46px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
+  transition: all 0.18s ease;
+}
+
+.search-input:focus {
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.12);
+}
+
+.search-hint {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-hint kbd {
+  border-radius: 6px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: #f8fafc;
+  padding: 3px 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.seg-shell {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
+}
+
+.seg-btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 14px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.18s ease;
+}
+
+.seg-btn:hover {
+  color: #334155;
+}
+
+.seg-btn-active {
+  background: linear-gradient(180deg, #eff6ff, #dbeafe);
+  color: #1d4ed8;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
+}
+
+.help-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(248, 250, 252, 0.92);
+  padding: 9px 12px;
+  color: #64748b;
+  font-size: 12px;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
+}
+
+.help-pill__label {
+  color: #334155;
+  font-weight: 800;
+}
+
+@media (max-width: 960px) {
+  .search-shell {
+    flex-basis: 100%;
+  }
+}
+</style>

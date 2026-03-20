@@ -3,7 +3,7 @@
  * 只保留认证和工具类API，数据操作直接使用Supabase
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import type {
   ApiResponse,
@@ -69,6 +69,13 @@ apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
   }
 )
 
+const extractAxiosErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError(error)) {
+    return error.response?.data?.detail || error.message || fallback
+  }
+  return error instanceof Error ? error.message : fallback
+}
+
 // 响应拦截器
 apiClient.interceptors.response.use((response: AxiosResponse) => {
   console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
@@ -78,13 +85,14 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
   return response
 },
   (error: unknown) => {
-    console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-      status: error.response?.status,
-      message: error.response?.data?.detail || error.message
+    const axiosError = axios.isAxiosError(error) ? error : null
+    console.error(`❌ API Error: ${axiosError?.config?.method?.toUpperCase()} ${axiosError?.config?.url}`, {
+      status: axiosError?.response?.status,
+      message: extractAxiosErrorMessage(error, '请求失败')
     })
 
     // 处理401错误
-    if (error.response?.status === 401) {
+    if (axiosError?.response?.status === 401) {
       TokenManager.clearTokens()
       message.error('登录已过期，请重新登录')
       // 可以在这里触发重定向到登录页面
@@ -124,7 +132,7 @@ export class SimplifiedApiService {
       return {
         success: false,
         error: {
-          message: error.response?.data?.detail || '登录失败'
+          message: extractAxiosErrorMessage(error, '登录失败')
         }
       }
     }
@@ -144,7 +152,7 @@ export class SimplifiedApiService {
       return {
         success: false,
         error: {
-          message: error.response?.data?.detail || '获取用户信息失败'
+          message: extractAxiosErrorMessage(error, '获取用户信息失败')
         }
       }
     }
@@ -187,7 +195,7 @@ export class SimplifiedApiService {
       return {
         success: false,
         error: {
-          message: error.response?.data?.detail || '健康检查失败'
+          message: extractAxiosErrorMessage(error, '健康检查失败')
         }
       }
     }
@@ -216,7 +224,7 @@ export class SimplifiedApiService {
       return {
         success: false,
         error: {
-          message: error.response?.data?.detail || '分析失败'
+          message: extractAxiosErrorMessage(error, '分析失败')
         }
       }
     }
@@ -245,7 +253,7 @@ export class SimplifiedApiService {
       return {
         success: false,
         error: {
-          message: error.response?.data?.detail || '文件上传失败'
+          message: extractAxiosErrorMessage(error, '文件上传失败')
         }
       }
     }
@@ -266,7 +274,7 @@ export class SimplifiedApiService {
       return {
         success: false,
         error: {
-          message: error.response?.data?.detail || '获取规则失败'
+          message: extractAxiosErrorMessage(error, '获取规则失败')
         }
       }
     }

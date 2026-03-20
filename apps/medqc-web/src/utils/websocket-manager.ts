@@ -36,6 +36,14 @@ interface ConnectionStats {
   uptime: number
 }
 
+interface RealtimeChannelLike {
+  on(
+    event: string,
+    filterOrCallback: unknown,
+    callback?: (payload: unknown) => void
+  ): RealtimeChannelLike
+}
+
 export class WebSocketManager {
   private connections: Map<string, any> = new Map()
   private messageQueue: Map<string, WebSocketMessage[]> = new Map()
@@ -119,7 +127,7 @@ export class WebSocketManager {
    * 设置连接事件监听
    */
   private setupConnectionEvents(
-    channel: unknown,
+    channel: RealtimeChannelLike,
     channelName: string,
     config: ConnectionConfig
   ) {
@@ -128,7 +136,7 @@ export class WebSocketManager {
       this.handleMessage(channelName, {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'postgres_changes',
-        payload,
+        payload: (payload as Record<string, unknown>),
         timestamp: Date.now(),
         priority: this.determinePriority(payload)
       })
@@ -139,7 +147,7 @@ export class WebSocketManager {
       this.handleMessage(channelName, {
         id: `qc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'realtime_qc_event',
-        payload,
+        payload: (payload as Record<string, unknown>),
         timestamp: Date.now(),
         priority: 'high'
       })
@@ -147,7 +155,15 @@ export class WebSocketManager {
 
     // 监听心跳响应
     channel.on('heartbeat_response',  (payload: unknown) => {
-      this.updateHeartbeat(channelName, payload.timestamp)
+      const timestamp = (
+        typeof payload === 'object' &&
+        payload !== null &&
+        'timestamp' in payload &&
+        typeof (payload as { timestamp: unknown }).timestamp === 'number'
+      )
+        ? (payload as { timestamp: number }).timestamp
+        : Date.now()
+      this.updateHeartbeat(channelName, timestamp)
     })
   }
 

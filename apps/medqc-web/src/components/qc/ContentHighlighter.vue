@@ -214,7 +214,7 @@ const highlightedContent = computed(() => {
   }> = []
 
   // 模拟问题位置检测（实际应用中应该由后端提供精确位置）
-  visibleHighlights.value.forEach((issue: unknown,  index: unknown) => {
+  visibleHighlights.value.forEach((issue: QCIssue) => {
     const keywords = extractKeywords(issue.description, issue.location)
     
     keywords.forEach(keyword => {
@@ -236,7 +236,7 @@ const highlightedContent = computed(() => {
   highlights.sort((a, b) => b.start - a.start)
 
   // 应用高亮
-  highlights.forEach((highlight: unknown,  index: unknown) => {
+  highlights.forEach((highlight, index: number) => {
     const className = `highlight-${highlight.issue.severity}`
     const dataAttrs = `data-issue-id="${highlight.issue.id}" data-highlight-index="${index}"`
     const highlightHtml = `<span class="${className} highlight-text" ${dataAttrs}>${highlight.text}</span>`
@@ -281,8 +281,8 @@ const setupHighlightEvents = () => {
   
   const highlightElements = contentRef.value.querySelectorAll('.highlight-text')
   
-  highlightElements.forEach((element, index) => {
-    element.addEventListener('mouseenter',  (e: unknown) => {
+  highlightElements.forEach((element) => {
+    element.addEventListener('mouseenter', (e: Event) => {
       const issueId = (e.target as HTMLElement).getAttribute('data-issue-id')
       const issue = props.issues.find(i => i.id === issueId)
       
@@ -296,7 +296,7 @@ const setupHighlightEvents = () => {
       selectedIssue.value = null
     })
     
-    element.addEventListener('click',  (e) => {
+    element.addEventListener('click', (e: Event) => {
       const issueId = (e.target as HTMLElement).getAttribute('data-issue-id')
       const issue = props.issues.find(i => i.id === issueId)
       
@@ -392,7 +392,7 @@ const getSeverityCount = (severity: string) => {
 }
 
 // 监听 activeIssue 变化
-watch(() => props.activeIssue, (newIssue: unknown) => {
+watch(() => props.activeIssue, (newIssue: QCIssue | null | undefined) => {
   if (newIssue) {
     const index = visibleHighlights.value.findIndex(issue => issue.id === newIssue.id)
     if (index !== -1) {

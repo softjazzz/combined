@@ -131,9 +131,9 @@ async function checkBatchMonitor() {
 
 // 暴露到全局对象
 if (typeof window !== 'undefined') {
-  (window as any).testBatchTable = testBatchTable
-  (window as any).testBatchUpload = testBatchUpload
-  (window as any).checkBatchMonitor = checkBatchMonitor
+  ;(window as any).testBatchTable = testBatchTable
+  ;(window as any).testBatchUpload = testBatchUpload
+  ;(window as any).checkBatchMonitor = checkBatchMonitor
   
   console.log('🧪 控制台测试工具已加载')
   console.log('📝 可用命令：')

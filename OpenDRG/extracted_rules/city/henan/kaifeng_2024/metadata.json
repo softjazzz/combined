@@ -1,0 +1,16 @@
+{
+  "scheme_name": "kaifeng_2024",
+  "label": "开封 2024",
+  "category": "city",
+  "province": "河南",
+  "source_file": "7186.js",
+  "extracted_at": "2026-03-15T18:28:52.919706",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4679,
+    "cc": 16567,
+    "ss_valid": 10246,
+    "adrg": 247,
+    "drg": 788
+  }
+}

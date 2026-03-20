@@ -275,9 +275,26 @@ import {
 import type { QCResult, QCIssue } from '@/types'
 import { structureSuggestions } from '@/utils/suggestionFormatter'
 
+interface RuleResultViewModel {
+  rule_id: string
+  rule_name: string
+  passed: boolean
+  score: number
+  details?: string
+}
+
+type QCResultViewModel = Omit<QCResult, 'issues' | 'suggestions'> & {
+  overall_score?: number
+  overall_grade?: string
+  analysis_date?: string
+  issues: QCIssue[]
+  suggestions: string[]
+  rule_results: RuleResultViewModel[]
+}
+
 // Props
 interface Props {
-  result: QCResult
+  result: QCResultViewModel
 }
 
 const props = defineProps<Props>()

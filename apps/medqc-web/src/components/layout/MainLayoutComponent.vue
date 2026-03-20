@@ -307,7 +307,7 @@
               <div class="bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-48">
                 <div class="px-4 py-3 border-b border-gray-100">
                   <div class="text-sm font-semibold text-gray-800">{{ authStore.userName }}</div>
-                  <div class="text-xs text-gray-500">{{ authStore.email }}</div>
+                  <div class="text-xs text-gray-500">{{ authStore.user?.email || '' }}</div>
                 </div>
 
                 <div class="py-1">
@@ -467,7 +467,7 @@ const forceLogout = () => {
   sessionStorage.clear()
 
   // 重置认证状态
-  authStore.resetState()
+  ;(authStore as unknown as { resetState?: () => void }).resetState?.()
 
   // 强制跳转到登录页
   window.location.href = '/login'
@@ -490,7 +490,10 @@ const handleLogout = async () => {
         })
 
         const signOutPromise = authStore.signOut()
-        const result = await Promise.race([signOutPromise, timeoutPromise])
+        const result = await Promise.race([signOutPromise, timeoutPromise]) as {
+          success?: boolean
+          error?: { message?: string }
+        }
 
         console.log('signOut结果:', result)
         loadingMessage()
@@ -522,7 +525,7 @@ const handleLogout = async () => {
 // 监听路由变化更新选中的菜单
 watch(
   () => route.path,
-  (newPath: unknown) => {
+  (newPath: string) => {
     selectedKeys.value = [newPath]
     // 如果是质控相关路径，展开质控子菜单
     if (newPath.includes('/dashboard/qc')) {

@@ -114,7 +114,7 @@
                     />
                     <a-button
                       type="default"
-                      @click="$refs.debugFileInput && $refs.debugFileInput.click()"
+                      @click="triggerDebugFileSelect"
                       :loading="isParsingFile"
                       :disabled="isParsingFile"
                     >
@@ -503,7 +503,6 @@ import {
 import LLMApiConfigDatabase from '@/components/LLMApiConfigDatabase.vue'
 import { llmService } from '@/services/llmServiceNew'
 import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordService'
-import type { ExtractedMedicalData } from '@/services/llmServiceNew'
 import { llmConfigService, type UserLLMConfig } from '@/services/llmConfigService'
 import { DocumentParser } from '@/utils/documentParser'
 import MedicalDocumentTree from '@/components/MedicalDocumentTree.vue'
@@ -515,6 +514,28 @@ import {
 } from '@/utils/documentTypeUtils'
 
 const router = useRouter()
+
+interface ExtractedDocumentItem {
+  id: string
+  type: string
+  title: string
+  content: string
+  confidence?: number
+  position?: Record<string, unknown>
+}
+
+interface ExtractedMedicalData {
+  recordNumber: string
+  patientName: string
+  patientAge?: number
+  patientGender?: string
+  department: string
+  primaryDiagnosis: string
+  secondaryDiagnosis?: string[]
+  majorSurgery: string
+  documents: ExtractedDocumentItem[]
+  confidence?: number
+}
 
 // 响应式数据
 const currentStep = ref(0)
@@ -540,13 +561,17 @@ const originalFullText = ref('')
 
 // 调试用的数据
 const debugSelectedFile = ref<File | null>(null)
+const debugFileInput = ref<HTMLInputElement | null>(null)
 
 // 抽取的数据
-const extractedData = reactive({
+const extractedData = reactive<ExtractedMedicalData>({
   recordNumber: '',
   patientName: '',
+  patientAge: undefined,
+  patientGender: '',
   department: '',
   primaryDiagnosis: '',
+  secondaryDiagnosis: [],
   majorSurgery: '',
   documents: []
 })
@@ -812,6 +837,10 @@ const handleDebugFileSelect = (event: Event) => {
     uploadedFile.value = file  // 同步到主要的文件变量
     message.success(`已选择文件: ${file.name}`)
   }
+}
+
+const triggerDebugFileSelect = () => {
+  debugFileInput.value?.click()
 }
 
 // 备用文件解析
@@ -1244,8 +1273,8 @@ const handleConfirmImport = async () => {
     try {
       const { createDocumentsBatch } = await import('@/services/medicalDocumentApi')
       const baseText = originalFullText.value || rawText || ''
-      const batch = (extractedMedicalData.documents || []).map((d: unknown, idx: unknown) => {
-        const pos = (d as any).position || {}
+      const batch = (extractedMedicalData.documents || []).map((d: ExtractedDocumentItem, idx: number) => {
+        const pos = d.position || {}
         const si = pos.startIndex
         const ei = pos.endIndex
 

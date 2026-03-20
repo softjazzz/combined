@@ -1,0 +1,16 @@
+{
+  "scheme_name": "beijing_2024",
+  "label": "北京 2024",
+  "category": "municipality",
+  "province": "",
+  "source_file": "7231.js",
+  "extracted_at": "2026-03-15T18:28:47.650025",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9373,
+    "adrg": 251,
+    "drg": 666
+  }
+}

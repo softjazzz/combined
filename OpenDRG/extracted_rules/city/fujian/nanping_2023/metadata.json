@@ -1,0 +1,16 @@
+{
+  "scheme_name": "nanping_2023",
+  "label": "南平 2023",
+  "category": "city",
+  "province": "福建",
+  "source_file": "5723.js",
+  "extracted_at": "2026-03-15T18:28:55.201020",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10251,
+    "adrg": 250,
+    "drg": 770
+  }
+}

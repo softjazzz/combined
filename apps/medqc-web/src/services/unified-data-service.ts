@@ -29,6 +29,18 @@ type MedicalRecordRow = Database['public']['Tables']['medical_records']['Row']
 type MedicalRecordInsert = Database['public']['Tables']['medical_records']['Insert']
 type MedicalRecordUpdate = Database['public']['Tables']['medical_records']['Update']
 
+interface ExtendedSearchParams extends SearchParams {
+  status?: string
+  department?: string
+  page?: number
+  pageSize?: number
+}
+
+interface CachedMedicalRecords {
+  data: MedicalRecord[]
+  count: number
+}
+
 // 统一响应格式
 export interface UnifiedApiResponse<T = any> {
   success: boolean
@@ -75,7 +87,8 @@ class SimpleCache {
 class SecurityUtils {
   // 数据脱敏
   static sanitizePatientData(record: unknown, userRole: string): unknown {
-    const sanitized = { ...record }
+    if (typeof record !== 'object' || record === null) return record
+    const sanitized = { ...(record as Record<string, unknown>) }
     
     // 非管理员用户脱敏处理
     if (userRole !== 'admin') {
@@ -133,13 +146,14 @@ export class UnifiedDataService {
   /**
    * 获取医疗记录列表
    */
-  async getMedicalRecords(params?: SearchParams): Promise<UnifiedApiResponse<MedicalRecord[]>> {
+  async getMedicalRecords(params?: ExtendedSearchParams): Promise<UnifiedApiResponse<MedicalRecord[]>> {
     try {
       // 缓存键
       const cacheKey = `medical_records_${JSON.stringify(params || {})}`
       const cached = this.cache.get(cacheKey)
       if (cached) {
-        return { success: true, data: cached.data, count: cached.count }
+        const cachedRecords = cached as CachedMedicalRecords
+        return { success: true, data: cachedRecords.data, count: cachedRecords.count }
       }
       
       // 构建查询

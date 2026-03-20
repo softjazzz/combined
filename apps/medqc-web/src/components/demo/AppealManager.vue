@@ -244,12 +244,12 @@ const handleViewDetail = (appeal: Appeal) => {
 }
 
 const handleCancel = (appealId: string) => {
-  demoStore.cancelAppeal(appealId)
+  demoStore.handleAppealAction('cancel', { id: appealId })
   message.success('申诉已撤销')
 }
 
 const handleDelete = (appealId: string) => {
-  demoStore.deleteAppeal(appealId)
+  demoStore.handleAppealAction('batch-delete', [appealId])
   message.success('申诉已删除')
 }
 </script>

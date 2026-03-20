@@ -122,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ApiOutlined,
@@ -135,6 +135,9 @@ import {
 } from '@ant-design/icons-vue'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
+
+const toErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : '??????'
 
 // 状态
 const connectionStatus = ref<'connected' | 'connecting' | 'disconnected'>('disconnected')
@@ -226,7 +229,7 @@ const testConnection = async () => {
       description: '连接测试过程中发生错误',
       status: 'error',
       duration,
-      error: error.message || '未知错误'
+      error: toErrorMessage(error)
     })
     message.error('连接测试失败')
   } finally {
@@ -299,7 +302,7 @@ const testAuth = async () => {
       description: '认证测试过程中发生错误',
       status: 'error',
       duration,
-      error: error.message || '未知错误'
+      error: toErrorMessage(error)
     })
     message.error('认证测试失败')
   } finally {
@@ -359,7 +362,7 @@ const testMedicalRecordsApi = async () => {
       description: '医疗记录API测试失败',
       status: 'error',
       duration,
-      error: error.message || '未知错误'
+      error: toErrorMessage(error)
     })
   }
 }
@@ -395,7 +398,7 @@ const testQCApi = async () => {
       description: '质控API测试失败',
       status: 'error',
       duration,
-      error: error.message || '未知错误'
+      error: toErrorMessage(error)
     })
   }
 }

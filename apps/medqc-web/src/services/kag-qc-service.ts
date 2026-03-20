@@ -100,7 +100,7 @@ export class KAGQCService {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await this.request('GET', '/health')
+      const response = await this.request<{ status?: string }>('GET', '/health')
       return response.status === 'healthy'
     } catch (error) {
       console.error('KAG服务健康检查失败:', error)
@@ -115,7 +115,7 @@ export class KAGQCService {
     try {
       console.log('开始KAG质控分析:', request.recordId)
 
-      const response = await this.request('POST', '/api/qc/analyze', {
+      const response = await this.request<KAGQCResponse>('POST', '/api/qc/analyze', {
         record_id: request.recordId,
         content: request.content,
         metadata: request.metadata,
@@ -142,7 +142,7 @@ export class KAGQCService {
     try {
       console.log('开始批量KAG质控分析:', request.records.length, '份病历')
 
-      const response = await this.request('POST', '/api/qc/batch-analyze', {
+      const response = await this.request<{ batchId: string }>('POST', '/api/qc/batch-analyze', {
         records: request.records.map(r => ({
           record_id: r.recordId,
           content: r.content,
@@ -173,7 +173,15 @@ export class KAGQCService {
     endTime?: string
   }> {
     try {
-      return await this.request('GET', `/api/qc/batch-status/${batchId}`)
+      return await this.request<{
+        batchId: string
+        status: string
+        totalRecords: number
+        completedRecords: number
+        failedRecords: number
+        startTime: string
+        endTime?: string
+      }>('GET', `/api/qc/batch-status/${batchId}`)
     } catch (error) {
       console.error('获取批量状态失败:', error)
       throw error
@@ -185,7 +193,7 @@ export class KAGQCService {
    */
   async getBatchResults(batchId: string): Promise<KAGBatchResponse> {
     try {
-      const response = await this.request('GET', `/api/qc/batch-results/${batchId}`)
+      const response = await this.request<KAGBatchResponse>('GET', `/api/qc/batch-results/${batchId}`)
 
       // 保存批量结果到Supabase
       for (const result of response.results) {
@@ -206,7 +214,7 @@ export class KAGQCService {
    */
   async getQCRules(): Promise<KAGRule[]> {
     try {
-      const response = await this.request('GET', '/api/qc/rules')
+      const response = await this.request<{ rules: KAGRule[] }>('GET', '/api/qc/rules')
       return response.rules
     } catch (error) {
       console.error('获取质控规则失败:', error)
@@ -225,7 +233,13 @@ export class KAGQCService {
     commonDefects: Array<{ defectType: string; count: number }>
   }> {
     try {
-      return await this.request('GET', '/api/qc/statistics')
+      return await this.request<{
+        totalAnalyses: number
+        todayAnalyses: number
+        averageScore: number
+        gradeDistribution: Record<string, number>
+        commonDefects: Array<{ defectType: string; count: number }>
+      }>('GET', '/api/qc/statistics')
     } catch (error) {
       console.error('获取质控统计失败:', error)
       throw error
@@ -307,7 +321,7 @@ export class KAGQCService {
   /**
    * 通用HTTP请求方法
    */
-  private async request(method: string, path: string, data?: unknown): Promise<unknown> {
+  private async request<T>(method: string, path: string, data?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`
 
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
@@ -333,7 +347,7 @@ export class KAGQCService {
         }
 
         const responseData = await response.json()
-        return responseData
+        return responseData as T
       } catch (error) {
         console.error(`请求失败 (尝试 ${attempt}/${this.retryAttempts}):`, error)
 
@@ -345,6 +359,8 @@ export class KAGQCService {
         await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
       }
     }
+
+    throw new Error('Request failed after retries')
   }
 
   /**

@@ -126,7 +126,7 @@ class LRUCache<T> {
 // Hash Generator for Cache Keys
 class CacheKeyGenerator {
   static generatePatientDataKey(patientData: unknown, rules: EnhancedQCRule[]): string {
-    const contentHash = this.hashPatientData(patientData)
+    const contentHash = this.hashPatientData(patientData as PatientDataLike)
     const rulesHash = this.hashRules(rules)
     return `qc_result_${contentHash}_${rulesHash}`
   }
@@ -139,11 +139,11 @@ class CacheKeyGenerator {
     return `prompt_template_${ruleId}_${version}`
   }
 
-  private static hashPatientData(patientData: unknown): string {
+  private static hashPatientData(patientData: PatientDataLike): string {
     // Generate hash based on document content and metadata
     const content = JSON.stringify({
       patientId: patientData.patientId,
-      documents: patientData.documents?.map((doc: unknown) => ({
+      documents: patientData.documents?.map((doc: PatientDocumentLike) => ({
         type: doc.type,
         timestamp: doc.timestamp,
         contentLength: doc.content?.length || 0,
@@ -174,6 +174,19 @@ class CacheKeyGenerator {
     }
     return Math.abs(hash).toString(36)
   }
+}
+
+interface PatientDocumentLike {
+  type?: string
+  timestamp?: string
+  content?: string
+}
+
+interface PatientDataLike {
+  patientId?: string
+  documents?: PatientDocumentLike[]
+  orders?: unknown[]
+  reports?: unknown[]
 }
 
 // Configuration Cache Implementation
@@ -224,6 +237,7 @@ export class IntelligentQCCache {
   private resultCache: LRUCache<ComprehensiveQCResult>
   private configCache: ConfigurationCacheImpl
   private promptCache: LRUCache<unknown>
+  private genericCache: LRUCache<unknown>
   private stats: {
     totalRequests: number
     cacheHits: number
@@ -234,6 +248,7 @@ export class IntelligentQCCache {
     this.resultCache = new LRUCache<ComprehensiveQCResult>(2000) // 2000 QC results
     this.configCache = new ConfigurationCacheImpl()
     this.promptCache = new LRUCache<unknown>(1000) // 1000 prompt templates
+    this.genericCache = new LRUCache<unknown>(2000)
     this.stats = {
       totalRequests: 0,
       cacheHits: 0,
@@ -279,6 +294,22 @@ export class IntelligentQCCache {
     
     this.resultCache.set(cacheKey, enhancedResult, 1800000) // 30 minutes TTL
     console.log(`Cached QC result: ${cacheKey}`)
+  }
+
+  // Generic key/value cache helpers (compatibility for existing call sites)
+  async getCachedResult<T = unknown>(key: string): Promise<T | null> {
+    this.stats.totalRequests++
+    const value = this.genericCache.get(key)
+    if (value !== null) {
+      this.stats.cacheHits++
+      return value as T
+    }
+    this.stats.cacheMisses++
+    return null
+  }
+
+  async cacheResult(key: string, value: unknown, ttlSeconds: number = 300): Promise<void> {
+    this.genericCache.set(key, value, ttlSeconds * 1000)
   }
 
   // Configuration Caching
@@ -371,6 +402,7 @@ export class IntelligentQCCache {
     this.resultCache.clear()
     this.configCache.clear()
     this.promptCache.clear()
+    this.genericCache.clear()
     this.stats = { totalRequests: 0, cacheHits: 0, cacheMisses: 0 }
     console.log('All caches cleared')
   }

@@ -1,0 +1,16 @@
+{
+  "scheme_name": "chongqing_2024",
+  "label": "重庆 2024",
+  "category": "municipality",
+  "province": "",
+  "source_file": "5463.js",
+  "extracted_at": "2026-03-15T18:28:48.929240",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 9612,
+    "adrg": 250,
+    "drg": 797
+  }
+}

@@ -294,6 +294,40 @@
     </div>
 
     <!-- ══════════ MongoDB 连接弹窗 ══════════ -->
+    <div class="ds-split">
+      <div class="ds-split__aside">
+        <h2 class="ds-section-title">DRG 演示模式</h2>
+        <p class="ds-section-desc">
+          控制 DRG 演示页是否强制使用 Mock 数据。开启后，`mid/payment/post` 三个页面会直接使用前端演示数据。
+        </p>
+      </div>
+      <div class="ds-split__main">
+        <div class="ds-card">
+          <div class="ds-card__body ds-divide">
+            <div class="ds-row">
+              <div class="ds-row__left">
+                <div class="ds-row__label">Mock 数据总开关</div>
+                <div class="ds-row__hint">作用范围：`workstation-v4/drg/mid`、`workstation-v4/drg/payment`、`workstation-v4/drg/post`</div>
+              </div>
+              <a-switch
+                :checked="drgMockEnabled"
+                checked-children="开启"
+                un-checked-children="关闭"
+                @change="handleDrgMockModeChange"
+              />
+            </div>
+          </div>
+          <div class="ds-card__footer">
+            <span class="ds-row__hint">关闭后会优先请求真实后端；请求失败时页面仍保留兜底展示。</span>
+            <span :class="drgMockEnabled ? 'ds-badge ds-badge--ok' : 'ds-badge ds-badge--off'">
+              <span :class="drgMockEnabled ? 'ds-badge__dot ds-badge__dot--green' : 'ds-badge__dot ds-badge__dot--slate'"></span>
+              {{ drgMockEnabled ? 'Mock 演示中' : '真实优先' }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <a-modal v-model:open="showMongoModal" title="MongoDB 连接配置" :confirm-loading="connSaving"
       @ok="saveMongoConnection" ok-text="保存并测试" cancel-text="取消" :width="520">
       <div style="padding-top: 8px">
@@ -329,10 +363,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import axios from 'axios'
 import { message } from 'ant-design-vue'
 import { SyncOutlined, ReloadOutlined } from '@ant-design/icons-vue'
+import { isDrgMockModeEnabled, onDrgMockModeChange, setDrgMockModeEnabled } from '@/utils/drgMockMode'
 
 const mongoConfig = ref<any>({})
 const mongoSyncState = ref<any>({})
@@ -344,6 +379,7 @@ const showMongoModal = ref(false)
 const connSaving = ref(false)
 const connTestResult = ref<any>(null)
 const connForm = ref({ mongo_uri: '', mongo_database: 'his_emr', read_preference: 'secondaryPreferred', connect_timeout_ms: 5000 })
+const drgMockEnabled = ref(isDrgMockModeEnabled())
 
 const configSaving = ref(false)
 const configForm = ref({
@@ -398,7 +434,26 @@ async function triggerMongoSync() {
     const poll = setInterval(async () => { await loadMongoStatus(); if (!mongoSyncState.value.is_running) clearInterval(poll) }, 2000)
   } catch { message.error('触发同步失败') }
 }
-onMounted(async () => { await Promise.all([loadMongoConfig(), loadMongoStatus()]) })
+
+function handleDrgMockModeChange(checked: boolean) {
+  drgMockEnabled.value = checked
+  setDrgMockModeEnabled(checked)
+  message.success(checked ? '已开启 DRG Mock 演示模式' : '已关闭 DRG Mock 演示模式')
+}
+
+let unsubscribeDrgMockMode: (() => void) | null = null
+
+onMounted(async () => {
+  drgMockEnabled.value = isDrgMockModeEnabled()
+  unsubscribeDrgMockMode = onDrgMockModeChange((enabled) => {
+    drgMockEnabled.value = enabled
+  })
+  await Promise.all([loadMongoConfig(), loadMongoStatus()])
+})
+
+onUnmounted(() => {
+  unsubscribeDrgMockMode?.()
+})
 </script>
 
 <style scoped>

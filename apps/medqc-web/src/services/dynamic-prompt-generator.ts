@@ -271,14 +271,14 @@ class PromptTemplateLibrary {
 
   private simpleTemplateRender(template: string, context: unknown): string {
     // Replace {{variable}} patterns with context values
-    return template.replace(/\{\{([^}]+)\}\}/g, (match: unknown,  path: unknown) => {
+    return template.replace(/\{\{([^}]+)\}\}/g, (match: string, path: string) => {
       const value = this.getNestedValue(context, path.trim())
       return value !== undefined ? String(value) : match
     })
   }
 
   private getNestedValue(obj: unknown, path: string): unknown {
-    return path.split('.').reduce((current: unknown,  key: unknown) => {
+    return path.split('.').reduce((current: unknown, key: string) => {
       if (key.includes('#each')) {
         // Handle simple array iteration (simplified)
         const arrayPath = key.replace('#each ', '')
@@ -287,7 +287,10 @@ class PromptTemplateLibrary {
           return array.map((item, index) => ({ ...item, '@index': index }))
         }
       }
-      return current?.[key]
+      if (typeof current === 'object' && current !== null) {
+        return (current as Record<string, unknown>)[key]
+      }
+      return undefined
     }, obj)
   }
 }
@@ -362,7 +365,7 @@ class ContextBuilder {
 
     if (qualityLogic.validation_criteria?.length > 0) {
       instructions += `\n验证标准：\n`
-      qualityLogic.validation_criteria.forEach((criteria: unknown,  index: unknown) => {
+      qualityLogic.validation_criteria.forEach((criteria: Record<string, unknown>, index: number) => {
         instructions += `${index + 1}. ${criteria.field} ${criteria.operator} ${criteria.value || ''} - ${criteria.description}\n`
       })
     }
@@ -518,7 +521,7 @@ export class DynamicPromptGenerator {
         template: null,
         compiledAt: new Date().toISOString(),
         isValid: false,
-        error: error.message
+        error: error instanceof Error ? error.message : '模板编译失败'
       }
     }
   }

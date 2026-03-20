@@ -12,6 +12,20 @@ import type {
 
 import { unifiedAPIClient, type PaginatedResponse } from './unified-api-client'
 
+const isObjectLike = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (isObjectLike(error) && typeof error.message === 'string') {
+    return error.message
+  }
+
+  return String(error)
+}
 export class AuditTaskServiceAdapter {
   private useEnhancedAPI = true // 标志：是否使用增强版API
 
@@ -54,7 +68,7 @@ export class AuditTaskServiceAdapter {
 
     } catch (error: unknown) {
       console.error('创建审核任务失败:', error)
-      throw new Error(`创建审核任务失败: ${error.message}`)
+      throw new Error(`创建审核任务失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -129,7 +143,7 @@ export class AuditTaskServiceAdapter {
 
     } catch (error) {
       console.error('获取审核任务列表失败:', error)
-      throw new Error(`获取审核任务列表失败: ${error.message}`)
+      throw new Error(`获取审核任务列表失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -149,7 +163,7 @@ export class AuditTaskServiceAdapter {
     if (filter?.task_type) params.append('task_type', filter.task_type)
     if (filter?.audit_level) params.append('audit_level', filter.audit_level)
     if (filter?.status) params.append('status', filter.status)
-    if (filter?.created_by) params.append('created_by', filter.created_by)
+    if (filter?.assigned_reviewer) params.append('created_by', filter.assigned_reviewer)
     if (filter?.search) params.append('search', filter.search)
 
     const response = await fetch(
@@ -213,11 +227,11 @@ export class AuditTaskServiceAdapter {
     try {
       return await unifiedAPIClient.getAuditTask(taskId)
     } catch (error: unknown) {
-      if (error.message.includes('404')) {
+      if (getErrorMessage(error).includes('404')) {
         return null
       }
       console.error('获取审核任务详情失败:', error)
-      throw new Error(`获取审核任务详情失败: ${error.message}`)
+      throw new Error(`获取审核任务详情失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -250,7 +264,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error: unknown) {
       console.error('获取任务明细失败:', error)
-      throw new Error(`获取任务明细失败: ${error.message}`)
+      throw new Error(`获取任务明细失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -268,7 +282,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error: unknown) {
       console.error('启动审核任务失败:', error)
-      throw new Error(`启动审核任务失败: ${error.message}`)
+      throw new Error(`启动审核任务失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -286,7 +300,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error: unknown) {
       console.error('完成审核任务失败:', error)
-      throw new Error(`完成审核任务失败: ${error.message}`)
+      throw new Error(`完成审核任务失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -305,7 +319,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error) {
       console.error('智能抽样失败:', error)
-      throw new Error(`智能抽样失败: ${error.message}`)
+      throw new Error(`智能抽样失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -326,7 +340,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error) {
       console.error('批量分配审核员失败:', error)
-      throw new Error(`批量分配审核员失败: ${error.message}`)
+      throw new Error(`批量分配审核员失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -338,7 +352,7 @@ export class AuditTaskServiceAdapter {
       return await unifiedAPIClient.getTaskStatistics(taskId)
     } catch (error: unknown) {
       console.error('获取任务统计失败:', error)
-      throw new Error(`获取任务统计失败: ${error.message}`)
+      throw new Error(`获取任务统计失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -355,7 +369,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error: unknown) {
       console.error('删除审核任务失败:', error)
-      throw new Error(`删除审核任务失败: ${error.message}`)
+      throw new Error(`删除审核任务失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -386,7 +400,7 @@ export class AuditTaskServiceAdapter {
       
     } catch (error: unknown) {
       console.error('批量处理失败:', error)
-      throw new Error(`批量处理失败: ${error.message}`)
+      throw new Error(`批量处理失败: ${getErrorMessage(error)}`)
     }
   }
 

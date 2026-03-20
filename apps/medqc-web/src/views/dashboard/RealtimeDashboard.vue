@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { h, ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useNotificationStore } from '../../stores/notification'
 import { getRealtimeService } from '../../lib/realtime/realtime-service'

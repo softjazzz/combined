@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+﻿import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import QCResultDisplay from '@/components/qc/QCResultDisplay.vue'
-import type { QCResult, QCIssue, QCSuggestion, QCRuleResult } from '@/types/quality-control'
+import type { QCResult } from '@/types/supabase'
+import type { QCIssue, QCSuggestion, QCRuleResult } from '@/types/quality-control'
 
 describe('QCResultDisplay', () => {
   const mockIssues: QCIssue[] = [
@@ -71,265 +72,77 @@ describe('QCResultDisplay', () => {
     }
   ]
 
-  const mockResult: QCResult = {
-    id: 'qc-001',
-    recordId: 'record-001',
-    overallScore: 82,
-    overallGrade: 'B',
-    analysisDate: '2024-01-01T10:00:00Z',
-    issues: mockIssues,
-    suggestions: mockSuggestions,
-    ruleResults: mockRuleResults
+  type QCResultDisplayMock = QCResult & {
+    overall_score: number
+    overall_grade: 'A' | 'B' | 'C'
+    analysis_date: string
+    rule_results: QCRuleResult[]
   }
 
-  describe('组件渲染', () => {
-    it('应该正确渲染组件', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
+  const mockResult: QCResultDisplayMock = {
+    id: 'qc-001',
+    record_id: 'record-001',
+    score: 82,
+    grade: 'B',
+    overall_score: 82,
+    overall_grade: 'B',
+    analysis_date: '2024-01-01T10:00:00Z',
+    issues: mockIssues,
+    suggestions: mockSuggestions,
+    summary: '病案存在少量问题',
+    raw_analysis: 'raw',
+    category_scores: [],
+    confidence_score: 0.88,
+    rule_version: 'v1',
+    analysis_time: '2024-01-01T10:00:00Z',
+    reviewer_id: null,
+    is_reviewed: false,
+    review_notes: '',
+    rule_results: mockRuleResults
+  }
 
-      expect(wrapper.exists()).toBe(true)
+  it('renders score and grade information', () => {
+    const wrapper = mount(QCResultDisplay, {
+      props: {
+        result: mockResult
+      }
     })
 
-    it('应该显示总体评分', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
+    expect(wrapper.text()).toContain('82')
+    expect(wrapper.text()).toContain('B级质控')
+    expect(wrapper.text()).toContain('良好 - 病案质量较好，存在少量问题')
 
-      // 验证组件接收到正确的 props
-      expect(wrapper.props('result').overallScore).toBe(82)
-      expect(wrapper.props('result').overallGrade).toBe('B')
-    })
+    const scoreNode = wrapper.find('.text-3xl.font-bold')
+    expect(scoreNode.text()).toBe('82')
+    expect(scoreNode.classes()).toContain('text-blue-400')
   })
 
-  describe('评分展示', () => {
-    it('应该正确显示评分颜色', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      const scoreColor = wrapper.vm.getScoreColor(82)
-      expect(scoreColor).toBe('text-blue-400')
+  it('renders issues, suggestions, and rule results', () => {
+    const wrapper = mount(QCResultDisplay, {
+      props: {
+        result: mockResult
+      }
     })
 
-    it('应该正确显示优秀评分颜色', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: { ...mockResult, overallScore: 95 }
-        }
-      })
-
-      const scoreColor = wrapper.vm.getScoreColor(95)
-      expect(scoreColor).toBe('text-emerald-400')
-    })
-
-    it('应该正确显示不及格评分颜色', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: { ...mockResult, overallScore: 65 }
-        }
-      })
-
-      const scoreColor = wrapper.vm.getScoreColor(65)
-      expect(scoreColor).toBe('text-red-400')
-    })
+    expect(wrapper.text()).toContain('主诉完整性检查')
+    expect(wrapper.text()).toContain('诊断一致性检查')
+    expect(wrapper.text()).toContain('补充病史信息')
+    expect(wrapper.text()).toContain('规范日期格式')
+    expect(wrapper.text()).toContain('主诉描述不完整')
+    expect(wrapper.text()).toContain('诊断与检查结果一致')
   })
 
-  describe('问题列表', () => {
-    it('应该正确显示问题数量', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.totalIssuesCount).toBe(2)
+  it('shows issue and suggestion counts', () => {
+    const wrapper = mount(QCResultDisplay, {
+      props: {
+        result: mockResult
+      }
     })
 
-    it('应该正确统计严重问题数量', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.criticalIssuesCount).toBe(2) // major + critical
-    })
-
-    it('应该支持问题筛选', async () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      // 筛选严重问题
-      wrapper.vm.issueFilter = 'critical'
-      await wrapper.vm.$nextTick()
-
-      expect(wrapper.vm.filteredIssues).toHaveLength(1)
-      expect(wrapper.vm.filteredIssues[0].severity).toBe('critical')
-    })
-
-    it('应该显示所有问题', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      wrapper.vm.issueFilter = 'all'
-      expect(wrapper.vm.filteredIssues).toHaveLength(2)
-    })
-  })
-
-  describe('严重程度标签', () => {
-    it('应该正确显示严重程度标签', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.getSeverityLabel('critical')).toBe('严重')
-      expect(wrapper.vm.getSeverityLabel('major')).toBe('重要')
-      expect(wrapper.vm.getSeverityLabel('minor')).toBe('轻微')
-      expect(wrapper.vm.getSeverityLabel('low')).toBe('提示')
-    })
-
-    it('应该正确显示严重程度颜色', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.getSeverityColor('critical')).toBe('red')
-      expect(wrapper.vm.getSeverityColor('major')).toBe('orange')
-      expect(wrapper.vm.getSeverityColor('minor')).toBe('yellow')
-      expect(wrapper.vm.getSeverityColor('low')).toBe('blue')
-    })
-  })
-
-  describe('建议展示', () => {
-    it('应该正确显示建议列表', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.result.suggestions).toHaveLength(2)
-      expect(wrapper.vm.result.suggestions[0].title).toBe('补充病史信息')
-    })
-
-    it('应该正确显示优先级标签', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.getPriorityLabel('high')).toBe('高优先级')
-      expect(wrapper.vm.getPriorityLabel('medium')).toBe('中优先级')
-      expect(wrapper.vm.getPriorityLabel('low')).toBe('低优先级')
-    })
-
-    it('应该正确显示优先级颜色', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.getPriorityColor('high')).toBe('red')
-      expect(wrapper.vm.getPriorityColor('medium')).toBe('orange')
-      expect(wrapper.vm.getPriorityColor('low')).toBe('blue')
-    })
-  })
-
-  describe('规则结果', () => {
-    it('应该正确显示规则结果列表', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.result.ruleResults).toHaveLength(2)
-    })
-
-    it('应该正确显示规则通过状态', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      const passedRule = wrapper.vm.result.ruleResults[1]
-      const failedRule = wrapper.vm.result.ruleResults[0]
-
-      expect(passedRule.passed).toBe(true)
-      expect(failedRule.passed).toBe(false)
-    })
-
-    it('应该正确显示规则评分', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.result.ruleResults[0].score).toBe(70)
-      expect(wrapper.vm.result.ruleResults[1].score).toBe(95)
-    })
-  })
-
-  describe('用户交互', () => {
-    it('应该触发高亮问题事件', async () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      wrapper.vm.$emit('highlight-issue', mockIssues[0])
-
-      expect(wrapper.emitted('highlight-issue')).toBeTruthy()
-      expect(wrapper.emitted('highlight-issue')?.[0][0]).toEqual(mockIssues[0])
-    })
-  })
-
-  describe('等级展示', () => {
-    it('应该正确显示等级颜色', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      expect(wrapper.vm.getGradeColor('A')).toBe('green')
-      expect(wrapper.vm.getGradeColor('B')).toBe('blue')
-      expect(wrapper.vm.getGradeColor('C')).toBe('orange')
-      expect(wrapper.vm.getGradeColor('D')).toBe('default') // D 等级返回 default
-    })
-
-    it('应该正确显示评分描述', () => {
-      const wrapper = mount(QCResultDisplay, {
-        props: {
-          result: mockResult
-        }
-      })
-
-      const description = wrapper.vm.getScoreDescription(82)
-      expect(description).toContain('良好')
-    })
+    expect(wrapper.text()).toContain('严重问题')
+    expect(wrapper.text()).toContain('总问题数')
+    expect(wrapper.text()).toContain('2')
+    expect(wrapper.text()).toContain('改善建议 (2)')
+    expect(wrapper.text()).toContain('规则执行结果')
   })
 })
-

@@ -1229,9 +1229,9 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
     }
   }
 
-  const adaptQCResultFromBackend = (raw: unknown): QCResult => {
+  const adaptQCResultFromBackend = (raw: any): QCResult => {
     const issues = Array.isArray(raw?.issues)
-      ? raw.issues.map((issue: unknown) => ({
+      ? raw.issues.map((issue: any) => ({
           id: issue.id || generateId(),
           ruleName: issue.rule_name || issue.ruleName || '未命名规则',
           ruleId: issue.rule_id || issue.ruleId || '',
@@ -1245,7 +1245,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       : []
 
     const suggestions = Array.isArray(raw?.suggestions)
-      ? raw.suggestions.map((item: unknown) => ({
+      ? raw.suggestions.map((item: any) => ({
           id: item.id || generateId(),
           category: item.category || '整改建议',
           title: item.title || '完善质控项',
@@ -1256,7 +1256,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       : []
 
     const ruleResults = Array.isArray(raw?.rule_results)
-      ? raw.rule_results.map((rr: unknown) => ({
+      ? raw.rule_results.map((rr: any) => ({
           ruleId: rr.rule_id || rr.ruleId || '',
           ruleName: rr.rule_name || rr.ruleName || '质控规则',
           passed: Boolean(rr.passed),
@@ -1271,7 +1271,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       : []
 
     const steps = Array.isArray(raw?.analysis_steps)
-      ? raw.analysis_steps.map((step: unknown): AnalysisStep => ({
+      ? raw.analysis_steps.map((step: any): AnalysisStep => ({
           id: step.id || generateId(),
           name: step.name || '质控步骤',
           description: step.description || '',
@@ -1619,7 +1619,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
   /**
    * 创建申诉
    */
-  const createAppeal = async (appealData: unknown) => {
+  const createAppeal = async (appealData: any) => {
     if (!activeNotification.value && !appealData.notificationId) {
       throw new Error('没有可申诉的通知')
     }
@@ -1806,7 +1806,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
         ])
 
         if (apiRecords.success && apiRecords.data?.data) {
-          records = apiRecords.data.data.map((record: unknown) => ({
+          records = apiRecords.data.data.map((record: any) => ({
             ...record,
             // 数据结构适配：将 patient_info.name 映射到 patient_name
             patient_name: record.patient_info?.name || record.patient_name || '未知患者',
@@ -1823,7 +1823,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
         }
 
         // 从记录中提取科室信息
-        departments = [...new Set(records.map(r => r.department).filter(Boolean))]
+        departments = [...new Set(records.map(r => (r as { department?: string }).department).filter(Boolean))]
 
         // 如果本地API成功，标记数据库已连接
         if (records.length > 0 && rules.length > 0) {
@@ -1846,7 +1846,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
         ])
 
         // 对Supabase数据也进行相同的数据结构适配
-        records = supabaseRecords.map((record: unknown) => ({
+        records = supabaseRecords.map((record: any) => ({
           ...record,
           // 数据结构适配：确保 patient_name 字段存在
           patient_name: record.patient_info?.name || record.patient_name || '未知患者',
@@ -1866,7 +1866,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       // 智能选择默认测试记录
       if (!testRecord.value && availableRecords.value.length > 0) {
         // 优先选择有完整信息的记录
-        const preferredRecord = availableRecords.value.find(r =>
+        const preferredRecord = availableRecords.value.find((r: any) =>
           r.patient_info && r.primary_diagnosis
         ) || availableRecords.value[0]
         testRecord.value = preferredRecord
@@ -1875,7 +1875,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
       // 智能选择默认文书（如果测试记录已选择但文书未选择）
       if (testRecord.value && !selectedDocument.value) {
         // 尝试从测试记录中获取文书列表
-        const recordDocuments = testRecord.value.documents || []
+        const recordDocuments = (testRecord.value as any).documents || []
         if (recordDocuments.length > 0) {
           // 优先选择首次病程记录或入院记录
           const preferredDoc = recordDocuments.find((doc: any) =>
@@ -2427,7 +2427,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
   /**
    * 处理申诉相关操作
    */
-  const handleAppealAction = (action: string, data?: unknown) => {
+  const handleAppealAction = (action: string, data?: any) => {
     switch (action) {
       case 'create':
         showAppealModal.value = true
@@ -2508,7 +2508,7 @@ export const useQCDemoStore = defineStore('qcDemo', () => {
    * 导出申诉数据
    */
   const exportAppealData = () => {
-    const data = appeals.value.map(appeal => ({
+    const data = appeals.value.map((appeal: any) => ({
       申诉编号: appeal.id,
       申诉类型: appeal.appealType,
       申诉理由: appeal.reason,

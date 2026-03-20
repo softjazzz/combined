@@ -55,6 +55,18 @@ export interface DatabaseQCRule {
   applicable_documents?: string[]  // 适用的文书类型列表
 }
 
+interface DepartmentRow {
+  department?: string
+}
+
+interface RawDocumentRow {
+  id?: string
+  type?: string
+  type_code?: string
+  title?: string
+  created_at?: string
+}
+
 // 演示数据服务类
 export class DemoDataService {
   private static instance: DemoDataService
@@ -443,7 +455,7 @@ export class DemoDataService {
         this.departmentsCache = { data: fallback, ts: Date.now() }
         return fallback
       }
-      const departments = [...new Set((data || []).map((item: unknown) => item.department).filter(Boolean))].sort()
+      const departments = [...new Set((data || []).map((item: DepartmentRow) => item.department).filter(Boolean))].sort()
       this.departmentsCache = { data: departments, ts: Date.now() }
       return departments
     } catch (error) {
@@ -512,7 +524,7 @@ export class DemoDataService {
       }
       const docs = (data as any)?.documents
       if (Array.isArray(docs) && docs.length > 0) {
-        return docs.map((d: unknown, i: number) => {
+        return docs.map((d: RawDocumentRow, i: number) => {
           const typeCode = (d.type || d.type_code || '').toString()
           const chineseLabel = (DOCUMENT_TYPE_LABELS as any)[typeCode] || ''
           return {
@@ -589,7 +601,7 @@ export class DemoDataService {
    * 从记录生成内容文本
    */
   private generateContentFromRecord(record: DatabaseMedicalRecord): string {
-    const patientInfo = record.patient_info || {}
+    const patientInfo: Partial<DatabaseMedicalRecord['patient_info']> = record.patient_info || {}
     return `
 患者姓名：${patientInfo.name || '未知'}
 年龄：${patientInfo.age || '未知'}岁

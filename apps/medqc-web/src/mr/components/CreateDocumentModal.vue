@@ -179,8 +179,9 @@ const resetForm = () => {
 
 // 文档类型选择过滤
 const filterOption = (input: string, option: unknown) => {
-  const label = option.label || ''
-  const value = option.value || ''
+  const normalized = (option || {}) as { label?: string; value?: string }
+  const label = normalized.label || ''
+  const value = normalized.value || ''
   return label.toLowerCase().includes(input.toLowerCase()) ||
          value.toLowerCase().includes(input.toLowerCase())
 }
@@ -236,7 +237,7 @@ const handleSubmit = async () => {
     
   } catch (error: unknown) {
     console.error('创建文档失败:', error)
-    message.error(error.message || '创建文档失败')
+    message.error(error instanceof Error ? error.message : '创建文档失败')
   } finally {
     loading.value = false
   }

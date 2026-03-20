@@ -151,7 +151,7 @@
               <a-form-item label="模型" required :rules="[{ required: true, message: '请选择模型' }]">
                 <a-select v-model:value="configForm.model_id" :disabled="!availableModels.length" placeholder="请选择模型">
                   <a-select-option v-for="model in availableModels" :key="model.id" :value="model.id">
-                    {{ model.display_name || model.model_name }}
+                    {{ model.model_name }}
                   </a-select-option>
                 </a-select>
               </a-form-item>
@@ -501,7 +501,8 @@ const testConnection = async () => {
       message.error(result.error || '连接失败')
     }
   } catch (e: unknown) {
-    message.error(`连接失败：${e.message || e}`)
+    const msg = e instanceof Error ? e.message : String(e)
+    message.error(`连接失败：${msg}`)
   } finally {
     testing.value = false
   }

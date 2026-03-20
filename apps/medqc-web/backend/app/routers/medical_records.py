@@ -351,10 +351,13 @@ async def get_workstation_data(
     from sqlalchemy import func
 
     with Session(engine) as session:
-        # 1. 构建基础查询
+        # 1. 构建基础查询：以病案首页主表为工作台主数据源（避免列表缩水）
         q = session.query(MedicalRecordFrontpage)
         if dept:
-            q = q.filter(MedicalRecordFrontpage.discharge_dept_name == dept)
+            q = q.filter(
+                (MedicalRecordFrontpage.discharge_dept_name == dept) |
+                (MedicalRecordFrontpage.admission_dept_name == dept)
+            )
         if keyword:
             kw = f"%{keyword}%"
             q = q.filter(
@@ -428,6 +431,16 @@ async def get_workstation_data(
                 record_status = "completed"
 
             dept_name = r.discharge_dept_name or r.admission_dept_name or ""
+            # 轻量判定：mr 记录存在但核心字段基本为空，视为“CDM 首页空壳”
+            cdm_frontpage_empty = not any([
+                r.name,
+                r.mr_no,
+                r.admission_datetime,
+                r.discharge_datetime,
+                r.discharge_dept_name,
+                r.record_content,
+            ])
+
             if record_status == "has_defects":
                 dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
                 departments[0]["warningCount"] += 1
@@ -447,6 +460,7 @@ async def get_workstation_data(
                 "days": int(r.hospital_duration) if r.hospital_duration else 0,
                 "doctor": r.attending_physician_sign or "",
                 "status": record_status,
+                "cdmFrontpageEmpty": cdm_frontpage_empty,
             })
 
         for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):

@@ -309,7 +309,7 @@ const getDateRange = () => {
 const getLinePoints = (metric: string) => {
   const width = 100 // SVG宽度百分比
   const height = 100 // SVG高度
-  const points = chartData.value.map((item: unknown,  index: unknown) => {
+  const points = chartData.value.map((item: ChartDataItem, index: number) => {
     const x = (index / (chartData.value.length - 1)) * width
     let y = 0
     

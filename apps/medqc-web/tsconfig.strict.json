@@ -62,6 +62,11 @@
   "exclude": [
     "node_modules",
     "dist",
-    "**/*.js"
+    "**/*.js",
+    "src/views/test/*.vue.ts",
+    "**/*-backup.vue",
+    "**/*.legacy.vue",
+    "**/*-backup.vue.ts",
+    "**/*.legacy.vue.ts"
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "scheme_name": "huaibei_2025",
+  "label": "淮北 2025",
+  "category": "city",
+  "province": "安徽",
+  "source_file": "1227.js",
+  "extracted_at": "2026-03-15T18:28:51.994511",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9314,
+    "adrg": 252,
+    "drg": 648
+  }
+}

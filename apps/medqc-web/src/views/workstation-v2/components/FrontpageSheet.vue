@@ -1,671 +1,525 @@
-<template>
-  <div class="fp-wrapper">
-    <!-- ============== 第一页 ============== -->
-    <div class="fp-page">
-      <!-- 附件标记 -->
-      <div class="fp-top-attachment">附件 1</div>
-      
-      <!-- 顶部 Header -->
-      <div class="fp-header">
-        <div class="header-line">
-          <span style="display:inline-block; width: 220px;">医疗机构<u class="fill">{{ b('institute_county_desc') }}</u></span>
-          <span style="flex:1; text-align:right;">（组织机构代码：<u class="fill" style="width:120px; text-align:left;">{{ b('institute_code') }}</u>）</span>
-        </div>
-        
-        <div class="header-line" style="position: relative; margin: 4px 0;">
-          <span style="position: absolute; left: 0; bottom: 4px;">医疗付费方式：<span class="val-box">{{ paymentCode }}</span></span>
-          <h1 class="fp-title">住 院 病 案 首 页</h1>
-        </div>
-        
-        <div class="header-line" style="display: flex; justify-content: space-between;">
-          <span>健康卡号：<u class="fill" style="width:120px">{{ b('insurance_no') }}</u></span>
-          <span>第 <u class="fill" style="width:40px">{{ b('visit_cnt') || '1' }}</u> 次住院</span>
-          <span>病案号：<u class="fill" style="width:120px">{{ b('document_id') }}</u></span>
-        </div>
-      </div>
-
-      <!-- 大黑框1 -->
-      <div class="fp-main-box">
-        <!-- 身份信息区 -->
-        <div class="fp-row">
-          <span>姓名</span><u class="fill flex-1"><b>{{ b('name') }}</b></u>
-          <span class="ml-2">性别</span><span class="val-box">{{ b('sex') }}</span><span class="hint">1.男 2.女</span>
-          <span class="ml-4">出生日期</span><u class="fill w-10">{{ dateParts(b('birthday')).year }}</u><span>年</span><u class="fill w-8">{{ dateParts(b('birthday')).month }}</u><span>月</span><u class="fill w-8">{{ dateParts(b('birthday')).day }}</u><span>日</span>
-          <span class="ml-4">年龄</span><u class="fill w-10">{{ computedAge }}</u>
-          <span class="ml-4">国籍</span><u class="fill w-12">{{ b('nationality') || '中国' }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span class="hint">（年龄不足1周岁的）</span>
-          <span>年龄</span><u class="fill w-10"></u><span>月</span>
-          <span class="ml-4">新生儿出生体重</span><u class="fill w-12"></u><span>克</span>
-          <span class="ml-4">新生儿入院体重</span><u class="fill w-12"></u><span>克</span>
-        </div>
-        
-        <div class="fp-row">
-          <span>出生地</span><u class="fill flex-1"></u><span>省(区、市)</span><u class="fill flex-1"></u><span>市</span><u class="fill flex-1"></u><span>县</span>
-          <span class="ml-4">籍贯</span><u class="fill flex-1">{{ parseProvCity(b('nativeplace')).prov }}</u><span>省(区、市)</span><u class="fill flex-1">{{ parseProvCity(b('nativeplace')).city }}</u><span>市</span>
-          <span class="ml-4">民族</span><u class="fill w-16">{{ b('ethnicity') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span>身份证号</span><u class="fill flex-1">{{ b('id_card_no') }}</u>
-          <span class="ml-4">职业</span><u class="fill flex-1">{{ b('occupation_category') }}</u>
-          <span class="ml-4">婚姻</span><span class="val-box">{{ b('marital_status') }}</span><span class="hint">1.未婚 2.已婚 3.丧偶 4.离婚 9.其他</span>
-        </div>
-        
-        <div class="fp-row">
-          <span>现住址</span><u class="fill flex-1">{{ parseAddress(b('currentaddress')).prov }}</u><span>省(区、市)</span><u class="fill flex-1">{{ parseAddress(b('currentaddress')).city }}</u><span>市</span><u class="fill flex-1">{{ parseAddress(b('currentaddress')).county }}</u><span>县</span>
-          <span class="ml-4">电话</span><u class="fill w-24">{{ b('contact_number') }}</u>
-          <span class="ml-4">邮编</span><u class="fill w-16"></u>
-        </div>
-        
-        <div class="fp-row">
-          <span>户口地址</span><u class="fill flex-1"></u><span>省(区、市)</span><u class="fill flex-1"></u><span>市</span><u class="fill flex-1"></u><span>县</span>
-          <span class="ml-4">邮编</span><u class="fill w-16"></u>
-        </div>
-        
-        <div class="fp-row">
-          <span>工作单位及地址</span><u class="fill flex-1">{{ b('work_unit') }}</u>
-          <span class="ml-4">单位电话</span><u class="fill w-24"></u>
-          <span class="ml-4">邮编</span><u class="fill w-16"></u>
-        </div>
-        
-        <div class="fp-row">
-          <span>联系人姓名</span><u class="fill flex-1">{{ b('contact_name') }}</u>
-          <span class="ml-4">关系</span><u class="fill w-16">{{ b('contact_relationship') }}</u>
-          <span class="ml-4">地址</span><u class="fill flex-1">{{ b('contact_address') }}</u>
-          <span class="ml-4">电话</span><u class="fill w-24">{{ b('contact_telephone') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span>入院途径</span><span class="val-box">{{ b('admission_route') }}</span><span class="hint">1.急诊 2.门诊 3.其他医疗机构转入 9.其他</span>
-        </div>
-        
-        <div class="fp-row">
-          <span>入院时间</span><u class="fill w-10">{{ dateParts(b('admission_datetime')).year }}</u><span>年</span><u class="fill w-8">{{ dateParts(b('admission_datetime')).month }}</u><span>月</span><u class="fill w-8">{{ dateParts(b('admission_datetime')).day }}</u><span>日</span><u class="fill w-8">{{ dateParts(b('admission_datetime')).hour }}</u><span>时</span>
-          <span class="ml-4">入院科别</span><u class="fill flex-1">{{ b('admission_dept_name') }}</u>
-          <span class="ml-4">病房</span><u class="fill flex-1">{{ b('admission_ward_name') }}</u>
-          <span class="ml-4">转科科别</span><u class="fill flex-1">{{ b('transfer_dept_name') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span>出院时间</span><u class="fill w-10">{{ dateParts(b('discharge_datetime')).year }}</u><span>年</span><u class="fill w-8">{{ dateParts(b('discharge_datetime')).month }}</u><span>月</span><u class="fill w-8">{{ dateParts(b('discharge_datetime')).day }}</u><span>日</span><u class="fill w-8">{{ dateParts(b('discharge_datetime')).hour }}</u><span>时</span>
-          <span class="ml-4">出院科别</span><u class="fill flex-1">{{ b('discharge_dept_name') }}</u>
-          <span class="ml-4">病房</span><u class="fill flex-1">{{ b('discharge_ward_name') }}</u>
-          <span class="ml-4">实际住院</span><u class="fill w-10">{{ b('hospital_duration') }}</u><span>天</span>
-        </div>
-        
-        <div class="fp-row" style="border-bottom: none;">
-          <span>门（急）诊诊断</span><u class="fill flex-1"></u>
-          <span class="ml-4">疾病编码</span><u class="fill w-32"></u>
-        </div>
-        
-        <!-- 诊断表格 (内外边框均需控制) -->
-        <table class="fp-table diag-table" style="border-left:none; border-right:none; width: 100%;">
-          <thead>
-            <tr>
-              <th style="width:28%; border-left:none;">出院诊断</th>
-              <th style="width:12%">疾病编码</th>
-              <th style="width:8%">入院<br/>病情</th>
-              <th style="width:28%">出院诊断</th>
-              <th style="width:12%">疾病编码</th>
-              <th style="width:8%; border-right:none;">入院<br/>病情</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(pair, idx) in diagnosisPairs" :key="idx">
-              <td style="border-left:none;">
-                <span v-if="pair.left">
-                  <b v-if="idx === 0">主要诊断：</b>
-                  <span v-else-if="idx === 1">其他诊断：</span>
-                  {{ pair.left.diagnosis_name }}
-                </span>
-                <span v-else-if="idx === 0">主要诊断：</span>
-                <span v-else-if="idx === 1">其他诊断：</span>
-              </td>
-              <td class="mono center">{{ pair.left?.diagnosis_code }}</td>
-              <td class="center">{{ pair.left?.admission_condition }}</td>
-              <td>
-                <span v-if="pair.right">
-                  <span v-if="idx === 0">其他诊断：</span>
-                  {{ pair.right.diagnosis_name }}
-                </span>
-                <span v-else-if="idx === 0">其他诊断：</span>
-              </td>
-              <td class="mono center">{{ pair.right?.diagnosis_code }}</td>
-              <td class="center" style="border-right:none;">{{ pair.right?.admission_condition }}</td>
-            </tr>
-          </tbody>
-        </table>
-        
-        <div class="fp-row">
-          <span>入院病情：</span><span class="hint">1.有, 2.临床未确定, 3.情况不明, 4.无</span>
-        </div>
-        
-        <div class="fp-row">
-          <span>损伤、中毒的外部原因</span><u class="fill flex-1"></u>
-          <span class="ml-4">疾病编码</span><u class="fill w-32"></u>
-        </div>
-        
-        <div class="fp-row" style="border-bottom: none;">
-          <span>病理诊断：</span><u class="fill flex-1"></u>
-          <span class="ml-4">疾病编码</span><u class="fill w-32"></u>
-        </div>
-        
-        <div class="fp-row text-right-align">
-          <span style="flex:1;"></span>
-          <span class="ml-4">病理号</span><u class="fill w-32">{{ t('pathology_id') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span>药物过敏</span><span class="val-box">{{ b('allergy_sign') === '2' ? '2' : '1' }}</span><span class="hint">1.无 2.有，过敏药物：</span>
-          <u class="fill flex-1">{{ b('allergy_sign') === '2' ? t('allergy_history') : '' }}</u>
-          <span class="ml-4">死亡患者尸检</span><span class="val-box">{{ b('death_autopsy_sign') }}</span><span class="hint">1.是 2.否</span>
-        </div>
-        
-        <div class="fp-row">
-          <span>血型</span><span class="val-box">{{ b('abo_blood_code') }}</span><span class="hint">1.A 2.B 3.O 4.AB 5.不详 6.未查</span>
-          <span class="ml-8">Rh</span><span class="val-box">{{ b('rh_blood_code') }}</span><span class="hint">1.阴 2.阳 3.不详 4.未查</span>
-        </div>
-        
-        <div class="fp-row" style="border-top: 2px solid #000; padding-top: 6px;">
-          <span>科主任</span><u class="fill flex-1">{{ b('deptdirector_sign') }}</u>
-          <span class="ml-2">主任（副主任）医师</span><u class="fill flex-1">{{ b('chief_physician_sign') }}</u>
-          <span class="ml-2">主治医师</span><u class="fill flex-1">{{ b('attending_physician_sign') }}</u>
-          <span class="ml-2">住院医师</span><u class="fill flex-1">{{ b('resident_physician_sign') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span>责任护士</span><u class="fill flex-1">{{ b('responsible_nurse_sign') }}</u>
-          <span class="ml-2">进修医师</span><u class="fill flex-1"></u>
-          <span class="ml-2">实习医师</span><u class="fill flex-1"></u>
-          <span class="ml-2">编码员</span><u class="fill flex-1">{{ b('coder_sign') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span>病案质量</span><span class="val-box">{{ b('medicalrecord_quality') }}</span><span class="hint">1.甲 2.乙 3.丙</span>
-          <span class="ml-8">质控医师</span><u class="fill flex-1">{{ t('QC_physician_sign') }}</u>
-          <span class="ml-4">质控护士</span><u class="fill flex-1">{{ t('QC_nurse_sign') }}</u>
-        </div>
-        
-        <div class="fp-row" style="border-bottom: none;">
-          <span>期</span><u class="fill w-10"></u><span>年</span><u class="fill w-8"></u><span>月</span><u class="fill w-8"></u><span>日</span>
-        </div>
-
-      </div>
+﻿<template>
+  <div class="fp-sheet-wrap">
+    <div v-if="diagnosisGenerationPending" class="fp-pending">
+      正在生成诊断编码与证据，请稍候...
     </div>
 
-    <!-- ============== 第二页 ============== -->
-    <div class="fp-page" style="margin-top: 30px;">
-      <!-- 大黑框2 -->
-      <div class="fp-main-box">
-        
-        <!-- 手术表格 -->
-        <table class="fp-table surgery-table" style="border-left:none; border-right:none; border-top:none; width: 100%;">
-          <thead>
-            <tr>
-              <th rowspan="2" style="width:10%; border-left:none; border-top:none;">手术及<br/>操作编码</th>
-              <th rowspan="2" style="width:9%; border-top:none;">手术及<br/>操作日期</th>
-              <th rowspan="2" style="width:5%; border-top:none;">手术<br/>级别</th>
-              <th rowspan="2" style="width:20%; border-top:none;">手术及操作名称</th>
-              <th colspan="3" style="border-top:none;">手术及操作医师</th>
-              <th rowspan="2" style="width:7%; border-top:none;">切口愈<br/>合等级</th>
-              <th rowspan="2" style="width:8%; border-top:none;">麻醉方式</th>
-              <th rowspan="2" style="width:8%; border-right:none; border-top:none;">麻醉医师</th>
-            </tr>
-            <tr>
-              <th style="width:7%">术者</th>
-              <th style="width:6%">Ⅰ助</th>
-              <th style="width:6%">Ⅱ助</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(s, idx) in paddedSurgeries" :key="idx">
-              <td class="mono center" style="border-left:none;">{{ s.surgery_code }}</td>
-              <td class="center">{{ formatDateShort(s.surgery_begin_datetime) }}</td>
-              <td class="center">{{ s.surgical_level }}</td>
-              <td>{{ s.surgery_name }}</td>
-              <td class="center">{{ s.surgeon }}</td>
-              <td class="center">{{ s.first_assistant }}</td>
-              <td class="center">{{ s.second_assistant }}</td>
-              <td class="center">{{ formatIncision(s) }}</td>
-              <td class="center">{{ s.anesthesia_method }}</td>
-              <td class="center" style="border-right:none;">{{ s.anesthesiologist }}</td>
-            </tr>
-          </tbody>
-        </table>
+    <div class="fp-frame-wrap">
+      <iframe ref="iframeRef" class="fp-frame" :srcdoc="srcdoc" />
+    </div>
 
-        <!-- 离院等信息 -->
-        <div class="fp-row" style="border-bottom: none; padding-bottom: 0; min-height: auto;">
-          <span>离院方式</span><span class="val-box">{{ b('leaving_hospital_way') }}</span><span class="hint">1.医嘱离院 2.医嘱转院，拟接收医疗机构名称：</span>
-          <u class="fill flex-1">{{ t('planned_transder_to') }}</u>
-        </div>
-        
-        <div class="fp-row" style="padding-top: 4px; min-height: auto;">
-          <span class="hint">3.医嘱转社区卫生服务机构/乡镇卫生院，拟接收医疗机构名称：</span>
-          <u class="fill flex-1"></u>
-          <span class="hint ml-2">4.非医嘱离院 5.死亡 9.其他</span>
-        </div>
-        
-        <div class="fp-row">
-          <span>是否有出院31天内再住院计划</span><span class="val-box">{{ b('rehospital_with_month') }}</span><span class="hint">1.无 2.有，目的：</span>
-          <u class="fill flex-1">{{ t('rehospital_with_month_purpose') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <span class="hint">颅脑损伤患者昏迷时间：入院前</span><u class="fill w-10"></u><span>天</span><u class="fill w-8"></u><span>小时</span><u class="fill w-8"></u><span>分钟</span>
-          <span class="hint ml-8">入院后</span><u class="fill w-10"></u><span>天</span><u class="fill w-8"></u><span>小时</span><u class="fill w-8"></u><span>分钟</span>
-        </div>
-
-        <!-- 费用明细 (粗横线分割) -->
-        <div class="fp-row" style="border-top: 2px solid #000; font-weight: bold; padding-top: 6px;">
-          <span>住院费用（元）：总费用</span><u class="fill flex-1 cost-val">{{ c('total_cost') }}</u>
-          <span class="ml-4">（自付金额：</span><u class="fill flex-1 cost-val">{{ c('self_pay') }}</u><span>）</span>
-        </div>
-        
-        <div class="fp-row">
-          <b>1.综合医疗服务类：</b>
-          <span>（1）一般医疗服务费：</span><u class="fill flex-1 cost-val">{{ c('general_medical_service_fee') }}</u>
-          <span>（2）一般治疗操作费：</span><u class="fill flex-1 cost-val">{{ c('general_treatment_fee') }}</u>
-          <span>（3）护理费：</span><u class="fill flex-1 cost-val">{{ c('nursing_care_fee') }}</u>
-        </div>
-        <div class="fp-row">
-          <span>（4）其他费用：</span><u class="fill flex-1 cost-val">{{ c('other_service_fee') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <b>2.诊断类：</b>
-          <span>（5）病理诊断费：</span><u class="fill flex-1 cost-val">{{ c('pathological_diagnostic_fee') }}</u>
-          <span>（6）实验室诊断费：</span><u class="fill flex-1 cost-val">{{ c('laboratory_diagnostic_fee') }}</u>
-          <span>（7）影像学诊断费：</span><u class="fill flex-1 cost-val">{{ c('imaging_diagnostic_fee') }}</u>
-        </div>
-        <div class="fp-row">
-          <span>（8）临床诊断项目费：</span><u class="fill flex-1 cost-val">{{ c('clinical_diagnostic_fee') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <b>3.治疗类：</b>
-          <span>（9）非手术治疗项目费：</span><u class="fill flex-1 cost-val">{{ c('nonsurgical_treatment_fee') }}</u>
-          <span>（临床物理治疗费：</span><u class="fill flex-1 cost-val">{{ c('clinical_physical_therapy_fee') }}</u><span>）</span>
-        </div>
-        <div class="fp-row">
-          <span>（10）手术治疗费：</span><u class="fill flex-1 cost-val">{{ c('surgery_treatment_fee') }}</u>
-          <span>（麻醉费：</span><u class="fill flex-1 cost-val">{{ c('anesthesia_fee') }}</u>
-          <span>手术费：</span><u class="fill flex-1 cost-val">{{ c('surgery_fee') }}</u><span>）</span>
-        </div>
-        
-        <div class="fp-row">
-          <b>4.康复类：</b>
-          <span>（11）康复费：</span><u class="fill flex-1 cost-val">{{ c('rehabilitation_fee') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <b>5.中医类：</b>
-          <span>（12）中医治疗费：</span><u class="fill flex-1 cost-val"></u>
-        </div>
-        
-        <div class="fp-row">
-          <b>6.西药类：</b>
-          <span>（13）西药费：</span><u class="fill flex-1 cost-val">{{ c('western_medicine_fee') }}</u>
-          <span>（抗菌药物费用：</span><u class="fill flex-1 cost-val">{{ c('antibacterial_drug_fee') }}</u><span>）</span>
-        </div>
-        
-        <div class="fp-row">
-          <b>7.中药类：</b>
-          <span>（14）中成药费：</span><u class="fill flex-1 cost-val">{{ c('chinese_patent_medcine_fee') }}</u>
-          <span>（15）中草药费：</span><u class="fill flex-1 cost-val">{{ c('chinese_herbal_medicine_fee') }}</u>
-        </div>
-        
-        <div class="fp-row">
-          <b>8.血液和血液制品类：</b>
-          <span>（16）血费：</span><u class="fill flex-1 cost-val">{{ c('blood_fee') }}</u>
-          <span>（17）白蛋白类制品费：</span><u class="fill flex-1 cost-val"></u>
-          <span>（18）球蛋白类制品费：</span><u class="fill flex-1 cost-val"></u>
-        </div>
-        <div class="fp-row">
-          <span>（19）凝血因子类制品费：</span><u class="fill flex-1 cost-val"></u>
-          <span>（20）细胞因子类制品费：</span><u class="fill flex-1 cost-val"></u>
-        </div>
-        
-        <div class="fp-row">
-          <b>9.耗材类：</b>
-          <span>（21）检查用一次性医用材料费：</span><u class="fill flex-1 cost-val">{{ c('exam_disposable_mat_fee') }}</u>
-          <span>（22）治疗用一次性医用材料费：</span><u class="fill flex-1 cost-val">{{ c('treat_disposable_mat_fee') }}</u>
-        </div>
-        <div class="fp-row">
-          <span>（23）手术用一次性医用材料费：</span><u class="fill flex-1 cost-val">{{ c('surgery_disposable_mat_fee') }}</u>
-        </div>
-        
-        <div class="fp-row" style="border-bottom: none;">
-          <b>10.其他类：</b>
-          <span>（24）其他费：</span><u class="fill flex-1 cost-val">{{ c('other_fee') }}</u>
-        </div>
-
+    <section v-if="diagnosisRows.length" class="fp-evidence-section">
+      <div class="fp-evidence-title">诊断证据</div>
+      <div class="fp-evidence-list">
+        <button
+          v-for="(item, idx) in diagnosisRows"
+          :key="`${item.diagnosis_name || ''}-${idx}`"
+          type="button"
+          class="fp-evidence-btn"
+          :disabled="!findDiagnosisEvidence(item.diagnosis_name)"
+          @click="openDiagnosisEvidence(item.diagnosis_name)"
+        >
+          <span class="fp-evidence-btn-name">{{ item.diagnosis_name || '未命名诊断' }}</span>
+          <span class="fp-evidence-btn-tag">证据</span>
+        </button>
       </div>
+    </section>
 
-      <!-- 底部说明文字 -->
-      <div class="fp-footer-desc">
-        <div>说明：（一）医疗付费方式 1.城镇职工基本医疗保险 2.城镇居民基本医疗保险 3.新型农村合作医疗 4.贫困救助 5.商业医疗保险 6.全公费 7.全自费 8.其他社会保险 9.其他</div>
-        <div style="padding-left: 38px;">（二）凡可由医院信息系统提供住院费用清单的，住院病案首页中可不填写“住院费用”。</div>
+    <div
+      v-if="evidencePanel.visible && evidencePanel.item"
+      class="evidence-overlay"
+      @click.self="closeDiagnosisEvidence"
+    >
+      <div class="evidence-card">
+        <div class="evidence-title">诊断原文证据</div>
+        <div class="evidence-meta">诊断：{{ evidencePanel.item.diagnosis_text || '-' }}</div>
+        <div class="evidence-meta">章节：{{ evidencePanel.item.section || '-' }}</div>
+        <div class="evidence-meta">
+          匹配：{{ evidencePanel.item.match_mode || '-' }}
+          置信度：{{ evidencePanel.item.confidence ?? '-' }}
+        </div>
+
+        <div class="evidence-block">
+          <div class="evidence-block-title">诊断条目原文</div>
+          <div class="evidence-quote">{{ evidencePanel.item.quote || '未命中诊断原文' }}</div>
+        </div>
+
+        <div class="evidence-block">
+          <div class="evidence-block-title">主要诊断选择依据</div>
+          <div class="evidence-logic">{{ evidencePanel.item.selection_logic || '暂无' }}</div>
+        </div>
+
+        <div
+          v-if="Array.isArray(evidencePanel.item.reasoning_checks) && evidencePanel.item.reasoning_checks.length"
+          class="evidence-block"
+        >
+          <div class="evidence-block-title">判定清单（医学逻辑）</div>
+          <div v-for="(ck, idx) in evidencePanel.item.reasoning_checks" :key="idx" class="evidence-check">
+            <div class="evidence-check-head">
+              <span>{{ ck.item || `规则${idx + 1}` }}</span>
+              <span :class="['evidence-pill', ck.status ? 'ok' : 'pending']">
+                {{ ck.status ? '满足' : '待确认' }}
+              </span>
+            </div>
+            <div class="evidence-check-exp">{{ ck.explain || '' }}</div>
+            <div v-if="ck.evidence_quote" class="evidence-check-quote">{{ ck.evidence_quote }}</div>
+          </div>
+        </div>
+
+        <div
+          v-if="Array.isArray(evidencePanel.item.raw_evidence_lines) && evidencePanel.item.raw_evidence_lines.length"
+          class="evidence-block"
+        >
+          <div class="evidence-block-title">已用病历原文</div>
+          <div v-for="(line, idx) in evidenceRawLinesToShow" :key="idx" class="evidence-raw-line">
+            <span class="evidence-raw-tag">[{{ line.source || '病历原文' }} | {{ line.role || '证据' }}]</span>
+            <span>{{ line.text }}</span>
+          </div>
+          <button v-if="hasMoreRawEvidence" type="button" class="evidence-btn-inline" @click="toggleRawEvidenceExpand">
+            {{ showAllRawEvidence ? '收起' : '展开更多' }}
+          </button>
+        </div>
+
+        <div class="evidence-actions">
+          <button type="button" class="evidence-close-btn" @click="closeDiagnosisEvidence">关闭</button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
+<script setup lang="ts">
+import { computed, reactive, ref } from 'vue'
 
-const props = defineProps({
-  data: { type: Object, required: true }
+import templateBodyHtml from '@/assets/templates/hm-frontpage/inpatient_record.html?raw'
+import contentsCss from '@/assets/templates/hm-frontpage/contents.css?raw'
+import printCss from '@/assets/templates/hm-frontpage/print.css?raw'
+import { frontPageDraftToDeMap } from '@/utils/hm-frontpage/frontPageDraftToDeMap'
+import { applyDeValuesToHmTemplateBody, buildHmTemplateSrcdoc } from '@/utils/hm-frontpage/templateRefill'
+
+interface DiagnosisItem {
+  diagnosis_type?: string
+  diagnosis_name?: string
+  diagnosis_code?: string
+  admission_condition?: string | number
+}
+
+const props = defineProps<{
+  data: any
+  postProcessing?: boolean
+}>()
+
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+
+const diagnosisRows = computed<DiagnosisItem[]>(() => {
+  const arr = props.data?.diagnoses
+  return Array.isArray(arr) ? arr : []
 })
 
-function b(field) {
-  return props.data?.basic?.[field] || ''
-}
-
-// t() 用于纯粹长下划线填空，过滤掉数据库里的 '/' 或 '-'，避免打印在下划线上显得突兀
-function t(field) {
-  const v = props.data?.basic?.[field]
-  return (!v || v === '/' || v === '-') ? '' : v
-}
-
-function c(field) {
-  const val = props.data?.cost?.[field]
-  if (!val || val === 'None') return ''
-  const num = parseFloat(val)
-  return isNaN(num) ? val : num.toFixed(2)
-}
-
-function dateParts(val) {
-  if (!val) return { year: '', month: '', day: '', hour: '' }
-  const m = val.match(/(\d{4})-(\d{2})-(\d{2})\s*(\d{2})?/)
-  if (m) {
-    return { year: m[1], month: m[2], day: m[3], hour: m[4] || '' }
-  }
-  return { year: '', month: '', day: '', hour: '' }
-}
-
-function formatDateShort(val) {
-  if (!val) return ''
-  const m = val.match(/(\d{4})-(\d{2})-(\d{2})/)
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`
-  return val
-}
-
-// 医疗付费方式：文字 → 编号映射（国家标准）
-const PAYMENT_MAP = {
-  '城镇职工基本医疗保险': '1', '城镇职工': '1',
-  '城镇居民基本医疗保险': '2', '城镇居民': '2',
-  '新型农村合作医疗': '3', '新农合': '3',
-  '贫困救助': '4',
-  '商业医疗保险': '5', '商业保险': '5',
-  '全公费': '6',
-  '全自费': '7', '自费': '7',
-  '其他社会保险': '8',
-  '其他': '9',
-}
-const paymentCode = computed(() => {
-  const raw = b('medical_payment_method')
-  if (!raw) return ''
-  // 如果已经是数字直接用
-  if (/^\d$/.test(raw)) return raw
-  return PAYMENT_MAP[raw] || raw.charAt(0)
+const diagnosisGenerationPending = computed(() => {
+  if (!props.postProcessing) return false
+  const list = diagnosisRows.value
+  if (!list.length) return true
+  const meaningful = list.filter((d) => String(d?.diagnosis_name || '').trim().length > 0)
+  if (!meaningful.length) return true
+  const hasMissingCode = meaningful.some((d) => String(d?.diagnosis_code || '').trim().length === 0)
+  const hasEvidence = diagnosisEvidenceList.value.length > 0
+  return hasMissingCode || !hasEvidence
 })
 
-function parseProvCity(val) {
-  if (!val) return { prov: '', city: '' }
-  // 简化的省市提取
-  let prov = val, city = ''
-  if (val.includes('省')) {
-    const parts = val.split('省')
-    prov = parts[0]
-    city = parts[1]?.replace('市', '') || ''
-  } else if (val.includes('市')) {
-    prov = val.split('市')[0]
-  }
-  return { prov, city }
+function first(arr: any[], fallback: any = undefined) {
+  return Array.isArray(arr) && arr.length ? arr[0] : fallback
 }
 
-function parseAddress(val) {
-  if (!val) return { prov: '', city: '', county: '' }
-  let prov = '', city = '', county = ''
-  let remain = val
-  if (remain.includes('省')) {
-    prov = remain.split('省')[0]
-    remain = remain.split('省')[1]
-  }
-  if (remain.includes('市')) {
-    city = remain.split('市')[0]
-    remain = remain.split('市')[1]
-  }
-  if (remain.includes('县')) {
-    county = remain.split('县')[0]
-  } else if (remain.includes('区')) {
-    county = remain.split('区')[0]
-  }
-  if (!prov && !city && !county) prov = val
-  return { prov, city, county }
+function normalizeDate(value: any): string | null {
+  if (!value) return null
+  const s = String(value).trim()
+  if (!s) return null
+  const m = s.match(/\d{4}-\d{2}-\d{2}/)
+  return m ? m[0] : s
 }
 
-const computedAge = computed(() => {
-  const bd = b('birthday')
-  if (!bd) return ''
-  try {
-    const birth = new Date(bd)
-    const now = new Date()
-    let age = now.getFullYear() - birth.getFullYear()
-    if (now.getMonth() < birth.getMonth() ||
-        (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) {
-      age--
+const normalizedDraft = computed(() => {
+  const src = props.data || {}
+  const basic = src.basic || {}
+  const diags: DiagnosisItem[] = Array.isArray(src.diagnoses) ? src.diagnoses : []
+  const surgeries: any[] = Array.isArray(src.surgeries) ? src.surgeries : []
+  const cost = src.cost || {}
+
+  const mainDiag = diags.find((d) => String(d?.diagnosis_type || '').includes('主要')) || first(diags, null)
+  const otherDiags = diags.filter((d) => d !== mainDiag)
+
+  const mainProc = first(surgeries, null)
+  const otherProcs = Array.isArray(surgeries) ? surgeries.slice(1) : []
+
+  return {
+    basic_info: {
+      patient_name: basic.name || '',
+      gender: basic.sex || '',
+      birth_date: basic.birthday || '',
+      age_years: basic.age || '',
+      id_number: basic.id_card_no || '',
+      marital_status: basic.marital_status || '',
+      nationality: basic.nationality || '中国',
+      ethnicity: basic.ethnicity || '',
+      occupation: basic.occupation_category || '',
+      nativeplace: basic.nativeplace || '',
+      current_address: basic.currentaddress || '',
+      work_unit: basic.work_unit || '',
+      contact_name: basic.contact_name || '',
+      contact_relation: basic.contact_relationship || '',
+      contact_phone: basic.contact_telephone || '',
+      contact_address: basic.contact_address || ''
+    },
+    hospitalization: {
+      hospital_name: basic.institute_county_desc || '',
+      organization_code: basic.institute_code || '',
+      medical_record_no: basic.document_id || '',
+      admission_times_in_hospital: basic.visit_cnt || '',
+      payment_method_text: basic.medical_payment_method || '',
+      admission_way_text: basic.admission_route || '',
+      admission_dept: basic.admission_dept_name || '',
+      discharge_dept: basic.discharge_dept_name || '',
+      admission_ward: basic.admission_ward_name || '',
+      discharge_ward: basic.discharge_ward_name || '',
+      transfer_dept: basic.transfer_dept_name || '',
+      admission_datetime: basic.admission_datetime || '',
+      discharge_datetime: basic.discharge_datetime || '',
+      actual_hospital_days: basic.hospital_duration || '',
+      leaving_hospital_way: basic.leaving_hospital_way || '',
+      rehospital_within_month: basic.rehospital_with_month || ''
+    },
+    diagnoses: {
+      discharge_main_diagnosis_text: mainDiag?.diagnosis_name || null,
+      discharge_main_icd: mainDiag?.diagnosis_code || null,
+      admission_condition: mainDiag?.admission_condition || null,
+      discharge_other_diagnoses_texts: otherDiags.map((d) => d?.diagnosis_name || '').filter(Boolean),
+      discharge_other_icds: otherDiags.map((d) => d?.diagnosis_code || '').filter(Boolean)
+    },
+    procedures: {
+      main_procedure_text: mainProc?.surgery_name || null,
+      main_procedure_code: mainProc?.surgery_code || null,
+      main_procedure_date: normalizeDate(mainProc?.surgery_begin_datetime),
+      main_procedure_level: mainProc?.surgical_level || null,
+      anesthesia_method: mainProc?.anesthesia_method || null,
+      incision_healing_grade: mainProc?.surgical_incisionheal_level || null,
+      other_procedures: otherProcs.map((p) => ({
+        text: p?.surgery_name || p?.text || '',
+        code: p?.surgery_code || p?.code || '',
+        date: normalizeDate(p?.surgery_begin_datetime || p?.date)
+      }))
+    },
+    other_medical_info: {
+      drug_allergy_flag: basic.allergy_sign || '',
+      abo_blood_type: basic.abo_blood_code || '',
+      rh_blood_type: basic.rh_blood_code || ''
+    },
+    staff: {
+      dept_director: basic.deptdirector_sign || '',
+      chief_physician: basic.chief_physician_sign || '',
+      attending_physician: basic.attending_physician_sign || '',
+      resident_physician: basic.resident_physician_sign || '',
+      responsible_nurse: basic.responsible_nurse_sign || '',
+      coder: basic.coder_sign || '',
+      medical_record_quality: basic.medicalrecord_quality || ''
+    },
+    costs: {
+      total_cost: cost.total_cost || '',
+      self_paid: cost.self_pay || ''
     }
-    return age >= 1 ? `${age}` : `${Math.floor((now - birth) / (1000*60*60*24*30))}月`
-  } catch { return '' }
-})
-
-const diagnosisPairs = computed(() => {
-  const diags = props.data?.diagnoses || []
-  const mainIdx = diags.findIndex(d => String(d?.diagnosis_type || '').includes('主要'))
-  const mainDiag = mainIdx >= 0 ? [diags[mainIdx]] : []
-  const otherDiag = diags.filter((_, idx) => idx !== mainIdx)
-  const leftItems = [...mainDiag, ...otherDiag.slice(0, Math.ceil(otherDiag.length / 2))]
-  const rightItems = otherDiag.slice(Math.ceil(otherDiag.length / 2))
-
-  const rowCount = Math.max(leftItems.length, rightItems.length, 10) 
-  const pairs = []
-  for (let i = 0; i < rowCount; i++) {
-    pairs.push({
-      left: leftItems[i] || null,
-      right: rightItems[i] || null
-    })
   }
-  return pairs
 })
 
-const paddedSurgeries = computed(() => {
-  const s = props.data?.surgeries || []
-  const rows = [...s]
-  while (rows.length < 8) {
-    rows.push({ surgery_code: '', surgery_name: '', surgeon: '' })
-  }
-  return rows
+const srcdoc = computed(() => {
+  const { deMap, diagnosisRows, procedureRows } = frontPageDraftToDeMap(normalizedDraft.value)
+  const filledBodyHtml = applyDeValuesToHmTemplateBody(templateBodyHtml, deMap, diagnosisRows, procedureRows)
+  return buildHmTemplateSrcdoc({ filledBodyHtml, contentsCss, printCss })
 })
 
-function formatIncision(s) {
-  if (!s.surgery_name && !s.surgery_code) return ''
-  if (!s.surgial_incision_level && !s.surgical_incisionheal_level) return '/'
-  return `${s.surgial_incision_level || ''} / ${s.surgical_incisionheal_level || ''}`
+function normalizeEvidenceKey(text: string): string {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\u3000，,。；;：:“”"'‘’、()（）【】\[\]\-—_]/g, '')
+}
+
+const diagnosisEvidenceList = computed(() => {
+  const arr = props.data?.evidence?.diagnoses
+  return Array.isArray(arr) ? arr : []
+})
+
+const diagnosisEvidenceMap = computed(() => {
+  const map = new Map<string, any>()
+  diagnosisEvidenceList.value.forEach((item: any) => {
+    const key = normalizeEvidenceKey(item?.diagnosis_text)
+    if (key && !map.has(key)) map.set(key, item)
+  })
+  return map
+})
+
+function findDiagnosisEvidence(name: string): any {
+  const key = normalizeEvidenceKey(name)
+  if (!key) return null
+  const direct = diagnosisEvidenceMap.value.get(key)
+  if (direct) return direct
+  return diagnosisEvidenceList.value.find((item: any) => {
+    const k = normalizeEvidenceKey(item?.diagnosis_text)
+    return k && (k.includes(key) || key.includes(k))
+  }) || null
+}
+
+const evidencePanel = reactive<{ visible: boolean; item: any | null }>({
+  visible: false,
+  item: null
+})
+
+const showAllRawEvidence = ref(false)
+
+const evidenceRawLines = computed(() => {
+  const lines = evidencePanel.item?.raw_evidence_lines
+  return Array.isArray(lines) ? lines : []
+})
+
+const hasMoreRawEvidence = computed(() => evidenceRawLines.value.length > 3)
+
+const evidenceRawLinesToShow = computed(() => {
+  if (showAllRawEvidence.value) return evidenceRawLines.value
+  return evidenceRawLines.value.slice(0, 3)
+})
+
+function toggleRawEvidenceExpand() {
+  showAllRawEvidence.value = !showAllRawEvidence.value
+}
+
+function openDiagnosisEvidence(name: string) {
+  const item = findDiagnosisEvidence(name)
+  if (!item) return
+  evidencePanel.item = item
+  evidencePanel.visible = true
+  showAllRawEvidence.value = false
+}
+
+function closeDiagnosisEvidence() {
+  evidencePanel.visible = false
+  evidencePanel.item = null
+  showAllRawEvidence.value = false
 }
 </script>
 
 <style scoped>
-/* ===== 住院病案首页 — 像素级还原官方PDF长相 ===== */
-.fp-wrapper {
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-  padding: 22px 18px 30px;
+.fp-sheet-wrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 12px;
 }
 
-.fp-page {
-  font-family: "SimSun", "宋体", "Songti SC", serif;
-  font-size: 13.5px;
-  color: #000;
-  background: #fff;
-  width: 794px; /* A4 宽度 210mm 以 96dpi 计算 */
-  min-height: 1123px; /* A4 高度 */
-  padding: 30px 40px;
-  border-radius: 24px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-  position: relative;
-  box-sizing: border-box;
-}
-
-/* 顶部文号标记 */
-.fp-top-attachment {
-  position: absolute;
-  top: 15px;
-  left: 40px;
-  font-size: 15px;
-  font-family: "SimHei", "黑体", sans-serif;
-}
-
-/* === 顶部 Header === */
-.fp-header {
-  margin-top: 25px;
-  margin-bottom: 5px;
-}
-
-.header-line {
-  line-height: 1.6;
-}
-
-.fp-title {
-  font-size: 26px;
-  font-weight: bold;
-  letter-spacing: 12px;
-  margin: 0;
-  text-align: center;
-  font-family: "SimHei", "黑体", sans-serif;
-}
-
-/* === 大黑框 === */
-.fp-main-box {
-  border: 2px solid #000; /* 粗黑外边框 */
-  display: flex;
-  flex-direction: column;
-}
-
-/* 每一行 */
-.fp-row {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-end; /* 底部对齐，让所有字在同一基线上 */
-  border-bottom: 1px solid #000;
-  padding: 5px 6px 3px 6px; /* 控制行高和留白 */
-  min-height: 28px;
-  line-height: 1.1;
-  box-sizing: border-box;
-}
-
-.fp-row > span {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* 下划线填空 */
-u.fill {
-  border-bottom: 1px solid #000;
-  text-decoration: none;
-  display: inline-block;
-  text-align: center;
-  margin: 0 2px;
-  flex-shrink: 0;
-  min-height: 18px;
-}
-
-.flex-1 { flex: 1; min-width: 10px; }
-.w-8 { width: 32px; }
-.w-10 { width: 40px; }
-.w-12 { width: 48px; }
-.w-16 { width: 64px; }
-.w-24 { width: 96px; }
-.w-32 { width: 128px; }
-
-/* 费用数字靠右 */
-u.fill.cost-val {
-  text-align: right;
-  padding-right: 4px;
-}
-
-/* 方框选择符 (显示数字在里面，或者为空) */
-.val-box {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 1px solid #000;
-  margin: 0 4px;
-  text-align: center;
-  line-height: 14px;
-  font-size: 12px;
-  vertical-align: middle;
-  background: transparent;
-  overflow: hidden;
-}
-
-/* 提示文字 */
-.hint {
-  font-size: 12px;
-}
-
-/* 常用留白 */
-.ml-2 { margin-left: 8px; }
-.ml-4 { margin-left: 16px; }
-.ml-8 { margin-left: 32px; }
-
-/* 文本右对齐补充行 */
-.text-right-align {
-  justify-content: flex-end;
-}
-
-/* === 表格 === */
-.fp-table {
-  border-collapse: collapse;
-  table-layout: fixed;
-  border-bottom: 1px solid #000;
-}
-
-.fp-table th, .fp-table td {
-  border: 1px solid #000;
-  padding: 3px 4px;
+.fp-pending {
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #1e3a8a;
+  border-radius: 12px;
+  padding: 10px 12px;
   font-size: 13px;
-  line-height: 1.4;
-  vertical-align: middle;
+  font-weight: 600;
 }
 
-.fp-table th {
-  font-weight: normal;
-  text-align: center;
+.fp-frame-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  overflow: auto;
+  max-height: calc(100vh - 220px);
 }
 
-.center { text-align: center; }
-.mono { font-family: "Courier New", monospace; font-size: 12px; }
+.fp-frame {
+  width: 100%;
+  min-height: 2500px;
+  border: 0;
+  background: #fff;
+}
 
-.diag-table td { height: 26px; }
-.surgery-table td { height: 24px; }
+.fp-evidence-section {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+}
 
+.fp-evidence-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
 
-/* 第二页底部说明文字 */
-.fp-footer-desc {
-  margin-top: 6px;
+.fp-evidence-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fp-evidence-btn {
+  border: 1px solid #bfdbfe;
+  background: #f8fbff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fp-evidence-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fp-evidence-btn-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
-  line-height: 1.6;
+  color: #1e293b;
 }
 
-@media print {
-  .fp-wrapper { padding: 0; background: #fff; }
-  .fp-page { box-shadow: none; margin: 0; padding: 20px 0; page-break-after: always; }
+.fp-evidence-btn-tag {
+  font-size: 12px;
+  color: #2563eb;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.evidence-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(15, 23, 42, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.evidence-card {
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #dbe2f0;
+  padding: 16px;
+}
+
+.evidence-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+
+.evidence-meta {
+  font-size: 14px;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.evidence-block {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.evidence-block-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 8px;
+}
+
+.evidence-quote,
+.evidence-logic,
+.evidence-check-exp,
+.evidence-check-quote,
+.evidence-raw-line {
+  font-size: 14px;
+  color: #1e293b;
+  line-height: 1.65;
+}
+
+.evidence-check + .evidence-check {
+  margin-top: 10px;
+}
+
+.evidence-check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.evidence-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.evidence-pill.ok {
+  color: #047857;
+  background: #d1fae5;
+  border: 1px solid #86efac;
+}
+
+.evidence-pill.pending {
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+
+.evidence-raw-tag {
+  display: inline-block;
+  margin-right: 8px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.evidence-btn-inline {
+  margin-top: 8px;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.evidence-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.evidence-close-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 10px;
+  min-width: 76px;
+  height: 34px;
+  font-size: 14px;
+  cursor: pointer;
 }
 </style>

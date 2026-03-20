@@ -2,22 +2,27 @@
   <div v-if="recentCodes.length > 0" class="icd-recent-bar">
     <div class="recent-label">
       <ClockCircleOutlined />
-      <span>最近查看</span>
+      <div>
+        <div class="recent-label__title">最近查看</div>
+        <div class="recent-label__sub">{{ recentCodes.length }} 个编码</div>
+      </div>
     </div>
+
     <div class="recent-tags">
-      <a-tag
+      <button
         v-for="item in recentCodes"
         :key="item.code"
-        :color="item.type === 'icd10' ? 'blue' : 'green'"
         class="recent-tag"
         @click="$emit('select', item)"
       >
-        {{ item.code }} {{ item.name }}
-      </a-tag>
+        <span class="recent-tag__code">{{ item.code }}</span>
+        <span class="recent-tag__name">{{ item.name }}</span>
+      </button>
     </div>
-    <a-button type="text" size="small" class="recent-clear" @click="$emit('clear')">
+
+    <button class="recent-clear" @click="$emit('clear')">
       清除
-    </a-button>
+    </button>
   </div>
 </template>
 
@@ -44,29 +49,48 @@ defineEmits<{
 .icd-recent-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 -10px 24px rgba(148, 163, 184, 0.08);
+  gap: 14px;
+  padding: 12px 22px;
+  border-top: 1px solid rgba(191, 219, 254, 0.85);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 246, 255, 0.92) 100%);
+  box-shadow: 0 -12px 28px rgba(148, 163, 184, 0.08);
 }
 
 .recent-label {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #64748b;
-  white-space: nowrap;
+  gap: 10px;
   flex-shrink: 0;
+  min-width: 116px;
+  color: #334155;
+}
+
+.recent-label :deep(svg) {
+  width: 18px;
+  height: 18px;
+  color: #2563eb;
+}
+
+.recent-label__title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recent-label__sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #94a3b8;
 }
 
 .recent-tags {
   display: flex;
-  gap: 6px;
   flex: 1;
-  overflow-x: auto;
+  gap: 10px;
   min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .recent-tags::-webkit-scrollbar {
@@ -74,30 +98,58 @@ defineEmits<{
 }
 
 .recent-tag {
-  cursor: pointer;
-  border-radius: 999px !important;
-  font-size: 12px;
-  padding-inline: 10px;
-  border-color: rgba(191, 219, 254, 0.9) !important;
-  background: rgba(239, 246, 255, 0.75) !important;
-  color: #0f172a !important;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
+  max-width: 300px;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.95);
+  background: linear-gradient(180deg, #eff6ff, #ffffff);
+  padding: 8px 14px;
+  color: #0f172a;
+  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .recent-tag:hover {
   transform: translateY(-1px);
-  border-color: rgba(125, 211, 252, 0.95) !important;
-  box-shadow: 0 10px 18px rgba(148, 163, 184, 0.18);
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 12px 22px rgba(59, 130, 246, 0.14);
+}
+
+.recent-tag__code {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1d4ed8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.recent-tag__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
 }
 
 .recent-clear {
-  font-size: 12px;
-  color: #64748b;
   flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 8px 12px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.recent-clear:hover {
+  border-color: rgba(59, 130, 246, 0.28);
+  color: #1d4ed8;
 }
 </style>

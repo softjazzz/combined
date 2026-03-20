@@ -425,9 +425,9 @@ const handleClose = () => {
 
 const onDocumentSelect = (keys: string[], info: unknown) => {
   if (keys.length > 0) {
-    const selectedNode = info.node
+    const selectedNode = (info as { node?: { isLeaf?: boolean; document?: ExtractedDocument } }).node
     // 只有文书节点（叶子节点）才能被选中
-    if (selectedNode.isLeaf && selectedNode.document) {
+    if (selectedNode?.isLeaf && selectedNode.document) {
       selectedKeys.value = keys
       selectedDocument.value = selectedNode.document
     } else {
@@ -458,7 +458,7 @@ const getCategoryIcon = (iconName: string) => {
 }
 
 const resolveDocumentType = (doc: ExtractedDocument): DocumentType => {
-  return (doc.type as DocumentType) || DocumentType.PROGRESS_NOTE
+  return (doc.type as DocumentType) || DocumentType.DAILY_PROGRESS_NOTE
 }
 
 const getDocumentIcon = (type: DocumentType) => {

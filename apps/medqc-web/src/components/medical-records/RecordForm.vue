@@ -236,9 +236,25 @@ import type { FormInstance, UploadRequestOption } from 'ant-design-vue'
 import type { MedicalRecord, CreateMedicalRecordRequest } from '@/types'
 import { DEPARTMENTS } from '@/types/medical-records'
 
+type RecordFormModel = MedicalRecord & {
+  patient_gender?: 'M' | 'F' | 'U'
+  admission_date?: string
+  record_type?: 'inpatient' | 'outpatient' | 'emergency'
+  file_url?: string
+  file_name?: string
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 // Props
 interface Props {
-  record?: MedicalRecord | null
+  record?: RecordFormModel | null
   loading?: boolean
 }
 
@@ -355,8 +371,10 @@ const handleSubmit = async () => {
     
     emit('submit', submitData)
   } catch (error: unknown) {
-    if (error?.errorFields) {
+    if (typeof error === 'object' && error && 'errorFields' in error) {
       message.warning('请检查输入信息')
+    } else {
+      message.error(getErrorMessage(error))
     }
   }
 }
@@ -420,7 +438,9 @@ const handleFileUpload = async (options: UploadRequestOption) => {
 
 // 筛选科室选项
 const filterDepartment = (input: string, option: unknown) => {
-  return option.children.toLowerCase().includes(input.toLowerCase())
+  if (typeof option !== 'object' || !option || !('children' in option)) return false
+  const children = String((option as { children?: unknown }).children || '')
+  return children.toLowerCase().includes(input.toLowerCase())
 }
 
 // 重置表单

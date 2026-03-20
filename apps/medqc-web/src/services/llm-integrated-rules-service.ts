@@ -23,6 +23,12 @@ import type {
 
 import { supabase } from '@/lib/supabase'
 
+type ImportedRule = Partial<EnhancedQCRule> & { id: string; rule_code?: string }
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 // Base Enhanced Rules Service (to be extended)
 class BaseEnhancedRulesService {
   async getEnhancedRules(filter?: EnhancedRuleFilter): Promise<EnhancedQCRule[]> {
@@ -230,11 +236,22 @@ class BaseEnhancedRulesService {
       warnings: []
     }
 
-    if (!configData.rules || !Array.isArray(configData.rules)) {
+    if (
+      typeof configData !== 'object' ||
+      configData === null ||
+      !('rules' in configData) ||
+      !Array.isArray((configData as { rules: unknown[] }).rules)
+    ) {
       throw new Error('Invalid configuration data: missing rules array')
     }
 
-    for (const ruleData of configData.rules) {
+    const importRules = (configData as { rules: unknown[] }).rules.filter((item): item is ImportedRule => (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as { id?: unknown }).id === 'string'
+    ))
+
+    for (const ruleData of importRules) {
       try {
         // Check if rule already exists
         const existingRule = await this.getRuleById(ruleData.id)
@@ -256,12 +273,12 @@ class BaseEnhancedRulesService {
               break
           }
         } else {
-          await this.createEnhancedRule(ruleData)
+          await this.createEnhancedRule(ruleData as CreateEnhancedRuleRequest)
           result.importedCount++
         }
       } catch (error) {
         result.errorCount++
-        result.errors.push(`Rule ${ruleData.rule_code}: ${error.message}`)
+        result.errors.push(`Rule ${ruleData.rule_code ?? ruleData.id}: ${getErrorMessage(error)}`)
       }
     }
 
@@ -325,7 +342,7 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
       
     } catch (error: unknown) {
       console.error(`Failed to sync rule ${rule.id} to LLM engine:`, error)
-      throw new Error(`规则同步失败: ${error.message}`)
+      throw new Error(`规则同步失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -540,7 +557,7 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
       return {
         ruleId,
         isSuccessful: false,
-        error: error.message,
+        error: getErrorMessage(error),
         testData
       }
     }

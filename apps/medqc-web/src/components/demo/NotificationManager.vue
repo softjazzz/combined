@@ -222,6 +222,11 @@ import {
 import dayjs from 'dayjs'
 
 const demoStore = useQCDemoStore()
+const demoStoreActions = demoStore as unknown as {
+  batchMarkRead?: (ids: string[]) => void
+  batchIgnore?: (ids: string[]) => void
+  batchDelete?: (ids: string[]) => void
+}
 
 // 筛选器
 const filters = ref({
@@ -317,19 +322,19 @@ const handleSelectChange = (e: any, id: string) => {
 }
 
 const handleBatchMarkRead = () => {
-  demoStore.batchMarkRead(selectedIds.value)
+  demoStoreActions.batchMarkRead?.(selectedIds.value)
   message.success(`已标记 ${selectedIds.value.length} 条通知为已读`)
   selectedIds.value = []
 }
 
 const handleBatchIgnore = () => {
-  demoStore.batchIgnore(selectedIds.value)
+  demoStoreActions.batchIgnore?.(selectedIds.value)
   message.success(`已忽略 ${selectedIds.value.length} 条通知`)
   selectedIds.value = []
 }
 
 const handleBatchDelete = () => {
-  demoStore.batchDelete(selectedIds.value)
+  demoStoreActions.batchDelete?.(selectedIds.value)
   message.success(`已删除 ${selectedIds.value.length} 条通知`)
   selectedIds.value = []
 }

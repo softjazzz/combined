@@ -18,6 +18,34 @@ import { integratedQCEngine } from './integrated-qc-engine'
 import { notificationService } from './notification-service'
 import { intelligentQCCache } from './intelligent-cache'
 
+interface RuleFindingLike {
+  type?: string
+  severity?: string
+  description?: string
+  location?: string
+  evidence?: string
+  recommendation?: string
+}
+
+interface RuleResultLike {
+  ruleCode?: string
+  confidence?: number
+  medicalReasoning?: string
+  findings?: RuleFindingLike[]
+}
+
+interface AnalysisResultLike {
+  ruleResults?: RuleResultLike[]
+}
+
+interface AuditResultNotificationPayload {
+  id: string
+  qc_audit_task_items?: {
+    patient_id?: string
+    medical_record_id?: string
+  }
+}
+
 // AI辅助缺陷识别服务
 class AIDefectAssistantService {
   constructor(private qcEngine: typeof integratedQCEngine) {}
@@ -49,7 +77,7 @@ class AIDefectAssistantService {
   }
 
   private convertToDefectSuggestions(
-    analysisResult: unknown,
+    analysisResult: AnalysisResultLike,
     context: DefectAnalysisContext
   ): AIDefectSuggestion[] {
     
@@ -107,7 +135,7 @@ class AIDefectAssistantService {
     return severityMap[severity] || 'minor'
   }
 
-  private enhanceDefectDescription(finding: unknown,  ruleResult: unknown): string {
+  private enhanceDefectDescription(finding: RuleFindingLike, ruleResult: RuleResultLike): string {
     let description = finding.description || ''
     
     if (finding.evidence) {
@@ -507,15 +535,18 @@ export class AuditResultService {
       .eq('id', taskItemId)
   }
 
-  private async sendAuditCompletionNotification(auditResult: unknown): Promise<void> {
+  private async sendAuditCompletionNotification(auditResult: AuditResultNotificationPayload): Promise<void> {
+    const taskItem = auditResult.qc_audit_task_items
+    if (!taskItem?.patient_id || !taskItem.medical_record_id) return
+
     // 发送给临床医生的通知
     await notificationService.sendNotification(
-      auditResult.qc_audit_task_items.patient_id, // 假设患者ID就是医生ID
+      taskItem.patient_id, // 假设患者ID就是医生ID
       'clinician',
       'audit_result',
       {
-        patient_id: auditResult.qc_audit_task_items.patient_id,
-        medical_record_id: auditResult.qc_audit_task_items.medical_record_id,
+        patient_id: taskItem.patient_id,
+        medical_record_id: taskItem.medical_record_id,
         audit_result_id: auditResult.id
       }
     )

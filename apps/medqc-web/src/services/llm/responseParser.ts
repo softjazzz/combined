@@ -7,12 +7,24 @@ import { DocumentClassifier } from './documentClassifier'
 import { EnhancedDocumentClassifier } from './enhancedDocumentClassifier'
 
 export class ResponseParser {
+  private static isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
+  }
+
+  private static toRecord(value: unknown): Record<string, unknown> {
+    return this.isRecord(value) ? value : {}
+  }
+
+  private static toArray(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : []
+  }
+
   /**
    * 解析医疗文本提取的响应
    */
-  static parseMedicalResponse(response: unknown): ExtractedMedicalData {
+  static parseMedicalResponse(response: any): ExtractedMedicalData {
     try {
-      let data: unknown
+      let data: any
 
       // 移除调试日志，指针模式应该能避免解析问题
 
@@ -55,7 +67,7 @@ export class ResponseParser {
       console.error('解析医疗响应失败:', error)
 
       // 尝试从原始响应中提取一些基本信息作为fallback
-      let fallbackData: unknown = {}
+      let fallbackData: any = {}
       if (typeof response === 'string') {
         // 尝试用正则提取一些基本字段
         const patientNameMatch = response.match(/["']?patientName["']?\s*:\s*["']([^"']+)["']?/i)
@@ -225,9 +237,9 @@ export class ResponseParser {
   /**
    * 解析文档索引响应（指针模式专用）
    */
-  static parseIndexResponse(response: unknown): unknown {
+  static parseIndexResponse(response: any): unknown {
     try {
-      let data: unknown
+      let data: any
 
       // 处理不同格式的响应
       if (typeof response === 'string') {
@@ -273,14 +285,14 @@ export class ResponseParser {
   /**
    * 解析文档数组（升级版 - 支持层级化分类）
    */
-  private static parseDocuments(documents: unknown[]): ExtractedDocument[] {
+  private static parseDocuments(documents: any[]): ExtractedDocument[] {
     if (!Array.isArray(documents)) {
       return []
     }
 
     const enhancedClassifier = new EnhancedDocumentClassifier()
 
-    return documents.map((doc: unknown, index: unknown) => {
+    return documents.map((doc: any, index: any) => {
       try {
         // 创建基础文档对象
         const baseDoc: ExtractedDocument = {
@@ -365,7 +377,7 @@ export class ResponseParser {
   /**
    * 解析年龄
    */
-  private static parseAge(age): number | undefined {
+  private static parseAge(age: any): number | undefined {
     if (typeof age === 'number' && age > 0 && age < 150) {
       return Math.floor(age)
     }
@@ -386,7 +398,7 @@ export class ResponseParser {
   /**
    * 解析性别
    */
-  private static parseGender(gender): string | undefined {
+  private static parseGender(gender: any): string | undefined {
     if (typeof gender !== 'string') {
       return undefined
     }
@@ -405,7 +417,7 @@ export class ResponseParser {
   /**
    * 增强的患者姓名提取
    */
-  private static extractPatientName(data: unknown, originalResponse?: unknown): string | undefined {
+  private static extractPatientName(data: any, originalResponse?: unknown): string | undefined {
     // 首先尝试从结构化数据中获取
     let name = this.cleanString(data.patientName)
     if (name && name !== '未识别') {
@@ -441,7 +453,7 @@ export class ResponseParser {
   /**
    * 增强的患者年龄提取
    */
-  private static extractPatientAge(data: unknown, originalResponse?: unknown): number | undefined {
+  private static extractPatientAge(data: any, originalResponse?: unknown): number | undefined {
     // 首先尝试从结构化数据中获取
     let age = this.parseAge(data.patientAge)
     if (age !== undefined) {
@@ -475,7 +487,7 @@ export class ResponseParser {
   /**
    * 增强的患者性别提取
    */
-  private static extractPatientGender(data: unknown, originalResponse?: unknown): string | undefined {
+  private static extractPatientGender(data: any, originalResponse?: unknown): string | undefined {
     // 首先尝试从结构化数据中获取
     let gender = this.parseGender(data.patientGender)
     if (gender) {
@@ -506,7 +518,7 @@ export class ResponseParser {
   /**
    * 增强的科室信息提取
    */
-  private static extractDepartment(data: unknown, originalResponse?: unknown): string | undefined {
+  private static extractDepartment(data: any, originalResponse?: unknown): string | undefined {
     // 首先尝试从结构化数据中获取
     let department = this.cleanString(data.department)
     if (department && department !== '未识别') {
@@ -541,7 +553,7 @@ export class ResponseParser {
   /**
    * 解析字符串数组
    */
-  private static parseStringArray(value): string[] {
+  private static parseStringArray(value: any): string[] {
     if (Array.isArray(value)) {
       return value
         .map(item => this.cleanString(item))
@@ -576,7 +588,7 @@ export class ResponseParser {
   /**
    * 解析批量处理响应
    */
-  static parseBatchResponse(response): ExtractedMedicalData[] {
+  static parseBatchResponse(response: any): ExtractedMedicalData[] {
     try {
       let data: unknown[]
 
@@ -618,7 +630,7 @@ export class ResponseParser {
   /**
    * 解析API使用统计
    */
-  static parseUsageStats(response: unknown): { tokensUsed: number; cost?: number } {
+  static parseUsageStats(response: any): { tokensUsed: number; cost?: number } {
     try {
       if (response.usage) {
         return {

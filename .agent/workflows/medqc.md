@@ -28,7 +28,23 @@ description: MedQC 病案质控系统项目规则和约定
 
 ## LLM 配置
 
-环境变量（在 `backend/.env` 中配置）:
+### 环境变量命名映射
+
+| 标准名（.env 中使用） | 历史别名（代码兼容） | 说明 |
+|---|---|---|
+| `LLM_API_ENDPOINT` | `SICHUAN_API_ENDPOINT` | LLM API 端点 |
+| `LLM_API_KEY` | `SICHUAN_API_KEY` | API 密钥 |
+| `LLM_MODEL` | `SICHUAN_MODEL` | 模型名称 |
+| `LLM_TIMEOUT_SECONDS` | `SICHUAN_TIMEOUT_SECONDS` | 超时时间 |
+| `LLM_ENABLE_TRUNCATE` | `SICHUAN_ENABLE_TRUNCATE` | 是否截断 |
+| `LLM_MAX_CONTENT_LENGTH` | `SICHUAN_MAX_CONTENT_LENGTH` | 最大内容长度 |
+
+> [!IMPORTANT]
+> `.env` 文件统一使用 `LLM_*` 前缀。`SICHUAN_*` 是历史别名，通过 `settings.py` 的 `AliasChoices` 映射。
+> **排查时搜索 `LLM_` 前缀，不要搜 `SICHUAN_`！** `SichuanQCLLMClient` 类名是历史命名，实际读取 `settings.LLM_*`。
+
+### 当前开发环境配置（`backend/.env`）
+
 ```
 LLM_API_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1
 LLM_API_KEY=sk-xxx
@@ -38,7 +54,14 @@ LLM_TIMEOUT_SECONDS=120
 
 > [!CAUTION]
 > **`.env` 文件必须位于 `backend/` 目录下**，且启动后端时**工作目录必须是 `backend/`**，
-> 否则 Pydantic Settings 无法读取 `.env`，LLM API 将不可用（会 fallback 到模拟数据）。
+> 否则 Pydantic Settings 无法读取 `.env`，LLM API 将不可用。
+
+### LLM 不工作排查清单
+
+1. 查看 `.env` 中 `LLM_API_ENDPOINT` / `LLM_API_KEY` / `LLM_MODEL` 是否已配置
+2. 检查启动日志中的 `LLM diagnostics at startup` 输出
+3. 调用 `GET /api/v1/health` 查看 `llm_config` 字段
+4. 若 `LLM_*` 与 `SICHUAN_*` 同时存在且值冲突，启动时会直接报错
 
 ## 常用命令
 

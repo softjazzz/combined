@@ -1,0 +1,16 @@
+{
+  "scheme_name": "foshan_2025",
+  "label": "佛山 2025",
+  "category": "city",
+  "province": "广东",
+  "source_file": "4653.js",
+  "extracted_at": "2026-03-15T18:28:51.117965",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9314,
+    "adrg": 251,
+    "drg": 688
+  }
+}

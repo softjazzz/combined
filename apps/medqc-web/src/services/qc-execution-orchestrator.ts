@@ -16,7 +16,7 @@ import type { QCRuleResult, QCFinding } from '@/types/enhanced-qc-rule'
 
 // Mock LLM Service Implementation
 class MockLLMService implements LLMService {
-  async analyze(prompt: string, options?: unknown): Promise<string> {
+  async analyze(prompt: string, options?: any): Promise<string> {
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000))
     
@@ -67,7 +67,7 @@ class MockLLMService implements LLMService {
     })
   }
 
-  async analyzeStructured(request: unknown): Promise<unknown> {
+  async analyzeStructured(request: any): Promise<any> {
     const response = await this.analyze(request.userPrompt, { ruleId: request.ruleId })
     return {
       content: response,
@@ -86,7 +86,7 @@ class MockLLMService implements LLMService {
     return true
   }
 
-  async getUsageStats(): Promise<unknown> {
+  async getUsageStats(): Promise<any> {
     return {
       totalRequests: Math.floor(Math.random() * 10000),
       totalTokens: Math.floor(Math.random() * 1000000),
@@ -123,7 +123,7 @@ class SimpleExecutionMonitor implements ExecutionMonitor {
     console.log(`Batch ${batchId} status: ${status}`)
   }
 
-  recordError(batchId: string, error: unknown): void {
+  recordError(batchId: string, error: any): void {
     const executionError: ExecutionError = {
       type: 'unknown',
       message: error.message || 'Unknown error',
@@ -180,7 +180,7 @@ class ResultValidator {
       }
       
       return validated
-    } catch (error: unknown) {
+    } catch (error: any) {
       // Return error result if validation fails
       return {
         ruleId: rule.id,
@@ -202,7 +202,7 @@ class ResultValidator {
     }
   }
 
-  private validateFindings(findings: unknown[]): QCFinding[] {
+  private validateFindings(findings: any[]): QCFinding[] {
     if (!Array.isArray(findings)) {
       return []
     }
@@ -315,7 +315,7 @@ export class QCExecutionOrchestrator {
       
       return results
       
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error('Batch execution failed:', error)
       throw error
     }
@@ -353,7 +353,7 @@ export class QCExecutionOrchestrator {
         status: 'success'
       }
       
-    } catch (error: unknown) {
+    } catch (error: any) {
       return this.createErrorResult(task, error)
     }
   }
@@ -411,13 +411,13 @@ ${index + 1}. 规则名称：${task.rule.name}
     }
   }
 
-  private formatPatientData(context: unknown): string {
-    return context.documents?.map((doc: unknown, index: number) => 
+  private formatPatientData(context: any): string {
+    return context.documents?.map((doc: any, index: number) => 
       `文书${index + 1}（${doc.type}）：\n${doc.content.substring(0, 500)}...`
     ).join('\n\n') || '无文书数据'
   }
 
-  private parseBatchResponse(response: string, tasks: QCTask[]): unknown {
+  private parseBatchResponse(response: string, tasks: QCTask[]): any {
     try {
       const parsed = JSON.parse(response)
       
@@ -449,7 +449,7 @@ ${index + 1}. 规则名称：${task.rule.name}
     }
   }
 
-  private createErrorResult(task: QCTask, error: unknown): QCExecutionResult {
+  private createErrorResult(task: QCTask, error: any): QCExecutionResult {
     return {
       taskId: task.id,
       ruleId: task.rule.id,

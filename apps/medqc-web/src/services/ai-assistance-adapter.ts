@@ -11,6 +11,10 @@ import type {
 
 import { unifiedAPIClient } from './unified-api-client'
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export class AIAssistanceServiceAdapter {
   private useEnhancedAPI = true // 标志：是否使用增强版API
 
@@ -327,14 +331,27 @@ export class AIAssistanceServiceAdapter {
       const result = await unifiedAPIClient.predictQualityScore(
         medicalRecordId,
         defaultConfig
-      )
+      ) as {
+        predicted_score: number
+        confidence_interval?: [number, number]
+        influencing_factors?: Array<{
+          factor: string
+          impact: number
+          description: string
+        }>
+        model_info: {
+          model_type: string
+          version: string
+          accuracy: number
+        }
+      }
       
       console.log(`预测评分: ${result.predicted_score}`)
       return result
       
     } catch (error: unknown) {
       console.error('质量评分预测失败:', error)
-      throw new Error(`质量评分预测失败: ${error.message}`)
+      throw new Error(`质量评分预测失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -395,7 +412,7 @@ export class AIAssistanceServiceAdapter {
       
     } catch (error: unknown) {
       console.error('提交反馈失败:', error)
-      throw new Error(`提交反馈失败: ${error.message}`)
+      throw new Error(`提交反馈失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -411,12 +428,14 @@ export class AIAssistanceServiceAdapter {
   }> {
     try {
       // 通过健康检查API获取状态
-      const healthData = await unifiedAPIClient.getSystemHealth()
+      const healthData = await unifiedAPIClient.getSystemHealth() as {
+        services?: Record<string, unknown>
+      }
       
       return {
-        qc_engine_status: healthData.services?.qc_engine || 'unknown',
-        llm_service_status: healthData.services?.llm_service || 'unknown',
-        analysis_queue_size: healthData.services?.queued_notifications || 0,
+        qc_engine_status: String(healthData.services?.qc_engine ?? 'unknown'),
+        llm_service_status: String(healthData.services?.llm_service ?? 'unknown'),
+        analysis_queue_size: Number(healthData.services?.queued_notifications ?? 0),
         average_response_time: 0, // 需要从实际监控数据获取
         success_rate: 0.95 // 需要从实际统计数据获取
       }
@@ -479,9 +498,9 @@ export class AIAssistanceServiceAdapter {
     
     if (useCache) {
       const cached = this.getCachedAnalysis(cacheKey)
-      if (cached) {
+      if (Array.isArray(cached)) {
         console.log('使用缓存的AI分析结果')
-        return cached
+        return cached as AIDefectSuggestion[]
       }
     }
     

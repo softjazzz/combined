@@ -244,7 +244,7 @@ ${text}
     sections.push('你是一个专业的医疗信息批量处理助手。请处理以下多个病历文本，并为每个文本提取关键信息。')
     sections.push('')
 
-    texts.forEach((text: unknown,  index: unknown) => {
+    texts.forEach((text: string, index: number) => {
       sections.push(`=== 文本 ${index + 1} ===`)
       sections.push(text.substring(0, 500) + (text.length > 500 ? '...' : ''))
       sections.push('')

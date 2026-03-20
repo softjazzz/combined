@@ -1,0 +1,16 @@
+{
+  "scheme_name": "bengbu_2023",
+  "label": "蚌埠 2023",
+  "category": "city",
+  "province": "安徽",
+  "source_file": "6331.js",
+  "extracted_at": "2026-03-15T18:28:48.005459",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10253,
+    "adrg": 250,
+    "drg": 641
+  }
+}

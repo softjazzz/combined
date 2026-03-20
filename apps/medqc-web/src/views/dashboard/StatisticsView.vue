@@ -294,6 +294,12 @@ const periodOptions = [
   { value: 'quarter', label: '按季度' }
 ]
 
+interface DepartmentStatsRow {
+  totalRecords: number
+  passRate: number
+  avgTime: number
+}
+
 // 表格列配置
 const tableColumns = [
   {
@@ -307,7 +313,7 @@ const tableColumns = [
     dataIndex: 'totalRecords',
     key: 'totalRecords',
     width: 120,
-    sorter: (a: unknown,  b: unknown) => a.totalRecords - b.totalRecords
+    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.totalRecords - b.totalRecords
   },
   {
     title: '通过数',
@@ -320,14 +326,14 @@ const tableColumns = [
     dataIndex: 'passRate',
     key: 'passRate',
     width: 200,
-    sorter: (a: unknown,  b: unknown) => a.passRate - b.passRate
+    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.passRate - b.passRate
   },
   {
     title: '平均处理时间(h)',
     dataIndex: 'avgTime',
     key: 'avgTime',
     width: 150,
-    sorter: (a: unknown,  b: unknown) => a.avgTime - b.avgTime
+    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.avgTime - b.avgTime
   },
   {
     title: '趋势',

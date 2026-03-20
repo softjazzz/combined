@@ -17,6 +17,28 @@ export type DocumentCategoryCode =
 
 export type RuleKey = string
 
+interface RuleDocumentLike {
+  document_categories?: unknown
+  applicable_documents?: unknown
+  check_logic?: unknown
+  checkLogic?: unknown
+  ruleCode?: string
+  rule_code?: string
+  code?: string
+  name?: string
+  rule_name?: string
+  description?: string
+  target_documents?: unknown
+  [key: string]: unknown
+}
+
+function toRuleDocumentLike(rule: unknown): RuleDocumentLike {
+  if (rule && typeof rule === 'object') {
+    return rule as RuleDocumentLike
+  }
+  return {}
+}
+
 // 基于“规则名称”或“规则编码”的静态映射
 // 备注：优先级低于后端提供的 applicable_documents 字段
 export const RULE_TO_CATEGORIES: Record<RuleKey, DocumentCategoryCode[]> = {
@@ -31,8 +53,9 @@ export const RULE_TO_CATEGORIES: Record<RuleKey, DocumentCategoryCode[]> = {
 
 function normalizeCategory(input: unknown): DocumentCategoryCode | undefined {
   if (input && typeof input === 'object') {
+    const obj = input as Record<string, unknown>
     const possible =
-      (input.value ?? input.code ?? input.category_code ?? input.category ?? input.label ?? input.name) as
+      (obj.value ?? obj.code ?? obj.category_code ?? obj.category ?? obj.label ?? obj.name) as
         | string
         | undefined
     if (possible) return normalizeCategory(possible)
@@ -168,33 +191,35 @@ function inferCategoriesFromText(text?: string): DocumentCategoryCode[] {
 }
 
 export function lookupRuleCategories(rule: unknown): DocumentCategoryCode[] {
+  const ruleObj = toRuleDocumentLike(rule)
+
   // 0) 首先尝试已归一化的 document_categories（用于服务端直接下发标准代码）
-  const embeddedCategories = normalizeCategories(rule?.document_categories)
+  const embeddedCategories = normalizeCategories(ruleObj.document_categories)
   if (embeddedCategories.length > 0) return embeddedCategories
 
   // 1) 优先使用后端字段 applicable_documents（若已提供）
-  const fromBackend = normalizeCategories(rule?.applicable_documents)
+  const fromBackend = normalizeCategories(ruleObj.applicable_documents)
   if (fromBackend.length > 0) return fromBackend
 
   // 1.5) 兼容 check_logic 内嵌的 applicable_documents/document_categories
-  const checkLogic = rule?.check_logic || rule?.checkLogic || {}
+  const checkLogic = toRuleDocumentLike(ruleObj.check_logic ?? ruleObj.checkLogic)
   const fromCheckLogic = normalizeCategories(
-    (checkLogic as any)?.applicable_documents ?? (checkLogic as any)?.document_categories ?? (checkLogic as any)?.target_documents
+    checkLogic.applicable_documents ?? checkLogic.document_categories ?? checkLogic.target_documents
   )
   if (fromCheckLogic.length > 0) return fromCheckLogic
 
   // 2) 其次尝试使用规则编码映射
-  const codeKey: RuleKey | undefined = rule?.ruleCode || rule?.rule_code || rule?.code
+  const codeKey: RuleKey | undefined = ruleObj.ruleCode || ruleObj.rule_code || ruleObj.code
   if (codeKey && RULE_TO_CATEGORIES[codeKey]) return RULE_TO_CATEGORIES[codeKey]
 
   // 3) 使用规则名称映射
-  const nameKey: RuleKey | undefined = rule?.name || rule?.rule_name
+  const nameKey: RuleKey | undefined = ruleObj.name || ruleObj.rule_name
   if (nameKey && RULE_TO_CATEGORIES[nameKey]) return RULE_TO_CATEGORIES[nameKey]
 
   // 4) 基于名称/描述的启发式关键词推断（兜底）
   const infer = uniq([
     ...inferCategoriesFromText(nameKey),
-    ...inferCategoriesFromText(rule?.description)
+    ...inferCategoriesFromText(ruleObj.description)
   ])
   if (infer.length > 0) return infer
 

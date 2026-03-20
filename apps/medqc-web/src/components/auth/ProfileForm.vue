@@ -199,9 +199,20 @@ import type { FormInstance } from 'ant-design-vue'
 import type { User, UserRole } from '@/types/auth'
 import AvatarUpload from './AvatarUpload.vue'
 
+type UserProfileModel = User & {
+  avatar?: string
+  phone?: string
+  bio?: string
+  notifications?: {
+    email?: boolean
+    sms?: boolean
+    push?: boolean
+  }
+}
+
 // Props
 interface Props {
-  user?: User | null
+  user?: UserProfileModel | null
   loading?: boolean
 }
 
@@ -313,8 +324,8 @@ const handleSubmit = async () => {
   try {
     await formRef.value?.validate()
     emit('update-profile', { ...profileForm })
-  } catch (error) {
-    if (error?.errorFields) {
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error && 'errorFields' in error) {
       message.warning('请检查输入信息')
     }
   }
@@ -338,7 +349,9 @@ const handleAvatarError = (error: string) => {
 
 // Filter department options
 const filterDepartment = (input: string, option: unknown) => {
-  return option.children.toLowerCase().includes(input.toLowerCase())
+  if (typeof option !== 'object' || !option || !('children' in option)) return false
+  const children = String((option as { children?: unknown }).children || '')
+  return children.toLowerCase().includes(input.toLowerCase())
 }
 
 // Get role color

@@ -72,7 +72,7 @@ const handleFilesProcessed = (results: unknown[]) => {
   message.info(`处理了 ${results.length} 个文件`)
 }
 
-const handleSingleFileProcessed = (result: unknown) => {
+const handleSingleFileProcessed = (result: { success?: boolean; fileName?: string }) => {
   if (result.success) {
     addLog(`文件解析成功: ${result.fileName || '未知文件'}`, 'success')
   } else {
@@ -80,7 +80,7 @@ const handleSingleFileProcessed = (result: unknown) => {
   }
 }
 
-const handleBatchCompleted = (results: unknown[]) => {
+const handleBatchCompleted = (results: Array<{ success?: boolean; fileName?: string }>) => {
   const successCount = results.filter(r => r.success).length
   const failCount = results.length - successCount
   

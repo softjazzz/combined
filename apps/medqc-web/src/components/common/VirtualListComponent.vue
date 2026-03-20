@@ -54,7 +54,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 
 // Props 定义
 interface Props {
-  items: unknown[]
+  items: Array<Record<string, unknown>>
   itemHeight: number
   containerHeight: number
   buffer?: number
@@ -65,7 +65,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  items: () => [] as unknown[],
+  items: () => [] as Array<Record<string, unknown>>,
   buffer: 5,
   keyField: 'id',
   loading: false,
@@ -99,7 +99,7 @@ const endIndex = computed(() =>
 )
 
 const visibleItems = computed(() => {
-  const items: Array<{ index: number; data: unknown }> = []
+  const items: Array<{ index: number; data: Record<string, unknown> }> = []
   for (let i = startIndex.value; i < endIndex.value; i++) {
     if (props.items[i]) {
       items.push({
@@ -114,14 +114,10 @@ const visibleItems = computed(() => {
 const offsetY = computed(() => startIndex.value * props.itemHeight)
 
 // 方法
-const getItemKey = (item: unknown): string | number => {
-  if (typeof item === 'object' && item !== null) {
-    const record = item as Record<string, unknown>
-    return (record[props.keyField] as string | number | undefined)
-      ?? (record.id as string | number | undefined)
-      ?? JSON.stringify(record)
-  }
-  return item
+const getItemKey = (item: Record<string, unknown>): string | number => {
+  return (item[props.keyField] as string | number | undefined)
+    ?? (item.id as string | number | undefined)
+    ?? JSON.stringify(item)
 }
 
 const handleScroll = async (event: Event) => {

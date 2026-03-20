@@ -13,6 +13,17 @@ import type {
   SearchResult 
 } from '@/types'
 
+type MockRecord = MedicalRecord & {
+  record_number: string
+  diagnosis_primary: string
+  diagnosis_secondary: string[]
+  doctor_name: string
+}
+
+const isRecordObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const isString = (value: unknown): value is string => typeof value === 'string'
 // 模拟延迟
 const delay = (ms: number = 500) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -60,7 +71,7 @@ const mockUsers = [
 ]
 
 // Mock 医疗记录数据
-const mockRecords: MedicalRecord[] = [
+const mockRecords: MockRecord[] = [
   {
     id: '1',
     record_number: 'MR20241225001',
@@ -260,7 +271,11 @@ export class MockService {
   }> {
     await delay(600)
     
-    const { page = 1, limit = 10, search = '', status = '' } = params
+    const query = isRecordObject(params) ? params : {}
+    const page = typeof query.page === 'number' ? query.page : 1
+    const limit = typeof query.limit === 'number' ? query.limit : 10
+    const search = isString(query.search) ? query.search : ''
+    const status = isString(query.status) ? query.status : ''
     
     let filteredRecords = mockRecords
     

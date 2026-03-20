@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """
 病案首页自动生成服务（LLM 抽取版）
@@ -204,21 +204,24 @@ HOSPITALIZATION_PROMPT = """从以下病历中提取住院相关信息。
 
 直接输出 JSON，不要添加说明："""
 
-DIAGNOSES_PROMPT = """从以下病历中提取诊断信息。
+DIAGNOSES_PROMPT = """从以下病历中提取诊断信息，并严格按《住院病案首页填写规范》判断主诊断与其他诊断。
 
-【重要规则】
-1. 必须将复合诊断拆分为独立条目。例如"冠状动脉粥样硬化性心脏病 不稳定型心绞痛"应拆分为：
-   第一条：冠状动脉粥样硬化性心脏病
-   第二条：不稳定型心绞痛
-2. 每个诊断名称应是一个独立的临床诊断，不要合并多个疾病
-3. 如果病历中只有"初步诊断"或"入院诊断"而没有"出院诊断"，将初步诊断/入院诊断视为门急诊诊断填入 ed_diagnosis_texts
+【主诊断选择规范（必须执行）】
+1. 主诊断应为“本次住院主要治疗的疾病”，即对本次住院医疗资源消耗最大、治疗措施最集中、对住院结局影响最大的疾病。
+2. 不得机械按“出院诊断第一条”作为主诊断；若第一条与本次主要治疗目标不一致，应改选更符合规范的诊断。
+3. 当存在“基础病 + 急性发作/并发症”时，优先选择导致本次住院和主要治疗行为的急性问题作为主诊断。
+4. “术后状态/植入后状态/既往病史”通常不作为主诊断，除非其确为本次住院主要治疗对象。
+5. 主诊断需与主要手术/关键治疗过程一致（如介入、手术、重症治疗等）。
 
-【主诊断选择规则 — 依据卫生部《住院病案首页填写规范》】
-请严格按照卫生部《住院病案首页填写规范》的原则选择主诊断，而非简单取出院诊断的第一条：
-1. 对本次住院影响最大的疾病：选择消耗医疗资源最多、住院时间最长的疾病作为主诊断
-2. 与主诉直接相关的疾病：主诊断应与患者主诉描述的症状/疾病有直接因果关系
-3. 如果做了手术，手术对应的疾病优先：手术所针对的疾病应优先作为主诊断
-4. DRG 分组效益最优化：在符合临床实际的前提下，选择使 DRG 权重最高的诊断
+【其他诊断填写要求（漏填补齐）】
+1. 其他诊断应包含：并存疾病、合并症、并发症、术后状态、影响治疗决策或资源消耗的疾病。
+2. 必须避免漏填：若病历中明确出现但出院诊断列表未列出，仍需补充到 `discharge_other_diagnoses_texts`。
+3. 复合诊断必须拆分为独立条目（例如“冠心病 不稳定型心绞痛”要拆成两条）。
+4. 去重：同义重复仅保留一次（如“冠脉粥样硬化性心脏病”与“冠心病”）。
+
+【门急诊/入院诊断规则】
+1. `ed_diagnosis_texts` 提取门诊、急诊、入院初步诊断。
+2. 若无明确“出院诊断”，仍需提取 `ed_diagnosis_texts`，但不得直接把全部门急诊诊断原样当作出院主诊断。
 
 【病历内容】
 {medical_text}
@@ -227,29 +230,31 @@ DIAGNOSES_PROMPT = """从以下病历中提取诊断信息。
 ```json
 {{
   "ed_diagnosis_texts": ["门/急诊诊断1", "门/急诊诊断2"],
-  "discharge_main_diagnosis_text": "出院主要诊断（根据上述规则选择最合适的一个诊断）",
-  "discharge_main_diagnosis_reason": "选择该主诊断的理由（简要说明）",
-  "discharge_main_outcome": "主诊断出院转归(治愈/好转/未愈/死亡/其他)",
+  "discharge_main_diagnosis_text": "出院主要诊断（按规范选定，仅1条）",
+  "discharge_main_diagnosis_reason": "主诊断判定依据（需体现规范口径：主要治疗目标/资源消耗/与关键治疗一致）",
+  "discharge_main_outcome": "治愈/好转/未愈/死亡/其他",
   "discharge_other_diagnoses_texts": ["其他诊断1", "其他诊断2"],
   "discharge_other_outcomes": ["好转", "好转"],
   "admission_condition": "1=有, 2=临床未确定, 3=情况不明, 4=无"
 }}
 ```
 
-直接输出 JSON，不要添加说明："""
+只输出 JSON，不要输出解释性正文。"""
 
-PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息。
+PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息，并严格按《住院病案首页填写规范》判定主要手术与其他手术。
 
-【重要规则】
-- 如果手术记录中包含多个手术操作（用"+"或"及"或顿号连接），必须将每个手术拆分为独立条目
-- 不要默认“第一个手术”就是主要手术，需按规范判断
-- 例如："高位复杂性肛瘘切除术+肛周脓肿切开引流术+亚甲蓝肛周封闭术" 应拆分为 3 个独立手术
+【主要手术填写要求（必须执行）】
+1. 主要手术应为本次住院中治疗作用最直接、技术难度和资源消耗最高、对预后影响最大的操作，仅能有1条。
+2. 主要手术应与主诊断直接相关，优先选择“治疗性操作”，不要机械选第一条记录。
+3. 同次住院存在“诊断性操作 + 治疗性操作”时，治疗性操作作为主要手术，诊断性操作归入其他手术。
+4. “术前检查/单纯诊断性检查”通常不作为主要手术，除非病历明确其为本次主要干预。
+5. 常见口径：`冠状动脉造影 + 支架植入`，主要手术应为`支架植入`，造影归入其他手术。
 
-【主要手术选择规则（参照《住院病案首页填写规范》）】
-1. 主要手术应为本次住院中治疗作用最直接、技术难度和资源消耗最高、对预后影响最大的操作。
-2. 主要手术应与主要诊断直接相关，优先选择解决主要病因的治疗性操作。
-3. 同次住院存在“诊断性操作 + 治疗性操作”时，治疗性操作为主要手术，诊断性操作归入其他手术。
-4. 常见示例：`冠状动脉造影 + 支架植入`，主要手术应为`支架植入`，造影归入其他手术。
+【其他手术填写要求（漏填补齐）】
+1. 其他手术应完整记录同次住院发生的其他治疗性或重要诊断性操作。
+2. 复合手术必须拆分为独立条目（用“+、及、并、联合”等连接的操作要拆开）。
+3. 不得漏填：病程记录、手术记录、麻醉记录中明确出现的手术/操作，如未进入主手术，需补入 `other_procedures_texts`。
+4. 去重：同一操作不同写法仅保留一次。
 
 【病历内容】
 {medical_text}
@@ -257,18 +262,18 @@ PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息。
 【输出格式】
 ```json
 {{
-  "main_procedure_text": "主要手术名称（按上述规则选定，仅一条）",
-  "main_procedure_reason": "为什么将该手术判定为主要手术（简要）",
+  "main_procedure_text": "主要手术名称（按规范选定，仅1条）",
+  "main_procedure_reason": "主要手术判定依据（需体现：治疗作用/资源消耗/与主诊断一致）",
   "main_procedure_date": "YYYY-MM-DD",
   "main_procedure_level": "手术级别",
   "main_procedure_start_time": "YYYY-MM-DD HH:MM",
   "main_procedure_end_time": "YYYY-MM-DD HH:MM",
   "incision_grade": "切口等级(0类/I类/II类/III类)",
-  "anesthesia_grade": "麻醉分级(如ASA I级/II级)",
+  "anesthesia_grade": "麻醉分级",
   "is_main_surgery": "是/否",
   "unplanned_reoperation": "是/否",
   "other_procedures_texts": ["其他手术1", "其他手术2"],
-  "other_procedures": [{{"text": "手术名", "date": "日期"}}],
+  "other_procedures": [{{"text": "手术名称", "date": "YYYY-MM-DD"}}],
   "surgeon_name": "术者姓名",
   "assistant1_name": "I助姓名",
   "assistant2_name": "II助姓名",
@@ -278,8 +283,8 @@ PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息。
 }}
 ```
 
-如果没有手术记录，所有字段返回 null。
-直接输出 JSON，不要添加说明："""
+如果无手术记录，相关字段返回 `null`，`other_procedures_texts` 返回 `[]`。
+只输出 JSON，不要输出解释性正文。"""
 
 DIAG_PROC_PROMPT = """从以下病历中一次性提取“诊断信息”和“手术/操作信息”，仅输出 JSON。
 
@@ -289,6 +294,9 @@ DIAG_PROC_PROMPT = """从以下病历中一次性提取“诊断信息”和“�
 3. procedures 的字段结构与手术提取任务一致。
 4. 若无手术，main_procedure_text/main_procedure_date/main_procedure_level 等字段返回 null，other_procedures_texts 返回 []。
 5. 仅输出 JSON，不要输出解释文本。
+6. 主诊断必须按《住院病案首页填写规范》判定，不得机械取第一条出院诊断。
+7. 主要手术必须按《住院病案首页填写规范》判定，不得机械取第一条手术记录。
+8. 其他诊断与其他手术需做“漏填补齐”，病历中明确出现但未入组的条目要补全，并去重。
 
 【病历内容】
 {medical_text}
@@ -1017,6 +1025,11 @@ class FrontPageExtractionService:
             logger.exception("stream: local ICD code resolution failed")
 
         fp_data["confidence"] = {**fp_data.get("confidence", {}), **validation_info}
+        fp_data["evidence"] = fp_data.get("evidence") or {}
+        if isinstance(fp_data.get("diagnoses"), dict):
+            fp_data["evidence"]["diagnoses"] = self._build_diagnosis_evidence(
+                llm_text, fp_data.get("diagnoses"), fp_data.get("procedures")
+            )
 
         # Final: 直接输出已构建的 fp_data
         yield ("done", {"frontpage": fp_data})
@@ -1834,7 +1847,9 @@ class FrontPageExtractionService:
             "other_medical_info": other_medical,
             "staff": staff,
             "costs": {"total_cost": None, "self_paid": None, "categories": {}},
-            "evidence": {},
+            "evidence": {
+                "diagnoses": self._build_diagnosis_evidence(medical_text, diagnoses, procedures)
+            },
             "confidence": validation_info, # 将校验信息放入 confidence 字段
         }
 
@@ -1951,6 +1966,29 @@ class FrontPageExtractionService:
                     diagnoses[field] = str(int(val)) if float(val).is_integer() else str(val)
 
             frontpage_data["diagnoses"] = diagnoses
+
+        # basic_info 数值字段容错：空字符串/非法字符串 -> None，避免 model_validate 500
+        basic_info = frontpage_data.get("basic_info")
+        if isinstance(basic_info, dict):
+            age_val = basic_info.get("age_years")
+            if isinstance(age_val, str):
+                cleaned = age_val.strip()
+                if cleaned == "":
+                    basic_info["age_years"] = None
+                else:
+                    try:
+                        basic_info["age_years"] = int(float(cleaned))
+                    except Exception:
+                        basic_info["age_years"] = None
+            elif isinstance(age_val, (int, float)):
+                try:
+                    basic_info["age_years"] = int(age_val)
+                except Exception:
+                    basic_info["age_years"] = None
+            elif age_val is not None:
+                basic_info["age_years"] = None
+
+            frontpage_data["basic_info"] = basic_info
 
         return frontpage_data
 
@@ -2125,11 +2163,15 @@ class FrontPageExtractionService:
             self._extract_discharge_diagnoses_from_text(medical_text)
         )
         llm_main = self._normalize_diag_text(diag.get("discharge_main_diagnosis_text"))
+        llm_main_parts = self._split_compound_diagnosis_line(llm_main) if llm_main else []
         llm_others_raw = diag.get("discharge_other_diagnoses_texts")
         llm_others = self._unique_texts(llm_others_raw if isinstance(llm_others_raw, list) else [])
 
-        # Keep LLM-selected main diagnosis when available.
-        if llm_main:
+        # Keep LLM-selected main diagnosis when available, but split compound main
+        # so that only one diagnosis is kept as main.
+        if llm_main_parts:
+            main = llm_main_parts[0]
+        elif llm_main:
             main = llm_main
         elif parsed_from_text:
             main = parsed_from_text[0]
@@ -2137,6 +2179,9 @@ class FrontPageExtractionService:
             main = None
 
         # Use LLM others first; fallback to parsed others.
+        if llm_others or len(llm_main_parts) > 1:
+            split_main_others = llm_main_parts[1:] if len(llm_main_parts) > 1 else []
+            llm_others = self._unique_texts([*split_main_others, *llm_others])
         if llm_others:
             other_candidates = llm_others
         else:
@@ -2171,6 +2216,568 @@ class FrontPageExtractionService:
         diag["discharge_other_icds"] = other_icds
 
         return diag
+
+    def _extract_diagnosis_section_blocks(self, medical_text: str) -> List[Tuple[str, str]]:
+        """
+        Extract diagnosis-related text blocks for evidence matching.
+        Returns list of (section_name, section_text).
+        """
+        if not medical_text or not medical_text.strip():
+            return []
+
+        text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
+        section_heads = [
+            "出院诊断",
+            "初步诊断",
+            "入院诊断",
+            "门诊诊断",
+            "急诊诊断",
+            "诊断",
+        ]
+        stop_heads = [
+            "诊疗计划",
+            "治疗计划",
+            "治疗方案",
+            "手术",
+            "主诉",
+            "现病史",
+            "既往史",
+            "体格检查",
+            "辅助检查",
+            "医师签名",
+            "记录时间",
+        ]
+        stop_re = re.compile(rf"^(?:{'|'.join(stop_heads)})\s*[:：]?")
+        blocks: List[Tuple[str, str]] = []
+
+        lines = text.split("\n")
+        for idx, raw in enumerate(lines):
+            line = raw.strip()
+            matched_head = None
+            inline = ""
+            for head in section_heads:
+                m = re.match(rf"^{head}\s*[:：]?\s*(.*)$", line)
+                if m:
+                    matched_head = head
+                    inline = (m.group(1) or "").strip()
+                    break
+            if not matched_head:
+                continue
+
+            collected: List[str] = []
+            if inline:
+                collected.append(inline)
+            for nxt in lines[idx + 1 :]:
+                s = nxt.strip()
+                if not s:
+                    continue
+                if stop_re.match(s):
+                    break
+                collected.append(s)
+            if collected:
+                blocks.append((matched_head, "\n".join(collected)))
+        return blocks
+
+    def _build_diagnosis_evidence(
+        self,
+        medical_text: str,
+        diagnoses: Optional[Dict[str, Any]],
+        procedures: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Build diagnosis evidence list for frontend trust display.
+        Includes both direct diagnosis quote and clinical supporting quotes.
+        """
+        if not isinstance(diagnoses, dict):
+            return []
+
+        entries: List[Tuple[str, str]] = []
+        main = self._normalize_diag_text(diagnoses.get("discharge_main_diagnosis_text"))
+        if main:
+            entries.append(("main", main))
+        others_raw = diagnoses.get("discharge_other_diagnoses_texts")
+        if isinstance(others_raw, list):
+            for item in others_raw:
+                cleaned = self._normalize_diag_text(item)
+                if cleaned:
+                    entries.append(("other", cleaned))
+
+        if not entries:
+            return []
+
+        blocks = self._extract_diagnosis_section_blocks(medical_text)
+        block_lines: List[Tuple[str, str]] = []
+        for sec, sec_text in blocks:
+            for ln in sec_text.split("\n"):
+                cleaned_ln = ln.strip()
+                if cleaned_ln:
+                    block_lines.append((sec, cleaned_ln))
+        diagnosis_line_keys = {
+            self._diagnosis_canonical_key(line)
+            for _, line in block_lines
+            if self._diagnosis_canonical_key(line)
+        }
+
+        # Full-text line pool for treatment/procedure/course support searching.
+        all_lines = []
+        if medical_text:
+            for ln in medical_text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+                s = ln.strip()
+                if s and len(s) >= 4:
+                    all_lines.append(s)
+
+        treatment_terms = [
+            "手术", "术后", "治疗", "介入", "支架", "造影", "PCI", "CABG",
+            "药", "病程", "复查", "检验", "检查", "肌钙蛋白", "心电图", "超声", "CT", "MRI",
+        ]
+
+        def _diag_keywords(diag_text: str) -> List[str]:
+            seeds = [
+                x
+                for x in re.split(r"[\s,，;；、:：()（）\[\]【】+\-/]+", diag_text or "")
+                if len(x) >= 2
+            ]
+            # keep medium-length terms first, avoid very generic words
+            seeds = [x for x in seeds if x not in {"诊断", "疾病", "状态", "综合征"}]
+            seeds.sort(key=len, reverse=True)
+            return seeds[:6]
+
+        def _compact_text(text: str) -> str:
+            return re.sub(r"[\s,，;；、:：()（）\[\]【】\.\-_/+]+", "", text or "").lower()
+
+        def _is_redundant_with_quote(line: str, main_quote: Optional[str]) -> bool:
+            if not main_quote:
+                return False
+            a = _compact_text(line)
+            b = _compact_text(main_quote)
+            if not a or not b:
+                return False
+            if a == b:
+                return True
+            # contain/contained: treat as same-origin sentence variation
+            if a in b or b in a:
+                return True
+            # high overlap fallback
+            min_len = max(1, min(len(a), len(b)))
+            same = sum(1 for ch in a if ch in b)
+            return (same / min_len) >= 0.85
+
+        def _supporting_quotes(diag_text: str, main_quote: Optional[str]) -> List[str]:
+            keywords = _diag_keywords(diag_text)
+            if not keywords:
+                return []
+            candidates: List[Tuple[float, str]] = []
+            main_key = self._diagnosis_canonical_key(main_quote or "")
+            for line in all_lines:
+                line_key = self._diagnosis_canonical_key(line)
+                if not line_key or (main_key and line_key == main_key):
+                    continue
+                if line_key in diagnosis_line_keys:
+                    # supporting evidence should come from course/treatment context,
+                    # not a duplicated diagnosis-section sentence.
+                    continue
+                if _is_redundant_with_quote(line, main_quote):
+                    continue
+                if "诊断" in line and "治疗" not in line and "手术" not in line and "病程" not in line:
+                    continue
+                hit = sum(1 for kw in keywords if kw in line)
+                if hit <= 0:
+                    continue
+                has_treatment = any(term.lower() in line.lower() for term in treatment_terms)
+                score = hit + (0.8 if has_treatment else 0.0)
+                if score < 1.0:
+                    continue
+                candidates.append((score, line))
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            selected: List[str] = []
+            seen = set()
+            for _, line in candidates:
+                key = self._diagnosis_canonical_key(line)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                selected.append(line)
+                if len(selected) >= 3:
+                    break
+            return selected
+
+        main_proc_text = ""
+        if isinstance(procedures, dict):
+            main_proc_text = str(procedures.get("main_procedure_text") or "")
+        proc_key = self._diagnosis_canonical_key(main_proc_text)
+
+        def _is_status_like(name: str) -> bool:
+            return any(k in name for k in ["后状态", "术后", "植入后", "既往", "病史"])
+
+        def _reasoning_checks(
+            diag_text: str,
+            dtype: str,
+            sec: str,
+            quote: Optional[str],
+            support_quotes: List[str],
+        ) -> List[Dict[str, Any]]:
+            is_main = dtype == "main"
+            checks: List[Dict[str, Any]] = []
+
+            source_ok = sec in {"出院诊断", "初步诊断", "入院诊断"}
+            checks.append(
+                {
+                    "item": "候选来源为诊断条目",
+                    "status": bool(source_ok),
+                    "evidence_quote": quote or "",
+                    "explain": "主要诊断候选应首先来自出院/入院诊断条目。",
+                }
+            )
+
+            proc_support_quote = ""
+            proc_ok = False
+            if main_proc_text:
+                diag_key = self._diagnosis_canonical_key(diag_text)
+                if diag_key and proc_key and (diag_key[:4] in proc_key or proc_key[:4] in diag_key):
+                    proc_ok = True
+                    proc_support_quote = main_proc_text
+                else:
+                    for sq in support_quotes:
+                        if any(t in sq for t in ["手术", "介入", "支架", "造影", "治疗"]):
+                            proc_ok = True
+                            proc_support_quote = sq
+                            break
+            checks.append(
+                {
+                    "item": "与主要治疗/手术方向一致",
+                    "status": bool(proc_ok) if is_main else True,
+                    "evidence_quote": proc_support_quote,
+                    "explain": "主要诊断应尽量与主要手术或关键治疗过程一致。",
+                }
+            )
+
+            severity_terms = ["重症", "不稳定", "急性", "危重", "监护", "介入", "手术", "PCI", "造影"]
+            burden_quote = next(
+                (sq for sq in support_quotes if any(term in sq for term in severity_terms)),
+                "",
+            )
+            checks.append(
+                {
+                    "item": "存在病程严重程度或资源消耗佐证",
+                    "status": bool(burden_quote) if is_main else True,
+                    "evidence_quote": burden_quote,
+                    "explain": "主要诊断通常应与住院主要医疗资源消耗相对应。",
+                }
+            )
+
+            if is_main:
+                status_ok = not _is_status_like(diag_text)
+                checks.append(
+                    {
+                        "item": "主诊断不优先选择术后/既往状态",
+                        "status": bool(status_ok),
+                        "evidence_quote": "" if status_ok else diag_text,
+                        "explain": "“术后状态/后状态”通常作为其他诊断记录。",
+                    }
+                )
+            else:
+                checks.append(
+                    {
+                        "item": "该条目可归入其他诊断",
+                        "status": True,
+                        "evidence_quote": quote or "",
+                        "explain": "该条目作为并存病或状态记录，纳入其他诊断。",
+                    }
+                )
+            return checks
+
+        def _line_match(diag_text: str) -> Optional[Tuple[str, str, str, float]]:
+            diag_key = self._diagnosis_canonical_key(diag_text)
+            if not diag_key:
+                return None
+
+            narrative_terms = ("术中", "术后", "治疗", "复查", "给予", "每", "换药", "切除术", "引流术", "麻醉")
+            max_quote_len = 42
+
+            def _is_narrative_long(line: str) -> bool:
+                compact = re.sub(r"\s+", "", line or "")
+                return len(compact) > max_quote_len and any(t in compact for t in narrative_terms)
+
+            # exact-ish match first: prefer concise diagnosis-item lines over long narratives
+            sec_priority = {"出院诊断": 0, "入院诊断": 1, "初步诊断": 2, "门诊诊断": 3, "急诊诊断": 4}
+            exact_candidates: List[Tuple[int, int, str, str]] = []
+            for sec, line in block_lines:
+                line_key = self._diagnosis_canonical_key(line)
+                if not line_key:
+                    continue
+                if diag_key in line_key or line_key in diag_key:
+                    extra_len = max(0, len(line_key) - len(diag_key))
+                    exact_candidates.append((sec_priority.get(sec, 9), extra_len, sec, line))
+            if exact_candidates:
+                exact_candidates.sort(key=lambda x: (x[0], x[1], len(x[3])))
+                _, _, sec, line = exact_candidates[0]
+
+                # 强制降级规则：
+                # 当命中句过长且包含治疗叙述词时，优先回退到“编号诊断行”（1./2./3.）
+                if _is_narrative_long(line):
+                    numbered_candidates: List[Tuple[int, int, str, str]] = []
+                    for nsec, nline in block_lines:
+                        if not re.match(r"^\s*\d{1,2}[\.、\)]", nline):
+                            continue
+                        nkey = self._diagnosis_canonical_key(nline)
+                        if not nkey:
+                            continue
+                        if diag_key in nkey or nkey in diag_key:
+                            nextra = max(0, len(nkey) - len(diag_key))
+                            numbered_candidates.append((sec_priority.get(nsec, 9), nextra, nsec, nline))
+                    if numbered_candidates:
+                        numbered_candidates.sort(key=lambda x: (x[0], x[1], len(x[3])))
+                        _, _, sec, line = numbered_candidates[0]
+                        return sec, line, "exact_numbered", 0.93
+
+                return sec, line, "exact", 0.93
+
+            # fallback fuzzy by token overlap
+            diag_tokens = [t for t in re.split(r"[\s,，;；、]+", diag_text) if len(t) >= 2]
+            best: Optional[Tuple[str, str, str, float]] = None
+            best_score = 0.0
+            for sec, line in block_lines:
+                if not line:
+                    continue
+                hit = 0
+                for tk in diag_tokens:
+                    if tk in line:
+                        hit += 1
+                if not diag_tokens:
+                    continue
+                score = hit / len(diag_tokens)
+                if score > best_score and score >= 0.5:
+                    best_score = score
+                    best = (sec, line, "fuzzy", round(0.6 + 0.3 * score, 2))
+            return best
+
+        evidence: List[Dict[str, Any]] = []
+        for dtype, diag_text in entries:
+            matched = _line_match(diag_text)
+            quote = matched[1] if matched else None
+            support_quotes = _supporting_quotes(diag_text, quote)
+            if dtype == "main":
+                if support_quotes and main_proc_text:
+                    logic = f"主诊断优先来自出院/入院诊断条目，并与主要治疗（{main_proc_text}）及病程记录相互印证。"
+                elif support_quotes:
+                    logic = "主诊断优先来自出院/入院诊断条目，并由病程/治疗记录提供支持。"
+                elif quote:
+                    logic = "主诊断来自诊断条目，当前证据以诊断原文为主。"
+                else:
+                    logic = "按首页规范优先取主要出院诊断；当前缺少可追溯原文证据。"
+            else:
+                logic = "作为其他诊断，来自出院（或初步）诊断条目，并做病历文本一致性校验。"
+
+            if matched:
+                sec, quote, mode, conf = matched
+                reasoning_checks = _reasoning_checks(
+                    diag_text, dtype, sec, quote, support_quotes
+                )
+                evidence.append(
+                    {
+                        "diagnosis_text": diag_text,
+                        "diagnosis_type": dtype,
+                        "quote": quote,
+                        "section": sec,
+                        "match_mode": mode,
+                        "confidence": conf,
+                        "selection_logic": logic,
+                        "supporting_quotes": support_quotes,
+                        "reasoning_checks": reasoning_checks,
+                    }
+                )
+            else:
+                reasoning_checks = _reasoning_checks(
+                    diag_text, dtype, "unknown", None, support_quotes
+                )
+                evidence.append(
+                    {
+                        "diagnosis_text": diag_text,
+                        "diagnosis_type": dtype,
+                        "quote": None,
+                        "section": "unknown",
+                        "match_mode": "none",
+                        "confidence": 0.0,
+                        "selection_logic": logic,
+                        "supporting_quotes": support_quotes,
+                        "reasoning_checks": reasoning_checks,
+                    }
+                )
+
+        # Candidate comparison for main diagnosis correction:
+        # evaluate whether selected main diagnosis is supported more strongly
+        # than competing diagnoses, instead of only trusting chart ordering.
+        try:
+            candidate_texts: List[str] = []
+            if main:
+                candidate_texts.append(main)
+            if isinstance(others_raw, list):
+                for o in others_raw:
+                    oo = self._normalize_diag_text(o)
+                    if oo and self._diagnosis_canonical_key(oo) not in {
+                        self._diagnosis_canonical_key(x) for x in candidate_texts
+                    }:
+                        candidate_texts.append(oo)
+
+            severity_terms = ["重症", "不稳定", "急性", "危重", "监护", "介入", "手术", "PCI", "造影"]
+            candidate_rows: List[Dict[str, Any]] = []
+            for cand in candidate_texts:
+                matched = _line_match(cand)
+                quote = matched[1] if matched else None
+                section = matched[0] if matched else "unknown"
+                support_quotes = _supporting_quotes(cand, quote)
+                has_proc_support = False
+                proc_support_quote = ""
+                if main_proc_text:
+                    ckey = self._diagnosis_canonical_key(cand)
+                    if ckey and proc_key and (ckey[:4] in proc_key or proc_key[:4] in ckey):
+                        has_proc_support = True
+                        proc_support_quote = main_proc_text
+                    else:
+                        for sq in support_quotes:
+                            if any(t in sq for t in ["手术", "介入", "支架", "造影", "治疗"]):
+                                has_proc_support = True
+                                proc_support_quote = sq
+                                break
+
+                has_burden_support = any(
+                    any(term in sq for term in severity_terms) for sq in support_quotes
+                )
+                is_status = _is_status_like(cand)
+                section_score = 2 if section in {"出院诊断", "入院诊断", "初步诊断"} else 0
+                proc_score = 3 if has_proc_support else 0
+                burden_score = 2 if has_burden_support else 0
+                status_penalty = -3 if is_status else 0
+                total_score = section_score + proc_score + burden_score + status_penalty
+
+                reasons: List[str] = []
+                reasons.append(f"来源章节：{section}")
+                if has_proc_support:
+                    reasons.append("与主要治疗/手术方向一致")
+                if has_burden_support:
+                    reasons.append("存在病程严重程度或资源消耗佐证")
+                if is_status:
+                    reasons.append("疑似术后/既往状态，不宜优先为主诊断")
+
+                candidate_rows.append(
+                    {
+                        "diagnosis_text": cand,
+                        "score": total_score,
+                        "section": section,
+                        "quote": quote,
+                        "support_quote": proc_support_quote,
+                        "reasons": reasons,
+                    }
+                )
+
+            candidate_rows.sort(key=lambda x: x.get("score", 0), reverse=True)
+            recommended = candidate_rows[0]["diagnosis_text"] if candidate_rows else ""
+            selected_main = main or ""
+            consistent = (
+                self._diagnosis_canonical_key(recommended)
+                == self._diagnosis_canonical_key(selected_main)
+                if recommended and selected_main
+                else True
+            )
+
+            analysis = {
+                "recommended_main_diagnosis": recommended,
+                "selected_main_diagnosis": selected_main,
+                "consistent_with_selection": bool(consistent),
+                "summary": (
+                    "当前主诊断与系统候选排序一致。"
+                    if consistent
+                    else "当前主诊断与系统候选排序不一致，建议人工复核并考虑纠偏。"
+                ),
+                "candidates": candidate_rows[:5],
+            }
+
+            for ev in evidence:
+                if ev.get("diagnosis_type") == "main":
+                    ev["candidate_analysis"] = analysis
+                    checks = ev.get("reasoning_checks")
+                    if isinstance(checks, list):
+                        checks.append(
+                            {
+                                "item": "与候选排序一致性校验",
+                                "status": bool(consistent),
+                                "evidence_quote": (
+                                    f"系统推荐：{recommended}" if recommended else ""
+                                ),
+                                "explain": (
+                                    "系统基于章节来源、治疗/手术一致性、资源消耗佐证对候选诊断排序。"
+                                ),
+                            }
+                        )
+                    if not consistent and recommended:
+                        ev["selection_logic"] = (
+                            f"当前主诊断为“{selected_main}”，但综合病历证据更倾向“{recommended}”，"
+                            "建议人工复核主诊断是否填写偏差。"
+                        )
+        except Exception:
+            logger.exception("build diagnosis candidate analysis failed")
+
+        # Build labeled raw evidence lines for frontend display/audit.
+        try:
+            key_to_section: Dict[str, str] = {}
+            for sec, line in block_lines:
+                k = self._diagnosis_canonical_key(line)
+                if k and k not in key_to_section:
+                    key_to_section[k] = sec
+
+            def _source_of_text(text: str) -> str:
+                k = self._diagnosis_canonical_key(text)
+                if k and k in key_to_section:
+                    return key_to_section[k]
+                t = str(text or "")
+                if any(x in t for x in ("手术", "术中", "术后", "麻醉", "切除", "置入", "引流")):
+                    return "手术/治疗记录"
+                if any(x in t for x in ("病程", "复查", "检查", "检验", "治疗", "给予")):
+                    return "病程/治疗记录"
+                return "病历原文"
+
+            for ev in evidence:
+                raw_lines: List[Dict[str, str]] = []
+                seen = set()
+
+                def _push(text: Any, role: str) -> None:
+                    s = str(text or "").strip()
+                    if not s:
+                        return
+                    if s in seen:
+                        return
+                    seen.add(s)
+                    raw_lines.append(
+                        {
+                            "text": s,
+                            "source": _source_of_text(s),
+                            "role": role,
+                        }
+                    )
+
+                _push(ev.get("quote"), "主证据")
+                for sq in ev.get("supporting_quotes") or []:
+                    _push(sq, "治疗佐证")
+
+                checks = ev.get("reasoning_checks")
+                if isinstance(checks, list):
+                    for ck in checks:
+                        if isinstance(ck, dict):
+                            _push(ck.get("evidence_quote"), "判定佐证")
+
+                ca = ev.get("candidate_analysis")
+                if isinstance(ca, dict):
+                    cands = ca.get("candidates")
+                    if isinstance(cands, list):
+                        for c in cands:
+                            if isinstance(c, dict):
+                                _push(c.get("quote"), "候选证据")
+                                _push(c.get("support_quote"), "候选佐证")
+
+                ev["raw_evidence_lines"] = raw_lines
+        except Exception:
+            logger.exception("build labeled raw evidence lines failed")
+        return evidence
 
     def _apply_external_diagnosis_codes(
         self,
@@ -2380,8 +2987,32 @@ class FrontPageExtractionService:
         if not parts:
             return ""
 
-        therapy_keywords = ("支架", "置入", "植入", "切除", "成形", "搭桥", "修补", "吻合", "置换", "重建")
-        diagnostic_keywords = ("造影", "检查", "探查", "镜检", "评估")
+        # 参照病案首页主手术选择原则：
+        # 治疗性操作 > 介入治疗 > 诊断性检查
+        core_therapy_keywords = (
+            "支架",
+            "置入",
+            "植入",
+            "切除",
+            "成形",
+            "搭桥",
+            "修补",
+            "吻合",
+            "置换",
+            "重建",
+            "消融",
+            "切开",
+            "缝合",
+        )
+        interventional_keywords = (
+            "pci",
+            "ptca",
+            "介入",
+            "球囊",
+            "扩张",
+        )
+        diagnostic_keywords = ("造影", "检查", "探查", "镜检", "评估", "活检", "穿刺")
+        uncertain_markers = ("必要时", "拟", "可能", "待")
 
         best_part = parts[0]
         best_score = -10**9
@@ -2389,11 +3020,16 @@ class FrontPageExtractionService:
             text = str(part or "").strip()
             if not text:
                 continue
+            lower_text = text.lower()
             score = 0
-            if any(k in text for k in therapy_keywords):
-                score += 2
+            if any(k in text for k in core_therapy_keywords):
+                score += 4
+            if any(k in lower_text for k in interventional_keywords):
+                score += 3
             if any(k in text for k in diagnostic_keywords):
-                score -= 1
+                score -= 3
+            if any(m in text for m in uncertain_markers):
+                score -= 0.5
             # Prefer later item on tie (often definitive treatment follows diagnostic step)
             score += idx * 0.01
             if score > best_score:
@@ -2441,6 +3077,9 @@ class FrontPageExtractionService:
         if text is None:
             return ""
         s = str(text).strip()
+        s = s.replace("＋", "+")
+        s = re.sub(r"^\s*(拟行|计划行|拟于|行|拟)\s*", "", s)
+        s = re.sub(r"^\s*必要时\s*", "", s)
         s = re.sub(r"^\s*\d{1,2}[\.、\)]\s*", "", s)
         return s.strip()
 
@@ -2449,7 +3088,7 @@ class FrontPageExtractionService:
         cleaned = cls._normalize_procedure_text(text)
         if not cleaned:
             return []
-        parts = re.split(r"[+＋、，,；;]|(?:\s+及\s+)", cleaned)
+        parts = re.split(r"[+＋、，,；;]|(?:\s*(?:及|并|和|联合)\s*)", cleaned)
         out: List[str] = []
         seen = set()
         for p in parts:
@@ -2565,4 +3204,5 @@ class FrontPageExtractionService:
 
 # 提供单例风格的访问方式
 default_frontpage_service = FrontPageExtractionService()
+
 

@@ -390,9 +390,18 @@ import {
 } from '@ant-design/icons-vue'
 import type { MedicalRecord } from '@/types'
 
+type RecordDetailModel = MedicalRecord & {
+  record_type?: string
+  patient_gender?: string
+  admission_date?: string
+  file_url?: string
+  file_name?: string
+  qc_grade?: string
+}
+
 // Props
 interface Props {
-  record: MedicalRecord
+  record: RecordDetailModel
   analyzing?: boolean
 }
 
@@ -402,10 +411,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'edit-record': [record: MedicalRecord]
-  'duplicate-record': [record: MedicalRecord]
-  'delete-record': [record: MedicalRecord]
-  'analyze-record': [record: MedicalRecord]
+  'edit-record': [record: RecordDetailModel]
+  'duplicate-record': [record: RecordDetailModel]
+  'delete-record': [record: RecordDetailModel]
+  'analyze-record': [record: RecordDetailModel]
 }>()
 
 // 状态
@@ -449,7 +458,7 @@ const exportRecord = () => {
 }
 
 // 获取记录类型颜色
-const getRecordTypeColor = (type: string) => {
+const getRecordTypeColor = (type?: string) => {
   const colors = {
     inpatient: 'blue',
     outpatient: 'green',
@@ -459,7 +468,7 @@ const getRecordTypeColor = (type: string) => {
 }
 
 // 获取记录类型标签
-const getRecordTypeLabel = (type: string) => {
+const getRecordTypeLabel = (type?: string) => {
   const labels = {
     inpatient: '住院记录',
     outpatient: '门诊记录',
@@ -469,7 +478,7 @@ const getRecordTypeLabel = (type: string) => {
 }
 
 // 获取性别标签
-const getGenderLabel = (gender: string) => {
+const getGenderLabel = (gender?: string) => {
   const labels = {
     M: '男性',
     F: '女性',
@@ -479,7 +488,7 @@ const getGenderLabel = (gender: string) => {
 }
 
 // 获取状态标签
-const getStatusLabel = (status: string) => {
+const getStatusLabel = (status?: string) => {
   const labels = {
     pending: '待处理',
     analyzing: '分析中',
@@ -490,7 +499,7 @@ const getStatusLabel = (status: string) => {
 }
 
 // 获取状态点样式
-const getStatusDotClass = (status: string) => {
+const getStatusDotClass = (status?: string) => {
   const classes = {
     pending: 'bg-amber-400',
     analyzing: 'bg-blue-400 animate-pulse',

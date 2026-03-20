@@ -1,0 +1,16 @@
+{
+  "scheme_name": "liaocheng_2025",
+  "label": "聊城 2025",
+  "category": "city",
+  "province": "山东",
+  "source_file": "7846.js",
+  "extracted_at": "2026-03-15T18:28:53.208663",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9388,
+    "adrg": 252,
+    "drg": 634
+  }
+}

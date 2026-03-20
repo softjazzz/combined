@@ -1,0 +1,16 @@
+{
+  "scheme_name": "fujian_2024",
+  "label": "福建 2024",
+  "category": "province",
+  "province": "",
+  "source_file": "6834.js",
+  "extracted_at": "2026-03-15T18:28:51.415059",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9388,
+    "adrg": 251,
+    "drg": 786
+  }
+}

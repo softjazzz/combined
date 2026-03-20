@@ -453,8 +453,8 @@ export function useRealTimeQC() {
     const { ruleResults } = analysisResult
     
     if (ruleResults.some((r) => r.severity === 'critical')) return 'critical'
-    if (ruleResults.some((r: unknown) => r.severity === 'error')) return 'error'
-    if (ruleResults.some((r: unknown) => r.severity === 'warning')) return 'warning'
+    if (ruleResults.some((r: { severity?: string }) => r.severity === 'error')) return 'error'
+    if (ruleResults.some((r: { severity?: string }) => r.severity === 'warning')) return 'warning'
     return 'info'
   }
 

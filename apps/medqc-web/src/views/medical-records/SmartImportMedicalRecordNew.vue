@@ -522,12 +522,12 @@ import MedicalDocumentResultModal from '@/components/MedicalDocumentResultModal.
 // 临时类型定义
 interface UserLLMConfig {
   config_name: string
-  [key: string]: unknown
+  [key: string]: any
 }
 
 interface SavedRecord {
   id: string
-  [key: string]: unknown
+  [key: string]: any
 }
 
 const router = useRouter()
@@ -542,10 +542,10 @@ const inputText = ref('')
 const parsing = ref(false)
 const saving = ref(false)
 const importing = ref(false)
-const parseResult = ref<unknown>(null)
+const parseResult = ref<any>(null)
 const operationLog = ref('')
-const importResult = ref<unknown>(null)
-const realtimeSubscription = ref<unknown>(null)
+const importResult = ref<any>(null)
+const realtimeSubscription = ref<any>(null)
 const showApiConfig = ref(false)
 const currentConfig = ref<UserLLMConfig | null>(null)
 // 后端可用性标记，用于避免跨域健康检查造成的报错
@@ -553,7 +553,7 @@ const backendAvailable = ref(false)
 
 // Modal相关状态
 const showResultModal = ref(false)
-const modalData = ref<unknown>(null)
+const modalData = ref<any>(null)
 const modalOriginalText = ref('')
 
 function isCrossOrigin(url: string): boolean {
@@ -575,11 +575,18 @@ interface UploadedFile {
   uploadTime: string
   parsed: boolean
   parsing: boolean
-  parseResult: Record<string, unknown>
+  parseResult: ParsedFileResult | null
   error: string | null
   previewUrl: string | null
   imported: boolean
   importResult: Record<string, unknown>
+}
+
+interface ParsedFileResult {
+  content?: string
+  pages?: number
+  medical_info?: Record<string, unknown>
+  [key: string]: unknown
 }
 
 // 批量文件管理
@@ -607,6 +614,14 @@ const batchProgressPercent = computed(() => {
   if (batchProgress.value.total === 0) return 0
   return Math.round((batchProgress.value.completed / batchProgress.value.total) * 100)
 })
+
+const getMedicalInfoString = (medicalInfo: unknown, key: string) => {
+  if (typeof medicalInfo !== 'object' || medicalInfo === null) {
+    return ''
+  }
+  const value = (medicalInfo as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : ''
+}
 
 // 示例医疗文本
 // 文本输入占位说明由 placeholder 提供，不再预填示例文本
@@ -653,14 +668,14 @@ const beforeUpload = (file: File) => {
 }
 
 // 处理文件上传变化事件
-const handleUploadChange = (info: unknown) => {
+const handleUploadChange = (info: any) => {
   console.log('handleUploadChange 被调用', info)
 
   const { fileList } = info
   console.log('文件列表:', fileList)
 
   // 处理新添加的文件
-  fileList.forEach((fileItem: unknown) => {
+  fileList.forEach((fileItem: any) => {
     const file = fileItem.originFileObj || fileItem
 
     // 检查是否已经添加过这个文件
@@ -712,7 +727,7 @@ const addFileToList = (file: File) => {
     operationLog.value += `\n文件上传成功: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`
     message.success(`文件 ${file.name} 上传成功`, 2)
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('文件处理失败:', error)
     operationLog.value += `\n文件处理失败: ${error}`
     message.error('文件处理失败')
@@ -720,7 +735,7 @@ const addFileToList = (file: File) => {
 }
 
 // 保留原有的handleFileUpload方法作为备用
-const handleFileUpload = async (options: unknown) => {
+const handleFileUpload = async (options: any) => {
   console.log('handleFileUpload 被调用', options)
   const { file } = options
   addFileToList(file)
@@ -812,7 +827,7 @@ const parseFile = async (index: number) => {
     } else {
       throw new Error(result.error || '解析失败')
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     file.error = error.message || '解析失败'
     operationLog.value += `\n解析失败: ${error.message}`
     message.error(`文件解析失败: ${file.name} - ${error.message}`)
@@ -862,7 +877,7 @@ const parseCurrentFile = async () => {
     } else {
       throw new Error(result.error || '解析失败')
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     currentFile.value.error = error.message || '解析失败'
     operationLog.value += `\n解析失败: ${error.message}`
     message.error(`文件解析失败: ${error.message}`)
@@ -925,7 +940,7 @@ const parseAllFiles = async () => {
         failCount++
         batchProgress.value.hasErrors = true
       }
-    } catch (error: unknown) {
+    } catch (error: any) {
       failCount++
       batchProgress.value.hasErrors = true
       operationLog.value += `\n解析失败: ${file.name} - ${error.message}`
@@ -971,7 +986,7 @@ const smartImportToDatabase = async () => {
     const medicalInfo = parseResult.medical_info || {}
 
     // 提取患者姓名（优先从医疗信息中获取，否则使用默认值）
-    const patientName = medicalInfo.patient_name ||
+    const patientName = getMedicalInfoString(medicalInfo, 'patient_name') ||
                        extractPatientNameFromContent(parseResult.content) ||
                        '未知患者'
 
@@ -1015,7 +1030,7 @@ const smartImportToDatabase = async () => {
     operationLog.value += `\n创建时间: ${new Date(result.created_at).toLocaleString()}`
 
     message.success('智能导入成功！数据已保存到数据库')
-  } catch (error: unknown) {
+  } catch (error: any) {
     operationLog.value += `\n导入失败: ${error.message}`
     message.error(`智能导入失败: ${error.message}`)
   } finally {
@@ -1065,7 +1080,7 @@ const showLLMAnalysis = async () => {
     }
 
     // 使用当前配置初始化LLM服务
-    await llmService.initialize(currentConfig.value)
+    await llmService.loadConfigFromDatabase(currentConfig.value.config_name)
 
     const result = await llmService.extractMedicalData(currentFile.value.parseResult.content, {
       extractDocuments: true,
@@ -1086,7 +1101,7 @@ const showLLMAnalysis = async () => {
     } else {
       message.error(`LLM解析失败: ${result.error}`)
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('LLM解析失败:', error)
     operationLog.value += `\n LLM解析失败: ${error}`
     message.error('LLM解析失败，请检查API配置')
@@ -1147,7 +1162,7 @@ const parseText = async () => {
     } else {
       throw new Error(result.error || '解析失败')
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('文本解析失败:', error)
     operationLog.value += `\n解析失败: ${error.message}`
     message.error(`文本解析失败: ${error.message}`)
@@ -1171,7 +1186,7 @@ const smartImportTextResult = async () => {
     const medicalInfo = data.medical_info || {}
 
     // 提取患者姓名
-    const patientName = medicalInfo.patient_name ||
+    const patientName = getMedicalInfoString(medicalInfo, 'patient_name') ||
                        extractPatientNameFromContent(data.content) ||
                        '文本导入患者'
 
@@ -1213,7 +1228,7 @@ const smartImportTextResult = async () => {
     operationLog.value += `\n创建时间: ${new Date(result.created_at).toLocaleString()}`
 
     message.success('智能导入成功！数据已保存到数据库')
-  } catch (error: unknown) {
+  } catch (error: any) {
     operationLog.value += `\n导入失败: ${error.message}`
     message.error(`智能导入失败: ${error.message}`)
   } finally {
@@ -1271,7 +1286,7 @@ const exportResult = () => {
     URL.revokeObjectURL(url)
     message.success('解析结果已导出')
     operationLog.value += '\n解析结果已导出为JSON文件'
-  } catch (error: unknown) {
+  } catch (error: any) {
     message.error('导出失败')
     operationLog.value += `\n导出失败: ${error}`
   }
@@ -1303,7 +1318,7 @@ const saveRecord = async () => {
     })
 
     // 保存到数据库
-    const savedRecord = await supabaseMedicalRecordService.createRecord(recordData)
+    const savedRecord = await supabaseMedicalRecordService.createMedicalRecord(recordData)
 
     message.success('记录保存成功')
     operationLog.value += `\n记录已保存到数据库，ID: ${savedRecord.id}`
@@ -1311,7 +1326,7 @@ const saveRecord = async () => {
     // 可选：跳转到记录详情页
     // router.push(`/medical-records/${savedRecord.id}`)
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('保存失败:', error)
     message.error(`保存失败: ${error.message || error}`)
     operationLog.value += `\n保存失败: ${error.message || error}`
@@ -1331,7 +1346,7 @@ const handleApiConfigUpdated = async (config: UserLLMConfig) => {
       showApiConfig.value = false
       operationLog.value += `\n配置已更新: ${config.config_name}`
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     message.error('应用配置失败')
     operationLog.value += `\n配置更新失败: ${error}`
   }
@@ -1454,14 +1469,14 @@ const checkBackendConnection = async () => {
 
     const response = await fetch(`${API_BASE_URL}/api/v1/health`)
     if (response.ok) {
-      const result: unknown = await response.json()
+      const result: any = await response.json()
       operationLog.value += `\n后端服务连接正常: ${result.message || 'OK'}`
       backendAvailable.value = true
       return true
     } else {
       throw new Error(`HTTP ${response.status}`)
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     operationLog.value += `\n后端服务连接失败，已降级为直连模式: ${(error && (error as any).message) || error}`
     backendAvailable.value = false
     // 不提示 warning，避免打扰用户
@@ -1488,7 +1503,7 @@ onMounted(async () => {
       currentConfig.value = llmService.getCurrentConfig()
       operationLog.value += '\n已加载默认LLM配置'
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     operationLog.value += `\n加载配置失败: ${error}`
   }
 
@@ -1517,13 +1532,13 @@ onUnmounted(() => {
 })
 
 // Modal处理方法
-const handleModalConfirm = async (data: unknown) => {
+const handleModalConfirm = async (data: any) => {
   // 用户点击"保存并跳转"按钮，直接保存并跳转
   operationLog.value += '\n用户选择保存并跳转到详情页面'
   await autoSaveAndRedirect(data)
 }
 
-const handleModalConfirmOnly = (data: unknown) => {
+const handleModalConfirmOnly = (data: any) => {
   // 用户点击"确认结果"按钮，只确认不跳转
   parseResult.value = {
     success: true,
@@ -1540,7 +1555,7 @@ const handleModalConfirmOnly = (data: unknown) => {
   message.success('解析结果已确认，可以进行后续操作')
 }
 
-const handleModalExport = (data: unknown) => {
+const handleModalExport = (data: any) => {
   try {
     const dataStr = JSON.stringify(data, null, 2)
     const blob = new Blob([dataStr], { type: 'application/json' })
@@ -1556,14 +1571,14 @@ const handleModalExport = (data: unknown) => {
     URL.revokeObjectURL(url)
     message.success('解析结果已导出')
     operationLog.value += '\n解析结果已导出为JSON文件'
-  } catch (error: unknown) {
+  } catch (error: any) {
     message.error('导出失败')
     operationLog.value += `\n导出失败: ${error}`
   }
 }
 
 // 自动保存并跳转方法
-const autoSaveAndRedirect = async (data: unknown) => {
+const autoSaveAndRedirect = async (data: any) => {
   try {
     saving.value = true
     operationLog.value += '\n开始自动保存解析结果...'
@@ -1607,7 +1622,7 @@ const autoSaveAndRedirect = async (data: unknown) => {
       router.push(`/dashboard/medical-records/${savedRecord.id}`)
     }, 1500)
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('自动保存失败:', error)
     message.error(`自动保存失败: ${error.message}`)
     operationLog.value += `\n自动保存失败: ${error.message}`
@@ -2505,4 +2520,5 @@ pre {
 }
 
 </stylex>
+
 

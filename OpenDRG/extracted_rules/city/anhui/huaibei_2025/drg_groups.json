@@ -1,0 +1,3098 @@
+{
+  "AA": {
+    "AA19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "AA29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "AB": {
+    "AB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "AC": {
+    "AC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "AD": {
+    "AD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "AE": {
+    "AE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "AF": {
+    "AF19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "AG": {
+    "AG19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "AG29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "AG39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    }
+  },
+  "AH": {
+    "AH19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "AH29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "PB": {
+    "PB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "PC": {
+    "PC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "PJ": {
+    "PJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "PS": {
+    "PS29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "PS39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "PS11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "PS43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "PS45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    }
+  },
+  "PU": {
+    "PU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "PV": {
+    "PV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "PK": {
+    "PK11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "PK15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "PR": {
+    "PR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "PR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "PD": {
+    "PD15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "YC": {
+    "YC11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "YC13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "YC15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "YR": {
+    "YR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "YR21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "YR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "YR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "YR25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "ZB": {
+    "ZB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "ZD": {
+    "ZD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "ZC": {
+    "ZC11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ZC15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "ZJ": {
+    "ZJ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ZJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "ZZ": {
+    "ZZ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ZZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "MA": {
+    "MA19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "MB": {
+    "MB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "MC": {
+    "MC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "MD": {
+    "MD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "MJ": {
+    "MJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "MZ": {
+    "MZ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "MR": {
+    "MR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "MR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "MS": {
+    "MS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "MS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "NA": {
+    "NA19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "NA29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "NB": {
+    "NB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "NC": {
+    "NC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "ND": {
+    "ND19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "NE": {
+    "NE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "NG": {
+    "NG19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "NS": {
+    "NS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "NZ": {
+    "NZ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "NF": {
+    "NF13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "NF15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "NJ": {
+    "NJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "NJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "NR": {
+    "NR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "NR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "OB": {
+    "OB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "OC": {
+    "OC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "OC29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "OD": {
+    "OD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "OD29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "OE": {
+    "OE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "OF": {
+    "OF19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "OF29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "OJ": {
+    "OJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "OR": {
+    "OR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "OS": {
+    "OS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "OS29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "OT": {
+    "OT19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "OZ": {
+    "OZ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "BC": {
+    "BC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "BD": {
+    "BD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "BD29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "BE": {
+    "BE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "BE21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BE25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "BV": {
+    "BV39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "BV11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BV21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BV13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BV15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BV25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "BB": {
+    "BB11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BB21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BB31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BB41": {
+      "suffix": "41",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BB51": {
+      "suffix": "51",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BB23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "BB43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "BB15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BB25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "BB35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    },
+    "BB45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    },
+    "BB55": {
+      "suffix": "55",
+      "condition": "无条件入组"
+    }
+  },
+  "BJ": {
+    "BJ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "BL": {
+    "BL11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BL15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "BM": {
+    "BM11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BM15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "BR": {
+    "BR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BR21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BR23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "BR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BR25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "BS": {
+    "BS11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "BT": {
+    "BT21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BT31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BT23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "BT33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "BT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BT25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "BT35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "BU": {
+    "BU11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BU21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BU31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BU25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "BU35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "BW": {
+    "BW21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BW13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BW23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "BW15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BW25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "BX": {
+    "BX11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BX23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "BX15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BX25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "BY": {
+    "BY11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BY21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BY23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "BY15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "BY25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "BZ": {
+    "BZ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "BZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "BZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "CB": {
+    "CB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "CB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "CB39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "CB59": {
+      "suffix": "59",
+      "condition": "无条件入组"
+    },
+    "CB69": {
+      "suffix": "69",
+      "condition": "无条件入组"
+    },
+    "CB79": {
+      "suffix": "79",
+      "condition": "无条件入组"
+    },
+    "CB43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "CB45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    }
+  },
+  "CD": {
+    "CD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "CD29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "CD39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    }
+  },
+  "CJ": {
+    "CJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CR": {
+    "CR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CT": {
+    "CT19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CU": {
+    "CU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CV": {
+    "CV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CW": {
+    "CW19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CZ": {
+    "CZ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "CS": {
+    "CS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "CS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "CX": {
+    "CX13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "CX15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "DB": {
+    "DB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "DC": {
+    "DC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DC39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "DC23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "DC43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "DC25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "DC45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    }
+  },
+  "DD": {
+    "DD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DD29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "DE": {
+    "DE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DE23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "DE25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "DF": {
+    "DF19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DF29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "DG": {
+    "DG19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DG29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "DH": {
+    "DH19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "DH29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "DH39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "DH49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    }
+  },
+  "DJ": {
+    "DJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "DK": {
+    "DK19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "DR": {
+    "DR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "DT": {
+    "DT29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "DT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "DT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "DU": {
+    "DU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "DV": {
+    "DV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "DW": {
+    "DW19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "DS": {
+    "DS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "DS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "DZ": {
+    "DZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "DZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "EB": {
+    "EB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "EB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "EC": {
+    "EC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "EC29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "EK": {
+    "EK19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "EK23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "EK25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "EU": {
+    "EU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "ED": {
+    "ED11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ED13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "ED15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "EJ": {
+    "EJ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "EJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "EJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "ER": {
+    "ER11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ER23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "ER15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "ER25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "ES": {
+    "ES11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ES31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ES13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "ES23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "ES33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "ES15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "ES25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "ES35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "ET": {
+    "ET11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "ET13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "ET23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "ET15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "ET25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "EW": {
+    "EW11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "EW13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "EW15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "EZ": {
+    "EZ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "EZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "EZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "EV": {
+    "EV13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "EV15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "EX": {
+    "EX13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "EX23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "EX15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "EX25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "FB": {
+    "FB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "FC": {
+    "FC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "FD": {
+    "FD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FD23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "FD25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "FE": {
+    "FE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FE29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "FF": {
+    "FF19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FF39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "FF23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "FF25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "FJ": {
+    "FJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "FK": {
+    "FK19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FK29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "FK39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "FK49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    }
+  },
+  "FL": {
+    "FL19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FL29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "FL39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "FL49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    }
+  },
+  "FM": {
+    "FM19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FM29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "FM39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "FM49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    },
+    "FM59": {
+      "suffix": "59",
+      "condition": "无条件入组"
+    }
+  },
+  "FN": {
+    "FN19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FN23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "FN25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "FR": {
+    "FR49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    },
+    "FR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "FR21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "FR51": {
+      "suffix": "51",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "FR33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "FR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "FR25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "FR35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    },
+    "FR55": {
+      "suffix": "55",
+      "condition": "无条件入组"
+    }
+  },
+  "FT": {
+    "FT19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FT29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "FT39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "FT41": {
+      "suffix": "41",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "FT43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "FT45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    }
+  },
+  "FU": {
+    "FU29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "FU11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "FU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "FV": {
+    "FV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "FV23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "FV33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "FV25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "FV35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "FW": {
+    "FW29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "FW13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "FW15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "FP": {
+    "FP13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "FP15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "FZ": {
+    "FZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "FZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GB": {
+    "GB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "GB39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "GB11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GB15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GC": {
+    "GC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "GC21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GC31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GC23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "GC33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "GC25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "GC35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "GD": {
+    "GD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "GE": {
+    "GE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "GE23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "GE25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "GF": {
+    "GF19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "GF23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "GF33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "GF25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "GF35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "GG": {
+    "GG19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "GG29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "GK": {
+    "GK19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "GK23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "GK33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "GK25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "GK35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "GU": {
+    "GU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "GU23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "GU25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "GH": {
+    "GH11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GH13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GH15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GJ": {
+    "GJ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GR": {
+    "GR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GS": {
+    "GS11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GV": {
+    "GV11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "GV13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GV15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GT": {
+    "GT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GW": {
+    "GW13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GW15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "GZ": {
+    "GZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "GZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "HK": {
+    "HK19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "HL": {
+    "HL19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "HL29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "HS": {
+    "HS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "HS39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "HS21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HS25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "HZ": {
+    "HZ29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "HZ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HZ31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "HZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "HZ35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "HB": {
+    "HB11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HB15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "HC": {
+    "HC11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HC31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HC23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "HC33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "HC15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "HC25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "HC35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "HJ": {
+    "HJ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "HJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "HR": {
+    "HR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "HT": {
+    "HT11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HT21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "HT23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "HT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "HT25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "HU": {
+    "HU11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "HU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "IB": {
+    "IB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "IB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "IB31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "IB35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "IC": {
+    "IC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "IC29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "IC39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "IC49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    }
+  },
+  "ID": {
+    "ID19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "ID23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "ID25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "IE": {
+    "IE39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "IE69": {
+      "suffix": "69",
+      "condition": "无条件入组"
+    },
+    "IE21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "IE13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "IE43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "IE53": {
+      "suffix": "53",
+      "condition": "需要CC或MCC"
+    },
+    "IE15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "IE25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "IE45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    },
+    "IE55": {
+      "suffix": "55",
+      "condition": "无条件入组"
+    }
+  },
+  "IF": {
+    "IF19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "IG": {
+    "IG19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "IR": {
+    "IR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "IR29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "IS": {
+    "IS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "IS29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "IT": {
+    "IT19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "IT21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "IT23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "IT33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "IT25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "IT35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "IU": {
+    "IU29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "IU39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "IU13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "IU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "IV": {
+    "IV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "IH": {
+    "IH13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "IH15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "IJ": {
+    "IJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "IJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "IZ": {
+    "IZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "IZ23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "IZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "IZ25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "JA": {
+    "JA19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "JA29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "JB": {
+    "JB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "JB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "JB39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    }
+  },
+  "JC": {
+    "JC19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "JJ": {
+    "JJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "JR": {
+    "JR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "JR23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "JR25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "JS": {
+    "JS29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "JS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "JS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "JT": {
+    "JT19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "JV": {
+    "JV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "JV29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "JD": {
+    "JD21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "JD13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "JD23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "JD15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "JD25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "JU": {
+    "JU13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "JU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "JZ": {
+    "JZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "JZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "KB": {
+    "KB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "KD": {
+    "KD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "KD29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "KE": {
+    "KE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "KR": {
+    "KR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "KV": {
+    "KV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "KC": {
+    "KC11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "KC15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "KU": {
+    "KU11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "KU13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "KU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "KJ": {
+    "KJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "KJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "KS": {
+    "KS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "KS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "KT": {
+    "KT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "KT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "KZ": {
+    "KZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "KZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LA": {
+    "LA19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "LA23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "LA25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "LB": {
+    "LB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "LB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "LD": {
+    "LD19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "LE": {
+    "LE19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "LT": {
+    "LT19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "LV": {
+    "LV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "LW": {
+    "LW19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "LX": {
+    "LX19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "LC": {
+    "LC11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "LC15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LF": {
+    "LF11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "LF15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LL": {
+    "LL11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "LL13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "LL15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LS": {
+    "LS11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "LS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LU": {
+    "LU11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "LU13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "LU15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LJ": {
+    "LJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "LJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LR": {
+    "LR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "LR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "LZ": {
+    "LZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "LZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "QB": {
+    "QB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "QR": {
+    "QR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "QR21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "QR23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "QR25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "QS": {
+    "QS29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "QS31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "QS41": {
+      "suffix": "41",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "QS51": {
+      "suffix": "51",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "QS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "QS33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "QS43": {
+      "suffix": "43",
+      "condition": "需要CC或MCC"
+    },
+    "QS53": {
+      "suffix": "53",
+      "condition": "需要CC或MCC"
+    },
+    "QS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "QS35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    },
+    "QS45": {
+      "suffix": "45",
+      "condition": "无条件入组"
+    },
+    "QS55": {
+      "suffix": "55",
+      "condition": "无条件入组"
+    }
+  },
+  "QT": {
+    "QT11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "QT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "QT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "QJ": {
+    "QJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "QJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "RA": {
+    "RA29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "RA39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    },
+    "RA49": {
+      "suffix": "49",
+      "condition": "无条件入组"
+    },
+    "RA13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "RA15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "RT": {
+    "RT29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "RT11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "RT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "RU": {
+    "RU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "RW": {
+    "RW19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "RW21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RW25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "RK": {
+    "RK11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RK21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RK13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "RK15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "RK25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "RL": {
+    "RL11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RL21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RL23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "RL15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "RL25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "RM": {
+    "RM11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RM15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "RN": {
+    "RN11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RN21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RN13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "RN15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "RN25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "RP": {
+    "RP11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RP15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "RR": {
+    "RR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "RR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "RS": {
+    "RS21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "RS13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "RS23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "RS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "RS25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "SS": {
+    "SS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "SU": {
+    "SU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "SB": {
+    "SB11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "SB13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "SB15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "SR": {
+    "SR11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "SR13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "SR15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "SV": {
+    "SV11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "SV13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "SV15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "ST": {
+    "ST13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "ST15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "SZ": {
+    "SZ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "SZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "TB": {
+    "TB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "TR": {
+    "TR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "TR29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "TS": {
+    "TS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "TS29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "TT": {
+    "TT29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "TT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "TT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "TU": {
+    "TU19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "TV": {
+    "TV19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "TX": {
+    "TX19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "TY": {
+    "TY19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "TW": {
+    "TW11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "TW15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "UR": {
+    "UR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "US": {
+    "US19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "VR": {
+    "VR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "VS": {
+    "VS19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "VS21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "VS25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "VJ": {
+    "VJ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "VJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "VJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "VZ": {
+    "VZ11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "VZ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "VB": {
+    "VB13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "VB15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "VC": {
+    "VC13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "VC15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "VT": {
+    "VT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "VT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  },
+  "WB": {
+    "WB19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "WB29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "WB39": {
+      "suffix": "39",
+      "condition": "无条件入组"
+    }
+  },
+  "WJ": {
+    "WJ19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    }
+  },
+  "WR": {
+    "WR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "WR29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    }
+  },
+  "XR": {
+    "XR19": {
+      "suffix": "19",
+      "condition": "无条件入组"
+    },
+    "XR21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "XR31": {
+      "suffix": "31",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "XR23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "XR33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "XR25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    },
+    "XR35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "XT": {
+    "XT29": {
+      "suffix": "29",
+      "condition": "无条件入组"
+    },
+    "XT13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "XT33": {
+      "suffix": "33",
+      "condition": "需要CC或MCC"
+    },
+    "XT15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "XT35": {
+      "suffix": "35",
+      "condition": "无条件入组"
+    }
+  },
+  "XS": {
+    "XS11": {
+      "suffix": "11",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "XS21": {
+      "suffix": "21",
+      "condition": "x.zdList.length>1&&x.mccList.length>0"
+    },
+    "XS23": {
+      "suffix": "23",
+      "condition": "需要CC或MCC"
+    },
+    "XS15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    },
+    "XS25": {
+      "suffix": "25",
+      "condition": "无条件入组"
+    }
+  },
+  "XJ": {
+    "XJ13": {
+      "suffix": "13",
+      "condition": "需要CC或MCC"
+    },
+    "XJ15": {
+      "suffix": "15",
+      "condition": "无条件入组"
+    }
+  }
+}

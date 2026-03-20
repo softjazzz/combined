@@ -33,6 +33,18 @@ class Settings(BaseSettings):
     # Environment
     ENV: str = os.getenv("ENV", "development")
 
+    # ICD semantic retrieval fallback (exact match still first)
+    ICD_SEMANTIC_ENABLED: bool = False
+    ICD_SEMANTIC_TOP_K: int = 5
+    ICD_SEMANTIC_T_HIGH: float = 0.90
+    ICD_SEMANTIC_T_LOW: float = 0.60
+    ICD_SEMANTIC_BACKEND: str = "tfidf"  # tfidf | hnsw | faiss | auto
+    ICD_SEMANTIC_INDEX_DIR: str = "backend/data/vector"
+    ICD_SEMANTIC_EMBED_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    ICD_SEMANTIC_API_ENDPOINT: str = "https://api.siliconflow.cn/v1/embeddings"
+    ICD_SEMANTIC_API_KEY: Optional[str] = None
+    ICD_SEMANTIC_TIMEOUT_SECONDS: int = 30
+
     # Outbound HTTP safety
     OUTBOUND_ALLOWLIST: List[str] = [
         "dashscope.aliyuncs.com",

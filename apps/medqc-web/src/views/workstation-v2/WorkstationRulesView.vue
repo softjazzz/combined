@@ -4,9 +4,7 @@
       <div class="rounded-[28px] border border-white/80 bg-white/88 p-6 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <div class="text-[11px] tracking-[0.14em] text-slate-400">规则中心</div>
-            <h1 class="mt-1 text-[30px] font-black text-slate-900 tracking-[-0.03em]">质控规则管理</h1>
-            <p class="text-[13px] text-slate-500 mt-2 font-medium">{{ activeTabDescription }}</p>
+            <h1 class="text-[30px] font-black text-slate-900 tracking-[-0.03em]">{{ activeTabTitle }}</h1>
           </div>
           <div class="flex rounded-[20px] border border-slate-200/80 bg-slate-50/90 p-1.5 shrink-0 overflow-x-auto shadow-sm">
             <button
@@ -55,12 +53,19 @@ const tabs = [
   { key: 'settlement' as const, label: '医保结算清单质控规则' },
 ]
 
-const descriptions: Record<TabKey, string> = {
-  coding: '基于 ICD 编码规范的 18 类质控规则，覆盖 9.4 万+条编码数据。',
-  frontpage: '基于病案首页数据的质控规则，校验首页字段的完整性和一致性。',
-  settlement: '针对医保结算清单数据的质控规则，覆盖必填项校验及逻辑一致性。',
+const titles: Record<TabKey, string> = {
+  coding: '编码质控规则管理',
+  frontpage: '首页质控规则管理',
+  settlement: '结算清单质控规则管理',
 }
 
+const descriptions: Record<TabKey, string> = {
+  coding: '基于 ICD 编码规范维护规则，覆盖主诊断、手术操作与编码一致性。',
+  frontpage: '基于病案首页字段维护规则，聚焦完整性、规范性与口径一致性。',
+  settlement: '针对医保结算清单维护规则，覆盖必填项、费用字段与清单逻辑校验。',
+}
+
+const activeTabTitle = computed(() => titles[activeTab.value])
 const activeTabDescription = computed(() => descriptions[activeTab.value])
 
 const switchTab = (key: TabKey) => {
@@ -68,7 +73,6 @@ const switchTab = (key: TabKey) => {
   router.replace({ query: { tab: key } })
 }
 
-// 从 URL query 读取初始 tab
 onMounted(() => {
   const tab = route.query.tab as string
   if (tab && ['coding', 'frontpage', 'settlement'].includes(tab)) {
@@ -76,12 +80,14 @@ onMounted(() => {
   }
 })
 
-// 监听 URL query 变化（侧边栏切换时触发）
-watch(() => route.query.tab, (newTab) => {
-  if (newTab && ['coding', 'frontpage', 'settlement'].includes(newTab as string)) {
-    activeTab.value = newTab as TabKey
-  }
-})
+watch(
+  () => route.query.tab,
+  (newTab) => {
+    if (newTab && ['coding', 'frontpage', 'settlement'].includes(newTab as string)) {
+      activeTab.value = newTab as TabKey
+    }
+  },
+)
 </script>
 
 <style scoped>

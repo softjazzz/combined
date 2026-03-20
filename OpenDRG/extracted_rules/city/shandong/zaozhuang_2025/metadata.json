@@ -1,0 +1,16 @@
+{
+  "scheme_name": "zaozhuang_2025",
+  "label": "枣庄 2025",
+  "category": "city",
+  "province": "山东",
+  "source_file": "6769.js",
+  "extracted_at": "2026-03-15T18:28:59.429329",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9314,
+    "adrg": 252,
+    "drg": 612
+  }
+}

@@ -5,6 +5,7 @@
  */
 
 import CryptoJS from 'crypto-js'
+import { supabase } from '@/lib/supabase'
 
 // API基础URL配置：优先用环境变量；若未设置则使用相对路径，交由 Vite 代理转发
 // 使用 nullish 合并，允许将环境变量显式设置为空字符串以启用相对路径
@@ -51,6 +52,7 @@ export interface UserLLMConfig {
   provider_id: string
   model_id: string
   api_key_encrypted: string | null
+  api_key_decrypted?: string | null
   custom_endpoint: string | null
   custom_parameters: Record<string, unknown>
   is_active: boolean
@@ -181,10 +183,10 @@ class LLMConfigService {
       }
 
       const result = await response.json()
-      const data = result.data || []
+      const data = (result.data || []) as Array<UserLLMConfig & { api_key_encrypted?: string }>
 
       // 解密API密钥
-      return data.map((config: unknown) => ({
+      return data.map((config) => ({
         ...config,
         api_key_decrypted: config.api_key_encrypted ? this.decryptApiKey(config.api_key_encrypted) : null
       }))
@@ -213,11 +215,11 @@ class LLMConfigService {
       }
 
       const result = await response.json()
-      const data = result.data
+      const data = result.data as (UserLLMConfig & { api_key_encrypted?: string }) | null
 
       // 解密API密钥
-      if (data && data.api_key_encrypted) {
-        (data as any).api_key_decrypted = this.decryptApiKey(data.api_key_encrypted)
+      if (data?.api_key_encrypted) {
+        data.api_key_decrypted = this.decryptApiKey(data.api_key_encrypted)
       }
 
       return data
@@ -233,7 +235,7 @@ class LLMConfigService {
   async saveConfig(config: LLMConfigInput, userId?: string): Promise<UserLLMConfig> {
     try {
       // 准备数据（支持按ID或按code提交，后端负责解析）
-      const configData: unknown = {
+      const configData: Record<string, unknown> = {
         user_id: userId || null,
         config_name: config.config_name,
         // 这两组字段按需传递，后端会优先使用 *_id，否则按 *_code 解析
@@ -298,7 +300,18 @@ class LLMConfigService {
    */
   async saveUserPointerPrefs(prefs: { pointerMode: boolean; summaryMaxLength: number }, userId?: string) {
     const existing = await this.getConfigByName('llm_pointer_prefs', userId)
-    const payload = {
+    const payload: {
+      user_id: string | null
+      config_name: string
+      custom_parameters: {
+        pointer_mode: boolean
+        summary_max_len: number
+        version: number
+      }
+      is_active: boolean
+      updated_at: string
+      created_at?: string
+    } = {
       user_id: userId || null,
       config_name: 'llm_pointer_prefs',
       custom_parameters: {

@@ -133,7 +133,27 @@ import EnhancedDocumentClassification from './EnhancedDocumentClassification.vue
 
 // Props
 interface Props {
-  record: Record<string, unknown>
+  record: EnhancedRecord
+}
+
+interface EnhancedRecord {
+  record_name?: string
+  status?: string
+  record_number?: string
+  updated_at?: string
+  content?: string
+  raw_text?: string
+  patient_info?: {
+    name?: string
+    age?: number | string
+    gender?: string
+  }
+  department?: string
+  documents?: unknown[]
+  ai_extraction_result?: Record<string, unknown>
+  primary_diagnosis?: string
+  secondary_diagnosis?: string[]
+  major_surgery?: string
 }
 
 const props = defineProps<Props>()
@@ -183,7 +203,7 @@ const handleClassificationFilter = (filter: unknown) => {
 }
 
 // 工具函数
-const getStatusColor = (status: string) => {
+const getStatusColor = (status?: string) => {
   const colors: Record<string, string> = {
     'pending': 'processing',
     'completed': 'success',
@@ -193,7 +213,7 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'default'
 }
 
-const getStatusText = (status: string) => {
+const getStatusText = (status?: string) => {
   const texts: Record<string, string> = {
     'pending': '待处理',
     'completed': '已完成',

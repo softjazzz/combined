@@ -4,6 +4,8 @@
 
 import { DocumentType, ClassificationResult } from '@/types/medical'
 
+const DT = DocumentType as any
+
 export class DocumentClassifier {
   /**
    * 基于标题和内容的规则分类（增强版）
@@ -58,7 +60,7 @@ export class DocumentClassifier {
     if (lowerTitle.includes('出院记录') || lowerTitle.includes('出院')) {
       if (lowerTitle.includes('死亡')) {
         if (lowerTitle.includes('讨论')) {
-          return DocumentType.DEATH_CASE_DISCUSSION
+          return DT.DEATH_CASE_DISCUSSION
         }
         return DocumentType.DEATH_RECORD
       }
@@ -70,30 +72,30 @@ export class DocumentClassifier {
     const hasImaging = imagingKeys.some(k => lowerTitle.includes(k) || lowerContent.includes(k))
     if (hasImaging || lowerTitle.includes('检查报告') || lowerTitle.includes('报告')) {
       if (hasImaging) {
-        return DocumentType.IMAGING_REPORT
+        return DT.IMAGING_REPORT
       }
       if (lowerTitle.includes('化验') || lowerTitle.includes('血常规') ||
           lowerTitle.includes('生化') || lowerTitle.includes('实验室')) {
-        return DocumentType.LAB_REPORT
+        return DT.LAB_REPORT
       }
-      return DocumentType.OTHER_EXAMINATION
+      return DT.OTHER_EXAMINATION
     }
 
     // 知情同意书类
     if (lowerTitle.includes('知情同意书') || lowerTitle.includes('同意书')) {
       if (lowerTitle.includes('手术')) {
-        return DocumentType.SURGERY_CONSENT
+        return DT.SURGERY_CONSENT
       }
       if (lowerTitle.includes('麻醉')) {
-        return DocumentType.ANESTHESIA_CONSENT
+        return DT.ANESTHESIA_CONSENT
       }
       if (lowerTitle.includes('输血') || lowerTitle.includes('用血')) {
-        return DocumentType.BLOOD_TRANSFUSION_CONSENT
+        return DT.BLOOD_TRANSFUSION_CONSENT
       }
       if (lowerTitle.includes('特殊治疗') || lowerTitle.includes('特殊检查')) {
-        return DocumentType.SPECIAL_TREATMENT_CONSENT
+        return DT.SPECIAL_TREATMENT_CONSENT
       }
-      return DocumentType.OTHER_CONSENT
+      return DT.OTHER_CONSENT
     }
 
     // 基于内容的二次判断
@@ -146,9 +148,9 @@ ${text.substring(0, 1000)}${text.length > 1000 ? '...' : ''}
   /**
    * 解析分类响应
    */
-  static parseClassificationResponse(response: unknown): ClassificationResult {
+  static parseClassificationResponse(response: any): ClassificationResult {
     try {
-      let result: unknown
+      let result: any
 
       if (typeof response === 'string') {
         // 尝试提取JSON部分
@@ -208,15 +210,15 @@ ${text.substring(0, 1000)}${text.length > 1000 ? '...' : ''}
       [DocumentType.PREOPERATIVE_SUMMARY]: '术前小结',
       [DocumentType.DISCHARGE_RECORD]: '出院记录',
       [DocumentType.DEATH_RECORD]: '死亡记录',
-      [DocumentType.DEATH_CASE_DISCUSSION]: '死亡病例讨论记录',
-      [DocumentType.IMAGING_REPORT]: '影像检查报告',
-      [DocumentType.LAB_REPORT]: '实验室检查报告',
-      [DocumentType.OTHER_EXAMINATION]: '其他检查报告',
-      [DocumentType.SURGERY_CONSENT]: '手术知情同意书',
-      [DocumentType.ANESTHESIA_CONSENT]: '麻醉知情同意书',
-      [DocumentType.BLOOD_TRANSFUSION_CONSENT]: '输血知情同意书',
-      [DocumentType.SPECIAL_TREATMENT_CONSENT]: '特殊治疗知情同意书',
-      [DocumentType.OTHER_CONSENT]: '其他知情同意书'
+      [DT.DEATH_CASE_DISCUSSION]: '死亡病例讨论记录',
+      [DT.IMAGING_REPORT]: '影像检查报告',
+      [DT.LAB_REPORT]: '实验室检查报告',
+      [DT.OTHER_EXAMINATION]: '其他检查报告',
+      [DT.SURGERY_CONSENT]: '手术知情同意书',
+      [DT.ANESTHESIA_CONSENT]: '麻醉知情同意书',
+      [DT.BLOOD_TRANSFUSION_CONSENT]: '输血知情同意书',
+      [DT.SPECIAL_TREATMENT_CONSENT]: '特殊治疗知情同意书',
+      [DT.OTHER_CONSENT]: '其他知情同意书'
     }
 
     return typeNames[type] || '未知文书类型'

@@ -598,6 +598,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 
 /* ==================== 滚动条 ==================== */

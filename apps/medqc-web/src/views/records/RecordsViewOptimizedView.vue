@@ -252,7 +252,19 @@ import { analyzeRecord as analyzeRecordAPI, batchAnalyzeRecords } from '@/api/qc
 import { formatDate, formatDateTime } from '@/utils/date'
 import { useBreakpoints } from '@/composables/useBreakpoints'
 
-type RecordItem = Record<string, any>
+interface RecordItem {
+  id: string
+  patient_name?: string
+  patient_gender?: string
+  patient_age?: number | string
+  status?: 'pending' | 'analyzing' | 'completed' | 'failed' | string
+  department?: string
+  admission_date?: string
+  record_type?: string
+  created_at?: string
+  content?: string
+  [key: string]: unknown
+}
 interface BatchActionItem {
   key: string
 }
@@ -381,12 +393,17 @@ const loadRecords = async (page = 1, append = false) => {
     })
 
     if (response.success && response.data) {
+      const payload = response.data as unknown
+      const pagedData = Array.isArray(payload)
+        ? { data: payload as RecordItem[], hasMore: false }
+        : (payload as { data?: RecordItem[]; hasMore?: boolean })
+
       if (append) {
-        records.value.push(...response.data.data)
+        records.value.push(...(pagedData.data || []))
       } else {
-        records.value = response.data.data
+        records.value = pagedData.data || []
       }
-      hasMore.value = response.data.hasMore
+      hasMore.value = !!pagedData.hasMore
       currentPage.value = page
     }
   } catch (error) {

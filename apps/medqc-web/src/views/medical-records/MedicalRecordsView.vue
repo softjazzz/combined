@@ -468,7 +468,7 @@ const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   },
-  onSelectAll: (selected: boolean, selectedRows: unknown[], changeRows: unknown[]) => {
+  onSelectAll: (selected: boolean, selectedRows: any[], changeRows: any[]) => {
     console.log('Select all:', selected, selectedRows, changeRows)
   }
 }))
@@ -592,7 +592,7 @@ const loadRecords = async () => {
     console.log(`📋 获取到 ${items.length} 条记录`)
 
     // 转换数据格式以适配现有UI - 适配medical_records表结构
-    records.value = items.map((record: unknown) => ({
+    records.value = items.map((record: any) => ({
       id: record.id,
       recordNumber: record.record_number || record.id,
       recordName: record.record_name || `${record.patient_info?.name || '未知患者'}的病历记录`,
@@ -808,7 +808,7 @@ const toggleViewMode = () => {
   viewMode.value = viewMode.value === 'card' ? 'table' : 'card'
 }
 
-const handleTableChange: TableProps['onChange'] = (pag: unknown,  filters: unknown, sorter: unknown) => {
+const handleTableChange: TableProps['onChange'] = (pag: any,  filters: any, sorter: any) => {
   pagination.current = pag?.current || 1
   pagination.pageSize = pag?.pageSize || 10
   loadRecords()

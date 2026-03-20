@@ -1,0 +1,16 @@
+{
+  "scheme_name": "wuxi_2023",
+  "label": "无锡 2023",
+  "category": "city",
+  "province": "江苏",
+  "source_file": "5351.js",
+  "extracted_at": "2026-03-15T18:28:57.483260",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10112,
+    "adrg": 250,
+    "drg": 605
+  }
+}

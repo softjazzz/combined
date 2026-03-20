@@ -1,0 +1,16 @@
+{
+  "scheme_name": "yinchuan_2023",
+  "label": "银川 2023",
+  "category": "city",
+  "province": "宁夏",
+  "source_file": "1677.js",
+  "extracted_at": "2026-03-15T18:28:59.120911",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10251,
+    "adrg": 224,
+    "drg": 639
+  }
+}

@@ -4,6 +4,16 @@ import { nextTick } from 'vue'
 import DashboardView from './DashboardView.vue'
 import type { DashboardStats } from '@/types/dashboard'
 
+type DashboardViewVm = {
+  stats: DashboardStats
+  refreshing: boolean
+  selectedPeriod: string
+  getGreeting: () => string
+  getTrendClass: (type: 'increase' | 'decrease') => string
+  getTrendIcon: (type: 'increase' | 'decrease') => unknown
+  handleQuickAction: (action: string) => void
+}
+
 // Mock QCTrendChart component
 vi.mock('@/components/charts/QCTrendChart.vue', () => ({
   default: {
@@ -15,6 +25,7 @@ vi.mock('@/components/charts/QCTrendChart.vue', () => ({
 
 describe('DashboardView', () => {
   let wrapper: VueWrapper<unknown>
+  const getVm = () => wrapper.vm as unknown as DashboardViewVm
 
   const mockStats: DashboardStats = {
     totalRecords: 1247,
@@ -78,7 +89,7 @@ describe('DashboardView', () => {
 
   describe('统计卡片模块', () => {
     it('应该正确计算和显示统计数据', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       expect(vm.stats.totalRecords).toBe(1247)
       expect(vm.stats.pendingRecords).toBe(23)
       expect(vm.stats.averageScore).toBe(87.5)
@@ -114,7 +125,7 @@ describe('DashboardView', () => {
     })
 
     it('应该正确处理快捷操作点击', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const handleQuickActionSpy = vi.spyOn(vm, 'handleQuickAction')
       
       const uploadButton = wrapper.find('[data-testid="quick-action-upload"]')
@@ -138,7 +149,7 @@ describe('DashboardView', () => {
     })
 
     it('应该响应时间段选择器变化', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const select = wrapper.find('[data-testid="period-select"]')
       
       await select.setValue('week')
@@ -148,7 +159,7 @@ describe('DashboardView', () => {
 
   describe('数据刷新功能', () => {
     it('应该正确处理数据刷新', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const refreshButton = wrapper.find('[data-testid="refresh-button"]')
       
       expect(vm.refreshing).toBe(false)
@@ -162,7 +173,7 @@ describe('DashboardView', () => {
     })
 
     it('应该在刷新时显示加载状态', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.refreshing = true
       await nextTick()
       
@@ -181,7 +192,7 @@ describe('DashboardView', () => {
 
   describe('工具函数', () => {
     it('getGreeting应该根据时间返回正确问候语', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       
       // Mock不同时间
       vi.setSystemTime(new Date('2024-01-01 09:00:00'))
@@ -195,13 +206,13 @@ describe('DashboardView', () => {
     })
 
     it('getTrendClass应该返回正确的CSS类', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       expect(vm.getTrendClass('increase')).toBe('text-green-500')
       expect(vm.getTrendClass('decrease')).toBe('text-red-500')
     })
 
     it('getTrendIcon应该返回正确的图标组件', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       expect(vm.getTrendIcon('increase')).toBeDefined()
       expect(vm.getTrendIcon('decrease')).toBeDefined()
     })

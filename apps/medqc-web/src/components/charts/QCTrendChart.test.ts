@@ -2,15 +2,41 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import QCTrendChart from './QCTrendChart.vue'
-import type { ChartDataPoint } from '@/types/dashboard'
+
+type ChartDataPointLike = {
+  date: string
+  count: number
+  score: number
+  pass_rate: number
+}
+
+type QCTrendChartVm = {
+  chartType: 'line' | 'bar' | 'area'
+  selectedMetric: 'all' | 'count' | 'score' | 'pass_rate'
+  chartData: ChartDataPointLike[]
+  loading: boolean
+  error: string
+  maxCount: number
+  maxScore: number
+  maxPassRate: number
+  selectedDataPoint: ChartDataPointLike | null
+  height: number
+  handleMetricChange: () => void
+  getLinePoints: (metric: string) => string
+  selectDataPoint: (item: ChartDataPointLike) => void
+  refreshData: () => Promise<void>
+  exportChart: () => void
+}
 
 describe('QCTrendChart', () => {
   let wrapper: VueWrapper<unknown>
 
-  const mockChartData: ChartDataPoint[] = [
-    { date: '2024-01', count: 120, score: 85, passRate: 92 },
-    { date: '2024-02', count: 150, score: 87, passRate: 94 },
-    { date: '2024-03', count: 180, score: 89, passRate: 96 }
+  const getVm = () => wrapper.vm as unknown as QCTrendChartVm
+
+  const mockChartData: ChartDataPointLike[] = [
+    { date: '2024-01', count: 120, score: 85, pass_rate: 92 },
+    { date: '2024-02', count: 150, score: 87, pass_rate: 94 },
+    { date: '2024-03', count: 180, score: 89, pass_rate: 96 }
   ]
 
   beforeEach(() => {
@@ -76,7 +102,7 @@ describe('QCTrendChart', () => {
 
   describe('图表类型切换', () => {
     it('应该正确切换图表类型', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       
       // 初始状态应该是线图
       expect(vm.chartType).toBe('line')
@@ -93,7 +119,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该根据图表类型显示不同的可视化', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       
       // 线图模式
       vm.chartType = 'line'
@@ -109,7 +135,7 @@ describe('QCTrendChart', () => {
 
   describe('指标选择功能', () => {
     it('应该正确处理指标变化', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const handleMetricChangeSpy = vi.spyOn(vm, 'handleMetricChange')
       
       vm.selectedMetric = 'count'
@@ -119,7 +145,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该根据选择的指标过滤数据', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       
       // 设置测试数据
       vm.chartData = mockChartData
@@ -135,7 +161,7 @@ describe('QCTrendChart', () => {
 
   describe('数据处理', () => {
     it('应该正确计算最大值', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.chartData = mockChartData
       
       expect(vm.maxCount).toBe(180)
@@ -144,7 +170,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该正确生成趋势线坐标', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.chartData = mockChartData
       
       const linePoints = vm.getLinePoints('count')
@@ -153,7 +179,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该正确处理空数据', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.chartData = []
       
       expect(vm.maxCount).toBe(0)
@@ -164,7 +190,7 @@ describe('QCTrendChart', () => {
 
   describe('交互功能', () => {
     it('应该正确处理数据点选择', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const selectDataPointSpy = vi.spyOn(vm, 'selectDataPoint')
       
       const dataPoint = mockChartData[0]
@@ -175,7 +201,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该正确处理刷新操作', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const refreshDataSpy = vi.spyOn(vm, 'refreshData')
       
       const refreshButton = wrapper.find('[data-testid="refresh-button"]')
@@ -185,7 +211,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该正确处理导出操作', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const exportChartSpy = vi.spyOn(vm, 'exportChart')
       
       const exportButton = wrapper.find('[data-testid="export-button"]')
@@ -197,7 +223,7 @@ describe('QCTrendChart', () => {
 
   describe('加载和错误状态', () => {
     it('应该正确显示加载状态', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.loading = true
       await nextTick()
       
@@ -206,7 +232,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该正确显示错误状态', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.error = '数据加载失败'
       await nextTick()
       
@@ -216,7 +242,7 @@ describe('QCTrendChart', () => {
     })
 
     it('应该在正常状态下显示图表内容', async () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       vm.loading = false
       vm.error = ''
       await nextTick()
@@ -233,19 +259,19 @@ describe('QCTrendChart', () => {
     })
 
     it('应该正确处理高度属性', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       expect(vm.height).toBe(400)
     })
   })
 
   describe('性能优化', () => {
     it('应该正确处理大量数据', () => {
-      const vm = wrapper.vm
+      const vm = getVm()
       const largeDataSet = Array.from({ length: 1000 }, (_, i) => ({
         date: `2024-${String(i + 1).padStart(3, '0')}`,
         count: Math.floor(Math.random() * 1000),
         score: Math.floor(Math.random() * 100),
-        passRate: Math.floor(Math.random() * 100)
+        pass_rate: Math.floor(Math.random() * 100)
       }))
       
       vm.chartData = largeDataSet

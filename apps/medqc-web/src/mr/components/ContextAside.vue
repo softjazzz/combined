@@ -158,8 +158,22 @@ interface Document {
 }
 
 interface Props {
-  patient?: Record<string, unknown>
+  patient?: PatientLike | null
   docs?: Document[]
+}
+
+interface PatientLike {
+  id?: string
+  record_name?: string
+  record_number?: string
+  department?: string
+  primary_diagnosis?: string
+  status?: string
+  patient_info?: {
+    name?: string
+    gender?: string
+    age?: number | string
+  }
 }
 
 const props = withDefaults(defineProps<Props>(), {

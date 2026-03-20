@@ -281,6 +281,19 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined, FolderOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 
+interface DocumentTreeNode {
+  key: string
+  label: string
+  code?: string
+  isLeaf?: boolean
+  description?: string
+  children?: DocumentTreeNode[]
+}
+
+interface TreeSelectInfo {
+  node?: DocumentTreeNode
+}
+
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
@@ -290,7 +303,7 @@ const documentSelectorVisible = ref(false)
 const searchKeyword = ref('')
 const expandedKeys = ref<string[]>(['admission', 'progress', 'surgery', 'examination', 'consent'])
 const selectedKeys = ref<string[]>([])
-const selectedDocument = ref<unknown>(null)
+const selectedDocument = ref<DocumentTreeNode | null>(null)
 
 // 与后端保持一致的文书类型（完整枚举）
 const DOCUMENT_TYPES = [
@@ -320,7 +333,7 @@ const DOCUMENT_TYPES = [
 ]
 
 // 构建树形数据结构 - 按照标准六大类文书分类
-const documentTreeData = [
+const documentTreeData: DocumentTreeNode[] = [
   {
     key: 'admission_record',
     label: '入院记录',
@@ -399,7 +412,9 @@ const getTypeLabel = (code: string) => {
 }
 
 const filterDocType = (input: string, option: unknown) => {
-  const text = (option?.children as string) || ''
+  const text = typeof option === 'object' && option && 'children' in option
+    ? String((option as { children?: string }).children || '')
+    : ''
   return text.toLowerCase().includes((input || '').toLowerCase())
 }
 
@@ -462,8 +477,8 @@ const filteredTreeData = computed(() => {
   }
   
   const keyword = searchKeyword.value.toLowerCase()
-  const filterTree = (nodes: unknown[]): unknown[] => {
-    return nodes.reduce((acc, node) => {
+  const filterTree = (nodes: DocumentTreeNode[]): DocumentTreeNode[] => {
+    return nodes.reduce<DocumentTreeNode[]>((acc, node) => {
       if (node.children) {
         const filteredChildren = filterTree(node.children)
         if (filteredChildren.length > 0) {
@@ -492,8 +507,8 @@ const onSearch = () => {
 }
 
 // 选择文书类型
-const onSelectDocument = (keys: string[], info: unknown) => {
-  if (info.node.isLeaf) {
+const onSelectDocument = (keys: string[], info: TreeSelectInfo) => {
+  if (info.node?.isLeaf) {
     selectedKeys.value = keys
     selectedDocument.value = info.node
   }
@@ -508,7 +523,7 @@ const confirmAddDocument = () => {
   
   const newDocument = {
     id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    type: selectedDocument.value.code,
+    type: selectedDocument.value.code || '',
     content: ''
   }
   formData.documents.push(newDocument)

@@ -54,9 +54,31 @@ import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 
+interface KPIData {
+  total_records: number
+  active_rules: number
+  qc_executions: number
+  avg_qc_score: number
+  passed: number
+  warning: number
+  failed: number
+}
+
+interface HealthStatusLite {
+  status?: string
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 const loading = ref(false)
 const exporting = ref(false)
-const kpis = ref<unknown>({
+const kpis = ref<KPIData>({
   total_records: 0,
   active_rules: 0,
   qc_executions: 0,
@@ -72,10 +94,13 @@ const fetchSummary = async () => {
   try {
     const resp = await fetch('/api/reports/qc/summary')
     if (!resp.ok) throw new Error(await resp.text())
-    const data = await resp.json()
-    kpis.value = data.kpis || {}
+    const data = await resp.json() as { kpis?: Partial<KPIData> }
+    kpis.value = {
+      ...kpis.value,
+      ...(data.kpis || {})
+    }
   } catch (e: unknown) {
-    message.error('加载看板失败: ' + (e?.message || e))
+    message.error('加载看板失败: ' + getErrorMessage(e))
   } finally {
     loading.value = false
   }
@@ -90,11 +115,11 @@ const exportSummary = async () => {
       body: JSON.stringify({ record_ids: [] }),
     })
     if (!resp.ok) throw new Error(await resp.text())
-    const data = await resp.json()
+    const data = await resp.json() as { download_url?: string }
     downloadUrl.value = data.download_url
     message.success('导出任务已创建')
   } catch (e: unknown) {
-    message.error('导出失败: ' + (e?.message || e))
+    message.error('导出失败: ' + getErrorMessage(e))
   } finally {
     exporting.value = false
   }

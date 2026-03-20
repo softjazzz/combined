@@ -1,14 +1,24 @@
 /**
  * 演示面板 API
- * 
- * 提供事中监控、质控消息、事后分析等面板数据接口
- * 
- * 使用原生 fetch（与项目其他 API 模块如 qc.ts/drg.ts 保持一致）
+ *
+ * 提供事中监控、质控消息、事后分析等面板数据接口。
+ * 使用原生 fetch，与项目其他 API 模块保持一致。
  */
 
 const API_PREFIX = '/api/v1/panel'
 
 // ==================== 类型定义 ====================
+
+export type MonitoringLevel = 'info' | 'warning' | 'critical'
+
+export interface MonitoringControlTip {
+    title: string
+    indicator: string
+    current_value: string
+    target_value: string
+    suggestion: string
+    level: MonitoringLevel
+}
 
 export interface DrgAlert {
     id: number
@@ -20,6 +30,11 @@ export interface DrgAlert {
     status: 'warning' | 'normal'
     los: number
     est_cost: number
+    baseline_payment: number
+    actual_cost: number
+    payment_gap: number
+    monitor_level: MonitoringLevel
+    control_tip: string
 }
 
 export interface CmiTrend {
@@ -39,6 +54,10 @@ export interface MonitoringStats {
     severe_alerts: number
     pending_suggestions: number
     today_new: number
+    simulated_groups: number
+    control_threshold: number
+    mock_scope_note: string
+    control_tips: MonitoringControlTip[]
 }
 
 export interface QCMessageSummary {
@@ -95,7 +114,6 @@ async function fetchJson<T>(url: string): Promise<T> {
         throw new Error(`API请求失败: ${response.status} ${response.statusText}`)
     }
     const result = await response.json()
-    // 后端统一返回 { success, data, message } 格式
     return result?.data ?? result
 }
 

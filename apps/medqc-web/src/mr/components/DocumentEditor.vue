@@ -136,8 +136,15 @@ const emit = defineEmits<{
   'change': [content: string]
 }>()
 
+interface TextAreaRefLike {
+  resizableTextArea?: {
+    textArea?: HTMLTextAreaElement
+  }
+  focus?: () => void
+}
+
 // 编辑器引用
-const editorRef = ref<unknown>(null)
+const editorRef = ref<TextAreaRefLike | null>(null)
 
 // 编辑器状态
 const editorContent = ref('')

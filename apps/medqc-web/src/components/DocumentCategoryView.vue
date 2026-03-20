@@ -423,7 +423,7 @@ const showAnalysisProgress = ref(false)
 const currentAnalysisDocument = ref<DocumentItem | null>(null)
 const showQCResults = ref(false)
 const currentQCDocument = ref<DocumentItem | null>(null)
-const qcAnalysisResult = ref<QCAnalysisResult | null>(null)
+const qcAnalysisResult = ref<QCAnalysisResultCompat | null>(null)
 const showDebugInfo = ref(false) // 调试信息开关
 
 // 质控规则相关数据
@@ -1565,3 +1565,7 @@ watch(() => props.recordId, () => {
   }
 }
 </style>
+type QCAnalysisResultCompat = QCAnalysisResult & {
+  evaluation_results?: Array<{ metadata?: unknown }>
+  performance_metrics?: unknown
+}

@@ -1,0 +1,16 @@
+{
+  "scheme_name": "nanjing_2024",
+  "label": "南京 2024",
+  "category": "city",
+  "province": "江苏",
+  "source_file": "7520.js",
+  "extracted_at": "2026-03-15T18:28:54.815792",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9314,
+    "adrg": 252,
+    "drg": 734
+  }
+}

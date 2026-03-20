@@ -149,14 +149,18 @@
           </a-button>
 
           <!-- 面包屑 -->
-          <a-breadcrumb class="hidden md:flex items-center">
+          <a-breadcrumb class="hidden md:flex items-center whitespace-nowrap" separator="">
             <a-breadcrumb-item>
-              <router-link to="/workstation-v2" class="flex items-center text-slate-400 hover:text-blue-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-50">
+              <router-link to="/workstation-v4" class="flex items-center gap-2 text-slate-700 hover:text-blue-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-50">
                 <HomeOutlined class="text-base" />
+                <span class="font-semibold text-sm">工作台</span>
               </router-link>
             </a-breadcrumb-item>
-            <a-breadcrumb-item v-for="item in breadcrumbItems" :key="item.title">
-              <span class="text-slate-800 font-semibold text-sm px-2 py-1">{{ item.title }}</span>
+            <a-breadcrumb-item v-if="currentPageTitle !== '工作台'">
+              <span class="mx-1 text-slate-300">/</span>
+            </a-breadcrumb-item>
+            <a-breadcrumb-item v-if="currentPageTitle !== '工作台'">
+              <span class="text-slate-800 font-semibold text-sm px-1">{{ currentPageTitle }}</span>
             </a-breadcrumb-item>
           </a-breadcrumb>
         </div>
@@ -280,8 +284,8 @@ const authStore = useAuthStore()
 const collapsed = ref(false)
 const selectedKeys = ref<string[]>([])
 
-// 面包屑
-const breadcrumbItems = computed(() => {
+// 当前页面标题
+const currentPageTitle = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
     '/workstation-v4': '工作台',
@@ -297,8 +301,7 @@ const breadcrumbItems = computed(() => {
     '/workstation-v4/rules': '质控规则管理',
     '/workstation-v4/system-config': '数据同步配置',
   }
-  const title = titleMap[path] || '工作台'
-  return [{ title }]
+  return titleMap[path] || '工作台'
 })
 
 // 方法

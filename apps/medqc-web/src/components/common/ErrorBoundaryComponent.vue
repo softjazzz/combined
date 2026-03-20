@@ -372,14 +372,15 @@ onErrorCaptured((error: Error) => {
 })
 
 // 监听全局错误
-window.addEventListener('error',  (event: unknown) => {
-  if (event.error) {
+window.addEventListener('error', (event: ErrorEvent) => {
+  if (event.error instanceof Error) {
     handleError(event.error)
   }
 })
 
-window.addEventListener('unhandledrejection',  (event: unknown) => {
-  handleError(new Error(event.reason))
+window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+  const reason = event.reason instanceof Error ? event.reason.message : String(event.reason)
+  handleError(new Error(reason))
 })
 
 // 暴露方法给父组件

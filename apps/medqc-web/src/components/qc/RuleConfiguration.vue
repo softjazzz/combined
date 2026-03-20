@@ -300,9 +300,17 @@ import {
 } from '@ant-design/icons-vue'
 import type { QCRule } from '@/types'
 
+type RuleWithStats = QCRule & {
+  updated_at?: string
+  conditions?: string
+  execution_count?: number
+  pass_rate?: number
+  issue_count?: number
+}
+
 // Props
 interface Props {
-  rules?: QCRule[]
+  rules?: RuleWithStats[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -311,8 +319,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'rule-updated': [rule: QCRule]
-  'rule-created': [rule: QCRule]
+  'rule-updated': [rule: RuleWithStats]
+  'rule-created': [rule: RuleWithStats]
   'rule-deleted': [ruleId: string]
 }>()
 
@@ -324,7 +332,7 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 
 // 模拟规则数据
-const rules = ref<QCRule[]>([
+const rules = ref<RuleWithStats[]>([
   {
     id: '1',
     rule_code: 'QC001',
@@ -420,7 +428,7 @@ const filterRules = () => {
   currentPage.value = 1
 }
 
-const toggleRuleStatus = async (rule: QCRule) => {
+const toggleRuleStatus = async (rule: RuleWithStats) => {
   try {
     // 模拟API调用
     await new Promise(resolve => setTimeout(resolve, 500))
@@ -438,11 +446,11 @@ const showCreateRuleModal = () => {
   message.info('创建规则功能开发中...')
 }
 
-const editRule = (rule: QCRule) => {
+const editRule = (rule: RuleWithStats) => {
   message.info(`编辑规则"${rule.name}"功能开发中...`)
 }
 
-const duplicateRule = (rule: QCRule) => {
+const duplicateRule = (rule: RuleWithStats) => {
   const newRule = {
     ...rule,
     id: Date.now().toString(),
@@ -457,7 +465,7 @@ const duplicateRule = (rule: QCRule) => {
   emit('rule-created', newRule)
 }
 
-const deleteRule = (rule: QCRule) => {
+const deleteRule = (rule: RuleWithStats) => {
   Modal.confirm({
     title: '确认删除', content: `确定要删除规则"${rule.name}"吗？此操作不可撤销。`, okText: '确认删除', okType: 'danger', cancelText: '取消', onOk: () => {
       const index = rules.value.findIndex(r => r.id === rule.id)
@@ -470,14 +478,14 @@ const deleteRule = (rule: QCRule) => {
   })
 }
 
-const testRule = (rule: QCRule) => {
+const testRule = (rule: RuleWithStats) => {
   message.loading(`正在测试规则"${rule.name}"...`, 2)
   setTimeout(() => {
     message.success('规则测试完成，运行正常')
   }, 2000)
 }
 
-const viewRuleHistory = (rule: QCRule) => {
+const viewRuleHistory = (rule: RuleWithStats) => {
   message.info(`查看规则"${rule.name}"历史记录功能开发中...`)
 }
 

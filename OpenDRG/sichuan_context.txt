@@ -1,0 +1,6 @@
+﻿��������2025(CHS-DRG 2.0)",tongchuan_2025:"����ͭ��2025(CHS-DRG 2.0)",xianyang_2025:"��������2025(CHS-DRG 2.0)",ankang_2025:"��������2025(CHS-DRG 2.0)",sichuan_2025:"�Ĵ�ȫʡͳһ2025(CHS-DRG 2.0)",sichuan_2024:"�Ĵ�ȫʡͳһ2024(CHS-DRG 2.0)",hubei_2024:"����ȫʡͳһ2024(CHS-DRG 2.0)",changsha_2024:"���ϳ���̶��2024(CHS-DRG 2.0)",chenzhou_20
+=====
+����ͭ��2025(CHS-DRG 2.0)",xianyang_2025:"��������2025(CHS-DRG 2.0)",ankang_2025:"��������2025(CHS-DRG 2.0)",sichuan_2025:"�Ĵ�ȫʡͳһ2025(CHS-DRG 2.0)",sichuan_2024:"�Ĵ�ȫʡͳһ2024(CHS-DRG 2.0)",hubei_2024:"����ȫʡͳһ2024(CHS-DRG 2.0)",changsha_2024:"���ϳ���̶��2024(CHS-DRG 2.0)",chenzhou_2025:"���ϳ���2025(CHS-DRG 2.0)",shanxi_2024:
+=====
+],ϵ��:l,֧����׼:(4500*s*l).toFixed(2),����:c.toFixed(2),����:F,�ܵ���:a.toFixed(2),��ֵ:d.toFixed(2),DRG����:u.toFixed(2),DRG���:(u-r).toFixed(2)}}(e,i,100,d,a,x,F):"�Ĵ�ʡ����"==t?function(e,t,n,i,o,d){let r,a=parseFloat(t["Ȩ��"]),s=parseFloat(t["ϵ��-"+i]),l=n*a,x=d/l,c=((e,t)=>t<.3?"�ͱ���":e<=2&&t>2||e>2&&t>1.5?"�߱���":"��������"
+=====

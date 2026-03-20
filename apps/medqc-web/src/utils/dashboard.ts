@@ -1,5 +1,16 @@
 import type { DashboardStats, TrendChange, ChartDataPoint } from '@/types/dashboard'
 
+interface DashboardDataShape {
+  totalRecords: number
+  pendingRecords: number
+  analyzingRecords: number
+  completedRecords: number
+  averageScore: number
+  passRate: number
+  todayUploads: number
+  weeklyTrend: unknown
+}
+
 /**
  * 格式化数字，添加千分位分隔符
  */
@@ -55,6 +66,10 @@ export function getGreetingByTime(hour: number): string {
  */
 export function validateDashboardData(data: unknown): { isValid: boolean; errors: string[] } {
   const errors: string[] = []
+  if (typeof data !== 'object' || data === null) {
+    return { isValid: false, errors: ['data must be an object'] }
+  }
+  const dashboardData = data as Partial<DashboardDataShape>
   
   // 检查必需字段
   const requiredFields = [
@@ -64,7 +79,7 @@ export function validateDashboardData(data: unknown): { isValid: boolean; errors
   ]
   
   requiredFields.forEach(field => {
-    if (!(field in data)) {
+    if (!(field in dashboardData)) {
       errors.push(`${field} is required`)
     }
   })
@@ -74,20 +89,20 @@ export function validateDashboardData(data: unknown): { isValid: boolean; errors
   }
   
   // 检查数值范围
-  if (data.totalRecords < 0) errors.push('totalRecords must be non-negative')
-  if (data.pendingRecords < 0) errors.push('pendingRecords must be non-negative')
-  if (data.analyzingRecords < 0) errors.push('analyzingRecords must be non-negative')
-  if (data.completedRecords < 0) errors.push('completedRecords must be non-negative')
-  if (data.averageScore < 0 || data.averageScore > 100) errors.push('averageScore must be between 0 and 100')
-  if (data.passRate < 0 || data.passRate > 100) errors.push('passRate must be between 0 and 100')
-  if (data.todayUploads < 0) errors.push('todayUploads must be non-negative')
+  if ((dashboardData.totalRecords || 0) < 0) errors.push('totalRecords must be non-negative')
+  if ((dashboardData.pendingRecords || 0) < 0) errors.push('pendingRecords must be non-negative')
+  if ((dashboardData.analyzingRecords || 0) < 0) errors.push('analyzingRecords must be non-negative')
+  if ((dashboardData.completedRecords || 0) < 0) errors.push('completedRecords must be non-negative')
+  if ((dashboardData.averageScore || 0) < 0 || (dashboardData.averageScore || 0) > 100) errors.push('averageScore must be between 0 and 100')
+  if ((dashboardData.passRate || 0) < 0 || (dashboardData.passRate || 0) > 100) errors.push('passRate must be between 0 and 100')
+  if ((dashboardData.todayUploads || 0) < 0) errors.push('todayUploads must be non-negative')
   
   // 检查数据一致性
-  if (data.completedRecords > data.totalRecords) {
+  if ((dashboardData.completedRecords || 0) > (dashboardData.totalRecords || 0)) {
     errors.push('completedRecords cannot exceed totalRecords')
   }
   
-  if (data.pendingRecords + data.analyzingRecords + data.completedRecords > data.totalRecords) {
+  if ((dashboardData.pendingRecords || 0) + (dashboardData.analyzingRecords || 0) + (dashboardData.completedRecords || 0) > (dashboardData.totalRecords || 0)) {
     errors.push('sum of pending, analyzing, and completed records cannot exceed total records')
   }
   

@@ -1,0 +1,16 @@
+{
+  "scheme_name": "datong_2023",
+  "label": "大同 2023",
+  "category": "city",
+  "province": "山西",
+  "source_file": "4585.js",
+  "extracted_at": "2026-03-15T18:28:50.495511",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 9609,
+    "adrg": 250,
+    "drg": 689
+  }
+}

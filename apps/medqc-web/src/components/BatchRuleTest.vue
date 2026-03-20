@@ -494,7 +494,7 @@
           :key="result.rule_id"
           :class="[
             'modal-result-item',
-            result.error ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
+            getResultStatusValue(result as any) === 'error' ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
           ]"
         >
           <div class="result-item-header">
@@ -1578,6 +1578,7 @@ const historyPagination = ref({
 })
 const historyFilters = ref<{
   documentType?: string
+  mode?: string
   dateRange?: [string, string]
   hasIssues?: boolean
 
@@ -1782,7 +1783,7 @@ const batchEvaluationStats = computed(() => {
   let errors = 0
 
   results.forEach(result => {
-    if (result.error) {
+    if (getResultStatusValue(result as any) === 'error') {
       errors++
       return
     }
@@ -1895,7 +1896,7 @@ const productionEvaluationStats = computed(() => {
   let errors = 0
 
   results.forEach(result => {
-    if (result.error) {
+    if (getResultStatusValue(result as any) === 'error') {
       errors++
       return
     }

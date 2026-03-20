@@ -1,0 +1,16 @@
+{
+  "scheme_name": "chs_drg_20",
+  "label": "CHS-DRG 2.0",
+  "category": "national",
+  "province": "",
+  "source_file": "1735.js",
+  "extracted_at": "2026-03-15T18:28:49.884862",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9376,
+    "adrg": 252,
+    "drg": 634
+  }
+}

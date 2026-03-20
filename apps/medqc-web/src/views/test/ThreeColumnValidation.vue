@@ -198,7 +198,7 @@ import {
 } from '@ant-design/icons-vue'
 
 const apiLoading = ref(false)
-const apiStatus = ref<unknown>(null)
+const apiStatus = ref<{ backend: boolean; patient: boolean; documents: boolean } | null>(null)
 
 const recordId = '7fcb8e4c-3892-40c4-92f3-19bf5061aa41'
 

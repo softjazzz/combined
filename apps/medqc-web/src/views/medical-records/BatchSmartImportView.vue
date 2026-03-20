@@ -271,6 +271,32 @@ import BatchFileProcessor from '@/components/BatchFileProcessor.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import LLMResultModal from '@/components/LLMResultModal.vue'
 
+interface BatchResultItem {
+  success?: boolean
+  fileName?: string
+  message?: string
+  data?: {
+    confidence?: number
+    patientName?: string
+    department?: string
+  }
+  originalText?: string
+}
+
+interface OperationLog {
+  timestamp: Date
+  message: string
+  type: 'info' | 'success' | 'error' | 'warning'
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 const router = useRouter()
 
 // 响应式数据
@@ -294,8 +320,8 @@ const showBatchResultsModal = ref(false)
 const activeResultTab = ref(0)
 const savingAll = ref(false)
 
-const batchResults = ref<any[]>([])
-const operationLogs = ref<any[]>([])
+const batchResults = ref<BatchResultItem[]>([])
+const operationLogs = ref<OperationLog[]>([])
 const totalProcessed = ref(0)
 const successCount = ref(0)
 const failureCount = ref(0)
@@ -391,11 +417,11 @@ const getFileIcon = (fileName: string) => {
 }
 
 // 事件处理
-const handleFilesProcessed = (results: unknown[]) => {
+const handleFilesProcessed = (results: BatchResultItem[]) => {
   addLog(`处理了 ${results.length} 个文件`, 'info')
 }
 
-const handleSingleFileProcessed = (result: unknown) => {
+const handleSingleFileProcessed = (result: BatchResultItem) => {
   totalProcessed.value++
   if (result.success) {
     successCount.value++
@@ -406,7 +432,7 @@ const handleSingleFileProcessed = (result: unknown) => {
   }
 }
 
-const handleBatchCompleted = (results: unknown[]) => {
+const handleBatchCompleted = (results: BatchResultItem[]) => {
   batchResults.value = results
   addLog(`批量处理完成，共处理 ${results.length} 个文件`, 'success')
   message.success('批量处理完成!')
@@ -426,15 +452,16 @@ const viewSingleResult = (index: number) => {
   showBatchResultsModal.value = true
 }
 
-const saveSingleResult = async (result: unknown) => {
+const saveSingleResult = async (result: BatchResultItem) => {
   try {
     // 这里实现单个结果保存逻辑
     await new Promise(resolve => setTimeout(resolve, 1000))
     message.success(`保存 ${result.fileName} 成功`)
     addLog(`保存文件结果: ${result.fileName}`, 'success')
   } catch (error: unknown) {
-    message.error(`保存失败: ${error.message}`)
-    addLog(`保存失败: ${result.fileName} - ${error.message}`, 'error')
+    const errMsg = getErrorMessage(error)
+    message.error(`保存失败: ${errMsg}`)
+    addLog(`保存失败: ${result.fileName || '未知文件'} - ${errMsg}`, 'error')
   }
 }
 
@@ -459,18 +486,19 @@ const saveAllToDatabase = async () => {
     message.success('批量保存成功!')
     addLog(`批量保存 ${batchResults.value.length} 个文件到数据库`, 'success')
   } catch (error: unknown) {
-    message.error(`批量保存失败: ${error.message}`)
-    addLog(`批量保存失败: ${error.message}`, 'error')
+    const errMsg = getErrorMessage(error)
+    message.error(`批量保存失败: ${errMsg}`)
+    addLog(`批量保存失败: ${errMsg}`, 'error')
   } finally {
     savingAll.value = false
   }
 }
 
-const handleResultSave = (result: unknown) => {
+const handleResultSave = (result: BatchResultItem) => {
   saveSingleResult(result)
 }
 
-const handleResultExport = (result: unknown) => {
+const handleResultExport = (result: BatchResultItem) => {
   const dataStr = JSON.stringify(result, null, 2)
   const blob = new Blob([dataStr], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -481,7 +509,7 @@ const handleResultExport = (result: unknown) => {
   URL.revokeObjectURL(url)
 }
 
-const handleResultExportPDF = (result: unknown) => {
+const handleResultExportPDF = (result: BatchResultItem) => {
   message.info('PDF导出功能开发中...')
 }
 

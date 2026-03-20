@@ -453,7 +453,7 @@ const handleRefresh = () => {
 }
 
 // 处理表格变化
-const handleTableChange = (pag, filters: unknown,  sorter: unknown) => {
+const handleTableChange = (pag, filters: unknown, sorter: unknown) => {
   // 更新分页
   if (pag) {
     searchParams.pagination!.page = pag.current
@@ -461,10 +461,14 @@ const handleTableChange = (pag, filters: unknown,  sorter: unknown) => {
   }
 
   // 更新排序
-  if (sorter && sorter.field) {
+  const sortState = (typeof sorter === 'object' && sorter !== null)
+    ? (sorter as { field?: string; order?: string })
+    : {}
+
+  if (sortState.field) {
     searchParams.sort = {
-      field: sorter.field,
-      order: sorter.order === 'ascend' ? 'asc' : 'desc'
+      field: sortState.field,
+      order: sortState.order === 'ascend' ? 'asc' : 'desc'
     }
   }
 

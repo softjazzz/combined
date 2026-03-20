@@ -1,0 +1,16 @@
+{
+  "scheme_name": "tianjin_2025",
+  "label": "天津 2025",
+  "category": "municipality",
+  "province": "",
+  "source_file": "349.js",
+  "extracted_at": "2026-03-15T18:28:56.808195",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9373,
+    "adrg": 252,
+    "drg": 675
+  }
+}

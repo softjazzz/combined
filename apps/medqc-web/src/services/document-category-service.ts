@@ -39,10 +39,10 @@ export class DocumentCategoryService {
       const canonical = new Set([
         'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
       ])
-      const codes = (data || []).map((r: unknown) => r.category_code)
-      const extras = Array.from(new Set(codes.filter((c: unknown) => !canonical.has(String(c)))))
+      const codes = (data || []).map((r: any) => r.category_code)
+      const extras = Array.from(new Set(codes.filter((c: any) => !canonical.has(String(c)))))
       console.log('📚 从数据库加载到的文书类别 config count=', data?.length || 0,
-        (data || []).map((r: unknown) => ({ code: r.category_code, name: r.category_name })))
+        (data || []).map((r: any) => ({ code: r.category_code, name: r.category_name })))
       if (extras.length > 0) {
         console.warn('⚠️ 发现非标准文书类别(应当仅为6大类):', extras)
       }
@@ -272,7 +272,7 @@ export class DocumentCategoryService {
     // 归一化：确保 document_categories 是数组；缺失时基于名称/描述做兜底推断，填充 primary/document_categories（仅内存，不改库）
     console.log('🔍 [DocumentCategoryService] 开始归一化处理，原始数据条数:', (data || []).length)
 
-    const normalized: unknown[] = (data || []).map((r: unknown, index: number) => {
+    const normalized: any[] = (data || []).map((r: any, index: number) => {
       const originalPrimary = r?.primary_document_category
       const originalCategories = r?.document_categories
 
@@ -334,7 +334,7 @@ export class DocumentCategoryService {
       覆盖率: `${Math.round(withPrimary / normalized.length * 100)}%`
     })
 
-    const debugSample = normalized.slice(0, 20).map((r: unknown) => ({
+    const debugSample = normalized.slice(0, 20).map((r: any) => ({
       rule_code: r.rule_code,
       name: r.name,
       primary: r.primary_document_category,
@@ -342,7 +342,7 @@ export class DocumentCategoryService {
     }))
     console.log('🧾 [归一化示例]', debugSample)
 
-    const resolvedSummary = normalized.reduce<Record<string, number>>((acc, r: unknown) => {
+    const resolvedSummary = normalized.reduce<Record<string, number>>((acc, r: any) => {
       const key = r._resolved_primary_category || r.primary_document_category || '未解析'
       acc[key] = (acc[key] || 0) + 1
       return acc
@@ -351,26 +351,26 @@ export class DocumentCategoryService {
 
     const missingPrimary = normalized.filter(r => !r.primary_document_category)
     if (missingPrimary.length > 0) {
-      console.warn('⚠️ [归一化] 仍有缺失 primary 的规则:', missingPrimary.map((r: unknown) => r.rule_code))
+      console.warn('⚠️ [归一化] 仍有缺失 primary 的规则:', missingPrimary.map((r: any) => r.rule_code))
     }
 
     try {
       const canonical = new Set([
         'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
       ])
-      const primaries = Array.from(new Set((normalized || []).map((r: unknown) => r.primary_document_category).filter(Boolean)))
-      const nonCanonicalPrim = primaries.filter((c: unknown) => !canonical.has(String(c)))
+      const primaries = Array.from(new Set((normalized || []).map((r: any) => r.primary_document_category).filter(Boolean)))
+      const nonCanonicalPrim = primaries.filter((c: any) => !canonical.has(String(c)))
       if (nonCanonicalPrim.length > 0) {
         console.warn('⚠️ 非标准 primary_document_category 值:', nonCanonicalPrim)
       }
       const sample = (normalized || []).slice(0, 200)
-      const rawFromJson = Array.from(new Set(sample.flatMap((r: unknown) => {
+      const rawFromJson = Array.from(new Set(sample.flatMap((r: any) => {
         try {
           const arr = (r?.check_logic?.applicable_documents) || []
           return Array.isArray(arr) ? arr : []
         } catch { return [] }
       }).filter(Boolean)))
-      const suspicious = rawFromJson.filter((v: unknown) => !canonical.has(String(v)))
+      const suspicious = rawFromJson.filter((v: any) => !canonical.has(String(v)))
       if (suspicious.length > 0) {
         console.warn('🔎 check_logic.applicable_documents 中的非标准值(示例):', suspicious.slice(0, 20))
       }

@@ -40,6 +40,7 @@ export function useFrontpageDraft(
   onDraftChanged?: () => void,
 ) {
   const frontpageGenerating = ref(false)
+  const frontpagePostProcessing = ref(false)
   const frontpageDraft = ref<any>(null)
   const frontpageModule = ref('')
   const frontpageFocusTarget = ref<'' | FrontpageFocusTarget>('')
@@ -204,10 +205,25 @@ export function useFrontpageDraft(
     const isRegenerate = !!frontpageDraft.value
 
     frontpageGenerating.value = true
+    frontpagePostProcessing.value = true
     frontpageDraft.value = null
     frontpageModule.value = ''
     completedModules.value = []
     generateStartTime.value = Date.now()
+    let releasedForPreview = false
+    const seenModules = new Set<string>()
+
+    const tryReleaseForPreview = () => {
+      if (releasedForPreview || !frontpageDraft.value) return
+      const hasDiagnoses = seenModules.has('diagnoses')
+      const hasProcedures = seenModules.has('procedures')
+      if (hasDiagnoses && hasProcedures) {
+        releasedForPreview = true
+        // 关键模块完成后先放行，剩余后处理继续流式更新
+        frontpageGenerating.value = false
+        frontpageModule.value = ''
+      }
+    }
 
     try {
       const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
@@ -247,6 +263,7 @@ export function useFrontpageDraft(
             }
             if (payload.module) {
               frontpageModule.value = payload.module
+              seenModules.add(payload.module)
               // 记录已完成的模块（去重，同一模块可能多次更新）
               const existing = completedModules.value.findIndex(m => m.name === payload.module)
               const entry: CompletedModule = {
@@ -260,6 +277,7 @@ export function useFrontpageDraft(
               } else {
                 completedModules.value.push(entry)
               }
+              tryReleaseForPreview()
             }
           } catch {
             // 忽略解析错误
@@ -277,6 +295,7 @@ export function useFrontpageDraft(
       message.error('首页生成失败: ' + (err.message || '未知错误'))
     } finally {
       frontpageGenerating.value = false
+      frontpagePostProcessing.value = false
       frontpageModule.value = ''
     }
   }
@@ -486,6 +505,7 @@ export function useFrontpageDraft(
 
   return {
     frontpageGenerating,
+    frontpagePostProcessing,
     frontpageDraft,
     frontpageModule,
     frontpageFocusTarget,

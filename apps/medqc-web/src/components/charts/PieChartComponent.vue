@@ -36,6 +36,13 @@ interface ChartDataItem {
   color?: string
 }
 
+interface PieTooltipParam {
+  percent?: number
+  name?: string
+  color?: string
+  value?: number | string
+}
+
 const props = defineProps({
   data: {
     type: Array as PropType<ChartDataItem[]>,
@@ -82,7 +89,7 @@ const chartOption = computed(() => {
     },
     tooltip: {
       trigger: 'item',
-      formatter: (params: unknown) => {
+      formatter: (params: PieTooltipParam) => {
         const percentage = params.percent || 0
         return `
           <div style="font-weight: bold; margin-bottom: 8px;">${params.name}</div>
@@ -124,7 +131,7 @@ const chartOption = computed(() => {
         label: {
           show: true,
           position: 'outside',
-          formatter: (params: unknown) => {
+          formatter: (params: PieTooltipParam) => {
             if (props.showPercentage) {
               return `${params.name}\n${params.percent}%`
             }

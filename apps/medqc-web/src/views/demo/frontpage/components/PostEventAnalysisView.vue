@@ -16,19 +16,19 @@
         <a-radio-button value="hospital">全院概览</a-radio-button>
         <a-radio-button value="department">科室分析</a-radio-button>
         <a-radio-button value="ward">病区分析</a-radio-button>
-        <a-radio-button value="drg">DRG组分析</a-radio-button>
-        <a-radio-button value="doctor">医生绩效</a-radio-button>
+        <a-radio-button value="chief_group">主诊医师组</a-radio-button>
+        <a-radio-button value="doctor">个人</a-radio-button>
       </a-radio-group>
       <span class="ml-auto text-xs text-slate-400">当前: {{ dimensionLabel }}</span>
     </div>
 
     <!-- Time Range Selector -->
     <div class="flex items-center gap-4 mb-6">
-      <div v-if="!batchId" class="text-orange-500 text-sm flex items-center gap-2">
+      <div v-if="useDemoData" class="text-orange-500 text-sm flex items-center gap-2">
         <WarningOutlined />
-        <span>当前为演示数据，请先自行上传Excel进行分析</span>
+        <span>{{ drgModeHintText }}</span>
       </div>
-      <a-range-picker v-if="batchId" v-model:value="dateRange" class="w-80" />
+      <a-range-picker v-if="!useDemoData && batchId" v-model:value="dateRange" class="w-80" />
       <a-select v-model:value="analysisType" class="w-40">
         <a-select-option value="quality">质量分析</a-select-option>
         <a-select-option value="cost">费用分析</a-select-option>
@@ -56,50 +56,15 @@
     </div>
 
     <!-- KPI Cards -->
-    <div class="grid grid-cols-6 gap-4 mb-6">
-      <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">病案总数</div>
-        <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.summary.total_records }}</div>
-        <div class="text-xs text-slate-400 mt-1">入组率: {{ (stats.summary.grouping_success_rate * 100).toFixed(1) }}%</div>
-      </div>
-      
-      <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">平均CMI</div>
-        <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.summary.avg_cmi.toFixed(2) }}</div>
-        <div class="text-xs text-green-600 mt-1">benchmark: 1.0</div>
-      </div>
-      
-      <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">总权重</div>
-        <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.summary.total_weight.toFixed(1) }}</div>
-        <div class="text-xs text-slate-400 mt-1">-</div>
-      </div>
-      
-      <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">总和盈亏</div>
-        <div class="text-2xl font-bold" :class="stats.summary.total_profit >= 0 ? 'text-green-600' : 'text-red-500'">
-          {{ stats.summary.total_profit.toLocaleString() }}
-        </div>
-        <div class="text-xs mt-1" :class="stats.summary.total_profit >= 0 ? 'text-green-600' : 'text-red-500'">
-          {{ stats.summary.total_profit >= 0 ? '盈余' : '亏损' }}
-        </div>
-      </div>
-      
-      <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">费用消耗指数</div>
-        <div class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.summary.cost_consumption_index?.toFixed(2) || '0.95' }}</div>
-        <div class="text-xs text-green-600 mt-1">↓ 0.05</div>
-      </div>
-      
-      <!-- 低风险死亡率 KPI -->
-      <div :class="['rounded-xl p-4 border', stats.summary.low_risk_mortality_rate > 0.1 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700']">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">低风险死亡率</div>
-        <div class="text-2xl font-bold" :class="stats.summary.low_risk_mortality_rate > 0.1 ? 'text-red-600' : 'text-slate-800 dark:text-white'">
-          {{ stats.summary.low_risk_mortality_rate?.toFixed(2) || '0.00' }}%
-        </div>
-        <div class="text-xs mt-1" :class="stats.summary.low_risk_mortality_rate > 0.1 ? 'text-red-500' : 'text-slate-400'">
-          {{ stats.summary.low_risk_death_count || 0 }}/{{ stats.summary.low_risk_total_count || 0 }} 例
-        </div>
+    <div class="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2 xl:grid-cols-4">
+      <div
+        v-for="card in kpiCards"
+        :key="card.label"
+        :class="['rounded-xl p-4 border bg-white dark:bg-slate-800', card.cardClass]"
+      >
+        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">{{ card.label }}</div>
+        <div class="text-2xl font-bold" :class="card.valueClass">{{ card.value }}</div>
+        <div class="text-xs mt-1" :class="card.hintClass">{{ card.hint }}</div>
       </div>
     </div>
 
@@ -147,7 +112,12 @@
 
     <!-- 超费原因分析 (新增) -->
     <div class="grid grid-cols-2 gap-4 mb-6">
-      <OverCostAnalysisCard :batch-id="batchId" />
+      <OverCostAnalysisCard
+        :batch-id="useDemoData ? undefined : batchId"
+        :session-id="useDemoData ? undefined : sessionId"
+        :dimension="analysisDimension"
+        :dimension-label="dimensionLabel"
+      />
     </div>
 
     <!-- AI Insights Summary -->
@@ -203,8 +173,8 @@
 	    :title="drillTitle"
 	    :dimension="drillDimension"
 	    :value="drillValue"
-	    :session-id="sessionId"
-	    :batch-id="batchId"
+	    :session-id="useDemoData ? undefined : sessionId"
+	    :batch-id="useDemoData ? undefined : batchId"
 	  />
 	</template>
 
@@ -225,6 +195,8 @@ import {
   DownloadOutlined
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+import { isDrgMockModeEnabled, onDrgMockModeChange } from '@/utils/drgMockMode'
+import { exportDrgMockReport, type DrgExportFormat } from '@/utils/drgMockExport'
 
 const props = defineProps<{
   sessionId?: string  // 新增：session_id
@@ -243,15 +215,23 @@ const drgScatterRef = ref<HTMLElement | null>(null)
 
 const dateRange = ref<any>(null)
 const analysisType = ref('quality')
-const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'drg' | 'doctor'>('hospital')
+const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'chief_group' | 'doctor'>('hospital')
+const drgMockEnabled = ref(isDrgMockModeEnabled())
+const useDemoData = computed(() => drgMockEnabled.value || !props.sessionId)
+const drgModeHintText = computed(() =>
+  drgMockEnabled.value
+    ? '当前已开启 Mock 演示模式，展示前端演示数据'
+    : '当前缺少 session_id，自动展示演示数据'
+)
+let unsubscribeDrgMockMode: (() => void) | null = null
 
 // 维度标签映射
 const dimensionLabelMap: Record<string, string> = {
   hospital: '全院概览',
   department: '科室分析',
   ward: '病区分析',
-  drg: 'DRG组分析',
-  doctor: '医生绩效'
+  chief_group: '主诊医师组',
+  doctor: '个人'
 }
 
 // 计算属性：当前维度名称
@@ -263,17 +243,104 @@ const chartTitles = computed(() => {
     hospital: { trend: '全院质量趋势', comparison: '科室绩效对比' },
     department: { trend: '科室质量趋势', comparison: '科室内病区对比' },
     ward: { trend: '病区质量趋势', comparison: '病区绩效排名' },
-    drg: { trend: 'DRG组入组趋势', comparison: 'DRG组盈亏对比' },
-    doctor: { trend: '医生绩效趋势', comparison: '医生CMI对比' }
+    chief_group: { trend: '主诊医师组趋势', comparison: '主诊医师组对比' },
+    doctor: { trend: '个人绩效趋势', comparison: '个人CMI对比' }
   }
   return titles[analysisDimension.value]
+})
+
+const safeNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const formatInteger = (value: unknown) => Math.round(safeNumber(value)).toLocaleString('zh-CN')
+const formatDecimal = (value: unknown, digits = 2) => safeNumber(value).toFixed(digits)
+const formatPercent = (value: unknown, digits = 2) => `${(safeNumber(value) * 100).toFixed(digits)}%`
+const formatCurrency = (value: unknown) => `¥${safeNumber(value).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`
+
+const kpiCards = computed(() => {
+  const summary = stats.value.summary as Record<string, any>
+  const insuranceProfit = safeNumber(summary.insurance_profit ?? summary.total_profit)
+  const profitClass = insuranceProfit >= 0 ? 'text-green-600' : 'text-red-500'
+  const profitHintClass = insuranceProfit >= 0 ? 'text-green-600' : 'text-red-500'
+  const mortality = safeNumber(summary.low_risk_mortality_rate)
+  const mortalityClass = mortality > 0.1 ? 'text-red-600' : 'text-slate-800 dark:text-white'
+  const mortalityHintClass = mortality > 0.1 ? 'text-red-500' : 'text-slate-400'
+
+  return [
+    {
+      label: '病组数',
+      value: formatInteger(summary.drg_count ?? summary.total_records),
+      hint: `入组率: ${formatPercent(summary.grouping_success_rate)}`,
+      valueClass: 'text-slate-800 dark:text-white',
+      hintClass: 'text-slate-400',
+      cardClass: ''
+    },
+    {
+      label: 'CMI',
+      value: formatDecimal(summary.avg_cmi),
+      hint: '基准: 1.00',
+      valueClass: 'text-slate-800 dark:text-white',
+      hintClass: 'text-green-600',
+      cardClass: ''
+    },
+    {
+      label: '费用消耗指数',
+      value: formatDecimal(summary.cost_consumption_index),
+      hint: '越低越优',
+      valueClass: 'text-slate-800 dark:text-white',
+      hintClass: 'text-slate-400',
+      cardClass: ''
+    },
+    {
+      label: '时间消耗指数',
+      value: formatDecimal(summary.time_consumption_index),
+      hint: '越低越优',
+      valueClass: 'text-slate-800 dark:text-white',
+      hintClass: 'text-slate-400',
+      cardClass: ''
+    },
+    {
+      label: '低风险死亡率',
+      value: formatPercent(summary.low_risk_mortality_rate),
+      hint: `${formatInteger(summary.low_risk_death_count)} / ${formatInteger(summary.low_risk_total_count)} 例`,
+      valueClass: mortalityClass,
+      hintClass: mortalityHintClass,
+      cardClass: mortality > 0.1 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : ''
+    },
+    {
+      label: '平均住院日',
+      value: `${formatDecimal(summary.avg_length_of_stay, 1)} 天`,
+      hint: '按出院病例口径',
+      valueClass: 'text-slate-800 dark:text-white',
+      hintClass: 'text-slate-400',
+      cardClass: ''
+    },
+    {
+      label: '平均住院费用',
+      value: formatCurrency(summary.avg_inpatient_cost),
+      hint: '含医保结算口径',
+      valueClass: 'text-slate-800 dark:text-white',
+      hintClass: 'text-slate-400',
+      cardClass: ''
+    },
+    {
+      label: '医保盈亏',
+      value: formatCurrency(insuranceProfit),
+      hint: insuranceProfit >= 0 ? '医保结余' : '医保亏损',
+      valueClass: profitClass,
+      hintClass: profitHintClass,
+      cardClass: ''
+    }
+  ]
 })
 
 // 处理维度切换
 const handleDimensionChange = () => {
   message.info(`切换到【${dimensionLabel.value}】维度，正在加载数据...`)
   // 重新加载数据（如果有 batchId）
-  if (props.batchId) {
+  if (!useDemoData.value && props.batchId) {
     fetchStatistics()
   } else {
     // 演示模式：更新 mock 数据
@@ -283,6 +350,99 @@ const handleDimensionChange = () => {
 
 // 根据维度更新 mock 数据
 const updateMockDataForDimension = () => {
+  const realisticSummaryByDimension: Record<string, any> = {
+    hospital: { total_records: 32021, drg_count: 2863, grouping_success_rate: 0.9928, avg_cmi: 0.8193, total_weight: 26226.8, total_fee: 203190072, total_profit: -84868160, insurance_profit: -84868160, cost_consumption_index: 1.09, time_consumption_index: 0.97, low_risk_mortality_rate: 0, low_risk_death_count: 0, low_risk_total_count: 2953, avg_length_of_stay: 6.7, avg_inpatient_cost: 6346 },
+    department: { total_records: 13801, drg_count: 12, grouping_success_rate: 0.995, avg_cmi: 0.8174, total_weight: 11284.6, total_fee: 31259932, total_profit: -12972741, insurance_profit: -12972741, cost_consumption_index: 1.05, time_consumption_index: 0.95, low_risk_mortality_rate: 0, low_risk_death_count: 0, low_risk_total_count: 1613, avg_length_of_stay: 6.3, avg_inpatient_cost: 4520 },
+    ward: { total_records: 8398, drg_count: 20, grouping_success_rate: 0.993, avg_cmi: 0.8192, total_weight: 6878.6, total_fee: 48653000, total_profit: -20170000, insurance_profit: -20170000, cost_consumption_index: 1.12, time_consumption_index: 0.98, low_risk_mortality_rate: 0, low_risk_death_count: 0, low_risk_total_count: 980, avg_length_of_stay: 6.9, avg_inpatient_cost: 5793 },
+    chief_group: { total_records: 6160, drg_count: 10, grouping_success_rate: 0.996, avg_cmi: 0.8183, total_weight: 5041.6, total_fee: 24682425, total_profit: -10516043, insurance_profit: -10516043, cost_consumption_index: 1.07, time_consumption_index: 0.96, low_risk_mortality_rate: 0, low_risk_death_count: 0, low_risk_total_count: 731, avg_length_of_stay: 6.4, avg_inpatient_cost: 4007 },
+    doctor: { total_records: 4695, drg_count: 147, grouping_success_rate: 0.998, avg_cmi: 0.8182, total_weight: 3841.7, total_fee: 22936616, total_profit: -10043804, insurance_profit: -10043804, cost_consumption_index: 1.08, time_consumption_index: 0.97, low_risk_mortality_rate: 0, low_risk_death_count: 0, low_risk_total_count: 566, avg_length_of_stay: 6.5, avg_inpatient_cost: 4885 }
+  }
+
+  const realisticDataByDimension: Record<string, any[]> = {
+    hospital: [
+      { dept_name: '呼吸内科专业', total_profit: -6160751, avg_cmi: 0.8123, case_count: 2762, cost_rate: 0.98 },
+      { dept_name: '心血管内科专业', total_profit: -9216297, avg_cmi: 0.8179, case_count: 2582, cost_rate: 1.26 },
+      { dept_name: '普通外科专业', total_profit: -9793757, avg_cmi: 0.8217, case_count: 2465, cost_rate: 1.45 },
+      { dept_name: '骨科专业', total_profit: -9284990, avg_cmi: 0.8227, case_count: 2169, cost_rate: 1.47 },
+      { dept_name: '神经内科专业', total_profit: -5459072, avg_cmi: 0.8221, case_count: 2193, cost_rate: 1.02 },
+      { dept_name: '儿科', total_profit: -2493697, avg_cmi: 0.8118, case_count: 2560, cost_rate: 0.31 }
+    ],
+    department: [
+      { dept_name: 'J44.0', total_profit: -3345446, avg_cmi: 0.8144, case_count: 1577, cost_rate: 0.93 },
+      { dept_name: 'J15.9', total_profit: -1547499, avg_cmi: 0.8085, case_count: 1013, cost_rate: 0.60 },
+      { dept_name: 'H25.9:13.4100x001', total_profit: -1530339, avg_cmi: 0.8275, case_count: 788, cost_rate: 0.65 },
+      { dept_name: 'Z51.1:99.2503', total_profit: -1377712, avg_cmi: 0.8285, case_count: 777, cost_rate: 0.73 },
+      { dept_name: 'J18.0', total_profit: -558227, avg_cmi: 0.816, case_count: 569, cost_rate: 0.33 },
+      { dept_name: 'I25.1', total_profit: -559077, avg_cmi: 0.8161, case_count: 391, cost_rate: 0.57 }
+    ],
+    ward: [
+      { dept_name: '呼吸内科一病区', total_profit: -2080000, avg_cmi: 0.812, case_count: 936, cost_rate: 0.92 },
+      { dept_name: '呼吸内科二病区', total_profit: -1860000, avg_cmi: 0.815, case_count: 884, cost_rate: 0.95 },
+      { dept_name: '心血管内科一病区', total_profit: -2780000, avg_cmi: 0.818, case_count: 902, cost_rate: 1.23 },
+      { dept_name: '心血管内科二病区', total_profit: -2650000, avg_cmi: 0.821, case_count: 846, cost_rate: 1.27 },
+      { dept_name: '普外一病区', total_profit: -2330000, avg_cmi: 0.822, case_count: 788, cost_rate: 1.35 },
+      { dept_name: '骨科一病区', total_profit: -2410000, avg_cmi: 0.823, case_count: 756, cost_rate: 1.40 }
+    ],
+    chief_group: [
+      { dept_name: 'J44.0 慢阻肺组', total_profit: -3345446, avg_cmi: 0.8144, case_count: 1577, cost_rate: 0.93 },
+      { dept_name: 'J15.9 肺炎组', total_profit: -1547499, avg_cmi: 0.8085, case_count: 1013, cost_rate: 0.60 },
+      { dept_name: 'Z51.1:99.2503 化疗组', total_profit: -1377712, avg_cmi: 0.8285, case_count: 777, cost_rate: 0.73 },
+      { dept_name: 'I25.1 冠心病组', total_profit: -559077, avg_cmi: 0.8161, case_count: 391, cost_rate: 0.57 },
+      { dept_name: 'I25.1:88.5500 介入组', total_profit: -1037190, avg_cmi: 0.839, case_count: 335, cost_rate: 1.13 }
+    ],
+    doctor: [
+      { dept_name: '李敏', total_profit: -1205897, avg_cmi: 0.8166, case_count: 563, cost_rate: 0.83 },
+      { dept_name: '郭映江', total_profit: -892036, avg_cmi: 0.8168, case_count: 487, cost_rate: 0.86 },
+      { dept_name: '曾晓楠', total_profit: -899343, avg_cmi: 0.8239, case_count: 475, cost_rate: 0.80 },
+      { dept_name: '冯婉琳', total_profit: -1529308, avg_cmi: 0.8205, case_count: 472, cost_rate: 1.15 },
+      { dept_name: '郭怀杰', total_profit: -1025240, avg_cmi: 0.8217, case_count: 466, cost_rate: 0.88 },
+      { dept_name: '李昂', total_profit: -930408, avg_cmi: 0.8164, case_count: 427, cost_rate: 0.96 }
+    ]
+  }
+
+  const monthly = [
+    { date: '1月', count: 3371, avg_cmi: 0.693 },
+    { date: '2月', count: 3100, avg_cmi: 0.8108 },
+    { date: '3月', count: 2968, avg_cmi: 0.8693 },
+    { date: '4月', count: 2655, avg_cmi: 0.8094 },
+    { date: '5月', count: 2616, avg_cmi: 0.751 },
+    { date: '6月', count: 2390, avg_cmi: 0.8103 },
+    { date: '7月', count: 2369, avg_cmi: 0.8402 },
+    { date: '8月', count: 2289, avg_cmi: 0.86 },
+    { date: '9月', count: 2382, avg_cmi: 0.8601 },
+    { date: '10月', count: 2436, avg_cmi: 0.8696 },
+    { date: '11月', count: 2511, avg_cmi: 0.8402 },
+    { date: '12月', count: 2901, avg_cmi: 0.86 }
+  ]
+
+  const realisticSelectedSummary = realisticSummaryByDimension[analysisDimension.value] || realisticSummaryByDimension.hospital
+  const selectedRows = realisticDataByDimension[analysisDimension.value] || realisticDataByDimension.hospital
+  stats.value = {
+    ...stats.value,
+    summary: {
+      ...stats.value.summary,
+      ...realisticSelectedSummary
+    },
+    department_stats: selectedRows,
+    doctor_stats: realisticDataByDimension.doctor,
+    mdc_distribution: [
+      { mdc: '正常病例', count: 23564 },
+      { mdc: '偏低病例', count: 7626 },
+      { mdc: '中途结算', count: 445 }
+    ],
+    drg_distribution: [],
+    daily_trends: monthly,
+    cost_structure: { drug: 3200, material: 2400, exam: 1800, treatment: 1600 },
+    ai_insights: [
+      '样本支付率约 58%，医保亏损为常态，超费控制应优先覆盖高频病种。',
+      '呼吸、心血管、普外、骨科是主要费用贡献科室，建议作为分层治理首批对象。'
+    ],
+    charts: {}
+  } as any
+
+  updateCharts()
+  return
+
   const mockDataByDimension: Record<string, any[]> = {
     // 全院概览 - 各科室数据
     hospital: [
@@ -321,8 +481,8 @@ const updateMockDataForDimension = () => {
       { dept_name: '呼吸病区', total_profit: -15000, avg_cmi: 0.95, case_count: 186, cost_rate: 1.12 },
       { dept_name: '消化病区', total_profit: 22000, avg_cmi: 1.08, case_count: 167, cost_rate: 0.96 }
     ],
-    // DRG组分析 - DRG编码数据
-    drg: [
+    // 主诊医师组 - 组内绩效数据
+    chief_group: [
       { dept_name: 'FM19 心衰伴MCC', total_profit: 85000, avg_cmi: 1.85, case_count: 128, cost_rate: 0.82 },
       { dept_name: 'FB15 心脏手术', total_profit: 125000, avg_cmi: 2.45, case_count: 65, cost_rate: 0.72 },
       { dept_name: 'IC19 脑血管手术', total_profit: 98000, avg_cmi: 2.15, case_count: 78, cost_rate: 0.78 },
@@ -348,7 +508,209 @@ const updateMockDataForDimension = () => {
       { dept_name: '郑浩 住院医师', total_profit: 12000, avg_cmi: 0.98, case_count: 75, cost_rate: 0.98 }
     ]
   }
-  stats.value.department_stats = mockDataByDimension[analysisDimension.value] || []
+  const mockSummaryByDimension: Record<string, any> = {
+    hospital: {
+      total_records: 1286,
+      drg_count: 126,
+      grouping_success_rate: 0.982,
+      avg_cmi: 1.18,
+      total_weight: 1568.4,
+      total_fee: 5680000,
+      total_profit: 152000,
+      insurance_profit: 152000,
+      cost_consumption_index: 0.96,
+      time_consumption_index: 0.93,
+      low_risk_mortality_rate: 0.07,
+      low_risk_death_count: 2,
+      low_risk_total_count: 2860,
+      avg_length_of_stay: 7.9,
+      avg_inpatient_cost: 18650
+    },
+    department: {
+      total_records: 846,
+      drg_count: 68,
+      grouping_success_rate: 0.975,
+      avg_cmi: 1.32,
+      total_weight: 1242.8,
+      total_fee: 4260000,
+      total_profit: -36000,
+      insurance_profit: -36000,
+      cost_consumption_index: 1.02,
+      time_consumption_index: 0.98,
+      low_risk_mortality_rate: 0.09,
+      low_risk_death_count: 3,
+      low_risk_total_count: 3320,
+      avg_length_of_stay: 9.1,
+      avg_inpatient_cost: 21450
+    },
+    ward: {
+      total_records: 762,
+      drg_count: 54,
+      grouping_success_rate: 0.969,
+      avg_cmi: 1.24,
+      total_weight: 1065.2,
+      total_fee: 3820000,
+      total_profit: 42000,
+      insurance_profit: 42000,
+      cost_consumption_index: 0.98,
+      time_consumption_index: 0.95,
+      low_risk_mortality_rate: 0.06,
+      low_risk_death_count: 2,
+      low_risk_total_count: 3080,
+      avg_length_of_stay: 8.4,
+      avg_inpatient_cost: 19800
+    },
+    chief_group: {
+      total_records: 648,
+      drg_count: 41,
+      grouping_success_rate: 0.963,
+      avg_cmi: 1.41,
+      total_weight: 980.6,
+      total_fee: 3360000,
+      total_profit: 78000,
+      insurance_profit: 78000,
+      cost_consumption_index: 0.91,
+      time_consumption_index: 0.89,
+      low_risk_mortality_rate: 0.05,
+      low_risk_death_count: 1,
+      low_risk_total_count: 2140,
+      avg_length_of_stay: 7.2,
+      avg_inpatient_cost: 17600
+    },
+    doctor: {
+      total_records: 534,
+      drg_count: 28,
+      grouping_success_rate: 0.958,
+      avg_cmi: 1.08,
+      total_weight: 842.3,
+      total_fee: 2980000,
+      total_profit: -12000,
+      insurance_profit: -12000,
+      cost_consumption_index: 1.06,
+      time_consumption_index: 1.04,
+      low_risk_mortality_rate: 0.11,
+      low_risk_death_count: 3,
+      low_risk_total_count: 1820,
+      avg_length_of_stay: 10.4,
+      avg_inpatient_cost: 22800
+    }
+  }
+
+  const selectedSummary = mockSummaryByDimension[analysisDimension.value] || mockSummaryByDimension.hospital
+  const mockChartMetaByDimension: Record<string, any> = {
+    hospital: {
+      mdc_distribution: [
+        { mdc: 'MDC 05', count: 128 },
+        { mdc: 'MDC 08', count: 112 },
+        { mdc: 'MDC 11', count: 96 }
+      ],
+      drg_distribution: [],
+      doctor_stats: mockDataByDimension.chief_group || [],
+      daily_trends: [
+        { date: '1月', count: 120, avg_cmi: 1.02 },
+        { date: '2月', count: 135, avg_cmi: 1.05 },
+        { date: '3月', count: 148, avg_cmi: 1.08 }
+      ],
+      cost_structure: { drug: 3500, material: 3200, exam: 2800, treatment: 2200 },
+      ai_insights: [
+        '全院病组数保持稳定，费用消耗指数较上月下降 0.03。',
+        '心内科和骨科仍是贡献医保盈亏的核心科室，建议持续跟踪病组结构。'
+      ]
+    },
+    department: {
+      mdc_distribution: [
+        { mdc: 'MDC 05', count: 84 },
+        { mdc: 'MDC 08', count: 76 },
+        { mdc: 'MDC 11', count: 69 }
+      ],
+      drg_distribution: [],
+      doctor_stats: mockDataByDimension.chief_group || [],
+      daily_trends: [
+        { date: '1月', count: 66, avg_cmi: 1.18 },
+        { date: '2月', count: 72, avg_cmi: 1.24 },
+        { date: '3月', count: 78, avg_cmi: 1.29 }
+      ],
+      cost_structure: { drug: 2900, material: 3600, exam: 2200, treatment: 2400 },
+      ai_insights: [
+        '科级维度下，心脏介入相关病组费用消耗指数高于全院均值。',
+        '慢病管理组的平均住院日偏长，是当前主要瓶颈。'
+      ]
+    },
+    ward: {
+      mdc_distribution: [
+        { mdc: 'MDC 05', count: 72 },
+        { mdc: 'MDC 08', count: 63 },
+        { mdc: 'MDC 11', count: 58 }
+      ],
+      drg_distribution: [],
+      doctor_stats: mockDataByDimension.chief_group || [],
+      daily_trends: [
+        { date: '1月', count: 58, avg_cmi: 1.15 },
+        { date: '2月', count: 61, avg_cmi: 1.19 },
+        { date: '3月', count: 66, avg_cmi: 1.22 }
+      ],
+      cost_structure: { drug: 2800, material: 3000, exam: 2100, treatment: 2300 },
+      ai_insights: [
+        '病区层面床位周转效率整体稳定，但呼吸病区住院日仍偏长。',
+        '骨科一病区的医保盈亏表现优于病区平均值。'
+      ]
+    },
+    chief_group: {
+      mdc_distribution: [
+        { mdc: 'MDC 05', count: 64 },
+        { mdc: 'MDC 08', count: 52 },
+        { mdc: 'MDC 11', count: 46 }
+      ],
+      drg_distribution: [],
+      doctor_stats: mockDataByDimension.doctor || [],
+      daily_trends: [
+        { date: '1月', count: 48, avg_cmi: 1.32 },
+        { date: '2月', count: 52, avg_cmi: 1.38 },
+        { date: '3月', count: 57, avg_cmi: 1.41 }
+      ],
+      cost_structure: { drug: 2400, material: 2400, exam: 1900, treatment: 2100 },
+      ai_insights: [
+        '主诊组维度下，张明华主诊组在医保盈亏和CMI上均领先。',
+        '建议围绕组内路径、编码和耗材选择进一步压缩时间消耗指数。'
+      ]
+    },
+    doctor: {
+      mdc_distribution: [
+        { mdc: 'MDC 05', count: 44 },
+        { mdc: 'MDC 08', count: 39 },
+        { mdc: 'MDC 11', count: 35 }
+      ],
+      drg_distribution: [],
+      doctor_stats: mockDataByDimension.doctor || [],
+      daily_trends: [
+        { date: '1月', count: 42, avg_cmi: 1.02 },
+        { date: '2月', count: 45, avg_cmi: 1.05 },
+        { date: '3月', count: 48, avg_cmi: 1.08 }
+      ],
+      cost_structure: { drug: 2600, material: 2500, exam: 2400, treatment: 2200 },
+      ai_insights: [
+        '个人维度下，低风险死亡率和住院日仍有改善空间。',
+        '建议对高费用病例进行逐例复盘，优先压缩耗材与检查占比。'
+      ]
+    }
+  }
+
+  const selectedMeta = mockChartMetaByDimension[analysisDimension.value] || mockChartMetaByDimension.hospital
+  stats.value = {
+    ...stats.value,
+    summary: {
+      ...stats.value.summary,
+      ...selectedSummary
+    },
+    department_stats: mockDataByDimension[analysisDimension.value] || [],
+    doctor_stats: selectedMeta.doctor_stats || [],
+    mdc_distribution: selectedMeta.mdc_distribution || [],
+    drg_distribution: selectedMeta.drg_distribution || [],
+    daily_trends: selectedMeta.daily_trends || [],
+    cost_structure: selectedMeta.cost_structure || stats.value.cost_structure,
+    ai_insights: selectedMeta.ai_insights || [],
+    charts: {}
+  } as any
   updateCharts()
 }
 
@@ -362,15 +724,20 @@ const drillValue = ref('')
 const stats = ref({
   summary: {
     total_records: 0,
+    drg_count: 0,
     grouping_success_rate: 0,
     avg_cmi: 0,
     total_weight: 0,
     total_fee: 0,
     total_profit: 0,
     cost_consumption_index: 0,
+    time_consumption_index: 0,
     low_risk_mortality_rate: 0,
     low_risk_death_count: 0,
-    low_risk_total_count: 0
+    low_risk_total_count: 0,
+    avg_length_of_stay: 0,
+    avg_inpatient_cost: 0,
+    insurance_profit: 0
   },
   mdc_distribution: [] as any[],
   drg_distribution: [] as any[], // Top 10 High Risk/Cost DRGs
@@ -560,65 +927,61 @@ onMounted(() => {
   
   setupChartEvents()
 
+  drgMockEnabled.value = isDrgMockModeEnabled()
+  unsubscribeDrgMockMode = onDrgMockModeChange((enabled) => {
+    drgMockEnabled.value = enabled
+    if (!useDemoData.value && props.sessionId) {
+      fetchStatistics()
+      return
+    }
+    initMockCharts()
+  })
+
   // Initial Fetch if sessionId exists
-  if (props.sessionId) {
+  if (!useDemoData.value && props.sessionId) {
       fetchStatistics()
   } else {
-      // Load mock data if no batchId provided? 
-      // Or just leave empty. For now we leave empty/zeros but charts might need empty option
-      stats.value.summary.total_records = 1258 // Mock fallback for demo look if user opens page directly without upload
-      initMockCharts() // Keep original mock look if no upload
+      initMockCharts()
   }
 })
 
 watch(() => props.sessionId, (newVal) => {
-    if (newVal) {
+    if (newVal && !useDemoData.value) {
         fetchStatistics()
+    } else {
+        initMockCharts()
     }
 })
 
 const initMockCharts = () => {
-    // Original mock initialization code (simplified for brevity, assumes original functionality if needed)
-    // But since we are replacing it, we can just clear it or show empty state.
-    // However, to keep the UI looking good before upload, maybe we keep the static data?
-    // Let's keep the user experience smooth: if no batchId, show the static data I replaced.
-    // Actually, I replaced the template bindings to use `stats.value`. 
-    // So I should populate `stats.value` with mock data if no batchId.
-    
-    stats.value = {
-        summary: {
-           total_records: 1258,
-           grouping_success_rate: 0.98,
-           avg_cmi: 1.08,
-           total_weight: 1540.5,
-           total_fee: 5400000,
-           total_profit: 125000,
-           cost_consumption_index: 0.95,
-           // 低风险死亡率数据
-           low_risk_mortality_rate: 0.08,
-           low_risk_death_count: 2,
-           low_risk_total_count: 2500
-        },
-        mdc_distribution: [
-            { mdc: 'MDCA', count: 125 },
-            { mdc: 'MDCB', count: 98 },
-            { mdc: 'MDCC', count: 87 }
-        ],
-        drg_distribution: [],
-        department_stats: [
-            { dept_name: '心内科', total_profit: 25000, avg_cmi: 1.15 },
-             { dept_name: '呼吸科', total_profit: -5000, avg_cmi: 0.98 }
-        ],
-        doctor_stats: [],
-        daily_trends: [
-            { date: '1月', count: 120, avg_cmi: 1.02 },
-            { date: '2月', count: 135, avg_cmi: 1.05 }
-        ],
-        cost_structure: {
-            drug: 3500, material: 3200, exam: 2800, treatment: 2200
-        }
-    } as any
-    updateCharts()
+  updateMockDataForDimension()
+}
+
+const buildMockExportPayload = () => {
+    const selectedRows = (stats.value.department_stats || []).map((item: any) => [
+        item.dept_name || item.name || '-',
+        safeNumber(item.total_profit).toFixed(0),
+        safeNumber(item.avg_cmi).toFixed(2),
+        safeNumber(item.cost_index ?? item.cost_consumption_index).toFixed(2),
+        safeNumber(item.avg_los ?? item.avg_length_of_stay).toFixed(1)
+    ])
+    return {
+        title: `DRG ${dimensionLabel.value} 演示报告`,
+        filenameBase: `drg_demo_report_${analysisDimension.value}_${Date.now()}`,
+        meta: [
+            ['当前维度', dimensionLabel.value],
+            ['导出时间', new Date().toLocaleString('zh-CN')],
+            ['数据模式', drgMockEnabled.value ? 'Mock 演示模式' : '无 session_id 的演示导出']
+        ] as Array<[string, string]>,
+        kpis: kpiCards.value.map((card) => [card.label, `${card.value} (${card.hint})`] as [string, string]),
+        sections: selectedRows.length
+            ? [{
+                title: '分层绩效明细',
+                columns: ['层级对象', '医保盈亏', '平均CMI', '费用消耗指数', '平均住院日'],
+                rows: selectedRows
+            }]
+            : undefined
+    }
 }
 
 // Export handler - use fetch to properly go through proxy
@@ -631,12 +994,19 @@ const handleExport = async ({ key }: { key: string }) => {
     
     const format = formatMap[key]
     if (!format) return
-    
-    // Build URL with optional batch_id parameter
-    let url = `/api/v1/drg/export/${key}`
-    if (props.batchId) {
-        url += `?batch_id=${props.batchId}`
+
+    if (useDemoData.value || !props.sessionId) {
+        exportDrgMockReport(key as DrgExportFormat, buildMockExportPayload())
+        message.warning(`当前缺少 session_id，已导出 ${format.name} 演示报告`)
+        return
     }
+    
+    const params = new URLSearchParams()
+    params.set('session_id', props.sessionId)
+    if (props.batchId) {
+        params.set('batch_id', props.batchId)
+    }
+    const url = `/api/v1/drg/export/${key}?${params.toString()}`
     
     const hideLoading = message.loading(`正在生成 ${format.name} 报告...`, 0)
     
@@ -646,7 +1016,7 @@ const handleExport = async ({ key }: { key: string }) => {
         const downloadUrl = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = downloadUrl
-        link.download = `drg_report_${props.batchId || 'all'}.${format.ext}`
+        link.download = `drg_report_${props.batchId || props.sessionId}.${format.ext}`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -661,6 +1031,7 @@ const handleExport = async ({ key }: { key: string }) => {
 }
 
 onUnmounted(() => {
+  unsubscribeDrgMockMode?.()
   qualityChart?.dispose()
   deptChart?.dispose()
   drgChart?.dispose()

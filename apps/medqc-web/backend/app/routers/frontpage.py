@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import contextlib
 import json
+import logging
+import re
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -17,6 +19,95 @@ from ..services.frontpage_extraction_service import (
 )
 
 router = APIRouter(prefix="/api/v1/frontpage", tags=["frontpage"])
+logger = logging.getLogger(__name__)
+
+
+def _extract_discharge_diagnoses_from_text(medical_text: str) -> List[str]:
+    if not medical_text or not medical_text.strip():
+        return []
+
+    text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    start_idx = -1
+    inline_text = ""
+    for idx, raw in enumerate(lines):
+        line = raw.strip()
+        m = re.match(r"^出院诊断\s*[：:]\s*(.*)$", line)
+        if m:
+            start_idx = idx
+            inline_text = m.group(1).strip()
+            break
+        if re.match(r"^出院诊断\s*$", line):
+            start_idx = idx
+            break
+    if start_idx < 0:
+        return []
+
+    stop_header = re.compile(
+        r"^(入院诊断|诊疗经过|出院情况|出院医嘱|医师签名|记录时间|主诉|现病史|既往史|体格检查|辅助检查|手术|手术名称|手术操作|操作名称)\s*[：:]?"
+    )
+    numbered = re.compile(r"^\s*\d{1,2}[\.、\)]\s*(.+?)\s*$")
+
+    section: List[str] = []
+    if inline_text:
+        section.append(inline_text)
+    for raw in lines[start_idx + 1 :]:
+        line = raw.strip()
+        if not line:
+            continue
+        if re.match(r"^={3,}$", line):
+            break
+        if stop_header.match(line):
+            break
+        section.append(raw)
+
+    items: List[str] = []
+    for raw in section:
+        m = numbered.match(raw)
+        text_line = (m.group(1) if m else raw).strip()
+        if not text_line:
+            continue
+        split_parts = [p.strip() for p in re.split(r"[、，,；;]+", text_line) if p and p.strip()]
+        if len(split_parts) == 1:
+            tokens = [t.strip() for t in re.split(r"\s+", text_line) if t and t.strip()]
+            if len(tokens) >= 2 and all(len(t) >= 4 for t in tokens):
+                split_parts = tokens
+        items.extend(split_parts if split_parts else [text_line])
+
+    out: List[str] = []
+    seen = set()
+    for it in items:
+        key = re.sub(r"[\s\-\u2022•·,，;；:：()（）\[\]【】]+", "", it.lower())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(it)
+    return out
+
+
+def _postprocess_frontpage_diagnoses(frontpage: Dict[str, Any], medical_text: str) -> Dict[str, Any]:
+    diagnoses = frontpage.get("diagnoses")
+    if not isinstance(diagnoses, dict):
+        diagnoses = {}
+        frontpage["diagnoses"] = diagnoses
+
+    main = diagnoses.get("discharge_main_diagnosis_text")
+    others = diagnoses.get("discharge_other_diagnoses_texts")
+    has_main = isinstance(main, str) and bool(main.strip())
+    has_others = isinstance(others, list) and any(str(x).strip() for x in others)
+    if not has_main and not has_others:
+        parsed = _extract_discharge_diagnoses_from_text(medical_text)
+        if parsed:
+            diagnoses["discharge_main_diagnosis_text"] = parsed[0]
+            diagnoses["discharge_other_diagnoses_texts"] = parsed[1:]
+            logger.info("frontpage auto-generate fallback parse filled diagnoses, count=%d", len(parsed))
+
+    try:
+        from ..services.local_icd_service import resolve_diagnosis_codes
+
+        frontpage["diagnoses"] = resolve_diagnosis_codes(diagnoses)
+    except Exception:
+        logger.exception("frontpage auto-generate diagnosis postprocess failed")
+    return frontpage
 
 
 class FrontPageDocument(BaseModel):
@@ -99,8 +190,12 @@ async def auto_generate_frontpage_draft(
             # 当前版本 visit_id 未参与真实逻辑，仅作为参数占位
             draft = await service.generate_draft_from_visit(payload.visit_id or "demo")
 
+        frontpage = draft.model_dump()
+        if payload.medical_text:
+            frontpage = _postprocess_frontpage_diagnoses(frontpage, payload.medical_text)
+
         return success_response(
-            data={"frontpage": draft.model_dump()},
+            data={"frontpage": frontpage},
             message="自动生成病案首页草稿成功",
             trace_id=trace_id,
         )

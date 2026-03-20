@@ -38,7 +38,7 @@
       <div 
         v-show="!collapsedNav"
         class="layout-resizer nav-resizer"
-        @mousedown="startResize('nav')"
+        @mousedown="startResize('nav', $event)"
       ></div>
 
       <!-- Center Content -->
@@ -84,7 +84,7 @@
       <div 
         v-show="!collapsedAside"
         class="layout-resizer aside-resizer"
-        @mousedown="startResize('aside')"
+        @mousedown="startResize('aside', $event)"
       ></div>
 
       <!-- Right Aside -->
@@ -112,7 +112,19 @@ interface Props {
   asideWidth?: number
   collapsedNav?: boolean
   collapsedAside?: boolean
-  patient?: Record<string, unknown>
+  patient?: PatientLike | null
+}
+
+interface PatientLike {
+  id?: string
+  record_name?: string
+  record_number?: string
+  status?: string
+  patient_info?: {
+    name?: string
+    age?: number | string
+    gender?: string
+  }
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -167,9 +179,9 @@ const toggleAside = () => {
 }
 
 // 拖拽调整宽度
-const startResize = (type: 'nav' | 'aside') => {
+const startResize = (type: 'nav' | 'aside', event: MouseEvent) => {
   resizing.value = type
-  startX.value = event?.clientX || 0
+  startX.value = event.clientX
   startWidth.value = type === 'nav' ? props.navWidth : props.asideWidth
   
   document.addEventListener('mousemove', handleResize)

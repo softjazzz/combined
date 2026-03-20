@@ -1,0 +1,16 @@
+{
+  "scheme_name": "xianyang_2025",
+  "label": "咸阳 2025",
+  "category": "city",
+  "province": "陕西",
+  "source_file": "7719.js",
+  "extracted_at": "2026-03-15T18:28:57.786678",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9381,
+    "adrg": 252,
+    "drg": 747
+  }
+}

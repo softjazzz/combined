@@ -215,6 +215,14 @@ const canEditExpertLevel = computed(() =>
   (!auditResults.value.expert?.is_final || auditResults.value.expert?.status === 'draft')
 )
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 // 方法
 const loadAuditResults = async () => {
   try {
@@ -240,7 +248,7 @@ const loadAuditResults = async () => {
     })).sort((a, b) => new Date(a.submitted_at || '').getTime() - new Date(b.submitted_at || '').getTime())
     
   } catch (error: unknown) {
-    message.error(`加载审核结果失败: ${error.message}`)
+    message.error(`加载审核结果失败: ${getErrorMessage(error)}`)
   } finally {
     loading.value = false
   }
@@ -263,8 +271,8 @@ const handleDepartmentUpdate = async (resultData) => {
     emit('result-updated', 'department', result)
     message.success('科室级审核结果已保存')
     
-  } catch (error) {
-    message.error(`保存失败: ${error.message}`)
+  } catch (error: unknown) {
+    message.error(`保存失败: ${getErrorMessage(error)}`)
   }
 }
 
@@ -281,8 +289,8 @@ const handleHospitalUpdate = async (resultData) => {
     emit('result-updated', 'hospital', result)
     message.success('院级审核结果已保存')
     
-  } catch (error) {
-    message.error(`保存失败: ${error.message}`)
+  } catch (error: unknown) {
+    message.error(`保存失败: ${getErrorMessage(error)}`)
   }
 }
 
@@ -299,8 +307,8 @@ const handleExpertUpdate = async (resultData) => {
     emit('result-updated', 'expert', result)
     message.success('专家级审核结果已保存')
     
-  } catch (error) {
-    message.error(`保存失败: ${error.message}`)
+  } catch (error: unknown) {
+    message.error(`保存失败: ${getErrorMessage(error)}`)
   }
 }
 
@@ -315,7 +323,7 @@ const handleSubmitResult = async (level: AuditLevel, auditResultId: string) => {
     message.success(`${level}级审核结果已提交`)
     
   } catch (error: unknown) {
-    message.error(`提交失败: ${error.message}`)
+    message.error(`提交失败: ${getErrorMessage(error)}`)
   }
 }
 
@@ -343,8 +351,8 @@ const handleConfirmModification = async () => {
     
     message.success('下级审核结果修改成功')
     
-  } catch (error) {
-    message.error(`修改失败: ${error.message}`)
+  } catch (error: unknown) {
+    message.error(`修改失败: ${getErrorMessage(error)}`)
   }
 }
 

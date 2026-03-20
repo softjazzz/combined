@@ -1,0 +1,16 @@
+{
+  "scheme_name": "maanshan_2023",
+  "label": "马鞍山 2023",
+  "category": "city",
+  "province": "安徽",
+  "source_file": "3033.js",
+  "extracted_at": "2026-03-15T18:28:54.150053",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10291,
+    "adrg": 250,
+    "drg": 606
+  }
+}

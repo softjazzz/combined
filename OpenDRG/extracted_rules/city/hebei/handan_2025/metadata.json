@@ -1,0 +1,16 @@
+{
+  "scheme_name": "handan_2025",
+  "label": "邯郸 2025",
+  "category": "city",
+  "province": "河北",
+  "source_file": "8290.js",
+  "extracted_at": "2026-03-15T18:28:51.701394",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9373,
+    "adrg": 252,
+    "drg": 719
+  }
+}

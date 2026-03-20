@@ -42,6 +42,13 @@ interface ChartDataItem {
   passRate: number
 }
 
+interface LineTooltipParam {
+  axisValue?: string
+  seriesName?: string
+  value?: number | string
+  color?: string
+}
+
 const props = defineProps({
   data: {
     type: Array as PropType<ChartDataItem[]>,
@@ -107,9 +114,10 @@ const chartOption = computed(() => {
           backgroundColor: '#6a7985'
         }
       },
-      formatter: (params: unknown) => {
-        let result = `<div style="font-weight: bold; margin-bottom: 8px;">${params[0].axisValue}</div>`
-        params.forEach((param: unknown) => {
+      formatter: (params: LineTooltipParam[]) => {
+        const safeParams = Array.isArray(params) ? params : []
+        let result = `<div style="font-weight: bold; margin-bottom: 8px;">${safeParams[0]?.axisValue || ''}</div>`
+        safeParams.forEach((param: LineTooltipParam) => {
           const value = param.seriesName === '病案数量' 
             ? `${param.value}个`
             : param.seriesName === '平均评分'

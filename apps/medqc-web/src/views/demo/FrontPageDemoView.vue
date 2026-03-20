@@ -1261,7 +1261,6 @@ const handleUpdateTestCase = (payload: { index: number; title: string; medical_t
   const target = testCases.value[payload.index]
   if (!target) return
   target.name = payload.title
-  target.title = payload.title
   target.medical_text = payload.medical_text
 }
 
@@ -1285,8 +1284,8 @@ const handleCodeChange = async (field: string, value: string) => {
   
   // 延迟触发DRG分组
   setTimeout(() => {
-    if (demoCase.value?.admission_id) {
-      performDRGGrouping(demoCase.value.admission_id)
+    if (demoCase.value?.case_id) {
+      performDRGGrouping(demoCase.value.case_id)
     }
   }, 500)
 }

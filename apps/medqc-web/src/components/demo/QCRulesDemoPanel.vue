@@ -323,7 +323,7 @@ const rulesWithApplicability = computed<any[]>(() => {
     return labelToCode[s]
   }
 
-  const arr = all.map((r: unknown) => {
+  const arr = all.map((r: any) => {
     // 1) 先尝试从映射表/后端字段取得标准类别集合
     const mapped = lookupRuleCategories(r)
     const raw: string[] = mapped.length > 0 ? mapped : (r.applicable_documents || [])
@@ -345,7 +345,7 @@ const rulesWithApplicability = computed<any[]>(() => {
     }
     return { ...r, _applicable: applicable, _disabled: !applicable }
   })
-  return arr.sort((a: unknown, b: unknown) => Number(b._applicable) - Number(a._applicable))
+  return arr.sort((a: any, b: any) => Number(b._applicable) - Number(a._applicable))
 })
 
 // 计算属性：过滤后的规则
@@ -507,7 +507,7 @@ const clearAllRules = () => {
   message.success('已清空所有规则')
 }
 
-const renderAvatar = () => {
+const renderAvatar = (_item?: any) => {
   return h(
     'div',
     { class: 'rule-avatar fixed-icon' },

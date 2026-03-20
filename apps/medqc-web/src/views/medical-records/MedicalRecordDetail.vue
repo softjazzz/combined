@@ -183,6 +183,8 @@ import {
   type TreeNode
 } from '@/mr/data/api'
 
+type DocumentView = Document & { category?: string }
+
 const route = useRoute()
 const router = useRouter()
 
@@ -226,14 +228,14 @@ const treeData = computed<TreeNode[]>(() => {
   return buildTreeData(documentsResponse.value)
 })
 
-const allDocuments = computed<Document[]>(() => {
+const allDocuments = computed<DocumentView[]>(() => {
   if (!documentsResponse.value) return []
-  return extractDocuments(documentsResponse.value)
+  return extractDocuments(documentsResponse.value) as DocumentView[]
 })
 
-const currentDocument = computed<Document | null>(() => {
+const currentDocument = computed<DocumentView | null>(() => {
   if (!documentsResponse.value || !selectedDocId.value) return null
-  return findDocumentById(documentsResponse.value, selectedDocId.value)
+  return findDocumentById(documentsResponse.value, selectedDocId.value) as DocumentView | null
 })
 
 const displayContent = computed(() => {
@@ -448,8 +450,8 @@ const handleDocumentCreated = async (document: unknown) => {
     await loadData()
 
     // 自动选中新创建的文档
-    if (document.id) {
-      selectedDocId.value = document.id
+    if (typeof document === 'object' && document !== null && 'id' in document) {
+      selectedDocId.value = String((document as { id: unknown }).id)
     }
 
   } catch (error) {
@@ -459,7 +461,12 @@ const handleDocumentCreated = async (document: unknown) => {
 
 const handleDocumentDeleted = async (result: unknown) => {
   try {
-    const operationType = result.deleteType === 'hard' ? '永久删除' : '删除'
+    const operationType = (
+      typeof result === 'object' &&
+      result !== null &&
+      'deleteType' in result &&
+      (result as { deleteType?: string }).deleteType === 'hard'
+    ) ? '永久删除' : '删除'
     message.success(`文档${operationType}成功`)
 
     // 清除当前选中的文档

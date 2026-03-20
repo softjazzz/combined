@@ -58,6 +58,12 @@ const props = withDefaults(defineProps<Props>(), {
   theme: 'light'
 })
 
+interface RadarTooltipParams {
+  name?: string
+  value?: number[]
+  color?: string
+}
+
 // 计算图表配置
 const chartOption = computed(() => {
   const isDark = props.theme === 'dark'
@@ -75,14 +81,16 @@ const chartOption = computed(() => {
     
     tooltip: {
       trigger: 'item',
-      formatter: (params: unknown) => {
-        const { name, value } = params
+      formatter: (params: RadarTooltipParams) => {
+        const name = params.name || ''
+        const value = Array.isArray(params.value) ? params.value : []
+        const color = params.color || '#1890ff'
         let content = `<div style="font-weight: bold; margin-bottom: 8px;">${name}</div>`
         
         value.forEach((val: number, index: number) => {
           const indicator = props.indicators[index]
           content += `<div style="margin: 4px 0;">
-            <span style="color: ${params.color};">●</span> 
+            <span style="color: ${color};">●</span> 
             ${indicator.name}: ${val}
           </div>`
         })

@@ -14,6 +14,39 @@ import type {
 
 import { unifiedAPIClient } from './unified-api-client'
 
+interface CandidateRecord {
+  id: string
+  patient_id: string
+  department_id?: string
+  department_name?: string
+  admission_date?: string
+  discharge_date?: string
+  document_count?: number
+  risk_level?: RiskLevel
+  complexity_score?: number
+  patients?: {
+    name?: string
+    admission_date?: string
+    discharge_date?: string
+  }
+  departments?: {
+    name?: string
+  }
+}
+
+interface RiskAssessmentLite {
+  overallScore?: number
+  riskLevel?: string
+  ruleResults?: Array<{ findings?: unknown[] }>
+}
+
+interface StratificationRuleLite {
+  stratum_name: 'A' | 'B' | 'C'
+  sample_ratio: number
+  min_sample_size?: number
+  max_sample_size?: number
+}
+
 // 智能抽样算法服务
 class IntelligentSamplingService {
   constructor(private qcEngine: typeof integratedQCEngine) {}
@@ -39,7 +72,7 @@ class IntelligentSamplingService {
     return sampledRecords
   }
 
-  private async getCandidateRecords(scope: AuditScope): Promise<any[]> {
+  private async getCandidateRecords(scope: AuditScope): Promise<CandidateRecord[]> {
     let query = supabase
       .from('medical_records')
       .select(`
@@ -79,8 +112,8 @@ class IntelligentSamplingService {
     return data || []
   }
 
-  private async assessRiskLevels(records: unknown[]): Promise<any[]> {
-    const assessedRecords = []
+  private async assessRiskLevels(records: CandidateRecord[]): Promise<CandidateRecord[]> {
+    const assessedRecords: CandidateRecord[] = []
 
     for (const record of records) {
       try {
@@ -115,7 +148,7 @@ class IntelligentSamplingService {
     return assessedRecords
   }
 
-  private calculateRiskLevel(assessment: unknown): RiskLevel {
+  private calculateRiskLevel(assessment: RiskAssessmentLite): RiskLevel {
     const overallScore = assessment.overallScore || 0
     const riskLevel = assessment.riskLevel
 
@@ -128,7 +161,7 @@ class IntelligentSamplingService {
     }
   }
 
-  private calculateComplexityScore(record, assessment): number {
+  private calculateComplexityScore(record: CandidateRecord, assessment: RiskAssessmentLite): number {
     let score = 0
 
     // 基于文书数量
@@ -141,7 +174,7 @@ class IntelligentSamplingService {
     score += Math.min(stayDays * 2, 20)
 
     // 基于质控发现的问题数量
-    const issueCount = assessment.ruleResults?.reduce((sum: number, result: unknown) => 
+    const issueCount = assessment.ruleResults?.reduce((sum: number, result) =>
       sum + (result.findings?.length || 0), 0) || 0
     score += Math.min(issueCount * 5, 30)
 
@@ -169,7 +202,7 @@ class IntelligentSamplingService {
   }
 
   private async applySamplingAlgorithm(
-    records: unknown[],
+    records: CandidateRecord[],
     config: SamplingConfig
   ): Promise<QCAuditTaskItem[]> {
     
@@ -185,7 +218,7 @@ class IntelligentSamplingService {
   }
 
   private async stratifiedSampling(
-    records: unknown[],
+    records: CandidateRecord[],
     config: SamplingConfig
   ): Promise<QCAuditTaskItem[]> {
     
@@ -199,7 +232,7 @@ class IntelligentSamplingService {
     }
 
     // 应用分层抽样规则
-    for (const rule of (config.stratification_rules || []) as unknown[]) {
+    for (const rule of (config.stratification_rules || []) as StratificationRuleLite[]) {
       const stratumRecords = strata[rule.stratum_name as keyof typeof strata] || []
       const sampleSize = Math.min(
         Math.max(
@@ -217,7 +250,7 @@ class IntelligentSamplingService {
   }
 
   private async riskBasedSampling(
-    records: unknown[],
+    records: CandidateRecord[],
     config: SamplingConfig
   ): Promise<QCAuditTaskItem[]> {
     
@@ -248,7 +281,7 @@ class IntelligentSamplingService {
     return sampledRecords
   }
 
-  private randomSampling(records: unknown[], config: SamplingConfig): QCAuditTaskItem[] {
+  private randomSampling(records: CandidateRecord[], config: SamplingConfig): QCAuditTaskItem[] {
     const sampleSize = config.total_sample_size || 
                       Math.ceil(records.length * (config.sampling_ratio || 0.1))
     
@@ -256,7 +289,7 @@ class IntelligentSamplingService {
     return sample.map(record => this.convertToTaskItem(record))
   }
 
-  private systematicSampling(records: unknown[], config: SamplingConfig): QCAuditTaskItem[] {
+  private systematicSampling(records: CandidateRecord[], config: SamplingConfig): QCAuditTaskItem[] {
     const sampleSize = config.total_sample_size || 
                       Math.ceil(records.length * (config.sampling_ratio || 0.1))
     
@@ -280,7 +313,7 @@ class IntelligentSamplingService {
     return shuffled.slice(0, count)
   }
 
-  private convertToTaskItem(record): QCAuditTaskItem {
+  private convertToTaskItem(record: CandidateRecord): QCAuditTaskItem {
     return {
       id: '', // 将在创建时生成
       task_id: '', // 将在创建时设置
@@ -410,14 +443,14 @@ export class AuditTaskService {
     }
   }
 
-  private distributeTaskItems(items: unknown[], reviewerIds: string[]): Map<string, string[]> {
+  private distributeTaskItems(items: Array<{ id: string }>, reviewerIds: string[]): Map<string, string[]> {
     const assignments = new Map<string, string[]>()
 
     // 初始化分配映射
     reviewerIds.forEach(id => assignments.set(id, []))
     
     // 轮询分配
-    items.forEach((item, index: unknown) => {
+    items.forEach((item, index: number) => {
       const reviewerId = reviewerIds[index % reviewerIds.length]
       assignments.get(reviewerId)!.push(item.id)
     })

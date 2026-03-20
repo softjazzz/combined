@@ -1,0 +1,16 @@
+{
+  "scheme_name": "linfen_2022",
+  "label": "临汾 2022",
+  "category": "city",
+  "province": "山西",
+  "source_file": "8761.js",
+  "extracted_at": "2026-03-15T18:28:53.525271",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10251,
+    "adrg": 241,
+    "drg": 645
+  }
+}

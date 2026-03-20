@@ -1,75 +1,112 @@
-import type { AnalysisDimension, AnalysisDataResponse } from '@/types/drg-analysis'
+import type {
+  AnalysisDataResponse,
+  AnalysisDimension,
+  AnalysisTableItem
+} from '@/types/drg-analysis'
+
+const BASE_OVERVIEW = {
+  totalCases: 32021,
+  totalCost: 203190072,
+  totalProfit: -84868160,
+  avgCostRate: 1.09,
+  drgGroupCount: 2863,
+  cmi: 0.8193,
+  lowRiskMortalityRate: 0,
+  lowRiskDeathCount: 0,
+  lowRiskTotalCount: 2953
+}
+
+const TRENDS = {
+  cost: [
+    { date: '2025-01', value: 1.03 },
+    { date: '2025-02', value: 1.06 },
+    { date: '2025-03', value: 1.08 },
+    { date: '2025-04', value: 1.05 },
+    { date: '2025-05', value: 1.01 },
+    { date: '2025-06', value: 1.04 },
+    { date: '2025-07', value: 1.07 },
+    { date: '2025-08', value: 1.11 },
+    { date: '2025-09', value: 1.10 },
+    { date: '2025-10', value: 1.08 },
+    { date: '2025-11', value: 1.06 },
+    { date: '2025-12', value: 1.09 }
+  ],
+  cmi: [
+    { date: '2025-01', value: 0.6930 },
+    { date: '2025-02', value: 0.8108 },
+    { date: '2025-03', value: 0.8693 },
+    { date: '2025-04', value: 0.8094 },
+    { date: '2025-05', value: 0.7510 },
+    { date: '2025-06', value: 0.8103 },
+    { date: '2025-07', value: 0.8402 },
+    { date: '2025-08', value: 0.8600 },
+    { date: '2025-09', value: 0.8601 },
+    { date: '2025-10', value: 0.8696 },
+    { date: '2025-11', value: 0.8402 },
+    { date: '2025-12', value: 0.8600 }
+  ]
+}
+
+const DISTRIBUTION = {
+  drg: [
+    { name: 'J44.0', value: 1577 },
+    { name: 'J15.9', value: 1013 },
+    { name: 'H25.9:13.4100x001', value: 788 },
+    { name: 'Z51.1:99.2503', value: 777 },
+    { name: 'J18.0', value: 569 }
+  ],
+  cost: [
+    { name: 'Drug', value: 35 },
+    { name: 'Material', value: 27 },
+    { name: 'Exam', value: 18 },
+    { name: 'Treatment', value: 12 },
+    { name: 'Other', value: 8 }
+  ]
+}
+
+const TABLE_BY_DIMENSION: Record<AnalysisDimension, AnalysisTableItem[]> = {
+  hospital: [
+    { id: 'D1', name: 'Respiratory', caseCount: 2762, totalRevenue: 10936553, totalCost: 17097304, profit: -6160751, cmi: 0.8123, costRate: 1.56 },
+    { id: 'D2', name: 'Cardiology', caseCount: 2582, totalRevenue: 11484672, totalCost: 20700969, profit: -9216297, cmi: 0.8179, costRate: 1.80 },
+    { id: 'D3', name: 'General Surgery', caseCount: 2465, totalRevenue: 12872387, totalCost: 22666144, profit: -9793757, cmi: 0.8217, costRate: 1.76 },
+    { id: 'D4', name: 'Orthopedics', caseCount: 2169, totalRevenue: 10884911, totalCost: 20169901, profit: -9284990, cmi: 0.8227, costRate: 1.85 },
+    { id: 'D5', name: 'Neurology', caseCount: 2193, totalRevenue: 8680546, totalCost: 14139618, profit: -5459072, cmi: 0.8221, costRate: 1.63 }
+  ],
+  department: [
+    { id: 'G1', name: 'J44.0', caseCount: 1577, totalRevenue: 6009409, totalCost: 9354855, profit: -3345446, cmi: 0.8144, costRate: 1.56 },
+    { id: 'G2', name: 'J15.9', caseCount: 1013, totalRevenue: 2311984, totalCost: 3859483, profit: -1547499, cmi: 0.8085, costRate: 1.67 },
+    { id: 'G3', name: 'H25.9:13.4100x001', caseCount: 788, totalRevenue: 1733463, totalCost: 3263802, profit: -1530339, cmi: 0.8275, costRate: 1.88 },
+    { id: 'G4', name: 'Z51.1:99.2503', caseCount: 777, totalRevenue: 2229502, totalCost: 3607214, profit: -1377712, cmi: 0.8285, costRate: 1.62 },
+    { id: 'G5', name: 'J18.0', caseCount: 569, totalRevenue: 620267, totalCost: 1178493, profit: -558227, cmi: 0.8160, costRate: 1.90 }
+  ],
+  ward: [
+    { id: 'W1', name: 'Resp Ward A', caseCount: 936, totalRevenue: 3720000, totalCost: 5800000, profit: -2080000, cmi: 0.8120, costRate: 1.56 },
+    { id: 'W2', name: 'Resp Ward B', caseCount: 884, totalRevenue: 3540000, totalCost: 5400000, profit: -1860000, cmi: 0.8150, costRate: 1.53 },
+    { id: 'W3', name: 'Cardio Ward A', caseCount: 902, totalRevenue: 4680000, totalCost: 7460000, profit: -2780000, cmi: 0.8180, costRate: 1.59 },
+    { id: 'W4', name: 'Cardio Ward B', caseCount: 846, totalRevenue: 4440000, totalCost: 7090000, profit: -2650000, cmi: 0.8210, costRate: 1.60 },
+    { id: 'W5', name: 'Ortho Ward A', caseCount: 756, totalRevenue: 4010000, totalCost: 6420000, profit: -2410000, cmi: 0.8230, costRate: 1.60 }
+  ],
+  doctor: [
+    { id: 'P1', name: 'Li Min', caseCount: 563, totalRevenue: 1752901, totalCost: 2958798, profit: -1205897, cmi: 0.8166, costRate: 1.69 },
+    { id: 'P2', name: 'Guo Yingjiang', caseCount: 487, totalRevenue: 1775057, totalCost: 2667092, profit: -892036, cmi: 0.8168, costRate: 1.50 },
+    { id: 'P3', name: 'Zeng Xiaonan', caseCount: 475, totalRevenue: 1502695, totalCost: 2402038, profit: -899343, cmi: 0.8239, costRate: 1.60 },
+    { id: 'P4', name: 'Feng Wanlin', caseCount: 472, totalRevenue: 1924052, totalCost: 3453359, profit: -1529308, cmi: 0.8205, costRate: 1.79 },
+    { id: 'P5', name: 'Guo Huaijie', caseCount: 466, totalRevenue: 1575522, totalCost: 2600762, profit: -1025240, cmi: 0.8217, costRate: 1.65 }
+  ],
+  drg: [
+    { id: 'C1', name: 'J44.0 Group', caseCount: 1577, totalRevenue: 6009409, totalCost: 9354855, profit: -3345446, cmi: 0.8144, costRate: 1.56 },
+    { id: 'C2', name: 'J15.9 Group', caseCount: 1013, totalRevenue: 2311984, totalCost: 3859483, profit: -1547499, cmi: 0.8085, costRate: 1.67 },
+    { id: 'C3', name: 'Z51.1 Group', caseCount: 777, totalRevenue: 2229502, totalCost: 3607214, profit: -1377712, cmi: 0.8285, costRate: 1.62 },
+    { id: 'C4', name: 'I25.1 Group', caseCount: 391, totalRevenue: 858583, totalCost: 1417660, profit: -559077, cmi: 0.8161, costRate: 1.65 },
+    { id: 'C5', name: 'I25.1:88.5500 Group', caseCount: 335, totalRevenue: 1374616, totalCost: 2411806, profit: -1037190, cmi: 0.8390, costRate: 1.75 }
+  ]
+}
 
 export const mockAnalysisData = (dimension: AnalysisDimension): AnalysisDataResponse => {
-    // 基础数据
-    const baseOverview = {
-        totalCases: 1250,
-        totalCost: 15850000,
-        totalProfit: 1620000,
-        avgCostRate: 0.95,
-        drgGroupCount: 42,
-        cmi: 1.8523,
-        lowRiskMortalityRate: 0.8,
-        lowRiskDeathCount: 5,
-        lowRiskTotalCount: 625
-    }
-
-    // 趋势模拟
-    const trends = {
-        cost: [
-            { date: '2024-01', value: 0.92 },
-            { date: '2024-02', value: 0.94 },
-            { date: '2024-03', value: 0.91 },
-            { date: '2024-04', value: 0.98 },
-            { date: '2024-05', value: 0.95 },
-            { date: '2024-06', value: 0.93 }
-        ],
-        cmi: [
-            { date: '2024-01', value: 1.75 },
-            { date: '2024-02', value: 1.78 },
-            { date: '2024-03', value: 1.80 },
-            { date: '2024-04', value: 1.82 },
-            { date: '2024-05', value: 1.84 },
-            { date: '2024-06', value: 1.85 }
-        ]
-    }
-
-    // 分布模拟
-    const distribution = {
-        drg: [
-            { name: '循环系统疾病', value: 35 },
-            { name: '呼吸系统疾病', value: 25 },
-            { name: '消化系统疾病', value: 20 },
-            { name: '神经系统疾病', value: 15 },
-            { name: '其他', value: 5 }
-        ],
-        cost: [
-            { name: '药品费', value: 30 },
-            { name: '耗材费', value: 25 },
-            { name: '检查费', value: 20 },
-            { name: '手术费', value: 15 },
-            { name: '护理费', value: 10 }
-        ]
-    }
-
-    // 表格数据模拟
-    const tableData = Array.from({ length: 15 }).map((_, index) => ({
-        id: `ITEM_${index + 1}`,
-        name: dimension === 'department' ? `科室 ${index + 1}` :
-            dimension === 'doctor' ? `医生 ${index + 1}` :
-                dimension === 'drg' ? `DRG组 ${index + 1}` : `项目 ${index + 1}`,
-        caseCount: Math.floor(Math.random() * 100) + 10,
-        totalRevenue: Math.floor(Math.random() * 1000000) + 100000,
-        totalCost: Math.floor(Math.random() * 900000) + 90000,
-        profit: Math.floor(Math.random() * 200000) - 50000,
-        cmi: Number((1 + Math.random()).toFixed(4)),
-        costRate: Number((0.8 + Math.random() * 0.4).toFixed(4))
-    }))
-
-    return {
-        overview: baseOverview,
-        trends,
-        distribution,
-        tableData
-    }
+  return {
+    overview: BASE_OVERVIEW,
+    trends: TRENDS,
+    distribution: DISTRIBUTION,
+    tableData: TABLE_BY_DIMENSION[dimension] || TABLE_BY_DIMENSION.hospital
+  }
 }

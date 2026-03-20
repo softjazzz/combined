@@ -10,6 +10,7 @@ import type {
 
 import { unifiedAPIClient, type PaginatedResponse } from './unified-api-client'
 import { useAuthStore } from '@/stores/auth'
+import { ApiService } from '@/services/apiService'
 
 // WebSocket连接管理
 class WebSocketManager {
@@ -175,6 +176,13 @@ class WebSocketManager {
 export class NotificationServiceAdapter {
   private wsManager: WebSocketManager | null = null
   private eventHandlers: Map<string, Function[]> = new Map()
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message
+    if (typeof error === 'object' && error && 'message' in error) {
+      return String((error as { message?: unknown }).message || '未知错误')
+    }
+    return '未知错误'
+  }
 
   /**
    * 初始化实时通信
@@ -182,7 +190,7 @@ export class NotificationServiceAdapter {
   async initializeRealTime(userId: string, userType: string): Promise<void> {
     try {
       const authStore = useAuthStore()
-      const authToken = authStore.token || localStorage.getItem('auth_token') || ''
+      const authToken = localStorage.getItem('auth_token') || ''
 
       if (!authToken) {
         console.warn('未找到认证令牌，无法建立WebSocket连接')
@@ -200,7 +208,7 @@ export class NotificationServiceAdapter {
         this.emit('disconnected', data)
       })
 
-      this.wsManager.on('notification', (notification: unknown) => {
+      this.wsManager.on('notification', (notification: { priority?: string }) => {
         this.emit('new-notification', notification)
 
         // 根据优先级显示不同的通知
@@ -264,7 +272,7 @@ export class NotificationServiceAdapter {
 
     } catch (error: unknown) {
       console.error('发送通知失败:', error)
-      throw new Error(`发送通知失败: ${error.message}`)
+      throw new Error(`发送通知失败: ${this.getErrorMessage(error)}`)
     }
   }
 
@@ -305,9 +313,9 @@ export class NotificationServiceAdapter {
       console.log(`批量发送 ${results.length} 条通知成功`)
       return results
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('批量发送通知失败:', error)
-      throw new Error(`批量发送通知失败: ${error.message}`)
+      throw new Error(`批量发送通知失败: ${this.getErrorMessage(error)}`)
     }
   }
 
@@ -344,7 +352,7 @@ export class NotificationServiceAdapter {
 
     } catch (error: unknown) {
       console.error('获取用户通知失败:', error)
-      throw new Error(`获取用户通知失败: ${error.message}`)
+      throw new Error(`获取用户通知失败: ${this.getErrorMessage(error)}`)
     }
   }
 
@@ -367,7 +375,7 @@ export class NotificationServiceAdapter {
 
     } catch (error: unknown) {
       console.error('标记已读失败:', error)
-      throw new Error(`标记已读失败: ${error.message}`)
+      throw new Error(`标记已读失败: ${this.getErrorMessage(error)}`)
     }
   }
 
@@ -380,7 +388,7 @@ export class NotificationServiceAdapter {
       console.log('消息已标记为已处理')
     } catch (error: unknown) {
       console.error('标记已处理失败:', error)
-      throw new Error(`标记已处理失败: ${error.message}`)
+      throw new Error(`标记已处理失败: ${this.getErrorMessage(error)}`)
     }
   }
 
@@ -393,7 +401,7 @@ export class NotificationServiceAdapter {
       console.log(`批量标记 ${notificationIds.length} 条消息为已读`)
     } catch (error: unknown) {
       console.error('批量标记已读失败:', error)
-      throw new Error(`批量标记已读失败: ${error.message}`)
+      throw new Error(`批量标记已读失败: ${this.getErrorMessage(error)}`)
     }
   }
 
@@ -424,7 +432,7 @@ export class NotificationServiceAdapter {
       return await unifiedAPIClient.sendTestNotification(recipientId, messageType, priority)
     } catch (error: unknown) {
       console.error('发送测试通知失败:', error)
-      throw new Error(`发送测试通知失败: ${error.message}`)
+      throw new Error(`发送测试通知失败: ${this.getErrorMessage(error)}`)
     }
   }
 

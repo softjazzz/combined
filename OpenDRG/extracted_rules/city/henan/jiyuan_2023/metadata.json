@@ -1,0 +1,16 @@
+{
+  "scheme_name": "jiyuan_2023",
+  "label": "济源 2023",
+  "category": "city",
+  "province": "河南",
+  "source_file": "8782.js",
+  "extracted_at": "2026-03-15T18:28:52.604515",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 9609,
+    "adrg": 250,
+    "drg": 630
+  }
+}

@@ -327,9 +327,12 @@ export function requirePermission(
     const originalMethod = descriptor.value
     
     descriptor.value = async function (...args: unknown[]) {
-      const user = this.user || args[0]?.user
-      
-      const result = checkPermission(user, resource, action, args[0]?.context)
+      const contextArg = (args[0] && typeof args[0] === 'object')
+        ? (args[0] as { user?: User; context?: Record<string, unknown> })
+        : {}
+      const thisContext = this as { user?: User }
+      const user = thisContext.user || contextArg.user
+      const result = checkPermission(user || null, resource, action, contextArg.context)
       if (!result.allowed) {
         throw new Error(`权限不足: ${result.reason}`)
       }

@@ -961,7 +961,69 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const error = ref('')
-const record = ref<unknown>(null)
+interface LegacyRecordLike {
+  id?: string
+  content?: string
+  raw_text?: string
+  selectedDocumentContent?: string | null
+  selectedDocumentTitle?: string | null
+  patient_name?: string
+  patient_age?: string | number
+  patient_gender?: string
+  status?: string
+  [key: string]: any
+}
+
+interface LegacyDocumentLike {
+  id?: string
+  title?: string
+  type?: string
+  content?: string
+  content_preview?: string
+  type_info?: {
+    type_name?: string
+    type_code?: string
+    [key: string]: any
+  }
+  ai_classified?: boolean
+  classification_confidence?: number
+  qc_status?: string
+  qc_score?: number
+  created_at?: string
+  category_code?: string
+  [key: string]: any
+}
+
+interface QCEvaluationProgressLike {
+  total?: number
+  completed?: number
+  passed?: number
+  failed?: number
+  rules?: Record<string, {
+    status?: string
+    confidence?: number
+    reasoning?: string
+    [key: string]: any
+  }>
+  [key: string]: any
+}
+
+interface QCEvaluationResultLike {
+  rule_id?: string
+  rule_code?: string
+  rule_name?: string
+  compliant?: boolean
+  is_compliant?: boolean
+  confidence?: number
+  score_deduction?: number
+  reasoning?: string
+  findings?: string
+  evidence?: string
+  suggestions?: string[]
+  [key: string]: any
+}
+
+const record = ref<LegacyRecordLike | null>(null)
 const contentExpanded = ref(false)
 
 // 视图模式状态
@@ -975,8 +1037,8 @@ const exportLoading = ref(false)
 // 四川省质控相关状态
 const qcLoading = ref(false)
 const showQCModal = ref(false)
-const qcProgress = ref<unknown>({})
-const qcResults = ref<unknown>({})
+const qcProgress = ref<Record<string, QCEvaluationProgressLike>>({})
+const qcResults = ref<Record<string, QCEvaluationResultLike[]>>({})
 const detectedDocumentTypes = ref<string[]>([])
 const applicableRules = ref<any[]>([])
 const qcStatus = ref<'idle' | 'analyzing' | 'evaluating' | 'completed' | 'error'>('idle')
@@ -1007,7 +1069,7 @@ const documentClassificationData = ref({
 
 // 文档查看对话框状态
 const documentViewDialogVisible = ref(false)
-const selectedDocument = ref<unknown>(null)
+const selectedDocument = ref<LegacyDocumentLike | null>(null)
 const showSidebar = ref(true)
 
 const computedSummaryText = computed(() => {
@@ -1058,7 +1120,7 @@ const loadRecord = async () => {
 
     // 加载文档统计信息
     await loadDocumentStats()
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error('加载医疗记录失败:', err)
     error.value = err.message || '加载医疗记录失败'
     message.error(error.value)
@@ -1098,7 +1160,7 @@ const handleContentHighlight = (texts: string[]) => {
   // 可以在这里添加高亮相关的逻辑
 }
 
-const handleDocumentSelect = async (document: unknown) => {
+const handleDocumentSelect = async (document: LegacyDocumentLike) => {
   console.log('=== 文档选择调试信息 ===')
   console.log('选择的文档:', document)
   console.log('文档类型:', document?.type)
@@ -1187,7 +1249,7 @@ const handleDocumentSelect = async (document: unknown) => {
   }
 }
 
-const handleClassificationFilter = (filter: unknown) => {
+const handleClassificationFilter = (filter: any) => {
   console.log('分类筛选:', filter)
   // 可以在这里添加筛选相关的逻辑
 }
@@ -1213,16 +1275,16 @@ const validateClassification = () => {
 }
 
 // 从API返回的数据中查找匹配的文档
-const findMatchingDocument = (apiData: unknown, targetDocument: unknown): unknown => {
+const findMatchingDocument = (apiData: any, targetDocument: any): any => {
   if (!apiData || !apiData.categories) return null
 
   // 规范化比较
-  const norm = (s: unknown) => String(s || '').replace(/\s+/g, '').toLowerCase()
+  const norm = (s: any) => String(s || '').replace(/\s+/g, '').toLowerCase()
   const tId = targetDocument?.id ? String(targetDocument.id) : ''
   const tType = norm(targetDocument?.type)
   const tTitle = norm(targetDocument?.title)
 
-  let best: unknown = null
+  let best: any = null
   let bestScore = -1
 
   for (const category of apiData.categories) {
@@ -1363,13 +1425,13 @@ const returnToOriginalContent = () => {
 }
 
 // 新增：文档相关方法
-const handleDocumentEdit = (document: unknown) => {
+const handleDocumentEdit = (document: LegacyDocumentLike) => {
   console.log('编辑文档:', document)
   showEditor.value = true
   activeContentTab.value = 'editor'
 }
 
-const handleDocumentView = (document: unknown) => {
+const handleDocumentView = (document: LegacyDocumentLike) => {
   console.log('查看文档:', document)
 
   // 设置选中的文档并显示对话框
@@ -1377,7 +1439,7 @@ const handleDocumentView = (document: unknown) => {
   documentViewDialogVisible.value = true
 }
 
-const handleDocumentSaveSuccess = (document: unknown) => {
+const handleDocumentSaveSuccess = (document: LegacyDocumentLike) => {
   console.log('文档保存成功:', document)
   message.success('文档保存成功')
   // 刷新文档统计信息
@@ -1404,7 +1466,7 @@ const copyDocumentContent = async () => {
   }
 }
 
-const handleDocumentSaveError = (error: unknown) => {
+const handleDocumentSaveError = (error: any) => {
   console.error('文档保存失败:', error)
   message.error('文档保存失败')
 }
@@ -1424,17 +1486,17 @@ const loadDocumentStats = async () => {
       documentStats.value = {
         total_documents: data.total_documents || 0,
         categories_count: data.categories?.length || 0,
-        ai_classified_count: data.categories?.reduce((count: number, category: unknown) => {
-          return count + category.documents.filter((doc: unknown) => doc.ai_classified).length
+        ai_classified_count: data.categories?.reduce((count: number, category: any) => {
+          return count + category.documents.filter((doc: any) => doc.ai_classified).length
         }, 0) || 0
       }
 
       // 构建文档列表用于增强分类组件
-      const documents: unknown[] = []
+      const documents: LegacyDocumentLike[] = []
       if (data.categories && Array.isArray(data.categories)) {
-        data.categories.forEach((category: unknown) => {
+        data.categories.forEach((category: any) => {
           if (category.documents && Array.isArray(category.documents)) {
-            category.documents.forEach((doc: unknown) => {
+            category.documents.forEach((doc: any) => {
               documents.push({
                 ...doc,
                 type: doc.type_info?.type_name || doc.category_code || '未分类',
@@ -1597,7 +1659,7 @@ const performDelete = async () => {
       router.back()
     }, 1500)
 
-  } catch (err: unknown) {
+  } catch (err: any) {
     console.error('删除医疗记录失败:', err)
     message.error(err.message || '删除医疗记录失败')
   } finally {
@@ -1707,7 +1769,7 @@ const loadRulesMapping = async (docTypes: string[]) => {
         documentTypeRuleMapping[dt].rules = ruleIds
       } else if (Array.isArray(rulesByType[dt]) && rulesByType[dt].length > 0) {
         documentTypeRuleMapping[dt].rules = rulesByType[dt]
-          .map((r: unknown) => r.rule_id || r.rule_code)
+          .map((r: any) => r.rule_id || r.rule_code)
           .filter(Boolean)
           .slice(0, 200)
       }
@@ -1820,7 +1882,7 @@ const startSichuanQC = async () => {
     qcStatus.value = 'evaluating'
     await performQCEvaluation(types, rules)
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('❌ 四川省质控评估失败:', error)
     message.error('质控评估失败: ' + (error.message || '未知错误'))
     qcStatus.value = 'error'
@@ -1903,7 +1965,7 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
     qcStatus.value = 'completed'
     message.success(`质控评估完成！共评估 ${rules.length} 条规则`)
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('❌ 质控评估执行失败:', error)
     qcStatus.value = 'error'
     throw error
@@ -1911,7 +1973,7 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
 }
 
 // 处理质控结果
-const processQCResults = (apiResponse: unknown, documentTypes: string[]) => {
+const processQCResults = (apiResponse: any, documentTypes: string[]) => {
   console.log('📊 开始处理质控结果...')
   console.log('📋 API响应结构:', apiResponse)
 
@@ -1926,7 +1988,7 @@ const processQCResults = (apiResponse: unknown, documentTypes: string[]) => {
 }
 
 // 处理多文书模式结果
-const processMultiDocumentResults = (apiResponse: unknown, documentTypes: string[]) => {
+const processMultiDocumentResults = (apiResponse: any, documentTypes: string[]) => {
   const documentResults = apiResponse.document_results || {}
 
   documentTypes.forEach(docType => {
@@ -1947,7 +2009,7 @@ const processMultiDocumentResults = (apiResponse: unknown, documentTypes: string
 
         // 更新每个规则的状态
         if (docResult.evaluation_results) {
-          docResult.evaluation_results.forEach((result: unknown) => {
+          docResult.evaluation_results.forEach((result: any) => {
             const isCompliant = result.is_compliant
             progress.rules[result.rule_id] = {
               status: isCompliant ? 'passed' : 'failed',
@@ -1971,13 +2033,13 @@ const processMultiDocumentResults = (apiResponse: unknown, documentTypes: string
 }
 
 // 处理单一prompt模式结果（保持向后兼容）
-const processSinglePromptResults = (apiResponse: unknown, documentTypes: string[]) => {
+const processSinglePromptResults = (apiResponse: any, documentTypes: string[]) => {
   // 兼容不同的API响应结构
   const evaluationResults = apiResponse.evaluation_results || apiResponse.results || []
   console.log('📊 评估结果数组:', evaluationResults)
 
   documentTypes.forEach(docType => {
-    const docTypeResults = evaluationResults.filter((result: unknown) => {
+    const docTypeResults = evaluationResults.filter((result: any) => {
       const ruleMapping = documentTypeRuleMapping[docType]
       return ruleMapping && ruleMapping.rules.includes(result.rule_id)
     }) || []
@@ -1989,13 +2051,13 @@ const processSinglePromptResults = (apiResponse: unknown, documentTypes: string[
     const progress = qcProgress.value[docType]
     progress.completed = docTypeResults.length
     // 兼容 compliant 和 is_compliant 字段
-    progress.passed = docTypeResults.filter((r: unknown) => r.compliant || r.is_compliant).length
-    progress.failed = docTypeResults.filter((r: unknown) => !(r.compliant || r.is_compliant)).length
+    progress.passed = docTypeResults.filter((r: any) => r.compliant || r.is_compliant).length
+    progress.failed = docTypeResults.filter((r: any) => !(r.compliant || r.is_compliant)).length
 
     console.log(`📊 ${docType} 进度统计:`, progress)
 
     // 更新每个规则的状态
-    docTypeResults.forEach((result: unknown) => {
+    docTypeResults.forEach((result: any) => {
       const isCompliant = result.compliant || result.is_compliant
       progress.rules[result.rule_id] = {
         status: isCompliant ? 'passed' : 'failed',
@@ -2219,9 +2281,9 @@ const exportQCReport = async () => {
       qc_progress: qcProgress.value,
       summary: {
         total_rules: applicableRules.value.length,
-        total_passed: Object.values(qcProgress.value).reduce((sum: number, progress: unknown) => sum + (progress.passed || 0), 0),
-        total_failed: Object.values(qcProgress.value).reduce((sum: number, progress: unknown) => sum + (progress.failed || 0), 0),
-        total_score_deduction: Object.values(qcResults.value).flat().reduce((sum: number, result: unknown) => sum + (result.compliant ? 0 : result.score_deduction || 0), 0)
+        total_passed: Object.values(qcProgress.value).reduce((sum: number, progress: QCEvaluationProgressLike) => sum + (progress.passed || 0), 0),
+        total_failed: Object.values(qcProgress.value).reduce((sum: number, progress: QCEvaluationProgressLike) => sum + (progress.failed || 0), 0),
+        total_score_deduction: Object.values(qcResults.value).flat().reduce((sum: number, result: QCEvaluationResultLike) => sum + (result.compliant ? 0 : result.score_deduction || 0), 0)
       }
     }
 
@@ -2245,7 +2307,7 @@ const exportQCReport = async () => {
 }
 
 // 生成质控报告内容
-const generateQCReportContent = (data: unknown): string => {
+const generateQCReportContent = (data: any): string => {
   let content = `四川省住院病历语义质控评估报告\n`
   content += `${'='.repeat(50)}\n\n`
 
@@ -2268,7 +2330,7 @@ const generateQCReportContent = (data: unknown): string => {
     content += `${'-'.repeat(30)}\n`
 
     const results = data.qc_results[docType] || []
-    results.forEach((result: unknown) => {
+    results.forEach((result: any) => {
       content += `  规则: ${result.rule_id} - ${result.rule_name}\n`
       content += `  结果: ${result.compliant ? '✓ 通过' : '✗ 不通过'}\n`
       content += `  置信度: ${Math.round(result.confidence * 100)}%\n`

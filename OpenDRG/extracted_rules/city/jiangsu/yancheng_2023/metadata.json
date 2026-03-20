@@ -1,0 +1,16 @@
+{
+  "scheme_name": "yancheng_2023",
+  "label": "盐城 2023",
+  "category": "city",
+  "province": "江苏",
+  "source_file": "2665.js",
+  "extracted_at": "2026-03-15T18:28:58.461087",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10253,
+    "adrg": 250,
+    "drg": 628
+  }
+}

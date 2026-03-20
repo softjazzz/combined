@@ -313,6 +313,35 @@ import type { FormInstance } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordService'
 
+interface EditableDocument {
+  id?: string
+  type?: string
+  title?: string
+  name?: string
+  content?: string
+}
+
+interface RecordPayload {
+  id?: string
+  record_number?: string
+  patient_name?: string
+  patient_age?: number | null
+  patient_gender?: string
+  department?: string
+  diagnosis_primary?: string
+  primary_diagnosis?: string
+  diagnosis_secondary?: string[]
+  secondary_diagnosis?: string[]
+  major_surgery?: string
+  status?: 'draft' | 'active' | 'archived' | string
+  content?: string
+  documents?: EditableDocument[]
+  content_sections?: {
+    documents?: EditableDocument[]
+  }
+  updated_at?: string
+}
+
 // 添加API配置 - 支持外部IP访问
 const getApiBaseUrl = () => {
   // 检测是否从外部IP访问，如果是则使用服务器IP
@@ -329,7 +358,7 @@ const route = useRoute()
 const formRef = ref<FormInstance>()
 const loading = ref(true)
 const submitting = ref(false)
-const originalData = ref<unknown>(null) // 用于并发编辑检测
+const originalData = ref<RecordPayload | null>(null) // 用于并发编辑检测
 
 // 表单数据
 const formData = reactive({ recordNumber: '',
@@ -435,7 +464,7 @@ const loadRecordData = async () => { try {
       throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`)
     }
 
-    const record = await response.json()
+    const record = await response.json() as RecordPayload
     console.log('加载的病历数据:', record)
 
     // 转换数据格式以适配表单 - 适配medical_records表结构
@@ -455,14 +484,14 @@ const loadRecordData = async () => { try {
 
     // 处理文档数据 - 从content_sections或documents字段中提取
     if (record.content_sections?.documents && Array.isArray(record.content_sections.documents)) {
-      formattedData.documents = record.content_sections.documents.map((doc: unknown, index: number) => ({
+      formattedData.documents = record.content_sections.documents.map((doc: EditableDocument, index: number) => ({
         id: doc.id || `doc_${index}`,
         type: doc.type || '病程记录',
         title: doc.title || doc.name || `文档${index + 1}`,
         content: doc.content || ''
       }))
     } else if (record.documents && Array.isArray(record.documents)) {
-      formattedData.documents = record.documents.map((doc: unknown, index: number) => ({
+      formattedData.documents = record.documents.map((doc: EditableDocument, index: number) => ({
         id: doc.id || `doc_${index}`,
         type: doc.type || '病程记录',
         title: doc.title || doc.name || `文档${index + 1}`,
@@ -546,7 +575,7 @@ const handleSubmit = async () => {
           })
 
           if (checkResponse.ok) {
-            const currentRecord = await checkResponse.json()
+            const currentRecord = await checkResponse.json() as RecordPayload
             if (currentRecord.updated_at !== originalData.value.updated_at) {
               const confirmed = window.confirm(
                 '检测到此病历已被其他用户修改。\n\n' +
@@ -628,16 +657,17 @@ const handleSubmit = async () => {
     }, 1500)
   } catch (error: unknown) {
     console.error('保存失败:', error)
+    const errorMessage = error instanceof Error ? error.message : ''
 
     // 根据错误类型显示不同的错误消息
-    if (error.message?.includes('validation')) {
+    if (errorMessage.includes('validation')) {
       message.error('数据验证失败，请检查输入内容')
-    } else if (error.message?.includes('network')) {
+    } else if (errorMessage.includes('network')) {
       message.error('网络连接失败，请检查网络后重试')
-    } else if (error.message?.includes('permission')) {
+    } else if (errorMessage.includes('permission')) {
       message.error('权限不足，无法保存病历')
     } else {
-      message.error(error.message || '保存失败，请重试')
+      message.error(errorMessage || '保存失败，请重试')
     }
   } finally {
     submitting.value = false

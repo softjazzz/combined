@@ -1,0 +1,16 @@
+{
+  "scheme_name": "yantai_2024",
+  "label": "烟台 2024",
+  "category": "city",
+  "province": "山东",
+  "source_file": "4949.js",
+  "extracted_at": "2026-03-15T18:28:58.833173",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9314,
+    "adrg": 252,
+    "drg": 634
+  }
+}

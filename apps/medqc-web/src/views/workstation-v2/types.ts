@@ -12,6 +12,7 @@ export interface PatientRecord {
   admissionDate: string
   dischargeDate: string
   days: number
+  cdmFrontpageEmpty?: boolean
   diagnosis: string
   diagnosisCode: string
   doctor: string

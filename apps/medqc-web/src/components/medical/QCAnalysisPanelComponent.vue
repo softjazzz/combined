@@ -167,6 +167,34 @@ import {
 import type { TableColumnsType } from 'ant-design-vue'
 // import { qcAnalysisService } from '@/lib/qc-analysis'
 
+interface QCScoreItem {
+  item_name: string
+  total_score: number
+  actual_score: number
+  deduction: number
+  assessment: string
+}
+
+interface QCIssueItem {
+  code: string
+  severity: string
+  description: string
+  suggestion: string
+}
+
+interface QCAnalysisResultViewModel {
+  summary: {
+    total_score: number
+    grade: string
+    overall_assessment: string
+  }
+  item_scores: QCScoreItem[]
+  issues: QCIssueItem[]
+  strengths: string[]
+  recommendations: string[]
+  analysis_time: string
+}
+
 // Props
 interface Props {
   recordId?: string
@@ -182,7 +210,7 @@ const props = withDefaults(defineProps<Props>(), {
 const analyzing = ref(false)
 const progressPercent = ref(0)
 const analysisMode = ref<'comprehensive' | 'focused' | 'quick'>('comprehensive')
-const analysisResult = ref<unknown>(null)
+const analysisResult = ref<QCAnalysisResultViewModel | null>(null)
 
 // 表格列定义
 const scoreColumns: TableColumnsType = [
@@ -384,12 +412,12 @@ ${content}
         grade: parsed.summary?.grade || '丙级',
         overall_assessment: parsed.summary?.overallAssessment || 'AI分析完成'
       },
-      item_scores: (parsed.itemScores || []).map((item: unknown) => ({
-        item_name: item.itemName,
-        total_score: item.totalScore,
-        actual_score: item.actualScore,
-        deduction: item.deduction,
-        assessment: item.assessment
+      item_scores: (parsed.itemScores || []).map((item: Record<string, unknown>) => ({
+        item_name: String(item.itemName || ''),
+        total_score: Number(item.totalScore || 0),
+        actual_score: Number(item.actualScore || 0),
+        deduction: Number(item.deduction || 0),
+        assessment: String(item.assessment || '')
       })),
       issues: parsed.issues || [],
       strengths: parsed.strengths || [],

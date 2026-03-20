@@ -32,10 +32,11 @@ interface TaskStatistics {
 
 export function useBatchMonitor() {
   // 响应式数据
-  const allTasks = ref<BatchTask[]>([])
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
-  const subscription = ref<unknown>(null)
+const allTasks = ref<BatchTask[]>([])
+const isLoading = ref(false)
+const error = ref<string | null>(null)
+const subscription = ref<unknown>(null)
+type RealtimeSubscription = { unsubscribe: () => void }
 
   // 计算属性
   const activeTasks = computed(() => 
@@ -119,7 +120,7 @@ export function useBatchMonitor() {
    */
   const subscribeToTasks = () => {
     if (subscription.value) {
-      subscription.value.unsubscribe()
+      ;(subscription.value as RealtimeSubscription).unsubscribe()
     }
 
     subscription.value = supabase
@@ -328,7 +329,7 @@ export function useBatchMonitor() {
    */
   const unsubscribe = () => {
     if (subscription.value) {
-      subscription.value.unsubscribe()
+      ;(subscription.value as RealtimeSubscription).unsubscribe()
       subscription.value = null
     }
   }

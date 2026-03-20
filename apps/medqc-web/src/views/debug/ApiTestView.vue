@@ -245,6 +245,14 @@ import {
 import ApiConnectionTest from '@/components/debug/ApiConnectionTest.vue'
 import { ApiService } from '@/services/apiService'
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 // 测试状态
 const authTesting = reactive({
   login: false,
@@ -323,7 +331,7 @@ const testLogin = async () => {
     addLog({
       title: '登录测试',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
     message.error('登录测试异常')
@@ -358,7 +366,7 @@ const testGetUser = async () => {
     addLog({
       title: '获取用户信息',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -394,7 +402,7 @@ const testUpdateProfile = async () => {
     addLog({
       title: '更新用户资料',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -427,7 +435,7 @@ const testLogout = async () => {
     addLog({
       title: '用户登出',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -464,7 +472,7 @@ const testGetRecords = async () => {
     addLog({
       title: '获取医疗记录',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -506,7 +514,7 @@ const testCreateRecord = async () => {
     addLog({
       title: '创建医疗记录',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -545,7 +553,7 @@ const testUploadFile = async () => {
     addLog({
       title: '文件上传',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -579,7 +587,7 @@ const testGetStatistics = async () => {
     addLog({
       title: '获取统计信息',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -614,7 +622,7 @@ const testGetQCRules = async () => {
     addLog({
       title: '获取质控规则',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -648,7 +656,7 @@ const testStartAnalysis = async () => {
     addLog({
       title: '开始质控分析',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -665,7 +673,7 @@ const testGetQCResult = async () => {
       addLog({
         title: '获取质控结果',
         message: '获取成功',
-        details: `GET /api/qc/result - 评分: ${response.data?.overall_score}`,
+        details: `GET /api/qc/result - 评分: ${response.data?.score}`,
         type: 'success'
       })
       message.success('获取结果成功')
@@ -682,7 +690,7 @@ const testGetQCResult = async () => {
     addLog({
       title: '获取质控结果',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {
@@ -716,7 +724,7 @@ const testGetQCHistory = async () => {
     addLog({
       title: '获取质控历史',
       message: '测试异常',
-      details: error.message,
+      details: getErrorMessage(error),
       type: 'error'
     })
   } finally {

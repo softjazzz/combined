@@ -206,8 +206,8 @@
               <a-descriptions-item label="入院日期">
                 {{ formatDate(demoStore.testRecord.admission_date) }}
               </a-descriptions-item>
-              <a-descriptions-item label="主要诊断" v-if="demoStore.testRecord.primary_diagnosis">
-                {{ demoStore.testRecord.primary_diagnosis }}
+              <a-descriptions-item label="主要诊断" v-if="testRecordPrimaryDiagnosis">
+                {{ testRecordPrimaryDiagnosis }}
               </a-descriptions-item>
             </a-descriptions>
 
@@ -434,6 +434,12 @@ const filteredRecords = computed(() => {
   return records
 })
 
+const testRecordPrimaryDiagnosis = computed(() => {
+  if (!demoStore.testRecord) return ''
+  const legacy = (demoStore.testRecord as unknown as { primary_diagnosis?: string }).primary_diagnosis
+  return legacy || demoStore.testRecord.primaryDiagnosis || ''
+})
+
 const paginatedRecords = computed(() => {
   const { current, pageSize } = recordsPagination
   const start = (current - 1) * pageSize
@@ -457,7 +463,7 @@ watch(
 const availableDocuments = computed(() => {
   if (!demoStore.testRecord) return []
 
-  const documents = demoStore.testRecord.documents || []
+  const documents = (demoStore.testRecord as unknown as { documents?: unknown[] }).documents || []
   if (documents.length > 0) {
     return documents
   }

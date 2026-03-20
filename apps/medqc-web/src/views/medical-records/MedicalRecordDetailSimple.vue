@@ -47,11 +47,36 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
+interface PatientLite {
+  patient_name?: string
+  patient_age?: number
+  patient_gender?: string
+  department?: string
+}
+
+interface DocumentCategoryLite {
+  category_code: string
+  category_name: string
+  document_count: number
+  documents: Array<{
+    id: string
+    title?: string
+    type_info?: {
+      type_name?: string
+    }
+  }>
+}
+
+interface DocumentsResponseLite {
+  total_documents?: number
+  categories?: DocumentCategoryLite[]
+}
+
 // 响应式状态
 const loading = ref(false)
 const error = ref('')
-const patient = ref<unknown>(null)
-const documentsResponse = ref<unknown>(null)
+const patient = ref<PatientLite | null>(null)
+const documentsResponse = ref<DocumentsResponseLite | null>(null)
 
 // 计算属性
 const recordId = computed(() => route.params.id as string)

@@ -7,7 +7,6 @@
           质控规则管理
           <span class="px-2 py-1 rounded text-xs font-normal bg-blue-50 text-blue-600 border border-blue-100">v2.4</span>
         </h2>
-        <p class="text-slate-500 text-sm mt-1 font-medium">{{ activeTabDescription }}</p>
       </div>
       <div class="flex items-center gap-3 mt-4 sm:mt-0">
         <button
@@ -706,7 +705,7 @@ interface QCRule {
   max_score: number
   weight: number
   is_active: boolean
-  check_logic: Record<string, unknown>
+  check_logic: Record<string, any>
   prompt_template?: string
   version: string
   created_at: string
@@ -760,20 +759,20 @@ const loadDocumentCategoryOptions = async () => {
     const canonical = new Set([
       'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
     ])
-    const nonCanonical = categories.filter((c: unknown) => !canonical.has(c.category_code))
+    const nonCanonical = categories.filter((c: any) => !canonical.has(c.category_code))
     if (nonCanonical.length > 0) {
-      console.warn('⚠️ 发现非标准文书类别，将被过滤:', nonCanonical.map((c: unknown) => c.category_code))
+      console.warn('⚠️ 发现非标准文书类别，将被过滤:', nonCanonical.map((c: any) => c.category_code))
     }
 
     // 只使用6个标准类别
-    const validCategories = categories.filter((c: unknown) => canonical.has(c.category_code))
+    const validCategories = categories.filter((c: any) => canonical.has(c.category_code))
     if (validCategories.length === 0) {
       throw new Error('未找到有效的标准文书类别配置')
     }
 
     documentCategoryOptions.value = validCategories
-      .sort((a: unknown, b: unknown) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((cfg: unknown) => {
+      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((cfg: any) => {
         const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(cfg.category_code as DocumentCategory)
         return {
           value: cfg.category_code as DocumentCategory,
@@ -1340,7 +1339,7 @@ const fallbackRulesService = {
     await new Promise(resolve => setTimeout(resolve, 500)) // 模拟网络延迟
     return mockRules
   },
-  createRule: async (ruleData: unknown) => {
+  createRule: async (ruleData: any) => {
     await new Promise(resolve => setTimeout(resolve, 300))
     const newRule = {
       ...ruleData,
@@ -1351,7 +1350,7 @@ const fallbackRulesService = {
     mockRules.push(newRule)
     return newRule
   },
-  updateRule: async (id: string, ruleData: unknown) => {
+  updateRule: async (id: string, ruleData: any) => {
     await new Promise(resolve => setTimeout(resolve, 300))
     const index = mockRules.findIndex(r => r.id === id)
     if (index !== -1) {
@@ -1400,8 +1399,8 @@ const fallbackRulesService = {
 }
 
 // 模拟验证器
-const buildSupabaseRulePayload = (ruleData: unknown) => {
-  const payload: unknown = {
+const buildSupabaseRulePayload = (ruleData: any) => {
+  const payload: any = {
     ...ruleData,
     check_logic: ruleData.check_logic || {},
     prompt_template: ruleData.prompt_template || null
@@ -1424,7 +1423,7 @@ const buildSupabaseRulePayload = (ruleData: unknown) => {
 }
 
 const rulesRepository = {
-  async createRule(ruleData: unknown) {
+  async createRule(ruleData: any) {
     const payload = buildSupabaseRulePayload(ruleData)
     try {
       return await RulesService.createRule(payload)
@@ -1434,7 +1433,7 @@ const rulesRepository = {
       return fallbackRulesService.createRule(ruleData)
     }
   },
-  async updateRule(id: string, ruleData: unknown) {
+  async updateRule(id: string, ruleData: any) {
     const payload = buildSupabaseRulePayload(ruleData)
     try {
       return await RulesService.updateRule(id, payload)
@@ -1493,7 +1492,7 @@ const rulesRepository = {
 }
 
 const mockRulesValidator = {
-  validateRule: (ruleData: unknown) => {
+  validateRule: (ruleData: any) => {
     const errors: string[] = []
     const warnings: string[] = []
 
@@ -1717,8 +1716,8 @@ const editRule = (rule: ResolvedRule) => {
     category: rule.category,
     rule_type: rule.rule_type,
     severity: rule.severity,
-    max_score: rule.max_score,
-    weight: rule.weight,
+    max_score: (rule as any).max_score ?? (rule as any).maxScore ?? 0,
+    weight: (rule as any).weight ?? 1,
     is_active: rule.is_active,
     check_logic: rule.check_logic,
     prompt_template: rule.prompt_template || '',

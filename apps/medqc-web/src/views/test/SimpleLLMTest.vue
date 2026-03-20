@@ -194,7 +194,7 @@ const loadDefaultConfig = async () => {
   try {
     const { llmService } = await import('@/services/llmServiceNew')
 
-    const success = await llmService.initialize('default')
+    const success = await llmService.loadConfigFromDatabase('default')
     if (success) {
       currentConfig.value = llmService.getCurrentConfig()
       testResult.value = '✅ 默认配置加载成功！'
@@ -270,7 +270,7 @@ const handleConfigUpdated = async (config: UserLLMConfig) => {
   try {
     const { llmService } = await import('@/services/llmServiceNew')
 
-    const success = await llmService.initialize(config.config_name)
+    const success = await llmService.loadConfigFromDatabase(config.config_name)
     if (success) {
       currentConfig.value = llmService.getCurrentConfig()
       testResult.value = `✅ 配置已更新: ${config.config_name}`

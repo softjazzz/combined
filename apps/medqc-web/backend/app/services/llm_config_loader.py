@@ -1,6 +1,6 @@
 ﻿"""
-LLM 閰嶇疆鍔犺浇鏈嶅姟
-浠?Supabase 鏁版嵁搴撳姞杞?LLM 閰嶇疆锛屾敮鎸佸洖閫€鍒?.env 鏂囦欢
+LLM 配置加载服务
+从 Supabase 数据库加载 LLM 配置，支持回退到 .env 文件
 """
 from typing import Dict, Any, Optional
 import logging
@@ -13,49 +13,49 @@ logger = logging.getLogger(__name__)
 
 
 class LLMConfigLoader:
-    """LLM 閰嶇疆鍔犺浇鍣紝鏀寔浠庢暟鎹簱鎴?.env 鏂囦欢鍔犺浇閰嶇疆"""
+    """LLM 配置加载器，支持从数据库或 .env 文件加载配置"""
     
     @staticmethod
     async def load_config(config_name: str = "default", user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        鍔犺浇 LLM 閰嶇疆
+        加载 LLM 配置
         
-        浼樺厛绾э細
-        1. 鏁版嵁搴撲腑鐨勭敤鎴烽厤缃紙濡傛灉鎸囧畾浜?user_id锛?
-        2. 鏁版嵁搴撲腑鐨勫叏灞€閰嶇疆锛坲ser_id = NULL锛?
-        3. .env 鏂囦欢閰嶇疆锛堝洖閫€鏂规锛?
+        优先级：
+        1. 数据库中的用户配置（如果指定了 user_id）
+        2. 数据库中的全局配置（user_id = NULL）
+        3. .env 文件配置（回退方案）
         
         Args:
-            config_name: 閰嶇疆鍚嶇О锛岄粯璁や负 "default"
-            user_id: 鐢ㄦ埛 ID锛屽鏋滀负 None 鍒欏姞杞藉叏灞€閰嶇疆
+            config_name: 配置名称，默认为 "default"
+            user_id: 用户 ID，如果为 None 则加载全局配置
             
         Returns:
-            閰嶇疆瀛楀吀锛屽寘鍚互涓嬪瓧娈碉細
-            - api_endpoint: API 绔偣
-            - api_key: API 瀵嗛挜锛堝凡瑙ｅ瘑锛?
-            - model: 妯″瀷浠ｇ爜
-            - provider_code: 鎻愪緵鍟嗕唬鐮?
-            - model_code: 妯″瀷浠ｇ爜
-            - timeout_seconds: 瓒呮椂鏃堕棿
-            濡傛灉鍔犺浇澶辫触鍒欒繑鍥?None
+            配置字典，包含以下字段：
+            - api_endpoint: API 端点
+            - api_key: API 密钥（已解密）
+            - model: 模型代码
+            - provider_code: 提供商代码
+            - model_code: 模型代码
+            - timeout_seconds: 超时时间
+            如果加载失败则返回 None
         """
         supabase = get_supabase()
         
-        # 灏濊瘯浠庢暟鎹簱鍔犺浇
+        # 尝试从数据库加载
         if supabase is not None:
             try:
                 config = await LLMConfigLoader._load_from_database(
                     supabase, config_name, user_id
                 )
                 if config:
-                    logger.info(f"鉁?浠庢暟鎹簱鍔犺浇 LLM 閰嶇疆鎴愬姛: config_name={config_name}, user_id={user_id}, model={config.get('model')}")
+                    logger.info(f"✅ 从数据库加载 LLM 配置成功: config_name={config_name}, user_id={user_id}, model={config.get('model')}")
                     return config
             except Exception as exc:
-                logger.warning(f"浠庢暟鎹簱鍔犺浇 LLM 閰嶇疆澶辫触: {exc}锛屽皢鍥為€€鍒?.env 閰嶇疆")
+                logger.warning(f"从数据库加载 LLM 配置失败: {exc}，将回退到 .env 配置")
         
-        # 鍥為€€鍒?.env 鏂囦欢
+        # 回退到 .env 文件
         config = LLMConfigLoader._load_from_env()
-        logger.info(f"鉁?浠?.env 鏂囦欢鍔犺浇 LLM 閰嶇疆: model={config.get('model')}")
+        logger.info(f"✅ 从 .env 文件加载 LLM 配置: model={config.get('model')}")
         return config
     
     @staticmethod
@@ -64,9 +64,9 @@ class LLMConfigLoader:
         config_name: str,
         user_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """浠庢暟鎹簱鍔犺浇閰嶇疆"""
+        """从数据库加载配置"""
         try:
-            # 鏋勫缓鏌ヨ锛堜笉浣跨敤鍏宠仈鏌ヨ锛屽垎姝ユ煡璇級
+            # 构建查询（不使用关联查询，分步查询）
             q = supabase.table("user_llm_configs").select("*").eq("config_name", config_name).eq("is_active", True)
 
             if user_id:
@@ -74,16 +74,16 @@ class LLMConfigLoader:
             else:
                 q = q.is_("user_id", None)  # type: ignore[attr-defined]
 
-            # 鎵ц鏌ヨ
+            # 执行查询
             resp = q.order("updated_at", desc=True).limit(1).execute()
 
             if not resp.data:
-                logger.debug(f"鏁版嵁搴撲腑鏈壘鍒伴厤缃? config_name={config_name}, user_id={user_id}")
+                logger.debug(f"数据库中未找到配置: config_name={config_name}, user_id={user_id}")
                 return None
 
             db_config = resp.data[0]
 
-            # 鍒嗗埆鏌ヨ provider 鍜?model
+            # 分别查询 provider 和 model
             provider = {}
             model = {}
 
@@ -93,7 +93,7 @@ class LLMConfigLoader:
                     if provider_resp.data:
                         provider = provider_resp.data[0]
                 except Exception as e:
-                    logger.warning(f"鏌ヨ provider 澶辫触: {e}")
+                    logger.warning(f"查询 provider 失败: {e}")
 
             if db_config.get("model_id"):
                 try:
@@ -101,47 +101,47 @@ class LLMConfigLoader:
                     if model_resp.data:
                         model = model_resp.data[0]
                 except Exception as e:
-                    logger.warning(f"鏌ヨ model 澶辫触: {e}")
+                    logger.warning(f"查询 model 失败: {e}")
 
-            # 瑙ｅ瘑 API 瀵嗛挜
+            # 解密 API 密钥
             api_key = None
             if db_config.get("api_key_encrypted"):
                 try:
                     api_key = base64.b64decode(db_config["api_key_encrypted"]).decode("utf-8")
                 except Exception as e:
-                    logger.warning(f"瑙ｅ瘑 API 瀵嗛挜澶辫触: {e}")
+                    logger.warning(f"解密 API 密钥失败: {e}")
                     api_key = None
 
-            # 鏋勫缓閰嶇疆瀛楀吀
+            # 构建配置字典
             config = {
                 "api_endpoint": db_config.get("custom_endpoint") or provider.get("base_endpoint"),
                 "api_key": api_key,
                 "model": model.get("model_code"),
                 "provider_code": provider.get("provider_code"),
                 "model_code": model.get("model_code"),
-                "timeout_seconds": 120,  # 榛樿瓒呮椂鏃堕棿
+                "timeout_seconds": 120,  # 默认超时时间
                 "source": "database",
                 "config_id": db_config.get("id"),
                 "config_name": config_name,
-                "custom_parameters": db_config.get("custom_parameters", {}),  # 鍖呭惈楂樼骇鍙傛暟
+                "custom_parameters": db_config.get("custom_parameters", {}),  # 包含高级参数
             }
 
             return config
 
         except Exception as exc:
-            logger.error(f"浠庢暟鎹簱鍔犺浇閰嶇疆鏃跺嚭閿? {exc}")
+            logger.error(f"从数据库加载配置时出错: {exc}")
             raise
     
     @staticmethod
     def _load_from_env() -> Dict[str, Any]:
-        """浠?.env 鏂囦欢鍔犺浇閰嶇疆"""
+        """从 .env 文件加载配置"""
         settings = get_settings()
         
         config = {
             "api_endpoint": str(settings.LLM_API_ENDPOINT) if settings.LLM_API_ENDPOINT else None,
             "api_key": settings.LLM_API_KEY,
             "model": settings.LLM_MODEL,
-            "provider_code": "alibaba",  # 榛樿鎻愪緵鍟?
+            "provider_code": "alibaba",  # 默认提供商
             "model_code": settings.LLM_MODEL,
             "timeout_seconds": settings.LLM_TIMEOUT_SECONDS,
             "source": "env",
@@ -153,23 +153,23 @@ class LLMConfigLoader:
     @staticmethod
     async def reload_config_for_service(service, config_name: str = "default", user_id: Optional[str] = None) -> bool:
         """
-        涓烘湇鍔￠噸鏂板姞杞介厤缃?
+        为服务重新加载配置
         
         Args:
-            service: SichuanQCService 瀹炰緥
-            config_name: 閰嶇疆鍚嶇О
-            user_id: 鐢ㄦ埛 ID
+            service: SichuanQCService 实例
+            config_name: 配置名称
+            user_id: 用户 ID
             
         Returns:
-            鏄惁鎴愬姛閲嶆柊鍔犺浇閰嶇疆
+            是否成功重新加载配置
         """
         try:
             config = await LLMConfigLoader.load_config(config_name, user_id)
             if not config:
-                logger.warning(f"鏃犳硶鍔犺浇閰嶇疆: config_name={config_name}, user_id={user_id}")
+                logger.warning(f"无法加载配置: config_name={config_name}, user_id={user_id}")
                 return False
             
-            # 鏇存柊鏈嶅姟鐨?LLM 瀹㈡埛绔厤缃?
+            # 更新服务的 LLM 客户端配置
             if hasattr(service, 'client'):
                 client = service.client
                 if config.get("api_endpoint"):
@@ -181,7 +181,7 @@ class LLMConfigLoader:
                 if config.get("timeout_seconds"):
                     client.timeout_seconds = config["timeout_seconds"]
 
-                # 鏇存柊楂樼骇鍙傛暟
+                # 更新高级参数
                 custom_params = config.get("custom_parameters", {})
                 if hasattr(client, 'temperature'):
                     client.temperature = custom_params.get("temperature", 0.2)
@@ -190,13 +190,13 @@ class LLMConfigLoader:
                 if hasattr(client, 'max_tokens'):
                     client.max_tokens = custom_params.get("max_tokens", 16384)
 
-                logger.info(f"鉁?鎴愬姛涓烘湇鍔￠噸鏂板姞杞介厤缃? model={client.model}, source={config.get('source')}, temperature={getattr(client, 'temperature', 'N/A')}, top_p={getattr(client, 'top_p', 'N/A')}")
+                logger.info(f"✅ 成功为服务重新加载配置: model={client.model}, source={config.get('source')}, temperature={getattr(client, 'temperature', 'N/A')}, top_p={getattr(client, 'top_p', 'N/A')}")
                 return True
             
             return False
             
         except Exception as exc:
-            logger.error(f"閲嶆柊鍔犺浇閰嶇疆澶辫触: {exc}")
+            logger.error(f"重新加载配置失败: {exc}")
             return False
 
 

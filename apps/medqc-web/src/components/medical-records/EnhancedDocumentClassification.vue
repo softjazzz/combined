@@ -318,7 +318,7 @@ import {
 
 // Props
 interface Props {
-  documents: unknown[]
+  documents: any[]
   classificationResult?: Record<string, unknown>
 }
 
@@ -329,8 +329,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'document-select': [document: unknown]
-  'classification-filter': [filter: unknown]
+  'document-select': [document: any]
+  'classification-filter': [filter: any]
   'refresh': []
   'reclassify': []
   'export': []
@@ -393,7 +393,7 @@ const filteredDocuments = computed(() => {
 })
 
 // 内容状态：正文/预览/无内容 + 长度
-const getContentState = (doc: unknown): { label: string; color: string; length: number } => {
+const getContentState = (doc: any): { label: string; color: string; length: number } => {
   const content = (doc && typeof doc.content === 'string') ? doc.content.trim() : ''
   const preview = (doc && typeof doc.content_preview === 'string') ? doc.content_preview.trim() : ''
   if (content) return { label: '正文', color: 'blue', length: content.length }
@@ -443,7 +443,7 @@ const handleSearch = (value: string) => {
   searchKeyword.value = value
 }
 
-const selectDocument = (document: unknown) => {
+const selectDocument = (document: any) => {
   console.log('=== EnhancedDocumentClassification selectDocument ===')
   console.log('选中的文档:', document)
   console.log('文档ID:', document?.id)
@@ -455,12 +455,12 @@ const selectDocument = (document: unknown) => {
   console.log('已发送 document-select 事件')
 }
 
-const viewDocument = (document: unknown) => {
+const viewDocument = (document: any) => {
   // 查看文档详情
   console.log('View document:', document)
 }
 
-const editDocument = (document: unknown) => {
+const editDocument = (document: any) => {
   // 编辑文档
   console.log('Edit document:', document)
 }
@@ -469,7 +469,7 @@ const onExpand = (keys: string[]) => {
   expandedKeys.value = keys
 }
 
-const onSelect = (keys: string[], { node }: unknown) => {
+const onSelect = (keys: string[], { node }: any) => {
   console.log('=== Tree onSelect 调试 ===')
   console.log('选中的keys:', keys)
   console.log('节点信息:', node)

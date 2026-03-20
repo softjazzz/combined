@@ -1,0 +1,16 @@
+{
+  "scheme_name": "dingzhou_2023",
+  "label": "定州 2023",
+  "category": "city",
+  "province": "河北",
+  "source_file": "420.js",
+  "extracted_at": "2026-03-15T18:28:50.820749",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 9609,
+    "adrg": 250,
+    "drg": 617
+  }
+}

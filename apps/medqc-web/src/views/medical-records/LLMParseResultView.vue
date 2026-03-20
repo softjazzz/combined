@@ -43,6 +43,13 @@ import { llmService } from '@/services/llmService'
 const router = useRouter()
 const store = useLLMParseStore()
 
+interface ParseResultLike {
+  success?: boolean
+  data?: Record<string, any>
+  tokensUsed?: number
+  processingTime?: number
+}
+
 // 响应式变量
 const saving = ref(false)
 
@@ -61,8 +68,8 @@ onMounted(async () => {
   }
 })
 
-const result = computed(() => store.lastResult)
-const data = computed<unknown>(() => result.value?.data)
+const result = computed<ParseResultLike | null>(() => store.lastResult as ParseResultLike | null)
+const data = computed<any>(() => result.value?.data)
 
 // 计算属性用于获取解析元数据
 const tokensUsed = computed(() => result.value?.tokensUsed || 0)
@@ -76,7 +83,7 @@ const providerName = computed(() => {
 
 const modelCode = computed(() => {
   const config = llmService.getCurrentConfig()
-  return config?.model?.model_code || llmService.model || 'unknown-model'
+  return config?.model?.model_code || 'unknown-model'
 })
 
 // Modal关闭处理：优先返回来源页面
@@ -147,7 +154,7 @@ const saveToDatabase = async (): Promise<string | null> => {
     saving.value = true
 
     // 构建保存数据 - 优化文档数据以减少请求体大小
-    const optimizedDocuments = (data.value.documents || []).map((doc: unknown) => ({
+    const optimizedDocuments = (data.value.documents || []).map((doc: any) => ({
       title: doc.title || '',
       summary: doc.summary || '',
       category: doc.category || '',
@@ -218,7 +225,7 @@ const saveToDatabase = async (): Promise<string | null> => {
     console.log('✅ 保存成功:', savedRecord)
     return savedRecord.id
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('❌ 保存失败:', error)
 
     // 提供更详细的错误信息

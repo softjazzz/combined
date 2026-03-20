@@ -46,21 +46,21 @@
     <!-- 缺陷列表面板（悬浮） -->
     <div
       v-if="showAnnotationPanel && annotations.length > 0"
-      class="annotation-panel fixed right-4 bottom-4 w-80 max-h-96 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-50"
+      class="annotation-panel fixed bottom-4 right-4 z-50 max-h-[26rem] w-72 overflow-hidden rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] shadow-[0_16px_34px_rgba(15,23,42,0.14)] backdrop-blur-xl"
     >
-      <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b">
-        <span class="text-sm font-bold text-gray-700">缺陷标注 ({{ annotations.length }})</span>
-        <button @click="showAnnotationPanel = false" class="text-gray-400 hover:text-gray-600">
+      <div class="flex items-center justify-between border-b border-slate-200/80 bg-white/72 px-4 py-3">
+        <span class="text-sm font-bold text-slate-700">缺陷标注 ({{ annotations.length }})</span>
+        <button @click="showAnnotationPanel = false" class="text-slate-400 transition-colors hover:text-slate-600">
           ✕
         </button>
       </div>
-      <div class="overflow-y-auto max-h-80 divide-y divide-gray-100">
+      <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
         <div
           v-for="ann in annotations"
           :key="ann.defect_id"
           :class="[
             'px-4 py-3 cursor-pointer transition-colors text-sm',
-            activeDefectId === ann.defect_id ? 'bg-blue-50' : 'hover:bg-gray-50'
+            activeDefectId === ann.defect_id ? 'bg-blue-50/80' : 'hover:bg-slate-50/80'
           ]"
           @click="handleAnnotationClick(ann)"
         >
@@ -68,14 +68,14 @@
             <span
               :class="[
                 'w-2 h-2 rounded-full',
-                ann.severity === 'critical' ? 'bg-red-500' :
-                ann.severity === 'error' ? 'bg-orange-500' :
-                ann.severity === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                ann.severity === 'critical' ? 'bg-blue-700' :
+                ann.severity === 'error' ? 'bg-blue-600' :
+                ann.severity === 'warning' ? 'bg-blue-500' : 'bg-blue-400'
               ]"
             />
-            <span class="font-medium text-gray-700 truncate">{{ ann.rule_name || ann.category }}</span>
+            <span class="font-medium text-slate-700 truncate">{{ ann.rule_name || ann.category }}</span>
           </div>
-          <p class="text-gray-500 text-xs line-clamp-2">{{ ann.description }}</p>
+          <p class="text-slate-500 text-xs line-clamp-2">{{ ann.description }}</p>
         </div>
       </div>
     </div>
@@ -84,7 +84,7 @@
     <button
       v-if="annotations.length > 0 && !showAnnotationPanel"
       @click="showAnnotationPanel = true"
-      class="fixed right-4 bottom-4 w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center z-50 transition-transform hover:scale-110"
+      class="fixed right-4 bottom-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_12px_24px_rgba(37,99,235,0.22)] transition-all hover:scale-105 hover:bg-blue-700"
     >
       <span class="text-sm font-bold">{{ annotations.length }}</span>
     </button>
@@ -309,20 +309,20 @@ watch(
 <style scoped>
 /* ============ 阅读区外壳 ============ */
 .emr-content {
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  padding: 14px 18px 24px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(252,253,255,0.98));
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.56);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.025);
+  padding: 12px 14px 22px;
   /* 文字排版黄金参数 */
   font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
   font-size: 14px;
-  line-height: 1.72;
+  line-height: 1.9;
   color: #475569; /* slate-600：不用纯黑，减少长时间阅读视网膜疲劳 */
   white-space: pre-wrap;
   word-break: break-all;
   /* 人体工学最大宽度，自动居中 */
-  max-width: 108ch;
+  max-width: 104ch;
   margin: 0 auto;
 }
 
@@ -331,9 +331,9 @@ watch(
   display: block;
   font-weight: 700;
   color: #1e293b;     /* slate-900：比正文深，立刻抓住视线 */
-  font-size: 13.5px;
-  margin-top: 1.25em;
-  margin-bottom: 0.16em;
+  font-size: 14px;
+  margin-top: 1.15em;
+  margin-bottom: 0.1em;
   letter-spacing: 0.01em;
 }
 
@@ -347,22 +347,22 @@ watch(
   cursor: help;
   border-bottom: 1.5px dashed;
   padding-bottom: 1px;
-  transition: background-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 .emr-content :deep(.emr-defect--critical) {
-  background-color: #fef2f2;
-  border-color: #ef4444;
+  background-color: rgba(219, 234, 254, 0.82);
+  border-color: #2563eb;
 }
 .emr-content :deep(.emr-defect--error) {
-  background-color: #fff7ed;
-  border-color: #f97316;
+  background-color: rgba(239, 246, 255, 0.82);
+  border-color: #3b82f6;
 }
 .emr-content :deep(.emr-defect--warning) {
-  background-color: #fffbeb;
-  border-color: #d97706;
+  background-color: rgba(239, 246, 255, 0.62);
+  border-color: #60a5fa;
 }
 .emr-content :deep(.emr-defect--info) {
-  background-color: #eff6ff;
+  background-color: rgba(239, 246, 255, 0.52);
   border-color: #3b82f6;
 }
 .emr-content :deep(.emr-defect:hover) {
@@ -378,10 +378,10 @@ watch(
   z-index: 200;
   width: 260px;
   background: #fff;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.12);
-  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  padding: 11px 13px;
   pointer-events: none;
   white-space: normal;
   word-break: break-all;
@@ -398,9 +398,9 @@ watch(
   padding-bottom: 7px;
   border-bottom: 1px solid #f1f5f9;
 }
-.emr-content :deep(.emr-defect-tip__header--critical) { color: #dc2626; }
-.emr-content :deep(.emr-defect-tip__header--error)    { color: #ea580c; }
-.emr-content :deep(.emr-defect-tip__header--warning)  { color: #d97706; }
+.emr-content :deep(.emr-defect-tip__header--critical) { color: #1d4ed8; }
+.emr-content :deep(.emr-defect-tip__header--error)    { color: #2563eb; }
+.emr-content :deep(.emr-defect-tip__header--warning)  { color: #3b82f6; }
 .emr-content :deep(.emr-defect-tip__header--info)     { color: #2563eb; }
 .emr-content :deep(.emr-defect-tip__body) {
   font-size: 12.5px;
@@ -418,7 +418,7 @@ watch(
 
 @media (max-width: 960px) {
   .emr-content {
-    padding: 14px 16px 20px;
+    padding: 12px 14px 18px;
     max-width: none;
   }
 }

@@ -1,0 +1,16 @@
+{
+  "scheme_name": "chenzhou_2025",
+  "label": "郴州 2025",
+  "category": "city",
+  "province": "湖南",
+  "source_file": "7058.js",
+  "extracted_at": "2026-03-15T18:28:48.584113",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9388,
+    "adrg": 249,
+    "drg": 713
+  }
+}

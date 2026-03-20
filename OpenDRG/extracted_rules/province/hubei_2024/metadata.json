@@ -1,0 +1,16 @@
+{
+  "scheme_name": "hubei_2024",
+  "label": "湖北 2024",
+  "category": "province",
+  "province": "",
+  "source_file": "3650.js",
+  "extracted_at": "2026-03-15T18:28:52.290666",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 9388,
+    "adrg": 252,
+    "drg": 547
+  }
+}

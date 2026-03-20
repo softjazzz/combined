@@ -278,6 +278,9 @@ export interface QCResult {
   overallScore: number
   overallGrade: string
   analysisDate: string
+  analysisStartTime?: Date | string
+  analysisEndTime?: Date | string
+  appliedRules?: string[]
   issues: QCIssue[]
   suggestions: QCSuggestion[]
   ruleResults: QCRuleResult[]

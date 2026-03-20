@@ -1,0 +1,16 @@
+{
+  "scheme_name": "luohe_2023",
+  "label": "漯河 2023",
+  "category": "city",
+  "province": "河南",
+  "source_file": "693.js",
+  "extracted_at": "2026-03-15T18:28:53.834709",
+  "stats": {
+    "cce": 28302,
+    "mcc": 4678,
+    "cc": 16568,
+    "ss_valid": 10251,
+    "adrg": 241,
+    "drg": 723
+  }
+}

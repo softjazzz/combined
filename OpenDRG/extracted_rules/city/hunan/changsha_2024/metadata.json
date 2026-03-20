@@ -1,0 +1,16 @@
+{
+  "scheme_name": "changsha_2024",
+  "label": "长沙 2024",
+  "category": "city",
+  "province": "湖南",
+  "source_file": "5592.js",
+  "extracted_at": "2026-03-15T18:28:48.294730",
+  "stats": {
+    "cce": 27143,
+    "mcc": 4477,
+    "cc": 8009,
+    "ss_valid": 10251,
+    "adrg": 249,
+    "drg": 713
+  }
+}

@@ -195,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import {
   ReloadOutlined,
   CheckCircleOutlined,
@@ -209,6 +209,33 @@ import { globalErrorHandler } from '@/lib/error-handler'
 import { apiFallbackManager } from '@/lib/api-fallback'
 import { optimizedQCAnalysisService } from '@/lib/qc-analysis-optimized'
 import { formatDateTime } from '@/utils/date'
+
+interface MonitorError {
+  key?: number
+  type?: string
+  severity?: string
+  message?: string
+  userMessage?: string
+  timestamp?: string | number
+  url?: string
+  stack?: string
+}
+
+interface ServiceHealthItem {
+  name: string
+  status: string
+  responseTime?: number
+  lastCheck?: number
+  error?: string
+}
+
+interface RawServiceHealth {
+  service?: string
+  status?: string
+  responseTime?: number
+  lastCheck?: number
+  error?: string
+}
 
 // 响应式数据
 const loading = ref(false)
@@ -228,8 +255,8 @@ const errorStats = ref({
   errorsByType: {} as Record<string, number>,
   errorsBySeverity: {} as Record<string, number>
 })
-const serviceHealth = ref<any[]>([])
-const recentErrors = ref<any[]>([])
+const serviceHealth = ref<ServiceHealthItem[]>([])
+const recentErrors = ref<MonitorError[]>([])
 
 // 图表相关
 const responseTimeChart = ref<HTMLElement>()
@@ -237,7 +264,7 @@ const errorChart = ref<HTMLElement>()
 
 // 错误详情
 const showErrorModal = ref(false)
-const selectedError = ref<unknown>(null)
+const selectedError = ref<MonitorError | null>(null)
 
 // 表格列定义
 const errorColumns = [
@@ -272,13 +299,16 @@ const refreshData = async () => {
 
     // 获取服务健康状态
     const healthMap = apiFallbackManager.getServiceHealth()
-    serviceHealth.value = Array.from(healthMap.values()).map(health => ({
-      name: getServiceDisplayName(health.service),
-      status: health.status,
-      responseTime: health.responseTime,
-      lastCheck: health.lastCheck,
-      error: health.error
-    }))
+    serviceHealth.value = Array.from(healthMap.values()).map(rawHealth => {
+      const health = rawHealth as RawServiceHealth
+      return {
+        name: getServiceDisplayName(health.service || 'unknown'),
+        status: health.status || 'unknown',
+        responseTime: health.responseTime,
+        lastCheck: health.lastCheck,
+        error: health.error
+      }
+    })
 
     // 获取最近错误
     recentErrors.value = errStats.recentErrors.slice(0, 20).map((error, index) => ({
@@ -358,7 +388,7 @@ const formatTime = (timestamp: number): string => {
   return `${Math.floor(diff / 86400000)}天前`
 }
 
-const viewErrorDetails = (error) => {
+const viewErrorDetails = (error: MonitorError) => {
   selectedError.value = error
   showErrorModal.value = true
 }

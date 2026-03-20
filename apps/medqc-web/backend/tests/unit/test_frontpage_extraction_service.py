@@ -419,3 +419,30 @@ class TestPromptTemplates:
         assert "测试病历" in formatted
         assert "测试诊断" in formatted
         assert "入院病情分类标准" in formatted
+
+def test_normalize_diagnoses_structure_supplements_llm_others_from_parsed_text():
+    service = FrontPageExtractionService()
+    medical_text = (
+        "\u51fa\u9662\u8bca\u65ad\uff1a\n"
+        "1. \u51a0\u72b6\u52a8\u8109\u7ca5\u6837\u786c\u5316\u6027\u5fc3\u810f\u75c5 "
+        "\u4e0d\u7a33\u5b9a\u578b\u5fc3\u7ede\u75db \u51a0\u8109\u652f\u67b6\u690d\u5165\u540e\u72b6\u6001\n"
+        "2. \u9ad8\u8840\u538b\u75c53\u7ea7\uff08\u6781\u9ad8\u5371\u7ec4\uff09\n"
+        "3. 2\u578b\u7cd6\u5c3f\u75c5\n"
+        "4. \u6df7\u5408\u578b\u9ad8\u8102\u8840\u75c7\n"
+        "5. \u51a0\u72b6\u52a8\u8109\u652f\u67b6\u690d\u5165\u540e\u72b6\u6001\n"
+    )
+    diagnoses = {
+        "discharge_main_diagnosis_text": "\u51a0\u72b6\u52a8\u8109\u7ca5\u6837\u786c\u5316\u6027\u5fc3\u810f\u75c5",
+        "discharge_other_diagnoses_texts": [
+            "\u4e0d\u7a33\u5b9a\u578b\u5fc3\u7ede\u75db",
+            "\u9ad8\u8840\u538b\u75c53\u7ea7\uff08\u6781\u9ad8\u5371\u7ec4\uff09",
+            "2\u578b\u7cd6\u5c3f\u75c5",
+            "\u6df7\u5408\u578b\u9ad8\u8102\u8840\u75c7",
+        ],
+    }
+
+    normalized = service._normalize_diagnoses_structure(medical_text, diagnoses)
+    others = normalized["discharge_other_diagnoses_texts"]
+
+    assert "\u51a0\u8109\u652f\u67b6\u690d\u5165\u540e\u72b6\u6001" in others
+    assert len(others) == 5

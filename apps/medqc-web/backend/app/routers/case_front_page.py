@@ -70,10 +70,10 @@ class ExtractRequest(BaseModel):
 @router.post("/extract")
 async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
     """
-    浠庣梾鍘嗘枃鏈腑鎻愬彇棣栭〉淇℃伅 (璇婃柇銆佹墜鏈瓑)
-    鐢ㄤ簬浜嬪墠鍒嗘瀽鐨?AI 鏅鸿兘鎶藉彇鍔熻兘
+    从病历文本中提取首页信息 (诊断、手术等)
+    用于事前分析的 AI 智能抽取功能
 
-    娴佺▼锛歀LM 鎶藉彇璇婃柇/鎵嬫湳鏂囨湰 鈫?LLM 寤鸿 ICD 缂栫爜 鈫?鏈湴 ICD 缂栫爜搴撶簿纭尮閰?
+    流程：LLM 抽取诊断/手术文本 → LLM 建议 ICD 编码 → 本地 ICD 编码库精确匹配
     """
     from ..services.frontpage_extraction_service import default_frontpage_service
     import uuid
@@ -122,6 +122,46 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
             out.append(text)
         return out
 
+    def _split_compound_diag_line(text: str) -> List[str]:
+        value = str(text or "").strip()
+        if not value:
+            return []
+        # Strong delimiters first.
+        parts = [p.strip() for p in re.split(r"[；;、，,]+", value) if p and p.strip()]
+        if len(parts) == 1:
+            # Conservative whitespace split fallback for compound lines like:
+            # "冠状动脉粥样硬化性心脏病 不稳定型心绞痛 冠脉支架植入后状态"
+            tokens = [t.strip() for t in re.split(r"\s+", value) if t and t.strip()]
+            if len(tokens) >= 2 and all(len(t) >= 4 for t in tokens):
+                parts = tokens
+        return parts
+
+    def _is_placeholder_text(value: Any) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return True
+        lowered = text.lower()
+        placeholder_tokens = (
+            "待编码",
+            "待补充",
+            "未知",
+            "n/a",
+            "na",
+            "none",
+            "null",
+            "未提供",
+            "请补充",
+            "出院主要诊断",
+            "主诊断选择依据",
+            "主要手术名称",
+        )
+        if any(token in lowered for token in placeholder_tokens):
+            return True
+        # 模板回显常见占位词
+        if re.fullmatch(r"(其他诊断\d*|门/急诊诊断\d*|其他手术\d*)", text):
+            return True
+        return False
+
     def _extract_diagnoses_from_text(medical_text: str) -> List[str]:
         if not medical_text:
             return []
@@ -151,14 +191,25 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
 
         numbered_items = re.findall(r"(?:^|\n)\s*\d{1,2}[\.\u3001\)]\s*([^\n]+)", block)
         if numbered_items:
-            return _dedupe_non_empty(numbered_items)
+            expanded: List[str] = []
+            for line in numbered_items:
+                split_items = _split_compound_diag_line(line)
+                if split_items:
+                    expanded.extend(split_items)
+                else:
+                    expanded.append(line)
+            return _dedupe_non_empty(expanded)
 
         raw_lines = re.split(r"[\n\uff1b;]", block)
         cleaned = []
         for line in raw_lines:
             text = re.sub(r"^\s*\d{1,2}[\.\u3001\)]\s*", "", line).strip()
             if text:
-                cleaned.append(text)
+                split_items = _split_compound_diag_line(text)
+                if split_items:
+                    cleaned.extend(split_items)
+                else:
+                    cleaned.append(text)
         return _dedupe_non_empty(cleaned)
 
     def _extract_main_procedure_from_text(medical_text: str) -> str | None:
@@ -166,25 +217,29 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
             return None
 
         planned = re.search(
-            r"(?:\u62df\u884c|\u8ba1\u5212\u884c|\u62df\u4e8e)\s*([^\n。\uff1b;]+)",
+            "(?:\u62df\u884c|\u8ba1\u5212\u884c|\u62df\u4e8e)\s*([^\n\uff1b;]+)",
             medical_text,
             re.IGNORECASE,
         )
-        if planned:
-            text = planned.group(1).strip()
+        if planned and planned.group(1).strip():
+            text = planned.group(1).strip(" ?:?,?.?;")
             if text:
                 return text
 
-        surgery_line = re.search(r"(?:\u624b\u672f|\u64cd\u4f5c)\s*[:\uff1a]\s*([^\n]+)", medical_text, re.IGNORECASE)
-        if surgery_line:
-            text = surgery_line.group(1).strip()
-            if text:
-                return text
+        surgery_line = re.search(
+            "(?:\u4e3b\u8981\u624b\u672f|\u624b\u672f|\u64cd\u4f5c)\s*[:\uff1a]\s*([^\n]+)",
+            medical_text,
+            re.IGNORECASE,
+        )
+        if surgery_line and surgery_line.group(1).strip():
+            candidate = surgery_line.group(1).strip(" ?:?,?.?;")
+            if candidate:
+                return candidate
 
         return None
 
     try:
-        # 1) LLM 鎶藉彇璇婃柇/鎵嬫湳鏂囨湰
+        # 1) LLM 抽取诊断/手术文本
         draft = await service.extract_from_text(payload.medical_text)
         result = _to_plain_dict(draft)
 
@@ -200,12 +255,18 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
 
         if isinstance(diagnoses, dict):
             ed_texts = diagnoses.get("ed_diagnosis_texts") or []
-            if not diagnoses.get("discharge_main_diagnosis_text") and ed_texts:
-                diagnoses["discharge_main_diagnosis_text"] = ed_texts[0]
+            if _is_placeholder_text(diagnoses.get("discharge_main_diagnosis_text")) and ed_texts:
+                promoted_parts = _split_compound_diag_line(ed_texts[0]) or [ed_texts[0]]
+                diagnoses["discharge_main_diagnosis_text"] = promoted_parts[0]
+
+                promoted_others = promoted_parts[1:]
                 if len(ed_texts) > 1:
-                    existing_others = diagnoses.get("discharge_other_diagnoses_texts") or []
-                    diagnoses["discharge_other_diagnoses_texts"] = ed_texts[1:] + existing_others
-                logger.info(f"extract: 浜嬪墠鍒嗘瀽鍏煎 - 灏嗛棬鎬ヨ瘖璇婃柇鎻愬崌涓轰富璇婃柇: {ed_texts[0]}")
+                    promoted_others.extend(ed_texts[1:])
+                existing_others = diagnoses.get("discharge_other_diagnoses_texts") or []
+                diagnoses["discharge_other_diagnoses_texts"] = _dedupe_non_empty(
+                    [*promoted_others, *existing_others]
+                )
+                logger.info(f"extract: 事前分析兼容 - 将门急诊诊断提升为主诊断: {ed_texts[0]}")
             else:
                 logger.info(
                     "extract: no promotion needed, main=%s, ed_count=%d",
@@ -214,7 +275,7 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
                 )
 
             # Fallback: if LLM gives no discharge main diagnosis, parse from medical_text.
-            if not diagnoses.get("discharge_main_diagnosis_text"):
+            if _is_placeholder_text(diagnoses.get("discharge_main_diagnosis_text")):
                 parsed_diags = _extract_diagnoses_from_text(payload.medical_text)
                 if parsed_diags:
                     diagnoses["discharge_main_diagnosis_text"] = parsed_diags[0]
@@ -229,7 +290,7 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
                 else:
                     logger.warning("extract: fallback text parse found no diagnosis candidates")
 
-        if isinstance(procedures, dict) and not procedures.get("main_procedure_text"):
+        if isinstance(procedures, dict) and _is_placeholder_text(procedures.get("main_procedure_text")):
             parsed_proc = _extract_main_procedure_from_text(payload.medical_text)
             if parsed_proc:
                 procedures["main_procedure_text"] = parsed_proc
@@ -238,36 +299,47 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
         if isinstance(diagnoses, dict) and diagnoses and not diagnoses.get("discharge_main_icd"):
             try:
                 diagnoses = await service._suggest_diagnosis_codes(diagnoses)
-                logger.info("extract: LLM 璇婃柇缂栫爜寤鸿瀹屾垚")
+                logger.info("extract: LLM 诊断编码建议完成")
             except Exception:
-                logger.exception("extract: LLM 璇婃柇缂栫爜寤鸿澶辫触")
+                logger.exception("extract: LLM 诊断编码建议失败")
 
         if isinstance(procedures, dict) and procedures and not procedures.get("main_procedure_code"):
             try:
                 procedures = await service._suggest_procedure_codes(procedures)
-                logger.info("extract: LLM 鎵嬫湳缂栫爜寤鸿瀹屾垚")
+                logger.info("extract: LLM 手术编码建议完成")
             except Exception:
-                logger.exception("extract: LLM 鎵嬫湳缂栫爜寤鸿澶辫触")
+                logger.exception("extract: LLM 手术编码建议失败")
 
-        # 3) 鏈湴 ICD 缂栫爜搴撶簿纭尮閰嶏紙鏇挎崲/鏍℃ LLM 杈撳嚭鐨勭紪鐮侊級
+        # 3) 本地 ICD 编码库精确匹配（替换/校正 LLM 输出的编码）
         try:
             from ..services.local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
             if isinstance(diagnoses, dict) and diagnoses:
                 diagnoses = resolve_diagnosis_codes(diagnoses)
-                logger.info("extract: 鏈湴 ICD 璇婃柇缂栫爜鍖归厤瀹屾垚")
+                logger.info("extract: 本地 ICD 诊断编码匹配完成")
             if isinstance(procedures, dict) and procedures:
                 procedures = resolve_procedure_codes(procedures)
-                logger.info("extract: 鏈湴 ICD 鎵嬫湳缂栫爜鍖归厤瀹屾垚")
+                logger.info("extract: 本地 ICD 手术编码匹配完成")
         except Exception:
-            logger.exception("extract: 鏈湴 ICD 缂栫爜鍖归厤澶辫触")
+            logger.exception("extract: 本地 ICD 编码匹配失败")
+
+        evidence = _to_plain_dict(result.get("evidence"))
+        if not isinstance(evidence, dict):
+            evidence = {}
+        try:
+            evidence["diagnoses"] = service._build_diagnosis_evidence(
+                payload.medical_text, diagnoses, procedures
+            )
+        except Exception:
+            logger.exception("extract: build diagnosis evidence failed")
 
         result["diagnoses"] = diagnoses
         result["procedures"] = procedures
+        result["evidence"] = evidence
 
-        # 鐢熸垚 admission_id 鐢ㄤ簬鍚庣画 DRG 鍒嗙粍
+        # 生成 admission_id 用于后续 DRG 分组
         admission_id = f"PRE_{uuid.uuid4().hex[:8]}"
 
-        # 淇濆瓨鍒?demo store 浠ヤ究鎸?admission_id 鏌ヨ
+        # 保存到 demo store 以便按 admission_id 查询
         store = get_demo_drg_store()
         store.upsert_case(admission_id=admission_id, patch={
             "admission_id": admission_id,

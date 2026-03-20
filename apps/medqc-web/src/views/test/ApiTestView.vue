@@ -209,10 +209,31 @@ import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { medicalQcApi, type QCAnalysisRequest, type QCAnalysisResponse, type SystemStatus } from '@/services/medicalQcApi'
 
+interface HealthStatusLite {
+  status?: string
+}
+
+interface OptimizationBenefits {
+  average_compression_ratio?: string
+  token_savings_rate?: string
+  cost_reduction?: string
+  processing_time_reduction?: string
+}
+
+interface DemoDataLite {
+  benefits?: OptimizationBenefits
+  workflow?: string[]
+  real_world_impact?: {
+    annual_cost_savings?: string
+    token_usage_reduction?: string
+    accuracy_maintained?: string
+  }
+}
+
 // 响应式数据
 const systemStatus = ref<SystemStatus | null>(null)
-const healthStatus = ref<unknown>(null)
-const demoData = ref<unknown>(null)
+const healthStatus = ref<HealthStatusLite | null>(null)
+const demoData = ref<DemoDataLite | null>(null)
 const analysisResult = ref<QCAnalysisResponse | null>(null)
 
 // 加载状态
