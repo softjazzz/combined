@@ -26,6 +26,23 @@ import { llmIntegratedRulesService } from './llm-integrated-rules-service'
 import { dynamicPromptGenerator } from './dynamic-prompt-generator'
 import { qcExecutionOrchestrator } from './qc-execution-orchestrator'
 
+interface ExecutionBatch {
+  id: string
+  type: 'batch' | 'single'
+  canBatchProcess: boolean
+  tasks: QCTask[]
+  estimatedTokens: number
+  priority: number
+}
+
+interface PatientDataInput {
+  patientId?: string
+  documents?: MedicalDocument[]
+  orders?: MedicalOrder[]
+  reports?: LabReport[]
+  timeline?: MedicalTimeline
+}
+
 // Performance Optimizer
 class QCPerformanceOptimizer { async createExecutionPlan(
     rules: EnhancedQCRule[],
@@ -106,8 +123,8 @@ class QCPerformanceOptimizer { async createExecutionPlan(
     return tasks
   }
 
-  private createOptimalBatches(tasks: QCTask[]): unknown[] {
-    const batches: unknown[] = []
+  private createOptimalBatches(tasks: QCTask[]): ExecutionBatch[] {
+    const batches: ExecutionBatch[] = []
     const batchableRules = ['completeness', 'duplication', 'writing_alerts']
     
     // Group batchable tasks
@@ -136,7 +153,7 @@ class QCPerformanceOptimizer { async createExecutionPlan(
     }
     
     // Create individual batches for complex tasks
-    individualTasks.forEach((task: unknown,  index: unknown) => {
+    individualTasks.forEach((task: QCTask) => {
       batches.push({
         id: `single_${task.id}`,
         type: 'single',
@@ -209,7 +226,7 @@ class QCPerformanceOptimizer { async createExecutionPlan(
   private estimateTaskTokens(task: QCTask): number {
     const baseTokens = 500 // Base prompt tokens
     const documentTokens = task.ruleContext.applicableDocuments.reduce(
-      (sum, doc) => sum + Math.min(doc.content.length / 4, 1000), // Rough token estimation
+      (sum, doc) => sum + Math.min((doc as { content: string }).content.length / 4, 1000), // Rough token estimation
       0
     )
     
@@ -229,17 +246,17 @@ class QCPerformanceOptimizer { async createExecutionPlan(
     return Math.floor((baseTokens + documentTokens) * multiplier)
   }
 
-  private estimateExecutionTime(batches: unknown[]): number {
-    return batches.reduce((total: unknown,  batch: unknown) => {
+  private estimateExecutionTime(batches: ExecutionBatch[]): number {
+    return batches.reduce((total: number, batch: ExecutionBatch) => {
       const baseTime = batch.type === 'batch' ? 3000 : 2000 // ms
       const tokenTime = batch.estimatedTokens * 0.1 // 0.1ms per token
       return total + baseTime + tokenTime
     }, 0)
   }
 
-  private estimateCost(batches: unknown[]): number {
+  private estimateCost(batches: ExecutionBatch[]): number {
     const costPerToken = 0.00002 // $0.00002 per token
-    const totalTokens = batches.reduce((sum, batch) => sum + batch.estimatedTokens, 0)
+    const totalTokens = batches.reduce((sum: number, batch: ExecutionBatch) => sum + batch.estimatedTokens, 0)
     return totalTokens * costPerToken
   }
 }
@@ -299,7 +316,7 @@ export class IntegratedQCEngine implements IIntegratedQCEngine {
   }
 
   private async getApplicableRules(
-    patientData: unknown,
+    patientData: PatientDataInput,
     departmentId?: string,
     ruleFilter?: EnhancedRuleFilter
   ): Promise<EnhancedQCRule[]> {
@@ -330,7 +347,7 @@ export class IntegratedQCEngine implements IIntegratedQCEngine {
     })
   }
 
-  private buildExecutionContext(patientData: unknown, departmentId?: string): QCExecutionContext {
+  private buildExecutionContext(patientData: PatientDataInput, departmentId?: string): QCExecutionContext {
     return {
       patientId: patientData.patientId || 'unknown',
       executionId: `exec_${Date.now()}`,

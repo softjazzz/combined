@@ -302,7 +302,7 @@ const test = async (c: UserLLMConfig) => {
     })
     const r = await llmService.parseMedicalText('ping', { maxTokens: 5, temperature: 0 })
     if (r.success) { testStatus.status='success'; testStatus.text='连接正常' } else { testStatus.status='error'; testStatus.text=r.error || '失败' }
-  } catch (e: unknown) { testStatus.status='error'; testStatus.text=e?.message || '失败' } finally { testing.value=false }
+  } catch (e: unknown) { testStatus.status='error'; testStatus.text=e instanceof Error ? e.message : '失败' } finally { testing.value=false }
 }
 
 const testTemp = async () => {

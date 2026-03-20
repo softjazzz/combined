@@ -335,7 +335,7 @@ export function useBatchUpload() {
       .channel(`batch_task_${taskId}`)
       .on('postgres_changes',  {
           event: 'UPDATE', schema: 'public', table: TABLES.BATCH_PROCESSING_TASKS, filter: `id=eq.${taskId}`
-        }, (payload: unknown) => {
+        }, (payload: { new: BatchTask }) => {
           callback(payload.new as BatchTask)
         }
       )

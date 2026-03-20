@@ -139,7 +139,7 @@ const handleConfirm = async () => {
     
   } catch (error: unknown) {
     console.error('删除文档失败:', error)
-    message.error(error.message || '删除文档失败')
+    message.error(error instanceof Error ? error.message : '删除文档失败')
   } finally {
     loading.value = false
   }

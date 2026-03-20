@@ -139,7 +139,7 @@ const testDatabaseData = async () => {
       addResult('error', `加载失败: ${response.error || '未知错误'}`)
     }
   } catch (error: unknown) {
-    addResult('error', `异常: ${error.message}`)
+    addResult('error', `异常: ${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     loading.value = false
   }
@@ -166,7 +166,7 @@ const testDemoData = async () => {
     patients.value = allPatients
     addResult('success', `成功加载 ${allPatients.length} 个演示患者`)
   } catch (error) {
-    addResult('error', `异常: ${error.message}`)
+    addResult('error', `异常: ${error instanceof Error ? (error as Error).message : '未知错误'}`)
   } finally {
     loading.value = false
   }

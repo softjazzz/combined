@@ -260,10 +260,10 @@ const roleUsers = ref([
 // 监听角色变化
 watch(
   () => props.role,
-  (newRole: unknown) => {
+  (newRole) => {
     if (newRole) {
       // 根据角色类型设置权限
-      updatePermissionsByRole(newRole.key)
+      updatePermissionsByRole((newRole as Record<string, unknown>).key as string)
     }
   },
   { immediate: true }

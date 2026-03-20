@@ -336,15 +336,15 @@ const handleRegister = async () => {
     
     const { confirmPassword, agreeTerms, ...registerData } = registerForm
     emit('register', registerData as RegisterRequest)
-  } catch (error) {
-    if (error?.errorFields) {
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'errorFields' in error) {
       message.warning('请检查输入信息')
     }
   }
 }
 
 // Filter department options
-const filterDepartment = (input: string, option: unknown) => {
+const filterDepartment = (input: string, option: { children: string; value: string }) => {
   return option.children.toLowerCase().includes(input.toLowerCase())
 }
 

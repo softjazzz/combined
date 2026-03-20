@@ -226,7 +226,7 @@ export class LLMQCDemoService {
           const rule = await llmIntegratedRulesService.createEnhancedRule(ruleData)
           createdRules.push(rule)
           console.log(`✅ Created rule: ${rule.name}`)
-        } catch (error: unknown) {
+        } catch (error: any) {
           console.log(`⚠️ Rule ${ruleData.name} may already exist: ${error.message}`)
         }
       }
@@ -285,7 +285,7 @@ export class LLMQCDemoService {
 
       return qcResult
 
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error('❌ QC Demo failed:', error)
       throw error
     }
@@ -295,7 +295,7 @@ export class LLMQCDemoService {
     console.log('\n📋 Detailed QC Results:')
     console.log('=' .repeat(50))
 
-    result.ruleResults.forEach((ruleResult: unknown,  index: unknown) => {
+    result.ruleResults.forEach((ruleResult: any,  index: any) => {
       console.log(`\n${index + 1}. ${ruleResult.ruleName} (${ruleResult.ruleCode})`)
       console.log(`   Status: ${ruleResult.isCompliant ? '✅ COMPLIANT' : '❌ NON-COMPLIANT'}`)
       console.log(`   Score: ${ruleResult.score}/100`)
@@ -304,7 +304,7 @@ export class LLMQCDemoService {
 
       if (ruleResult.findings.length > 0) {
         console.log('   Findings:')
-        ruleResult.findings.forEach((finding: unknown,  fIndex: unknown) => {
+        ruleResult.findings.forEach((finding: any,  fIndex: any) => {
           const severityIcon = finding.severity === 'critical' ? '🔴' : 
                               finding.severity === 'major' ? '🟡' : '🟢'
           console.log(`     ${fIndex + 1}. ${severityIcon} ${finding.description}`)
@@ -330,11 +330,11 @@ export class LLMQCDemoService {
     }
   }
 
-  async getCacheStats(): Promise<unknown> {
+  async getCacheStats(): Promise<any> {
     return intelligentQCCache.getCacheStats()
   }
 
-  async getExecutionMetrics(): Promise<unknown> {
+  async getExecutionMetrics(): Promise<any> {
     return integratedQCEngine.getExecutionMetrics()
   }
 
@@ -379,7 +379,7 @@ export class LLMQCDemoService {
         const exportData = await llmIntegratedRulesService.exportRulesConfig(
           allRules.slice(0, 1).map(r => r.id)
         )
-        console.log(`✅ Exported ${exportData.rules.length} rule configurations`)
+        console.log(`✅ Exported ${(exportData as { rules: unknown[] }).rules.length} rule configurations`)
       }
 
     } catch (error) {
@@ -414,7 +414,7 @@ export class LLMQCDemoService {
       console.log('\n🎉 Full demo completed successfully!')
       return qcResult
 
-    } catch (error: unknown) {
+    } catch (error: any) {
       console.error('❌ Full demo failed:', error)
       throw error
     }

@@ -201,7 +201,7 @@ const doctorOptions = [
 ]
 
 // 搜索过滤
-const filterOption = (input: string, option: unknown) => {
+const filterOption = (input: string, option: { label: string }) => {
   return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
 }
 

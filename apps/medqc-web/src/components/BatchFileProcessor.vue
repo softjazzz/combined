@@ -569,7 +569,7 @@ const saveBatchToDatabase = async () => {
     await new Promise(resolve => setTimeout(resolve, 2000)) // 模拟保存
     message.success('批量保存成功!')
   } catch (error: unknown) {
-    message.error(`批量保存失败: ${error.message}`)
+    message.error(`批量保存失败: ${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     saving.value = false
   }
