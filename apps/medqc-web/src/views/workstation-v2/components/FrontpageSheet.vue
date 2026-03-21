@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="fp-sheet-wrap">
     <div v-if="diagnosisGenerationPending" class="fp-pending">
       正在生成诊断编码与证据，请稍候...
@@ -105,11 +105,31 @@
         </tr>
         <tr v-for="(row, i) in diagnosisPairedRows" :key="'d'+i" class="data-row">
           <!-- 左列 -->
-          <td>{{ row.left.label }}{{ row.left.name }}</td>
+          <td>
+            {{ row.left.label }}{{ row.left.name }}
+            <button
+              v-if="row.left.name && findDiagnosisEvidence(row.left.name)"
+              type="button"
+              class="fp-inline-evidence"
+              @click="openDiagnosisEvidence(row.left.name)"
+            >
+              证据
+            </button>
+          </td>
           <td class="center mono">{{ row.left.code }}</td>
           <td class="center">{{ row.left.condition }}</td>
           <!-- 右列 -->
-          <td>{{ row.right.label }}{{ row.right.name }}</td>
+          <td>
+            {{ row.right.label }}{{ row.right.name }}
+            <button
+              v-if="row.right.name && findDiagnosisEvidence(row.right.name)"
+              type="button"
+              class="fp-inline-evidence"
+              @click="openDiagnosisEvidence(row.right.name)"
+            >
+              证据
+            </button>
+          </td>
           <td class="center mono">{{ row.right.code }}</td>
           <td class="center">{{ row.right.condition }}</td>
         </tr>
@@ -237,6 +257,7 @@
         <div class="evidence-title">诊断原文证据</div>
         <div class="evidence-meta">诊断：{{ evidencePanel.item.diagnosis_text || '-' }}</div>
         <div class="evidence-meta">章节：{{ evidencePanel.item.section || '-' }}</div>
+        <div class="evidence-meta">定位：{{ evidencePanel.item.quote_location || '-' }}</div>
         <div class="evidence-meta">
           匹配：{{ evidencePanel.item.match_mode || '-' }}
           置信度：{{ evidencePanel.item.confidence ?? '-' }}
@@ -252,6 +273,46 @@
           <div class="evidence-logic">{{ evidencePanel.item.selection_logic || '暂无' }}</div>
         </div>
 
+        <div v-if="evidencePanel.item.coder_summary" class="evidence-block">
+          <div class="evidence-block-title">编码员裁决摘要</div>
+          <div class="evidence-logic">{{ evidencePanel.item.coder_summary }}</div>
+        </div>
+
+        <div
+          v-if="evidencePanel.item.candidate_analysis && Array.isArray(evidencePanel.item.candidate_analysis.candidates)"
+          class="evidence-block"
+        >
+          <div class="evidence-block-title">候选诊断对比（主诊断判定）</div>
+          <table class="evidence-candidate-table">
+            <thead>
+              <tr>
+                <th>候选诊断</th>
+                <th>评分</th>
+                <th>来源定位</th>
+                <th>入选/淘汰依据</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(cand, idx) in evidencePanel.item.candidate_analysis.candidates"
+                :key="`${cand.diagnosis_text || ''}-${idx}`"
+              >
+                <td>{{ cand.diagnosis_text || '-' }}</td>
+                <td>{{ cand.score ?? '-' }}</td>
+                <td>{{ cand.quote_location || cand.section || '-' }}</td>
+                <td>
+                  <div v-if="Array.isArray(cand.reasons) && cand.reasons.length">
+                    <div v-for="(r, i) in cand.reasons" :key="`r-${i}`">+ {{ r }}</div>
+                  </div>
+                  <div v-if="Array.isArray(cand.reject_reasons) && cand.reject_reasons.length" class="evidence-candidate-reject">
+                    <div v-for="(r, i) in cand.reject_reasons" :key="`x-${i}`">- {{ r }}</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <div
           v-if="Array.isArray(evidencePanel.item.reasoning_checks) && evidencePanel.item.reasoning_checks.length"
           class="evidence-block"
@@ -265,7 +326,18 @@
               </span>
             </div>
             <div class="evidence-check-exp">{{ ck.explain || '' }}</div>
+            <div v-if="ck.rule_ref" class="evidence-check-rule">{{ ck.rule_ref }}</div>
             <div v-if="ck.evidence_quote" class="evidence-check-quote">{{ ck.evidence_quote }}</div>
+          </div>
+        </div>
+
+        <div
+          v-if="Array.isArray(evidencePanel.item.manual_review_points) && evidencePanel.item.manual_review_points.length"
+          class="evidence-block"
+        >
+          <div class="evidence-block-title">人工复核要点</div>
+          <div v-for="(p, i) in evidencePanel.item.manual_review_points" :key="`manual-${i}`" class="evidence-raw-line">
+            {{ i + 1 }}. {{ p }}
           </div>
         </div>
 
@@ -274,13 +346,11 @@
           class="evidence-block"
         >
           <div class="evidence-block-title">已用病历原文</div>
-          <div v-for="(line, idx) in evidenceRawLinesToShow" :key="idx" class="evidence-raw-line">
+          <div v-for="(line, idx) in evidenceRawLines" :key="idx" class="evidence-raw-line">
             <span class="evidence-raw-tag">[{{ line.source || '病历原文' }} | {{ line.role || '证据' }}]</span>
             <span>{{ line.text }}</span>
           </div>
-          <button v-if="hasMoreRawEvidence" type="button" class="evidence-btn-inline" @click="toggleRawEvidenceExpand">
-            {{ showAllRawEvidence ? '收起' : '展开更多' }}
-          </button>
+
         </div>
 
         <div class="evidence-actions">
@@ -292,7 +362,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive } from 'vue'
 
 interface DiagnosisItem {
   diagnosis_type?: string
@@ -515,7 +585,6 @@ const evidencePanel = reactive<{ visible: boolean; item: any | null }>({
   item: null
 })
 
-const showAllRawEvidence = ref(false)
 
 const evidenceRawLines = computed(() => {
   const lines = evidencePanel.item?.raw_evidence_lines
@@ -524,7 +593,7 @@ const evidenceRawLines = computed(() => {
 
 const hasMoreRawEvidence = computed(() => evidenceRawLines.value.length > 3)
 
-const evidenceRawLinesToShow = computed(() => {
+const evidenceRawLines = computed(() => {
   if (showAllRawEvidence.value) return evidenceRawLines.value
   return evidenceRawLines.value.slice(0, 3)
 })
@@ -538,13 +607,11 @@ function openDiagnosisEvidence(name: string) {
   if (!item) return
   evidencePanel.item = item
   evidencePanel.visible = true
-  showAllRawEvidence.value = false
 }
 
 function closeDiagnosisEvidence() {
   evidencePanel.visible = false
   evidencePanel.item = null
-  showAllRawEvidence.value = false
 }
 </script>
 
@@ -641,6 +708,23 @@ u.fill {
 .center { text-align: center; }
 .num { text-align: right; font-family: "Courier New", monospace; font-size: 11.5px; }
 .mono { font-family: "Courier New", monospace; }
+.fp-inline-evidence {
+  margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #60a5fa;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.fp-inline-evidence:hover {
+  background: #dbeafe;
+}
 
 /* 数据行最小高度 */
 .data-row td { height: 26px; }
@@ -769,6 +853,34 @@ u.fill {
   line-height: 1.65;
 }
 
+.evidence-check-rule {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+.evidence-candidate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.evidence-candidate-table th,
+.evidence-candidate-table td {
+  border: 1px solid #dbeafe;
+  padding: 8px;
+  vertical-align: top;
+  line-height: 1.5;
+}
+.evidence-candidate-table th {
+  background: #eff6ff;
+  color: #1e3a8a;
+  text-align: left;
+  font-weight: 700;
+}
+.evidence-candidate-reject {
+  margin-top: 4px;
+  color: #9a3412;
+}
+
 .evidence-check + .evidence-check {
   margin-top: 10px;
 }
@@ -814,15 +926,6 @@ u.fill {
   font-weight: 600;
 }
 
-.evidence-btn-inline {
-  margin-top: 8px;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-  background: #fff;
-  border-radius: 999px;
-  padding: 2px 10px;
-  cursor: pointer;
-}
 
 .evidence-actions {
   display: flex;
