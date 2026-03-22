@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import Antd from 'ant-design-vue'
-import * as Icons from '@ant-design/icons-vue'
+// 图标由各组件按需 import，不再全量全局注册（原 793 个图标会导致请求风暴）
 
 import App from './App.vue'
 import router from './router'
@@ -9,6 +9,9 @@ import router from './router'
 // 导入样式 - 调整顺序以确保Tailwind样式优先级
 import './styles/index.css'
 import 'ant-design-vue/dist/reset.css'
+
+// 导入错误处理
+import errorHandler from './utils/error-handler'
 
 // 创建应用实例
 const app = createApp(App)
@@ -23,16 +26,8 @@ app.use(router)
 // 配置Ant Design Vue
 app.use(Antd)
 
-// 注册Ant Design图标
-Object.keys(Icons).forEach(key => {
-  app.component(key, Icons[key as keyof typeof Icons])
-})
-
-// 导入错误处理
-import errorHandler from './utils/error-handler'
-
 // 全局错误处理
-app.config.errorHandler = (err, vm: unknown,  info: unknown) => {
+app.config.errorHandler = (err, vm: unknown, info: unknown) => {
   console.error('Global error:', err, vm, info)
   errorHandler.handleError(err)
 }
@@ -43,8 +38,8 @@ app.config.globalProperties.$SITE_NAME = '病案质控系统'
 // 挂载应用
 app.mount('#app')
 
-// 开发环境下加载API测试工具
-if (process.env.NODE_ENV === 'development') {
+// 开发环境下加载API测试工具（设置 VITE_LOAD_TEST_UTILS=true 启用）
+if (import.meta.env.DEV && import.meta.env.VITE_LOAD_TEST_UTILS === 'true') {
   import('./utils/test-aliyun-api')
   import('./utils/test-qc-api')
-} 
+}
