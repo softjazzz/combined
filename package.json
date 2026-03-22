@@ -17,9 +17,22 @@
     "test": "pnpm -r test",
     "test:medqc": "pnpm --filter ./apps/medqc-web test",
     "test:yibao": "pnpm --filter ./apps/yibao-web test:all",
-    "gen:precise": "pnpm --filter ./apps/yibao-web exec tsc -p scripts/tsconfig.json && node scripts/dist/generate-precise-rule-pack.js"
+    "gen:precise": "pnpm --filter ./apps/yibao-web exec tsc -p scripts/tsconfig.json && node scripts/dist/generate-precise-rule-pack.js",
+    "prepare": "husky",
+    "precommit": "corepack pnpm lint-staged --config ./package.json && corepack pnpm --filter ./apps/medqc-web run check:encoding",
+    "quality:medqc": "corepack pnpm --filter ./apps/medqc-web run quality:ci"
   },
   "devDependencies": {
-    "concurrently": "8"
+    "concurrently": "8",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2"
+  },
+  "lint-staged": {
+    "apps/medqc-web/**/*.{js,jsx,ts,tsx,vue,cjs,mjs}": [
+      "corepack pnpm --filter ./apps/medqc-web exec eslint --fix"
+    ],
+    "apps/medqc-web/**/*.{js,jsx,ts,tsx,vue,json,md,yml,yaml,css,scss,less}": [
+      "corepack pnpm --filter ./apps/medqc-web exec prettier --write"
+    ]
   }
 }

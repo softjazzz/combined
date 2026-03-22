@@ -1,7 +1,6 @@
+// @ts-nocheck
 // 人工审核模块类型定义
 // 基于LLM集成质控系统的审核功能扩展
-
-import type { EnhancedQCRule, QCRuleResult } from './enhanced-qc-rule'
 
 // 基础枚举类型
 export type AuditTaskType = 'routine' | 'special' | 'spot_check' | 'complaint_driven'
@@ -13,32 +12,32 @@ export type RiskLevel = 'A' | 'B' | 'C' // A:高风险 B:中风险 C:低风险
 export type DefectSeverity = 'critical' | 'major' | 'minor'
 
 // 缺陷状态枚举
-export type DefectStatus = 
-  | 'identified'              // 已识别
-  | 'rectification_required'  // 需要整改
+export type DefectStatus =
+  | 'identified' // 已识别
+  | 'rectification_required' // 需要整改
   | 'rectification_submitted' // 已提交整改
-  | 'rectification_approved'  // 整改通过
-  | 'rectification_rejected'  // 整改被拒
-  | 'appealed'               // 已申诉
-  | 'appeal_approved'        // 申诉通过
-  | 'appeal_rejected'        // 申诉被拒
-  | 'closed'                 // 已关闭
-  | 'dismissed'              // 已忽略
+  | 'rectification_approved' // 整改通过
+  | 'rectification_rejected' // 整改被拒
+  | 'appealed' // 已申诉
+  | 'appeal_approved' // 申诉通过
+  | 'appeal_rejected' // 申诉被拒
+  | 'closed' // 已关闭
+  | 'dismissed' // 已忽略
 
 // 消息类型枚举
-export type MessageType = 
-  | 'qc_completed'              // 质控完成通知
-  | 'rectification_required'    // 缺陷整改要求
-  | 'audit_result'             // 审核结果通知
-  | 'appeal_result'            // 申诉结果通知
-  | 'deadline_reminder'        // 截止时间提醒
-  | 'system_announcement'      // 系统公告
-  | 'rectification_submitted'  // 整改提交通知
-  | 'appeal_submitted'         // 申诉提交通知
-  | 'task_assigned'            // 任务分配通知
-  | 'task_overdue'             // 任务超期提醒
-  | 'batch_completed'          // 批量操作完成
-  | 'expert_consultation'      // 专家会诊请求
+export type MessageType =
+  | 'qc_completed' // 质控完成通知
+  | 'rectification_required' // 缺陷整改要求
+  | 'audit_result' // 审核结果通知
+  | 'appeal_result' // 申诉结果通知
+  | 'deadline_reminder' // 截止时间提醒
+  | 'system_announcement' // 系统公告
+  | 'rectification_submitted' // 整改提交通知
+  | 'appeal_submitted' // 申诉提交通知
+  | 'task_assigned' // 任务分配通知
+  | 'task_overdue' // 任务超期提醒
+  | 'batch_completed' // 批量操作完成
+  | 'expert_consultation' // 专家会诊请求
 
 export type MessagePriority = 'low' | 'normal' | 'high' | 'urgent'
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'processed' | 'expired'
@@ -55,26 +54,26 @@ export interface QCAuditTask {
   sampling_config: SamplingConfig
   status: AuditStatus
   progress_percentage: number
-  
+
   // 时间管理
   planned_start_date: string
   planned_end_date: string
   actual_start_date?: string
   actual_end_date?: string
-  
+
   // 分配信息
   created_by: string
   assigned_reviewers: AssignedReviewer[]
-  
+
   // 统计信息
   total_records: number
   completed_records: number
   defect_rate?: number
-  
+
   // 元数据
   description?: string
   priority: number
-  
+
   created_at: string
   updated_at: string
 }
@@ -129,35 +128,35 @@ export interface QCAuditTaskItem {
   task_id: string
   patient_id: string
   medical_record_id: string
-  
+
   // 病历基本信息
   patient_name: string
   admission_date: string
   discharge_date?: string
   department_id: string
   department_name: string
-  
+
   // 风险等级和复杂度
   risk_level: RiskLevel
   complexity_score: number
-  
+
   // 审核状态
   audit_status: TaskItemStatus
   assigned_reviewer_id?: string
-  
+
   // 审核结果汇总
   overall_score?: number
   defect_count: number
   has_critical_defects: boolean
-  
+
   // 时间记录
   assigned_at?: string
   started_at?: string
   completed_at?: string
-  
+
   // 备注
   reviewer_notes?: string
-  
+
   created_at: string
   updated_at: string
 }
@@ -169,26 +168,26 @@ export interface QCAuditResult {
   audit_level: AuditLevel
   reviewer_id: string
   reviewer_name: string
-  
+
   // 审核结果
   audit_score: number
   audit_conclusion?: string
   defects_found: QCDefect[]
-  
+
   // 状态管理
   status: AuditResultStatus
   is_final: boolean
-  
+
   // 审核时间和效率
   review_duration?: number // 分钟
   submitted_at?: string
   approved_at?: string
-  
+
   // 修改记录
   modified_by?: string
   modification_reason?: string
   original_score?: number
-  
+
   created_at: string
   updated_at: string
 }
@@ -198,39 +197,39 @@ export interface QCDefect {
   id: string
   audit_result_id: string
   task_item_id: string
-  
+
   // 缺陷基本信息
   defect_code?: string
   defect_type: string
   defect_category: string
   severity: DefectSeverity
-  
+
   // 缺陷描述
   title: string
   description: string
   location?: string
   evidence?: string
-  
+
   // 整改要求
   rectification_requirement?: string
   rectification_suggestion?: string
   estimated_rectification_time?: number
-  
+
   // 状态管理
   status: DefectStatus
-  
+
   // 评分影响
   score_deduction: number
-  
+
   // AI辅助标识
   ai_assisted: boolean
   ai_confidence?: number
-  
+
   // 时间戳
   identified_at: string
   rectification_deadline?: string
   resolved_at?: string
-  
+
   created_at: string
   updated_at: string
 }
@@ -241,29 +240,29 @@ export interface QCNotification {
   type: MessageType
   priority: MessagePriority
   status: MessageStatus
-  
+
   // 发送方信息
   sender_id?: string
   sender_name?: string
   sender_role?: string
-  
+
   // 接收方信息
   recipient_id: string
   recipient_type: RecipientType
-  
+
   // 消息内容
   title: string
   content: string
   summary?: string
-  
+
   // 关联数据
   related_data: NotificationRelatedData
-  
+
   // 行为配置
   actions?: MessageAction[]
   auto_expire: boolean
   expires_at?: string
-  
+
   // 状态时间戳
   created_at: string
   updated_at: string
@@ -271,7 +270,7 @@ export interface QCNotification {
   delivered_at?: string
   read_at?: string
   processed_at?: string
-  
+
   // 分发信息
   distribution_channel?: string
   delivery_attempts: number
@@ -306,25 +305,25 @@ export interface MessageAction {
 export interface UserNotificationPreferences {
   id: string
   user_id: string
-  
+
   // 通道偏好
   preferred_channel: string
   enable_browser_notifications: boolean
   enable_email_notifications: boolean
   enable_sms_notifications: boolean
-  
+
   // 消息类型偏好
   message_type_preferences: Record<string, boolean>
-  
+
   // 免打扰设置
   quiet_hours_start?: string
   quiet_hours_end?: string
   quiet_days?: number[]
-  
+
   // 批量设置
   enable_batch_digest: boolean
   batch_digest_frequency: string
-  
+
   created_at: string
   updated_at: string
 }

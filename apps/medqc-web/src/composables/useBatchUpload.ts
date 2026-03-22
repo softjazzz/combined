@@ -15,9 +15,9 @@ interface UploadFile {
 
 // 批量上传选项
 interface BatchUploadOptions {
-  onProgress?: (progress: number) => void
-  onFileComplete?: (index: number, success: boolean, error?: string) => void
-  onBatchComplete?: (results: BatchUploadResult[]) => void
+  onProgress?: (_progress: number) => void
+  onFileComplete?: (_index: number, _success: boolean, _error?: string) => void
+  onBatchComplete?: (_results: BatchUploadResult[]) => void
   batchSize?: number // 每批处理的文件数量
   maxRetries?: number // 最大重试次数
 }
@@ -55,12 +55,12 @@ export function useBatchUpload() {
    * 文件内容提取
    */
   const extractFileContent = async (file: File): Promise<string> => {
-    return new Promise((resolve: unknown,  reject: unknown) => {
+    return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
-      
+
       reader.onload = (e) => {
         const content = e.target?.result as string
-        
+
         // 根据文件类型处理内容
         if (file.type.includes('text')) {
           resolve(content)
@@ -74,11 +74,11 @@ export function useBatchUpload() {
           resolve(content || `文件: ${file.name}`)
         }
       }
-      
+
       reader.onerror = () => {
         reject(new Error('文件读取失败'))
       }
-      
+
       // 根据文件类型选择读取方式
       if (file.type.includes('text')) {
         reader.readAsText(file, 'UTF-8')
@@ -95,21 +95,17 @@ export function useBatchUpload() {
     const fileName = `${Date.now()}-${file.name}`
     const filePath = `medical-records/${fileName}`
 
-    const { data, error } = await supabase.storage
-      .from('medical-files')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      })
+    const { error } = await supabase.storage.from('medical-files').upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+    })
 
     if (error) {
       throw new Error(`文件上传失败: ${error.message}`)
     }
 
     // 获取公共URL
-    const { data: urlData } = supabase.storage
-      .from('medical-files')
-      .getPublicUrl(filePath)
+    const { data: urlData } = supabase.storage.from('medical-files').getPublicUrl(filePath)
 
     return urlData.publicUrl
   }
@@ -119,7 +115,7 @@ export function useBatchUpload() {
    */
   const createBatchTask = async (
     taskType: 'upload' | 'analysis' | 'export',
-    totalItems: number
+    totalItems: number,
   ): Promise<string> => {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) {
@@ -132,7 +128,7 @@ export function useBatchUpload() {
         user_id: userData.user.id,
         task_type: taskType,
         total_items: totalItems,
-        status: 'pending'
+        status: 'pending',
       })
       .select()
       .single()
@@ -147,10 +143,7 @@ export function useBatchUpload() {
   /**
    * 更新批量处理任务状态
    */
-  const updateBatchTask = async (
-    taskId: string,
-    updates: Partial<BatchTask>
-  ): Promise<void> => {
+  const updateBatchTask = async (taskId: string, updates: Partial<BatchTask>): Promise<void> => {
     const { error } = await supabase
       .from(TABLES.BATCH_PROCESSING_TASKS)
       .update(updates)
@@ -164,11 +157,7 @@ export function useBatchUpload() {
   /**
    * 处理单个文件上传
    */
-  const processSingleFile = async (
-    file: UploadFile,
-    index: number,
-    taskId: string
-  ): Promise<BatchUploadResult> => {
+  const processSingleFile = async (file: UploadFile, index: number): Promise<BatchUploadResult> => {
     try {
       // 更新文件状态为上传中
       file.status = 'uploading'
@@ -186,7 +175,7 @@ export function useBatchUpload() {
 
       // 3. 创建病案记录
       const recordData = {
-        patient_name: `批量导入患者-${index + 1}`,
+        patient_name: `批量导入患者 ${index + 1}`,
         patient_age: 50, // 默认年龄
         patient_gender: 'U' as const, // 未知性别
         department: '批量导入',
@@ -196,13 +185,15 @@ export function useBatchUpload() {
         file_url: fileUrl,
         file_name: file.name,
         file_size: file.file.size,
-        status: 'pending' as const
+        status: 'pending' as const,
       }
 
       const response = await createMedicalRecord(recordData)
-      
+
       if (!response.success || !response.data) {
-        throw new Error(response.error || '创建病案记录失败')
+        const errorMessage =
+          typeof response.error === 'string' ? response.error : response.error?.message
+        throw new Error(errorMessage || '创建病案记录失败')
       }
 
       // 更新文件状态为成功
@@ -212,7 +203,7 @@ export function useBatchUpload() {
       return {
         file,
         success: true,
-        recordId: response.data.id
+        recordId: response.data.id,
       }
     } catch (error) {
       // 更新文件状态为失败
@@ -222,7 +213,7 @@ export function useBatchUpload() {
       return {
         file,
         success: false,
-        error: file.error
+        error: file.error,
       }
     }
   }
@@ -232,14 +223,13 @@ export function useBatchUpload() {
    */
   const uploadBatch = async (
     files: UploadFile[],
-    options: BatchUploadOptions = {}
+    options: BatchUploadOptions = {},
   ): Promise<BatchUploadResult[]> => {
     const {
       onProgress,
       onFileComplete,
       onBatchComplete,
       batchSize = 5, // 每批处理5个文件
-      maxRetries = 3
     } = options
 
     if (files.length === 0) {
@@ -252,11 +242,11 @@ export function useBatchUpload() {
     try {
       // 创建批量处理任务
       const taskId = await createBatchTask('upload', files.length)
-      
+
       // 更新任务状态为处理中
       await updateBatchTask(taskId, {
         status: 'processing',
-        started_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
       })
 
       const results: BatchUploadResult[] = []
@@ -265,10 +255,10 @@ export function useBatchUpload() {
       // 分批处理文件
       for (let i = 0; i < files.length; i += batchSize) {
         const batch = files.slice(i, i + batchSize)
-        
+
         // 并行处理当前批次的文件
-        const batchPromises = batch.map((file, batchIndex) => 
-          processSingleFile(file, i + batchIndex, taskId)
+        const batchPromises = batch.map((file, batchIndex) =>
+          processSingleFile(file, i + batchIndex),
         )
 
         const batchResults = await Promise.all(batchPromises)
@@ -288,31 +278,29 @@ export function useBatchUpload() {
         })
 
         // 更新批量任务进度
-        const successCount = results.filter(r => r.success).length
-        const failedCount = results.filter(r => !r.success).length
-        
+        const failedCount = results.filter((r) => !r.success).length
+
         await updateBatchTask(taskId, {
           processed_items: processedCount,
           failed_items: failedCount,
-          progress_percentage: progress
+          progress_percentage: progress,
         })
 
         // 短暂延迟，避免过于频繁的请求
         if (i + batchSize < files.length) {
-          await new Promise(resolve => setTimeout(resolve, 100))
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
       }
 
       // 完成批量任务
-      const successCount = results.filter(r => r.success).length
-      const failedCount = results.filter(r => !r.success).length
-      
+      const failedCount = results.filter((r) => !r.success).length
+
       await updateBatchTask(taskId, {
         status: failedCount === 0 ? 'completed' : 'failed',
         completed_at: new Date().toISOString(),
         processed_items: files.length,
         failed_items: failedCount,
-        progress_percentage: 100
+        progress_percentage: 100,
       })
 
       // 调用批量完成回调
@@ -330,14 +318,22 @@ export function useBatchUpload() {
   /**
    * 监听批量任务状态变化
    */
-  const subscribeToBatchTask = (taskId: string, callback: (task: BatchTask) => void) => {
+  const subscribeToBatchTask = (taskId: string, callback: (_task: BatchTask) => void) => {
     const subscription = supabase
       .channel(`batch_task_${taskId}`)
-      .on('postgres_changes',  {
-          event: 'UPDATE', schema: 'public', table: TABLES.BATCH_PROCESSING_TASKS, filter: `id=eq.${taskId}`
-        }, (payload: { new: BatchTask }) => {
-          callback(payload.new as BatchTask)
-        }
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: TABLES.BATCH_PROCESSING_TASKS,
+          filter: `id=eq.${taskId}`,
+        },
+        (payload: unknown) => {
+          if (typeof payload === 'object' && payload && 'new' in payload) {
+            callback((payload as { new: BatchTask }).new)
+          }
+        },
       )
       .subscribe()
 
@@ -375,6 +371,6 @@ export function useBatchUpload() {
     subscribeToBatchTask,
     getUserBatchTasks,
     createBatchTask,
-    updateBatchTask
+    updateBatchTask,
   }
 }

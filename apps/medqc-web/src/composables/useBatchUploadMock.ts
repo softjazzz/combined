@@ -19,9 +19,9 @@ interface UploadFile {
 
 // 批量上传选项
 interface BatchUploadOptions {
-  onProgress?: (progress: number) => void
-  onFileComplete?: (index: number, success: boolean, error?: string) => void
-  onBatchComplete?: (results: BatchUploadResult[]) => void
+  onProgress?: (_progress: number) => void
+  onFileComplete?: (_index: number, _success: boolean, _error?: string) => void
+  onBatchComplete?: (_results: BatchUploadResult[]) => void
   batchSize?: number
   maxRetries?: number
 }
@@ -42,12 +42,12 @@ export function useBatchUploadMock() {
    * 文件内容提取
    */
   const extractFileContent = async (file: File): Promise<string> => {
-    return new Promise((resolve: unknown,  reject: unknown) => {
+    return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
-      
+
       reader.onload = (e) => {
         const content = e.target?.result as string
-        
+
         // 根据文件类型处理内容
         if (file.type.includes('text')) {
           resolve(content)
@@ -59,11 +59,11 @@ export function useBatchUploadMock() {
           resolve(content || `文件: ${file.name}`)
         }
       }
-      
+
       reader.onerror = () => {
         reject(new Error('文件读取失败'))
       }
-      
+
       // 根据文件类型选择读取方式
       if (file.type.includes('text')) {
         reader.readAsText(file, 'UTF-8')
@@ -76,10 +76,7 @@ export function useBatchUploadMock() {
   /**
    * 处理单个文件上传
    */
-  const processSingleFile = async (
-    file: UploadFile,
-    index: number
-  ): Promise<BatchUploadResult> => {
+  const processSingleFile = async (file: UploadFile, index: number): Promise<BatchUploadResult> => {
     try {
       // 更新文件状态为上传中
       file.status = 'uploading'
@@ -89,7 +86,7 @@ export function useBatchUploadMock() {
 
       // 2. 创建病案记录
       const recordData = {
-        patient_name: `批量导入患者-${index + 1}`,
+        patient_name: `批量导入患者 ${index + 1}`,
         patient_age: 50,
         patient_gender: 'U' as const,
         department: '批量导入',
@@ -98,13 +95,15 @@ export function useBatchUploadMock() {
         content: content,
         file_name: file.name,
         file_size: file.file.size,
-        status: 'pending' as const
+        status: 'pending' as const,
       }
 
       const response = await createMedicalRecord(recordData)
-      
+
       if (!response.success || !response.data) {
-        throw new Error(response.error || '创建病案记录失败')
+        const errorMessage =
+          typeof response.error === 'string' ? response.error : response.error?.message
+        throw new Error(errorMessage || '创建病案记录失败')
       }
 
       // 更新文件状态为成功
@@ -114,7 +113,7 @@ export function useBatchUploadMock() {
       return {
         file,
         success: true,
-        recordId: response.data.id
+        recordId: response.data.id,
       }
     } catch (error) {
       // 更新文件状态为失败
@@ -124,7 +123,7 @@ export function useBatchUploadMock() {
       return {
         file,
         success: false,
-        error: file.error
+        error: file.error,
       }
     }
   }
@@ -134,14 +133,9 @@ export function useBatchUploadMock() {
    */
   const uploadBatch = async (
     files: UploadFile[],
-    options: BatchUploadOptions = {}
+    options: BatchUploadOptions = {},
   ): Promise<BatchUploadResult[]> => {
-    const {
-      onProgress,
-      onFileComplete,
-      onBatchComplete,
-      batchSize = 5
-    } = options
+    const { onProgress, onFileComplete, onBatchComplete, batchSize = 5 } = options
 
     if (files.length === 0) {
       return []
@@ -151,7 +145,7 @@ export function useBatchUploadMock() {
     uploadProgress.value = 0
 
     try {
-      console.log('🚀 开始批量上传（模拟模式）:', files.length, '个文件')
+      console.warn('开始批量上传（模拟模式）', files.length, '个文件')
 
       const results: BatchUploadResult[] = []
       let processedCount = 0
@@ -159,10 +153,10 @@ export function useBatchUploadMock() {
       // 分批处理文件
       for (let i = 0; i < files.length; i += batchSize) {
         const batch = files.slice(i, i + batchSize)
-        
+
         // 并行处理当前批次的文件
-        const batchPromises = batch.map((file, batchIndex) => 
-          processSingleFile(file, i + batchIndex)
+        const batchPromises = batch.map((file, batchIndex) =>
+          processSingleFile(file, i + batchIndex),
         )
 
         const batchResults = await Promise.all(batchPromises)
@@ -183,20 +177,20 @@ export function useBatchUploadMock() {
 
         // 短暂延迟，模拟处理时间
         if (i + batchSize < files.length) {
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await new Promise((resolve) => setTimeout(resolve, 500))
         }
       }
 
       // 调用批量完成回调
       onBatchComplete?.(results)
 
-      const successCount = results.filter(r => r.success).length
-      const failedCount = results.filter(r => !r.success).length
-      
-      console.log('✅ 批量上传完成（模拟模式）:', {
+      const successCount = results.filter((r) => r.success).length
+      const failedCount = results.filter((r) => !r.success).length
+
+      console.warn('✅ 批量上传完成（模拟模式）:', {
         total: files.length,
         success: successCount,
-        failed: failedCount
+        failed: failedCount,
       })
 
       return results
@@ -211,6 +205,6 @@ export function useBatchUploadMock() {
   return {
     isUploading,
     uploadProgress,
-    uploadBatch
+    uploadBatch,
   }
 }

@@ -19,22 +19,36 @@
           v-model:value="selectedDept"
           placeholder="选择科室"
           style="width: 160px; margin-left: 12px"
-          allowClear
+          allow-clear
           @change="filterRecords"
         >
-          <a-select-option value="all">全部科室</a-select-option>
-          <a-select-option v-for="dept in deptList" :key="dept" :value="dept">{{ dept }}</a-select-option>
+          <a-select-option value="all">
+            全部科室
+          </a-select-option>
+          <a-select-option
+            v-for="dept in deptList"
+            :key="dept"
+            :value="dept"
+          >
+            {{ dept }}
+          </a-select-option>
         </a-select>
         <a-select
           v-model:value="selectedStatus"
           placeholder="状态"
           style="width: 120px; margin-left: 8px"
-          allowClear
+          allow-clear
           @change="filterRecords"
         >
-          <a-select-option value="all">全部</a-select-option>
-          <a-select-option value="pending">待质控</a-select-option>
-          <a-select-option value="completed">已质控</a-select-option>
+          <a-select-option value="all">
+            全部
+          </a-select-option>
+          <a-select-option value="pending">
+            待质控
+          </a-select-option>
+          <a-select-option value="completed">
+            已质控
+          </a-select-option>
         </a-select>
       </div>
       <div class="toolbar-right">
@@ -42,7 +56,10 @@
           <AlertOutlined />
           质控概览
         </a-button>
-        <a-button type="primary" @click="router.push('/dashboard/workstation/import')">
+        <a-button
+          type="primary"
+          @click="router.push('/dashboard/workstation/import')"
+        >
           <UploadOutlined />
           导入病历数据
         </a-button>
@@ -52,10 +69,16 @@
     <!-- 三栏布局主体 -->
     <div class="workstation-body">
       <!-- 左侧：病历列表 -->
-      <div class="panel panel-left" :style="{ width: leftPanelWidth + 'px' }">
+      <div
+        class="panel panel-left"
+        :style="{ width: leftPanelWidth + 'px' }"
+      >
         <div class="panel-header">
           <span class="panel-title">病历列表</span>
-          <a-badge :count="filteredRecords.length" :number-style="{ backgroundColor: '#1677ff' }" />
+          <a-badge
+            :count="filteredRecords.length"
+            :number-style="{ backgroundColor: '#1677ff' }"
+          />
         </div>
         <div class="record-list">
           <div
@@ -67,20 +90,28 @@
           >
             <div class="record-item-header">
               <span class="patient-name">{{ record.name }}</span>
-              <a-tag :color="record.status === 'completed' ? 'green' : 'processing'" size="small">
+              <a-tag
+                :color="record.status === 'completed' ? 'green' : 'processing'"
+                size="small"
+              >
                 {{ record.status === 'completed' ? '已质控' : '待质控' }}
               </a-tag>
             </div>
             <div class="record-item-meta">
               <span>{{ record.deptName }} · {{ record.bedNo }} · {{ record.inpatNo }}</span>
             </div>
-            <div class="record-item-diag">{{ record.diagnosisMain }}</div>
+            <div class="record-item-diag">
+              {{ record.diagnosisMain }}
+            </div>
             <div class="record-item-date">
               {{ record.admissionDate }} ~ {{ record.dischargeDate || '在院' }}
             </div>
           </div>
           <!-- 空状态 -->
-          <div v-if="filteredRecords.length === 0" class="empty-state">
+          <div
+            v-if="filteredRecords.length === 0"
+            class="empty-state"
+          >
             <InboxOutlined style="font-size: 48px; color: #d9d9d9" />
             <p>暂无匹配的病历</p>
           </div>
@@ -88,23 +119,49 @@
       </div>
 
       <!-- 可拖动分隔条 -->
-      <div class="divider" @mousedown="startResize('left', $event)"></div>
+      <div
+        class="divider"
+        @mousedown="startResize('left', $event)"
+      />
 
       <!-- 中间：病历文书内容 -->
       <div class="panel panel-center">
         <template v-if="selectedRecord">
           <div class="panel-header">
-            <a-segmented v-model:value="activeDocTab" :options="docTabs" size="small" />
+            <a-segmented
+              v-model:value="activeDocTab"
+              :options="docTabs"
+              size="small"
+            />
             <div class="panel-header-extra">
-              <a-tag color="blue">{{ selectedRecord.deptName }}</a-tag>
-              <span class="header-name">{{ selectedRecord.name }} · {{ selectedRecord.age }} · {{ selectedRecord.sex }}</span>
+              <a-tag color="blue">
+                {{ selectedRecord.deptName }}
+              </a-tag>
+              <span class="header-name">{{ selectedRecord.name }} · {{ selectedRecord.age }} ·
+                {{ selectedRecord.sex }}</span>
             </div>
           </div>
           <div class="document-content">
-            <div v-if="activeDocTab === 'admission'" class="doc-text" v-html="selectedRecord.admissionNote || noDataHtml('入院记录')" />
-            <div v-else-if="activeDocTab === 'discharge'" class="doc-text" v-html="selectedRecord.dischargeNote || noDataHtml('出院记录')" />
-            <div v-else-if="activeDocTab === 'progress'" class="doc-text" v-html="selectedRecord.progressNote || noDataHtml('病程记录')" />
-            <div v-else-if="activeDocTab === 'surgery'" class="doc-text" v-html="selectedRecord.surgeryNote || noDataHtml('手术记录')" />
+            <div
+              v-if="activeDocTab === 'admission'"
+              class="doc-text"
+              v-html="selectedRecord.admissionNote || noDataHtml('入院记录')"
+            />
+            <div
+              v-else-if="activeDocTab === 'discharge'"
+              class="doc-text"
+              v-html="selectedRecord.dischargeNote || noDataHtml('出院记录')"
+            />
+            <div
+              v-else-if="activeDocTab === 'progress'"
+              class="doc-text"
+              v-html="selectedRecord.progressNote || noDataHtml('病程记录')"
+            />
+            <div
+              v-else-if="activeDocTab === 'surgery'"
+              class="doc-text"
+              v-html="selectedRecord.surgeryNote || noDataHtml('手术记录')"
+            />
           </div>
         </template>
         <template v-else>
@@ -117,23 +174,41 @@
       </div>
 
       <!-- 可拖动分隔条 -->
-      <div class="divider" @mousedown="startResize('right', $event)"></div>
+      <div
+        class="divider"
+        @mousedown="startResize('right', $event)"
+      />
 
       <!-- 右侧：质控/分析面板 -->
-      <div class="panel panel-right" :style="{ width: rightPanelWidth + 'px' }">
+      <div
+        class="panel panel-right"
+        :style="{ width: rightPanelWidth + 'px' }"
+      >
         <div class="panel-header">
-          <a-segmented v-model:value="activeAnalysisTab" :options="analysisTabs" size="small" />
+          <a-segmented
+            v-model:value="activeAnalysisTab"
+            :options="analysisTabs"
+            size="small"
+          />
         </div>
         <div class="analysis-content">
           <!-- Tab1: 首页生成（复用 StructuredDataView） -->
-          <div v-if="activeAnalysisTab === 'frontpage'" class="tab-content">
-            <div v-if="!selectedRecord" class="empty-hint">
+          <div
+            v-if="activeAnalysisTab === 'frontpage'"
+            class="tab-content"
+          >
+            <div
+              v-if="!selectedRecord"
+              class="empty-hint"
+            >
               <FileTextOutlined style="font-size: 32px; color: #d9d9d9" />
               <p>选择病历后自动生成首页</p>
             </div>
             <StructuredDataView
               v-else
               :extracting="bridge.extracting.value"
+              :extraction-progress="null"
+              :extraction-status="'idle'"
               :frontpage="bridge.frontpage.value"
               :has-medical-text="bridge.hasMedicalText.value"
               @extract="bridge.extractStructuredData"
@@ -141,13 +216,25 @@
           </div>
 
           <!-- Tab2: 质控结果 -->
-          <div v-if="activeAnalysisTab === 'qc'" class="tab-content">
-            <div v-if="!selectedRecord" class="empty-hint">
+          <div
+            v-if="activeAnalysisTab === 'qc'"
+            class="tab-content"
+          >
+            <div
+              v-if="!selectedRecord"
+              class="empty-hint"
+            >
               <CheckCircleOutlined style="font-size: 32px; color: #d9d9d9" />
               <p>选择病历后运行质控</p>
             </div>
             <div v-else>
-              <a-button type="primary" block @click="runQualityControl" :loading="qcRunning" style="margin-bottom: 16px">
+              <a-button
+                type="primary"
+                block
+                :loading="qcRunning"
+                style="margin-bottom: 16px"
+                @click="runQualityControl"
+              >
                 <SafetyCertificateOutlined />
                 运行质控检查
               </a-button>
@@ -156,35 +243,52 @@
                 <div class="qc-summary">
                   <div class="qc-stat pass">
                     <CheckCircleOutlined />
-                    <span>{{ qcResults.filter(r => r.passed).length }} 通过</span>
+                    <span>{{ qcResults.filter((r) => r.passed).length }} 通过</span>
                   </div>
                   <div class="qc-stat fail">
                     <CloseCircleOutlined />
-                    <span>{{ qcResults.filter(r => !r.passed).length }} 不通过</span>
+                    <span>{{ qcResults.filter((r) => !r.passed).length }} 不通过</span>
                   </div>
                   <div class="qc-stat score">
                     <span>扣分：{{ qcResults.reduce((s, r) => s + r.deduction, 0) }}</span>
                   </div>
                 </div>
                 <!-- 规则列表 -->
-                <a-collapse :bordered="false" style="background: transparent">
+                <a-collapse
+                  :bordered="false"
+                  style="background: transparent"
+                >
                   <a-collapse-panel
                     v-for="result in qcResults"
                     :key="result.ruleId"
-                    :style="{ borderLeft: `3px solid ${result.passed ? '#52c41a' : result.severity === 'error' ? '#ff4d4f' : '#faad14'}` }"
+                    :style="{
+                      borderLeft: `3px solid ${result.passed ? '#52c41a' : result.severity === 'error' ? '#ff4d4f' : '#faad14'}`,
+                    }"
                   >
                     <template #header>
                       <div class="qc-rule-header">
                         <span>{{ result.ruleName }}</span>
-                        <a-tag :color="result.passed ? 'green' : result.severity === 'error' ? 'red' : 'orange'" size="small">
+                        <a-tag
+                          :color="
+                            result.passed ? 'green' : result.severity === 'error' ? 'red' : 'orange'
+                          "
+                          size="small"
+                        >
                           {{ result.passed ? '✓' : result.severity === 'error' ? '✗' : '⚠' }}
                         </a-tag>
                       </div>
                     </template>
-                    <p class="qc-detail">{{ result.detail }}</p>
+                    <p class="qc-detail">
+                      {{ result.detail }}
+                    </p>
                     <div class="qc-meta">
-                      <a-tag size="small">{{ result.category }}</a-tag>
-                      <span v-if="result.deduction > 0" class="qc-deduction">-{{ result.deduction }}分</span>
+                      <a-tag size="small">
+                        {{ result.category }}
+                      </a-tag>
+                      <span
+                        v-if="result.deduction > 0"
+                        class="qc-deduction"
+                      >-{{ result.deduction }}分</span>
                     </div>
                   </a-collapse-panel>
                 </a-collapse>
@@ -193,47 +297,90 @@
           </div>
 
           <!-- Tab3: ICD编码 -->
-          <div v-if="activeAnalysisTab === 'icd'" class="tab-content">
-            <div v-if="icdStats" class="icd-stats">
-              <a-tag color="blue">ICD-10: {{ icdStats.icd10_count?.toLocaleString() }} 条</a-tag>
-              <a-tag color="green">ICD-9-CM-3: {{ icdStats.icd9cm3_count?.toLocaleString() }} 条</a-tag>
+          <div
+            v-if="activeAnalysisTab === 'icd'"
+            class="tab-content"
+          >
+            <div
+              v-if="icdStats"
+              class="icd-stats"
+            >
+              <a-tag color="blue">
+                ICD-10: {{ icdStats.icd10_count?.toLocaleString() }} 条
+              </a-tag>
+              <a-tag color="green">
+                ICD-9-CM-3: {{ icdStats.icd9cm3_count?.toLocaleString() }} 条
+              </a-tag>
             </div>
             <div style="display: flex; gap: 8px; margin-bottom: 12px">
               <a-input-search
                 v-model:value="icdSearchText"
                 placeholder="搜索疾病名称、编码、拼音首字母..."
-                @search="searchICD"
                 :loading="icdLoading"
                 style="flex: 1"
+                @search="searchICD"
               />
-              <a-select v-model:value="icdCodeType" style="width: 130px" @change="() => icdSearchText && searchICD(icdSearchText)">
-                <a-select-option value="all">全部</a-select-option>
-                <a-select-option value="icd10">ICD-10</a-select-option>
-                <a-select-option value="icd9cm3">ICD-9-CM-3</a-select-option>
+              <a-select
+                v-model:value="icdCodeType"
+                style="width: 130px"
+                @change="() => icdSearchText && searchICD(icdSearchText)"
+              >
+                <a-select-option value="all">
+                  全部
+                </a-select-option>
+                <a-select-option value="icd10">
+                  ICD-10
+                </a-select-option>
+                <a-select-option value="icd9cm3">
+                  ICD-9-CM-3
+                </a-select-option>
               </a-select>
             </div>
-            <div v-if="icdTotal > 0" class="icd-match-info">
+            <div
+              v-if="icdTotal > 0"
+              class="icd-match-info"
+            >
               找到 {{ icdTotal }} 条匹配（显示前 {{ icdResults.length }} 条）
             </div>
             <a-spin :spinning="icdLoading">
-              <div v-if="icdResults.length > 0" class="icd-results">
-                <div v-for="item in icdResults" :key="item.code + item.type" class="icd-item">
-                  <a-tag :color="item.type === 'icd10' ? 'blue' : 'green'" size="small" style="flex-shrink: 0">
+              <div
+                v-if="icdResults.length > 0"
+                class="icd-results"
+              >
+                <div
+                  v-for="item in icdResults"
+                  :key="item.code + item.type"
+                  class="icd-item"
+                >
+                  <a-tag
+                    :color="item.type === 'icd10' ? 'blue' : 'green'"
+                    size="small"
+                    style="flex-shrink: 0"
+                  >
                     {{ item.type === 'icd10' ? '诊断' : '手术' }}
                   </a-tag>
                   <span class="icd-code">{{ item.code }}</span>
                   <span class="icd-name">{{ item.name }}</span>
                 </div>
               </div>
-              <div v-else-if="icdSearchText && !icdLoading" class="empty-hint">
+              <div
+                v-else-if="icdSearchText && !icdLoading"
+                class="empty-hint"
+              >
                 <p>未找到匹配的编码</p>
               </div>
             </a-spin>
           </div>
 
           <!-- Tab4: DRG分组 -->
-          <div v-if="activeAnalysisTab === 'drg'" class="tab-content">
-            <div v-if="!selectedRecord" class="empty-hint">
+          <div
+            v-if="activeAnalysisTab === 'drg'"
+            class="tab-content"
+          >
+            <div
+              v-if="!selectedRecord"
+              class="empty-hint"
+            >
               <ClusterOutlined style="font-size: 32px; color: #d9d9d9" />
               <p>选择病历后进行 DRG 入组</p>
             </div>
@@ -281,20 +428,18 @@ import {
   AlertOutlined,
   FileSearchOutlined,
   FileTextOutlined,
-  ThunderboltOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   SafetyCertificateOutlined,
   ClusterOutlined,
 } from '@ant-design/icons-vue'
-import {
-  mockRecords,
-  generateMockQCResults,
-  type MedicalRecord,
-  type QCResult,
-} from './mockData'
+import { mockRecords, generateMockQCResults, type MedicalRecord, type QCResult } from './mockData'
 import { useWorkstationBridge } from './useWorkstationBridge'
-import { StructuredDataView, DRGGroupingTab, CodingOptimizationDrawer } from '../demo/frontpage/components'
+import {
+  StructuredDataView,
+  DRGGroupingTab,
+  CodingOptimizationDrawer,
+} from '../demo/frontpage/components'
 
 const router = useRouter()
 
@@ -306,7 +451,7 @@ const selectedDept = ref<string | undefined>(undefined)
 const selectedStatus = ref<string | undefined>(undefined)
 
 // 科室列表（从 mock 数据提取）
-const deptList = computed(() => [...new Set(mockRecords.map(r => r.deptName))])
+const deptList = computed(() => [...new Set(mockRecords.map((r) => r.deptName))])
 
 // 面板宽度
 const leftPanelWidth = ref(300)
@@ -320,18 +465,19 @@ const filteredRecords = computed(() => {
   let list = [...mockRecords]
   if (searchText.value) {
     const q = searchText.value.toLowerCase()
-    list = list.filter(r =>
-      r.name.toLowerCase().includes(q) ||
-      r.inpatNo.toLowerCase().includes(q) ||
-      r.visitId.toLowerCase().includes(q) ||
-      r.diagnosisMain.toLowerCase().includes(q)
+    list = list.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.inpatNo.toLowerCase().includes(q) ||
+        r.visitId.toLowerCase().includes(q) ||
+        r.diagnosisMain.toLowerCase().includes(q),
     )
   }
   if (selectedDept.value && selectedDept.value !== 'all') {
-    list = list.filter(r => r.deptName === selectedDept.value)
+    list = list.filter((r) => r.deptName === selectedDept.value)
   }
   if (selectedStatus.value && selectedStatus.value !== 'all') {
-    list = list.filter(r => r.status === selectedStatus.value)
+    list = list.filter((r) => r.status === selectedStatus.value)
   }
   return list
 })
@@ -401,7 +547,7 @@ async function runQualityControl() {
   if (!selectedRecord.value) return
   qcRunning.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 800))
+    await new Promise((resolve) => setTimeout(resolve, 800))
     qcResults.value = generateMockQCResults(selectedRecord.value)
   } finally {
     qcRunning.value = false
@@ -475,11 +621,6 @@ function startResize(side: 'left' | 'right', event: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp)
 }
 
-function handleFileUpload(file: File) {
-  console.log('上传文件:', file.name)
-  return false
-}
-
 onMounted(() => {
   loadIcdStats()
 })
@@ -500,7 +641,7 @@ onMounted(() => {
   padding: 10px 16px;
   background: #fff;
   border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .toolbar-left {
@@ -603,7 +744,7 @@ onMounted(() => {
 .record-item.active {
   background: #e6f4ff;
   border-color: #91caff;
-  box-shadow: 0 1px 4px rgba(22,119,255,0.15);
+  box-shadow: 0 1px 4px rgba(22, 119, 255, 0.15);
 }
 
 .record-item-header {
@@ -777,9 +918,16 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.qc-stat.pass { color: #52c41a; }
-.qc-stat.fail { color: #ff4d4f; }
-.qc-stat.score { color: #888; margin-left: auto; }
+.qc-stat.pass {
+  color: #52c41a;
+}
+.qc-stat.fail {
+  color: #ff4d4f;
+}
+.qc-stat.score {
+  color: #888;
+  margin-left: auto;
+}
 
 .qc-rule-header {
   display: flex;

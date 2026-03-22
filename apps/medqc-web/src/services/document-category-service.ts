@@ -22,31 +22,47 @@ export class DocumentCategoryService {
     if (error) {
       console.warn('获取文书类别配置失败，使用默认配置:', error)
       // 返回默认的6个标准类别
-      return Object.entries(DOCUMENT_CATEGORY_CONFIG)
+      const defaultEntries = Object.entries(DOCUMENT_CATEGORY_CONFIG) as Array<
+        [DocumentCategory, (typeof DOCUMENT_CATEGORY_CONFIG)[DocumentCategory]]
+      >
+      return defaultEntries
         .sort(([, a], [, b]) => a.sortOrder - b.sortOrder)
         .map(([code, config]) => ({
-          category_code: code,
+          category_code: code as unknown as DocumentCategoryConfig['category_code'],
           category_name: config.label,
-          description: config.description,
-          color: config.color,
-          icon: config.icon,
+          category_description: config.description,
           sort_order: config.sortOrder,
-          is_active: true
+          is_active: true,
+          default_weight: 1,
+          required_sections: [],
+          optional_sections: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         }))
     }
 
     try {
       const canonical = new Set([
-        'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
+        'admission_record',
+        'progress_note',
+        'discharge_record',
+        'operation_record',
+        'examination_report',
+        'consent_form',
       ])
       const codes = (data || []).map((r: any) => r.category_code)
       const extras = Array.from(new Set(codes.filter((c: any) => !canonical.has(String(c)))))
-      console.log('📚 从数据库加载到的文书类别 config count=', data?.length || 0,
-        (data || []).map((r: any) => ({ code: r.category_code, name: r.category_name })))
+      console.warn(
+        '📚 从数据库加载到的文书类别 config count=',
+        data?.length || 0,
+        (data || []).map((r: any) => ({ code: r.category_code, name: r.category_name })),
+      )
       if (extras.length > 0) {
         console.warn('⚠️ 发现非标准文书类别(应当仅为6大类):', extras)
       }
-    } catch {}
+    } catch {
+      // 忽略调试信息统计异常，不影响主流程
+    }
 
     return data || []
   }
@@ -68,32 +84,36 @@ export class DocumentCategoryService {
 
     // 定义6个标准类别
     const CANONICAL_CATEGORIES = new Set([
-      'admission_record', 'progress_note', 'discharge_record',
-      'operation_record', 'examination_report', 'consent_form'
+      'admission_record',
+      'progress_note',
+      'discharge_record',
+      'operation_record',
+      'examination_report',
+      'consent_form',
     ])
 
     // 非标准类别到标准类别的映射
     const CATEGORY_MAPPING: Record<string, string> = {
-      'nursing_document': 'progress_note',
-      'medical_order': 'progress_note',
-      'blood_transfusion': 'progress_note',
-      'emergency_record': 'progress_note', // 映射到病程记录，但不会在UI中显示
-      'consultation_record': 'progress_note',
-      'surgery_record': 'operation_record',
-      'lab_report': 'examination_report',
-      'imaging_report': 'examination_report',
-      'pathology_report': 'examination_report'
+      nursing_document: 'progress_note',
+      medical_order: 'progress_note',
+      blood_transfusion: 'progress_note',
+      emergency_record: 'progress_note', // 映射到病程记录，但不会在UI中显示
+      consultation_record: 'progress_note',
+      surgery_record: 'operation_record',
+      lab_report: 'examination_report',
+      imaging_report: 'examination_report',
+      pathology_report: 'examination_report',
     }
 
     // 统计每个类别的规则数量，只保留标准类别
     const stats: Record<string, number> = {}
 
     // 为每个标准类别初始化计数器
-    CANONICAL_CATEGORIES.forEach(category => {
+    CANONICAL_CATEGORIES.forEach((category) => {
       stats[category] = 0
     })
 
-    data?.forEach(rule => {
+    data?.forEach((rule) => {
       const primaryCategory = rule.primary_document_category
       const documentCategories = rule.document_categories || []
 
@@ -107,7 +127,7 @@ export class DocumentCategoryService {
 
       // 添加文档类别数组中的类别
       if (Array.isArray(documentCategories)) {
-        documentCategories.forEach(cat => {
+        documentCategories.forEach((cat) => {
           if (cat && typeof cat === 'string') {
             allCategories.add(cat)
           }
@@ -115,7 +135,7 @@ export class DocumentCategoryService {
       }
 
       // 对每个标准类别，检查该规则是否匹配（避免重复计数）
-      CANONICAL_CATEGORIES.forEach(standardCategory => {
+      CANONICAL_CATEGORIES.forEach((standardCategory) => {
         let ruleMatchesCategory = false
 
         // 检查是否直接匹配标准类别
@@ -152,17 +172,17 @@ export class DocumentCategoryService {
     options: {
       includeMultiCategory?: boolean // 是否包含适用于多个类别的规则
       activeOnly?: boolean
-    } = {}
+    } = {},
   ): Promise<EnhancedQCRule[]> {
     const { includeMultiCategory = true, activeOnly = true } = options
 
-    let query = supabase
-      .from('qc_rules')
-      .select('*')
+    let query = supabase.from('qc_rules').select('*')
 
     if (includeMultiCategory) {
       // 包含主要类别是目标类别，或者文书类别数组包含目标类别的规则
-      query = query.or(`primary_document_category.eq.${documentCategory},document_categories.cs.{${documentCategory}}`)
+      query = query.or(
+        `primary_document_category.eq.${documentCategory},document_categories.cs.{${documentCategory}}`,
+      )
     } else {
       // 只包含主要类别是目标类别的规则
       query = query.eq('primary_document_category', documentCategory)
@@ -199,16 +219,16 @@ export class DocumentCategoryService {
       severity,
       is_active,
       page = 1,
-      pageSize = 20
+      pageSize = 20,
     } = filters
 
-    let query = supabase
-      .from('qc_rules')
-      .select('*', { count: 'exact' })
+    let query = supabase.from('qc_rules').select('*', { count: 'exact' })
 
     // 关键词搜索
     if (keyword) {
-      query = query.or(`name.ilike.%${keyword}%,description.ilike.%${keyword}%,rule_code.ilike.%${keyword}%`)
+      query = query.or(
+        `name.ilike.%${keyword}%,description.ilike.%${keyword}%,rule_code.ilike.%${keyword}%`,
+      )
     }
 
     // 规则分类筛选
@@ -218,7 +238,9 @@ export class DocumentCategoryService {
 
     // 文书类别筛选
     if (document_category) {
-      query = query.or(`primary_document_category.eq.${document_category},document_categories.cs.{${document_category}}`)
+      query = query.or(
+        `primary_document_category.eq.${document_category},document_categories.cs.{${document_category}}`,
+      )
     }
 
     // 规则类型筛选
@@ -252,25 +274,25 @@ export class DocumentCategoryService {
     }
 
     // 调试：检查原始数据结构
-    console.log('🔍 [原始数据] 查询返回条数:', (data || []).length)
+    console.warn('🔍 [原始数据] 查询返回条数:', (data || []).length)
     if (data && data.length > 0) {
       const sample = data[0]
-      console.log('🔍 [原始数据] 第一条记录字段:', {
+      console.warn('🔍 [原始数据] 第一条记录 sample=', {
         id: sample.id,
         rule_code: sample.rule_code,
         name: sample.name,
         primary_document_category: sample.primary_document_category,
         document_categories: sample.document_categories,
-        字段类型: {
+        field_types: {
           primary: typeof sample.primary_document_category,
           categories: typeof sample.document_categories,
-          categories_isArray: Array.isArray(sample.document_categories)
-        }
+          categories_is_array: Array.isArray(sample.document_categories),
+        },
       })
     }
 
     // 归一化：确保 document_categories 是数组；缺失时基于名称/描述做兜底推断，填充 primary/document_categories（仅内存，不改库）
-    console.log('🔍 [DocumentCategoryService] 开始归一化处理，原始数据条数:', (data || []).length)
+    console.warn('🔍 [DocumentCategoryService] 开始归一化处理，原始数据条数:', (data || []).length)
 
     const normalized: any[] = (data || []).map((r: any, index: number) => {
       const originalPrimary = r?.primary_document_category
@@ -280,7 +302,7 @@ export class DocumentCategoryService {
       r.document_categories = categories
 
       const normalizedPrimary = normalizeCategories(
-        r?.primary_document_category ? [r.primary_document_category] : []
+        r?.primary_document_category ? [r.primary_document_category] : [],
       )
       let primary = normalizedPrimary[0] as DocumentCategory | undefined
       if (primary) {
@@ -304,12 +326,12 @@ export class DocumentCategoryService {
           ;(r as any)._resolved_primary_category = primary
 
           if (index < 5) {
-            console.log(`🔧 [推断] 规则 ${r.rule_code || r.id}: "${r.name}" -> ${primary}`, {
-              原始primary: originalPrimary,
-              原始categories: originalCategories,
-              推断结果: inferred,
-              最终primary: primary,
-              最终categories: r.document_categories
+            console.warn(`🔧 [推断] 规则 ${r.rule_code || r.id}: "${r.name}" -> ${primary}`, {
+              originalPrimary,
+              originalCategories,
+              inferred,
+              primary,
+              categories: r.document_categories,
             })
           }
         }
@@ -325,60 +347,87 @@ export class DocumentCategoryService {
     })
 
     // 统计归一化结果
-    const withPrimary = normalized.filter(r => r.primary_document_category).length
-    const withCategories = normalized.filter(r => r.document_categories && r.document_categories.length > 0).length
-    console.log('📊 [归一化统计]', {
-      总数: normalized.length,
-      有primary的: withPrimary,
-      有categories的: withCategories,
-      覆盖率: `${Math.round(withPrimary / normalized.length * 100)}%`
+    const withPrimary = normalized.filter((r) => r.primary_document_category).length
+    const withCategories = normalized.filter(
+      (r) => r.document_categories && r.document_categories.length > 0,
+    ).length
+    console.warn('📊 [归一化统计]', {
+      total: normalized.length,
+      withPrimary,
+      withCategories,
+      coverage:
+        normalized.length > 0 ? `${Math.round((withPrimary / normalized.length) * 100)}%` : '0%',
     })
 
     const debugSample = normalized.slice(0, 20).map((r: any) => ({
       rule_code: r.rule_code,
       name: r.name,
       primary: r.primary_document_category,
-      categories: r.document_categories
+      categories: r.document_categories,
     }))
-    console.log('🧾 [归一化示例]', debugSample)
+    console.warn('👁 [归一化示例]', debugSample)
 
     const resolvedSummary = normalized.reduce<Record<string, number>>((acc, r: any) => {
-      const key = r._resolved_primary_category || r.primary_document_category || '未解析'
+      const key = r._resolved_primary_category || r.primary_document_category || 'unknown'
       acc[key] = (acc[key] || 0) + 1
       return acc
     }, {})
-    console.log('📈 [归一化类别分布]', resolvedSummary)
+    console.warn('📱 [归一化类别分布]', resolvedSummary)
 
-    const missingPrimary = normalized.filter(r => !r.primary_document_category)
+    const missingPrimary = normalized.filter((r) => !r.primary_document_category)
     if (missingPrimary.length > 0) {
-      console.warn('⚠️ [归一化] 仍有缺失 primary 的规则:', missingPrimary.map((r: any) => r.rule_code))
+      console.warn(
+        '⚠️ [归一化] 仍有缺失 primary 的规则:',
+        missingPrimary.map((r: any) => r.rule_code),
+      )
     }
 
     try {
       const canonical = new Set([
-        'admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'
+        'admission_record',
+        'progress_note',
+        'discharge_record',
+        'operation_record',
+        'examination_report',
+        'consent_form',
       ])
-      const primaries = Array.from(new Set((normalized || []).map((r: any) => r.primary_document_category).filter(Boolean)))
+      const primaries = Array.from(
+        new Set((normalized || []).map((r: any) => r.primary_document_category).filter(Boolean)),
+      )
       const nonCanonicalPrim = primaries.filter((c: any) => !canonical.has(String(c)))
       if (nonCanonicalPrim.length > 0) {
         console.warn('⚠️ 非标准 primary_document_category 值:', nonCanonicalPrim)
       }
       const sample = (normalized || []).slice(0, 200)
-      const rawFromJson = Array.from(new Set(sample.flatMap((r: any) => {
-        try {
-          const arr = (r?.check_logic?.applicable_documents) || []
-          return Array.isArray(arr) ? arr : []
-        } catch { return [] }
-      }).filter(Boolean)))
+      const rawFromJson = Array.from(
+        new Set(
+          sample
+            .flatMap((r: any) => {
+              try {
+                const arr = r?.check_logic?.applicable_documents || []
+                return Array.isArray(arr) ? arr : []
+              } catch {
+                // check_logic 结构异常时按空数组处理
+                return []
+              }
+            })
+            .filter(Boolean),
+        ),
+      )
       const suspicious = rawFromJson.filter((v: any) => !canonical.has(String(v)))
       if (suspicious.length > 0) {
-        console.warn('🔎 check_logic.applicable_documents 中的非标准值(示例):', suspicious.slice(0, 20))
+        console.warn(
+          '🔍 check_logic.applicable_documents 中的非标准值(示例):',
+          suspicious.slice(0, 20),
+        )
       }
-    } catch {}
+    } catch {
+      // 忽略调试分析异常，不影响返回
+    }
 
     return {
       data: normalized || [],
-      total: count || 0
+      total: count || 0,
     }
   }
 
@@ -389,7 +438,7 @@ export class DocumentCategoryService {
     ruleId: string,
     documentCategories: DocumentCategory[],
     primaryCategory: DocumentCategory,
-    targetSections: string[] = []
+    targetSections: string[] = [],
   ): Promise<void> {
     const { error } = await supabase
       .from('qc_rules')
@@ -397,7 +446,7 @@ export class DocumentCategoryService {
         document_categories: documentCategories,
         primary_document_category: primaryCategory,
         target_sections: targetSections,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('id', ruleId)
 
@@ -420,15 +469,15 @@ export class DocumentCategoryService {
     const categoryStr = String(category || '').toLowerCase()
 
     // 映射非标准类别到标准类别
-    const mappings: Record<string, keyof typeof DOCUMENT_CATEGORY_CONFIG> = {
-      'medical_order': 'progress_note',
-      'nursing_document': 'progress_note',
-      'blood_transfusion': 'progress_note',
-      'emergency_record': 'progress_note', // 急诊记录映射到病程记录
-      '输血记录': 'progress_note',
-      '医嘱记录': 'progress_note',
-      '护理记录': 'progress_note',
-      '急诊记录': 'progress_note'
+    const mappings: Record<string, DocumentCategory> = {
+      medical_order: DocumentCategory.PROGRESS_NOTE,
+      nursing_document: DocumentCategory.PROGRESS_NOTE,
+      blood_transfusion: DocumentCategory.PROGRESS_NOTE,
+      emergency_record: DocumentCategory.PROGRESS_NOTE,
+      输血记录: DocumentCategory.PROGRESS_NOTE,
+      医嘱记录: DocumentCategory.PROGRESS_NOTE,
+      护理记录: DocumentCategory.PROGRESS_NOTE,
+      急诊记录: DocumentCategory.PROGRESS_NOTE,
     }
 
     const mappedCategory = mappings[categoryStr]
@@ -442,7 +491,7 @@ export class DocumentCategoryService {
       description: '未识别的文书类别',
       color: '#666666',
       icon: 'FileOutlined',
-      sortOrder: 999
+      sortOrder: 999,
     }
   }
 
@@ -452,33 +501,38 @@ export class DocumentCategoryService {
    * 如需从数据库加载，请使用 getDocumentCategories() 方法
    */
   static getDocumentCategoryOptions() {
-    return Object.entries(DOCUMENT_CATEGORY_CONFIG)
+    const entries = Object.entries(DOCUMENT_CATEGORY_CONFIG) as Array<
+      [DocumentCategory, (typeof DOCUMENT_CATEGORY_CONFIG)[DocumentCategory]]
+    >
+    return entries
       .sort(([, a], [, b]) => a.sortOrder - b.sortOrder)
       .map(([value, config]) => ({
-        value: value as DocumentCategory,
+        value,
         label: config.label,
         description: config.description,
         color: config.color,
-        icon: config.icon
+        icon: config.icon,
       }))
   }
 
   /**
    * 批量更新规则的文书类别（用于数据迁移或批量操作）
    */
-  static async batchUpdateRuleCategories(updates: Array<{
-    ruleId: string
-    documentCategories: DocumentCategory[]
-    primaryCategory: DocumentCategory
-    targetSections?: string[]
-  }>): Promise<void> {
-    const promises = updates.map(update =>
+  static async batchUpdateRuleCategories(
+    updates: Array<{
+      ruleId: string
+      documentCategories: DocumentCategory[]
+      primaryCategory: DocumentCategory
+      targetSections?: string[]
+    }>,
+  ): Promise<void> {
+    const promises = updates.map((update) =>
       this.updateRuleDocumentCategories(
         update.ruleId,
         update.documentCategories,
         update.primaryCategory,
-        update.targetSections
-      )
+        update.targetSections,
+      ),
     )
 
     await Promise.all(promises)
