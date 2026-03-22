@@ -10,6 +10,8 @@ const backendTarget = 'http://localhost:8001'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  // 避免 node_modules/.vite 在 Windows 下被权限/锁文件影响，统一落到项目可写目录
+  cacheDir: '.tmp/vite-cache',
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -90,10 +92,7 @@ export default defineConfig({
         // 不需要rewrite，因为前端代码已经使用 /api/v1/* 路径
       }
     },
-    // 预热核心入口文件，减少首次请求延迟
-    warmup: {
-      clientFiles: ['./src/main.ts', './src/router/index.ts']
-    }
+    // warmup 已移除：会在启动时触发 transform 管道，可能阻塞 HTTP 响应
   },
   build: {
     target: 'es2015',
@@ -109,26 +108,8 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    // 让 Vite 自动扫描源码发现依赖（默认行为），仅显式 include 已知大包加速首次加载
-    include: [
-      'vue',
-      'vue-router',
-      'pinia',
-      'axios',
-      'ant-design-vue',
-      '@ant-design/icons-vue',
-      'dayjs',
-      'lodash-es',
-      'echarts',
-      'vue-echarts',
-      'dayjs/plugin/quarterOfYear.js',
-      'dayjs/plugin/weekOfYear.js',
-      'dayjs/plugin/weekYear.js',
-      'dayjs/plugin/weekday.js',
-      'dayjs/plugin/advancedFormat.js',
-      'dayjs/plugin/customParseFormat.js',
-      'dayjs/plugin/localeData.js'
-    ]
+    // 仓库根目录存在大量测试 html，限制预扫描入口，避免启动阶段卡死
+    entries: ['index.html']
   },
   worker: {
     format: 'es'
