@@ -305,3 +305,49 @@ class TestSyncRouter:
             },
         )
         assert resp_mixed_star.status_code == 422
+
+    def test_get_departments_from_mongo(self, client, monkeypatch):
+        _override_user(client, ["qc_manager"])
+
+        monkeypatch.setattr(
+            "app.services.etl_config.load_mongo_config",
+            lambda: MongoSyncConfig(mongo_uri="mongodb://127.0.0.1:27017/admin", enabled=True),
+        )
+
+        class _FakeCollection:
+            @staticmethod
+            def distinct(_field):
+                return ["心内科", "", None, "呼吸内科", "心内科"]
+
+        class _FakeDb(dict):
+            def __getitem__(self, item):
+                if item == "mr":
+                    return _FakeCollection()
+                raise KeyError(item)
+
+        class _FakeMongoConnector:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get_db(self):
+                return _FakeDb()
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr("app.services.mongo_sync.MongoConnector", _FakeMongoConnector)
+
+        resp = client.get("/api/v1/sync/departments")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert body["items"] == ["呼吸内科", "心内科"]
+
+    def test_get_departments_requires_mongo_uri(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.etl_config.load_mongo_config",
+            lambda: MongoSyncConfig(mongo_uri="", enabled=True),
+        )
+        resp = client.get("/api/v1/sync/departments")
+        assert resp.status_code == 422

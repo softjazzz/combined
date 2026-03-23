@@ -341,6 +341,44 @@ async def test_all_connections(_: dict = Depends(require_sync_write_access)):
     }
 
 
+@router.get("/departments")
+async def get_mongo_departments(_: dict = Depends(require_sync_read_access)):
+    """从远端 Mongo 实时获取科室列表（用于模板科室选择）"""
+    from ..services.etl_config import load_mongo_config
+    from ..services.mongo_sync import MongoConnector
+
+    config = load_mongo_config()
+    if not config.mongo_uri:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mongo_uri 未配置")
+
+    connector = MongoConnector(
+        uri=config.mongo_uri,
+        database=config.mongo_database,
+        read_preference=config.read_preference,
+        max_pool_size=1,
+        socket_timeout_ms=config.query_timeout_s * 1000,
+        connect_timeout_ms=config.connect_timeout_ms,
+    )
+    try:
+        db = connector.get_db()
+        raw_departments = db["mr"].distinct("discharge_dept_name")
+        items = sorted(
+            {
+                str(item).strip()
+                for item in raw_departments
+                if str(item or "").strip()
+            }
+        )
+        return {"items": items, "total": len(items)}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"获取科室失败: {str(exc)[:200]}",
+        )
+    finally:
+        connector.close()
+
+
 # ==================== 试运行预检 ====================
 
 @router.post("/preflight")

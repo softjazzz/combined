@@ -230,7 +230,7 @@ export const syncApi = {
   },
 
   async getDepartments(): Promise<string[]> {
-    const response = await http.get('/api/medical-records/departments')
-    return Array.isArray(response.data) ? response.data : []
+    const response = await http.get('/api/v1/sync/departments')
+    return Array.isArray(response.data?.items) ? response.data.items : []
   },
 }
