@@ -1,6 +1,8 @@
 <template>
   <div class="h-full flex flex-col bg-white">
-    <div class="px-5 py-3 border-b border-[#E5E7EB] flex items-center justify-between shrink-0 relative z-10 h-[52px]">
+    <div
+      class="px-5 py-3 border-b border-[#E5E7EB] flex items-center justify-between shrink-0 relative z-10 h-[52px]"
+    >
       <h2 class="text-[14px] font-semibold text-slate-800 tracking-tight leading-none">
         结构浏览器
       </h2>
@@ -10,12 +12,14 @@
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
-        ><path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-        /></svg>
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
         <input
           v-model="searchText"
           type="text"
@@ -36,7 +40,11 @@
               v-for="table in filteredTables"
               :key="table.name"
               class="w-full text-left px-3 py-1.5 rounded-[6px] text-[12px] font-mono transition-colors"
-              :class="selectedTable?.name === table.name ? 'bg-white text-[#1890FF] border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]' : 'hover:bg-slate-100 text-slate-600'"
+              :class="
+                selectedTable?.name === table.name
+                  ? 'bg-white text-[#1890FF] border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]'
+                  : 'hover:bg-slate-100 text-slate-600'
+              "
               @click="handleSelectTable(table.name)"
             >
               {{ table.name }}
@@ -49,14 +57,22 @@
         <div class="flex border-b border-slate-100/80 px-6 pt-2">
           <button
             class="px-3 py-2.5 border-b-[2px] text-[12px] mr-4 transition-colors"
-            :class="activeView === 'schema' ? 'border-[#1890FF] font-bold text-[#1890FF]' : 'border-transparent text-slate-500 hover:text-slate-700'"
+            :class="
+              activeView === 'schema'
+                ? 'border-[#1890FF] font-bold text-[#1890FF]'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            "
             @click="activeView = 'schema'"
           >
             表结构 (Schema)
           </button>
           <button
             class="px-3 py-2.5 border-b-[2px] text-[12px] transition-colors"
-            :class="activeView === 'sample' ? 'border-[#1890FF] font-bold text-[#1890FF]' : 'border-transparent text-slate-500 hover:text-slate-700'"
+            :class="
+              activeView === 'sample'
+                ? 'border-[#1890FF] font-bold text-[#1890FF]'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            "
             @click="activeView = 'sample'"
           >
             样本数据 (Limit 20)
@@ -212,9 +228,11 @@ const filteredTables = computed(() => {
 })
 
 const selectedTable = computed(() => {
-  return filteredTables.value.find((table) => table.name === selectedTableName.value)
-    || filteredTables.value[0]
-    || null
+  return (
+    filteredTables.value.find((table) => table.name === selectedTableName.value) ||
+    filteredTables.value[0] ||
+    null
+  )
 })
 
 async function loadSchema() {

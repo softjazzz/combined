@@ -71,7 +71,10 @@ function parseTimestamp(value?: string | null): number {
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
-function pickLastSyncTime(mongoSyncState: Record<string, any>, pgSyncState: Record<string, any>): string | null {
+function pickLastSyncTime(
+  mongoSyncState: Record<string, any>,
+  pgSyncState: Record<string, any>,
+): string | null {
   const candidates = [
     mongoSyncState.tier3_last_run,
     mongoSyncState.tier2_last_run,
@@ -180,7 +183,8 @@ function patchMongoForms(payload: MongoConnectionConfig) {
   globalSyncState.mongoConfigRaw = payload
   globalSyncState.mongoConnectionForm.mongo_uri = ''
   globalSyncState.mongoConnectionForm.mongo_database = payload.mongo_database || 'his_emr'
-  globalSyncState.mongoConnectionForm.read_preference = payload.read_preference || 'secondaryPreferred'
+  globalSyncState.mongoConnectionForm.read_preference =
+    payload.read_preference || 'secondaryPreferred'
   globalSyncState.mongoConnectionForm.connect_timeout_ms = payload.connect_timeout_ms || 5000
 
   globalSyncState.policyForm.enabled = payload.enabled ?? false
@@ -222,7 +226,10 @@ function recomputeOverview() {
 
   globalSyncState.stats.connectedCount = connectedCount
   globalSyncState.stats.totalSources = 3
-  globalSyncState.stats.lastSyncTime = pickLastSyncTime(globalSyncState.mongoSyncState, globalSyncState.pgSyncState)
+  globalSyncState.stats.lastSyncTime = pickLastSyncTime(
+    globalSyncState.mongoSyncState,
+    globalSyncState.pgSyncState,
+  )
   globalSyncState.stats.pendingRecords = pending + partial
   globalSyncState.stats.failedRecords = failed
 }
@@ -240,11 +247,16 @@ async function loadPgConfig() {
 async function loadStatusAndStats() {
   globalSyncState.isLoadingStatus = true
   try {
-    const [statusResp, statsResp] = await Promise.all([syncApi.getStatus(), syncApi.getStatistics()])
+    const [statusResp, statsResp] = await Promise.all([
+      syncApi.getStatus(),
+      syncApi.getStatistics(),
+    ])
     globalSyncState.mongoSyncState = statusResp.mongo_sync || {}
     globalSyncState.pgSyncState = statusResp.pg_sync || {}
     globalSyncState.mongoStats = statsResp
-    globalSyncState.isSyncing = Boolean(globalSyncState.mongoSyncState.is_running || globalSyncState.pgSyncState.is_running)
+    globalSyncState.isSyncing = Boolean(
+      globalSyncState.mongoSyncState.is_running || globalSyncState.pgSyncState.is_running,
+    )
     recomputeOverview()
   } finally {
     globalSyncState.isLoadingStatus = false
@@ -266,12 +278,14 @@ async function loadMappings() {
 async function loadRunHistory() {
   globalSyncState.runsLoading = true
   try {
-    const source = globalSyncState.runHistorySourceFilter === 'all'
-      ? undefined
-      : globalSyncState.runHistorySourceFilter
-    const tier = globalSyncState.runHistoryTierFilter === 'all'
-      ? undefined
-      : globalSyncState.runHistoryTierFilter
+    const source =
+      globalSyncState.runHistorySourceFilter === 'all'
+        ? undefined
+        : globalSyncState.runHistorySourceFilter
+    const tier =
+      globalSyncState.runHistoryTierFilter === 'all'
+        ? undefined
+        : globalSyncState.runHistoryTierFilter
     const resp = await syncApi.getRuns({
       source,
       tier,
@@ -310,16 +324,25 @@ async function testActiveConnection() {
   try {
     if (globalSyncState.activeTab === 'mongo') {
       const result = await syncApi.testMongoConnection()
-      pushLog(result.connected ? 'success' : 'warn', result.connected ? 'Mongo 连接成功' : `Mongo 连接失败：${result.error || '未知错误'}`)
+      pushLog(
+        result.connected ? 'success' : 'warn',
+        result.connected ? 'Mongo 连接成功' : `Mongo 连接失败：${result.error || '未知错误'}`,
+      )
       return result
     }
     if (globalSyncState.activeTab === 'pg_remote') {
       const result = await syncApi.testPgRemoteConnection()
-      pushLog(result.connected ? 'success' : 'warn', result.connected ? '远端 PG 连接成功' : `远端 PG 连接失败：${result.error || '未知错误'}`)
+      pushLog(
+        result.connected ? 'success' : 'warn',
+        result.connected ? '远端 PG 连接成功' : `远端 PG 连接失败：${result.error || '未知错误'}`,
+      )
       return result
     }
     const result = await syncApi.testPgLocalConnection()
-    pushLog(result.connected ? 'success' : 'warn', result.connected ? '本地 PG 连接成功' : `本地 PG 连接失败：${result.error || '未知错误'}`)
+    pushLog(
+      result.connected ? 'success' : 'warn',
+      result.connected ? '本地 PG 连接成功' : `本地 PG 连接失败：${result.error || '未知错误'}`,
+    )
     return result
   } finally {
     globalSyncState.isTestingActive = false
@@ -479,7 +502,13 @@ function clearLogs() {
 async function initialize() {
   globalSyncState.isInitializing = true
   try {
-    await Promise.all([loadMongoConfig(), loadPgConfig(), loadStatusAndStats(), loadMappings(), loadRunHistory()])
+    await Promise.all([
+      loadMongoConfig(),
+      loadPgConfig(),
+      loadStatusAndStats(),
+      loadMappings(),
+      loadRunHistory(),
+    ])
     pushLog('info', '数据同步控制台已加载')
   } catch (error: any) {
     const errMsg = error?.response?.data?.detail || error?.message || '加载失败'
@@ -512,9 +541,7 @@ export function useDataSync() {
   const authStore = useAuthStore()
   const isAdmin = computed(() => authStore.userRoles.includes('admin'))
   const isReadonly = computed(() => !isAdmin.value)
-  const hasPreflightPass = computed(
-    () => Boolean(globalSyncState.preflightResult?.executable),
-  )
+  const hasPreflightPass = computed(() => Boolean(globalSyncState.preflightResult?.executable))
 
   return {
     state: globalSyncState,

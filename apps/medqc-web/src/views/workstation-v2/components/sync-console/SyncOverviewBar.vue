@@ -1,7 +1,9 @@
 <template>
   <div class="flex-shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-5 w-full">
     <div class="flex items-center gap-3 shrink-0">
-      <div class="w-8 h-8 rounded-lg bg-blue-600 border border-blue-500 flex items-center justify-center shadow-sm">
+      <div
+        class="w-8 h-8 rounded-lg bg-blue-600 border border-blue-500 flex items-center justify-center shadow-sm"
+      >
         <svg
           class="w-4 h-4 text-white"
           fill="none"
@@ -29,16 +31,21 @@
     </div>
 
     <div class="flex items-center gap-4 flex-1 lg:justify-end pr-4">
-      <div class="flex flex-col bg-white rounded-[8px] px-5 py-2.5 border border-[#E5E7EB] shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] min-w-[120px]">
+      <div
+        class="flex flex-col bg-white rounded-[8px] px-5 py-2.5 border border-[#E5E7EB] shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] min-w-[120px]"
+      >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="text-[12px] font-medium text-slate-500">连通状态</span>
         </div>
         <div class="text-[15px] font-bold text-slate-800 font-mono tracking-tight">
-          {{ state.stats.connectedCount }}<span class="text-[12px] text-slate-400 font-medium ml-1">/ {{ state.stats.totalSources }}</span>
+          {{ state.stats.connectedCount
+          }}<span class="text-[12px] text-slate-400 font-medium ml-1">/ {{ state.stats.totalSources }}</span>
         </div>
       </div>
 
-      <div class="flex flex-col bg-white rounded-[8px] px-5 py-2.5 border border-[#E5E7EB] shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] min-w-[140px]">
+      <div
+        class="flex flex-col bg-white rounded-[8px] px-5 py-2.5 border border-[#E5E7EB] shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] min-w-[140px]"
+      >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="text-[12px] font-medium text-slate-500">上次同步</span>
         </div>
@@ -47,7 +54,9 @@
         </div>
       </div>
 
-      <div class="flex flex-col bg-white rounded-[8px] px-5 py-2.5 border border-[#E5E7EB] shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] min-w-[120px]">
+      <div
+        class="flex flex-col bg-white rounded-[8px] px-5 py-2.5 border border-[#E5E7EB] shadow-[0_1px_2px_0_rgba(0,0,0,0.03)] min-w-[120px]"
+      >
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="text-[12px] font-medium text-slate-500">待处理</span>
         </div>
@@ -88,7 +97,9 @@
         </button>
       </a-tooltip>
 
-      <a-tooltip :title="isReadonly ? '仅 admin 可执行' : `执行同步前预检，不落库（${activeSourceLabel}）`">
+      <a-tooltip
+        :title="isReadonly ? '仅 admin 可执行' : `执行同步前预检，不落库（${activeSourceLabel}）`"
+      >
         <button
           class="px-5 py-2.5 rounded-[6px] text-[13px] font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-sm transition-all"
           :disabled="isReadonly || state.isPreflighting"
@@ -98,7 +109,9 @@
         </button>
       </a-tooltip>
 
-      <a-tooltip :title="isReadonly ? '仅 admin 可执行' : `仅在预检通过后可执行（${activeSourceLabel}）`">
+      <a-tooltip
+        :title="isReadonly ? '仅 admin 可执行' : `仅在预检通过后可执行（${activeSourceLabel}）`"
+      >
         <button
           class="px-6 py-2.5 rounded-[6px] text-[13px] font-bold text-white bg-[#1677FF] hover:bg-[#0052D9] shadow-sm transition-all border-none"
           :disabled="isReadonly || !hasPreflightPass || state.isSyncing"
@@ -116,7 +129,8 @@ import { computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { useDataSync } from '../../composables/useDataSync'
 
-const { state, isReadonly, hasPreflightPass, testAllConnections, runPreflight, executeSync } = useDataSync()
+const { state, isReadonly, hasPreflightPass, testAllConnections, runPreflight, executeSync } =
+  useDataSync()
 
 const activeSource = computed(() => (state.activeTab === 'mongo' ? 'mongo' : 'pg'))
 const activeSourceLabel = computed(() => (activeSource.value === 'mongo' ? 'Mongo' : 'PG'))

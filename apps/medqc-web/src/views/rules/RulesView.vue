@@ -284,10 +284,11 @@
                 'cursor-pointer border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 select-none',
               ]"
               @click="
-                filterDocumentCategory === cat.value
-                  ? (filterDocumentCategory = undefined)
-                  : (filterDocumentCategory = cat.value)
-                handleFilter()
+                () => {
+                  filterDocumentCategory =
+                    filterDocumentCategory === cat.value ? undefined : cat.value
+                  handleFilter()
+                }
               "
             >
               {{ cat.label }}

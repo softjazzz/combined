@@ -125,7 +125,9 @@ export const syncApi = {
     return response.data
   },
 
-  async updateMongoConfig(payload: Partial<MongoConnectionConfig>): Promise<{ success: boolean; config: MongoConnectionConfig }> {
+  async updateMongoConfig(
+    payload: Partial<MongoConnectionConfig>,
+  ): Promise<{ success: boolean; config: MongoConnectionConfig }> {
     const response = await http.put('/api/v1/sync/config/mongo', payload)
     return response.data
   },

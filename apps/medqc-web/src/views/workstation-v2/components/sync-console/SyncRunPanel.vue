@@ -1,6 +1,8 @@
 <template>
   <div class="h-full flex flex-col bg-white overflow-hidden">
-    <div class="px-5 py-3 border-b border-slate-100 bg-white flex justify-between items-center shrink-0">
+    <div
+      class="px-5 py-3 border-b border-slate-100 bg-white flex justify-between items-center shrink-0"
+    >
       <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
         执行日志与历史
       </h2>
@@ -23,14 +25,22 @@
     <div class="px-5 py-2 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2">
       <button
         class="px-2 py-1 rounded text-[11px] transition-colors"
-        :class="activeView === 'realtime' ? 'bg-white text-slate-800 border border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+        :class="
+          activeView === 'realtime'
+            ? 'bg-white text-slate-800 border border-slate-200'
+            : 'text-slate-500 hover:text-slate-700'
+        "
         @click="activeView = 'realtime'"
       >
         实时日志
       </button>
       <button
         class="px-2 py-1 rounded text-[11px] transition-colors"
-        :class="activeView === 'history' ? 'bg-white text-slate-800 border border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+        :class="
+          activeView === 'history'
+            ? 'bg-white text-slate-800 border border-slate-200'
+            : 'text-slate-500 hover:text-slate-700'
+        "
         @click="activeView = 'history'"
       >
         运行历史
@@ -55,7 +65,8 @@
         预检结果：{{ state.preflightResult.executable ? '通过' : '未通过' }}
       </div>
       <div class="text-[11px] text-slate-500 mt-1">
-        预计影响 {{ state.preflightResult.estimated_impact }} 条，风险等级 {{ state.preflightResult.risk_level }}
+        预计影响 {{ state.preflightResult.estimated_impact }} 条，风险等级
+        {{ state.preflightResult.risk_level }}
       </div>
       <div
         v-if="state.preflightResult.blockers?.length"
@@ -153,7 +164,10 @@
               </span>
             </div>
             <div class="mt-1 text-[11px] text-slate-500">
-              开始：{{ formatTime(item.started_at) }} · 耗时：{{ formatDuration(item.duration_ms) }} · 记录数：{{ item.total_records || 0 }}
+              开始：{{ formatTime(item.started_at) }} · 耗时：{{
+                formatDuration(item.duration_ms)
+              }}
+              · 记录数：{{ item.total_records || 0 }}
             </div>
             <div
               v-if="item.error"

@@ -1,6 +1,8 @@
 <template>
   <div class="h-full flex flex-col bg-white overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+    <div
+      class="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0"
+    >
       <div>
         <h2 class="text-[15px] font-bold text-slate-900 tracking-tight">
           字段清洗与映射规则（只读）

@@ -206,7 +206,8 @@
 import { message } from 'ant-design-vue'
 import { useDataSync } from '../../composables/useDataSync'
 
-const { state, isReadonly, testActiveConnection, saveMongoConnection, savePgConnection } = useDataSync()
+const { state, isReadonly, testActiveConnection, saveMongoConnection, savePgConnection } =
+  useDataSync()
 
 const readPreferenceOptions = [
   { label: 'secondaryPreferred（推荐）', value: 'secondaryPreferred' },

@@ -189,7 +189,7 @@
           item-layout="horizontal"
           size="small"
         >
-          <template #renderItem="{ item }">
+          <template #renderItem="{ item, index }">
             <a-list-item>
               <template #actions>
                 <a-space>
