@@ -207,9 +207,14 @@
         <QcEngineConfig />
       </div>
 
-      <!-- 数据同步配置 -->
+      <!-- 数据同步已迁移至 Workstation V4 -->
       <div v-if="activeTab === 'data_sync'">
-        <DataSyncConfig />
+        <a-alert
+          type="info"
+          show-icon
+          message="数据同步控制台已迁移到 Workstation V4"
+          description="正在跳转到 /workstation-v4/system-config ..."
+        />
       </div>
     </div>
 
@@ -233,7 +238,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, h, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   SettingOutlined,
@@ -258,7 +263,6 @@ import UserEditModal from '@/components/settings/UserEditModal.vue'
 import RoleEditModal from '@/components/settings/RoleEditModal.vue'
 import ClassificationVersionManager from '@/components/settings/ClassificationVersionManager.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
-import DataSyncConfig from '@/components/settings/DataSyncConfig.vue'
 import SystemConfig from '@/components/settings/SystemConfig.vue'
 import QcEngineConfig from '@/components/settings/QcEngineConfig.vue'
 import UserManagement from '@/components/settings/UserManagement.vue'
@@ -276,6 +280,7 @@ type SettingsTab =
   | 'data_sync'
 
 const route = useRoute()
+const router = useRouter()
 const activeTab = ref<SettingsTab>('users')
 const validTabs: SettingsTab[] = [
   'users',
@@ -303,6 +308,13 @@ watch(
   },
   { immediate: true },
 )
+
+watch(activeTab, async (tab) => {
+  if (tab !== 'data_sync') {
+    return
+  }
+  await router.push({ path: '/workstation-v4/system-config', query: { tab: 'dataSync' } })
+})
 
 const modals = reactive({
   userEdit: false,

@@ -1,55 +1,87 @@
 <template>
-  <div class="flex-1 flex flex-col bg-white overflow-hidden">
-    <!-- Header -->
+  <div class="h-full flex flex-col bg-white overflow-hidden">
     <div class="px-5 py-3 border-b border-slate-100 bg-white flex justify-between items-center shrink-0">
+      <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
+        执行日志与历史
+      </h2>
       <div class="flex items-center gap-2">
-        <div class="flex items-center">
-          <span class="relative flex h-2 w-2 mr-2">
-            <span
-              v-if="state.isSyncing"
-              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"
-            />
-            <span
-              class="relative inline-flex rounded-full h-2 w-2"
-              :class="state.isSyncing ? 'bg-slate-600' : 'bg-slate-200'"
-            />
-          </span>
-          <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
-            执行日志
-          </h2>
-        </div>
+        <button
+          class="text-[11px] text-slate-400 hover:text-slate-800 transition-colors font-medium"
+          @click="handleRefreshHistory"
+        >
+          刷新历史
+        </button>
+        <button
+          class="text-[11px] text-slate-400 hover:text-slate-800 transition-colors font-medium"
+          @click="clearLogs"
+        >
+          清空日志
+        </button>
       </div>
+    </div>
+
+    <div class="px-5 py-2 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2">
       <button
-        class="text-[11px] text-slate-400 hover:text-slate-800 transition-colors font-medium"
-        @click="handleClear"
+        class="px-2 py-1 rounded text-[11px] transition-colors"
+        :class="activeView === 'realtime' ? 'bg-white text-slate-800 border border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+        @click="activeView = 'realtime'"
       >
-        Clear
+        实时日志
+      </button>
+      <button
+        class="px-2 py-1 rounded text-[11px] transition-colors"
+        :class="activeView === 'history' ? 'bg-white text-slate-800 border border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+        @click="activeView = 'history'"
+      >
+        运行历史
       </button>
     </div>
 
-    <!-- Active Tasks Progress (Minimal Progress Line) -->
     <div
       v-if="state.isSyncing"
       class="px-5 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0"
     >
-      <div class="flex justify-between items-end mb-1.5">
-        <span class="text-[11px] font-medium text-slate-700 font-mono tracking-tight">Syncing his_emr...</span>
-        <span class="text-[10px] font-semibold text-slate-500">45%</span>
-      </div>
-      <div class="w-full bg-slate-200 rounded-full h-1 overflow-hidden">
-        <div
-          class="bg-slate-800 h-1 rounded-full transition-all duration-300"
-          style="width: 45%"
-        />
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-medium text-slate-700">同步任务执行中...</span>
+        <span class="text-[11px] text-slate-500">轮询中</span>
       </div>
     </div>
 
-    <!-- Logs Body (Light theme, Airbyte/Fivetran style) -->
-    <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-2 text-[11.5px] font-mono bg-[#FAFAFA]">
-      <div class="text-slate-400 pb-1 border-b border-slate-100 border-dashed">
-        > Ready. Waiting for master signal...
+    <div
+      v-if="state.preflightResult"
+      class="px-5 py-3 border-b border-slate-100 shrink-0"
+    >
+      <div class="text-[12px] font-semibold text-slate-800">
+        预检结果：{{ state.preflightResult.executable ? '通过' : '未通过' }}
       </div>
-      
+      <div class="text-[11px] text-slate-500 mt-1">
+        预计影响 {{ state.preflightResult.estimated_impact }} 条，风险等级 {{ state.preflightResult.risk_level }}
+      </div>
+      <div
+        v-if="state.preflightResult.blockers?.length"
+        class="text-[11px] text-red-500 mt-1"
+      >
+        阻断项：{{ state.preflightResult.blockers.join('；') }}
+      </div>
+      <div
+        v-if="state.preflightResult.warnings?.length"
+        class="text-[11px] text-amber-600 mt-1"
+      >
+        告警：{{ state.preflightResult.warnings.join('；') }}
+      </div>
+    </div>
+
+    <div
+      v-if="activeView === 'realtime'"
+      class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-2 text-[11.5px] font-mono bg-[#FAFAFA]"
+    >
+      <div
+        v-if="state.currentRunLog.length === 0"
+        class="text-slate-400"
+      >
+        > Ready. Waiting for command...
+      </div>
+
       <div
         v-for="(log, idx) in state.currentRunLog"
         :key="idx"
@@ -66,69 +98,153 @@
           }"
         >{{ log.message }}</span>
       </div>
+    </div>
 
-      <!-- Dry Run Results View (Minimalist Info Block) -->
-      <div
-        v-if="state.dryRunResults && !state.isSyncing"
-        class="mt-4 p-3 bg-white border border-slate-200 shadow-sm rounded-md font-sans"
-      >
-        <div class="text-[11.5px] font-semibold text-slate-800 mb-1.5 flex items-center gap-1.5">
-          <svg
-            class="w-3.5 h-3.5 text-slate-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          ><path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-          /></svg>
-          试运行准入评估通过
+    <div
+      v-else
+      class="flex-1 flex flex-col min-h-0"
+    >
+      <div class="px-5 py-2 border-b border-slate-100 flex items-center gap-2">
+        <a-select
+          v-model:value="historySource"
+          size="small"
+          style="width: 110px"
+          :options="sourceOptions"
+          @change="handleFilterChange"
+        />
+        <a-select
+          v-model:value="historyTier"
+          size="small"
+          style="width: 110px"
+          :options="tierOptions"
+          @change="handleFilterChange"
+        />
+        <span class="text-[11px] text-slate-400">共 {{ state.runHistoryTotal }} 条</span>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2 bg-[#FAFAFA]">
+        <div
+          v-if="state.runsLoading"
+          class="text-[12px] text-slate-500"
+        >
+          正在加载运行历史...
         </div>
-        <div class="text-[11px] text-slate-600 space-y-1">
-          <div class="flex justify-between">
-            <span class="text-slate-500">评估受影响记录:</span>
-            <span class="font-mono font-medium text-slate-800">{{ state.dryRunResults.estimatedImpact }}</span>
-          </div>
+        <div
+          v-else-if="state.runHistory.length === 0"
+          class="text-[12px] text-slate-500"
+        >
+          暂无运行历史记录。
         </div>
-        
-        <div class="mt-2.5 pt-2.5 border-t border-slate-100">
-          <div class="text-[11px] font-medium text-slate-500 mb-1">
-            风险提示:
-          </div>
-          <ul class="list-disc pl-4 text-[10.5px] text-slate-600 space-y-0.5">
-            <li
-              v-for="w in state.dryRunResults.warnings"
-              :key="w"
-            >
-              {{ w }}
-            </li>
-          </ul>
-        </div>
-        
-        <div class="mt-3">
-          <button
-            class="w-full py-1.5 text-[11.5px] font-medium text-white bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded transition-colors shadow-sm"
-            @click="handleExecute"
+        <template v-else>
+          <div
+            v-for="item in state.runHistory"
+            :key="item.id"
+            class="rounded border border-slate-200 bg-white px-3 py-2"
           >
-            确认安全，提交流水线
-          </button>
-        </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-[12px] font-semibold text-slate-800">
+                {{ item.source.toUpperCase() }} · {{ item.tier }}
+              </div>
+              <span
+                class="text-[11px] font-medium"
+                :class="statusClass(item.status)"
+              >
+                {{ item.status }}
+              </span>
+            </div>
+            <div class="mt-1 text-[11px] text-slate-500">
+              开始：{{ formatTime(item.started_at) }} · 耗时：{{ formatDuration(item.duration_ms) }} · 记录数：{{ item.total_records || 0 }}
+            </div>
+            <div
+              v-if="item.error"
+              class="mt-1 text-[11px] text-red-500"
+            >
+              错误：{{ item.error }}
+            </div>
+            <div
+              v-if="item.operator?.email"
+              class="mt-1 text-[11px] text-slate-400"
+            >
+              操作人：{{ item.operator.email }}
+            </div>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { message } from 'ant-design-vue'
 import { useDataSync } from '../../composables/useDataSync'
-const { state, executeSync } = useDataSync()
 
-const handleExecute = () => {
-  executeSync()
+const { state, clearLogs, loadRunHistory } = useDataSync()
+
+const activeView = ref<'realtime' | 'history'>('realtime')
+const historySource = ref<'all' | 'mongo' | 'pg'>('all')
+const historyTier = ref<'all' | 'tier1' | 'tier2' | 'tier3'>('all')
+
+const sourceOptions = [
+  { label: '全部来源', value: 'all' },
+  { label: 'Mongo', value: 'mongo' },
+  { label: 'PG', value: 'pg' },
+]
+
+const tierOptions = [
+  { label: '全部 Tier', value: 'all' },
+  { label: 'Tier1', value: 'tier1' },
+  { label: 'Tier2', value: 'tier2' },
+  { label: 'Tier3', value: 'tier3' },
+]
+
+async function handleRefreshHistory() {
+  try {
+    await loadRunHistory({
+      source: historySource.value,
+      tier: historyTier.value,
+    })
+  } catch {
+    message.error('刷新运行历史失败')
+  }
 }
 
-const handleClear = () => {
-  state.currentRunLog.splice(0)
+async function handleFilterChange() {
+  await handleRefreshHistory()
+}
+
+function formatTime(value?: string): string {
+  if (!value) {
+    return '-'
+  }
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) {
+    return value
+  }
+  return dt.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatDuration(ms?: number): string {
+  const value = Number(ms || 0)
+  if (value <= 0) {
+    return '-'
+  }
+  if (value < 1000) {
+    return `${value}ms`
+  }
+  return `${(value / 1000).toFixed(1)}s`
+}
+
+function statusClass(status: string): string {
+  if (status === 'success') {
+    return 'text-emerald-600'
+  }
+  if (status === 'partial') {
+    return 'text-amber-600'
+  }
+  if (status === 'failed') {
+    return 'text-red-600'
+  }
+  return 'text-slate-500'
 }
 </script>

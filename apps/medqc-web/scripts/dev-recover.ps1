@@ -191,8 +191,19 @@ function Resolve-EsbuildBinary([string]$projectRoot) {
       return $null
     }
 
-    $tempEsbuild = Join-Path $env:TEMP "esbuild-dev.exe"
-    Copy-Item -Path $candidate.FullName -Destination $tempEsbuild -Force
+    $safeVersion = ($hostVersion -replace "[^0-9A-Za-z\.-]", "_")
+    $localTmpDir = Join-Path $projectRoot ".tmp"
+    if (-not (Test-Path -LiteralPath $localTmpDir)) {
+      New-Item -ItemType Directory -Path $localTmpDir -Force | Out-Null
+    }
+    $tempEsbuild = Join-Path $localTmpDir ("esbuild-dev-" + $safeVersion + ".exe")
+    try {
+      Copy-Item -Path $candidate.FullName -Destination $tempEsbuild -Force -ErrorAction Stop
+    } catch {
+      if (-not (Test-Path -LiteralPath $tempEsbuild)) {
+        throw
+      }
+    }
     return $tempEsbuild
   } catch {
     Write-Warning "  prepare esbuild binary failed: $($_.Exception.Message)"

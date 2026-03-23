@@ -51,7 +51,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import SyncOverviewBar from './components/sync-console/SyncOverviewBar.vue'
 import ConnectionStudio from './components/sync-console/ConnectionStudio.vue'
 import SchemaExplorer from './components/sync-console/SchemaExplorer.vue'
@@ -59,8 +60,22 @@ import SyncPolicyPanel from './components/sync-console/SyncPolicyPanel.vue'
 import SyncRunPanel from './components/sync-console/SyncRunPanel.vue'
 import FieldMappingWorkbench from './components/sync-console/FieldMappingWorkbench.vue'
 import FrontpageExtractionSettingsPanel from './components/system-config/FrontpageExtractionSettingsPanel.vue'
+import { useDataSync } from './composables/useDataSync'
 
 const activeTab = ref('dataSync')
+const route = useRoute()
+const { initialize, resetState } = useDataSync()
+
+onMounted(async () => {
+  if (route.query.tab === 'frontpageExtraction') {
+    activeTab.value = 'frontpageExtraction'
+  }
+  await initialize()
+})
+
+onUnmounted(() => {
+  resetState()
+})
 </script>
 
 <style scoped>

@@ -929,10 +929,7 @@
                   size="small"
                   :disabled="!combinedMedicalText"
                   class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]"
-                  @click="
-                    aiProfileModalVisible = true
-                    profileAnalyzed = true
-                  "
+                  @click="() => { aiProfileModalVisible = true; profileAnalyzed = true }"
                 >
                   <template #icon>
                     <ThunderboltOutlined />
@@ -1524,10 +1521,7 @@
               'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
               'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800',
             ]"
-            @click="
-              viewMode = 'list'
-              selectDept(dept.name)
-            "
+            @click="() => { viewMode = 'list'; selectDept(dept.name) }"
           >
             <span class="truncate">{{ dept.name }}</span>
             <div class="flex items-center gap-1.5">
