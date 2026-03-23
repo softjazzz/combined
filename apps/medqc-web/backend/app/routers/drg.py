@@ -11,6 +11,7 @@ import pandas as pd
 
 from ..services.drg_demo_store import get_demo_drg_store
 from ..services import drg_batch_store
+from ..services.drg_config_store import get_drg_config_store
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,157 @@ class HandleAlertRequest(BaseModel):
     alert_id: int
     action: str  # acknowledge / resolve
     handled_by: Optional[str] = None
+
+
+class GrouperConfigPayload(BaseModel):
+    region: str
+    engine: str
+    baseRate: float
+    hospitalCoefficient: float
+    regionCoefficient: float
+    effectiveDate: str
+    lowRateThreshold: int
+    highRateThreshold: int
+    enableCCMCC: bool = True
+    enableAutoSuggestion: bool = True
+
+
+class SaveConfigRequest(BaseModel):
+    config: GrouperConfigPayload
+    operator: str
+    change_summary: str
+
+
+class PublishConfigRequest(BaseModel):
+    operator: str
+    change_summary: str
+
+
+class RollbackConfigRequest(BaseModel):
+    version_id: str
+    operator: str
+    change_summary: str
+
+
+class ConsistencySample(BaseModel):
+    case_key: Optional[str] = None
+    admission_id: Optional[str] = None
+    hospital_group: Optional[str] = None
+    insurance_group: Optional[str] = None
+
+
+class ConsistencyCheckRequest(BaseModel):
+    operator: str
+    version_id: Optional[str] = None
+    samples: List[ConsistencySample]
+
+
+@router.get("/config/current")
+async def get_grouper_config_current() -> Dict[str, Any]:
+    store = get_drg_config_store()
+    return {
+        "success": True,
+        "data": store.get_current(),
+    }
+
+
+@router.put("/config")
+async def save_grouper_config(payload: SaveConfigRequest) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    saved = store.save_draft(
+        config=payload.config.model_dump(),
+        operator=payload.operator.strip(),
+        change_summary=payload.change_summary.strip(),
+    )
+    return {
+        "success": True,
+        "data": saved,
+        "message": "配置草稿已保存",
+    }
+
+
+@router.post("/config/publish")
+async def publish_grouper_config(payload: PublishConfigRequest) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    version = store.publish(
+        operator=payload.operator.strip(),
+        change_summary=payload.change_summary.strip(),
+    )
+    return {
+        "success": True,
+        "data": version,
+        "message": "配置发布成功",
+    }
+
+
+@router.get("/config/versions")
+async def list_grouper_config_versions(limit: int = Query(20, ge=1, le=200)) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    versions = store.list_versions()[:limit]
+    return {
+        "success": True,
+        "data": {
+            "items": versions,
+            "total": len(versions),
+        },
+    }
+
+
+@router.get("/config/versions/{version_id}")
+async def get_grouper_config_version_detail(version_id: str) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    detail = store.get_version(version_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    return {
+        "success": True,
+        "data": detail,
+    }
+
+
+@router.post("/config/rollback")
+async def rollback_grouper_config(payload: RollbackConfigRequest) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    try:
+        result = store.rollback(
+            version_id=payload.version_id,
+            operator=payload.operator.strip(),
+            change_summary=payload.change_summary.strip(),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="目标版本不存在")
+    return {
+        "success": True,
+        "data": result,
+        "message": "版本回滚成功",
+    }
+
+
+@router.get("/config/audit-logs")
+async def list_grouper_config_audit_logs(limit: int = Query(100, ge=1, le=500)) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    logs = store.get_audit_logs(limit=limit)
+    return {
+        "success": True,
+        "data": {
+            "items": logs,
+            "total": len(logs),
+        },
+    }
+
+
+@router.post("/config/consistency-check")
+async def run_grouper_consistency_check(payload: ConsistencyCheckRequest) -> Dict[str, Any]:
+    store = get_drg_config_store()
+    report = store.run_consistency_check(
+        samples=[sample.model_dump() for sample in payload.samples],
+        operator=payload.operator.strip(),
+        version_id=payload.version_id,
+    )
+    return {
+        "success": True,
+        "data": report,
+    }
 
 
 @router.post("/predict-realtime")

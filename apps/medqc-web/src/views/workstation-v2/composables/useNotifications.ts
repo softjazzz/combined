@@ -2,12 +2,19 @@ import { computed, ref, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { ApiService } from '@/services/apiService'
 import { normalizeNotification } from '../normalize'
-import type { NotificationVM, PatientRecord } from '../types'
+import type { NotificationOverviewItem, NotificationVM, PatientRecord } from '../types'
 
 interface NotificationListResponse {
   data?: {
     items?: unknown[]
     unread_count?: number
+  }
+}
+
+interface NotificationOverviewResponse {
+  data?: {
+    items?: unknown[]
+    date?: string
   }
 }
 
@@ -27,12 +34,150 @@ export function useNotifications(
   const notificationUnreadCount = ref(0)
   const notificationLoading = ref(false)
   const notificationReadFilter = ref<'all' | 'unread' | 'read'>('unread')
+  const overviewLoading = ref(false)
+  const overviewViewMode = ref<'overview' | 'detail'>('overview')
+  const overviewTypeFilter = ref<'all' | string>('all')
+  const overviewSeverityFilter = ref<'all' | string>('all')
+  const overviewDepartmentFilter = ref<'all' | string>('all')
+  const notificationOverviewItems = ref<NotificationOverviewItem[]>([])
 
   const filteredAssistNotifications = computed(() => {
     if (notificationReadFilter.value === 'all') return assistNotifications.value
     const expectRead = notificationReadFilter.value === 'read'
     return assistNotifications.value.filter((item) => item.is_read === expectRead)
   })
+
+  const overviewDepartments = computed(() => {
+    const set = new Set<string>()
+    for (const item of notificationOverviewItems.value) {
+      if (item.department) set.add(item.department)
+    }
+    return Array.from(set).sort()
+  })
+
+  const overviewTypes = computed(() => {
+    const set = new Set<string>()
+    for (const item of notificationOverviewItems.value) {
+      if (item.type) set.add(item.type)
+    }
+    return Array.from(set).sort()
+  })
+
+  const overviewSeverities = computed(() => {
+    const set = new Set<string>()
+    for (const item of notificationOverviewItems.value) {
+      if (item.severity) set.add(item.severity)
+    }
+    return Array.from(set).sort()
+  })
+
+  const filteredNotificationOverviewItems = computed(() => {
+    return notificationOverviewItems.value.filter((item) => {
+      const matchDepartment =
+        overviewDepartmentFilter.value === 'all' ||
+        item.department === overviewDepartmentFilter.value
+      const matchType = overviewTypeFilter.value === 'all' || item.type === overviewTypeFilter.value
+      const matchSeverity =
+        overviewSeverityFilter.value === 'all' || item.severity === overviewSeverityFilter.value
+      return matchDepartment && matchType && matchSeverity
+    })
+  })
+
+  function normalizeOverviewItem(raw: unknown, index: number): NotificationOverviewItem {
+    const item = (raw || {}) as Record<string, unknown>
+    const sourceIdsRaw = item.source_notification_ids
+    const sourceIds = Array.isArray(sourceIdsRaw)
+      ? sourceIdsRaw.map((id) => String(id)).filter(Boolean)
+      : []
+    return {
+      overview_id: String(item.overview_id || `overview-${index}`),
+      type: String(item.type || 'general'),
+      severity: String(item.severity || 'info'),
+      department: String(item.department || '未分科室'),
+      record_id: String(item.record_id || ''),
+      title: String(item.title || '病案问题集中点'),
+      summary: String(item.summary || '暂无描述'),
+      occurrence_count: Number(item.occurrence_count || 0),
+      unread_count: Number(item.unread_count || 0),
+      latest_created_at: String(item.latest_created_at || ''),
+      source_notification_ids: sourceIds,
+    }
+  }
+
+  function buildLocalOverview(items: NotificationVM[]): NotificationOverviewItem[] {
+    const groups = new Map<string, NotificationOverviewItem>()
+    for (const notif of items) {
+      const type = notif.type || 'general'
+      const severity = notif.level || 'info'
+      const department = '未分科室'
+      const recordId = notif.record_id || ''
+      const key = `${type}|${severity}|${department}|${recordId}`
+      const existing = groups.get(key)
+      if (existing) {
+        existing.occurrence_count += 1
+        existing.unread_count += notif.is_read ? 0 : 1
+        existing.source_notification_ids.push(notif.id)
+        if (notif.created_at > existing.latest_created_at) {
+          existing.latest_created_at = notif.created_at
+          existing.summary = notif.content || existing.summary
+        }
+        continue
+      }
+      groups.set(key, {
+        overview_id: key,
+        type,
+        severity,
+        department,
+        record_id: recordId,
+        title: notif.title || '病案问题集中点',
+        summary: notif.content || '暂无描述',
+        occurrence_count: 1,
+        unread_count: notif.is_read ? 0 : 1,
+        latest_created_at: notif.created_at,
+        source_notification_ids: notif.id ? [notif.id] : [],
+      })
+    }
+    return Array.from(groups.values()).sort(
+      (a, b) =>
+        b.unread_count - a.unread_count ||
+        b.occurrence_count - a.occurrence_count ||
+        (b.latest_created_at || '').localeCompare(a.latest_created_at || ''),
+    )
+  }
+
+  async function fetchAssistNotificationOverview() {
+    if (!ApiService.isAuthenticated()) {
+      notificationOverviewItems.value = []
+      return
+    }
+
+    overviewLoading.value = true
+    try {
+      const now = new Date()
+      const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const res = await ApiService.get<NotificationOverviewResponse>(
+        '/api/v1/notifications/overview',
+        {
+          date: dateKey,
+        },
+      )
+      if (!res.success) {
+        notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
+        return
+      }
+      const items = Array.isArray(res.data?.data?.items) ? res.data?.data?.items : []
+      notificationOverviewItems.value = items.map((item, index) =>
+        normalizeOverviewItem(item, index),
+      )
+    } catch (err) {
+      if (!isAuthError(err)) {
+        console.error('加载当天问题概览失败:', err)
+      }
+      notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
+    } finally {
+      overviewLoading.value = false
+    }
+  }
 
   async function fetchAssistNotifications() {
     if (!ApiService.isAuthenticated()) {
@@ -56,12 +201,14 @@ export function useNotifications(
       const items = Array.isArray(payload?.items) ? payload.items : []
       assistNotifications.value = items.map((item, index) => normalizeNotification(item, index))
       notificationUnreadCount.value = Number(payload?.unread_count || 0)
+      await fetchAssistNotificationOverview()
     } catch (err) {
       if (!isAuthError(err)) {
         console.error('加载消息概览失败:', err)
       }
       assistNotifications.value = []
       notificationUnreadCount.value = 0
+      notificationOverviewItems.value = []
     } finally {
       notificationLoading.value = false
     }
@@ -109,7 +256,9 @@ export function useNotifications(
       return
     }
 
-    const record = allRecords.value.find((item) => item.id === targetRecordId || item.visitId === targetRecordId)
+    const record = allRecords.value.find(
+      (item) => item.id === targetRecordId || item.visitId === targetRecordId,
+    )
     if (!record) {
       message.warning(`未找到病历：${targetRecordId}`)
       return
@@ -119,6 +268,40 @@ export function useNotifications(
     assistPanelVisible.value = true
     assistTab.value = 'form'
     frontpageTab.value = 'fields'
+  }
+
+  async function handleAssistOverviewClick(item: NotificationOverviewItem) {
+    if (item.source_notification_ids.length > 0) {
+      for (const notifId of item.source_notification_ids) {
+        const target = assistNotifications.value.find((notif) => notif.id === notifId)
+        if (!target) continue
+        if (!target.is_read) {
+          await markAssistNotificationRead(target)
+        }
+      }
+    }
+
+    if (item.record_id) {
+      const pseudoNotification: NotificationVM = {
+        id: item.source_notification_ids[0] || item.overview_id,
+        record_id: item.record_id,
+        title: item.title,
+        content: item.summary,
+        message: item.summary,
+        created_at: item.latest_created_at,
+        is_read: item.unread_count <= 0,
+        level: item.severity,
+        type: item.type,
+      }
+      await handleAssistNotificationClick(pseudoNotification)
+    } else {
+      assistPanelVisible.value = true
+      assistTab.value = 'form'
+      frontpageTab.value = 'fields'
+      message.info('该问题集中点未绑定具体病历，已进入质控页')
+    }
+
+    await fetchAssistNotificationOverview()
   }
 
   function formatRelativeTime(iso: string) {
@@ -138,11 +321,23 @@ export function useNotifications(
     notificationUnreadCount,
     notificationLoading,
     notificationReadFilter,
+    overviewLoading,
+    overviewViewMode,
+    overviewTypeFilter,
+    overviewSeverityFilter,
+    overviewDepartmentFilter,
+    notificationOverviewItems,
+    filteredNotificationOverviewItems,
+    overviewDepartments,
+    overviewTypes,
+    overviewSeverities,
     filteredAssistNotifications,
     fetchAssistNotifications,
+    fetchAssistNotificationOverview,
     markAssistNotificationRead,
     markAllAssistNotificationsRead,
     handleAssistNotificationClick,
+    handleAssistOverviewClick,
     formatRelativeTime,
   }
 }

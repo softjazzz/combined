@@ -12,7 +12,7 @@ import type {
   DRGGroupingHistoryItem,
   DRGGroupingResult,
   ICDSearchResponse,
-  ValidationResult
+  ValidationResult,
 } from '@/types/drg'
 import type { AnalysisDimension, AnalysisDataResponse } from '@/types/drg-analysis'
 
@@ -21,7 +21,7 @@ import {
   mockCaseFrontPages,
   getCaseFrontPageByAdmissionId,
   getDiagnosesByFrontPageId,
-  getProceduresByFrontPageId
+  getProceduresByFrontPageId,
 } from '../data/drg/mock-case-front-page'
 
 import {
@@ -31,11 +31,7 @@ import {
   getLatestGroupingByAdmissionId,
 } from '../data/drg/mock-drg-grouping'
 
-import {
-  suggestICDCodes,
-  searchICD10Codes,
-  searchICD9Procedures
-} from '../data/drg/mock-icd-codes'
+import { suggestICDCodes, searchICD10Codes, searchICD9Procedures } from '../data/drg/mock-icd-codes'
 
 import { mockAnalysisData } from '../data/drg/mock-analysis'
 
@@ -43,6 +39,56 @@ import { mockAnalysisData } from '../data/drg/mock-analysis'
 const USE_MOCK_DATA = (import.meta as any).env?.VITE_USE_DRG_MOCK !== 'false' // 默认使用 Mock；设置为 "false" 可切到真实 API
 
 const API_V1_PREFIX = '/api/v1'
+
+type GrouperConfigPayload = {
+  region: string
+  engine: string
+  baseRate: number
+  hospitalCoefficient: number
+  regionCoefficient: number
+  effectiveDate: string
+  lowRateThreshold: number
+  highRateThreshold: number
+  enableCCMCC: boolean
+  enableAutoSuggestion: boolean
+}
+
+type GrouperVersionItem = {
+  version_id: string
+  operator: string
+  operated_at: string
+  change_summary: string
+  published_at?: string
+  is_published?: boolean
+}
+
+type GrouperConsistencySample = {
+  case_key?: string
+  admission_id?: string
+  hospital_group: string
+  insurance_group: string
+}
+
+const mockGrouperStore: {
+  draft: GrouperConfigPayload
+  published_version_id: string | null
+  versions: Array<GrouperVersionItem & { config: GrouperConfigPayload }>
+} = {
+  draft: {
+    region: 'sichuan',
+    engine: 'OpenDRG',
+    baseRate: 10000,
+    hospitalCoefficient: 1.2,
+    regionCoefficient: 1.05,
+    effectiveDate: '2024-01-01',
+    lowRateThreshold: 3,
+    highRateThreshold: 30,
+    enableCCMCC: true,
+    enableAutoSuggestion: true,
+  },
+  published_version_id: null,
+  versions: [],
+}
 
 // ==================== 病案首页相关 API ====================
 
@@ -66,24 +112,24 @@ export async function getCaseFrontPageDetail(admissionId: string) {
     const frontPage = getCaseFrontPageByAdmissionId(admissionId)
     if (!frontPage) return Promise.resolve(null)
 
-    const diagnoses = getDiagnosesByFrontPageId(frontPage.front_page_id).map(d => ({
+    const diagnoses = getDiagnosesByFrontPageId(frontPage.front_page_id).map((d) => ({
       code: d.diagnosis_code,
       name: d.diagnosis_name,
       sequence: d.sequence,
-      is_complication: d.is_complication
+      is_complication: d.is_complication,
     }))
 
-    const procedures = getProceduresByFrontPageId(frontPage.front_page_id).map(p => ({
+    const procedures = getProceduresByFrontPageId(frontPage.front_page_id).map((p) => ({
       code: p.procedure_code,
       name: p.procedure_name,
       sequence: p.sequence,
-      procedure_date: p.procedure_date
+      procedure_date: p.procedure_date,
     }))
 
     return Promise.resolve({
       ...frontPage,
       secondary_diagnoses: diagnoses,
-      procedures
+      procedures,
     })
   }
 
@@ -100,14 +146,14 @@ export async function saveCaseFrontPage(data: Partial<CaseFrontPage>): Promise<C
     console.log('[Mock] 保存病案首页:', data)
     return Promise.resolve({
       ...mockCaseFrontPages[0],
-      ...data
+      ...data,
     } as CaseFrontPage)
   }
 
   const response = await fetch(`${API_V1_PREFIX}/case-front-page`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
   return response.json()
 }
@@ -126,11 +172,11 @@ export async function suggestCoding(params: {
   if (USE_MOCK_DATA) {
     // Mock: 使用本地模拟函数
     const suggestions = suggestICDCodes(params.diagnosis_name)
-    const candidates = suggestions.map(s => ({
+    const candidates = suggestions.map((s) => ({
       code: s.code,
       name: s.name,
       confidence: s.confidence,
-      note: s.notes
+      note: s.notes,
     }))
     return Promise.resolve({ candidates, total: candidates.length })
   }
@@ -138,7 +184,7 @@ export async function suggestCoding(params: {
   const response = await fetch(`${API_V1_PREFIX}/coding/suggest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+    body: JSON.stringify(params),
   })
   const data = await response.json()
   return data
@@ -161,19 +207,19 @@ export async function validateCoding(params: {
       warnings: [
         {
           type: 'missing_diagnosis',
-          message: '病程记录中提到\'心力衰竭\'，建议补充次诊断：I50.001（心力衰竭）',
+          message: "病程记录中提到'心力衰竭'，建议补充次诊断：I50.001（心力衰竭）",
           evidence: '病程记录第3天：患者出现呼吸困难，双肺底湿啰音，考虑心力衰竭...',
-          severity: 'info'
-        }
+          severity: 'info',
+        },
       ],
-      conflicts: []
+      conflicts: [],
     })
   }
 
   const response = await fetch(`${API_V1_PREFIX}/coding/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+    body: JSON.stringify(params),
   })
   return response.json()
 }
@@ -196,7 +242,7 @@ export async function searchICDCodes(params: {
   }
 
   const response = await fetch(
-    `${API_V1_PREFIX}/coding/search?keyword=${encodeURIComponent(params.keyword)}&category=${params.category}&limit=${params.limit ?? 20}`
+    `${API_V1_PREFIX}/coding/search?keyword=${encodeURIComponent(params.keyword)}&category=${params.category}&limit=${params.limit ?? 20}`,
   )
   return response.json()
 }
@@ -228,14 +274,14 @@ export async function predictDRGGrouping(params: {
       expected_los: { min: 10, max: 15 },
       confidence: 0.89,
       risk_level: 'high',
-      grouping_logic: `主诊断${grouping.adrg_code} + 合并症`
+      grouping_logic: `主诊断${grouping.adrg_code} + 合并症`,
     } as any)
   }
 
   const response = await fetch(`${API_V1_PREFIX}/drg/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+    body: JSON.stringify(params),
   })
   const data = await response.json()
   return data.data
@@ -244,7 +290,9 @@ export async function predictDRGGrouping(params: {
 /**
  * DIP 入组预测
  */
-export async function predictDIPGrouping(params: import('@/types/drg').DIPPredictRequest): Promise<import('@/types/drg').DIPGroupingResult> {
+export async function predictDIPGrouping(
+  params: import('@/types/drg').DIPPredictRequest,
+): Promise<import('@/types/drg').DIPGroupingResult> {
   if (USE_MOCK_DATA) {
     // Mock logic if needed, or throw error saying Mock not supported for DIP yet
     throw new Error('DIP Mock mode not implemented in frontend, please use real API')
@@ -254,7 +302,7 @@ export async function predictDIPGrouping(params: import('@/types/drg').DIPPredic
   const response = await fetch(`${API_V1_PREFIX}/dip/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
+    body: JSON.stringify(params),
   })
   const data = await response.json()
   return data.data
@@ -267,8 +315,8 @@ export async function getGroupingHistory(admissionId: string): Promise<DRGGroupi
   if (USE_MOCK_DATA) {
     return Promise.resolve(
       mockDRGGroupings
-        .filter(g => g.admission_id === admissionId)
-        .map(g => ({
+        .filter((g) => g.admission_id === admissionId)
+        .map((g) => ({
           grouping_id: g.grouping_id,
           drg_code: g.drg_code,
           drg_name: g.drg_name,
@@ -278,8 +326,8 @@ export async function getGroupingHistory(admissionId: string): Promise<DRGGroupi
           profit_margin: g.profit_margin,
           version: g.version,
           is_latest: g.is_latest,
-          grouped_at: g.grouped_at
-        })) as any
+          grouped_at: g.grouped_at,
+        })) as any,
     )
   }
 
@@ -301,12 +349,13 @@ export async function getCodingSuggestions(params?: {
   if (USE_MOCK_DATA) {
     let suggestions = [...mockCodingSuggestions]
     if (params?.admission_id) {
-      suggestions = suggestions.filter(s => s.admission_id === params.admission_id)
+      suggestions = suggestions.filter((s) => s.admission_id === params.admission_id)
     }
     if (params?.status) {
-      suggestions = suggestions.filter(s => s.status === params.status)
+      suggestions = suggestions.filter((s) => s.status === params.status)
     }
-    const limited = typeof params?.limit === 'number' ? suggestions.slice(0, params.limit) : suggestions
+    const limited =
+      typeof params?.limit === 'number' ? suggestions.slice(0, params.limit) : suggestions
     return Promise.resolve({ suggestions: limited as any, total: limited.length })
   }
 
@@ -315,7 +364,9 @@ export async function getCodingSuggestions(params?: {
   if (params?.status) qs.set('status', params.status)
   if (typeof params?.limit === 'number') qs.set('limit', String(params.limit))
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/suggestions${qs.toString() ? `?${qs.toString()}` : ''}`)
+  const response = await fetch(
+    `${API_V1_PREFIX}/drg/suggestions${qs.toString() ? `?${qs.toString()}` : ''}`,
+  )
   return response.json()
 }
 
@@ -338,8 +389,8 @@ export async function handleCodingSuggestion(params: {
     body: JSON.stringify({
       suggestion_id: params.suggestion_id,
       action: params.action,
-      handled_by: params.handled_by || 'current_user'
-    })
+      handled_by: params.handled_by || 'current_user',
+    }),
   })
 }
 
@@ -357,13 +408,13 @@ export async function getDRGAlerts(params?: {
   if (USE_MOCK_DATA) {
     let alerts = [...mockDRGAlerts]
     if (params?.admission_id) {
-      alerts = alerts.filter(a => a.admission_id === params.admission_id)
+      alerts = alerts.filter((a) => a.admission_id === params.admission_id)
     }
     if (params?.alert_level) {
-      alerts = alerts.filter(a => a.alert_level === params.alert_level)
+      alerts = alerts.filter((a) => a.alert_level === params.alert_level)
     }
     if (params?.status) {
-      alerts = alerts.filter(a => a.status === params.status)
+      alerts = alerts.filter((a) => a.status === params.status)
     }
     const limited = typeof params?.limit === 'number' ? alerts.slice(0, params.limit) : alerts
     return Promise.resolve({ alerts: limited as any, total: limited.length })
@@ -375,7 +426,9 @@ export async function getDRGAlerts(params?: {
   if (params?.status) qs.set('status', params.status)
   if (typeof params?.limit === 'number') qs.set('limit', String(params.limit))
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/alerts${qs.toString() ? `?${qs.toString()}` : ''}`)
+  const response = await fetch(
+    `${API_V1_PREFIX}/drg/alerts${qs.toString() ? `?${qs.toString()}` : ''}`,
+  )
   return response.json()
 }
 
@@ -395,8 +448,8 @@ export async function handleDRGAlert(params: {
     body: JSON.stringify({
       alert_id: params.alert_id,
       action: params.action,
-      handled_by: params.handled_by || 'current_user'
-    })
+      handled_by: params.handled_by || 'current_user',
+    }),
   })
 
   if (!res.ok) {
@@ -420,12 +473,211 @@ export async function getAnalysisData(params: {
   const qs = new URLSearchParams({
     dimension: params.dimension,
     start_date: params.startDate,
-    end_date: params.endDate
+    end_date: params.endDate,
   })
   if (params.filterId) qs.set('filter_id', params.filterId)
 
   const response = await fetch(`${API_V1_PREFIX}/drg/analysis?${qs.toString()}`)
   return response.json()
+}
+
+// ==================== 分组器配置中心 API（6.2.2） ====================
+
+export async function getGrouperConfigCurrent(): Promise<{
+  draft: GrouperConfigPayload
+  published_version_id: string | null
+  published_config: GrouperConfigPayload | null
+  latest_version_id: string | null
+  latest_consistency_report?: any
+}> {
+  if (USE_MOCK_DATA) {
+    const latest = mockGrouperStore.versions[0]
+    return Promise.resolve({
+      draft: { ...mockGrouperStore.draft },
+      published_version_id: mockGrouperStore.published_version_id,
+      published_config: latest ? { ...latest.config } : null,
+      latest_version_id: latest?.version_id || null,
+      latest_consistency_report: null,
+    })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config/current`)
+  const data = await response.json()
+  return data.data
+}
+
+export async function saveGrouperConfigDraft(params: {
+  config: GrouperConfigPayload
+  operator: string
+  change_summary: string
+}) {
+  if (USE_MOCK_DATA) {
+    mockGrouperStore.draft = { ...params.config }
+    return Promise.resolve({
+      draft: { ...mockGrouperStore.draft },
+      audit: {
+        version_id: mockGrouperStore.published_version_id,
+        operator: params.operator,
+        operated_at: new Date().toISOString(),
+        change_summary: params.change_summary,
+      },
+    })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = await response.json()
+  return data.data
+}
+
+export async function publishGrouperConfig(params: { operator: string; change_summary: string }) {
+  if (USE_MOCK_DATA) {
+    const versionId = `mock-${Date.now()}`
+    const now = new Date().toISOString()
+    const version = {
+      version_id: versionId,
+      operator: params.operator,
+      operated_at: now,
+      change_summary: params.change_summary,
+      published_at: now,
+      is_published: true,
+      config: { ...mockGrouperStore.draft },
+    }
+    mockGrouperStore.versions.unshift(version)
+    mockGrouperStore.published_version_id = versionId
+    return Promise.resolve(version)
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = await response.json()
+  return data.data
+}
+
+export async function listGrouperConfigVersions(): Promise<{
+  items: GrouperVersionItem[]
+  total: number
+}> {
+  if (USE_MOCK_DATA) {
+    return Promise.resolve({
+      items: mockGrouperStore.versions.map(({ config, ...item }) => item),
+      total: mockGrouperStore.versions.length,
+    })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config/versions`)
+  const data = await response.json()
+  return data.data
+}
+
+export async function getGrouperConfigVersionDetail(versionId: string) {
+  if (USE_MOCK_DATA) {
+    const item = mockGrouperStore.versions.find((v) => v.version_id === versionId)
+    if (!item) {
+      throw new Error('版本不存在')
+    }
+    return item
+  }
+
+  const response = await fetch(
+    `${API_V1_PREFIX}/drg/config/versions/${encodeURIComponent(versionId)}`,
+  )
+  const data = await response.json()
+  return data.data
+}
+
+export async function rollbackGrouperConfig(params: {
+  version_id: string
+  operator: string
+  change_summary: string
+}) {
+  if (USE_MOCK_DATA) {
+    const version = mockGrouperStore.versions.find((item) => item.version_id === params.version_id)
+    if (!version) {
+      throw new Error('版本不存在')
+    }
+    mockGrouperStore.published_version_id = version.version_id
+    mockGrouperStore.draft = { ...version.config }
+    return Promise.resolve({
+      version_id: version.version_id,
+      operator: params.operator,
+      operated_at: new Date().toISOString(),
+      change_summary: params.change_summary,
+      config: { ...version.config },
+    })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config/rollback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = await response.json()
+  return data.data
+}
+
+export async function runGrouperConsistencyCheck(params: {
+  operator: string
+  version_id?: string
+  samples: GrouperConsistencySample[]
+}) {
+  if (USE_MOCK_DATA) {
+    const validSamples = params.samples.filter(
+      (item) => item.hospital_group && item.insurance_group,
+    )
+    const matched = validSamples.filter((item) => item.hospital_group === item.insurance_group)
+    const differences = validSamples.filter((item) => item.hospital_group !== item.insurance_group)
+    const consistencyRate =
+      validSamples.length > 0
+        ? Number(((matched.length / validSamples.length) * 100).toFixed(2))
+        : 0
+    return Promise.resolve({
+      version_id: params.version_id || mockGrouperStore.published_version_id,
+      operator: params.operator,
+      operated_at: new Date().toISOString(),
+      formula: '一致率 = 匹配成功样本数 / 有效对照样本数',
+      summary: {
+        matched_count: matched.length,
+        valid_count: validSamples.length,
+        consistency_rate: consistencyRate,
+        difference_count: differences.length,
+      },
+      differences,
+    })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config/consistency-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = await response.json()
+  return data.data
+}
+
+export async function listGrouperConfigAuditLogs(
+  limit = 100,
+): Promise<{ items: any[]; total: number }> {
+  if (USE_MOCK_DATA) {
+    const items = mockGrouperStore.versions.map((version) => ({
+      action: 'publish',
+      version_id: version.version_id,
+      operator: version.operator,
+      operated_at: version.operated_at,
+      change_summary: version.change_summary,
+    }))
+    return Promise.resolve({ items, total: items.length })
+  }
+
+  const response = await fetch(`${API_V1_PREFIX}/drg/config/audit-logs?limit=${limit}`)
+  const data = await response.json()
+  return data.data
 }
 
 // ==================== 医保结算清单 API ====================
@@ -456,7 +708,9 @@ export async function getSettlementForm(caseNumber: string): Promise<SettlementF
 /**
  * 保存结算清单
  */
-export async function saveSettlementForm(data: SettlementForm): Promise<{ success: boolean; message: string }> {
+export async function saveSettlementForm(
+  data: SettlementForm,
+): Promise<{ success: boolean; message: string }> {
   if (USE_MOCK_DATA) {
     console.log('[Mock] 保存结算清单:', data)
     return Promise.resolve({ success: true, message: '保存成功' })
@@ -465,7 +719,7 @@ export async function saveSettlementForm(data: SettlementForm): Promise<{ succes
   const response = await fetch(`${API_V1_PREFIX}/settlement`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
   return response.json()
 }
@@ -483,7 +737,7 @@ export async function generateSettlementFromCase(admissionId: string): Promise<S
   }
 
   const response = await fetch(`${API_V1_PREFIX}/settlement/generate/${admissionId}`, {
-    method: 'POST'
+    method: 'POST',
   })
   return response.json()
 }
@@ -506,7 +760,8 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
   const dischargeDept = caseFrontPage.discharge_department || ''
   const los = caseFrontPage.total_hospital_days ?? caseFrontPage.los ?? null
   const primaryDxName = caseFrontPage.primary_diagnosis_name || ''
-  const primaryDxCode = caseFrontPage.primary_diagnosis_code || caseFrontPage.primary_diagnosis || ''
+  const primaryDxCode =
+    caseFrontPage.primary_diagnosis_code || caseFrontPage.primary_diagnosis || ''
   const attendingDoc = caseFrontPage.attending_physician || ''
   const totalFee = caseFrontPage.total_cost ?? null
 
@@ -520,7 +775,12 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
       settlementLevel: '三级甲等',
       reportDate: new Date().toISOString().slice(0, 10),
       patientName,
-      gender: patientGender === 'M' || patientGender === '男' ? 1 : patientGender === 'F' || patientGender === '女' ? 2 : null,
+      gender:
+        patientGender === 'M' || patientGender === '男'
+          ? 1
+          : patientGender === 'F' || patientGender === '女'
+            ? 2
+            : null,
       birthDate: '',
       age: patientAge,
       ageInDays: null,
@@ -543,7 +803,7 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
       insuredArea: '泸州市',
       newbornAdmissionType: '',
       newbornBirthWeight: null,
-      newbornAdmissionWeight: null
+      newbornAdmissionWeight: null,
     },
     outpatientInfo: {
       department: admissionDept,
@@ -553,8 +813,8 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
         diagnosisName: '',
         diagnosisCode: '',
         procedureName: '',
-        procedureCode: ''
-      }))
+        procedureCode: '',
+      })),
     },
     inpatientInfo: {
       hospitalizationType: 1,
@@ -577,7 +837,7 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
         admissionCondition: '',
         tcmDiagnosis: '',
         tcmCode: '',
-        tcmAdmissionCondition: ''
+        tcmAdmissionCondition: '',
       })),
       diagnosisCount: diagnoses.length,
       surgeryRows: procedures.slice(0, 5).map((p: any, i: number) => ({
@@ -593,7 +853,7 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
         surgeonName: '',
         surgeonCode: '',
         anesthesiologistName: '',
-        anesthesiologistCode: ''
+        anesthesiologistCode: '',
       })),
       surgeryCount: procedures.length,
       ventilatorDays: null,
@@ -620,7 +880,7 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
       primaryNurseName: '',
       primaryNurseCode: '',
       attendingPhysicianName: attendingDoc,
-      attendingPhysicianCode: ''
+      attendingPhysicianCode: '',
     },
     feeInfo: {
       businessSerialNumber: '',
@@ -628,21 +888,28 @@ function convertCaseFrontPageToSettlement(caseFrontPage: any): SettlementForm {
       invoiceNumber: '',
       settlementPeriod: {
         start: admissionDate,
-        end: dischargeDate
+        end: dischargeDate,
       },
       feeItems: [],
-      totalAmount: { itemName: '合计', amount: totalFee, classA: null, classB: null, selfPay: null, other: null },
+      totalAmount: {
+        itemName: '合计',
+        amount: totalFee,
+        classA: null,
+        classB: null,
+        selfPay: null,
+        other: null,
+      },
       fundPayments: [],
       personalSelfPay: null,
       personalSelfExpense: null,
       personalAccountPay: null,
       personalCashPay: null,
-      paymentMethod: [4] // 默认 DRG
+      paymentMethod: [4], // 默认 DRG
     },
     reportingDepartment: '病案室',
     reportingPerson: '',
     insuranceAgency: '泸州市医疗保障局',
-    insuranceAgent: ''
+    insuranceAgent: '',
   }
 }
 
@@ -676,11 +943,20 @@ export const drgApi = {
   // 统计分析
   getAnalysisData,
 
+  // 6.2.2 分组器本地化配置
+  getGrouperConfigCurrent,
+  saveGrouperConfigDraft,
+  publishGrouperConfig,
+  listGrouperConfigVersions,
+  getGrouperConfigVersionDetail,
+  rollbackGrouperConfig,
+  runGrouperConsistencyCheck,
+  listGrouperConfigAuditLogs,
+
   // 医保结算清单
   getSettlementForm,
   saveSettlementForm,
-  generateSettlementFromCase
+  generateSettlementFromCase,
 }
 
 export default drgApi
-

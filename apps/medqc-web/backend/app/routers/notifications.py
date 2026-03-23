@@ -10,6 +10,7 @@
 """
 
 import logging
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
@@ -27,6 +28,61 @@ def _ensure_db():
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
     return sb
+
+
+def _to_datetime(value: object) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _pick_text(item: dict, keys: list[str]) -> str:
+    for key in keys:
+        raw = item.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return ""
+
+
+def _extract_department(item: dict) -> str:
+    direct = _pick_text(item, ["department", "dept_name", "department_name"])
+    if direct:
+        return direct
+    metadata = item.get("metadata")
+    if isinstance(metadata, dict):
+        nested = _pick_text(metadata, ["department", "dept_name", "department_name"])
+        if nested:
+            return nested
+    payload = item.get("payload")
+    if isinstance(payload, dict):
+        nested = _pick_text(payload, ["department", "dept_name", "department_name"])
+        if nested:
+            return nested
+    return "未分科室"
+
+
+def _extract_severity(item: dict) -> str:
+    severity = _pick_text(item, ["severity", "level", "priority"])
+    return severity or "info"
+
+
+def _severity_weight(level: str) -> int:
+    mapping = {
+        "critical": 4,
+        "high": 3,
+        "warning": 2,
+        "medium": 2,
+        "low": 1,
+        "info": 1,
+    }
+    return mapping.get(str(level).lower(), 1)
 
 
 # ==================== 通知 API ====================
@@ -84,6 +140,104 @@ async def list_notifications(
     except Exception as e:
         logger.error(f"查询通知失败: {e}")
         raise HTTPException(status_code=500, detail=f"查询通知失败: {str(e)}")
+
+
+@router.get("/overview")
+async def list_notification_overview(
+    request: Request,
+    date: Optional[str] = Query(None, description="统计日期，格式 YYYY-MM-DD，默认当天"),
+    current_user: dict = Depends(get_current_user),
+):
+    """按问题类型/严重度/科室/病历聚合当天通知集中点。"""
+    sb = _ensure_db()
+    try:
+        user_id = current_user.get("id") or current_user.get("user_id")
+
+        if date:
+            try:
+                target_date = datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="date 格式必须为 YYYY-MM-DD")
+        else:
+            target_date = datetime.now()
+        start_dt = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = start_dt + timedelta(days=1)
+
+        query = sb.table("notifications").select("*")
+        if user_id:
+            query = query.eq("recipient_id", user_id)
+        query = query.gte("created_at", start_dt.isoformat()).lt("created_at", end_dt.isoformat())
+        query = query.order("created_at", desc=True).limit(500)
+
+        resp = await async_execute(query)
+        rows = list(getattr(resp, "data", None) or [])
+
+        groups: dict[str, dict] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            notif_type = _pick_text(row, ["type", "category"]) or "general"
+            severity = _extract_severity(row)
+            department = _extract_department(row)
+            record_id = _pick_text(row, ["record_id", "recordId", "visit_id", "visitId"]) or ""
+            key = f"{notif_type}|{severity}|{department}|{record_id}"
+            created_at = _pick_text(row, ["created_at", "createdAt"])
+
+            entry = groups.get(key)
+            if entry is None:
+                entry = {
+                    "overview_id": key,
+                    "type": notif_type,
+                    "severity": severity,
+                    "department": department,
+                    "record_id": record_id,
+                    "title": _pick_text(row, ["title", "subject", "type_label"]) or "病案问题提醒",
+                    "summary": _pick_text(row, ["content", "message", "body"]) or "暂无描述",
+                    "occurrence_count": 0,
+                    "unread_count": 0,
+                    "latest_created_at": created_at,
+                    "source_notification_ids": [],
+                }
+                groups[key] = entry
+
+            entry["occurrence_count"] += 1
+            if not bool(row.get("is_read")):
+                entry["unread_count"] += 1
+            source_id = _pick_text(row, ["id", "notification_id"])
+            if source_id:
+                entry["source_notification_ids"].append(source_id)
+
+            existing_time = _to_datetime(entry.get("latest_created_at"))
+            incoming_time = _to_datetime(created_at)
+            if incoming_time and (existing_time is None or incoming_time > existing_time):
+                entry["latest_created_at"] = created_at
+                if _pick_text(row, ["content", "message", "body"]):
+                    entry["summary"] = _pick_text(row, ["content", "message", "body"])
+
+        items = list(groups.values())
+        items.sort(
+            key=lambda item: (
+                int(item.get("unread_count") or 0),
+                _severity_weight(str(item.get("severity") or "")),
+                int(item.get("occurrence_count") or 0),
+                _to_datetime(item.get("latest_created_at")) or datetime.min,
+            ),
+            reverse=True,
+        )
+
+        return success_response(
+            data={
+                "date": start_dt.strftime("%Y-%m-%d"),
+                "items": items,
+                "total": len(items),
+            },
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询通知概览失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询通知概览失败: {str(e)}")
 
 
 @router.put("/{notification_id}/read")

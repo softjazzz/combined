@@ -67,3 +67,17 @@ export interface NotificationVM {
   level?: string
   type?: string
 }
+
+export interface NotificationOverviewItem {
+  overview_id: string
+  type: string
+  severity: string
+  department: string
+  record_id: string
+  title: string
+  summary: string
+  occurrence_count: number
+  unread_count: number
+  latest_created_at: string
+  source_notification_ids: string[]
+}
