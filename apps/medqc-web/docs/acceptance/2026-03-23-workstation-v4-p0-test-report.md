@@ -104,6 +104,10 @@
 
 ## 9. 待执行清单（统一回归窗口）
 
+执行脚本：`scripts/run-workstation-v4-p0-acceptance.mjs`  
+可选参数：`--skip-build`（跳过 build）  
+可选环境变量：`PYTHON_BIN`（指定 pytest 解释器路径）
+
 1. 执行并留档 `npm run build`
 2. 执行 4.1.2 三项业务指标采样并填报
 3. 执行 6.2.2 真实样本一致率测算并填报
