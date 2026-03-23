@@ -25,14 +25,15 @@ export interface RuleData {
 /**
  * 规则验证器类
  */
-export class RulesValidator { /**
+export class RulesValidator {
+  /**
    * 验证规则编码格式
    */
   static validateRuleCode(ruleCode: string): ValidationResult {
     const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     // 检查是否为空
@@ -69,10 +70,11 @@ export class RulesValidator { /**
   /**
    * 验证规则名称
    */
-  static validateRuleName(name: string): ValidationResult { const result: ValidationResult = {
+  static validateRuleName(name: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!name || name.trim() === '') {
@@ -82,7 +84,7 @@ export class RulesValidator { /**
     }
 
     const trimmedName = name.trim()
-    
+
     // 长度检查
     if (trimmedName.length < 2) {
       result.isValid = false
@@ -100,7 +102,7 @@ export class RulesValidator { /**
     }
 
     // 特殊字符检查
-    const invalidChars = /[<>\"'&]/
+    const invalidChars = /[<>"'&]/
     if (invalidChars.test(trimmedName)) {
       result.isValid = false
       result.errors.push('规则名称包含无效字符')
@@ -112,10 +114,11 @@ export class RulesValidator { /**
   /**
    * 验证规则描述
    */
-  static validateRuleDescription(description: string): ValidationResult { const result: ValidationResult = {
+  static validateRuleDescription(description: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!description || description.trim() === '') {
@@ -125,7 +128,7 @@ export class RulesValidator { /**
     }
 
     const trimmedDesc = description.trim()
-    
+
     // 长度检查
     if (trimmedDesc.length < 10) {
       result.isValid = false
@@ -148,10 +151,11 @@ export class RulesValidator { /**
   /**
    * 验证规则分类
    */
-  static validateRuleCategory(category: string): ValidationResult { const result: ValidationResult = {
+  static validateRuleCategory(category: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!category) {
@@ -172,10 +176,11 @@ export class RulesValidator { /**
   /**
    * 验证规则类型
    */
-  static validateRuleType(ruleType: string): ValidationResult { const result: ValidationResult = {
+  static validateRuleType(ruleType: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!ruleType) {
@@ -196,10 +201,11 @@ export class RulesValidator { /**
   /**
    * 验证严重程度
    */
-  static validateRuleSeverity(severity: string): ValidationResult { const result: ValidationResult = {
+  static validateRuleSeverity(severity: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!severity) {
@@ -220,10 +226,11 @@ export class RulesValidator { /**
   /**
    * 验证最大扣分
    */
-  static validateMaxScore(maxScore: number, severity: string): ValidationResult { const result: ValidationResult = {
+  static validateMaxScore(maxScore: number, severity: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (maxScore === undefined || maxScore === null) {
@@ -241,11 +248,14 @@ export class RulesValidator { /**
 
     // 与严重程度的一致性检查
     if (severity && RULES_CONFIG.severities[severity as keyof typeof RULES_CONFIG.severities]) {
-      const severityConfig = RULES_CONFIG.severities[severity as keyof typeof RULES_CONFIG.severities]
+      const severityConfig =
+        RULES_CONFIG.severities[severity as keyof typeof RULES_CONFIG.severities]
       const [minScore, maxScoreRange] = severityConfig.score_range
-      
+
       if (maxScore !== 0 && (maxScore < minScore || maxScore > maxScoreRange)) {
-        result.warnings.push(`最大扣分 ${maxScore} 与严重程度 ${severity} 不匹配，建议范围: ${minScore}-${maxScoreRange}`)
+        result.warnings.push(
+          `最大扣分 ${maxScore} 与严重程度 ${severity} 不匹配，建议范围: ${minScore}-${maxScoreRange}`,
+        )
       }
     }
 
@@ -255,10 +265,11 @@ export class RulesValidator { /**
   /**
    * 验证权重
    */
-  static validateWeight(weight: number): ValidationResult { const result: ValidationResult = {
+  static validateWeight(weight: number): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (weight === undefined || weight === null) {
@@ -282,10 +293,11 @@ export class RulesValidator { /**
   /**
    * 验证检查逻辑
    */
-  static validateCheckLogic(checkLogic: Record<string, unknown>): ValidationResult { const result: ValidationResult = {
+  static validateCheckLogic(checkLogic: Record<string, unknown>): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!checkLogic || Object.keys(checkLogic).length === 0) {
@@ -312,10 +324,11 @@ export class RulesValidator { /**
   /**
    * 验证提示模板
    */
-  static validatePromptTemplate(template?: string): ValidationResult { const result: ValidationResult = {
+  static validatePromptTemplate(template?: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!template || template.trim() === '') {
@@ -324,7 +337,7 @@ export class RulesValidator { /**
     }
 
     const trimmedTemplate = template.trim()
-    
+
     // 长度检查
     if (trimmedTemplate.length < 20) {
       result.warnings.push('提示模板过短，建议提供更详细的指导')
@@ -336,8 +349,8 @@ export class RulesValidator { /**
 
     // 检查是否包含变量占位符
     const variables = Object.keys(RULES_CONFIG.variables)
-    const hasVariables = variables.some(variable => trimmedTemplate.includes(variable))
-    
+    const hasVariables = variables.some((variable) => trimmedTemplate.includes(variable))
+
     if (!hasVariables) {
       result.warnings.push('提示模板中未使用变量占位符，建议使用动态内容')
     }
@@ -348,10 +361,11 @@ export class RulesValidator { /**
   /**
    * 验证版本号
    */
-  static validateVersion(version: string): ValidationResult { const result: ValidationResult = {
+  static validateVersion(version: string): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     if (!version || version.trim() === '') {
@@ -372,10 +386,11 @@ export class RulesValidator { /**
   /**
    * 综合验证规则
    */
-  static validateRule(rule: RuleData): ValidationResult { const result: ValidationResult = {
+  static validateRule(rule: RuleData): ValidationResult {
+    const result: ValidationResult = {
       isValid: true,
-      errors:  [],
-      warnings: []
+      errors: [],
+      warnings: [],
     }
 
     // 验证各个字段
@@ -390,7 +405,7 @@ export class RulesValidator { /**
       this.validateWeight(rule.weight),
       this.validateCheckLogic(rule.check_logic),
       this.validatePromptTemplate(rule.prompt_template),
-      this.validateVersion(rule.version)
+      this.validateVersion(rule.version),
     ]
 
     // 合并验证结果
@@ -418,7 +433,7 @@ export class RulesValidator { /**
         results[rule.rule_code] = {
           isValid: false,
           errors: ['规则编码重复'],
-          warnings: []
+          warnings: [],
         }
       } else {
         ruleCodes.add(rule.rule_code)

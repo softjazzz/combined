@@ -43,21 +43,23 @@ function toRuleDocumentLike(rule: unknown): RuleDocumentLike {
 // 备注：优先级低于后端提供的 applicable_documents 字段
 export const RULE_TO_CATEGORIES: Record<RuleKey, DocumentCategoryCode[]> = {
   // 样例（来自当前演示环境规则名称）
-  '现病史完整性检查': ['admission_record'],
-  '抢救记录详细性检查': ['progress_note'],
-  '出院记录诊疗经过完整性': ['discharge_record'],
-  '手术时间记录准确性': ['operation_record'],
-  '出入量记录一致性': ['operation_record'],
-  '植入物信息完整性': ['operation_record'],
+  现病史完整性检查: ['admission_record'],
+  抢救记录详细性检查: ['progress_note'],
+  出院记录诊疗经过完整性: ['discharge_record'],
+  手术时间记录准确性: ['operation_record'],
+  出入量记录一致性: ['operation_record'],
+  植入物信息完整性: ['operation_record'],
 }
 
 function normalizeCategory(input: unknown): DocumentCategoryCode | undefined {
   if (input && typeof input === 'object') {
     const obj = input as Record<string, unknown>
-    const possible =
-      (obj.value ?? obj.code ?? obj.category_code ?? obj.category ?? obj.label ?? obj.name) as
-        | string
-        | undefined
+    const possible = (obj.value ??
+      obj.code ??
+      obj.category_code ??
+      obj.category ??
+      obj.label ??
+      obj.name) as string | undefined
     if (possible) return normalizeCategory(possible)
   }
 
@@ -124,8 +126,8 @@ function toCategoryCandidates(inputs: unknown): string[] {
       }
     }
     return raw
-      .split(/[\s,;；、\/]+/)
-      .map(item => item.trim())
+      .split(/[\s,;；、/]+/)
+      .map((item) => item.trim())
       .filter(Boolean)
   }
   if (typeof inputs === 'object') {
@@ -155,7 +157,7 @@ function uniq<T>(arr: T[]): T[] {
 }
 
 function includesAny(s: string, keywords: string[]): boolean {
-  return keywords.some(k => s.includes(k))
+  return keywords.some((k) => s.includes(k))
 }
 
 function inferCategoriesFromText(text?: string): DocumentCategoryCode[] {
@@ -178,10 +180,24 @@ function inferCategoriesFromText(text?: string): DocumentCategoryCode[] {
 
   if (includesAny(s, ['入院', '主诉', '现病史', '既往史', '体格'])) result.push('admission_record')
 
-  if (includesAny(s, ['检查', '检验', '影像', '放射', 'CT', 'MRI', '超声', '报告'])) result.push('examination_report')
+  if (includesAny(s, ['检查', '检验', '影像', '放射', 'CT', 'MRI', '超声', '报告']))
+    result.push('examination_report')
 
   if (
-    includesAny(s, ['病程', '会诊', '抢救', '查房', '死亡记录', '讨论', '随访', '转科', '输血', '输血记录', '医嘱', '医嘱记录']) &&
+    includesAny(s, [
+      '病程',
+      '会诊',
+      '抢救',
+      '查房',
+      '死亡记录',
+      '讨论',
+      '随访',
+      '转科',
+      '输血',
+      '输血记录',
+      '医嘱',
+      '医嘱记录',
+    ]) &&
     !result.includes('operation_record')
   ) {
     result.push('progress_note')
@@ -204,7 +220,9 @@ export function lookupRuleCategories(rule: unknown): DocumentCategoryCode[] {
   // 1.5) 兼容 check_logic 内嵌的 applicable_documents/document_categories
   const checkLogic = toRuleDocumentLike(ruleObj.check_logic ?? ruleObj.checkLogic)
   const fromCheckLogic = normalizeCategories(
-    checkLogic.applicable_documents ?? checkLogic.document_categories ?? checkLogic.target_documents
+    checkLogic.applicable_documents ??
+      checkLogic.document_categories ??
+      checkLogic.target_documents,
   )
   if (fromCheckLogic.length > 0) return fromCheckLogic
 
@@ -219,7 +237,7 @@ export function lookupRuleCategories(rule: unknown): DocumentCategoryCode[] {
   // 4) 基于名称/描述的启发式关键词推断（兜底）
   const infer = uniq([
     ...inferCategoriesFromText(nameKey),
-    ...inferCategoriesFromText(ruleObj.description)
+    ...inferCategoriesFromText(ruleObj.description),
   ])
   if (infer.length > 0) return infer
 

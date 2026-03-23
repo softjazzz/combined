@@ -1,25 +1,24 @@
 <template>
   <div class="rule-doc-view">
-    <a-card
-      title="质控点说明（泸县33条规则逻辑总览）"
-      :bordered="false"
-    >
+    <a-card title="质控点说明（泸县33条规则逻辑总览）" :bordered="false">
       <a-table
-        :dataSource="ruleDocRows"
+        :data-source="ruleDocRows"
         :columns="ruleDocColumns"
         class="rule-doc-table"
         :pagination="{
           pageSize: 10,
           showSizeChanger: true,
           pageSizeOptions: ['10', '20', '33', '50'],
-          showTotal: (total) => `共 ${total} 条质控点`
+          showTotal: (total: number) => `共 ${total} 条质控点`,
         }"
         size="small"
-        rowKey="rule_id"
+        row-key="rule_id"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_id'">
-            <a-tag color="blue">{{ record.rule_id }}</a-tag>
+            <a-tag color="blue">
+              {{ record.rule_id }}
+            </a-tag>
           </template>
           <template v-else-if="column.key === 'name'">
             <span class="rule-name">{{ record.name }}</span>
@@ -74,25 +73,25 @@ const ruleDocColumns = [
     dataIndex: 'rule_id',
     key: 'rule_id',
     width: 110,
-    fixed: 'left'
+    fixed: 'left',
   },
   {
     title: '质控点名称',
     dataIndex: 'name',
     key: 'name',
-    width: 260
+    width: 260,
   },
   {
     title: '质控点描述',
     dataIndex: 'description',
     key: 'description',
-    width: 360
+    width: 360,
   },
   {
     title: '检查要点',
     dataIndex: 'check_points',
-    key: 'check_points'
-  }
+    key: 'check_points',
+  },
 ]
 
 const ruleDocRows = computed(() =>
@@ -106,8 +105,8 @@ const ruleDocRows = computed(() =>
       rule_id: rule.rule_id || rule.rule_code,
       name: rule.name,
       description: rule.description,
-      check_points: extractCheckPoints(rule.custom_prompt)
-    }))
+      check_points: extractCheckPoints(rule.custom_prompt),
+    })),
 )
 </script>
 

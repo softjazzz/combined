@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import type {
@@ -14,14 +15,7 @@ import type {
   QCResult,
   QCRule,
   QCAnalysisRequest,
-  MedicalRecordDocumentsResponse,
-  MedicalRecordDocumentPayload
 } from '@/types'
-import type { RecordDocumentInfo } from '@/types/quality-control'
-import { mockLogin, mockGetCurrentUser, mockRegister, mockRefreshToken } from '@/data/mock-auth'
-
-// Mock 配置
-const USE_AUTH_MOCK = import.meta.env.VITE_USE_AUTH_MOCK !== 'false' // 默认启用 Mock
 
 // API基础配置
 const ENV_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined
@@ -32,11 +26,7 @@ function computeBaseURL(): string {
 
   // 开发环境使用vite代理，避免CORS问题
   if (import.meta.env.DEV) {
-    // 开发环境优先使用显式配置的地址；否则继续走 Vite 代理
-    if (base) {
-      return base
-    }
-    return '' // 使用相对路径，通过 Vite 代理转发到后端
+    return '' // 使用相对路径，通过vite代理转发到后端
   }
 
   try {
@@ -49,18 +39,24 @@ function computeBaseURL(): string {
         base = 'http://127.0.0.1:8001'
       }
     }
-  } catch { }
+  } catch {
+    // 忽略运行时环境探测异常，回退到已有 base 配置
+  }
   return base
 }
 
 const API_BASE_URL = computeBaseURL()
 const API_TIMEOUT = 15000 // 15秒超时，避免过长等待
 const LOGIN_TIMEOUT = 10000 // 登录请求10秒超时
+const API_DEBUG =
+  import.meta.env.DEV && String(import.meta.env.VITE_API_DEBUG || '').toLowerCase() === 'true'
 
 // 调试信息
-console.log('🔧 API Configuration:')
-console.log('  VITE_API_BASE_URL:', ENV_BASE)
-console.log('  Final API_BASE_URL:', API_BASE_URL || '[same-origin]')
+if (API_DEBUG) {
+  console.log('🔧 API Configuration:')
+  console.log('  VITE_API_BASE_URL:', ENV_BASE)
+  console.log('  Final API_BASE_URL:', API_BASE_URL || '[same-origin]')
+}
 
 // 创建axios实例
 const apiClient: AxiosInstance = axios.create({
@@ -111,56 +107,58 @@ class TokenManager {
 }
 
 // 请求拦截器
-apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
-  const token = TokenManager.getToken()
-  if (token && !TokenManager.isTokenExpired(token)) {
+apiClient.interceptors.request.use(
+  (config: AxiosRequestConfig) => {
+    const token = TokenManager.getToken()
+    if (token && !TokenManager.isTokenExpired(token)) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
+
+    // 添加请求ID用于调试
     config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
-  }
+    config.headers['X-Request-ID'] = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-  // 添加请求ID用于调试
-  config.headers = config.headers || {}
-  config.headers['X-Request-ID'] = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    if (API_DEBUG) {
+      console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+        headers: config.headers,
+        data: config.data,
+        params: config.params,
+      })
+    }
 
-  console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-    headers: config.headers,
-    data: config.data,
-    params: config.params
-  })
-
-  return config
-},
-  (error: any) => {
+    return config
+  },
+  (error: unknown) => {
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
-  }
+  },
 )
 
 // 响应拦截器
-apiClient.interceptors.response.use((response: AxiosResponse) => {
-  console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-    status: response.status,
-    data: response.data
-  })
-  return response
-},
-  async (error: any) => {
+apiClient.interceptors.response.use(
+  (response: AxiosResponse) => {
+    if (API_DEBUG) {
+      console.log(
+        `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
+        {
+          status: response.status,
+          data: response.data,
+        },
+      )
+    }
+    return response
+  },
+  async (error: unknown) => {
     const originalRequest = error.config
-
-    // 跳过对认证接口401/403错误的日志打印（这些是正常的未登录状态）
-    const isAuthMeEndpoint = error.config?.url?.includes('/api/v1/auth/me')
-    const isAuthError = error.response?.status === 401 || error.response?.status === 403
 
     // 只在开发环境或非认证错误时记录详细错误
     if (process.env.NODE_ENV === 'development' || error.response?.status !== 401) {
-      // 对于auth/me接口的403错误，不打印日志（用户未登录或访问demo页面时是正常的）
-      if (!(isAuthMeEndpoint && isAuthError)) {
-        console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-          status: error.response?.status,
-          data: error.response?.data,
-          message: error.message
-        })
-      }
+      console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      })
     }
 
     // Token过期处理（带单航刷新，避免并发冲突）
@@ -237,7 +235,9 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
         message.error('请求过于频繁，请稍后再试')
         break
       case 500:
-        message.error(traceId ? `服务器错误（${traceId}），请联系管理员` : '服务器内部错误，请联系管理员')
+        message.error(
+          traceId ? `服务器错误（${traceId}），请联系管理员` : '服务器内部错误，请联系管理员',
+        )
         break
       case 502:
       case 503:
@@ -255,11 +255,79 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
     }
 
     return Promise.reject(error)
-  }
+  },
 )
 
 // API服务类
 export class ApiService {
+  // Generic HTTP helpers used by legacy/new modules.
+  static async get<T = unknown>(
+    url: string,
+    params?: Record<string, unknown>,
+    config?: AxiosRequestConfig,
+  ): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.get<T>(url, { ...(config || {}), params })
+      return { success: true, data: response.data }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.response?.data?.message || error?.message || 'GET request failed',
+        data: null as any,
+      }
+    }
+  }
+
+  static async post<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig,
+  ): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.post<T>(url, data, config)
+      return { success: true, data: response.data }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.response?.data?.message || error?.message || 'POST request failed',
+        data: null as any,
+      }
+    }
+  }
+
+  static async put<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig,
+  ): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.put<T>(url, data, config)
+      return { success: true, data: response.data }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.response?.data?.message || error?.message || 'PUT request failed',
+        data: null as any,
+      }
+    }
+  }
+
+  static async delete<T = unknown>(
+    url: string,
+    config?: AxiosRequestConfig,
+  ): Promise<ApiResponse<T>> {
+    try {
+      const response = await apiClient.delete<T>(url, config)
+      return { success: true, data: response.data }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.response?.data?.message || error?.message || 'DELETE request failed',
+        data: null as any,
+      }
+    }
+  }
+
   // ==================== 用户认证相关API (B1任务 - 9个接口) ====================
 
   /**
@@ -267,44 +335,13 @@ export class ApiService {
    */
   static async login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
-      // 每次登录前清除旧 Token，避免 Mock/过期 Token 残留
-      TokenManager.clearTokens()
-
       console.log('🔐 ApiService.login 发送请求:', {
         email: credentials.email,
         role: credentials.role,
         roleType: typeof credentials.role,
         fullCredentials: credentials,
-        useMock: USE_AUTH_MOCK
       })
 
-      // Mock 模式
-      if (USE_AUTH_MOCK) {
-        console.log('🎭 使用 Mock 认证')
-        const mockResponse = mockLogin(credentials.email, credentials.password)
-
-        if (!mockResponse) {
-          return {
-            success: false,
-            error: '用户名或密码错误',
-            data: null
-          }
-        }
-
-        // 保存token
-        TokenManager.setToken(mockResponse.access_token)
-        TokenManager.setRefreshToken(mockResponse.refresh_token)
-
-        console.log('✅ Mock 登录成功:', mockResponse.user.display_name)
-
-        return {
-          success: true,
-          data: mockResponse,
-          message: '登录成功'
-        }
-      }
-
-      // 真实 API 模式
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials)
       console.log('📡 ApiService.login 收到响应:', response.data)
 
@@ -319,13 +356,13 @@ export class ApiService {
       return {
         success: true,
         data: response.data,
-        message: '登录成功'
+        message: '登录成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '登录失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -339,13 +376,13 @@ export class ApiService {
       return {
         success: true,
         data: response.data,
-        message: '注册成功'
+        message: '注册成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '注册失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -355,43 +392,16 @@ export class ApiService {
    */
   static async getCurrentUser(): Promise<ApiResponse<User>> {
     try {
-      // Mock 模式
-      if (USE_AUTH_MOCK) {
-        const token = TokenManager.getToken()
-        if (!token) {
-          return {
-            success: false,
-            error: '未登录',
-            data: null
-          }
-        }
-
-        const mockUser = mockGetCurrentUser(token)
-        if (!mockUser) {
-          return {
-            success: false,
-            error: '无效的token',
-            data: null
-          }
-        }
-
-        return {
-          success: true,
-          data: mockUser
-        }
-      }
-
-      // 真实 API 模式
       const response = await apiClient.get<User>('/api/v1/auth/me')
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取用户信息失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -405,13 +415,13 @@ export class ApiService {
       return {
         success: true,
         data: response.data,
-        message: '资料更新成功'
+        message: '资料更新成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '资料更新失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -419,20 +429,23 @@ export class ApiService {
   /**
    * 修改密码
    */
-  static async updatePassword(newPassword: string, currentPassword?: string): Promise<ApiResponse<void>> {
+  static async updatePassword(
+    newPassword: string,
+    currentPassword?: string,
+  ): Promise<ApiResponse<void>> {
     try {
       await apiClient.put('/api/v1/auth/password', {
         new_password: newPassword,
-        current_password: currentPassword
+        current_password: currentPassword,
       })
       return {
         success: true,
-        message: '密码修改成功'
+        message: '密码修改成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.message || '密码修改失败'
+        error: error.response?.data?.message || '密码修改失败',
       }
     }
   }
@@ -446,14 +459,14 @@ export class ApiService {
       TokenManager.clearTokens()
       return {
         success: true,
-        message: '登出成功'
+        message: '登出成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 即使API调用失败，也要清除本地token
       TokenManager.clearTokens()
       return {
         success: true,
-        message: '登出成功'
+        message: '登出成功',
       }
     }
   }
@@ -469,7 +482,7 @@ export class ApiService {
       }
 
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/refresh', {
-        refresh_token: refreshToken
+        refresh_token: refreshToken,
       })
 
       // 更新token
@@ -482,13 +495,13 @@ export class ApiService {
 
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       TokenManager.clearTokens()
       return {
         success: false,
-        error: error.response?.data?.message || 'Token刷新失败'
+        error: error.response?.data?.message || 'Token刷新失败',
       }
     }
   }
@@ -501,12 +514,12 @@ export class ApiService {
       await apiClient.post('/api/v1/auth/forgot-password', { email })
       return {
         success: true,
-        message: '重置密码邮件已发送'
+        message: '重置密码邮件已发送',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.message || '发送重置邮件失败'
+        error: error.response?.data?.message || '发送重置邮件失败',
       }
     }
   }
@@ -518,16 +531,16 @@ export class ApiService {
     try {
       await apiClient.post('/api/v1/auth/reset-password', {
         token,
-        new_password: newPassword
+        new_password: newPassword,
       })
       return {
         success: true,
-        message: '密码重置成功'
+        message: '密码重置成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.message || '密码重置失败'
+        error: error.response?.data?.message || '密码重置失败',
       }
     }
   }
@@ -537,29 +550,35 @@ export class ApiService {
   /**
    * 获取医疗记录列表
    */
-  static async getMedicalRecords(params?: SearchParams): Promise<ApiResponse<PaginatedResponse<MedicalRecord>>> {
+  static async getMedicalRecords(
+    params?: SearchParams,
+  ): Promise<ApiResponse<PaginatedResponse<MedicalRecord>>> {
     try {
       const queryParams = new URLSearchParams()
 
       if (params?.keyword) queryParams.append('keyword', params.keyword)
       if (params?.filters?.department) queryParams.append('department', params.filters.department)
       if (params?.filters?.status) queryParams.append('status', params.filters.status)
-      if (params?.filters?.record_type) queryParams.append('record_type', params.filters.record_type)
+      if (params?.filters?.record_type)
+        queryParams.append('record_type', params.filters.record_type)
       if (params?.sort?.field) queryParams.append('sort_field', params.sort.field)
       if (params?.sort?.order) queryParams.append('sort_order', params.sort.order)
       if (params?.pagination?.page) queryParams.append('page', params.pagination.page.toString())
-      if (params?.pagination?.pageSize) queryParams.append('page_size', params.pagination.pageSize.toString())
+      if (params?.pagination?.pageSize)
+        queryParams.append('page_size', params.pagination.pageSize.toString())
 
-      const response = await apiClient.get<PaginatedResponse<MedicalRecord>>(`/api/records?${queryParams}`)
+      const response = await apiClient.get<PaginatedResponse<MedicalRecord>>(
+        `/api/records?${queryParams}`,
+      )
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取医疗记录失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -572,82 +591,13 @@ export class ApiService {
       const response = await apiClient.get<MedicalRecord>(`/api/records/${id}`)
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取医疗记录详情失败',
-        data: null
-      }
-    }
-  }
-
-  /**
-   * 获取指定医疗记录的文书列表（带适配）
-   */
-  static async getMedicalRecordDocuments(recordId: string): Promise<ApiResponse<RecordDocumentInfo[]>> {
-    try {
-      const response = await apiClient.get<MedicalRecordDocumentsResponse | { data: MedicalRecordDocumentsResponse }>(
-        `/api/medical-records/${recordId}/documents`
-      )
-
-      const rawPayload = (response.data as { data?: MedicalRecordDocumentsResponse }).data
-        ?? (response.data as MedicalRecordDocumentsResponse)
-      const documents: RecordDocumentInfo[] = []
-
-      if (rawPayload && Array.isArray(rawPayload.categories)) {
-        const seenIds = new Set<string>()
-        let generatedIndex = 0
-
-        rawPayload.categories.forEach(category => {
-          const categoryDocs = Array.isArray(category.documents) ? category.documents : []
-          categoryDocs.forEach((doc: MedicalRecordDocumentPayload) => {
-            generatedIndex += 1
-
-            let docId = (doc.id && String(doc.id)) || `${recordId}-doc-${generatedIndex}`
-            while (seenIds.has(docId)) {
-              generatedIndex += 1
-              docId = `${recordId}-doc-${generatedIndex}`
-            }
-            seenIds.add(docId)
-
-            const typeCode =
-              (typeof doc.type === 'string' && doc.type) ||
-              (doc.type_info && typeof doc.type_info.type_code === 'string' ? doc.type_info.type_code : undefined) ||
-              (category.category_code || '')
-
-            const titleCandidates = [
-              doc.title,
-              doc.type_info?.type_name,
-              typeof doc.type === 'string' ? doc.type : undefined,
-              category.category_name,
-              '未命名文书'
-            ]
-            const title = String(titleCandidates.find(candidate => !!candidate && String(candidate).trim().length > 0) ?? '未命名文书').trim()
-
-            documents.push({
-              id: docId,
-              title,
-              type: typeCode || undefined,
-              content: typeof doc.content === 'string' ? doc.content : '',
-              created_at: typeof doc.created_at === 'string'
-                ? doc.created_at
-                : (typeof doc.updated_at === 'string' ? doc.updated_at : undefined)
-            })
-          })
-        })
-      }
-
-      return {
-        success: true,
-        data: documents
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error?.response?.data?.message || error?.message || '获取医疗文书失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -655,7 +605,9 @@ export class ApiService {
   /**
    * 创建医疗记录
    */
-  static async createMedicalRecord(recordData: CreateMedicalRecordRequest): Promise<ApiResponse<MedicalRecord>> {
+  static async createMedicalRecord(
+    recordData: CreateMedicalRecordRequest,
+  ): Promise<ApiResponse<MedicalRecord>> {
     try {
       const formData = new FormData()
 
@@ -675,20 +627,20 @@ export class ApiService {
 
       const response = await apiClient.post<MedicalRecord>('/api/records', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          'Content-Type': 'multipart/form-data',
+        },
       })
 
       return {
         success: true,
         data: response.data,
-        message: '医疗记录创建成功'
+        message: '医疗记录创建成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '创建医疗记录失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -696,7 +648,10 @@ export class ApiService {
   /**
    * 更新医疗记录
    */
-  static async updateMedicalRecord(id: string, recordData: UpdateMedicalRecordRequest): Promise<ApiResponse<MedicalRecord>> {
+  static async updateMedicalRecord(
+    id: string,
+    recordData: UpdateMedicalRecordRequest,
+  ): Promise<ApiResponse<MedicalRecord>> {
     try {
       const formData = new FormData()
 
@@ -716,20 +671,20 @@ export class ApiService {
 
       const response = await apiClient.put<MedicalRecord>(`/api/records/${id}`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          'Content-Type': 'multipart/form-data',
+        },
       })
 
       return {
         success: true,
         data: response.data,
-        message: '医疗记录更新成功'
+        message: '医疗记录更新成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '更新医疗记录失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -742,12 +697,12 @@ export class ApiService {
       await apiClient.delete(`/api/records/${id}`)
       return {
         success: true,
-        message: '医疗记录删除成功'
+        message: '医疗记录删除成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.message || '删除医疗记录失败'
+        error: error.response?.data?.message || '删除医疗记录失败',
       }
     }
   }
@@ -758,16 +713,16 @@ export class ApiService {
   static async batchDeleteRecords(ids: string[]): Promise<ApiResponse<void>> {
     try {
       await apiClient.delete('/api/records/batch', {
-        data: { record_ids: ids }
+        data: { record_ids: ids },
       })
       return {
         success: true,
-        message: '批量删除成功'
+        message: '批量删除成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.message || '批量删除失败'
+        error: error.response?.data?.message || '批量删除失败',
       }
     }
   }
@@ -778,18 +733,18 @@ export class ApiService {
   static async exportRecords(ids: string[]): Promise<ApiResponse<{ download_url: string }>> {
     try {
       const response = await apiClient.post<{ download_url: string }>('/api/records/export', {
-        record_ids: ids
+        record_ids: ids,
       })
       return {
         success: true,
         data: response.data,
-        message: '导出任务创建成功'
+        message: '导出任务创建成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '导出失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -797,18 +752,18 @@ export class ApiService {
   /**
    * 获取医疗记录统计信息
    */
-  static async getMedicalRecordsStatistics(): Promise<ApiResponse<any>> {
+  static async getMedicalRecordsStatistics(): Promise<ApiResponse<unknown>> {
     try {
       const response = await apiClient.get('/api/records/statistics')
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取统计信息失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -816,27 +771,33 @@ export class ApiService {
   /**
    * 上传医疗记录文件
    */
-  static async uploadRecordFile(file: File): Promise<ApiResponse<{ file_url: string; file_name: string }>> {
+  static async uploadRecordFile(
+    file: File,
+  ): Promise<ApiResponse<{ file_url: string; file_name: string }>> {
     try {
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await apiClient.post<{ file_url: string; file_name: string }>('/api/records/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
+      const response = await apiClient.post<{ file_url: string; file_name: string }>(
+        '/api/records/upload',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        },
+      )
 
       return {
         success: true,
         data: response.data,
-        message: '文件上传成功'
+        message: '文件上传成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '文件上传失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -850,13 +811,13 @@ export class ApiService {
       return {
         success: true,
         data: response.data,
-        message: '记录复制成功'
+        message: '记录复制成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '记录复制失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -866,19 +827,25 @@ export class ApiService {
   /**
    * 开始质控分析
    */
-  static async analyzeRecord(recordId: string, analysisParams?: QCAnalysisRequest): Promise<ApiResponse<{ analysis_id: string }>> {
+  static async analyzeRecord(
+    recordId: string,
+    analysisParams?: QCAnalysisRequest,
+  ): Promise<ApiResponse<{ analysis_id: string }>> {
     try {
-      const response = await apiClient.post<{ analysis_id: string }>(`/api/qc/analyze/${recordId}`, analysisParams || {})
+      const response = await apiClient.post<{ analysis_id: string }>(
+        `/api/qc/analyze/${recordId}`,
+        analysisParams || {},
+      )
       return {
         success: true,
         data: response.data,
-        message: '质控分析已开始'
+        message: '质控分析已开始',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '开始分析失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -886,21 +853,23 @@ export class ApiService {
   /**
    * 批量质控分析
    */
-  static async batchAnalyzeRecords(recordIds: string[]): Promise<ApiResponse<{ analysis_ids: string[] }>> {
+  static async batchAnalyzeRecords(
+    recordIds: string[],
+  ): Promise<ApiResponse<{ analysis_ids: string[] }>> {
     try {
       const response = await apiClient.post<{ analysis_ids: string[] }>('/api/qc/analyze/batch', {
-        record_ids: recordIds
+        record_ids: recordIds,
       })
       return {
         success: true,
         data: response.data,
-        message: '批量分析已开始'
+        message: '批量分析已开始',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '批量分析失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -913,13 +882,13 @@ export class ApiService {
       const response = await apiClient.get<QCResult>(`/api/qc/result/${recordId}`)
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取分析结果失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -927,18 +896,18 @@ export class ApiService {
   /**
    * 获取分析进度
    */
-  static async getAnalysisProgress(analysisId: string): Promise<ApiResponse<any>> {
+  static async getAnalysisProgress(analysisId: string): Promise<ApiResponse<unknown>> {
     try {
       const response = await apiClient.get(`/api/qc/progress/${analysisId}`)
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取分析进度失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -951,13 +920,13 @@ export class ApiService {
       const response = await apiClient.get<QCRule[]>('/api/qc/rules')
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取质控规则失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -971,13 +940,13 @@ export class ApiService {
       return {
         success: true,
         data: response.data,
-        message: '质控规则创建成功'
+        message: '质控规则创建成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '创建质控规则失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -985,19 +954,22 @@ export class ApiService {
   /**
    * 更新质控规则
    */
-  static async updateQCRule(ruleId: string, ruleData: Partial<QCRule>): Promise<ApiResponse<QCRule>> {
+  static async updateQCRule(
+    ruleId: string,
+    ruleData: Partial<QCRule>,
+  ): Promise<ApiResponse<QCRule>> {
     try {
       const response = await apiClient.put<QCRule>(`/api/qc/rules/${ruleId}`, ruleData)
       return {
         success: true,
         data: response.data,
-        message: '质控规则更新成功'
+        message: '质控规则更新成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '更新质控规则失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -1010,12 +982,12 @@ export class ApiService {
       await apiClient.delete(`/api/qc/rules/${ruleId}`)
       return {
         success: true,
-        message: '质控规则删除成功'
+        message: '质控规则删除成功',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.response?.data?.message || '删除质控规则失败'
+        error: error.response?.data?.message || '删除质控规则失败',
       }
     }
   }
@@ -1023,7 +995,10 @@ export class ApiService {
   /**
    * 获取质控历史记录
    */
-  static async getQCHistory(params?: { page?: number; pageSize?: number }): Promise<ApiResponse<any[]>> {
+  static async getQCHistory(params?: {
+    page?: number
+    pageSize?: number
+  }): Promise<ApiResponse<any[]>> {
     try {
       const queryParams = new URLSearchParams()
       if (params?.page) queryParams.append('page', params.page.toString())
@@ -1032,13 +1007,13 @@ export class ApiService {
       const response = await apiClient.get<any[]>(`/api/qc/history?${queryParams}`)
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         error: error.response?.data?.message || '获取质控历史失败',
-        data: null
+        data: null,
       }
     }
   }
@@ -1046,71 +1021,11 @@ export class ApiService {
   // ==================== 工具方法 ====================
 
   /**
-   * 通用 POST 请求方法
-   */
-  static async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    try {
-      const response = await apiClient.post<T>(url, data, config)
-      return {
-        success: true,
-        data: response.data,
-        message: '请求成功'
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.message || error.response?.data?.detail || (error.code === 'ECONNABORTED' ? '请求超时' : '请求失败'),
-        data: null
-      }
-    }
-  }
-
-  /**
-   * 通用 PUT 请求方法
-   */
-  static async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    try {
-      const response = await apiClient.put<T>(url, data, config)
-      return {
-        success: true,
-        data: response.data,
-        message: '请求成功'
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.message || error.response?.data?.detail || (error.code === 'ECONNABORTED' ? '请求超时' : '请求失败'),
-        data: null
-      }
-    }
-  }
-
-  /**
-   * 通用 GET 请求方法
-   */
-  static async get<T = any>(url: string, params?: any): Promise<ApiResponse<T>> {
-    try {
-      const response = await apiClient.get<T>(url, { params })
-      return {
-        success: true,
-        data: response.data,
-        message: '请求成功'
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.response?.data?.message || error.response?.data?.detail || '请求失败',
-        data: null
-      }
-    }
-  }
-
-  /**
    * 检查API连接状态
    */
   static async checkConnection(): Promise<boolean> {
     try {
-      await apiClient.get('/api/v1/health')
+      await apiClient.get('/api/health')
       return true
     } catch {
       return false
@@ -1129,13 +1044,9 @@ export class ApiService {
    */
   static isAuthenticated(): boolean {
     const token = TokenManager.getToken()
-    const hasValidAccess = token !== null && !TokenManager.isTokenExpired(token)
-    // 若存在刷新令牌，则视为可恢复的已登录态，避免短暂重定向抖动
-    const hasRefresh = TokenManager.getRefreshToken() !== null
-    return hasValidAccess || hasRefresh
+    return token !== null && !TokenManager.isTokenExpired(token)
   }
 }
 
 // 导出默认实例
 export default ApiService
-

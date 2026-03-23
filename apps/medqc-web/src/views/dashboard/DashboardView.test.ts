@@ -19,24 +19,13 @@ vi.mock('@/components/charts/QCTrendChart.vue', () => ({
   default: {
     name: 'QCTrendChart',
     props: ['period', 'height', 'autoRefresh'],
-    template: '<div data-testid="qc-trend-chart">Mock Chart</div>'
-  }
+    template: '<div data-testid="qc-trend-chart">Mock Chart</div>',
+  },
 }))
 
 describe('DashboardView', () => {
   let wrapper: VueWrapper<unknown>
   const getVm = () => wrapper.vm as unknown as DashboardViewVm
-
-  const mockStats: DashboardStats = {
-    totalRecords: 1247,
-    pendingRecords: 23,
-    analyzingRecords: 8,
-    completedRecords: 1216,
-    averageScore: 87.5,
-    passRate: 94.2,
-    todayUploads: 15,
-    weeklyTrend: '+12.5%'
-  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -45,18 +34,19 @@ describe('DashboardView', () => {
         stubs: {
           'a-button': {
             template: '<button @click="$emit(\'click\')" :loading="loading"><slot /></button>',
-            props: ['loading', 'type']
+            props: ['loading', 'type'],
           },
           'a-select': {
-            template: '<select @change="$emit(\'change\', $event.target.value)" :value="value"><slot /></select>',
-            props: ['value', 'options']
+            template:
+              '<select @change="$emit(\'change\', $event.target.value)" :value="value"><slot /></select>',
+            props: ['value', 'options'],
           },
-          'QCTrendChart': {
+          QCTrendChart: {
             template: '<div data-testid="qc-trend-chart">Mock Chart</div>',
-            props: ['period', 'height', 'autoRefresh']
-          }
-        }
-      }
+            props: ['period', 'height', 'autoRefresh'],
+          },
+        },
+      },
     })
   })
 
@@ -79,7 +69,7 @@ describe('DashboardView', () => {
     it('应该显示正确的统计数据', () => {
       const cards = wrapper.findAll('[data-testid="stat-card"]')
       expect(cards).toHaveLength(6)
-      
+
       // 检查第一个卡片（总病案数）
       const firstCard = cards[0]
       expect(firstCard.text()).toContain('总病案数')
@@ -98,7 +88,7 @@ describe('DashboardView', () => {
     it('应该正确显示趋势指示器', () => {
       const trendIcons = wrapper.findAll('[data-testid="trend-icon"]')
       expect(trendIcons.length).toBeGreaterThan(0)
-      
+
       // 检查趋势颜色
       const increaseTrend = wrapper.find('.text-green-500')
       expect(increaseTrend.exists()).toBe(true)
@@ -107,7 +97,7 @@ describe('DashboardView', () => {
     it('应该在悬浮时显示光晕效果', async () => {
       const card = wrapper.find('[data-testid="stat-card"]')
       await card.trigger('mouseenter')
-      
+
       // 检查是否有悬浮效果类
       expect(card.classes()).toContain('group')
     })
@@ -117,7 +107,7 @@ describe('DashboardView', () => {
     it('应该渲染所有快捷操作按钮', () => {
       const actionButtons = wrapper.findAll('[data-testid="quick-action"]')
       expect(actionButtons).toHaveLength(4)
-      
+
       const expectedActions = ['上传病案', '质控分析', '生成报告', '规则管理']
       actionButtons.forEach((button, index) => {
         expect(button.text()).toContain(expectedActions[index])
@@ -127,10 +117,10 @@ describe('DashboardView', () => {
     it('应该正确处理快捷操作点击', async () => {
       const vm = getVm()
       const handleQuickActionSpy = vi.spyOn(vm, 'handleQuickAction')
-      
+
       const uploadButton = wrapper.find('[data-testid="quick-action-upload"]')
       await uploadButton.trigger('click')
-      
+
       expect(handleQuickActionSpy).toHaveBeenCalledWith('upload')
     })
   })
@@ -151,7 +141,7 @@ describe('DashboardView', () => {
     it('应该响应时间段选择器变化', async () => {
       const vm = getVm()
       const select = wrapper.find('[data-testid="period-select"]')
-      
+
       await select.setValue('week')
       expect(vm.selectedPeriod).toBe('week')
     })
@@ -161,14 +151,14 @@ describe('DashboardView', () => {
     it('应该正确处理数据刷新', async () => {
       const vm = getVm()
       const refreshButton = wrapper.find('[data-testid="refresh-button"]')
-      
+
       expect(vm.refreshing).toBe(false)
-      
+
       await refreshButton.trigger('click')
       expect(vm.refreshing).toBe(true)
-      
+
       // 等待异步操作完成
-      await new Promise(resolve => setTimeout(resolve, 1100))
+      await new Promise((resolve) => setTimeout(resolve, 1100))
       expect(vm.refreshing).toBe(false)
     })
 
@@ -176,7 +166,7 @@ describe('DashboardView', () => {
       const vm = getVm()
       vm.refreshing = true
       await nextTick()
-      
+
       const refreshButton = wrapper.find('[data-testid="refresh-button"]')
       expect(refreshButton.attributes('loading')).toBeDefined()
     })
@@ -193,14 +183,14 @@ describe('DashboardView', () => {
   describe('工具函数', () => {
     it('getGreeting应该根据时间返回正确问候语', () => {
       const vm = getVm()
-      
+
       // Mock不同时间
       vi.setSystemTime(new Date('2024-01-01 09:00:00'))
       expect(vm.getGreeting()).toBe('早上好')
-      
+
       vi.setSystemTime(new Date('2024-01-01 14:00:00'))
       expect(vm.getGreeting()).toBe('下午好')
-      
+
       vi.setSystemTime(new Date('2024-01-01 20:00:00'))
       expect(vm.getGreeting()).toBe('晚上好')
     })

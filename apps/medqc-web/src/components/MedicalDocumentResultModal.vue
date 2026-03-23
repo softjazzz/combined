@@ -1,46 +1,69 @@
 <template>
   <a-modal
     :open="visible"
-    @update:open="$emit('update:visible', $event)"
     title="LLM智能解析结果"
     width="1200px"
     :footer="null"
-    :destroyOnClose="true"
+    :destroy-on-close="true"
     class="medical-document-result-modal"
+    @update:open="$emit('update:visible', $event)"
   >
     <div class="modal-content">
       <!-- 解析概览 -->
       <div class="result-overview glass-card mb-4">
         <!-- 第一行：患者基本信息 -->
-        <a-row :gutter="16" class="mb-3">
+        <a-row
+          :gutter="16"
+          class="mb-3"
+        >
           <a-col :span="6">
             <div class="overview-item">
-              <div class="overview-label">患者姓名</div>
-              <div class="overview-value" :class="{ 'missing-info': !data?.patientName || data?.patientName === '未识别' }">
+              <div class="overview-label">
+                患者姓名
+              </div>
+              <div
+                class="overview-value"
+                :class="{ 'missing-info': !data?.patientName || data?.patientName === '未识别' }"
+              >
                 {{ formatPatientInfo(data?.patientName) }}
               </div>
             </div>
           </a-col>
           <a-col :span="6">
             <div class="overview-item">
-              <div class="overview-label">性别</div>
-              <div class="overview-value" :class="{ 'missing-info': !data?.patientGender }">
+              <div class="overview-label">
+                性别
+              </div>
+              <div
+                class="overview-value"
+                :class="{ 'missing-info': !data?.patientGender }"
+              >
                 {{ formatPatientInfo(data?.patientGender) }}
               </div>
             </div>
           </a-col>
           <a-col :span="6">
             <div class="overview-item">
-              <div class="overview-label">年龄</div>
-              <div class="overview-value" :class="{ 'missing-info': !data?.patientAge }">
+              <div class="overview-label">
+                年龄
+              </div>
+              <div
+                class="overview-value"
+                :class="{ 'missing-info': !data?.patientAge }"
+              >
                 {{ formatAge(data?.patientAge) }}
               </div>
             </div>
           </a-col>
           <a-col :span="6">
             <div class="overview-item">
-              <div class="overview-label">科室</div>
-              <div class="overview-value" :class="{ 'missing-info': !data?.department || data?.department === '未识别' }">
+              <div class="overview-label">
+                科室
+              </div>
+              <div
+                class="overview-value"
+                :class="{ 'missing-info': !data?.department || data?.department === '未识别' }"
+              >
                 {{ formatPatientInfo(data?.department) }}
               </div>
             </div>
@@ -51,14 +74,22 @@
         <a-row :gutter="16">
           <a-col :span="6">
             <div class="overview-item">
-              <div class="overview-label">文书数量</div>
-              <div class="overview-value">{{ documents.length }}个</div>
+              <div class="overview-label">
+                文书数量
+              </div>
+              <div class="overview-value">
+                {{ documents.length }}个
+              </div>
             </div>
           </a-col>
           <a-col :span="6">
             <div class="overview-item">
-              <div class="overview-label">整体置信度</div>
-              <div class="overview-value confidence-score">{{ Math.round(data?.confidence || 0) }}%</div>
+              <div class="overview-label">
+                整体置信度
+              </div>
+              <div class="overview-value confidence-score">
+                {{ Math.round(data?.confidence || 0) }}%
+              </div>
             </div>
           </a-col>
         </a-row>
@@ -73,7 +104,9 @@
                 <MedicineBoxOutlined class="mr-2" />
                 主要诊断
               </div>
-              <div class="diagnosis-value">{{ data?.primaryDiagnosis || '未识别' }}</div>
+              <div class="diagnosis-value">
+                {{ data?.primaryDiagnosis || '未识别' }}
+              </div>
             </div>
           </a-col>
           <a-col :span="12">
@@ -82,14 +115,25 @@
                 <ScissorOutlined class="mr-2" />
                 主要手术
               </div>
-              <div class="diagnosis-value">{{ data?.majorSurgery || '无' }}</div>
+              <div class="diagnosis-value">
+                {{ data?.majorSurgery || '无' }}
+              </div>
             </div>
           </a-col>
         </a-row>
-        <div v-if="data?.secondaryDiagnosis && data.secondaryDiagnosis.length > 0" class="secondary-diagnosis mt-3">
-          <div class="diagnosis-label mb-2">次要诊断</div>
+        <div
+          v-if="data?.secondaryDiagnosis && data.secondaryDiagnosis.length > 0"
+          class="secondary-diagnosis mt-3"
+        >
+          <div class="diagnosis-label mb-2">
+            次要诊断
+          </div>
           <div class="diagnosis-tags">
-            <a-tag v-for="(diagnosis, index) in data.secondaryDiagnosis" :key="index" color="blue">
+            <a-tag
+              v-for="(diagnosis, index) in data.secondaryDiagnosis"
+              :key="index"
+              color="blue"
+            >
               {{ diagnosis }}
             </a-tag>
           </div>
@@ -101,46 +145,73 @@
         <div class="section-header">
           <FileTextOutlined class="mr-2" />
           <span class="section-title">文书分类结果</span>
-          <a-tag color="green" class="ml-2">共{{ documents.length }}个文书</a-tag>
+          <a-tag
+            color="green"
+            class="ml-2"
+          >
+            共{{ documents.length }}个文书
+          </a-tag>
         </div>
 
-        <div v-if="documents.length === 0" class="empty-state">
+        <div
+          v-if="documents.length === 0"
+          class="empty-state"
+        >
           <a-empty description="未识别到任何文书" />
         </div>
 
-        <div v-else class="documents-grid">
+        <div
+          v-else
+          class="documents-grid"
+        >
           <div
-            v-for="(doc, index) in documents"
+            v-for="doc in documents"
             :key="doc.id"
             class="document-card glass-card"
             @click="showDocumentDetail(doc)"
           >
             <div class="document-header">
               <div class="document-title">
-                <component :is="getDocumentIcon(doc.type)" class="document-icon mr-2" />
+                <component
+                  :is="getDocumentIcon(doc.type)"
+                  class="document-icon mr-2"
+                />
                 {{ doc.title || getDocumentTypeLabel(doc.type) }}
               </div>
               <div class="document-meta">
-                <a-tag :color="getDocumentTypeColor(doc.type)" size="small">
+                <a-tag
+                  :color="getDocumentTypeColor(doc.type)"
+                  size="small"
+                >
                   {{ getDocumentTypeLabel(doc.type) }}
                 </a-tag>
-                <span v-if="doc.confidence != null" class="confidence-badge">
+                <span
+                  v-if="doc.confidence != null"
+                  class="confidence-badge"
+                >
                   {{ Math.round(doc.confidence) }}%
                 </span>
               </div>
             </div>
-            
+
             <div class="document-summary">
               {{ doc.content || '暂无摘要' }}
             </div>
 
-            <div v-if="getDocumentTimestamp(doc)" class="document-timestamp">
+            <div
+              v-if="getDocumentTimestamp(doc)"
+              class="document-timestamp"
+            >
               <ClockCircleOutlined class="mr-1" />
               {{ formatTimestamp(getDocumentTimestamp(doc)) }}
             </div>
 
             <div class="document-actions">
-              <a-button type="link" size="small" @click.stop="showDocumentDetail(doc)">
+              <a-button
+                type="link"
+                size="small"
+                @click.stop="showDocumentDetail(doc)"
+              >
                 查看详情
               </a-button>
             </div>
@@ -151,8 +222,13 @@
       <!-- 操作按钮 -->
       <div class="modal-actions">
         <a-space>
-          <a-button @click="handleClose">关闭</a-button>
-          <a-button type="primary" @click="handleConfirm">
+          <a-button @click="handleClose">
+            关闭
+          </a-button>
+          <a-button
+            type="primary"
+            @click="handleConfirm"
+          >
             <DatabaseOutlined class="mr-1" />
             保存并跳转
           </a-button>
@@ -173,21 +249,29 @@
       :title="selectedDocument?.title || '文书详情'"
       width="800px"
       :footer="null"
-      :destroyOnClose="true"
+      :destroy-on-close="true"
       class="document-detail-modal"
     >
-      <div v-if="selectedDocument" class="document-detail">
+      <div
+        v-if="selectedDocument"
+        class="document-detail"
+      >
         <div class="detail-header mb-4">
           <a-tag :color="getDocumentTypeColor(selectedDocument.type)">
             {{ getDocumentTypeLabel(selectedDocument.type) }}
           </a-tag>
-          <span v-if="selectedDocument.confidence != null" class="confidence-badge ml-2">
+          <span
+            v-if="selectedDocument.confidence != null"
+            class="confidence-badge ml-2"
+          >
             置信度: {{ Math.round(selectedDocument.confidence) }}%
           </span>
         </div>
-        
+
         <div class="detail-content">
-          <a-typography-title :level="5">完整内容</a-typography-title>
+          <a-typography-title :level="5">
+            完整内容
+          </a-typography-title>
           <div class="content-container">
             <pre class="document-content">{{ getFullContent(selectedDocument) }}</pre>
           </div>
@@ -198,7 +282,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, defineProps, defineEmits } from 'vue'
+import { ref, computed, defineProps, defineEmits, type Component } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   FileTextOutlined,
@@ -211,13 +295,10 @@ import {
   ScheduleOutlined,
   ExperimentOutlined,
   HeartOutlined,
-  SafetyOutlined
+  SafetyOutlined,
 } from '@ant-design/icons-vue'
 import type { ExtractedMedicalData, ExtractedDocument, DocumentType } from '@/services/llmService'
-import {
-  getDocumentTypeLabel,
-  getDocumentTypeColor
-} from '@/utils/documentTypeUtils'
+import { getDocumentTypeLabel, getDocumentTypeColor } from '@/utils/documentTypeUtils'
 
 interface Props {
   visible: boolean
@@ -274,10 +355,13 @@ const showDocumentDetail = (doc: ExtractedDocument) => {
 
 // 获取文档图标
 const getDocumentIcon = (type: DocumentType) => {
-  const iconMap = {
+  const iconMap: Record<string, Component> = {
     admission_record: FileOutlined,
+    admission_record_24h_in: FileOutlined,
+    admission_record_24h_out: FileOutlined,
     first_progress_note: ScheduleOutlined,
     daily_progress_note: ScheduleOutlined,
+    attending_first_progress: ScheduleOutlined,
     attending_progress: ScheduleOutlined,
     stage_summary: ScheduleOutlined,
     operation_record: ScissorOutlined,
@@ -290,7 +374,7 @@ const getDocumentIcon = (type: DocumentType) => {
     anesthesia_consent: SafetyOutlined,
     blood_transfusion_consent: SafetyOutlined,
     special_treatment_consent: SafetyOutlined,
-    critical_illness_notice: SafetyOutlined
+    critical_illness_notice: SafetyOutlined,
   }
   return iconMap[type] || FileOutlined
 }
@@ -301,35 +385,35 @@ const getDocumentTimestamp = (doc: ExtractedDocument): string | null => {
   if (titleMatch) {
     return titleMatch[1]
   }
-  
+
   if (doc.extractedAt) {
-    return doc.extractedAt instanceof Date
-      ? doc.extractedAt.toISOString()
-      : String(doc.extractedAt)
+    return doc.extractedAt instanceof Date ? doc.extractedAt.toISOString() : String(doc.extractedAt)
   }
-  
+
   return null
 }
 
 // 格式化时间戳
 const formatTimestamp = (timestamp: string | null): string => {
   if (!timestamp) return ''
-  
+
   try {
     if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}$/.test(timestamp)) {
       return timestamp
     }
-    
+
     const date = new Date(timestamp)
     if (isNaN(date.getTime())) return timestamp
-    
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).replace(/\//g, '-')
+
+    return date
+      .toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      .replace(/\//g, '-')
   } catch {
     return timestamp
   }
@@ -361,7 +445,13 @@ const getFullContent = (doc: ExtractedDocument): string => {
   if (source) {
     const si = doc.position?.startIndex
     const ei = doc.position?.endIndex
-    if (typeof si === 'number' && typeof ei === 'number' && ei > si && si >= 0 && ei <= source.length) {
+    if (
+      typeof si === 'number' &&
+      typeof ei === 'number' &&
+      ei > si &&
+      si >= 0 &&
+      ei <= source.length
+    ) {
       return source.slice(si, ei)
     }
   }

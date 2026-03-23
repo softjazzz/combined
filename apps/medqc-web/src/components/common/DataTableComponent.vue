@@ -1,14 +1,18 @@
 <template>
   <div class="data-table-container">
     <!-- 表格工具栏 -->
-    <div v-if="showToolbar" class="table-toolbar">
+    <div
+      v-if="showToolbar"
+      class="table-toolbar"
+    >
       <div class="toolbar-left">
         <slot name="toolbar-left">
           <!-- 批量操作 -->
-          <div v-if="selectedRowKeys.length > 0" class="batch-actions">
-            <span class="batch-info">
-              已选择 {{ selectedRowKeys.length }} 项
-            </span>
+          <div
+            v-if="selectedRowKeys.length > 0"
+            class="batch-actions"
+          >
+            <span class="batch-info"> 已选择 {{ selectedRowKeys.length }} 项 </span>
             <a-space size="small">
               <a-button
                 v-for="action in batchActions"
@@ -19,35 +23,47 @@
                 :disabled="action.disabled"
                 @click="handleBatchAction(action)"
               >
-                <component v-if="action.icon" :is="action.icon" />
+                <component
+                  :is="action.icon"
+                  v-if="action.icon"
+                />
                 {{ action.text }}
               </a-button>
             </a-space>
           </div>
-          
+
           <!-- 搜索框 -->
-          <div v-if="showSearch" class="search-box">
+          <div
+            v-if="showSearch"
+            class="search-box"
+          >
             <a-input-search
               v-model:value="searchValue"
               :placeholder="searchPlaceholder"
               :loading="searchLoading"
+              style="width: 280px"
               @search="handleSearch"
               @change="handleSearchChange"
-              style="width: 280px"
             />
           </div>
         </slot>
       </div>
-      
+
       <div class="toolbar-right">
         <slot name="toolbar-right">
           <a-space size="small">
             <!-- 筛选器 -->
-            <a-dropdown v-if="filters.length > 0" trigger="click">
+            <a-dropdown
+              v-if="filters.length > 0"
+              trigger="click"
+            >
               <a-button>
                 <FilterOutlined />
                 筛选
-                <span v-if="activeFilters.length > 0" class="filter-count">
+                <span
+                  v-if="activeFilters.length > 0"
+                  class="filter-count"
+                >
                   {{ activeFilters.length }}
                 </span>
               </a-button>
@@ -58,7 +74,9 @@
                     :key="filter.key"
                     class="filter-item"
                   >
-                    <div class="filter-label">{{ filter.label }}</div>
+                    <div class="filter-label">
+                      {{ filter.label }}
+                    </div>
                     <a-select
                       v-if="filter.type === 'select'"
                       v-model:value="filterValues[filter.key]"
@@ -86,9 +104,12 @@
                 </div>
               </template>
             </a-dropdown>
-            
+
             <!-- 列设置 -->
-            <a-dropdown v-if="showColumnSettings" trigger="click">
+            <a-dropdown
+              v-if="showColumnSettings"
+              trigger="click"
+            >
               <a-button>
                 <SettingOutlined />
                 列设置
@@ -109,15 +130,22 @@
                 </div>
               </template>
             </a-dropdown>
-            
+
             <!-- 刷新 -->
-            <a-button @click="handleRefresh" :loading="refreshing">
+            <a-button
+              :loading="refreshing"
+              @click="handleRefresh"
+            >
               <ReloadOutlined />
               刷新
             </a-button>
-            
+
             <!-- 导出 -->
-            <a-button v-if="showExport" @click="handleExport" :loading="exporting">
+            <a-button
+              v-if="showExport"
+              :loading="exporting"
+              @click="handleExport"
+            >
               <DownloadOutlined />
               导出
             </a-button>
@@ -125,7 +153,7 @@
         </slot>
       </div>
     </div>
-    
+
     <!-- 数据表格 -->
     <a-table
       v-bind="tableProps"
@@ -141,13 +169,23 @@
       @change="handleTableChange"
     >
       <!-- 传递所有插槽 -->
-      <template v-for="(_, name) in $slots" :key="name" #[name]="slotProps">
-        <slot :name="name" v-bind="slotProps" />
+      <template
+        v-for="(_, name) in $slots"
+        :key="name"
+        #[name]="slotProps"
+      >
+        <slot
+          :name="name"
+          v-bind="slotProps"
+        />
       </template>
     </a-table>
-    
+
     <!-- 空状态 -->
-    <div v-if="!loading && processedDataSource.length === 0" class="empty-state">
+    <div
+      v-if="!loading && processedDataSource.length === 0"
+      class="empty-state"
+    >
       <slot name="empty">
         <EmptyStateComponent
           :type="emptyType"
@@ -164,11 +202,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
-import { 
-  FilterOutlined, 
-  SettingOutlined, 
-  ReloadOutlined, 
-  DownloadOutlined 
+import {
+  FilterOutlined,
+  SettingOutlined,
+  ReloadOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons-vue'
 import EmptyStateComponent from './EmptyStateComponent.vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
@@ -195,12 +233,26 @@ interface BatchAction {
 interface EmptyAction {
   key: string
   text: string
-  type?: 'primary' | 'default'
+  type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
   icon?: Component
+  size?: 'small' | 'middle' | 'large'
+  loading?: boolean
+  disabled?: boolean
   onClick?: () => void
 }
 
 type TableRecord = Record<string, unknown>
+type TableColumn = TableColumnsType[number]
+
+const getColumnKey = (column: TableColumn): string | undefined => {
+  const key = column.key ?? ('dataIndex' in column ? column.dataIndex : undefined)
+
+  if (key === undefined || key === null) {
+    return undefined
+  }
+
+  return Array.isArray(key) ? key.map((part) => String(part)).join('.') : String(key)
+}
 
 interface Props {
   // 基础属性
@@ -209,41 +261,41 @@ interface Props {
   loading?: boolean
   size?: 'small' | 'middle' | 'large'
   bordered?: boolean
-  
+
   // 分页配置
   pagination?: Record<string, unknown> | false
-  
+
   // 选择配置
   rowSelection?: Record<string, unknown>
-  
+
   // 工具栏配置
   showToolbar?: boolean
   showSearch?: boolean
   searchPlaceholder?: string
   showColumnSettings?: boolean
   showExport?: boolean
-  
+
   // 筛选配置
   filters?: FilterItem[]
-  
+
   // 批量操作
   batchActions?: BatchAction[]
-  
+
   // 空状态配置
   emptyType?: 'empty' | 'search' | 'error'
   emptyTitle?: string
   emptyDescription?: string
   emptyActions?: EmptyAction[]
-  
+
   // 滚动配置
   scroll?: { x?: number; y?: number }
-  
+
   // 其他表格属性
   tableProps?: Partial<TableProps>
 }
 
 interface Emits {
-  (e: 'change', pagination: unknown,  filters: unknown, sorter: unknown): void
+  (e: 'change', pagination: unknown, filters: unknown, sorter: unknown): void
   (e: 'search', value: string): void
   (e: 'filter-change', filters: Record<string, unknown>): void
   (e: 'batch-action', action: BatchAction, selectedKeys: string[]): void
@@ -268,7 +320,7 @@ const props = withDefaults(defineProps<Props>(), {
   emptyTitle: '暂无数据',
   emptyDescription: '当前没有可显示的内容',
   emptyActions: () => [] as EmptyAction[],
-  tableProps: () => ({}) as Partial<TableProps>
+  tableProps: () => ({}) as Partial<TableProps>,
 })
 
 const emit = defineEmits<Emits>()
@@ -284,22 +336,22 @@ const visibleColumns = ref<string[]>([])
 
 // 初始化可见列
 onMounted(() => {
-  visibleColumns.value = props.columns.map(col => {
-    const column = col as any
-    return column.key || column.dataIndex
-  }).filter(Boolean)
+  visibleColumns.value = props.columns
+    .map((col: TableColumn) => getColumnKey(col))
+    .filter((key): key is string => Boolean(key))
 })
 
 // 计算属性
 const configurableColumns = computed(() => {
-  return props.columns.filter(col => col.key !== 'actions' && !col.fixed)
+  return props.columns.filter((col: TableColumn) => col.key !== 'actions' && !col.fixed)
 })
 
 const visibleTableColumns = computed(() => {
-  return props.columns.filter(col => {
-    const column = col as any
-    if (column.key === 'actions' || column.fixed) return true
-    return visibleColumns.value.includes(column.key || column.dataIndex)
+  return props.columns.filter((col: TableColumn) => {
+    if (col.key === 'actions' || col.fixed) return true
+
+    const columnKey = getColumnKey(col)
+    return columnKey ? visibleColumns.value.includes(columnKey) : false
   })
 })
 
@@ -311,57 +363,55 @@ const activeFilters = computed(() => {
 
 const processedDataSource = computed(() => {
   let data = [...props.dataSource]
-  
+
   // 搜索过滤
   if (searchValue.value) {
     const searchLower = searchValue.value.toLowerCase()
-    data = data.filter(item => {
-      return Object.values(item).some(value => 
-        String(value).toLowerCase().includes(searchLower)
-      )
+    data = data.filter((item) => {
+      return Object.values(item).some((value) => String(value).toLowerCase().includes(searchLower))
     })
   }
-  
+
   // 筛选器过滤
   if (activeFilters.value.length > 0) {
-    data = data.filter(item => {
-      return activeFilters.value.every(key => {
+    data = data.filter((item) => {
+      return activeFilters.value.every((key) => {
         const filterValue = filterValues.value[key]
         const itemValue = item[key]
-        
+
         if (filterValue === undefined || filterValue === null || filterValue === '') {
           return true
         }
-        
+
         return String(itemValue).includes(String(filterValue))
       })
     })
   }
-  
+
   return data
 })
 
 const paginationConfig = computed(() => {
   if (props.pagination === false) return false
-  
+
   return {
     showSizeChanger: true,
     showQuickJumper: true,
-    showTotal: (total: number, range: [number, number]) => 
+    showTotal: (total: number, range: [number, number]) =>
       `显示 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-    ...props.pagination
+    ...props.pagination,
   }
 })
 
 const rowSelection = computed(() => {
   if (!props.rowSelection) return undefined
-  
+
   return {
     selectedRowKeys: selectedRowKeys.value,
     onChange: (keys: string[]) => {
       selectedRowKeys.value = keys
     },
-    ...props.rowSelection
+    ...props.rowSelection,
   }
 })
 
@@ -370,23 +420,24 @@ const tableClass = computed(() => [
   {
     'table-small': props.size === 'small',
     'table-large': props.size === 'large',
-    'table-bordered': props.bordered
-  }
+    'table-bordered': props.bordered,
+  },
 ])
 
 // 事件处理
 const handleSearch = (value: string) => {
   searchLoading.value = true
   emit('search', value)
-  
+
   // 模拟搜索延迟
   setTimeout(() => {
     searchLoading.value = false
   }, 300)
 }
 
-const handleSearchChange = (e) => {
-  searchValue.value = e.target.value
+const handleSearchChange = (e: Event) => {
+  const target = e.target as HTMLInputElement | null
+  searchValue.value = target?.value ?? ''
 }
 
 const handleFilterChange = () => {
@@ -403,7 +454,7 @@ const handleBatchAction = (action: BatchAction) => {
 const handleRefresh = () => {
   refreshing.value = true
   emit('refresh')
-  
+
   // 模拟刷新延迟
   setTimeout(() => {
     refreshing.value = false
@@ -413,7 +464,7 @@ const handleRefresh = () => {
 const handleExport = () => {
   exporting.value = true
   emit('export')
-  
+
   // 模拟导出延迟
   setTimeout(() => {
     exporting.value = false
@@ -446,7 +497,7 @@ const resetFilters = () => {
 defineExpose({
   clearSelection,
   resetFilters,
-  selectedRowKeys
+  selectedRowKeys,
 })
 </script>
 
@@ -566,19 +617,19 @@ defineExpose({
     color: #262626;
     border-bottom: 2px solid #e8e8e8;
   }
-  
+
   .ant-table-tbody > tr:hover > td {
     background: #f5f5f5;
   }
-  
+
   .ant-table-tbody > tr > td {
     transition: background-color 0.2s ease;
   }
-  
+
   .ant-table-row-selected > td {
     background: #e6f7ff !important;
   }
-  
+
   .ant-table-row-selected:hover > td {
     background: #bae7ff !important;
   }
@@ -621,23 +672,23 @@ defineExpose({
     align-items: stretch;
     gap: 12px;
   }
-  
+
   .toolbar-left {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
-  
+
   .toolbar-right {
     justify-content: center;
   }
-  
+
   .batch-actions {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
   }
-  
+
   .search-box {
     max-width: none;
   }
@@ -688,4 +739,4 @@ defineExpose({
     transform: translateY(0);
   }
 }
-</style> 
+</style>

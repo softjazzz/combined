@@ -5,7 +5,9 @@
         <div class="analysis-command__title-row">
           <div>
             <h1>病历抽取与 DRG / DIP 预判</h1>
-            <p>把原始病历阅读、主诊断校验和分组预判收在同一个工作台里，先看文书，再做结构化判断。</p>
+            <p>
+              把原始病历阅读、主诊断校验和分组预判收在同一个工作台里，先看文书，再做结构化判断。
+            </p>
           </div>
           <div class="command-status">
             <strong>{{ currentCase.admissionId }}</strong>
@@ -13,33 +15,61 @@
           </div>
         </div>
 
-        <div class="workflow-rail" aria-label="工作流">
-          <div class="workflow-node" :class="{ active: !!medicalText }">
+        <div
+          class="workflow-rail"
+          aria-label="工作流"
+        >
+          <div
+            class="workflow-node"
+            :class="{ active: !!medicalText }"
+          >
             <span class="workflow-node__index">01</span>
             <div>
-              <div class="workflow-node__title">病历阅读</div>
-              <div class="workflow-node__desc">先确认原始文本和手术场景</div>
+              <div class="workflow-node__title">
+                病历阅读
+              </div>
+              <div class="workflow-node__desc">
+                先确认原始文本和手术场景
+              </div>
             </div>
           </div>
-          <div class="workflow-node" :class="{ active: hasExtractedData }">
+          <div
+            class="workflow-node"
+            :class="{ active: hasExtractedData }"
+          >
             <span class="workflow-node__index">02</span>
             <div>
-              <div class="workflow-node__title">结构化抽取</div>
-              <div class="workflow-node__desc">沉淀主诊断、手术和费用字段</div>
+              <div class="workflow-node__title">
+                结构化抽取
+              </div>
+              <div class="workflow-node__desc">
+                沉淀主诊断、手术和费用字段
+              </div>
             </div>
           </div>
-          <div class="workflow-node" :class="{ active: !!drgResult }">
+          <div
+            class="workflow-node"
+            :class="{ active: !!drgResult }"
+          >
             <span class="workflow-node__index">03</span>
             <div>
-              <div class="workflow-node__title">DRG / DIP 预判</div>
-              <div class="workflow-node__desc">输出分组结果与费用判断</div>
+              <div class="workflow-node__title">
+                DRG / DIP 预判
+              </div>
+              <div class="workflow-node__desc">
+                输出分组结果与费用判断
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="analysis-command__side">
-        <div class="case-switcher" role="tablist" aria-label="病例切换">
+        <div
+          class="case-switcher"
+          role="tablist"
+          aria-label="病例切换"
+        >
           <button
             v-for="(item, index) in testCases"
             :key="item.name"
@@ -53,11 +83,21 @@
           </button>
         </div>
         <div class="toolbar-actions">
-          <button type="button" class="ghost-button" @click="handleExtract" :disabled="extracting">
+          <button
+            type="button"
+            class="ghost-button"
+            :disabled="extracting"
+            @click="handleExtract"
+          >
             <span class="primary-action__icon">⚡</span>
             <span>{{ extracting ? '抽取中' : '开始抽取' }}</span>
           </button>
-          <button type="button" class="primary-action primary-action--compact" @click="handleDRGGrouping" :disabled="grouping || !hasExtractedData">
+          <button
+            type="button"
+            class="primary-action primary-action--compact"
+            :disabled="grouping || !hasExtractedData"
+            @click="handleDRGGrouping"
+          >
             <span class="primary-action__icon">⚡</span>
             <span>{{ grouping ? '分组中' : 'DRG 分组' }}</span>
           </button>
@@ -75,10 +115,15 @@
             <div class="medical-toolbar">
               <span class="medical-toolbar__label">当前病案</span>
               <span class="medical-toolbar__value">{{ currentCase.admissionId }}</span>
-              <span class="medical-toolbar__dot"></span>
+              <span class="medical-toolbar__dot" />
               <span class="medical-toolbar__value">{{ currentCase.name }}</span>
             </div>
-            <button v-if="hasExtractedData" type="button" class="ghost-button ghost-button--soft" @click="extractedData = null">
+            <button
+              v-if="hasExtractedData"
+              type="button"
+              class="ghost-button ghost-button--soft"
+              @click="extractedData = null"
+            >
               清空结构化结果
             </button>
           </div>
@@ -86,7 +131,10 @@
 
         <div class="medical-frame">
           <div class="medical-frame__scroll">
-            <div class="medical-text" v-html="highlightedMedicalText"></div>
+            <div
+              class="medical-text"
+              v-html="highlightedMedicalText"
+            />
           </div>
         </div>
       </section>
@@ -97,19 +145,27 @@
             <div>
               <h2>主诊断与手术 / 操作</h2>
             </div>
-            <span class="status-pill status-pill--blue">{{ hasExtractedData ? '已同步' : '等待抽取' }}</span>
+            <span class="status-pill status-pill--blue">{{
+              hasExtractedData ? '已同步' : '等待抽取'
+            }}</span>
           </div>
 
           <div class="console-list">
             <div class="console-row">
               <span class="console-row__label">主诊断</span>
-              <strong>{{ hasExtractedData && mainDiagnosis ? (mainDiagnosis.text || mainDiagnosis.code || '已抽取') : '等待抽取' }}</strong>
+              <strong>{{
+                hasExtractedData && mainDiagnosis
+                  ? mainDiagnosis.text || mainDiagnosis.code || '已抽取'
+                  : '等待抽取'
+              }}</strong>
               <span class="console-row__meta">编码 {{ mainDiagnosis?.code || '--' }}</span>
             </div>
             <div class="console-row">
               <span class="console-row__label">手术 / 操作</span>
-              <strong>{{ procedures.length ? (procedures[0].text || procedures[0].name || '已抽取') : '等待抽取' }}</strong>
-              <span class="console-row__meta">{{ hasExtractedData ? `${procedures.length} 条` : '0 条' }}</span>
+              <strong>{{ procedures.length ? procedures[0].text || '已抽取' : '等待抽取' }}</strong>
+              <span class="console-row__meta">{{
+                hasExtractedData ? `${procedures.length} 条` : '0 条'
+              }}</span>
             </div>
           </div>
         </article>
@@ -120,21 +176,44 @@
               <h2>DRG / DIP 预判结果</h2>
             </div>
             <div class="group-actions">
-              <button type="button" class="ghost-button ghost-button--soft" @click="handleDIPGrouping" :disabled="grouping || !hasExtractedData">DIP</button>
-              <button type="button" class="primary-action primary-action--compact" @click="handleDRGGrouping" :disabled="grouping || !hasExtractedData">
+              <button
+                type="button"
+                class="ghost-button ghost-button--soft"
+                :disabled="grouping || !hasExtractedData"
+                @click="handleDIPGrouping"
+              >
+                DIP
+              </button>
+              <button
+                type="button"
+                class="primary-action primary-action--compact"
+                :disabled="grouping || !hasExtractedData"
+                @click="handleDRGGrouping"
+              >
                 <span class="primary-action__icon">⚡</span>
                 <span>{{ grouping ? '分组中' : 'DRG' }}</span>
               </button>
             </div>
           </div>
 
-          <div v-if="drgResult" class="group-summary">
+          <div
+            v-if="drgResult"
+            class="group-summary"
+          >
             <div class="group-summary__top">
               <div>
-                <div class="group-summary__badge">{{ drgResult.groupingType || groupingType }}</div>
-                <div class="group-summary__name">{{ drgResult.groupName || drgResult.name || '未返回分组' }}</div>
+                <div class="group-summary__badge">
+                  {{ drgResult.groupingType || groupingType }}
+                </div>
+                <div class="group-summary__name">
+                  {{ drgResult.groupName || drgResult.name || '未返回分组' }}
+                </div>
               </div>
-              <div class="group-summary__meta">{{ drgResult.message || '分组结果已生成，可继续核对费用结构、手术匹配和主诊断归类。' }}</div>
+              <div class="group-summary__meta">
+                {{
+                  drgResult.message || '分组结果已生成，可继续核对费用结构、手术匹配和主诊断归类。'
+                }}
+              </div>
             </div>
 
             <div class="metric-grid metric-grid--grouping">
@@ -144,30 +223,57 @@
               </div>
               <div class="metric-card">
                 <span>预估费用</span>
-                <strong>{{ drgResult.payment !== '--' ? drgResult.payment?.toLocaleString() : '--' }}</strong>
+                <strong>{{
+                  drgResult.payment !== '--' ? drgResult.payment?.toLocaleString() : '--'
+                }}</strong>
               </div>
               <div class="metric-card">
                 <span>实际费用</span>
-                <strong>{{ drgResult.actual_cost !== '--' ? drgResult.actual_cost?.toLocaleString() : '--' }}</strong>
+                <strong>{{
+                  drgResult.actual_cost !== '--' ? drgResult.actual_cost?.toLocaleString() : '--'
+                }}</strong>
               </div>
               <div class="metric-card">
                 <span>盈亏情况</span>
-                <strong>{{ drgResult.profit !== '--' ? drgResult.profit?.toLocaleString() : '--' }}</strong>
+                <strong>{{
+                  drgResult.profit !== '--' ? drgResult.profit?.toLocaleString() : '--'
+                }}</strong>
               </div>
             </div>
           </div>
 
-          <div v-if="drgResult" class="trace-list">
-            <div class="trace-item" v-for="(item, idx) in drgResult.messages || []" :key="idx">
-              <div class="trace-item__title">步骤 {{ idx + 1 }}</div>
-              <div class="trace-item__value" v-html="highlightCodes(item)"></div>
+          <div
+            v-if="drgResult"
+            class="trace-list"
+          >
+            <div
+              v-for="(item, idx) in drgResult.messages || []"
+              :key="idx"
+              class="trace-item"
+            >
+              <div class="trace-item__title">
+                步骤 {{ idx + 1 }}
+              </div>
+              <div
+                class="trace-item__value"
+                v-html="highlightCodes(item)"
+              />
             </div>
           </div>
 
-          <div v-else class="empty-state">
-            <div class="empty-state__icon">DRG</div>
-            <div class="empty-state__title">等待分组结果</div>
-            <div class="empty-state__desc">完成病历抽取后即可生成 DRG / DIP 结果与费用建议。</div>
+          <div
+            v-else
+            class="empty-state"
+          >
+            <div class="empty-state__icon">
+              DRG
+            </div>
+            <div class="empty-state__title">
+              等待分组结果
+            </div>
+            <div class="empty-state__desc">
+              完成病历抽取后即可生成 DRG / DIP 结果与费用建议。
+            </div>
           </div>
         </section>
       </section>
@@ -258,11 +364,13 @@ const secondaryDiagnoses = computed(() => {
   if (!diags) return []
   const codes = diags.discharge_other_icds || diags.admission_other_icds || []
   const texts = diags.discharge_other_diagnoses_texts || diags.admission_other_diagnoses_texts || []
-  return texts.map((text: string, idx: number) => ({
-    code: codes[idx] || '',
-    text,
-    mappedCode: codeMappings.value[codes[idx]] || '',
-  })).slice(0, 5)
+  return texts
+    .map((text: string, idx: number) => ({
+      code: codes[idx] || '',
+      text,
+      mappedCode: codeMappings.value[codes[idx]] || '',
+    }))
+    .slice(0, 5)
 })
 
 const procedures = computed(() => {
@@ -284,19 +392,16 @@ const procedures = computed(() => {
 
 const highlightedMedicalText = computed(() => {
   if (!medicalText.value) return ''
-  let html = medicalText.value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  let html = medicalText.value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   const diagTerms: string[] = []
   if (mainDiagnosis.value?.text) diagTerms.push(mainDiagnosis.value.text)
-  secondaryDiagnoses.value.forEach((item) => {
+  secondaryDiagnoses.value.forEach((item: { text?: string }) => {
     if (item.text) diagTerms.push(item.text)
   })
 
   const procTerms: string[] = []
-  procedures.value.forEach((item) => {
+  procedures.value.forEach((item: { text?: string }) => {
     if (item.text) procTerms.push(item.text)
   })
 
@@ -315,7 +420,10 @@ const highlightedMedicalText = computed(() => {
 })
 
 function highlightCodes(msg: string): string {
-  return msg.replace(/([A-Z]\d{2}\.\d[\w.]*|\d{2}\.\d[\w.]*)/g, '<code class="trace-code">$1</code>')
+  return msg.replace(
+    /([A-Z]\d{2}\.\d[\w.]*|\d{2}\.\d[\w.]*)/g,
+    '<code class="trace-code">$1</code>',
+  )
 }
 
 const handleCaseChange = (idx: number) => {
@@ -371,7 +479,8 @@ const handleDIPGrouping = async () => {
     const costs = extractedData.value.costs || {}
 
     const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || ''
-    const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
+    const secondaryDiagCodes =
+      diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
     const mainProcCode = proceduresData.main_procedure_code || ''
     const otherProcCodes = proceduresData.other_procedure_codes || []
 
@@ -429,7 +538,8 @@ const handleDRGGrouping = async () => {
     const costs = extractedData.value.costs || {}
 
     const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || ''
-    const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
+    const secondaryDiagCodes =
+      diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
     const mainProcCode = proceduresData.main_procedure_code || ''
     const otherProcCodes = proceduresData.other_procedure_codes || []
 
@@ -437,7 +547,7 @@ const handleDRGGrouping = async () => {
     const ssList = [mainProcCode, ...otherProcCodes].filter(Boolean)
 
     const drgGroupResult = await localDrgGrouping({
-      gender: (basicInfo.gender === '2' || basicInfo.gender_text === '女') ? '2' : '1',
+      gender: basicInfo.gender === '2' || basicInfo.gender_text === '女' ? '2' : '1',
       age: basicInfo.age_years || 50,
       zdList,
       ssList,
@@ -451,7 +561,9 @@ const handleDRGGrouping = async () => {
       const baselinePayment = Math.round(rw * 8000 * 100) / 100
       drgResult.value = {
         code: drgGroupResult.drg,
-        name: drgGroupResult.drgName || `MDC ${drgGroupResult.mdc || '--'} / ADRG ${drgGroupResult.adrg || '--'}`,
+        name:
+          drgGroupResult.drgName ||
+          `MDC ${drgGroupResult.mdc || '--'} / ADRG ${drgGroupResult.adrg || '--'}`,
         weight: rw,
         payment: baselinePayment,
         actual_cost: actualCost,
@@ -502,7 +614,10 @@ const handleDRGGrouping = async () => {
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.05);
 }
 
-.analysis-command__main { flex: 1; min-width: 0; }
+.analysis-command__main {
+  flex: 1;
+  min-width: 0;
+}
 .analysis-command__side {
   display: flex;
   width: min(440px, 42%);
@@ -517,10 +632,43 @@ const handleDRGGrouping = async () => {
   justify-content: space-between;
   gap: 16px;
 }
-.analysis-command h1 { margin: 0; font-size: 32px; line-height: 1.08; font-weight: 900; letter-spacing: -0.04em; }
-.analysis-command p { margin: 10px 0 0; max-width: 760px; color: #64748b; font-size: 14px; line-height: 1.72; }
-.eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: rgba(37, 99, 235, 0.08); color: #2563eb; font-size: 12px; font-weight: 700; }
-.eyebrow-icon { display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 7px; border-radius: 999px; background: rgba(37, 99, 235, 0.14); color: #1d4ed8; font-size: 10px; letter-spacing: 0.04em; }
+.analysis-command h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.08;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+.analysis-command p {
+  margin: 10px 0 0;
+  max-width: 760px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.72;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+}
+.eyebrow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
 
 .command-status {
   display: grid;
@@ -532,11 +680,29 @@ const handleDRGGrouping = async () => {
   border: 1px solid rgba(37, 99, 235, 0.12);
   background: linear-gradient(180deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.96));
 }
-.command-status__label { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #2563eb; }
-.command-status strong { font-size: 16px; line-height: 1.2; color: #0f172a; }
-.command-status span:last-child { color: #64748b; font-size: 13px; }
+.command-status__label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+.command-status strong {
+  font-size: 16px;
+  line-height: 1.2;
+  color: #0f172a;
+}
+.command-status span:last-child {
+  color: #64748b;
+  font-size: 13px;
+}
 
-.workflow-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.workflow-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
 .workflow-node {
   display: flex;
   align-items: center;
@@ -559,13 +725,22 @@ const handleDRGGrouping = async () => {
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: rgba(37, 99, 235, 0.10);
+  background: rgba(37, 99, 235, 0.1);
   color: #2563eb;
   font-size: 12px;
   font-weight: 800;
 }
-.workflow-node__title { font-size: 14px; font-weight: 800; color: #0f172a; }
-.workflow-node__desc { margin-top: 1px; font-size: 12px; line-height: 1.45; color: #64748b; }
+.workflow-node__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.workflow-node__desc {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #64748b;
+}
 
 .case-switcher {
   display: grid;
@@ -582,101 +757,426 @@ const handleDRGGrouping = async () => {
   background: rgba(255, 255, 255, 0.94);
   color: #475569;
   text-align: left;
-  transition: all .18s ease;
+  transition: all 0.18s ease;
 }
-.case-chip:hover { transform: translateY(-1px); border-color: rgba(37, 99, 235, 0.22); box-shadow: 0 10px 22px rgba(37, 99, 235, 0.10); }
+.case-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.22);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.1);
+}
 .case-chip.active {
   border-color: rgba(37, 99, 235, 0.24);
   background: linear-gradient(180deg, rgba(239, 246, 255, 0.94), rgba(255, 255, 255, 0.98));
   color: #1d4ed8;
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
 }
-.case-chip__meta { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.72; }
-.case-chip__name { font-size: 16px; line-height: 1.25; font-weight: 800; color: #0f172a; }
-.toolbar-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.case-chip__meta {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+.case-chip__name {
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #0f172a;
+}
+.toolbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
-.pre-analysis-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr); gap: 14px; margin-top: 14px; }
-.results-column { display: flex; flex-direction: column; gap: 14px; }
-.coding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.surface-card { border-radius: 20px; border: 1px solid rgba(148, 163, 184, 0.14); background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96)); box-shadow: 0 14px 32px rgba(15, 23, 42, 0.04); }
-.surface-card--medical { padding: 16px; min-height: 720px; }
-.surface-card--small { padding: 14px; min-height: 154px; }
-.surface-card--grouping { padding: 16px; min-height: 520px; }
-.surface-card--panel { padding: 16px; }
-.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pre-analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+.results-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.coding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.surface-card {
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96));
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.04);
+}
+.surface-card--medical {
+  padding: 16px;
+  min-height: 720px;
+}
+.surface-card--small {
+  padding: 14px;
+  min-height: 154px;
+}
+.surface-card--grouping {
+  padding: 16px;
+  min-height: 520px;
+}
+.surface-card--panel {
+  padding: 16px;
+}
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 .panel-head--tight,
-.panel-head--compact { align-items: center; }
-.panel-head--reading { align-items: flex-start; }
-.panel-kicker { font-size: 12px; font-weight: 800; color: #2563eb; letter-spacing: 0.04em; text-transform: uppercase; }
-.panel-head h2 { margin: 4px 0 0; font-size: 17px; line-height: 1.2; font-weight: 800; color: #0f172a; }
+.panel-head--compact {
+  align-items: center;
+}
+.panel-head--reading {
+  align-items: flex-start;
+}
+.panel-kicker {
+  font-size: 12px;
+  font-weight: 800;
+  color: #2563eb;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.panel-head h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #0f172a;
+}
 
 .ghost-button,
-.primary-action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(37, 99, 235, 0.14); background: rgba(255, 255, 255, 0.94); color: #1d4ed8; font-size: 13px; font-weight: 700; }
-.ghost-button--soft { background: rgba(37, 99, 235, 0.05); }
-.primary-action { border-color: transparent; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 12px 26px rgba(37, 99, 235, 0.20); }
-.primary-action--compact { height: 36px; padding: 0 13px; }
-.primary-action__icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 12px; }
+.primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ghost-button--soft {
+  background: rgba(37, 99, 235, 0.05);
+}
+.primary-action {
+  border-color: transparent;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.2);
+}
+.primary-action--compact {
+  height: 36px;
+  padding: 0 13px;
+}
+.primary-action__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+}
 
-.reading-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-.medical-toolbar { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: rgba(37, 99, 235, 0.06); color: #475569; font-size: 12px; font-weight: 600; }
-.medical-toolbar__label { color: #2563eb; font-weight: 800; }
-.medical-toolbar__value { color: #0f172a; }
-.medical-toolbar__dot { width: 4px; height: 4px; border-radius: 50%; background: #cbd5e1; }
-.medical-frame { margin-top: 14px; height: calc(100% - 84px); border-radius: 22px; border: 1px solid rgba(148, 163, 184, 0.12); background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(247,250,255,.98)); overflow: hidden; }
-.medical-frame__scroll { height: 100%; overflow: auto; padding: 16px 18px; }
-.medical-text { color: #0f172a; font-size: 14px; line-height: 1.85; white-space: pre-wrap; word-break: break-word; }
-.medical-text :deep(.highlight-code) { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; padding: 0 2px; border-radius: 4px; }
+.reading-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.medical-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.06);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+.medical-toolbar__label {
+  color: #2563eb;
+  font-weight: 800;
+}
+.medical-toolbar__value {
+  color: #0f172a;
+}
+.medical-toolbar__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+.medical-frame {
+  margin-top: 14px;
+  height: calc(100% - 84px);
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 255, 0.98));
+  overflow: hidden;
+}
+.medical-frame__scroll {
+  height: 100%;
+  overflow: auto;
+  padding: 16px 18px;
+}
+.medical-text {
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.medical-text :deep(.highlight-code) {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  padding: 0 2px;
+  border-radius: 4px;
+}
 
-.console-list { display: grid; gap: 10px; margin-top: 12px; }
-.console-row { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border-radius: 16px; background: rgba(248, 250, 255, 0.96); border: 1px solid rgba(148, 163, 184, 0.10); }
-.console-row__label { font-size: 12px; color: #64748b; }
-.console-row strong { font-size: 14px; color: #0f172a; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.console-row__meta { font-size: 12px; color: #2563eb; font-weight: 700; }
+.console-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.console-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(248, 250, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+.console-row__label {
+  font-size: 12px;
+  color: #64748b;
+}
+.console-row strong {
+  font-size: 14px;
+  color: #0f172a;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-row__meta {
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 700;
+}
 
-.group-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.group-summary { margin-top: 12px; padding: 14px; border-radius: 18px; border: 1px solid rgba(37, 99, 235, 0.12); background: rgba(248, 251, 255, 0.96); }
-.group-summary__top { display: grid; gap: 8px; }
-.group-summary__badge { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; background: rgba(37, 99, 235, 0.10); color: #2563eb; font-size: 12px; font-weight: 800; }
-.group-summary__name { margin-top: 6px; font-size: 17px; font-weight: 800; color: #0f172a; }
-.group-summary__meta { color: #64748b; font-size: 13px; line-height: 1.6; }
-.metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
-.metric-grid--grouping { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.metric-card { padding: 12px 13px; border-radius: 16px; background: rgba(255, 255, 255, 0.96); border: 1px solid rgba(148, 163, 184, 0.10); }
-.metric-card span { display: block; font-size: 12px; color: #64748b; }
-.metric-card strong { display: block; margin-top: 8px; font-size: 18px; line-height: 1; color: #0f172a; }
-.trace-list { display: grid; gap: 8px; margin-top: 12px; }
-.trace-item { padding: 12px 13px; border-radius: 14px; background: rgba(248, 250, 255, 0.96); border: 1px solid rgba(148, 163, 184, 0.10); }
-.trace-item__title { font-size: 12px; font-weight: 800; color: #2563eb; }
-.trace-item__value { margin-top: 6px; font-size: 13px; line-height: 1.68; color: #334155; }
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 310px; margin-top: 12px; border-radius: 18px; border: 1px dashed rgba(37, 99, 235, 0.18); background: rgba(248, 251, 255, 0.80); text-align: center; }
-.empty-state__icon { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 18px; background: rgba(37, 99, 235, 0.10); color: #2563eb; font-size: 13px; font-weight: 800; letter-spacing: 0.08em; }
-.empty-state__title { margin-top: 14px; font-size: 18px; font-weight: 800; color: #0f172a; }
-.empty-state__desc { margin-top: 8px; max-width: 320px; color: #64748b; font-size: 13px; line-height: 1.7; }
-.status-pill { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-.status-pill--blue { background: rgba(37, 99, 235, 0.08); color: #2563eb; border: 1px solid rgba(37, 99, 235, 0.10); }
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.group-summary {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  background: rgba(248, 251, 255, 0.96);
+}
+.group-summary__top {
+  display: grid;
+  gap: 8px;
+}
+.group-summary__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+}
+.group-summary__name {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.group-summary__meta {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.metric-grid--grouping {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.metric-card {
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+.metric-card span {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+.metric-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 18px;
+  line-height: 1;
+  color: #0f172a;
+}
+.trace-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.trace-item {
+  padding: 12px 13px;
+  border-radius: 14px;
+  background: rgba(248, 250, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+.trace-item__title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #2563eb;
+}
+.trace-item__value {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.68;
+  color: #334155;
+}
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 310px;
+  margin-top: 12px;
+  border-radius: 18px;
+  border: 1px dashed rgba(37, 99, 235, 0.18);
+  background: rgba(248, 251, 255, 0.8);
+  text-align: center;
+}
+.empty-state__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.empty-state__title {
+  margin-top: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.empty-state__desc {
+  margin-top: 8px;
+  max-width: 320px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.status-pill--blue {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.1);
+}
 
 @media (max-width: 1180px) {
-  .analysis-command { flex-direction: column; }
-  .analysis-command__side { width: 100%; min-width: 0; }
-  .case-switcher { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .analysis-command__title-row { flex-direction: column; }
-  .pre-analysis-grid { grid-template-columns: 1fr; }
-  .surface-card--medical { min-height: 580px; }
+  .analysis-command {
+    flex-direction: column;
+  }
+  .analysis-command__side {
+    width: 100%;
+    min-width: 0;
+  }
+  .case-switcher {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analysis-command__title-row {
+    flex-direction: column;
+  }
+  .pre-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+  .surface-card--medical {
+    min-height: 580px;
+  }
 }
 
 @media (max-width: 960px) {
-  .pre-analysis-shell { padding: 14px; }
-  .analysis-command { padding: 14px; }
-  .analysis-command h1 { font-size: 26px; }
-  .analysis-command__side { align-items: stretch; }
-  .case-switcher { grid-template-columns: 1fr; }
-  .toolbar-actions { flex-wrap: wrap; }
+  .pre-analysis-shell {
+    padding: 14px;
+  }
+  .analysis-command {
+    padding: 14px;
+  }
+  .analysis-command h1 {
+    font-size: 26px;
+  }
+  .analysis-command__side {
+    align-items: stretch;
+  }
+  .case-switcher {
+    grid-template-columns: 1fr;
+  }
+  .toolbar-actions {
+    flex-wrap: wrap;
+  }
   .workflow-rail,
   .coding-grid,
   .metric-grid,
-  .metric-grid--grouping { grid-template-columns: 1fr; }
-  .console-row { grid-template-columns: 1fr; }
+  .metric-grid--grouping {
+    grid-template-columns: 1fr;
+  }
+  .console-row {
+    grid-template-columns: 1fr;
+  }
   .panel-head--reading,
-  .reading-actions { align-items: stretch; }
+  .reading-actions {
+    align-items: stretch;
+  }
 }
 </style>

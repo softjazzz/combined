@@ -12,31 +12,29 @@
           <Input
             v-model:value="newDocument.title"
             placeholder="文档标题（可选）"
-            style="width: 200px; margin-right: 12px;"
+            style="width: 200px; margin-right: 12px"
           />
           <Select
             v-model:value="newDocument.category"
             placeholder="选择分类"
-            style="width: 150px; margin-right: 12px;"
+            style="width: 150px; margin-right: 12px"
           >
-            <SelectOption value="心血管内科">心血管内科</SelectOption>
-            <SelectOption value="呼吸内科">呼吸内科</SelectOption>
-            <SelectOption value="消化内科">消化内科</SelectOption>
-            <SelectOption value="神经内科">神经内科</SelectOption>
-            <SelectOption value="妇产科">妇产科</SelectOption>
-            <SelectOption value="外科">外科</SelectOption>
-            <SelectOption value="其他">其他</SelectOption>
+            <SelectOption value="心血管内科"> 心血管内科 </SelectOption>
+            <SelectOption value="呼吸内科"> 呼吸内科 </SelectOption>
+            <SelectOption value="消化内科"> 消化内科 </SelectOption>
+            <SelectOption value="神经内科"> 神经内科 </SelectOption>
+            <SelectOption value="妇产科"> 妇产科 </SelectOption>
+            <SelectOption value="外科"> 外科 </SelectOption>
+            <SelectOption value="其他"> 其他 </SelectOption>
           </Select>
-          <Button type="primary" @click="saveDocument" :loading="saving">
-            保存文档
-          </Button>
+          <Button type="primary" :loading="saving" @click="saveDocument"> 保存文档 </Button>
         </div>
         <div class="form-row">
           <TextArea
             v-model:value="newDocument.content"
             placeholder="在此粘贴病历文本内容..."
             :rows="8"
-            style="width: 100%;"
+            style="width: 100%"
           />
         </div>
       </div>
@@ -49,23 +47,25 @@
           <Input.Search
             v-model:value="searchTerm"
             placeholder="搜索文档..."
-            style="width: 200px;"
+            style="width: 200px"
             @search="handleSearch"
           />
           <Select
             v-model:value="filters.processing_status"
             placeholder="处理状态"
-            style="width: 120px;"
-            allowClear
+            style="width: 120px"
+            allow-clear
             @change="loadDocuments"
           >
-            <SelectOption value="pending">待处理</SelectOption>
-            <SelectOption value="processing">处理中</SelectOption>
-            <SelectOption value="completed">已完成</SelectOption>
-            <SelectOption value="failed">失败</SelectOption>
+            <SelectOption value="pending"> 待处理 </SelectOption>
+            <SelectOption value="processing"> 处理中 </SelectOption>
+            <SelectOption value="completed"> 已完成 </SelectOption>
+            <SelectOption value="failed"> 失败 </SelectOption>
           </Select>
-          <Button @click="loadDocuments" :loading="loading">
-            <template #icon><ReloadOutlined /></template>
+          <Button :loading="loading" @click="loadDocuments">
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             刷新
           </Button>
         </Space>
@@ -76,8 +76,8 @@
         :data-source="documents"
         :loading="loading"
         :pagination="pagination"
-        @change="handleTableChange"
         row-key="id"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'title'">
@@ -110,13 +110,9 @@
 
           <template v-if="column.key === 'actions'">
             <Space>
-              <Button size="small" @click="viewDocument(record)">
-                查看
-              </Button>
-              <Button size="small" @click="editDocument(record)">
-                编辑
-              </Button>
-              <Button size="small" danger @click="deleteDocument(record)">
+              <Button size="small" @click="viewDocument(asDocument(record))"> 查看 </Button>
+              <Button size="small" @click="editDocument(asDocument(record))"> 编辑 </Button>
+              <Button size="small" danger @click="deleteDocument(asDocument(record))">
                 删除
               </Button>
             </Space>
@@ -165,7 +161,11 @@
           <pre>{{ currentDocument.raw_content }}</pre>
         </div>
 
-        <div v-if="currentDocument.extracted_data && Object.keys(currentDocument.extracted_data).length > 0">
+        <div
+          v-if="
+            currentDocument.extracted_data && Object.keys(currentDocument.extracted_data).length > 0
+          "
+        >
           <Divider>提取的结构化数据</Divider>
           <pre>{{ JSON.stringify(currentDocument.extracted_data, null, 2) }}</pre>
         </div>
@@ -176,17 +176,28 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { 
-  Card, Table, Button, Input, Textarea, Select, SelectOption, 
-  Space, Tag, Modal, Descriptions, DescriptionsItem, Divider,
-  message
+import {
+  Card,
+  Table,
+  Button,
+  Input,
+  Textarea,
+  Select,
+  SelectOption,
+  Space,
+  Tag,
+  Modal,
+  Descriptions,
+  DescriptionsItem,
+  Divider,
+  message,
 } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
-import { 
-  getUnstructuredDocuments, 
-  saveRawMedicalText, 
+import {
+  getUnstructuredDocuments,
+  saveRawMedicalText,
   deleteUnstructuredDocument,
-  searchUnstructuredDocuments
+  searchUnstructuredDocuments,
 } from '@/api/unstructured-documents'
 import type { Database } from '@/types/database'
 
@@ -204,14 +215,14 @@ const currentDocument = ref<UnstructuredDocument | null>(null)
 const newDocument = reactive({
   title: '',
   content: '',
-  category: ''
+  category: '',
 })
 
 // 筛选条件
 const filters = reactive({
   processing_status: undefined as string | undefined,
   qc_status: undefined as string | undefined,
-  category: undefined as string | undefined
+  category: undefined as string | undefined,
 })
 
 // 分页配置
@@ -221,7 +232,7 @@ const pagination = reactive({
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条记录`
+  showTotal: (total: number) => `共 ${total} 条记录`,
 })
 
 // 表格列配置
@@ -229,34 +240,34 @@ const columns = [
   {
     title: '文档信息',
     key: 'title',
-    width: 300
+    width: 300,
   },
   {
     title: '分类',
     dataIndex: 'category',
     key: 'category',
-    width: 120
+    width: 120,
   },
   {
     title: '处理状态',
     key: 'processing_status',
-    width: 100
+    width: 100,
   },
   {
     title: '质控状态',
     key: 'qc_status',
-    width: 100
+    width: 100,
   },
   {
     title: '创建时间',
     key: 'created_at',
-    width: 150
+    width: 150,
   },
   {
     title: '操作',
     key: 'actions',
-    width: 200
-  }
+    width: 200,
+  },
 ]
 
 // 方法
@@ -266,7 +277,7 @@ const loadDocuments = async () => {
     const response = await getUnstructuredDocuments({
       ...filters,
       limit: pagination.pageSize,
-      offset: (pagination.current - 1) * pagination.pageSize
+      offset: (pagination.current - 1) * pagination.pageSize,
     })
 
     if (response.success && response.data) {
@@ -294,7 +305,7 @@ const saveDocument = async () => {
     const response = await saveRawMedicalText(
       newDocument.content,
       newDocument.title || undefined,
-      newDocument.category || undefined
+      newDocument.category || undefined,
     )
 
     if (response.success) {
@@ -325,7 +336,7 @@ const handleSearch = async () => {
   try {
     const response = await searchUnstructuredDocuments(searchTerm.value, {
       limit: pagination.pageSize,
-      offset: (pagination.current - 1) * pagination.pageSize
+      offset: (pagination.current - 1) * pagination.pageSize,
     })
 
     if (response.success && response.data) {
@@ -346,6 +357,8 @@ const viewDocument = (document: UnstructuredDocument) => {
   documentModalVisible.value = true
 }
 
+const asDocument = (record: Record<string, unknown>) => record as UnstructuredDocument
+
 const editDocument = (document: UnstructuredDocument) => {
   // TODO: 实现编辑功能
   message.info('编辑功能开发中...')
@@ -365,71 +378,71 @@ const deleteDocument = async (document: UnstructuredDocument) => {
   }
 }
 
-const handleTableChange = (pag) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
+const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
+  pagination.current = pag.current ?? pagination.current
+  pagination.pageSize = pag.pageSize ?? pagination.pageSize
   loadDocuments()
 }
 
 // 工具方法
 const getDocumentTypeColor = (type: string) => {
   const colors = {
-    'raw_text': 'blue',
-    'copied_record': 'green',
-    'uploaded_file': 'orange',
-    'scanned_document': 'purple'
+    raw_text: 'blue',
+    copied_record: 'green',
+    uploaded_file: 'orange',
+    scanned_document: 'purple',
   }
   return colors[type as keyof typeof colors] || 'default'
 }
 
 const getDocumentTypeText = (type: string) => {
   const texts = {
-    'raw_text': '原始文本',
-    'copied_record': '复制记录',
-    'uploaded_file': '上传文件',
-    'scanned_document': '扫描文档'
+    raw_text: '原始文本',
+    copied_record: '复制记录',
+    uploaded_file: '上传文件',
+    scanned_document: '扫描文档',
   }
   return texts[type as keyof typeof texts] || type
 }
 
 const getStatusColor = (status: string) => {
   const colors = {
-    'pending': 'orange',
-    'processing': 'blue',
-    'completed': 'green',
-    'failed': 'red',
-    'skipped': 'gray'
+    pending: 'orange',
+    processing: 'blue',
+    completed: 'green',
+    failed: 'red',
+    skipped: 'gray',
   }
   return colors[status as keyof typeof colors] || 'default'
 }
 
 const getStatusText = (status: string) => {
   const texts = {
-    'pending': '待处理',
-    'processing': '处理中',
-    'completed': '已完成',
-    'failed': '失败',
-    'skipped': '跳过'
+    pending: '待处理',
+    processing: '处理中',
+    completed: '已完成',
+    failed: '失败',
+    skipped: '跳过',
   }
   return texts[status as keyof typeof texts] || status
 }
 
 const getQCStatusColor = (status: string) => {
   const colors = {
-    'not_analyzed': 'gray',
-    'analyzing': 'blue',
-    'completed': 'green',
-    'failed': 'red'
+    not_analyzed: 'gray',
+    analyzing: 'blue',
+    completed: 'green',
+    failed: 'red',
   }
   return colors[status as keyof typeof colors] || 'default'
 }
 
 const getQCStatusText = (status: string) => {
   const texts = {
-    'not_analyzed': '未分析',
-    'analyzing': '分析中',
-    'completed': '已完成',
-    'failed': '失败'
+    not_analyzed: '未分析',
+    analyzing: '分析中',
+    completed: '已完成',
+    failed: '失败',
   }
   return texts[status as keyof typeof texts] || status
 }

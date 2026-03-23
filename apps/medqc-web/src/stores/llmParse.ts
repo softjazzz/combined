@@ -13,7 +13,9 @@ export const useLLMParseStore = defineStore('llmParse', {
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem('llm.lastResult', JSON.stringify(result))
         }
-      } catch {}
+      } catch (error) {
+        void error
+      }
     },
     loadFromSession() {
       try {
@@ -21,14 +23,17 @@ export const useLLMParseStore = defineStore('llmParse', {
           const raw = sessionStorage.getItem('llm.lastResult')
           if (raw) this.lastResult = JSON.parse(raw)
         }
-      } catch {}
+      } catch (error) {
+        void error
+      }
     },
     clear() {
       this.lastResult = null
       try {
         if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('llm.lastResult')
-      } catch {}
-    }
-  }
+      } catch (error) {
+        void error
+      }
+    },
+  },
 })
-

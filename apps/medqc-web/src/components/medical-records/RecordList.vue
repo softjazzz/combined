@@ -9,8 +9,8 @@
             v-model:value="searchParams.keyword"
             placeholder="搜索患者姓名、科室或记录内容..."
             size="large"
-            @search="handleSearch"
             class="search-input"
+            @search="handleSearch"
           >
             <template #prefix>
               <SearchOutlined class="text-slate-400" />
@@ -27,12 +27,12 @@
             size="large"
             style="width: 150px"
             allow-clear
-            @change="handleFilterChange"
             class="filter-select"
+            @change="handleFilterChange"
           >
-            <a-select-option 
-              v-for="dept in departments" 
-              :key="dept" 
+            <a-select-option
+              v-for="dept in departments"
+              :key="dept"
               :value="dept"
             >
               {{ dept }}
@@ -46,30 +46,30 @@
             size="large"
             style="width: 120px"
             allow-clear
-            @change="handleFilterChange"
             class="filter-select"
+            @change="handleFilterChange"
           >
             <a-select-option value="pending">
               <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-amber-400"></div>
+                <div class="w-2 h-2 rounded-full bg-amber-400" />
                 待处理
               </div>
             </a-select-option>
             <a-select-option value="analyzing">
               <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                <div class="w-2 h-2 rounded-full bg-blue-400" />
                 分析中
               </div>
             </a-select-option>
             <a-select-option value="completed">
               <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                <div class="w-2 h-2 rounded-full bg-emerald-400" />
                 已完成
               </div>
             </a-select-option>
             <a-select-option value="failed">
               <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-red-400"></div>
+                <div class="w-2 h-2 rounded-full bg-red-400" />
                 失败
               </div>
             </a-select-option>
@@ -82,20 +82,26 @@
             size="large"
             style="width: 120px"
             allow-clear
-            @change="handleFilterChange"
             class="filter-select"
+            @change="handleFilterChange"
           >
-            <a-select-option value="inpatient">住院</a-select-option>
-            <a-select-option value="outpatient">门诊</a-select-option>
-            <a-select-option value="emergency">急诊</a-select-option>
+            <a-select-option value="inpatient">
+              住院
+            </a-select-option>
+            <a-select-option value="outpatient">
+              门诊
+            </a-select-option>
+            <a-select-option value="emergency">
+              急诊
+            </a-select-option>
           </a-select>
 
           <!-- 刷新按钮 -->
-          <a-button 
-            size="large" 
-            @click="handleRefresh"
+          <a-button
+            size="large"
             :loading="loading"
             class="bg-slate-700/50 border-slate-600/50 text-slate-300 hover:bg-slate-600/50"
+            @click="handleRefresh"
           >
             <ReloadOutlined />
           </a-button>
@@ -116,8 +122,14 @@
 
       <div class="flex items-center gap-3">
         <!-- 批量操作 -->
-        <a-dropdown v-if="selectedRowKeys.length > 0" :trigger="['click']">
-          <a-button size="large" class="bg-blue-500/20 border-blue-400/30 text-blue-300">
+        <a-dropdown
+          v-if="selectedRowKeys.length > 0"
+          :trigger="['click']"
+        >
+          <a-button
+            size="large"
+            class="bg-blue-500/20 border-blue-400/30 text-blue-300"
+          >
             <MoreOutlined />
             批量操作 ({{ selectedRowKeys.length }})
           </a-button>
@@ -132,7 +144,10 @@
                 导出记录
               </a-menu-item>
               <a-menu-divider />
-              <a-menu-item key="delete" class="text-red-400">
+              <a-menu-item
+                key="delete"
+                class="text-red-400"
+              >
                 <DeleteOutlined />
                 批量删除
               </a-menu-item>
@@ -141,11 +156,11 @@
         </a-dropdown>
 
         <!-- 新增记录按钮 -->
-        <a-button 
-          type="primary" 
+        <a-button
+          type="primary"
           size="large"
-          @click="$emit('create-record')"
           class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-none"
+          @click="$emit('create-record')"
         >
           <PlusOutlined />
           新增记录
@@ -154,7 +169,9 @@
     </div>
 
     <!-- 数据表格 -->
-    <div class="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 overflow-hidden">
+    <div
+      class="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 overflow-hidden"
+    >
       <a-table
         :columns="columns"
         :data-source="records"
@@ -163,18 +180,22 @@
         :row-selection="rowSelection"
         :scroll="{ x: 1200 }"
         size="middle"
-        @change="handleTableChange"
         class="medical-records-table"
+        @change="handleTableChange"
       >
         <!-- 患者信息列 -->
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'patient'">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-semibold">
+              <div
+                class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white font-semibold"
+              >
                 {{ record.patient_name.charAt(0) }}
               </div>
               <div>
-                <div class="font-medium text-slate-100">{{ record.patient_name }}</div>
+                <div class="font-medium text-slate-100">
+                  {{ record.patient_name }}
+                </div>
                 <div class="text-xs text-slate-400">
                   {{ record.patient_age }}岁 · {{ getGenderLabel(record.patient_gender) }}
                 </div>
@@ -184,12 +205,15 @@
 
           <!-- 状态列 -->
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)" class="status-tag">
+            <a-tag
+              :color="getStatusColor(record.status)"
+              class="status-tag"
+            >
               <div class="flex items-center gap-1">
-                <div 
+                <div
                   class="w-1.5 h-1.5 rounded-full"
                   :class="getStatusDotClass(record.status)"
-                ></div>
+                />
                 {{ getStatusLabel(record.status) }}
               </div>
             </a-tag>
@@ -197,19 +221,28 @@
 
           <!-- 质控评分列 -->
           <template v-else-if="column.key === 'qc_score'">
-            <div v-if="record.qc_score !== null" class="flex items-center gap-2">
-              <div class="text-lg font-bold" :class="getScoreColor(record.qc_score)">
+            <div
+              v-if="record.qc_score !== null"
+              class="flex items-center gap-2"
+            >
+              <div
+                class="text-lg font-bold"
+                :class="getScoreColor(record.qc_score)"
+              >
                 {{ record.qc_score }}
               </div>
-              <a-tag 
-                :color="getGradeColor(record.qc_grade)" 
-                size="small"
+              <a-tag
                 v-if="record.qc_grade"
+                :color="getGradeColor(record.qc_grade)"
+                size="small"
               >
                 {{ record.qc_grade }}级
               </a-tag>
             </div>
-            <span v-else class="text-slate-400 text-sm">未评分</span>
+            <span
+              v-else
+              class="text-slate-400 text-sm"
+            >未评分</span>
           </template>
 
           <!-- 记录类型列 -->
@@ -223,11 +256,11 @@
           <template v-else-if="column.key === 'actions'">
             <div class="flex items-center gap-2">
               <a-tooltip title="查看详情">
-                <a-button 
-                  size="small" 
+                <a-button
+                  size="small"
                   type="text"
-                  @click="$emit('view-record', record)"
                   class="text-blue-400 hover:text-blue-300"
+                  @click="$emit('view-record', record)"
                 >
                   <EyeOutlined />
                 </a-button>
@@ -237,31 +270,41 @@
                 <a-button
                   size="small"
                   type="text"
-                  @click="$emit('edit-record', record)"
                   class="text-emerald-400 hover:text-emerald-300"
+                  @click="$emit('edit-record', record)"
                 >
                   <EditOutlined />
                 </a-button>
               </a-tooltip>
 
-              <a-tooltip title="质控分析" v-if="record.status === 'pending'">
-                <a-button 
-                  size="small" 
+              <a-tooltip
+                v-if="record.status === 'pending'"
+                title="质控分析"
+              >
+                <a-button
+                  size="small"
                   type="text"
-                  @click="$emit('analyze-record', record)"
                   class="text-amber-400 hover:text-amber-300"
+                  @click="$emit('analyze-record', record)"
                 >
                   <ThunderboltOutlined />
                 </a-button>
               </a-tooltip>
 
               <a-dropdown :trigger="['click']">
-                <a-button size="small" type="text" class="text-slate-400 hover:text-slate-300">
+                <a-button
+                  size="small"
+                  type="text"
+                  class="text-slate-400 hover:text-slate-300"
+                >
                   <MoreOutlined />
                 </a-button>
                 <template #overlay>
-                  <a-menu @click="({ key   }) => handleRecordAction(key, record)">
-                    <a-menu-item key="download" v-if="record.file_url">
+                  <a-menu @click="handleRecordMenuClick($event, record)">
+                    <a-menu-item
+                      v-if="record.file_url"
+                      key="download"
+                    >
                       <DownloadOutlined />
                       下载文件
                     </a-menu-item>
@@ -270,7 +313,10 @@
                       复制记录
                     </a-menu-item>
                     <a-menu-divider />
-                    <a-menu-item key="delete" class="text-red-400">
+                    <a-menu-item
+                      key="delete"
+                      class="text-red-400"
+                    >
                       <DeleteOutlined />
                       删除记录
                     </a-menu-item>
@@ -299,14 +345,9 @@ import {
   EyeOutlined,
   EditOutlined,
   DownloadOutlined,
-  CopyOutlined
+  CopyOutlined,
 } from '@ant-design/icons-vue'
-import type { 
-  MedicalRecord, 
-  SearchParams, 
-  PaginationParams,
-  TableColumn 
-} from '@/types'
+import type { MedicalRecord, SearchParams, PaginationParams, TableColumn } from '@/types'
 import { DEPARTMENTS } from '@/types/medical-records'
 
 // Props
@@ -314,8 +355,21 @@ interface Props {
   loading?: boolean
 }
 
+interface SearchParamsState extends SearchParams {
+  filters: NonNullable<SearchParams['filters']>
+  sort: NonNullable<SearchParams['sort']>
+  pagination: NonNullable<SearchParams['pagination']>
+}
+
+interface TablePaginationLike {
+  current?: number
+  pageSize?: number
+}
+
+type SearchFilterKey = keyof SearchParamsState['filters']
+
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
 })
 
 // Emits
@@ -324,39 +378,38 @@ const emit = defineEmits<{
   'view-record': [record: MedicalRecord]
   'edit-record': [record: MedicalRecord]
   'analyze-record': [record: MedicalRecord]
-  'search': [params: SearchParams]
+  search: [params: SearchParams]
   'batch-action': [action: string, records: MedicalRecord[]]
   'record-action': [action: string, record: MedicalRecord]
 }>()
 
 // 状态
-const loading = ref(false)
 const records = ref<MedicalRecord[]>([])
 const selectedRowKeys = ref<string[]>([])
 
 // 搜索参数
-const searchParams = reactive<SearchParams>({
+const searchParams = reactive<SearchParamsState>({
   keyword: '',
   filters: {
     department: undefined,
     status: undefined,
-    record_type: undefined
+    record_type: undefined,
   },
   sort: {
     field: 'created_at',
-    order: 'desc'
+    order: 'desc',
   },
   pagination: {
     page: 1,
-    pageSize: 20
-  }
+    pageSize: 20,
+  },
 })
 
 // 分页配置
 const pagination = reactive<PaginationParams>({
   page: 1,
   pageSize: 20,
-  total: 0
+  total: 0,
 })
 
 // 科室列表
@@ -368,19 +421,19 @@ const columns: TableColumn[] = [
     title: '患者信息',
     key: 'patient',
     width: 200,
-    fixed: 'left'
+    fixed: 'left',
   },
   {
     title: '科室',
     dataIndex: 'department',
     key: 'department',
     width: 120,
-    filters: departments.map(dept => ({ text: dept, value: dept }))
+    filters: departments.map((dept) => ({ text: dept, value: dept })),
   },
   {
     title: '记录类型',
     key: 'record_type',
-    width: 100
+    width: 100,
   },
   {
     title: '状态',
@@ -390,14 +443,14 @@ const columns: TableColumn[] = [
       { text: '待处理', value: 'pending' },
       { text: '分析中', value: 'analyzing' },
       { text: '已完成', value: 'completed' },
-      { text: '失败', value: 'failed' }
-    ]
+      { text: '失败', value: 'failed' },
+    ],
   },
   {
     title: '质控评分',
     key: 'qc_score',
     width: 120,
-    sorter: true
+    sorter: true,
   },
   {
     title: '创建时间',
@@ -405,14 +458,14 @@ const columns: TableColumn[] = [
     key: 'created_at',
     width: 160,
     sorter: true,
-    render: (value: string) => new Date(value).toLocaleString('zh-CN')
+    render: (value: unknown) => new Date(String(value)).toLocaleString('zh-CN'),
   },
   {
     title: '操作',
     key: 'actions',
     width: 150,
-    fixed: 'right'
-  }
+    fixed: 'right',
+  },
 ]
 
 // 表格分页配置
@@ -422,23 +475,24 @@ const paginationConfig = computed(() => ({
   total: pagination.total,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number, range: [number, number]) => 
-    `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
+  showTotal: (total: number, range: [number, number]) =>
+    `第 ${range[0]}-${range[1]} 条，共 ${total} 条记录`,
 }))
 
 // 行选择配置
 const rowSelection = computed(() => ({
-  selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   },
   getCheckboxProps: (record: MedicalRecord) => ({
-    disabled: record.status === 'analyzing'
-  })
+    disabled: record.status === 'analyzing',
+  }),
 }))
 
 // 处理搜索
 const handleSearch = () => {
-  searchParams.pagination!.page = 1
+  searchParams.pagination.page = 1
   emit('search', { ...searchParams })
 }
 
@@ -453,30 +507,33 @@ const handleRefresh = () => {
 }
 
 // 处理表格变化
-const handleTableChange = (pag, filters: unknown, sorter: unknown) => {
+const handleTableChange = (pag: TablePaginationLike, filters: unknown, sorter: unknown) => {
   // 更新分页
   if (pag) {
-    searchParams.pagination!.page = pag.current
-    searchParams.pagination!.pageSize = pag.pageSize
+    searchParams.pagination.page = pag.current ?? searchParams.pagination.page
+    searchParams.pagination.pageSize = pag.pageSize ?? searchParams.pagination.pageSize
   }
 
   // 更新排序
-  const sortState = (typeof sorter === 'object' && sorter !== null)
-    ? (sorter as { field?: string; order?: string })
-    : {}
+  const sortState =
+    typeof sorter === 'object' && sorter !== null
+      ? (sorter as { field?: string; order?: string })
+      : {}
 
   if (sortState.field) {
     searchParams.sort = {
       field: sortState.field,
-      order: sortState.order === 'ascend' ? 'asc' : 'desc'
+      order: sortState.order === 'ascend' ? 'asc' : 'desc',
     }
   }
 
   // 更新筛选
   if (filters) {
-    Object.keys(filters).forEach(key => {
-      if (filters[key]) {
-        searchParams.filters![key] = filters[key][0]
+    const filterMap = filters as Record<string, unknown[] | null | undefined>
+    Object.keys(filterMap).forEach((key) => {
+      const values = filterMap[key]
+      if (values && key in searchParams.filters) {
+        searchParams.filters[key as SearchFilterKey] = values[0] as string | undefined
       }
     })
   }
@@ -486,8 +543,8 @@ const handleTableChange = (pag, filters: unknown, sorter: unknown) => {
 
 // 处理批量操作
 const handleBatchAction = ({ key }: { key: string }) => {
-  const selectedRecords = records.value.filter(record => 
-    selectedRowKeys.value.includes(record.id)
+  const selectedRecords = records.value.filter((record) =>
+    selectedRowKeys.value.includes(record.id),
   )
   emit('batch-action', key, selectedRecords)
 }
@@ -497,13 +554,17 @@ const handleRecordAction = (action: string, record: MedicalRecord) => {
   emit('record-action', action, record)
 }
 
+const handleRecordMenuClick = (info: { key: string }, record: MedicalRecord) => {
+  handleRecordAction(info.key, record)
+}
+
 // 获取状态颜色
 const getStatusColor = (status: string) => {
   const colors = {
     pending: 'orange',
     analyzing: 'blue',
     completed: 'green',
-    failed: 'red'
+    failed: 'red',
   }
   return colors[status as keyof typeof colors] || 'default'
 }
@@ -514,7 +575,7 @@ const getStatusLabel = (status: string) => {
     pending: '待处理',
     analyzing: '分析中',
     completed: '已完成',
-    failed: '失败'
+    failed: '失败',
   }
   return labels[status as keyof typeof labels] || status
 }
@@ -525,7 +586,7 @@ const getStatusDotClass = (status: string) => {
     pending: 'bg-amber-400',
     analyzing: 'bg-blue-400 animate-pulse',
     completed: 'bg-emerald-400',
-    failed: 'bg-red-400'
+    failed: 'bg-red-400',
   }
   return classes[status as keyof typeof classes] || 'bg-gray-400'
 }
@@ -543,7 +604,7 @@ const getGradeColor = (grade: string) => {
   const colors = {
     A: 'green',
     B: 'blue',
-    C: 'orange'
+    C: 'orange',
   }
   return colors[grade as keyof typeof colors] || 'default'
 }
@@ -553,7 +614,7 @@ const getRecordTypeColor = (type: string) => {
   const colors = {
     inpatient: 'blue',
     outpatient: 'green',
-    emergency: 'red'
+    emergency: 'red',
   }
   return colors[type as keyof typeof colors] || 'default'
 }
@@ -563,7 +624,7 @@ const getRecordTypeLabel = (type: string) => {
   const labels = {
     inpatient: '住院',
     outpatient: '门诊',
-    emergency: '急诊'
+    emergency: '急诊',
   }
   return labels[type as keyof typeof labels] || type
 }
@@ -573,14 +634,15 @@ const getGenderLabel = (gender: string) => {
   const labels = {
     M: '男',
     F: '女',
-    U: '未知'
+    U: '未知',
   }
   return labels[gender as keyof typeof labels] || gender
 }
 
 // 暴露方法给父组件
 defineExpose({
-  refresh: handleRefresh, clearSelection: () => {
+  refresh: handleRefresh,
+  clearSelection: () => {
     selectedRowKeys.value = []
   },
   updateRecords: (newRecords: MedicalRecord[]) => {
@@ -588,7 +650,7 @@ defineExpose({
   },
   updatePagination: (newPagination: PaginationParams) => {
     Object.assign(pagination, newPagination)
-  }
+  },
 })
 </script>
 
@@ -645,7 +707,7 @@ defineExpose({
   .flex-col.lg\\:flex-row {
     flex-direction: column;
   }
-  
+
   .gap-3 {
     gap: 0.5rem;
   }

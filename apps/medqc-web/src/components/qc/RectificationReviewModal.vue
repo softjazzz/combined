@@ -2,20 +2,41 @@
   <a-modal
     title="验收整改"
     :open="visible"
+    :confirm-loading="submitting"
+    width="600px"
     @ok="handleSubmit"
     @cancel="handleCancel"
-    :confirmLoading="submitting"
-    width="600px"
   >
-    <a-descriptions bordered column="1" size="small" class="mb-4">
-      <a-descriptions-item label="任务">{{ task?.taskTitle }}</a-descriptions-item>
-      <a-descriptions-item label="整改人">{{ task?.assigneeName }}</a-descriptions-item>
-       <a-descriptions-item label="整改说明">
-           <div class="whitespace-pre-wrap">{{ task?.rectificationContent }}</div>
-       </a-descriptions-item>
-        <a-descriptions-item label="附件" v-if="task?.rectificationFiles?.length">
-        <div v-for="(url, idx) in task.rectificationFiles" :key="idx">
-          <a :href="url" target="_blank" class="text-blue-500">文件 {{ idx + 1 }}</a>
+    <a-descriptions
+      bordered
+      column="1"
+      size="small"
+      class="mb-4"
+    >
+      <a-descriptions-item label="任务">
+        {{ task?.taskTitle }}
+      </a-descriptions-item>
+      <a-descriptions-item label="整改人">
+        {{ task?.assigneeName }}
+      </a-descriptions-item>
+      <a-descriptions-item label="整改说明">
+        <div class="whitespace-pre-wrap">
+          {{ task?.rectificationContent }}
+        </div>
+      </a-descriptions-item>
+      <a-descriptions-item
+        v-if="task?.rectificationFiles?.length"
+        label="附件"
+      >
+        <div
+          v-for="(url, idx) in task.rectificationFiles"
+          :key="idx"
+        >
+          <a
+            :href="url"
+            target="_blank"
+            class="text-blue-500"
+          >文件 {{ idx + 1 }}</a>
         </div>
       </a-descriptions-item>
     </a-descriptions>
@@ -28,14 +49,30 @@
       :rules="rules"
       layout="vertical"
     >
-      <a-form-item label="验收结果" name="reviewResult">
+      <a-form-item
+        label="验收结果"
+        name="reviewResult"
+      >
         <a-radio-group v-model:value="formState.reviewResult">
-            <a-radio value="pass" class="text-green-600">通过</a-radio>
-            <a-radio value="fail" class="text-red-600">不通过</a-radio>
+          <a-radio
+            value="pass"
+            class="text-green-600"
+          >
+            通过
+          </a-radio>
+          <a-radio
+            value="fail"
+            class="text-red-600"
+          >
+            不通过
+          </a-radio>
         </a-radio-group>
       </a-form-item>
 
-      <a-form-item label="验收意见" name="reviewComment">
+      <a-form-item
+        label="验收意见"
+        name="reviewComment"
+      >
         <a-textarea
           v-model:value="formState.reviewComment"
           :rows="3"
@@ -70,20 +107,23 @@ interface FormState {
 
 const formState = reactive<FormState>({
   reviewResult: ReviewResult.PASS,
-  reviewComment: ''
+  reviewComment: '',
 })
 
 const rules = {
   reviewResult: [{ required: true, message: '请选择验收结果', trigger: 'change' }],
-  reviewComment: [{ required: true, message: '请输入验收意见', trigger: 'blur' }]
+  reviewComment: [{ required: true, message: '请输入验收意见', trigger: 'blur' }],
 }
 
-watch(() => props.visible, (val) => {
+watch(
+  () => props.visible,
+  (val) => {
     if (val) {
-        formState.reviewResult = ReviewResult.PASS
-        formState.reviewComment = ''
+      formState.reviewResult = ReviewResult.PASS
+      formState.reviewComment = ''
     }
-})
+  },
+)
 
 const handleSubmit = async () => {
   if (!props.task?.id) return
@@ -93,15 +133,16 @@ const handleSubmit = async () => {
     submitting.value = true
 
     await reviewRectification(props.task.id, {
-        reviewResult: formState.reviewResult,
-        reviewComment: formState.reviewComment
+      reviewResult: formState.reviewResult,
+      reviewComment: formState.reviewComment,
     })
 
     message.success('验收完成')
     emit('success')
     handleCancel()
   } catch (error: any) {
-     if (error?.errorFields) {
+    if (error?.errorFields) {
+      return
     } else {
       message.error(error.message || '操作失败')
     }
@@ -120,6 +161,6 @@ const handleCancel = () => {
   margin-bottom: 16px;
 }
 .whitespace-pre-wrap {
-    white-space: pre-wrap;
+  white-space: pre-wrap;
 }
 </style>

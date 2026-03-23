@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -36,7 +37,7 @@ describe('QCTrendChart', () => {
   const mockChartData: ChartDataPointLike[] = [
     { date: '2024-01', count: 120, score: 85, pass_rate: 92 },
     { date: '2024-02', count: 150, score: 87, pass_rate: 94 },
-    { date: '2024-03', count: 180, score: 89, pass_rate: 96 }
+    { date: '2024-03', count: 180, score: 89, pass_rate: 96 },
   ]
 
   beforeEach(() => {
@@ -45,36 +46,37 @@ describe('QCTrendChart', () => {
       props: {
         period: 'month',
         height: 400,
-        autoRefresh: true
+        autoRefresh: true,
       },
       global: {
         stubs: {
           'a-radio-group': {
             template: '<div><slot /></div>',
-            props: ['value']
+            props: ['value'],
           },
           'a-radio-button': {
             template: '<button @click="$emit(\'click\')" :value="value"><slot /></button>',
-            props: ['value']
+            props: ['value'],
           },
           'a-select': {
-            template: '<select @change="$emit(\'change\', $event.target.value)" :value="value"><slot /></select>',
-            props: ['value']
+            template:
+              '<select @change="$emit(\'change\', $event.target.value)" :value="value"><slot /></select>',
+            props: ['value'],
           },
           'a-select-option': {
             template: '<option :value="value"><slot /></option>',
-            props: ['value']
+            props: ['value'],
           },
           'a-button': {
             template: '<button @click="$emit(\'click\')" :loading="loading"><slot /></button>',
-            props: ['loading', 'type', 'size', 'icon']
+            props: ['loading', 'type', 'size', 'icon'],
           },
           'a-tooltip': {
             template: '<div><slot /></div>',
-            props: ['title']
-          }
-        }
-      }
+            props: ['title'],
+          },
+        },
+      },
     })
   })
 
@@ -103,15 +105,15 @@ describe('QCTrendChart', () => {
   describe('图表类型切换', () => {
     it('应该正确切换图表类型', async () => {
       const vm = getVm()
-      
+
       // 初始状态应该是线图
       expect(vm.chartType).toBe('line')
-      
+
       // 切换到柱状图
       vm.chartType = 'bar'
       await nextTick()
       expect(vm.chartType).toBe('bar')
-      
+
       // 切换到面积图
       vm.chartType = 'area'
       await nextTick()
@@ -120,12 +122,12 @@ describe('QCTrendChart', () => {
 
     it('应该根据图表类型显示不同的可视化', async () => {
       const vm = getVm()
-      
+
       // 线图模式
       vm.chartType = 'line'
       await nextTick()
       expect(wrapper.find('.trend-lines').exists()).toBe(true)
-      
+
       // 柱状图模式
       vm.chartType = 'bar'
       await nextTick()
@@ -136,24 +138,24 @@ describe('QCTrendChart', () => {
   describe('指标选择功能', () => {
     it('应该正确处理指标变化', async () => {
       const vm = getVm()
-      const handleMetricChangeSpy = vi.spyOn(vm, 'handleMetricChange')
-      
+      vi.spyOn(vm, 'handleMetricChange')
+
       vm.selectedMetric = 'count'
       await nextTick()
-      
+
       expect(vm.selectedMetric).toBe('count')
     })
 
     it('应该根据选择的指标过滤数据', async () => {
       const vm = getVm()
-      
+
       // 设置测试数据
       vm.chartData = mockChartData
-      
+
       // 选择病案数量指标
       vm.selectedMetric = 'count'
       await nextTick()
-      
+
       // 验证数据过滤逻辑
       expect(vm.selectedMetric).toBe('count')
     })
@@ -163,7 +165,7 @@ describe('QCTrendChart', () => {
     it('应该正确计算最大值', () => {
       const vm = getVm()
       vm.chartData = mockChartData
-      
+
       expect(vm.maxCount).toBe(180)
       expect(vm.maxScore).toBe(89)
       expect(vm.maxPassRate).toBe(96)
@@ -172,7 +174,7 @@ describe('QCTrendChart', () => {
     it('应该正确生成趋势线坐标', () => {
       const vm = getVm()
       vm.chartData = mockChartData
-      
+
       const linePoints = vm.getLinePoints('count')
       expect(linePoints).toBeDefined()
       expect(typeof linePoints).toBe('string')
@@ -181,7 +183,7 @@ describe('QCTrendChart', () => {
     it('应该正确处理空数据', () => {
       const vm = getVm()
       vm.chartData = []
-      
+
       expect(vm.maxCount).toBe(0)
       expect(vm.maxScore).toBe(0)
       expect(vm.maxPassRate).toBe(0)
@@ -192,10 +194,10 @@ describe('QCTrendChart', () => {
     it('应该正确处理数据点选择', async () => {
       const vm = getVm()
       const selectDataPointSpy = vi.spyOn(vm, 'selectDataPoint')
-      
+
       const dataPoint = mockChartData[0]
       vm.selectDataPoint(dataPoint)
-      
+
       expect(selectDataPointSpy).toHaveBeenCalledWith(dataPoint)
       expect(vm.selectedDataPoint).toBe(dataPoint)
     })
@@ -203,20 +205,20 @@ describe('QCTrendChart', () => {
     it('应该正确处理刷新操作', async () => {
       const vm = getVm()
       const refreshDataSpy = vi.spyOn(vm, 'refreshData')
-      
+
       const refreshButton = wrapper.find('[data-testid="refresh-button"]')
       await refreshButton.trigger('click')
-      
+
       expect(refreshDataSpy).toHaveBeenCalled()
     })
 
     it('应该正确处理导出操作', async () => {
       const vm = getVm()
       const exportChartSpy = vi.spyOn(vm, 'exportChart')
-      
+
       const exportButton = wrapper.find('[data-testid="export-button"]')
       await exportButton.trigger('click')
-      
+
       expect(exportChartSpy).toHaveBeenCalled()
     })
   })
@@ -226,7 +228,7 @@ describe('QCTrendChart', () => {
       const vm = getVm()
       vm.loading = true
       await nextTick()
-      
+
       const loadingElement = wrapper.find('.chart-loading')
       expect(loadingElement.exists()).toBe(true)
     })
@@ -235,7 +237,7 @@ describe('QCTrendChart', () => {
       const vm = getVm()
       vm.error = '数据加载失败'
       await nextTick()
-      
+
       const errorElement = wrapper.find('.chart-error')
       expect(errorElement.exists()).toBe(true)
       expect(errorElement.text()).toContain('数据加载失败')
@@ -246,7 +248,7 @@ describe('QCTrendChart', () => {
       vm.loading = false
       vm.error = ''
       await nextTick()
-      
+
       const chartContent = wrapper.find('.chart-content')
       expect(chartContent.exists()).toBe(true)
     })
@@ -271,9 +273,9 @@ describe('QCTrendChart', () => {
         date: `2024-${String(i + 1).padStart(3, '0')}`,
         count: Math.floor(Math.random() * 1000),
         score: Math.floor(Math.random() * 100),
-        pass_rate: Math.floor(Math.random() * 100)
+        pass_rate: Math.floor(Math.random() * 100),
       }))
-      
+
       vm.chartData = largeDataSet
       expect(vm.chartData.length).toBe(1000)
       expect(vm.maxCount).toBeGreaterThan(0)

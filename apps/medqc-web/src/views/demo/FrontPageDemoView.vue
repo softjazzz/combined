@@ -1,274 +1,542 @@
 <template>
-  <div class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex overflow-hidden transition-colors duration-300">
-    <div v-if="!isAuthorized" class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-      <div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-8">
-        <h2 class="text-xl font-semibold text-slate-800 dark:text-white mb-2">请输入访问密码</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">需要输入密码才能进入页面</p>
+  <div
+    class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex overflow-hidden transition-colors duration-300"
+  >
+    <div
+      v-if="!isAuthorized"
+      class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+    >
+      <div
+        class="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-8"
+      >
+        <h2 class="text-xl font-semibold text-slate-800 dark:text-white mb-2">
+          请输入访问密码
+        </h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">
+          需要输入密码才能进入页面
+        </p>
         <a-input-password
           v-model:value="passwordInput"
           placeholder="请输入密码"
           size="large"
-          @pressEnter="verifyPassword"
+          @press-enter="verifyPassword"
         />
-        <p v-if="passwordError" class="text-sm text-red-500 mt-3">{{ passwordError }}</p>
+        <p
+          v-if="passwordError"
+          class="text-sm text-red-500 mt-3"
+        >
+          {{ passwordError }}
+        </p>
         <div class="mt-6 flex justify-end">
-          <a-button type="primary" size="large" @click="verifyPassword">进入</a-button>
+          <a-button
+            type="primary"
+            size="large"
+            @click="verifyPassword"
+          >
+            进入
+          </a-button>
         </div>
       </div>
     </div>
     <!-- Sidebar -->
     <!-- Sidebar -->
-    <aside :class="['bg-white dark:bg-slate-800 flex-shrink-0 flex flex-col justify-between border-r border-slate-200 dark:border-slate-700 hidden md:flex z-20 transition-all duration-300', isSidebarCollapsed ? 'w-20' : 'w-64']">
+    <aside
+      :class="[
+        'bg-white dark:bg-slate-800 flex-shrink-0 flex flex-col justify-between border-r border-slate-200 dark:border-slate-700 hidden md:flex z-20 transition-all duration-300',
+        isSidebarCollapsed ? 'w-20' : 'w-64',
+      ]"
+    >
       <div>
         <!-- Sidebar Header with Toggle -->
-        <div class="h-16 flex items-center justify-center px-4 border-b border-slate-100 dark:border-slate-700/50">
-           <button @click="isSidebarCollapsed = !isSidebarCollapsed" class="text-slate-400 hover:text-blue-500 transition-colors">
-              <MenuUnfoldOutlined v-if="isSidebarCollapsed" class="text-lg" />
-              <MenuFoldOutlined v-else class="text-lg" />
-           </button>
+        <div
+          class="h-16 flex items-center justify-center px-4 border-b border-slate-100 dark:border-slate-700/50"
+        >
+          <button
+            class="text-slate-400 hover:text-blue-500 transition-colors"
+            @click="isSidebarCollapsed = !isSidebarCollapsed"
+          >
+            <MenuUnfoldOutlined
+              v-if="isSidebarCollapsed"
+              class="text-lg"
+            />
+            <MenuFoldOutlined
+              v-else
+              class="text-lg"
+            />
+          </button>
         </div>
 
-        <div class="p-4 flex flex-col items-center border-b border-slate-100 dark:border-slate-700/50">
-          <div class="relative transition-transform duration-300" :class="isSidebarCollapsed ? 'scale-75' : ''">
-            <div class="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl shadow-lg border-4 border-white dark:border-slate-600 overflow-hidden">
-               <UserOutlined class="text-slate-400" />
+        <div
+          class="p-4 flex flex-col items-center border-b border-slate-100 dark:border-slate-700/50"
+        >
+          <div
+            class="relative transition-transform duration-300"
+            :class="isSidebarCollapsed ? 'scale-75' : ''"
+          >
+            <div
+              class="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl shadow-lg border-4 border-white dark:border-slate-600 overflow-hidden"
+            >
+              <UserOutlined class="text-slate-400" />
             </div>
-            <div class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"></div>
+            <div
+              class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"
+            />
           </div>
-          <div v-if="!isSidebarCollapsed" class="mt-3 text-center transition-opacity duration-300">
-             <h2 class="text-lg font-bold text-slate-800 dark:text-white">张医生</h2>
-             <p class="text-xs text-slate-500 dark:text-slate-400">首席编码员</p>
+          <div
+            v-if="!isSidebarCollapsed"
+            class="mt-3 text-center transition-opacity duration-300"
+          >
+            <h2 class="text-lg font-bold text-slate-800 dark:text-white">
+              张医生
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              首席编码员
+            </p>
           </div>
         </div>
 
         <nav class="p-3 space-y-1 mt-2">
-	          <a @click="goToWorkbench" :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', currentView === 'workbench' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
-	            <AppstoreOutlined class="text-[20px]" />
-	            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">工作台</span>
-	          </a>
-          
-          <div class="my-2 border-t border-slate-100 dark:border-slate-700 mx-2"></div>
-          
+          <a
+            :class="[
+              'flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group',
+              isSidebarCollapsed ? 'justify-center' : '',
+              currentView === 'workbench'
+                ? 'bg-blue-500 text-white shadow-md'
+                : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+            ]"
+            @click="goToWorkbench"
+          >
+            <AppstoreOutlined class="text-[20px]" />
+            <span
+              v-if="!isSidebarCollapsed"
+              class="font-medium text-sm"
+            >工作台</span>
+          </a>
+
+          <div class="my-2 border-t border-slate-100 dark:border-slate-700 mx-2" />
+
           <!-- DRG/DIP 折叠菜单组 -->
           <div class="space-y-1">
-            <a @click="drgMenuExpanded = !drgMenuExpanded" :class="['flex items-center justify-between px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', ['pre-analysis', 'monitoring', 'payment', 'analysis'].includes(currentView) ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+            <a
+              :class="[
+                'flex items-center justify-between px-3 py-3 rounded-xl transition-all cursor-pointer group',
+                isSidebarCollapsed ? 'justify-center' : '',
+                ['pre-analysis', 'monitoring', 'payment', 'analysis'].includes(currentView)
+                  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+              ]"
+              @click="drgMenuExpanded = !drgMenuExpanded"
+            >
               <div class="flex items-center gap-3">
                 <MedicineBoxOutlined class="text-[20px]" />
-                <span v-if="!isSidebarCollapsed" class="font-medium text-sm">DRG/DIP</span>
+                <span
+                  v-if="!isSidebarCollapsed"
+                  class="font-medium text-sm"
+                >DRG/DIP</span>
               </div>
-              <DownOutlined v-if="!isSidebarCollapsed" :class="['text-xs transition-transform', drgMenuExpanded ? 'rotate-180' : '']" />
+              <DownOutlined
+                v-if="!isSidebarCollapsed"
+                :class="['text-xs transition-transform', drgMenuExpanded ? 'rotate-180' : '']"
+              />
             </a>
-            
-            <div v-show="drgMenuExpanded && !isSidebarCollapsed" class="pl-4 space-y-1">
+
+            <div
+              v-show="drgMenuExpanded && !isSidebarCollapsed"
+              class="pl-4 space-y-1"
+            >
               <!-- 6.1 事前分析 -->
-              <a @click="currentView = 'pre-analysis'" :class="['flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group', currentView === 'pre-analysis' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+              <a
+                :class="[
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group',
+                  currentView === 'pre-analysis'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+                ]"
+                @click="currentView = 'pre-analysis'"
+              >
                 <FileSearchOutlined class="text-[18px]" />
                 <span class="font-medium text-sm">事前分析</span>
               </a>
-              
+
               <!-- 6.2 事中分析 (可展开) -->
               <div class="space-y-1">
-                <a @click="midAnalysisExpanded = !midAnalysisExpanded" :class="['flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer group', ['monitoring', 'payment'].includes(currentView) ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+                <a
+                  :class="[
+                    'flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer group',
+                    ['monitoring', 'payment'].includes(currentView)
+                      ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+                  ]"
+                  @click="midAnalysisExpanded = !midAnalysisExpanded"
+                >
                   <div class="flex items-center gap-3">
                     <SafetyCertificateOutlined class="text-[18px]" />
                     <span class="font-medium text-sm">事中分析</span>
                   </div>
-                  <RightOutlined :class="['text-xs transition-transform', midAnalysisExpanded ? 'rotate-90' : '']" />
+                  <RightOutlined
+                    :class="[
+                      'text-xs transition-transform',
+                      midAnalysisExpanded ? 'rotate-90' : '',
+                    ]"
+                  />
                 </a>
-                <div v-show="midAnalysisExpanded" class="pl-5 space-y-1">
-                  <a @click="currentView = 'monitoring'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer', currentView === 'monitoring' ? 'bg-blue-500 text-white shadow-sm' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400']">
+                <div
+                  v-show="midAnalysisExpanded"
+                  class="pl-5 space-y-1"
+                >
+                  <a
+                    :class="[
+                      'flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer',
+                      currentView === 'monitoring'
+                        ? 'bg-blue-500 text-white shadow-sm'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400',
+                    ]"
+                    @click="currentView = 'monitoring'"
+                  >
                     <span class="text-sm">事中监控</span>
                   </a>
-                  <a @click="currentView = 'payment'" :class="['flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer', currentView === 'payment' ? 'bg-blue-500 text-white shadow-sm' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400']">
+                  <a
+                    :class="[
+                      'flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer',
+                      currentView === 'payment'
+                        ? 'bg-blue-500 text-white shadow-sm'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400',
+                    ]"
+                    @click="currentView = 'payment'"
+                  >
                     <span class="text-sm">付费监测</span>
                   </a>
                 </div>
               </div>
-              
+
               <!-- 6.3 事后分析 -->
-              <a @click="currentView = 'analysis'" :class="['flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group', currentView === 'analysis' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
+              <a
+                :class="[
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group',
+                  currentView === 'analysis'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+                ]"
+                @click="currentView = 'analysis'"
+              >
                 <BarChartOutlined class="text-[18px]" />
                 <span class="font-medium text-sm">事后分析</span>
               </a>
             </div>
           </div>
-          
-          <div class="my-2 border-t border-slate-100 dark:border-slate-700 mx-2"></div>
 
-          <a @click="currentView = 'testcases'" :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', currentView === 'testcases' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
-            <FolderOpenOutlined class="text-[20px]" :class="currentView === 'testcases' ? '' : 'group-hover:text-blue-500'" />
-            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">测试病历列表</span>
+          <div class="my-2 border-t border-slate-100 dark:border-slate-700 mx-2" />
+
+          <a
+            :class="[
+              'flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group',
+              isSidebarCollapsed ? 'justify-center' : '',
+              currentView === 'testcases'
+                ? 'bg-blue-500 text-white shadow-md'
+                : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+            ]"
+            @click="currentView = 'testcases'"
+          >
+            <FolderOpenOutlined
+              class="text-[20px]"
+              :class="currentView === 'testcases' ? '' : 'group-hover:text-blue-500'"
+            />
+            <span
+              v-if="!isSidebarCollapsed"
+              class="font-medium text-sm"
+            >测试病历列表</span>
           </a>
-          <a @click="currentView = 'upload'" :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group', isSidebarCollapsed ? 'justify-center' : '', currentView === 'upload' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400']">
-            <CloudUploadOutlined class="text-[20px]" :class="currentView === 'upload' ? '' : 'group-hover:text-blue-500'" />
-            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">数据上传</span>
+          <a
+            :class="[
+              'flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group',
+              isSidebarCollapsed ? 'justify-center' : '',
+              currentView === 'upload'
+                ? 'bg-blue-500 text-white shadow-md'
+                : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+            ]"
+            @click="currentView = 'upload'"
+          >
+            <CloudUploadOutlined
+              class="text-[20px]"
+              :class="currentView === 'upload' ? '' : 'group-hover:text-blue-500'"
+            />
+            <span
+              v-if="!isSidebarCollapsed"
+              class="font-medium text-sm"
+            >数据上传</span>
           </a>
-          <a :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400', isSidebarCollapsed ? 'justify-center' : '']">
+          <a
+            :class="[
+              'flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer group hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-blue-500 text-slate-500 dark:text-slate-400',
+              isSidebarCollapsed ? 'justify-center' : '',
+            ]"
+          >
             <SettingOutlined class="text-[20px] group-hover:text-blue-500" />
-            <span v-if="!isSidebarCollapsed" class="font-medium text-sm">系统设置</span>
+            <span
+              v-if="!isSidebarCollapsed"
+              class="font-medium text-sm"
+            >系统设置</span>
           </a>
         </nav>
       </div>
       <div class="p-3">
-        <a :class="['flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10', isSidebarCollapsed ? 'justify-center' : '']">
+        <a
+          :class="[
+            'flex items-center gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10',
+            isSidebarCollapsed ? 'justify-center' : '',
+          ]"
+        >
           <LogoutOutlined class="text-[20px]" />
-          <span v-if="!isSidebarCollapsed" class="font-medium text-sm">退出登录</span>
+          <span
+            v-if="!isSidebarCollapsed"
+            class="font-medium text-sm"
+          >退出登录</span>
         </a>
       </div>
     </aside>
 
     <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
-      <div class="absolute top-0 right-0 w-full h-64 bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/10 dark:to-transparent pointer-events-none -z-10"></div>
-      
+      <div
+        class="absolute top-0 right-0 w-full h-64 bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/10 dark:to-transparent pointer-events-none -z-10"
+      />
+
       <!-- Header -->
       <!-- Header Removed -->
-      <div class="h-6"></div>
-      
+      <div class="h-6" />
+
       <!-- Content Area -->
       <div class="flex-1 overflow-hidden px-8 pb-8">
-        <div v-if="currentView === 'workbench'" class="h-full w-full">
-          <div class="flex h-full" ref="containerRef">
-          
-	          <!-- Left Column: Medical Record -->
-	          <div class="flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 transition-all duration-700" :style="{ width: isExpanded ? '0%' : leftPanelWidth + '%', opacity: isExpanded ? 0 : 1, paddingRight: isExpanded ? '0' : '' }">
-	            <MedicalRecordPanel
-	              :loading="loading"
-	              :medical-text="demoCase?.medical_text"
-	              :test-cases="testCases"
-	              @selectTestCase="loadDemoCase"
-	            />
-	          </div>
-
-          <!-- Resizable Splitter -->
-          <div 
-            v-show="!isExpanded"
-            class="w-2 flex-shrink-0 cursor-col-resize group flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors mx-1 rounded"
-            @mousedown="startResize"
+        <div
+          v-if="currentView === 'workbench'"
+          class="h-full w-full"
+        >
+          <div
+            ref="containerRef"
+            class="flex h-full"
           >
-            <div class="w-1 h-16 bg-slate-200 dark:bg-slate-600 rounded-full group-hover:bg-blue-400 dark:group-hover:bg-blue-500 transition-colors"></div>
-          </div>
+            <!-- Left Column: Medical Record -->
+            <div
+              class="flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 transition-all duration-700"
+              :style="{
+                width: isExpanded ? '0%' : leftPanelWidth + '%',
+                opacity: isExpanded ? 0 : 1,
+                paddingRight: isExpanded ? '0' : '',
+              }"
+            >
+              <MedicalRecordPanel
+                :loading="loading"
+                :medical-text="demoCase?.medical_text"
+                :test-cases="testCases"
+                @select-test-case="loadDemoCase"
+              />
+            </div>
 
-	          <!-- Right Column: Results & Tools -->
-	          <div class="flex flex-col gap-4 h-full pl-2 transition-all duration-700" :style="{ width: isExpanded ? '100%' : (100 - leftPanelWidth) + '%' }">
-	            <!-- Back (collapse expanded view) -->
-	            <div v-if="isExpanded" class="flex items-center">
-	              <button
-	                class="inline-flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-600 transition-colors shadow-sm"
-	                @click="collapseExpanded"
-	              >
-	                <ArrowLeftOutlined class="text-base" /> 返回
-	              </button>
-	            </div>
+            <!-- Resizable Splitter -->
+            <div
+              v-show="!isExpanded"
+              class="w-2 flex-shrink-0 cursor-col-resize group flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors mx-1 rounded"
+              @mousedown="startResize"
+            >
+              <div
+                class="w-1 h-16 bg-slate-200 dark:bg-slate-600 rounded-full group-hover:bg-blue-400 dark:group-hover:bg-blue-500 transition-colors"
+              />
+            </div>
 
-	            <!-- Tabs -->
-	            <FrontPageResultTabs
-	              :tabs="tabs"
-	              :active-tab="activeTab"
-	              :is-expanded="isExpanded"
-              @update:activeTab="activeTab = $event"
-              @toggleExpand="toggleExpand"
-            />
-            
-            <!-- Main Content Area -->
-            <div class="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col overflow-hidden">
-              <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800 dark:text-white">{{ activeTabLabel }}</h3>
-                <button 
-                  v-if="activeTab === 'structured' || activeTab === 'print'" 
-                  @click="handlePrint"
-                  class="text-blue-500 hover:text-blue-600 text-sm font-medium flex items-center gap-1"
+            <!-- Right Column: Results & Tools -->
+            <div
+              class="flex flex-col gap-4 h-full pl-2 transition-all duration-700"
+              :style="{ width: isExpanded ? '100%' : 100 - leftPanelWidth + '%' }"
+            >
+              <!-- Back (collapse expanded view) -->
+              <div
+                v-if="isExpanded"
+                class="flex items-center"
+              >
+                <button
+                  class="inline-flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-600 transition-colors shadow-sm"
+                  @click="collapseExpanded"
                 >
-                  <PrinterOutlined class="text-base" /> 打印
+                  <ArrowLeftOutlined class="text-base" /> 返回
                 </button>
               </div>
-              
-              <div class="flex-1 p-6 relative overflow-hidden flex flex-col">
-                 <!-- Background Grid -->
-                 <div class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))] pointer-events-none -z-0"></div>
-                 
-                 <div class="relative z-10 overflow-y-auto custom-scrollbar" style="max-height: calc(100vh - 280px)">
-                    
-                    <!-- Content: Structured -->
-	                    <StructuredDataView
-	                      v-if="activeTab === 'structured'"
-	                      :extracting="extracting"
-	                      :extraction-progress="extractionProgress"
-	                      :extraction-status="extractionStatus"
-	                      :frontpage="frontpage"
-	                      :has-medical-text="!!demoCase?.medical_text"
-	                      @extract="extractStructuredData"
-	                    />
 
-                    <!-- Content: AI Analysis -->
-                    <AIProfileDashboard v-else-if="activeTab === 'profile'" :medical-text="demoCase?.medical_text" :frontpage="frontpage" @expand="onProfileExpand" />
-                    <!-- Content: HM Template -->
-                    <div v-else-if="activeTab === 'hm'" class="h-full">
-                      <HmFrontpagePreview :draft="frontpage" class="h-full" />
-                    </div>
-                    
-	                    <!-- Content: Insurance -->
-	                     <InsuranceClaimView v-else-if="activeTab === 'insurance'" :insurance-claim="insuranceClaim" />
-	                     
-	                 </div>
-	              </div>
-              
-              <!-- Footer Actions -->
-              <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 flex justify-between items-center rounded-b-2xl">
-                <div class="flex items-center gap-3">
-                  <button 
-                    v-if="frontpage && activeTab === 'structured'"
-                    @click="fillToFrontpage"
-                    class="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow flex items-center gap-2"
+              <!-- Tabs -->
+              <FrontPageResultTabs
+                :tabs="tabs"
+                :active-tab="activeTab"
+                :is-expanded="isExpanded"
+                @update:active-tab="activeTab = $event"
+                @toggle-expand="toggleExpand"
+              />
+
+              <!-- Main Content Area -->
+              <div
+                class="flex-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col overflow-hidden"
+              >
+                <div
+                  class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center"
+                >
+                  <h3 class="font-semibold text-slate-800 dark:text-white">
+                    {{ activeTabLabel }}
+                  </h3>
+                  <button
+                    v-if="activeTab === 'structured' || activeTab === 'print'"
+                    class="text-blue-500 hover:text-blue-600 text-sm font-medium flex items-center gap-1"
+                    @click="handlePrint"
                   >
-                    <FormOutlined class="text-base" />
-                    回填到病案首页
+                    <PrinterOutlined class="text-base" /> 打印
                   </button>
                 </div>
-                <div class="flex items-center gap-3">
-                  <button class="px-4 py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white font-medium transition-colors">清空</button>
-                  <button class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 rounded-lg text-sm font-medium cursor-not-allowed">导出 CSV</button>
+
+                <div class="flex-1 p-6 relative overflow-hidden flex flex-col">
+                  <!-- Background Grid -->
+                  <div
+                    class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 dark:[mask-image:linear-gradient(0deg,rgba(255,255,255,0.1),rgba(255,255,255,0.5))] pointer-events-none -z-0"
+                  />
+
+                  <div
+                    class="relative z-10 overflow-y-auto custom-scrollbar"
+                    style="max-height: calc(100vh - 280px)"
+                  >
+                    <!-- Content: Structured -->
+                    <StructuredDataView
+                      v-if="activeTab === 'structured'"
+                      :extracting="extracting"
+                      :extraction-progress="extractionProgress"
+                      :extraction-status="extractionStatus"
+                      :frontpage="frontpage"
+                      :has-medical-text="!!demoCase?.medical_text"
+                      @extract="extractStructuredData"
+                    />
+
+                    <!-- Content: AI Analysis -->
+                    <AIProfileDashboard
+                      v-else-if="activeTab === 'profile'"
+                      :medical-text="demoCase?.medical_text"
+                      :frontpage="frontpage"
+                      @expand="onProfileExpand"
+                    />
+                    <!-- Content: HM Template -->
+                    <div
+                      v-else-if="activeTab === 'hm'"
+                      class="h-full"
+                    >
+                      <HmFrontpagePreview
+                        :draft="frontpage"
+                        class="h-full"
+                      />
+                    </div>
+
+                    <!-- Content: Insurance -->
+                    <InsuranceClaimView
+                      v-else-if="activeTab === 'insurance'"
+                      :insurance-claim="insuranceClaim"
+                    />
+                  </div>
+                </div>
+
+                <!-- Footer Actions -->
+                <div
+                  class="px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 flex justify-between items-center rounded-b-2xl"
+                >
+                  <div class="flex items-center gap-3">
+                    <button
+                      v-if="frontpage && activeTab === 'structured'"
+                      class="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow flex items-center gap-2"
+                      @click="fillToFrontpage"
+                    >
+                      <FormOutlined class="text-base" />
+                      回填到病案首页
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <button
+                      class="px-4 py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white font-medium transition-colors"
+                    >
+                      清空
+                    </button>
+                    <button
+                      class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 rounded-lg text-sm font-medium cursor-not-allowed"
+                    >
+                      导出 CSV
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-            
           </div>
-        </div>
-        
-        <!-- Recent Cases Table -->
-        <div class="mt-6 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <HistoryOutlined class="text-slate-400" /> 最近病案
-            </h3>
-            <a class="text-sm text-blue-500 hover:underline cursor-pointer">查看全部</a>
+
+          <!-- Recent Cases Table -->
+          <div
+            class="mt-6 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                <HistoryOutlined class="text-slate-400" /> 最近病案
+              </h3>
+              <a class="text-sm text-blue-500 hover:underline cursor-pointer">查看全部</a>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm text-left text-slate-500 dark:text-slate-400">
+                <thead
+                  class="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700/50 dark:text-slate-300"
+                >
+                  <tr>
+                    <th class="px-4 py-3 rounded-l-lg font-semibold">
+                      病案号
+                    </th>
+                    <th class="px-4 py-3 font-semibold">
+                      科室
+                    </th>
+                    <th class="px-4 py-3 font-semibold">
+                      出院日期
+                    </th>
+                    <th class="px-4 py-3 rounded-r-lg font-semibold">
+                      状态
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    class="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                      #2026010001
+                    </td>
+                    <td class="px-4 py-3">
+                      心内科
+                    </td>
+                    <td class="px-4 py-3">
+                      2026-01-04
+                    </td>
+                    <td class="px-4 py-3">
+                      <span
+                        class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-green-900 dark:text-green-300"
+                      >已完成</span>
+                    </td>
+                  </tr>
+                  <tr
+                    class="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                      #2026010002
+                    </td>
+                    <td class="px-4 py-3">
+                      神经内科
+                    </td>
+                    <td class="px-4 py-3">
+                      2026-01-03
+                    </td>
+                    <td class="px-4 py-3">
+                      <span
+                        class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-yellow-900 dark:text-yellow-300"
+                      >审核中</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left text-slate-500 dark:text-slate-400">
-              <thead class="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700/50 dark:text-slate-300">
-	                <tr>
-	                  <th class="px-4 py-3 rounded-l-lg font-semibold">病案号</th>
-	                  <th class="px-4 py-3 font-semibold">科室</th>
-	                  <th class="px-4 py-3 font-semibold">出院日期</th>
-	                  <th class="px-4 py-3 rounded-r-lg font-semibold">状态</th>
-	                </tr>
-	              </thead>
-	              <tbody>
-	                <tr class="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-	                  <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">#2026010001</td>
-	                  <td class="px-4 py-3">心内科</td>
-	                  <td class="px-4 py-3">2026-01-04</td>
-	                  <td class="px-4 py-3"><span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-green-900 dark:text-green-300">已完成</span></td>
-	                </tr>
-	                <tr class="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-	                  <td class="px-4 py-3 font-medium text-slate-900 dark:text-white">#2026010002</td>
-	                  <td class="px-4 py-3">神经内科</td>
-	                  <td class="px-4 py-3">2026-01-03</td>
-	                  <td class="px-4 py-3"><span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-yellow-900 dark:text-yellow-300">审核中</span></td>
-	                </tr>
-	              </tbody>
-	            </table>
-	          </div>
-	        </div>
         </div>
 
         <!-- 事前分析：自包含的完整功能 -->
@@ -276,26 +544,29 @@
 
         <InProcessMonitoringView v-else-if="currentView === 'monitoring'" />
         <PaymentMonitoringView v-else-if="currentView === 'payment'" />
-        <PostEventAnalysisView v-else-if="currentView === 'analysis'" :session-id="selectedSessionId" :batch-id="selectedBatchId" />
-        <TestCaseListView 
-          v-else-if="currentView === 'testcases'" 
+        <PostEventAnalysisView
+          v-else-if="currentView === 'analysis'"
+          :session-id="selectedSessionId"
+          :batch-id="selectedBatchId"
+        />
+        <TestCaseListView
+          v-else-if="currentView === 'testcases'"
           :test-cases="testCases"
           @back="currentView = 'workbench'"
-          @loadCase="handleLoadTestCase"
-          @createCase="handleCreateTestCase"
-          @updateCase="handleUpdateTestCase"
-          @deleteCase="handleDeleteTestCase"
+          @load-case="handleLoadTestCase"
+          @create-case="handleCreateTestCase"
+          @update-case="handleUpdateTestCase"
+          @delete-case="handleDeleteTestCase"
         />
         <ExcelUploadView
           v-else-if="currentView === 'upload'"
           @back="currentView = 'workbench'"
-          @goAnalysis="handleGoAnalysis"
+          @go-analysis="handleGoAnalysis"
         />
       </div>
-	      
-	    </main>
-	  </div>
-	</template>
+    </main>
+  </div>
+</template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
@@ -303,20 +574,20 @@ import {
   AppstoreOutlined,
   FolderOpenOutlined,
   BarChartOutlined,
-	  SettingOutlined,
-	  LogoutOutlined,
-	  CheckCircleOutlined,
-	  ThunderboltOutlined,
-		  PrinterOutlined,
-		  UserOutlined,
-		  HistoryOutlined,
-		  ArrowLeftOutlined,
-		  MenuFoldOutlined,
-		  MenuUnfoldOutlined,
-		  DollarOutlined,
-		  CalculatorOutlined,
-		  RiseOutlined,
-	  FallOutlined,
+  SettingOutlined,
+  LogoutOutlined,
+  CheckCircleOutlined,
+  ThunderboltOutlined,
+  PrinterOutlined,
+  UserOutlined,
+  HistoryOutlined,
+  ArrowLeftOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  DollarOutlined,
+  CalculatorOutlined,
+  RiseOutlined,
+  FallOutlined,
   ExclamationCircleOutlined,
   CloudUploadOutlined,
   QuestionCircleOutlined,
@@ -326,24 +597,24 @@ import {
   DownOutlined,
   RightOutlined,
   FileSearchOutlined,
-  FormOutlined
+  FormOutlined,
 } from '@ant-design/icons-vue'
-	import { message } from 'ant-design-vue'
-	import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
-		import { 
-		  AIProfileDashboard, 
-		  FrontPageResultTabs, 
-		  InsuranceClaimView, 
-		  MedicalRecordPanel, 
-		  StructuredDataView,
-		  InProcessMonitoringView,
-		  PaymentMonitoringView,
-		  PostEventAnalysisView,
-		  TestCaseListView,
-		  ExcelUploadView,
-		  PreAnalysisView
-		} from '@/views/demo/frontpage/components'
-		import { useMedicalTextExtraction, useDRGGrouping } from '@/views/demo/frontpage/composables'
+import { message } from 'ant-design-vue'
+import HmFrontpagePreview from '@/components/frontpage/HmFrontpagePreview.vue'
+import {
+  AIProfileDashboard,
+  FrontPageResultTabs,
+  InsuranceClaimView,
+  MedicalRecordPanel,
+  StructuredDataView,
+  InProcessMonitoringView,
+  PaymentMonitoringView,
+  PostEventAnalysisView,
+  TestCaseListView,
+  ExcelUploadView,
+  PreAnalysisView,
+} from '@/views/demo/frontpage/components'
+import { useMedicalTextExtraction, useDRGGrouping } from '@/views/demo/frontpage/composables'
 
 // Basic Types
 interface DemoCase {
@@ -364,8 +635,8 @@ const isDark = ref(false)
 const isSidebarCollapsed = ref(false)
 const drgMenuExpanded = ref(true)
 const midAnalysisExpanded = ref(true)
-const selectedBatchId = ref<string | null>(null)
-const selectedSessionId = ref<string | null>(null)  // 新增：session_id
+const selectedBatchId = ref<string | undefined>(undefined)
+const selectedSessionId = ref<string | undefined>(undefined) // 新增：session_id
 const isAuthorized = ref(false)
 const passwordInput = ref('')
 const passwordError = ref('')
@@ -383,18 +654,19 @@ const verifyPassword = () => {
   }
 }
 
-const { extracting, extractionProgress, extractionStatus, extractStructuredData } = useMedicalTextExtraction({
-  demoCase,
-  onStartExtract: () => {
-    // 开始提取 2 秒后即扩展页面，不等待提取完成
-    setTimeout(() => {
-      isExpanded.value = true
-    }, 2000)
-  },
-  onExtracted: () => {
-    // 提取完成的回调（可选：用于其他后续操作）
-  }
-})
+const { extracting, extractionProgress, extractionStatus, extractStructuredData } =
+  useMedicalTextExtraction({
+    demoCase,
+    onStartExtract: () => {
+      // 开始提取 2 秒后即扩展页面，不等待提取完成
+      setTimeout(() => {
+        isExpanded.value = true
+      }, 2000)
+    },
+    onExtracted: () => {
+      // 提取完成的回调（可选：用于其他后续操作）
+    },
+  })
 
 // DRG Grouping
 const { drgLoading: drgGrouping, drgResult, performDRGGrouping: doDRGGrouping } = useDRGGrouping()
@@ -412,29 +684,31 @@ const handlePrint = () => {
     message.warning('没有可打印的内容')
     return
   }
-  
+
   // Create print window
   const printWindow = window.open('', '_blank')
   if (!printWindow) {
     message.error('无法打开打印窗口，请检查浏览器弹窗设置')
     return
   }
-  
+
   // Get current styles
   const styles = Array.from(document.styleSheets)
-    .map(sheet => {
+    .map((sheet) => {
       try {
-        return Array.from(sheet.cssRules).map(rule => rule.cssText).join('\n')
+        return Array.from(sheet.cssRules)
+          .map((rule) => rule.cssText)
+          .join('\n')
       } catch {
         return ''
       }
     })
     .join('\n')
-  
+
   // Build print document
   const patientName = frontpage.value?.basic_info?.patient_name || '未知患者'
   const printDate = new Date().toLocaleDateString('zh-CN')
-  
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
@@ -493,9 +767,9 @@ const handlePrint = () => {
     </body>
     </html>
   `)
-  
+
   printWindow.document.close()
-  
+
   // Wait for styles to load then print
   setTimeout(() => {
     printWindow.focus()
@@ -509,14 +783,14 @@ const fillToFrontpage = () => {
     message.warning('请先进行 AI 提取')
     return
   }
-  
+
   // Switch to HM tab
   activeTab.value = 'hm'
-  
+
   // Show success notification
   message.success({
     content: '✅ 已将提取数据回填到病案首页',
-    duration: 3
+    duration: 3,
   })
 }
 
@@ -797,7 +1071,7 @@ T 36.8℃，P 88次/分，R 20次/分，BP 145/92mmHg
    - 其他材料费：1650.00元
 4. 西药费：8246.30元
 5. 护理费：2500.00元
-6. 床位费：1500.00元（300元/天×5天）`
+6. 床位费：1500.00元（300元/天×5天）`,
   },
   {
     name: '测试病历2',
@@ -1087,8 +1361,8 @@ T 36.3℃，P 98次/分，R 20次/分，BP 147/95mmHg
    - 其他治疗：500.00元
 4. 西药费：1850.00元
 5. 护理费：1200.00元
-6. 床位费：1000.00元（200元/天×5天）`
-  }
+6. 床位费：1000.00元（200元/天×5天）`,
+  },
 ])
 
 // Resizable splitter state
@@ -1106,10 +1380,10 @@ const startResize = (e: MouseEvent) => {
 
 const doResize = (e: MouseEvent) => {
   if (!isResizing.value || !containerRef.value) return
-  
+
   const containerRect = containerRef.value.getBoundingClientRect()
   const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100
-  
+
   // Limit to reasonable bounds (20% - 80%)
   leftPanelWidth.value = Math.min(80, Math.max(20, newWidth))
 }
@@ -1137,17 +1411,19 @@ onUnmounted(() => {
 })
 
 // Computed
-	const frontpage = computed(() => demoCase.value?.frontpage || null)
-	const insuranceClaim = computed(() => demoCase.value?.insurance_claim || null)
+const frontpage = computed(() => demoCase.value?.frontpage || null)
+const insuranceClaim = computed(() => demoCase.value?.insurance_claim || null)
 
-	const tabs = [
-	  { key: 'structured', label: '结构化结果' },
-	  { key: 'profile', label: 'AI 画像分析' },
-	  { key: 'hm', label: '病案首页' },
-	  { key: 'insurance', label: '医保清单' }
-	]
+const tabs = [
+  { key: 'structured', label: '结构化结果' },
+  { key: 'profile', label: 'AI 画像分析' },
+  { key: 'hm', label: '病案首页' },
+  { key: 'insurance', label: '医保清单' },
+]
 
-	const activeTabLabel = computed(() => tabs.find(t => t.key === activeTab.value)?.label || '结果展示')
+const activeTabLabel = computed(
+  () => tabs.find((t) => t.key === activeTab.value)?.label || '结果展示',
+)
 
 // Actions
 const toggleDarkMode = () => {
@@ -1159,45 +1435,44 @@ const toggleDarkMode = () => {
   }
 }
 
-	const normalizeTestCaseIndex = (input: unknown) => {
-	  let idx = 0
-	  if (typeof input === 'number') {
-	    idx = input
-	  } else if (typeof input === 'string') {
-	    idx = Number.parseInt(input, 10)
-	  } else if (input && typeof input === 'object') {
-	    const maybe = input as any
-	    if (maybe.key != null) idx = Number.parseInt(String(maybe.key), 10)
-	    else if (maybe.index != null) idx = Number.parseInt(String(maybe.index), 10)
-	  }
-	
-	  if (!Number.isFinite(idx) || Number.isNaN(idx)) idx = 0
-	  const total = testCases.value.length
-	  if (total <= 0) return 0
-	  return Math.min(Math.max(0, idx), total - 1)
-	}
-	
-	const loadDemoCase = async (caseIndex: unknown = 0) => {
-	  loading.value = true
-	  try {
-	    // Get selected test case
-	    const index = normalizeTestCaseIndex(caseIndex)
-	    const selectedCase = testCases.value[index]
-	    if (!selectedCase) {
-	      throw new Error('Invalid test case index')
-	    }
-	    
-	    await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay for UX
-	    
-	    demoCase.value = {
-	      case_id: `demo_case_${index + 1}`,
-	      description: selectedCase.description,
-	      medical_text: selectedCase.medical_text,
-	      frontpage: null, // 不直接加载，需要用户点击"开始 AI 提取"
-	      insurance_claim: null // 也延迟加载
+const normalizeTestCaseIndex = (input: unknown) => {
+  let idx = 0
+  if (typeof input === 'number') {
+    idx = input
+  } else if (typeof input === 'string') {
+    idx = Number.parseInt(input, 10)
+  } else if (input && typeof input === 'object') {
+    const maybe = input as any
+    if (maybe.key != null) idx = Number.parseInt(String(maybe.key), 10)
+    else if (maybe.index != null) idx = Number.parseInt(String(maybe.index), 10)
+  }
+
+  if (!Number.isFinite(idx) || Number.isNaN(idx)) idx = 0
+  const total = testCases.value.length
+  if (total <= 0) return 0
+  return Math.min(Math.max(0, idx), total - 1)
+}
+
+const loadDemoCase = async (caseIndex: unknown = 0) => {
+  loading.value = true
+  try {
+    // Get selected test case
+    const index = normalizeTestCaseIndex(caseIndex)
+    const selectedCase = testCases.value[index]
+    if (!selectedCase) {
+      throw new Error('Invalid test case index')
     }
-    
-    
+
+    await new Promise((resolve) => setTimeout(resolve, 500)) // Brief delay for UX
+
+    demoCase.value = {
+      case_id: `demo_case_${index + 1}`,
+      description: selectedCase.description,
+      medical_text: selectedCase.medical_text,
+      frontpage: null, // 不直接加载，需要用户点击"开始 AI 提取"
+      insurance_claim: null, // 也延迟加载
+    }
+
     message.success(`${selectedCase.name} 加载成功`)
   } catch (error: any) {
     console.error('加载测试病历失败:', error)
@@ -1245,11 +1520,8 @@ const handleGoAnalysis = (sessionId: string, batchId: string) => {
 const handleCreateTestCase = (data: { title: string; medical_text: string; createdAt: string }) => {
   testCases.value.push({
     name: data.title,
-    title: data.title,
     description: '',
     medical_text: data.medical_text,
-    type: '住院病历',
-    createdAt: data.createdAt
   })
 }
 
@@ -1275,17 +1547,17 @@ const handleDeleteTestCase = (index: number) => {
 // 编码变更处理 - 触发DRG重新分组
 const handleCodeChange = async (field: string, value: string) => {
   if (!frontpage.value?.diagnoses) return
-  
+
   // 更新本地数据
   frontpage.value.diagnoses[field] = value
-  
+
   // 显示提示并触发重新分组
   message.loading('编码已更新，正在重新计算DRG分组...', 1)
-  
+
   // 延迟触发DRG分组
   setTimeout(() => {
     if (demoCase.value?.case_id) {
-      performDRGGrouping(demoCase.value.case_id)
+      performDRGGrouping()
     }
   }, 500)
 }

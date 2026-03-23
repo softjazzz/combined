@@ -3,7 +3,7 @@
  * 包含3个典型病例，用于演示质控功能
  */
 
-import type { Case, Document, DocumentSection } from '@/types/clinical-workstation'
+import type { Case } from '@/types/clinical-workstation'
 import { DocumentType, CaseComplexity } from '@/types/clinical-workstation'
 
 // ==================== 病例1：急性冠脉综合征（心内科，复杂）====================
@@ -536,7 +536,7 @@ const case1: Case = {
   patientInfo: {
     name: '李明',
     gender: '男',
-    age: 58
+    age: 58,
   },
   visitInfo: {
     visitId: 'V20251011001',
@@ -544,13 +544,13 @@ const case1: Case = {
     admissionDate: '2025-10-11',
     dischargeDate: '2025-10-20',
     bedNumber: '15床',
-    admissionNumber: '2025001234'
+    admissionNumber: '2025001234',
   },
   diagnosisInfo: {
     diseaseType: '急性冠脉综合征',
     complexity: 'high' as CaseComplexity,
     primaryDiagnosis: '急性冠脉综合征 - NSTEMI',
-    otherDiagnoses: ['高血压病 3级 很高危', '2型糖尿病', '血脂异常']
+    otherDiagnoses: ['高血压病 3级 很高危', '2型糖尿病', '血脂异常'],
   },
   documents: [
     {
@@ -564,8 +564,8 @@ const case1: Case = {
         department: '心内科',
         visitType: '住院',
         patientId: 'P20251011001',
-        visitId: 'V20251011001'
-      }
+        visitId: 'V20251011001',
+      },
     },
     {
       documentId: 'doc-001-first-course',
@@ -575,8 +575,8 @@ const case1: Case = {
       content: case1_first_course_content,
       metadata: {
         author: '张医生',
-        department: '心内科'
-      }
+        department: '心内科',
+      },
     },
     {
       documentId: 'doc-001-daily-1',
@@ -584,7 +584,7 @@ const case1: Case = {
       title: '日常病程记录',
       recordTime: '2025-10-12 09:00',
       content: case1_daily_course_content_1,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-pre-op-discussion',
@@ -592,7 +592,7 @@ const case1: Case = {
       title: '术前讨论',
       recordTime: '2025-10-12 15:00',
       content: case1_pre_op_discussion_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-pre-op-summary',
@@ -600,7 +600,7 @@ const case1: Case = {
       title: '术前小结',
       recordTime: '2025-10-12 16:30',
       content: case1_pre_op_summary_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-surgery-apply',
@@ -608,7 +608,7 @@ const case1: Case = {
       title: '手术申请单',
       recordTime: '2025-10-12 16:00',
       content: case1_surgery_apply_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-surgery-safety-check',
@@ -616,7 +616,7 @@ const case1: Case = {
       title: '手术安全核查记录单',
       recordTime: '2025-10-13 09:00',
       content: case1_surgery_safety_check_content,
-      metadata: { author: '王医生', department: '心内科' }
+      metadata: { author: '王医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-anesthesia',
@@ -624,7 +624,7 @@ const case1: Case = {
       title: '麻醉记录',
       recordTime: '2025-10-13 11:00',
       content: case1_anesthesia_content,
-      metadata: { author: '王医生', department: '心内科' }
+      metadata: { author: '王医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-surgery-record',
@@ -632,7 +632,7 @@ const case1: Case = {
       title: '手术记录',
       recordTime: '2025-10-13 11:10',
       content: case1_surgery_record_content,
-      metadata: { author: '王医生', department: '心内科' }
+      metadata: { author: '王医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-rescue',
@@ -640,7 +640,7 @@ const case1: Case = {
       title: '抢救记录',
       recordTime: '2025-10-13 11:20',
       content: case1_rescue_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-post-op',
@@ -648,7 +648,7 @@ const case1: Case = {
       title: '术后病程记录',
       recordTime: '2025-10-13 11:30',
       content: case1_post_op_course_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-nursing',
@@ -656,7 +656,7 @@ const case1: Case = {
       title: '护理记录',
       recordTime: '2025-10-13 12:00',
       content: case1_nursing_content,
-      metadata: { author: '李护士', department: '心内科' }
+      metadata: { author: '李护士', department: '心内科' },
     },
     {
       documentId: 'doc-001-rounds',
@@ -664,7 +664,7 @@ const case1: Case = {
       title: '查房记录',
       recordTime: '2025-10-14 09:00',
       content: case1_rounds_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-discussion',
@@ -672,7 +672,7 @@ const case1: Case = {
       title: '疑难病例讨论记录',
       recordTime: '2025-10-14 15:00',
       content: case1_discussion_content,
-      metadata: { author: '张医生', department: '心内科' }
+      metadata: { author: '张医生', department: '心内科' },
     },
     {
       documentId: 'doc-001-consultation',
@@ -680,7 +680,7 @@ const case1: Case = {
       title: '会诊记录',
       recordTime: '2025-10-15 10:00',
       content: case1_consultation_content,
-      metadata: { author: '赵医生', department: '内分泌科' }
+      metadata: { author: '赵医生', department: '内分泌科' },
     },
     {
       documentId: 'doc-001-discharge',
@@ -690,16 +690,17 @@ const case1: Case = {
       content: case1_discharge_content,
       metadata: {
         author: '张医生',
-        department: '心内科'
-      }
-    }
+        department: '心内科',
+      },
+    },
   ],
   metadata: {
     isCustom: false,
     createdAt: '2025-10-11T09:30:00Z',
-    description: '典型的急性冠脉综合征病例，包含完整的入院、首程、出院记录，适合演示心内科质控规则。',
-    tags: ['心内科', 'ACS', '复杂', '高危']
-  }
+    description:
+      '典型的急性冠脉综合征病例，包含完整的入院、首程、出院记录，适合演示心内科质控规则。',
+    tags: ['心内科', 'ACS', '复杂', '高危'],
+  },
 }
 
 // ==================== 病例2：急性阑尾炎（普外科，中等）====================
@@ -864,7 +865,7 @@ const case2: Case = {
   patientInfo: {
     name: '王芳',
     gender: '女',
-    age: 28
+    age: 28,
   },
   visitInfo: {
     visitId: 'V20251015002',
@@ -872,13 +873,13 @@ const case2: Case = {
     admissionDate: '2025-10-15',
     dischargeDate: '2025-10-21',
     bedNumber: '8床',
-    admissionNumber: '2025005678'
+    admissionNumber: '2025005678',
   },
   diagnosisInfo: {
     diseaseType: '急性阑尾炎',
     complexity: 'medium' as CaseComplexity,
     primaryDiagnosis: '急性化脓性阑尾炎',
-    otherDiagnoses: ['腹腔镜阑尾切除术后']
+    otherDiagnoses: ['腹腔镜阑尾切除术后'],
   },
   documents: [
     {
@@ -892,8 +893,8 @@ const case2: Case = {
         department: '普外科',
         visitType: '住院',
         patientId: 'P20251015002',
-        visitId: 'V20251015002'
-      }
+        visitId: 'V20251015002',
+      },
     },
     {
       documentId: 'doc-002-surgery',
@@ -903,8 +904,8 @@ const case2: Case = {
       content: case2_surgery_record_content,
       metadata: {
         author: '李医生',
-        department: '普外科'
-      }
+        department: '普外科',
+      },
     },
     {
       documentId: 'doc-002-discharge',
@@ -914,16 +915,17 @@ const case2: Case = {
       content: case2_discharge_content,
       metadata: {
         author: '李医生',
-        department: '普外科'
-      }
-    }
+        department: '普外科',
+      },
+    },
   ],
   metadata: {
     isCustom: false,
     createdAt: '2025-10-15T21:00:00Z',
-    description: '典型的急性阑尾炎手术病例，包含入院记录、手术记录、出院记录，适合演示普外科质控规则。',
-    tags: ['普外科', '急性阑尾炎', '手术', '中等']
-  }
+    description:
+      '典型的急性阑尾炎手术病例，包含入院记录、手术记录、出院记录，适合演示普外科质控规则。',
+    tags: ['普外科', '急性阑尾炎', '手术', '中等'],
+  },
 }
 
 // ==================== 病例3：肺部感染（呼吸内科，简单）====================
@@ -1045,7 +1047,7 @@ const case3: Case = {
   patientInfo: {
     name: '赵强',
     gender: '男',
-    age: 65
+    age: 65,
   },
   visitInfo: {
     visitId: 'V20251018003',
@@ -1053,13 +1055,13 @@ const case3: Case = {
     admissionDate: '2025-10-18',
     dischargeDate: '2025-10-25',
     bedNumber: '12床',
-    admissionNumber: '2025009012'
+    admissionNumber: '2025009012',
   },
   diagnosisInfo: {
     diseaseType: '肺部感染',
     complexity: 'low' as CaseComplexity,
     primaryDiagnosis: '肺部感染（右下肺）- 肺炎链球菌感染',
-    otherDiagnoses: ['慢性支气管炎']
+    otherDiagnoses: ['慢性支气管炎'],
   },
   documents: [
     {
@@ -1073,8 +1075,8 @@ const case3: Case = {
         department: '呼吸内科',
         visitType: '住院',
         patientId: 'P20251018003',
-        visitId: 'V20251018003'
-      }
+        visitId: 'V20251018003',
+      },
     },
     {
       documentId: 'doc-003-discharge',
@@ -1084,16 +1086,16 @@ const case3: Case = {
       content: case3_discharge_content,
       metadata: {
         author: '陈医生',
-        department: '呼吸内科'
-      }
-    }
+        department: '呼吸内科',
+      },
+    },
   ],
   metadata: {
     isCustom: false,
     createdAt: '2025-10-18T13:30:00Z',
     description: '简单的肺部感染病例，包含入院记录和出院记录，适合演示呼吸内科基础质控规则。',
-    tags: ['呼吸内科', '肺部感染', '简单']
-  }
+    tags: ['呼吸内科', '肺部感染', '简单'],
+  },
 }
 
 // ==================== 导出 ====================
@@ -1135,6 +1137,6 @@ export function searchCases(keyword: string): Case[] {
       c.caseName.toLowerCase().includes(lowerKeyword) ||
       c.diagnosisInfo.diseaseType.toLowerCase().includes(lowerKeyword) ||
       c.visitInfo.department.toLowerCase().includes(lowerKeyword) ||
-      c.patientInfo.name.toLowerCase().includes(lowerKeyword)
+      c.patientInfo.name.toLowerCase().includes(lowerKeyword),
   )
 }

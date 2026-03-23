@@ -2,14 +2,25 @@
   <div class="quality-control-point-management">
     <!-- 页面标题 -->
     <div class="page-header mb-6">
-      <h2 class="page-title">非编码质控点管理</h2>
+      <h2 class="page-title">
+        非编码质控点管理
+      </h2>
     </div>
 
     <!-- 标签页 -->
     <div class="tabs-container mb-6">
-      <a-tabs v-model:activeKey="activeTab" class="custom-tabs">
-        <a-tab-pane key="online" tab="已上线" />
-        <a-tab-pane key="offline" tab="未上线" />
+      <a-tabs
+        v-model:active-key="activeTab"
+        class="custom-tabs"
+      >
+        <a-tab-pane
+          key="online"
+          tab="已上线"
+        />
+        <a-tab-pane
+          key="offline"
+          tab="未上线"
+        />
       </a-tabs>
     </div>
 
@@ -18,56 +29,62 @@
       <!-- 左侧批量操作按钮 -->
       <div class="batch-actions">
         <template v-if="activeTab === 'online'">
-          <a-button 
+          <a-button
             :disabled="selectedRowKeys.length === 0"
-            @click="handleBatchEnable"
             class="batch-btn"
+            @click="handleBatchEnable"
           >
             批量开启
           </a-button>
-          <a-button 
+          <a-button
             :disabled="selectedRowKeys.length === 0"
-            @click="handleBatchDisable"
             class="batch-btn"
+            @click="handleBatchDisable"
           >
             批量关闭
-            </a-button>
-          <a-button 
+          </a-button>
+          <a-button
             :disabled="selectedRowKeys.length === 0"
-            @click="handleBatchOffline"
             class="batch-btn"
+            @click="handleBatchOffline"
           >
             批量下线
           </a-button>
         </template>
         <template v-else>
-          <a-button 
+          <a-button
             :disabled="selectedRowKeys.length === 0"
-            @click="handleBatchDelete"
             class="batch-btn"
+            @click="handleBatchDelete"
           >
             批量删除
           </a-button>
-          <a-button 
+          <a-button
             :disabled="selectedRowKeys.length === 0"
-            @click="handleBatchOnline"
             class="batch-btn"
+            @click="handleBatchOnline"
           >
             批量上线
           </a-button>
         </template>
-        
+
         <!-- 导入导出按钮 -->
-        <a-button @click="handleImport" class="action-btn">
+        <a-button
+          class="action-btn"
+          @click="handleImport"
+        >
           导入质控点
         </a-button>
-        <a-button @click="handleExport" class="action-btn">
+        <a-button
+          class="action-btn"
+          @click="handleExport"
+        >
           导出质控点
         </a-button>
-        <a-button 
-          type="primary" 
-          @click="handleCreateNew"
+        <a-button
+          type="primary"
           class="create-btn"
+          @click="handleCreateNew"
         >
           新建质控点
         </a-button>
@@ -75,20 +92,24 @@
 
       <!-- 右侧搜索 -->
       <div class="search-area">
-        <a-select 
-          v-model:value="searchType" 
+        <a-select
+          v-model:value="searchType"
           class="search-type-select"
           placeholder="质控点ID"
         >
-          <a-select-option value="id">质控点ID</a-select-option>
-          <a-select-option value="name">质控点名称</a-select-option>
+          <a-select-option value="id">
+            质控点ID
+          </a-select-option>
+          <a-select-option value="name">
+            质控点名称
+          </a-select-option>
         </a-select>
         <a-input-search
           v-model:value="searchKeyword"
           placeholder="请输入"
-          @search="handleSearch"
           class="search-input"
           enter-button
+          @search="handleSearch"
         />
       </div>
     </div>
@@ -109,32 +130,44 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
             <div class="name-cell">
-              <div class="name-text">{{ record.name }}</div>
-              <div class="source-text">{{ record.source }}</div>
+              <div class="name-text">
+                {{ record.name }}
+              </div>
+              <div class="source-text">
+                {{ record.source }}
+              </div>
             </div>
           </template>
-          
+
           <!-- 启用状态列 -->
           <template v-if="column.key === 'enabled' && activeTab === 'online'">
-            <a-switch 
+            <a-switch
               v-model:checked="record.enabled"
-              @change="(checked) => handleToggleEnable(record, checked)"
               size="small"
+              @change="(checked: boolean) => handleToggleEnable(record, checked)"
             />
           </template>
-          
+
           <!-- 操作列 -->
           <template v-if="column.key === 'action'">
             <div class="action-buttons">
-              <a-button type="link" size="small" @click="handleView(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleView(record)"
+              >
                 查看
               </a-button>
-              <a-button type="link" size="small" @click="handleEdit(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleEdit(record)"
+              >
                 编辑
               </a-button>
-              <a-button 
-                type="link" 
-                size="small" 
+              <a-button
+                type="link"
+                size="small"
                 danger
                 @click="handleDelete(record)"
               >
@@ -156,7 +189,7 @@ import type {
   QualityControlPoint,
   QualityControlSearchParams,
   TableColumn,
-  PaginationConfig
+  PaginationConfig,
 } from '@/types/quality-control'
 
 const router = useRouter()
@@ -181,7 +214,7 @@ const tableData = ref<QualityControlPoint[]>([
     onlineDate: '2024-03-11 16:46',
     lastOperator: '王某',
     enabled: true,
-    status: 'online'
+    status: 'online',
   },
   {
     id: 'Q2121',
@@ -194,7 +227,7 @@ const tableData = ref<QualityControlPoint[]>([
     onlineDate: '2024-03-11 16:46',
     lastOperator: '王某',
     enabled: true,
-    status: 'online'
+    status: 'online',
   },
   {
     id: 'Q2122',
@@ -207,62 +240,62 @@ const tableData = ref<QualityControlPoint[]>([
     onlineDate: '2024-03-11 16:46',
     lastOperator: '王某',
     enabled: true,
-    status: 'online'
-  }
+    status: 'online',
+  },
 ])
 
 // 表格列配置
-const tableColumns = computed(() => {
-  const baseColumns = [
+const tableColumns = computed<TableColumn[]>(() => {
+  const baseColumns: TableColumn[] = [
     {
       title: '质控点ID',
       dataIndex: 'id',
       key: 'id',
       width: 100,
-      sorter: true
+      sorter: true,
     },
     {
       title: '质控点名称',
       dataIndex: 'name',
       key: 'name',
       width: 200,
-      sorter: true
+      sorter: true,
     },
     {
       title: '质控点来源',
       dataIndex: 'source',
       key: 'source',
       width: 150,
-      sorter: true
+      sorter: true,
     },
     {
       title: '质控大类',
       dataIndex: 'category',
       key: 'category',
       width: 120,
-      sorter: true
+      sorter: true,
     },
     {
       title: '质控类型',
       dataIndex: 'type',
       key: 'type',
       width: 100,
-      sorter: true
+      sorter: true,
     },
     {
       title: '核心制度分类',
       dataIndex: 'coreSystem',
       key: 'coreSystem',
       width: 120,
-      sorter: true
+      sorter: true,
     },
     {
       title: '质控文书',
       dataIndex: 'document',
       key: 'document',
       width: 100,
-      sorter: true
-    }
+      sorter: true,
+    },
   ]
 
   if (activeTab.value === 'online') {
@@ -272,21 +305,21 @@ const tableColumns = computed(() => {
         dataIndex: 'onlineDate',
         key: 'onlineDate',
         width: 150,
-        sorter: true
+        sorter: true,
       },
       {
         title: '最后操作人',
         dataIndex: 'lastOperator',
         key: 'lastOperator',
         width: 100,
-        sorter: true
+        sorter: true,
       },
       {
         title: '启用状态',
         dataIndex: 'enabled',
         key: 'enabled',
-        width: 100
-      }
+        width: 100,
+      },
     )
   } else {
     baseColumns.push(
@@ -295,23 +328,24 @@ const tableColumns = computed(() => {
         dataIndex: 'status',
         key: 'status',
         width: 100,
-        sorter: true
+        sorter: true,
       },
       {
         title: '上线日期',
         dataIndex: 'onlineDate',
         key: 'onlineDate',
         width: 150,
-        sorter: true
-      }
+        sorter: true,
+      },
     )
   }
 
   baseColumns.push({
     title: '操作',
+    dataIndex: 'action',
     key: 'action',
     width: 150,
-    fixed: 'right'
+    fixed: 'right',
   })
 
   return baseColumns
@@ -322,7 +356,7 @@ const rowSelection = {
   selectedRowKeys: selectedRowKeys,
   onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
-  }
+  },
 }
 
 // 分页配置
@@ -332,9 +366,8 @@ const paginationConfig = reactive({
   total: 2093,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number, range: [number, number]) => 
-    `共 ${total} 条`,
-  pageSizeOptions: ['10', '20', '50', '100']
+  showTotal: (total: number) => `共 ${total} 条`,
+  pageSizeOptions: ['10', '20', '50', '100'],
 })
 
 // 事件处理函数
@@ -379,19 +412,19 @@ const handleSearch = () => {
   message.info(`搜索: ${searchType.value} - ${searchKeyword.value}`)
 }
 
-const handleToggleEnable = (record, checked: boolean) => {
+const handleToggleEnable = (record: QualityControlPoint, checked: boolean) => {
   message.success(`质控点 ${record.id} 已${checked ? '启用' : '禁用'}`)
 }
 
-const handleView = (record) => {
+const handleView = (record: QualityControlPoint) => {
   message.info(`查看质控点: ${record.id}`)
 }
 
-const handleEdit = (record) => {
+const handleEdit = (record: QualityControlPoint) => {
   message.info(`编辑质控点: ${record.id}`)
 }
 
-const handleDelete = (record) => {
+const handleDelete = (record: QualityControlPoint) => {
   message.info(`删除质控点: ${record.id}`)
 }
 
@@ -418,25 +451,25 @@ onMounted(() => {
   .tabs-container {
     background: #ffffff;
     border-radius: 8px 8px 0 0;
-    
+
     :deep(.ant-tabs) {
       margin: 0;
-      
+
       .ant-tabs-nav {
         margin: 0;
         padding: 0 24px;
-        
+
         .ant-tabs-tab {
           padding: 16px 24px;
           font-size: 14px;
           font-weight: 500;
-          
+
           &.ant-tabs-tab-active {
             color: #1890ff;
           }
         }
       }
-      
+
       .ant-tabs-content-holder {
         display: none;
       }
@@ -461,7 +494,7 @@ onMounted(() => {
         padding: 0 16px;
         font-size: 14px;
         border-radius: 6px;
-        
+
         &:disabled {
           opacity: 0.5;
         }
@@ -474,7 +507,7 @@ onMounted(() => {
         border-radius: 6px;
         border-color: #d9d9d9;
         color: #666666;
-        
+
         &:hover {
           border-color: #1890ff;
           color: #1890ff;
@@ -498,7 +531,7 @@ onMounted(() => {
 
       .search-type-select {
         width: 120px;
-        
+
         :deep(.ant-select-selector) {
           height: 32px;
           border-radius: 6px;
@@ -507,7 +540,7 @@ onMounted(() => {
 
       .search-input {
         width: 240px;
-        
+
         :deep(.ant-input-group-wrapper) {
           .ant-input-wrapper {
             .ant-input {
@@ -515,7 +548,7 @@ onMounted(() => {
               border-radius: 6px 0 0 6px;
             }
           }
-          
+
           .ant-input-group-addon {
             .ant-btn {
               height: 32px;
@@ -555,7 +588,7 @@ onMounted(() => {
           color: #333333;
           margin-bottom: 4px;
         }
-        
+
         .source-text {
           font-size: 12px;
           color: #999999;
@@ -565,7 +598,7 @@ onMounted(() => {
       .action-buttons {
         display: flex;
         gap: 8px;
-        
+
         :deep(.ant-btn-link) {
           padding: 0;
           height: auto;
@@ -592,11 +625,11 @@ onMounted(() => {
 
       .search-area {
         justify-content: stretch;
-        
+
         .search-type-select {
           flex: 1;
         }
-        
+
         .search-input {
           flex: 2;
         }

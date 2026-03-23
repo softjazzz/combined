@@ -24,13 +24,13 @@ const TITLE_PATTERNS: Array<{ re: RegExp; typeCode: string }> = [
 // 页眉/页脚与分页标记（被剔除）
 const HEADER_FOOTER_LINE = new RegExp(
   [
-    '^===\s*第\d+页\s*===\s*$', // === 第n页 ===
-    '^第\s*\d+\s*页/共\s*\d+\s*页$', // 第n页/共m页
-    '^第\s*\(\d+\)\s*页$', // 第(n)页
-    '^(?:.{0,10}医院|病\s*程\s*记\s*录)\s*$', // 医院名/病 程 记 录 独立行
+    '^===\\s*第\\d+页\\s*===\\s*$', // === 第n页 ===
+    '^第\\s*\\d+\\s*页/共\\s*\\d+\\s*页$', // 第n页/共m页
+    '^第\\s*\\(\\d+\\)\\s*页$', // 第(n)页
+    '^(?:.{0,10}医院|病\\s*程\\s*记\\s*录)\\s*$', // 医院名/病 程 记 录 独立行
     '^(?:科室|姓名|性别|年龄|住院号)[:：].*$', // 头部信息行
   ].join('|'),
-  'u'
+  'u',
 )
 
 function isHeaderFooterLine(line: string): boolean {
@@ -74,9 +74,6 @@ export function segmentMedicalDocument(text: string): DocSegment[] {
   for (let k = 0; k < titleLineIdx.length; k++) {
     const cur = titleLineIdx[k]
     const next = titleLineIdx[k + 1]
-    const startIndex = lineStartOffsets[cur.idx]
-    const endIndex = next ? lineStartOffsets[next.idx] : text.length
-
     // 去除起止端的页眉/脚行
     let s = cur.idx
     while (s < lines.length && isHeaderFooterLine(lines[s])) s++
@@ -101,7 +98,7 @@ export function segmentMedicalDocument(text: string): DocSegment[] {
 export function findNearestSegment(
   segments: DocSegment[],
   approxStart: number,
-  typeCode?: string
+  typeCode?: string,
 ): DocSegment | null {
   if (!segments.length) return null
   let best: DocSegment | null = null
@@ -110,8 +107,10 @@ export function findNearestSegment(
     const dist = Math.abs(seg.startIndex - approxStart)
     const penalty = typeCode && seg.typeCode && seg.typeCode !== typeCode ? 10000 : 0
     const score = dist + penalty
-    if (score < bestScore) { bestScore = score; best = seg }
+    if (score < bestScore) {
+      bestScore = score
+      best = seg
+    }
   }
   return best
 }
-

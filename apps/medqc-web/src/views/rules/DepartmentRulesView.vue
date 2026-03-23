@@ -8,9 +8,7 @@
             <div class="p-1 bg-blue-100 rounded-md">
               <ApartmentOutlined class="text-base text-blue-600" />
             </div>
-            <h1 class="text-lg lg:text-xl font-bold text-gray-900">
-              科室级质控规则管理
-            </h1>
+            <h1 class="text-lg lg:text-xl font-bold text-gray-900">科室级质控规则管理</h1>
           </div>
           <p class="text-gray-600 text-xs">
             管理科室级质控规则，支持覆盖全局规则或创建科室特有规则
@@ -18,21 +16,25 @@
         </div>
         <div class="flex flex-wrap gap-1.5">
           <a-button
-            @click="refreshRules"
             :loading="loading"
             size="small"
             class="flex items-center space-x-1"
+            @click="refreshRules"
           >
-            <template #icon><ReloadOutlined /></template>
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             <span>刷新</span>
           </a-button>
           <a-button
             type="primary"
-            @click="showCreateModal"
             size="small"
             class="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700"
+            @click="showCreateModal"
           >
-            <template #icon><PlusOutlined /></template>
+            <template #icon>
+              <PlusOutlined />
+            </template>
             <span>新增科室规则</span>
           </a-button>
         </div>
@@ -49,15 +51,11 @@
             allow-clear
             show-search
             :filter-option="filterDepartmentOption"
-            @change="handleFilterChange"
             class="w-full"
             size="small"
+            @change="handleFilterChange"
           >
-            <a-select-option
-              v-for="dept in departments"
-              :key="dept.id"
-              :value="dept.id"
-            >
+            <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
               {{ dept.name }}
             </a-select-option>
           </a-select>
@@ -67,13 +65,13 @@
             v-model:value="filters.status_filter"
             placeholder="规则状态"
             allow-clear
-            @change="handleFilterChange"
             class="w-full"
             size="small"
+            @change="handleFilterChange"
           >
-            <a-select-option value="draft">草稿</a-select-option>
-            <a-select-option value="published">已发布</a-select-option>
-            <a-select-option value="archived">已归档</a-select-option>
+            <a-select-option value="draft"> 草稿 </a-select-option>
+            <a-select-option value="published"> 已发布 </a-select-option>
+            <a-select-option value="archived"> 已归档 </a-select-option>
           </a-select>
         </a-col>
         <a-col :xs="24" :sm="12" :md="6">
@@ -81,21 +79,21 @@
             v-model:value="filters.override_action"
             placeholder="覆盖行为"
             allow-clear
-            @change="handleFilterChange"
             class="w-full"
             size="small"
+            @change="handleFilterChange"
           >
-            <a-select-option value="override">覆盖配置</a-select-option>
-            <a-select-option value="disable">禁用规则</a-select-option>
+            <a-select-option value="override"> 覆盖配置 </a-select-option>
+            <a-select-option value="disable"> 禁用规则 </a-select-option>
           </a-select>
         </a-col>
         <a-col :xs="24" :sm="12" :md="6">
           <a-input-search
             v-model:value="filters.keyword"
             placeholder="搜索规则编号、名称"
-            @search="handleFilterChange"
             allow-clear
             size="small"
+            @search="handleFilterChange"
           />
         </a-col>
       </a-row>
@@ -108,26 +106,28 @@
         :data-source="rules"
         :loading="loading"
         :pagination="pagination"
-        @change="handleTableChange"
         :scroll="{ x: 1200 }"
         size="small"
         row-key="id"
+        @change="handleTableChange"
       >
         <!-- 规则编号 -->
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_code'">
             <div class="flex items-center space-x-2">
-              <a-tag color="blue" class="text-xs">{{ record.rule_code }}</a-tag>
-              <a-tag v-if="record.parent_rule_id" color="orange" class="text-xs">
-                覆盖
+              <a-tag color="blue" class="text-xs">
+                {{ record.rule_code }}
               </a-tag>
+              <a-tag v-if="record.parent_rule_id" color="orange" class="text-xs"> 覆盖 </a-tag>
             </div>
           </template>
 
           <!-- 规则名称 -->
           <template v-else-if="column.key === 'name'">
             <div>
-              <div class="font-medium text-gray-900">{{ record.name }}</div>
+              <div class="font-medium text-gray-900">
+                {{ record.name }}
+              </div>
               <div v-if="record.description" class="text-xs text-gray-500 mt-0.5">
                 {{ record.description }}
               </div>
@@ -150,56 +150,35 @@
 
           <!-- 覆盖行为 -->
           <template v-else-if="column.key === 'override_action'">
-            <a-tag
-              :color="record.override_action === 'override' ? 'blue' : 'red'"
-              class="text-xs"
-            >
+            <a-tag :color="record.override_action === 'override' ? 'blue' : 'red'" class="text-xs">
               {{ record.override_action === 'override' ? '覆盖配置' : '禁用规则' }}
             </a-tag>
           </template>
 
           <!-- 优先级 -->
           <template v-else-if="column.key === 'priority'">
-            <a-badge
-              :count="record.priority"
-              :number-style="{ backgroundColor: '#52c41a' }"
-            />
+            <a-badge :count="record.priority" :number-style="{ backgroundColor: '#52c41a' }" />
           </template>
 
           <!-- 操作 -->
           <template v-else-if="column.key === 'actions'">
             <a-space :size="4">
-              <a-button
-                type="link"
-                size="small"
-                @click="viewRule(record)"
-                class="p-0"
-              >
+              <a-button type="link" size="small" class="p-0" @click="viewRule(record)">
                 查看
               </a-button>
-              <a-button
-                type="link"
-                size="small"
-                @click="editRule(record)"
-                class="p-0"
-              >
+              <a-button type="link" size="small" class="p-0" @click="editRule(record)">
                 编辑
               </a-button>
               <a-button
                 v-if="record.status === 'draft'"
                 type="link"
                 size="small"
-                @click="publishRule(record)"
                 class="p-0 text-green-600"
+                @click="publishRule(record)"
               >
                 发布
               </a-button>
-              <a-button
-                type="link"
-                size="small"
-                @click="viewHistory(record)"
-                class="p-0"
-              >
+              <a-button type="link" size="small" class="p-0" @click="viewHistory(record)">
                 历史
               </a-button>
               <a-popconfirm
@@ -208,14 +187,7 @@
                 cancel-text="取消"
                 @confirm="deleteRule(record)"
               >
-                <a-button
-                  type="link"
-                  danger
-                  size="small"
-                  class="p-0"
-                >
-                  删除
-                </a-button>
+                <a-button type="link" danger size="small" class="p-0"> 删除 </a-button>
               </a-popconfirm>
             </a-space>
           </template>
@@ -242,8 +214,8 @@
         <!-- 创建模式选择 -->
         <a-form-item v-if="isCreateMode" label="创建模式">
           <a-radio-group v-model:value="createMode" @change="handleCreateModeChange">
-            <a-radio value="override">基于全局规则创建</a-radio>
-            <a-radio value="new">全新创建</a-radio>
+            <a-radio value="override"> 基于全局规则创建 </a-radio>
+            <a-radio value="new"> 全新创建 </a-radio>
           </a-radio-group>
         </a-form-item>
 
@@ -260,11 +232,7 @@
             :filter-option="filterRuleOption"
             @change="handleBaseRuleChange"
           >
-            <a-select-option
-              v-for="rule in globalRules"
-              :key="rule.id"
-              :value="rule.id"
-            >
+            <a-select-option v-for="rule in globalRules" :key="rule.id" :value="rule.id">
               {{ rule.rule_code }} - {{ rule.name }}
             </a-select-option>
           </a-select>
@@ -278,11 +246,7 @@
             show-search
             :filter-option="filterDepartmentOption"
           >
-            <a-select-option
-              v-for="dept in departments"
-              :key="dept.id"
-              :value="dept.id"
-            >
+            <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
               {{ dept.name }}
             </a-select-option>
           </a-select>
@@ -299,46 +263,39 @@
 
         <!-- 规则名称 -->
         <a-form-item label="规则名称" name="name" required>
-          <a-input
-            v-model:value="formData.name"
-            placeholder="输入规则名称"
-          />
+          <a-input v-model:value="formData.name" placeholder="输入规则名称" />
         </a-form-item>
 
         <!-- 规则描述 -->
         <a-form-item label="规则描述" name="description">
-          <a-textarea
-            v-model:value="formData.description"
-            placeholder="输入规则描述"
-            :rows="3"
-          />
+          <a-textarea v-model:value="formData.description" placeholder="输入规则描述" :rows="3" />
         </a-form-item>
 
         <!-- 规则分类 -->
         <a-form-item label="规则分类" name="category" required>
           <a-select v-model:value="formData.category" placeholder="选择规则分类">
-            <a-select-option value="completeness">完整性</a-select-option>
-            <a-select-option value="accuracy">准确性</a-select-option>
-            <a-select-option value="timeliness">及时性</a-select-option>
-            <a-select-option value="consistency">一致性</a-select-option>
-            <a-select-option value="rationality">合理性</a-select-option>
+            <a-select-option value="completeness"> 完整性 </a-select-option>
+            <a-select-option value="accuracy"> 准确性 </a-select-option>
+            <a-select-option value="timeliness"> 及时性 </a-select-option>
+            <a-select-option value="consistency"> 一致性 </a-select-option>
+            <a-select-option value="rationality"> 合理性 </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 严重程度 -->
         <a-form-item label="严重程度" name="severity" required>
           <a-select v-model:value="formData.severity" placeholder="选择严重程度">
-            <a-select-option value="critical">严重</a-select-option>
-            <a-select-option value="major">重要</a-select-option>
-            <a-select-option value="minor">一般</a-select-option>
+            <a-select-option value="critical"> 严重 </a-select-option>
+            <a-select-option value="major"> 重要 </a-select-option>
+            <a-select-option value="minor"> 一般 </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 覆盖行为 -->
         <a-form-item label="覆盖行为" name="override_action">
           <a-radio-group v-model:value="formData.override_action">
-            <a-radio value="override">覆盖配置</a-radio>
-            <a-radio value="disable">禁用规则</a-radio>
+            <a-radio value="override"> 覆盖配置 </a-radio>
+            <a-radio value="disable"> 禁用规则 </a-radio>
           </a-radio-group>
         </a-form-item>
 
@@ -366,12 +323,7 @@
     </a-modal>
 
     <!-- 变更历史对话框 -->
-    <a-modal
-      v-model:open="historyModalVisible"
-      title="变更历史"
-      width="900px"
-      :footer="null"
-    >
+    <a-modal v-model:open="historyModalVisible" title="变更历史" width="900px" :footer="null">
       <a-timeline mode="left">
         <a-timeline-item
           v-for="log in changeLogs"
@@ -390,13 +342,9 @@
             </div>
             <div class="text-sm text-gray-600 mt-1">
               操作人：{{ log.actor_name || log.actor_id }}
-              <span v-if="log.actor_role" class="ml-2">
-                ({{ log.actor_role }})
-              </span>
+              <span v-if="log.actor_role" class="ml-2"> ({{ log.actor_role }}) </span>
             </div>
-            <div v-if="log.reason" class="text-sm text-gray-500 mt-1">
-              原因：{{ log.reason }}
-            </div>
+            <div v-if="log.reason" class="text-sm text-gray-500 mt-1">原因：{{ log.reason }}</div>
           </div>
         </a-timeline-item>
       </a-timeline>
@@ -405,10 +353,10 @@
         v-model:current="historyPagination.current"
         v-model:page-size="historyPagination.pageSize"
         :total="historyPagination.total"
-        :show-total="(total) => `共 ${total} 条`"
-        @change="loadChangeHistory"
+        :show-total="(total: number) => `共 ${total} 条`"
         size="small"
         class="mt-4 text-center"
+        @change="loadChangeHistory"
       />
     </a-modal>
   </div>
@@ -729,10 +677,7 @@ const editRule = (record: DepartmentRule) => {
 
   // 设置生效期
   if (record.effective_from && record.effective_to) {
-    effectiveDateRange.value = [
-      dayjs(record.effective_from),
-      dayjs(record.effective_to),
-    ]
+    effectiveDateRange.value = [dayjs(record.effective_from), dayjs(record.effective_to)]
   }
 
   modalVisible.value = true
@@ -773,7 +718,7 @@ const loadChangeHistory = async () => {
     const result = await departmentQCRulesService.getRuleChangeHistory(
       currentRuleId.value,
       historyPagination.current,
-      historyPagination.pageSize
+      historyPagination.pageSize,
     )
     changeLogs.value = result.items
     historyPagination.total = result.total
@@ -897,4 +842,3 @@ onMounted(() => {
   margin: 0 auto;
 }
 </style>
-

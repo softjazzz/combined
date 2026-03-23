@@ -14,7 +14,7 @@ export enum ErrorType {
   AUTHORIZATION = 'AUTHORIZATION',
   FILE_UPLOAD = 'FILE_UPLOAD',
   BUSINESS = 'BUSINESS',
-  UNKNOWN = 'UNKNOWN'
+  UNKNOWN = 'UNKNOWN',
 }
 
 // 错误级别枚举
@@ -22,7 +22,7 @@ export enum ErrorLevel {
   INFO = 'INFO',
   WARNING = 'WARNING',
   ERROR = 'ERROR',
-  CRITICAL = 'CRITICAL'
+  CRITICAL = 'CRITICAL',
 }
 
 // 应用错误接口
@@ -57,7 +57,7 @@ export class ErrorHandler {
     code: string,
     message: string,
     originalError?: Error,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ): AppError {
     const userMessage = this.generateUserMessage(type, code, message)
     const suggestions = this.generateSuggestions(type, code)
@@ -71,7 +71,7 @@ export class ErrorHandler {
       context,
       timestamp: new Date().toISOString(),
       userMessage,
-      suggestions
+      suggestions,
     }
   }
 
@@ -89,7 +89,7 @@ export class ErrorHandler {
         ErrorLevel.ERROR,
         'UNKNOWN_ERROR',
         '未知错误',
-        error
+        error,
       )
     }
 
@@ -107,49 +107,49 @@ export class ErrorHandler {
   private generateUserMessage(type: ErrorType, code: string, message: string): string {
     const userMessages: Record<string, Record<string, string>> = {
       [ErrorType.VALIDATION]: {
-        'REQUIRED_FIELD': '请填写必填字段',
-        'INVALID_FORMAT': '输入格式不正确',
-        'LENGTH_EXCEEDED': '输入内容过长',
-        'INVALID_FILE_TYPE': '不支持的文件格式',
-        'FILE_SIZE_EXCEEDED': '文件大小超出限制',
-        'DEFAULT': '输入信息有误，请检查后重试'
+        REQUIRED_FIELD: '请填写必填字段',
+        INVALID_FORMAT: '输入格式不正确',
+        LENGTH_EXCEEDED: '输入内容过长',
+        INVALID_FILE_TYPE: '不支持的文件格式',
+        FILE_SIZE_EXCEEDED: '文件大小超出限制',
+        DEFAULT: '输入信息有误，请检查后重试',
       },
       [ErrorType.NETWORK]: {
-        'CONNECTION_FAILED': '网络连接失败，请检查网络设置',
-        'TIMEOUT': '请求超时，请稍后重试',
-        'SERVER_ERROR': '服务器暂时无法响应，请稍后重试',
-        'DEFAULT': '网络请求失败，请检查网络连接'
+        CONNECTION_FAILED: '网络连接失败，请检查网络设置',
+        TIMEOUT: '请求超时，请稍后重试',
+        SERVER_ERROR: '服务器暂时无法响应，请稍后重试',
+        DEFAULT: '网络请求失败，请检查网络连接',
       },
       [ErrorType.DATABASE]: {
-        'CONNECTION_FAILED': '数据库连接失败',
-        'QUERY_ERROR': '数据查询失败',
-        'DUPLICATE_KEY': '数据已存在，请检查输入信息',
-        'FOREIGN_KEY_CONSTRAINT': '数据关联错误，请联系管理员',
-        'DEFAULT': '数据操作失败，请稍后重试'
+        CONNECTION_FAILED: '数据库连接失败',
+        QUERY_ERROR: '数据查询失败',
+        DUPLICATE_KEY: '数据已存在，请检查输入信息',
+        FOREIGN_KEY_CONSTRAINT: '数据关联错误，请联系管理员',
+        DEFAULT: '数据操作失败，请稍后重试',
       },
       [ErrorType.AUTHENTICATION]: {
-        'INVALID_CREDENTIALS': '用户名或密码错误',
-        'TOKEN_EXPIRED': '登录已过期，请重新登录',
-        'ACCOUNT_LOCKED': '账户已被锁定，请联系管理员',
-        'DEFAULT': '身份验证失败，请重新登录'
+        INVALID_CREDENTIALS: '用户名或密码错误',
+        TOKEN_EXPIRED: '登录已过期，请重新登录',
+        ACCOUNT_LOCKED: '账户已被锁定，请联系管理员',
+        DEFAULT: '身份验证失败，请重新登录',
       },
       [ErrorType.AUTHORIZATION]: {
-        'INSUFFICIENT_PERMISSIONS': '权限不足，无法执行此操作',
-        'RESOURCE_FORBIDDEN': '无权访问该资源',
-        'DEFAULT': '权限不足，请联系管理员'
+        INSUFFICIENT_PERMISSIONS: '权限不足，无法执行此操作',
+        RESOURCE_FORBIDDEN: '无权访问该资源',
+        DEFAULT: '权限不足，请联系管理员',
       },
       [ErrorType.FILE_UPLOAD]: {
-        'UPLOAD_FAILED': '文件上传失败，请重试',
-        'INVALID_FILE': '文件格式不正确',
-        'FILE_TOO_LARGE': '文件大小超出限制',
-        'DEFAULT': '文件处理失败，请检查文件格式和大小'
+        UPLOAD_FAILED: '文件上传失败，请重试',
+        INVALID_FILE: '文件格式不正确',
+        FILE_TOO_LARGE: '文件大小超出限制',
+        DEFAULT: '文件处理失败，请检查文件格式和大小',
       },
       [ErrorType.BUSINESS]: {
-        'RECORD_NOT_FOUND': '未找到相关记录',
-        'OPERATION_NOT_ALLOWED': '当前状态下不允许此操作',
-        'DUPLICATE_OPERATION': '请勿重复操作',
-        'DEFAULT': '业务处理失败，请稍后重试'
-      }
+        RECORD_NOT_FOUND: '未找到相关记录',
+        OPERATION_NOT_ALLOWED: '当前状态下不允许此操作',
+        DUPLICATE_OPERATION: '请勿重复操作',
+        DEFAULT: '业务处理失败，请稍后重试',
+      },
     }
 
     const typeMessages = userMessages[type]
@@ -164,25 +164,25 @@ export class ErrorHandler {
   private generateSuggestions(type: ErrorType, code: string): string[] {
     const suggestions: Record<string, Record<string, string[]>> = {
       [ErrorType.VALIDATION]: {
-        'REQUIRED_FIELD': ['请填写所有必填字段', '检查表单是否完整'],
-        'INVALID_FORMAT': ['请按照正确格式输入', '参考输入示例'],
-        'FILE_SIZE_EXCEEDED': ['压缩文件后重试', '选择更小的文件'],
-        'DEFAULT': ['检查输入信息', '按照提示修改']
+        REQUIRED_FIELD: ['请填写所有必填字段', '检查表单是否完整'],
+        INVALID_FORMAT: ['请按照正确格式输入', '参考输入示例'],
+        FILE_SIZE_EXCEEDED: ['压缩文件后重试', '选择更小的文件'],
+        DEFAULT: ['检查输入信息', '按照提示修改'],
       },
       [ErrorType.NETWORK]: {
-        'CONNECTION_FAILED': ['检查网络连接', '稍后重试'],
-        'TIMEOUT': ['网络较慢，请稍后重试', '刷新页面重试'],
-        'DEFAULT': ['检查网络连接', '刷新页面重试']
+        CONNECTION_FAILED: ['检查网络连接', '稍后重试'],
+        TIMEOUT: ['网络较慢，请稍后重试', '刷新页面重试'],
+        DEFAULT: ['检查网络连接', '刷新页面重试'],
       },
       [ErrorType.AUTHENTICATION]: {
-        'INVALID_CREDENTIALS': ['检查用户名和密码', '使用忘记密码功能'],
-        'TOKEN_EXPIRED': ['重新登录', '刷新页面'],
-        'DEFAULT': ['重新登录', '清除浏览器缓存']
+        INVALID_CREDENTIALS: ['检查用户名和密码', '使用忘记密码功能'],
+        TOKEN_EXPIRED: ['重新登录', '刷新页面'],
+        DEFAULT: ['重新登录', '清除浏览器缓存'],
       },
       [ErrorType.AUTHORIZATION]: {
-        'INSUFFICIENT_PERMISSIONS': ['联系管理员申请权限', '使用有权限的账户'],
-        'DEFAULT': ['联系管理员', '检查账户权限']
-      }
+        INSUFFICIENT_PERMISSIONS: ['联系管理员申请权限', '使用有权限的账户'],
+        DEFAULT: ['联系管理员', '检查账户权限'],
+      },
     }
 
     const typeSuggestions = suggestions[type]
@@ -204,7 +204,7 @@ export class ErrorHandler {
         ErrorLevel.ERROR,
         'NETWORK_ERROR',
         error.message,
-        error
+        error,
       )
     }
 
@@ -214,7 +214,7 @@ export class ErrorHandler {
         ErrorLevel.ERROR,
         'AUTH_ERROR',
         error.message,
-        error
+        error,
       )
     }
 
@@ -224,7 +224,7 @@ export class ErrorHandler {
         ErrorLevel.ERROR,
         'PERMISSION_ERROR',
         error.message,
-        error
+        error,
       )
     }
 
@@ -234,7 +234,7 @@ export class ErrorHandler {
         ErrorLevel.WARNING,
         'VALIDATION_ERROR',
         error.message,
-        error
+        error,
       )
     }
 
@@ -244,7 +244,7 @@ export class ErrorHandler {
       ErrorLevel.ERROR,
       'UNKNOWN_ERROR',
       error.message,
-      error
+      error,
     )
   }
 
@@ -265,7 +265,7 @@ export class ErrorHandler {
             message: '操作失败',
             description: userMessage,
             duration: 6,
-            style: { marginTop: '24px' }
+            style: { marginTop: '24px' },
           })
         } else {
           message.error(userMessage)
@@ -276,7 +276,7 @@ export class ErrorHandler {
           message: '严重错误',
           description: userMessage,
           duration: 0, // 不自动关闭
-          style: { marginTop: '24px' }
+          style: { marginTop: '24px' },
         })
         break
     }
@@ -291,7 +291,7 @@ export class ErrorHandler {
       code: error.code,
       message: error.message,
       context: error.context,
-      stack: error.originalError?.stack
+      stack: error.originalError?.stack,
     }
 
     // 开发环境输出到控制台
@@ -319,7 +319,7 @@ export class ErrorHandler {
 
   // 检查是否为应用错误
   private isAppError(error: unknown): error is AppError {
-    return error && typeof error === 'object' && 'type' in error && 'level' in error
+    return Boolean(error && typeof error === 'object' && 'type' in error && 'level' in error)
   }
 
   // 获取错误历史
@@ -344,7 +344,7 @@ export const handleValidationError = (message: string, context?: Record<string, 
     'VALIDATION_ERROR',
     message,
     undefined,
-    context
+    context,
   )
   errorHandler.handleError(error)
 }
@@ -356,7 +356,7 @@ export const handleNetworkError = (error: Error, context?: Record<string, unknow
     'NETWORK_ERROR',
     error.message,
     error,
-    context
+    context,
   )
   errorHandler.handleError(appError)
 }
@@ -368,7 +368,7 @@ export const handleDatabaseError = (error: Error, context?: Record<string, unkno
     'DATABASE_ERROR',
     error.message,
     error,
-    context
+    context,
   )
   errorHandler.handleError(appError)
 }
@@ -380,7 +380,7 @@ export const handleAuthError = (message: string, context?: Record<string, unknow
     'AUTH_ERROR',
     message,
     undefined,
-    context
+    context,
   )
   errorHandler.handleError(error)
 }
@@ -392,10 +392,10 @@ export const handleBusinessError = (message: string, context?: Record<string, un
     'BUSINESS_ERROR',
     message,
     undefined,
-    context
+    context,
   )
   errorHandler.handleError(error)
 }
 
 // 导出默认错误处理器
-export default errorHandler 
+export default errorHandler

@@ -7,17 +7,21 @@
         <div class="header-left">
           <SafetyCertificateOutlined class="header-icon" />
           <span class="header-title">内涵质控</span>
-          <a-tag v-if="totalCount > 0" color="error" size="small">{{ totalCount }}</a-tag>
+          <a-tag v-if="totalCount > 0" color="error" size="small">
+            {{ totalCount }}
+          </a-tag>
         </div>
-        <div class="content-qc-tab__header-desc">基于病历文书内容，检查诊疗逻辑、记录完整性与内涵一致性。</div>
+        <div class="content-qc-tab__header-desc">
+          基于病历文书内容，检查诊疗逻辑、记录完整性与内涵一致性。
+        </div>
       </div>
       <a-button
         type="link"
         size="small"
         class="content-qc-tab__header-action"
-        @click="runContentQC"
         :loading="loading"
         :disabled="!patientId"
+        @click="runContentQC"
       >
         <ReloadOutlined /> {{ loading ? '分析中...' : '开始分析' }}
       </a-button>
@@ -32,7 +36,9 @@
         </div>
         <div>
           <div class="progress-title">正在逐文书质控分析</div>
-          <div class="progress-sub">已完成 {{ completedSections.length }} / {{ totalSections }} 个文书</div>
+          <div class="progress-sub">
+            已完成 {{ completedSections.length }} / {{ totalSections }} 个文书
+          </div>
         </div>
         <a-spin class="ml-auto" />
       </div>
@@ -40,7 +46,7 @@
       <!-- 进度条 -->
       <div class="progress-bar-wrap">
         <div class="progress-bar-bg">
-          <div class="progress-bar-fill" :style="{ width: `${progressPercent}%` }"></div>
+          <div class="progress-bar-fill" :style="{ width: `${progressPercent}%` }" />
         </div>
       </div>
 
@@ -59,26 +65,38 @@
           <!-- 状态图标 -->
           <div class="timeline-dot" :class="`timeline-dot--${sec.status}`">
             <CheckCircleOutlined v-if="sec.status === 'done'" class="text-white text-[10px]" />
-            <span v-else-if="sec.status === 'active'" class="dot-ping"></span>
-            <span v-else class="dot-idle"></span>
+            <span v-else-if="sec.status === 'active'" class="dot-ping" />
+            <span v-else class="dot-idle" />
           </div>
           <!-- 内容 -->
           <div class="timeline-content">
             <div class="timeline-title-row">
-              <span class="timeline-label" :class="`timeline-label--${sec.status}`">{{ sec.label }}</span>
+              <span class="timeline-label" :class="`timeline-label--${sec.status}`">{{
+                sec.label
+              }}</span>
               <span v-if="sec.duration" class="timeline-time">{{ sec.duration }}s</span>
               <span v-if="sec.status === 'active'" class="timeline-active-hint">分析中...</span>
             </div>
             <!-- 已完成的质控结果预览 -->
-            <div v-if="sec.status === 'done' && sec.ruleCount !== undefined" class="timeline-result">
+            <div
+              v-if="sec.status === 'done' && sec.ruleCount !== undefined"
+              class="timeline-result"
+            >
               <span class="result-tag result-tag--rules">{{ sec.ruleCount }} 条规则</span>
-              <span v-if="sec.issueCount > 0" class="result-tag result-tag--issues">{{ sec.issueCount }} 个问题</span>
+              <span v-if="(sec.issueCount ?? 0) > 0" class="result-tag result-tag--issues"
+                >{{ sec.issueCount }} 个问题</span
+              >
               <span v-else class="result-tag result-tag--pass">全部通过</span>
             </div>
             <!-- 发现的问题逐条展示 -->
-            <div v-if="sec.status === 'done' && sec.issues && sec.issues.length > 0" class="timeline-issues">
+            <div
+              v-if="sec.status === 'done' && sec.issues && sec.issues.length > 0"
+              class="timeline-issues"
+            >
               <div v-for="(iss, i) in sec.issues.slice(0, 3)" :key="i" class="timeline-issue-item">
-                <a-tag :color="severityTagColor(iss.severity)" size="small" class="!text-[10px]">{{ severityLabel(iss.severity) }}</a-tag>
+                <a-tag :color="severityTagColor(iss.severity)" size="small" class="!text-[10px]">
+                  {{ severityLabel(iss.severity) }}
+                </a-tag>
                 <span class="issue-text">{{ iss.description }}</span>
               </div>
               <div v-if="sec.issues.length > 3" class="timeline-issue-more">
@@ -96,15 +114,19 @@
         <SafetyCertificateOutlined class="empty-icon" />
       </div>
       <div class="empty-title">内涵质控分析</div>
-      <div class="empty-desc">基于 LLM 对病历全文进行深度语义校验，聚焦诊疗逻辑、病程记录完整性与知情同意等内涵质量。</div>
+      <div class="empty-desc">
+        基于 LLM 对病历全文进行深度语义校验，聚焦诊疗逻辑、病程记录完整性与知情同意等内涵质量。
+      </div>
       <a-button
         type="primary"
         size="small"
-        @click="runContentQC"
         :disabled="!patientId"
         class="empty-btn"
+        @click="runContentQC"
       >
-        <template #icon><ThunderboltOutlined /></template>
+        <template #icon>
+          <ThunderboltOutlined />
+        </template>
         开始内涵质控
       </a-button>
     </div>
@@ -142,19 +164,21 @@
       <template v-if="issues.length > 0">
         <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="issue-group">
           <header class="group-header">
-            <span class="group-dot" :style="{ background: severityColor(group.severity) }"></span>
+            <span class="group-dot" :style="{ background: severityColor(group.severity) }" />
             <span class="group-title">{{ group.title }}</span>
             <span class="group-count">({{ group.items.length }})</span>
           </header>
           <article v-for="(issue, iIdx) in group.items" :key="iIdx" class="issue-item">
             <div class="issue-top">
-              <a-tag :color="severityTagColor(issue.severity)" size="small">{{ severityLabel(issue.severity) }}</a-tag>
+              <a-tag :color="severityTagColor(issue.severity)" size="small">
+                {{ severityLabel(issue.severity) }}
+              </a-tag>
               <span class="issue-rule">{{ issue.ruleName }}</span>
             </div>
-            <div class="issue-desc">{{ issue.description }}</div>
-            <div v-if="issue.suggestion" class="issue-suggestion">
-              💡 {{ issue.suggestion }}
+            <div class="issue-desc">
+              {{ issue.description }}
             </div>
+            <div v-if="issue.suggestion" class="issue-suggestion">💡 {{ issue.suggestion }}</div>
           </article>
         </section>
       </template>
@@ -168,8 +192,10 @@
 
     <!-- 底部 -->
     <footer v-if="analyzed && !loading" class="content-qc-tab__footer">
-      <span>共 <strong>{{ totalCount }}</strong> 个问题</span>
-      <a-button type="link" size="small" @click="runContentQC" :loading="loading">
+      <span
+        >共 <strong>{{ totalCount }}</strong> 个问题</span
+      >
+      <a-button type="link" size="small" :loading="loading" @click="runContentQC">
         <ReloadOutlined /> 重新分析
       </a-button>
     </footer>
@@ -219,8 +245,8 @@ interface SectionProgress {
 // ==================== 文书类型（来自 PG 数据库表） ====================
 
 interface DocItem {
-  type: string       // PG 表名，如 admission_record
-  label: string      // 中文文书名，如 "入院记录"
+  type: string // PG 表名，如 admission_record
+  label: string // 中文文书名，如 "入院记录"
   has_content: boolean
   content: string | null
   length: number
@@ -250,7 +276,7 @@ const props = defineProps<{
   patientId?: string
   visitId?: string
   instituteId?: string
-  documents?: DocItem[]   // 从 PG 各文书表查出的文书列表
+  documents?: DocItem[] // 从 PG 各文书表查出的文书列表
 }>()
 
 const emit = defineEmits<{
@@ -315,8 +341,12 @@ function parseEvalResults(data: any, docLabel: string): ContentIssue[] {
       newIssues.push({
         ruleId: result.rule_id || '',
         ruleName: result.rule_name || result.rule_text || '未知规则',
-        severity: result.severity === '严重' || result.severity === 'critical' ? 'error'
-          : result.severity === '轻微' || result.severity === 'minor' ? 'info' : 'warning',
+        severity:
+          result.severity === '严重' || result.severity === 'critical'
+            ? 'error'
+            : result.severity === '轻微' || result.severity === 'minor'
+              ? 'info'
+              : 'warning',
         group: docLabel,
         description: result.issue_description || result.analysis || '未提供详细说明',
         suggestion: result.improvement_suggestion || result.suggestion || '',
@@ -335,7 +365,7 @@ async function runContentQC() {
   }
 
   // 直接使用 PG 数据库按表存储的文书列表（每个 DocItem 自带 type/label/content）
-  const docs = (props.documents || []).filter(d => d.has_content && d.content)
+  const docs = (props.documents || []).filter((d) => d.has_content && d.content)
   if (docs.length === 0) {
     message.warning('该患者暂无病历文书内容，请先加载文书')
     return
@@ -351,7 +381,7 @@ async function runContentQC() {
   totalSections.value = docs.length
 
   // 初始化时间线（直接使用 PG 表的 type 和 label）
-  sectionTimeline.value = docs.map(d => ({
+  sectionTimeline.value = docs.map((d) => ({
     type: d.type,
     label: d.label,
     content: d.content || '',
@@ -359,11 +389,11 @@ async function runContentQC() {
   }))
 
   // 所有文书类型清单（用于告知 LLM 患者有哪些文书）
-  const allDocLabels = docs.map(d => d.label).join('、')
+  const allDocLabels = docs.map((d) => d.label).join('、')
 
   // 逐文书调用后端 LLM 质控
   let allIssues: ContentIssue[] = []
-  const allRuleIds = new Set<string>()       // 按 rule_id 去重
+  const allRuleIds = new Set<string>() // 按 rule_id 去重
   const nonCompliantRuleIds = new Set<string>() // 不合规的 rule_id
   const startTime = Date.now()
 
@@ -385,20 +415,24 @@ async function runContentQC() {
         '',
       ].join('\n')
 
-      const resp = await axios.post('/api/v1/qc/sichuan/evaluate', {
-        document_id: `${props.patientId}-${props.visitId}-${sec.type}`,
-        document_content: contextPrefix + sec.content,
-        document_type: qcDocType,
-        patient_info: {
-          current_document_type: qcDocType,
-          current_table: sec.type,
-          available_documents: docs.map(d => TABLE_TO_DOC_TYPE[d.type] || d.label).join('、'),
-          patient_id: props.patientId || '',
-          visit_id: props.visitId || '',
+      const resp = await axios.post(
+        '/api/v1/qc/sichuan/evaluate',
+        {
+          document_id: `${props.patientId}-${props.visitId}-${sec.type}`,
+          document_content: contextPrefix + sec.content,
+          document_type: qcDocType,
+          patient_info: {
+            current_document_type: qcDocType,
+            current_table: sec.type,
+            available_documents: docs.map((d) => TABLE_TO_DOC_TYPE[d.type] || d.label).join('、'),
+            patient_id: props.patientId || '',
+            visit_id: props.visitId || '',
+          },
+          persist: false,
+          prompt_mode: 'plan_a',
         },
-        persist: false,
-        prompt_mode: 'plan_a',
-      }, { timeout: 120000 })
+        { timeout: 120000 },
+      )
 
       const data = resp.data
       const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
@@ -445,7 +479,7 @@ async function runContentQC() {
       console.error(`质控 ${sec.label} 失败:`, err)
       sec.status = 'done'
       sec.ruleCount = 0
-      sec.issueCount = -1  // 标记失败
+      sec.issueCount = -1 // 标记失败
       sec.duration = secDuration
       completedSections.value.push({ ...sec })
     }
@@ -457,7 +491,8 @@ async function runContentQC() {
   const compliantCount = uniqueRuleCount - nonCompliantRuleIds.size
   summary.value = {
     totalRules: uniqueRuleCount,
-    complianceRate: uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : 100,
+    complianceRate:
+      uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : 100,
     issuesFound: allIssues.length,
     docCount: sectionTimeline.value.length,
   }
@@ -473,14 +508,17 @@ async function runContentQC() {
 }
 
 // 切换患者时重置
-watch(() => props.patientId, () => {
-  analyzed.value = false
-  issues.value = []
-  summary.value = null
-  completedSections.value = []
-  sectionTimeline.value = []
-  emit('issues-change', 0)
-})
+watch(
+  () => props.patientId,
+  () => {
+    analyzed.value = false
+    issues.value = []
+    summary.value = null
+    completedSections.value = []
+    sectionTimeline.value = []
+    emit('issues-change', 0)
+  },
+)
 </script>
 
 <style scoped>
@@ -642,13 +680,25 @@ watch(() => props.patientId, () => {
   transition: all 0.3s ease;
 }
 
-.timeline-done { background: linear-gradient(180deg, #eff6ff, #f8fbff); }
-.timeline-active { background: linear-gradient(180deg, #eff6ff, #f8fbff); animation: pulse-bg 2s infinite; }
-.timeline-pending { background: rgba(255, 255, 255, 0.72); }
+.timeline-done {
+  background: linear-gradient(180deg, #eff6ff, #f8fbff);
+}
+.timeline-active {
+  background: linear-gradient(180deg, #eff6ff, #f8fbff);
+  animation: pulse-bg 2s infinite;
+}
+.timeline-pending {
+  background: rgba(255, 255, 255, 0.72);
+}
 
 @keyframes pulse-bg {
-  0%, 100% { background: #eff6ff; }
-  50% { background: #dbeafe; }
+  0%,
+  100% {
+    background: #eff6ff;
+  }
+  50% {
+    background: #dbeafe;
+  }
 }
 
 .timeline-dot {
@@ -662,9 +712,15 @@ watch(() => props.patientId, () => {
   margin-top: 1px;
 }
 
-.timeline-dot--done { background: #2563eb; }
-.timeline-dot--active { background: #3b82f6; }
-.timeline-dot--pending { background: #e2e8f0; }
+.timeline-dot--done {
+  background: #2563eb;
+}
+.timeline-dot--active {
+  background: #3b82f6;
+}
+.timeline-dot--pending {
+  background: #e2e8f0;
+}
 
 .dot-ping {
   width: 8px;
@@ -682,7 +738,8 @@ watch(() => props.patientId, () => {
 }
 
 @keyframes ping {
-  75%, 100% {
+  75%,
+  100% {
     transform: scale(1.8);
     opacity: 0;
   }
@@ -704,9 +761,15 @@ watch(() => props.patientId, () => {
   font-weight: 700;
 }
 
-.timeline-label--done { color: #2563eb; }
-.timeline-label--active { color: #2563eb; }
-.timeline-label--pending { color: #94a3b8; }
+.timeline-label--done {
+  color: #2563eb;
+}
+.timeline-label--active {
+  color: #2563eb;
+}
+.timeline-label--pending {
+  color: #94a3b8;
+}
 
 .timeline-time {
   font-size: 10px;
@@ -809,9 +872,23 @@ watch(() => props.patientId, () => {
     inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-.empty-icon { font-size: 24px; color: #2563eb; }
-.empty-title { font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 6px; }
-.empty-desc { font-size: 12px; color: #6b7f96; line-height: 1.6; margin-bottom: 18px; max-width: 228px; }
+.empty-icon {
+  font-size: 24px;
+  color: #2563eb;
+}
+.empty-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+.empty-desc {
+  font-size: 12px;
+  color: #6b7f96;
+  line-height: 1.6;
+  margin-bottom: 18px;
+  max-width: 228px;
+}
 .empty-btn {
   border-radius: 999px !important;
   box-shadow:
@@ -831,9 +908,7 @@ watch(() => props.patientId, () => {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   padding: 12px;
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%),
-    #fff;
+  background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%), #fff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   margin-bottom: 12px;
@@ -885,10 +960,20 @@ watch(() => props.patientId, () => {
   padding: 4px 8px;
 }
 
-.summary-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
-.summary-value { font-size: 13px; font-weight: 800; color: #0f172a; }
+.summary-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.summary-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
 
-.issue-group { margin-bottom: 12px; }
+.issue-group {
+  margin-bottom: 12px;
+}
 
 .group-header {
   display: flex;
@@ -901,9 +986,21 @@ watch(() => props.patientId, () => {
   margin-bottom: 8px;
 }
 
-.group-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
-.group-title { font-size: 12px; font-weight: 700; color: #334155; }
-.group-count { font-size: 11px; color: #94a3b8; }
+.group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+.group-count {
+  font-size: 11px;
+  color: #94a3b8;
+}
 
 .issue-item {
   background: #fff;
@@ -912,7 +1009,10 @@ watch(() => props.patientId, () => {
   padding: 12px;
   margin-bottom: 8px;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.035);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .issue-item:hover {
@@ -921,9 +1021,22 @@ watch(() => props.patientId, () => {
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
 }
 
-.issue-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.issue-rule { font-size: 12px; font-weight: 700; color: #475569; }
-.issue-desc { font-size: 13px; color: #0f172a; line-height: 1.6; }
+.issue-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.issue-rule {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+.issue-desc {
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.6;
+}
 .issue-suggestion {
   margin-top: 6px;
   background: linear-gradient(180deg, rgba(255, 247, 237, 0.9), rgba(255, 251, 235, 0.9));
@@ -947,8 +1060,16 @@ watch(() => props.patientId, () => {
   border: 1px dashed rgba(147, 197, 253, 0.52);
 }
 
-.empty-result-icon { font-size: 30px; color: #2563eb; margin-bottom: 10px; }
-.empty-result-text { font-size: 13px; font-weight: 700; color: #334155; }
+.empty-result-icon {
+  font-size: 30px;
+  color: #2563eb;
+  margin-bottom: 10px;
+}
+.empty-result-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
 
 .content-qc-tab__footer {
   display: flex;
@@ -971,9 +1092,18 @@ watch(() => props.patientId, () => {
   }
 }
 
-.ml-auto { margin-left: auto; }
+.ml-auto {
+  margin-left: auto;
+}
 
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
 </style>

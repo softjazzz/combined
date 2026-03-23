@@ -30,37 +30,46 @@ interface TaskStatistics {
   successRate: number
 }
 
+type TaskChangePayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  new: BatchTask | null
+  old: BatchTask | null
+}
+
 export function useBatchMonitor() {
   // 响应式数据
-const allTasks = ref<BatchTask[]>([])
-const isLoading = ref(false)
-const error = ref<string | null>(null)
-const subscription = ref<unknown>(null)
-type RealtimeSubscription = { unsubscribe: () => void }
+  const allTasks = ref<BatchTask[]>([])
+  const isLoading = ref(false)
+  const error = ref<string | null>(null)
+  const subscription = ref<unknown>(null)
+  type RealtimeSubscription = { unsubscribe: () => void }
 
   // 计算属性
-  const activeTasks = computed(() => 
-    allTasks.value.filter(task => 
-      task.status === 'pending' || task.status === 'processing'
-    )
+  const activeTasks = computed(() =>
+    allTasks.value.filter((task) => task.status === 'pending' || task.status === 'processing'),
   )
 
-  const recentTasks = computed(() => 
+  const recentTasks = computed(() =>
     allTasks.value
-      .filter(task => task.status === 'completed' || task.status === 'failed')
+      .filter((task) => task.status === 'completed' || task.status === 'failed')
       .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())
-      .slice(0, 10)
+      .slice(0, 10),
   )
 
   const taskStatistics = computed((): TaskStatistics => {
     const tasks = allTasks.value
     const totalTasks = tasks.length
-    const activeTasks = tasks.filter(t => t.status === 'pending' || t.status === 'processing').length
-    const completedTasks = tasks.filter(t => t.status === 'completed').length
-    const failedTasks = tasks.filter(t => t.status === 'failed').length
+    const activeTasks = tasks.filter(
+      (t) => t.status === 'pending' || t.status === 'processing',
+    ).length
+    const completedTasks = tasks.filter((t) => t.status === 'completed').length
+    const failedTasks = tasks.filter((t) => t.status === 'failed').length
     const totalItems = tasks.reduce((sum, t) => sum + t.total_items, 0)
     const processedItems = tasks.reduce((sum, t) => sum + t.processed_items, 0)
-    const successRate = totalItems > 0 ? ((processedItems - tasks.reduce((sum, t) => sum + t.failed_items, 0)) / totalItems) * 100 : 0
+    const successRate =
+      totalItems > 0
+        ? ((processedItems - tasks.reduce((sum, t) => sum + t.failed_items, 0)) / totalItems) * 100
+        : 0
 
     return {
       totalTasks,
@@ -69,7 +78,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
       failedTasks,
       totalItems,
       processedItems,
-      successRate: Math.round(successRate * 100) / 100
+      successRate: Math.round(successRate * 100) / 100,
     }
   })
 
@@ -125,11 +134,16 @@ type RealtimeSubscription = { unsubscribe: () => void }
 
     subscription.value = supabase
       .channel('batch_tasks_monitor')
-      .on('postgres_changes', {
-          event: '*', schema: 'public', table: TABLES.BATCH_PROCESSING_TASKS
-        }, (payload: unknown) => {
-          handleTaskChange(payload)
-        }
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: TABLES.BATCH_PROCESSING_TASKS,
+        },
+        (payload: unknown) => {
+          handleTaskChange(payload as TaskChangePayload)
+        },
       )
       .subscribe()
 
@@ -139,15 +153,17 @@ type RealtimeSubscription = { unsubscribe: () => void }
   /**
    * 处理任务变化
    */
-  const handleTaskChange = (payload) => {
+  const handleTaskChange = (payload: TaskChangePayload) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
 
     switch (eventType) {
       case 'INSERT':
         if (newRecord) {
           // 检查是否是当前用户的任务
-          const currentUserId = supabase.auth.getUser().then(({ data  }) => data.user?.id)
-          currentUserId.then(userId => {
+          const currentUserId = supabase.auth
+            .getUser()
+            .then(({ data }: { data: { user: { id: string } | null } }) => data.user?.id)
+          currentUserId.then((userId) => {
             if (newRecord.user_id === userId) {
               allTasks.value.unshift(newRecord)
             }
@@ -157,10 +173,10 @@ type RealtimeSubscription = { unsubscribe: () => void }
 
       case 'UPDATE':
         if (newRecord) {
-          const index = allTasks.value.findIndex(task => task.id === newRecord.id)
+          const index = allTasks.value.findIndex((task) => task.id === newRecord.id)
           if (index !== -1) {
             allTasks.value[index] = newRecord
-            
+
             // 如果任务完成，显示通知
             if (oldRecord?.status !== 'completed' && newRecord.status === 'completed') {
               message.success(`任务"${getTaskName(newRecord.task_type)}"已完成`)
@@ -173,7 +189,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
 
       case 'DELETE':
         if (oldRecord) {
-          const index = allTasks.value.findIndex(task => task.id === oldRecord.id)
+          const index = allTasks.value.findIndex((task) => task.id === oldRecord.id)
           if (index !== -1) {
             allTasks.value.splice(index, 1)
           }
@@ -192,7 +208,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
         .update({
           status: 'failed',
           error_details: { message: '用户取消任务' },
-          completed_at: new Date().toISOString()
+          completed_at: new Date().toISOString(),
         })
         .eq('id', taskId)
 
@@ -223,7 +239,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
           progress_percentage: 0,
           error_details: null,
           started_at: null,
-          completed_at: null
+          completed_at: null,
         })
         .eq('id', taskId)
 
@@ -267,7 +283,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
    * 获取任务详情
    */
   const getTaskById = (taskId: string): BatchTask | undefined => {
-    return allTasks.value.find(task => task.id === taskId)
+    return allTasks.value.find((task) => task.id === taskId)
   }
 
   /**
@@ -306,7 +322,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
     const names = {
       upload: '批量上传',
       analysis: '批量分析',
-      export: '批量导出'
+      export: '批量导出',
     }
     return names[taskType as keyof typeof names] || '未知任务'
   }
@@ -319,7 +335,7 @@ type RealtimeSubscription = { unsubscribe: () => void }
       pending: '等待中',
       processing: '处理中',
       completed: '已完成',
-      failed: '失败'
+      failed: '失败',
     }
     return names[status as keyof typeof names] || status
   }
@@ -354,6 +370,6 @@ type RealtimeSubscription = { unsubscribe: () => void }
     getTaskById,
     cleanupCompletedTasks,
     getTaskName,
-    getStatusName
+    getStatusName,
   }
 }

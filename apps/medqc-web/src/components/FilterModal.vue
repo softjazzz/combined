@@ -15,20 +15,36 @@
         <!-- 缺陷状态筛选 -->
         <a-form-item label="缺陷状态">
           <a-checkbox-group v-model:value="formData.defectStatus">
-            <a-checkbox value="pending">待整改</a-checkbox>
-            <a-checkbox value="urged">已催办</a-checkbox>
-            <a-checkbox value="rectified">已整改</a-checkbox>
-            <a-checkbox value="appealed">已申诉</a-checkbox>
+            <a-checkbox value="pending">
+              待整改
+            </a-checkbox>
+            <a-checkbox value="urged">
+              已催办
+            </a-checkbox>
+            <a-checkbox value="rectified">
+              已整改
+            </a-checkbox>
+            <a-checkbox value="appealed">
+              已申诉
+            </a-checkbox>
           </a-checkbox-group>
         </a-form-item>
 
         <!-- 审核状态筛选 -->
         <a-form-item label="审核状态">
           <a-checkbox-group v-model:value="formData.auditStatus">
-            <a-checkbox value="pending">待审核</a-checkbox>
-            <a-checkbox value="reviewing">审核中</a-checkbox>
-            <a-checkbox value="passed">已通过</a-checkbox>
-            <a-checkbox value="questioned">存疑</a-checkbox>
+            <a-checkbox value="pending">
+              待审核
+            </a-checkbox>
+            <a-checkbox value="reviewing">
+              审核中
+            </a-checkbox>
+            <a-checkbox value="passed">
+              已通过
+            </a-checkbox>
+            <a-checkbox value="questioned">
+              存疑
+            </a-checkbox>
           </a-checkbox-group>
         </a-form-item>
 
@@ -59,9 +75,15 @@
         <!-- 优先级筛选 -->
         <a-form-item label="优先级">
           <a-checkbox-group v-model:value="formData.priority">
-            <a-checkbox value="high">高</a-checkbox>
-            <a-checkbox value="medium">中</a-checkbox>
-            <a-checkbox value="low">低</a-checkbox>
+            <a-checkbox value="high">
+              高
+            </a-checkbox>
+            <a-checkbox value="medium">
+              中
+            </a-checkbox>
+            <a-checkbox value="low">
+              低
+            </a-checkbox>
           </a-checkbox-group>
         </a-form-item>
 
@@ -105,9 +127,15 @@
         <!-- 是否催办 -->
         <a-form-item label="催办状态">
           <a-radio-group v-model:value="formData.isUrgent">
-            <a-radio :value="undefined">全部</a-radio>
-            <a-radio :value="true">已催办</a-radio>
-            <a-radio :value="false">未催办</a-radio>
+            <a-radio :value="undefined">
+              全部
+            </a-radio>
+            <a-radio :value="true">
+              已催办
+            </a-radio>
+            <a-radio :value="false">
+              未催办
+            </a-radio>
           </a-radio-group>
         </a-form-item>
       </a-form>
@@ -130,11 +158,20 @@
     <template #footer>
       <div class="flex justify-between">
         <div>
-          <a-button @click="handleReset">重置</a-button>
+          <a-button @click="handleReset">
+            重置
+          </a-button>
         </div>
         <div>
-          <a-button @click="handleCancel">取消</a-button>
-          <a-button type="primary" @click="handleConfirm">确定</a-button>
+          <a-button @click="handleCancel">
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            @click="handleConfirm"
+          >
+            确定
+          </a-button>
         </div>
       </div>
     </template>
@@ -157,22 +194,23 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
-  currentConditions: () => ({})
+  currentConditions: () => ({}),
 })
 
 const emit = defineEmits<Emits>()
 
 // 表单数据
-const formData = reactive({ defectStatus: [],
+const formData = reactive({
+  defectStatus: [],
   auditStatus: [],
   department: [],
   doctor: [],
-  priority:  [],
+  priority: [],
   scoreRange: [0, 100],
   defectCountMin: undefined,
   defectCountMax: undefined,
   timeRange: undefined,
-  isUrgent: undefined
+  isUrgent: undefined,
 })
 
 // 模板相关
@@ -188,7 +226,7 @@ const departmentOptions = [
   { label: '急诊科', value: 'emergency' },
   { label: '骨科', value: 'orthopedics' },
   { label: '神经科', value: 'neurology' },
-  { label: '心内科', value: 'cardiology' }
+  { label: '心内科', value: 'cardiology' },
 ]
 
 const doctorOptions = [
@@ -197,7 +235,7 @@ const doctorOptions = [
   { label: '王医生', value: 'doctor3' },
   { label: '刘医生', value: 'doctor4' },
   { label: '陈医生', value: 'doctor5' },
-  { label: '杨医生', value: 'doctor6' }
+  { label: '杨医生', value: 'doctor6' },
 ]
 
 // 搜索过滤
@@ -206,12 +244,15 @@ const filterOption = (input: string, option: { label: string }) => {
 }
 
 // 监听visible变化，初始化表单数据
-watch(() => props.visible, (newVal: unknown) => {
-  if (newVal) {
-    // 初始化表单数据
-    Object.assign(formData, props.currentConditions)
-  }
-})
+watch(
+  () => props.visible,
+  (newVal: unknown) => {
+    if (newVal) {
+      // 初始化表单数据
+      Object.assign(formData, props.currentConditions)
+    }
+  },
+)
 
 // 确认
 const handleConfirm = () => {
@@ -223,20 +264,20 @@ const handleConfirm = () => {
 
   // 构建筛选条件
   const conditions = { ...formData }
-  
+
   // 清理空值
-  Object.keys(conditions).forEach(key => {
+  Object.keys(conditions).forEach((key) => {
     const value = conditions[key as keyof typeof conditions]
     if (Array.isArray(value) && value.length === 0) {
       delete conditions[key as keyof typeof conditions]
-    } else if (value === undefined || value === null || value === '') {
+    } else if (!Array.isArray(value) && (value === undefined || value === null || value === '')) {
       delete conditions[key as keyof typeof conditions]
     }
   })
 
   emit('confirm', conditions, saveAsTemplate.value ? templateName.value : undefined)
   emit('update:visible', false)
-  
+
   // 重置模板相关状态
   saveAsTemplate.value = false
   templateName.value = ''
@@ -250,17 +291,18 @@ const handleCancel = () => {
 }
 
 // 重置
-const handleReset = () => { Object.assign(formData, {
+const handleReset = () => {
+  Object.assign(formData, {
     defectStatus: [],
     auditStatus: [],
     department: [],
     doctor: [],
-    priority:  [],
+    priority: [],
     scoreRange: [0, 100],
     defectCountMin: undefined,
     defectCountMax: undefined,
     timeRange: undefined,
-    isUrgent: undefined
+    isUrgent: undefined,
   })
 }
 </script>

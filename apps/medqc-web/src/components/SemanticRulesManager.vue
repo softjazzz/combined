@@ -2,39 +2,48 @@
   <div class="semantic-rules-manager">
     <!-- 1. 核心数据卡片区 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      
       <!-- 卡片 1: 复杂度分布 (环形图) -->
       <div class="stats-card relative overflow-hidden flex flex-col">
         <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">规则复杂度分布</h3>
+          <h3 class="stats-title">
+            规则复杂度分布
+          </h3>
           <PieChartOutlined class="stats-icon" />
         </div>
         <div class="flex items-center flex-1">
           <!-- CSS 模拟环形图 (Donut Chart) -->
-          <div 
+          <div
             class="relative w-28 h-28 rounded-full mr-6 flex items-center justify-center flex-shrink-0"
             :style="complexityConicGradient"
           >
             <!-- 镂空遮罩 -->
-            <div class="absolute w-20 h-20 bg-white rounded-full shadow-inner"></div>
+            <div class="absolute w-20 h-20 bg-white rounded-full shadow-inner" />
             <!-- 中心文字 -->
             <div class="absolute flex flex-col items-center justify-center z-10">
-              <span class="text-2xl font-bold text-slate-700 leading-none">{{ sichuanStats.total_rules }}</span>
+              <span class="text-2xl font-bold text-slate-700 leading-none">{{
+                sichuanStats.total_rules
+              }}</span>
               <span class="text-[10px] text-slate-400 mt-1">总规则</span>
             </div>
           </div>
           <div class="space-y-3 text-sm flex-1">
             <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-red-400 mr-2"></span>高复杂度</span>
-              <span class="font-bold text-slate-700 group-hover:text-red-500 transition-colors">{{ sichuanStats.complexity_distribution?.['高复杂度'] || 0 }}</span>
+              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-red-400 mr-2" />高复杂度</span>
+              <span class="font-bold text-slate-700 group-hover:text-red-500 transition-colors">{{
+                sichuanStats.complexity_distribution?.['高复杂度'] || 0
+              }}</span>
             </div>
             <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>中复杂度</span>
-              <span class="font-bold text-slate-700 group-hover:text-amber-500 transition-colors">{{ sichuanStats.complexity_distribution?.['中复杂度'] || 0 }}</span>
+              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2" />中复杂度</span>
+              <span class="font-bold text-slate-700 group-hover:text-amber-500 transition-colors">{{
+                sichuanStats.complexity_distribution?.['中复杂度'] || 0
+              }}</span>
             </div>
             <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>低复杂度</span>
-              <span class="font-bold text-slate-700 group-hover:text-emerald-500 transition-colors">{{ sichuanStats.complexity_distribution?.['低复杂度'] || 0 }}</span>
+              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2" />低复杂度</span>
+              <span
+                class="font-bold text-slate-700 group-hover:text-emerald-500 transition-colors"
+              >{{ sichuanStats.complexity_distribution?.['低复杂度'] || 0 }}</span>
             </div>
           </div>
         </div>
@@ -43,35 +52,58 @@
       <!-- 卡片 2: 缺陷级别 (进度条) -->
       <div class="stats-card flex flex-col">
         <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">缺陷级别分布</h3>
+          <h3 class="stats-title">
+            缺陷级别分布
+          </h3>
           <AlertOutlined class="stats-icon" />
         </div>
         <div class="space-y-5 flex-1 justify-center flex flex-col">
           <div>
             <div class="flex justify-between text-xs mb-1.5">
               <span class="text-slate-500 font-medium">严重缺陷 (阻断)</span>
-              <span class="text-red-500 font-bold">{{ sichuanStats.defect_level_distribution?.['严重缺陷'] || 0 }}</span>
+              <span class="text-red-500 font-bold">{{
+                sichuanStats.defect_level_distribution?.['严重缺陷'] || 0
+              }}</span>
             </div>
             <div class="w-full bg-slate-100 rounded-full h-2">
-              <div class="bg-red-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(239,68,68,0.2)]" :style="{ width: getPercentage(sichuanStats.defect_level_distribution?.['严重缺陷']) + '%' }"></div>
+              <div
+                class="bg-red-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(239,68,68,0.2)]"
+                :style="{
+                  width: getPercentage(sichuanStats.defect_level_distribution?.['严重缺陷']) + '%',
+                }"
+              />
             </div>
           </div>
           <div>
             <div class="flex justify-between text-xs mb-1.5">
               <span class="text-slate-500 font-medium">一般缺陷 (警告)</span>
-              <span class="text-orange-400 font-bold">{{ sichuanStats.defect_level_distribution?.['一般缺陷'] || 0 }}</span>
+              <span class="text-orange-400 font-bold">{{
+                sichuanStats.defect_level_distribution?.['一般缺陷'] || 0
+              }}</span>
             </div>
             <div class="w-full bg-slate-100 rounded-full h-2">
-              <div class="bg-orange-400 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(251,191,36,0.2)]" :style="{ width: getPercentage(sichuanStats.defect_level_distribution?.['一般缺陷']) + '%' }"></div>
+              <div
+                class="bg-orange-400 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(251,191,36,0.2)]"
+                :style="{
+                  width: getPercentage(sichuanStats.defect_level_distribution?.['一般缺陷']) + '%',
+                }"
+              />
             </div>
           </div>
           <div>
             <div class="flex justify-between text-xs mb-1.5">
               <span class="text-slate-500 font-medium">轻微缺陷 (提示)</span>
-              <span class="text-emerald-500 font-bold">{{ sichuanStats.defect_level_distribution?.['轻微缺陷'] || 0 }}</span>
+              <span class="text-emerald-500 font-bold">{{
+                sichuanStats.defect_level_distribution?.['轻微缺陷'] || 0
+              }}</span>
             </div>
             <div class="w-full bg-slate-100 rounded-full h-2">
-              <div class="bg-emerald-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(16,185,129,0.2)]" :style="{ width: getPercentage(sichuanStats.defect_level_distribution?.['轻微缺陷']) + '%' }"></div>
+              <div
+                class="bg-emerald-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(16,185,129,0.2)]"
+                :style="{
+                  width: getPercentage(sichuanStats.defect_level_distribution?.['轻微缺陷']) + '%',
+                }"
+              />
             </div>
           </div>
         </div>
@@ -80,15 +112,26 @@
       <!-- 卡片 3: 规则分类 (网格) -->
       <div class="stats-card flex flex-col">
         <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">规则分类统计</h3>
+          <h3 class="stats-title">
+            规则分类统计
+          </h3>
           <AppstoreOutlined class="stats-icon" />
         </div>
         <div class="grid grid-cols-3 gap-3 mt-2 flex-1">
-          <div v-for="(cat, idx) in topCategories" :key="cat.name"
+          <div
+            v-for="(cat, idx) in topCategories"
+            :key="cat.name"
             :class="['stat-grid-item', categoryColors[idx % categoryColors.length]]"
           >
-            <div class="text-xl font-bold mb-1">{{ cat.count }}</div>
-            <div class="text-[10px] font-medium opacity-70 truncate w-full text-center" :title="cat.name">{{ cat.name }}</div>
+            <div class="text-xl font-bold mb-1">
+              {{ cat.count }}
+            </div>
+            <div
+              class="text-[10px] font-medium opacity-70 truncate w-full text-center"
+              :title="cat.name"
+            >
+              {{ cat.name }}
+            </div>
           </div>
         </div>
       </div>
@@ -98,23 +141,29 @@
     <div class="flex flex-col sm:flex-row justify-between items-center mb-5 gap-4">
       <div class="relative w-full sm:w-96 search-wrapper group">
         <SearchOutlined class="search-icon group-hover:text-blue-500 transition-colors" />
-        <input 
-          type="text" 
-          placeholder="搜索规则编号、名称..." 
+        <input
+          type="text"
+          placeholder="搜索规则编号、名称..."
           class="search-input"
-          @input="e => handleSearch((e.target as HTMLInputElement).value)"
+          @input="(e) => handleSearch((e.target as HTMLInputElement).value)"
         >
       </div>
       <div class="flex gap-3 w-full sm:w-auto justify-end">
-        <button class="modern-btn-ghost" @click="refreshSichuanRules">
+        <button
+          class="modern-btn-ghost"
+          @click="refreshSichuanRules"
+        >
           <ReloadOutlined :class="{ 'animate-spin': loading }" />
           <span class="hidden sm:inline ml-1">刷新</span>
         </button>
         <button class="modern-btn-ghost">
           <FilterOutlined />
           <span class="hidden sm:inline ml-1">筛选</span>
-          </button>
-        <button class="modern-btn-primary" @click="showQCEvaluation = true">
+        </button>
+        <button
+          class="modern-btn-primary"
+          @click="showQCEvaluation = true"
+        >
           <PlayCircleOutlined class="mr-1" />
           开始质控评估
         </button>
@@ -124,7 +173,7 @@
     <!-- 3. 数据表格 -->
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
       <a-table
-        :dataSource="filteredRules"
+        :data-source="filteredRules"
         :columns="sichuanColumns"
         :loading="loading"
         :pagination="tablePagination"
@@ -135,7 +184,9 @@
         <template #bodyCell="{ column, record }">
           <!-- 编号列：Mono字体 + 浅色背景 -->
           <template v-if="column.key === 'rule_id'">
-            <span class="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold select-all border border-slate-200">
+            <span
+              class="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold select-all border border-slate-200"
+            >
               {{ record.rule_code || record.rule_id }}
             </span>
           </template>
@@ -143,7 +194,9 @@
           <!-- 规则名称 + 分类标签 -->
           <template v-if="column.key === 'name'">
             <div class="pr-2">
-              <div class="text-slate-800 font-semibold text-[13px] leading-snug mb-0.5">{{ record.name }}</div>
+              <div class="text-slate-800 font-semibold text-[13px] leading-snug mb-0.5">
+                {{ record.name }}
+              </div>
               <div class="flex items-center gap-1.5">
                 <span
                   class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium shrink-0"
@@ -151,7 +204,10 @@
                 >
                   {{ getCategoryZh(record.category) }}
                 </span>
-                <span class="text-slate-400 text-[11px] truncate max-w-[240px]" :title="record.description">
+                <span
+                  class="text-slate-400 text-[11px] truncate max-w-[240px]"
+                  :title="record.description"
+                >
                   {{ record.description }}
                 </span>
               </div>
@@ -160,7 +216,7 @@
 
           <!-- 复杂度 -->
           <template v-if="column.key === 'complexity'">
-            <span 
+            <span
               class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
               :class="getComplexityClass(record.complexity)"
             >
@@ -170,7 +226,7 @@
 
           <!-- 缺陷级别 -->
           <template v-if="column.key === 'defect_level'">
-             <span 
+            <span
               class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
               :class="getDefectLevelClass(record.defect_level)"
             >
@@ -191,9 +247,16 @@
               </span>
               <a-tooltip v-if="record.applicable_documents.length > 2">
                 <template #title>
-                  {{ record.applicable_documents.slice(2).map(d => getDocTypeZh(d)).join(', ') }}
+                  {{
+                    record.applicable_documents
+                      .slice(2)
+                      .map((d: string) => getDocTypeZh(d))
+                      .join(', ')
+                  }}
                 </template>
-                <span class="text-[10px] text-slate-400 px-1.5 py-0.5 cursor-help bg-slate-50 rounded border border-slate-100">
+                <span
+                  class="text-[10px] text-slate-400 px-1.5 py-0.5 cursor-help bg-slate-50 rounded border border-slate-100"
+                >
                   +{{ record.applicable_documents.length - 2 }}
                 </span>
               </a-tooltip>
@@ -204,11 +267,17 @@
           <template v-if="column.key === 'actions'">
             <div class="flex items-center justify-end gap-3">
               <a-tooltip title="查看详情">
-                <button class="icon-btn text-slate-400 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100" @click="viewSichuanRuleDetail(record)">
+                <button
+                  class="icon-btn text-slate-400 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100"
+                  @click="viewSichuanRuleDetail(record)"
+                >
                   <EyeOutlined />
                 </button>
               </a-tooltip>
-              <button class="table-action-btn" @click="startQCWithRule(record)">
+              <button
+                class="table-action-btn"
+                @click="startQCWithRule(record)"
+              >
                 评估
               </button>
             </div>
@@ -227,27 +296,58 @@
       class="modern-modal"
     >
       <!-- 保持原有详情内容 -->
-      <div v-if="selectedRule" class="rule-detail p-2">
+      <div
+        v-if="selectedRule"
+        class="rule-detail p-2"
+      >
         <div class="bg-slate-50 p-5 rounded-xl mb-6 border border-slate-100">
           <div class="flex justify-between items-start mb-3">
-            <h3 class="text-lg font-bold text-slate-800">{{ selectedRule.name }}</h3>
-            <span class="font-mono text-blue-600 bg-white px-2 py-1 rounded border border-blue-100 text-xs">{{ selectedRule.rule_id }}</span>
+            <h3 class="text-lg font-bold text-slate-800">
+              {{ selectedRule.name }}
+            </h3>
+            <span
+              class="font-mono text-blue-600 bg-white px-2 py-1 rounded border border-blue-100 text-xs"
+            >{{ selectedRule.rule_id }}</span>
           </div>
-          <p class="text-slate-600 text-sm leading-relaxed">{{ selectedRule.description }}</p>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            {{ selectedRule.description }}
+          </p>
         </div>
-        
-        <a-descriptions :column="2" size="small" class="mb-6">
-          <a-descriptions-item label="分类">{{ getCategoryZh(selectedRule.category) }}</a-descriptions-item>
+
+        <a-descriptions
+          :column="2"
+          size="small"
+          class="mb-6"
+        >
+          <a-descriptions-item label="分类">
+            {{ getCategoryZh(selectedRule.category) }}
+          </a-descriptions-item>
           <a-descriptions-item label="复杂度">
-             <span :class="['px-2 py-0.5 rounded-md text-xs', getComplexityClass(selectedRule.complexity)]">{{ selectedRule.complexity }}</span>
+            <span
+              :class="[
+                'px-2 py-0.5 rounded-md text-xs',
+                getComplexityClass(selectedRule.complexity),
+              ]"
+            >{{ selectedRule.complexity }}</span>
           </a-descriptions-item>
           <a-descriptions-item label="缺陷级别">
-             <span :class="['px-2 py-0.5 rounded-md text-xs', getDefectLevelClass(selectedRule.defect_level)]">{{ getSeverityZh(selectedRule.defect_level) }}</span>
+            <span
+              :class="[
+                'px-2 py-0.5 rounded-md text-xs',
+                getDefectLevelClass(selectedRule.defect_level),
+              ]"
+            >{{ getSeverityZh(selectedRule.defect_level) }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="扣分">{{ selectedRule.score_deduction }}分</a-descriptions-item>
+          <a-descriptions-item label="扣分">
+            {{ selectedRule.score_deduction }}分
+          </a-descriptions-item>
           <a-descriptions-item label="适用文书">
             <div class="flex gap-1 flex-wrap">
-              <span v-for="d in selectedRule.applicable_documents" :key="d" class="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded text-xs">
+              <span
+                v-for="d in selectedRule.applicable_documents"
+                :key="d"
+                class="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded text-xs"
+              >
                 {{ getDocTypeZh(d) }}
               </span>
             </div>
@@ -259,16 +359,43 @@
             <div class="flex justify-between items-center mb-4">
               <h4 class="font-bold text-slate-700 flex items-center gap-2 text-sm">
                 <CodeOutlined /> 提示词管理
-                <span class="text-[10px] font-normal bg-amber-50 text-amber-600 px-2 py-0.5 rounded border border-amber-100">Admin</span>
+                <span
+                  class="text-[10px] font-normal bg-amber-50 text-amber-600 px-2 py-0.5 rounded border border-amber-100"
+                >Admin</span>
               </h4>
-              <a-button v-if="!isEditingPrompt" type="link" size="small" @click="startEditPrompt">编辑</a-button>
-              <div v-else class="flex gap-2">
-                <a-button size="small" @click="cancelEditPrompt">取消</a-button>
-                <a-button type="primary" size="small" @click="savePrompt" :loading="promptLoading">保存</a-button>
+              <a-button
+                v-if="!isEditingPrompt"
+                type="link"
+                size="small"
+                @click="startEditPrompt"
+              >
+                编辑
+              </a-button>
+              <div
+                v-else
+                class="flex gap-2"
+              >
+                <a-button
+                  size="small"
+                  @click="cancelEditPrompt"
+                >
+                  取消
+                </a-button>
+                <a-button
+                  type="primary"
+                  size="small"
+                  :loading="promptLoading"
+                  @click="savePrompt"
+                >
+                  保存
+                </a-button>
               </div>
             </div>
-            
-            <div v-if="!isEditingPrompt" class="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar border border-slate-800">
+
+            <div
+              v-if="!isEditingPrompt"
+              class="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar border border-slate-800"
+            >
               {{ currentPrompt || '// 暂无自定义提示词，使用系统默认模板' }}
             </div>
             <a-textarea
@@ -290,26 +417,43 @@
       width="900px"
       :footer="null"
       centered
-      :destroyOnClose="true"
+      :destroy-on-close="true"
       class="modern-modal"
     >
-      <div v-if="testingRule" class="p-2">
-        <div class="flex items-center justify-between mb-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+      <div
+        v-if="testingRule"
+        class="p-2"
+      >
+        <div
+          class="flex items-center justify-between mb-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100"
+        >
           <div>
-            <div class="font-bold text-slate-800 mb-1">{{ testingRule.name }}</div>
-            <div class="text-xs text-slate-500">测试该规则的 AI 识别准确性</div>
+            <div class="font-bold text-slate-800 mb-1">
+              {{ testingRule.name }}
+            </div>
+            <div class="text-xs text-slate-500">
+              测试该规则的 AI 识别准确性
+            </div>
           </div>
           <div class="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-            <button 
+            <button
               class="px-3 py-1.5 text-xs rounded-md transition-colors font-medium"
-              :class="testExampleType === 'negative' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+              :class="
+                testExampleType === 'negative'
+                  ? 'bg-red-50 text-red-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              "
               @click="switchExampleType('negative')"
             >
               反例 (有缺陷)
             </button>
-            <button 
+            <button
               class="px-3 py-1.5 text-xs rounded-md transition-colors font-medium"
-              :class="testExampleType === 'positive' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+              :class="
+                testExampleType === 'positive'
+                  ? 'bg-emerald-50 text-emerald-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              "
               @click="switchExampleType('positive')"
             >
               正例 (无缺陷)
@@ -318,7 +462,7 @@
         </div>
 
         <div class="mb-6">
-         <a-textarea
+          <a-textarea
             v-model:value="testMedicalText"
             :rows="8"
             class="text-sm text-slate-700 bg-white border-slate-200 focus:border-blue-500 rounded-xl p-4 shadow-sm"
@@ -327,73 +471,131 @@
         </div>
 
         <div class="flex justify-end mb-6">
-          <button class="modern-btn-primary px-6 py-2" :disabled="testLoading" @click="executeRuleTest">
-            <ThunderboltOutlined v-if="!testLoading" class="mr-2" />
-            <ReloadOutlined v-else class="mr-2 animate-spin" />
-              {{ testLoading ? '测试中...' : '开始测试' }}
-            </button>
-          </div>
+          <button
+            class="modern-btn-primary px-6 py-2"
+            :disabled="testLoading"
+            @click="executeRuleTest"
+          >
+            <ThunderboltOutlined
+              v-if="!testLoading"
+              class="mr-2"
+            />
+            <ReloadOutlined
+              v-else
+              class="mr-2 animate-spin"
+            />
+            {{ testLoading ? '测试中...' : '开始测试' }}
+          </button>
+        </div>
 
         <transition name="fade">
-          <div v-if="testResult" class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md animate-fade-in-up">
-            <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h4 class="font-bold text-slate-700">测试结果</h4>
+          <div
+            v-if="testResult"
+            class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md animate-fade-in-up"
+          >
+            <div
+              class="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"
+            >
+              <h4 class="font-bold text-slate-700">
+                测试结果
+              </h4>
               <div class="flex items-center gap-3">
                 <span class="text-xs text-slate-500 font-medium">置信度</span>
                 <div class="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div class="h-full bg-blue-500 rounded-full" :style="{ width: (testResult.confidence * 100) + '%' }"></div>
+                  <div
+                    class="h-full bg-blue-500 rounded-full"
+                    :style="{ width: testResult.confidence * 100 + '%' }"
+                  />
                 </div>
                 <span class="text-sm font-bold text-blue-600">{{ Math.round(testResult.confidence * 100) }}%</span>
               </div>
             </div>
-            
+
             <div class="p-6">
               <div class="flex items-start gap-4 mb-5">
-                <div 
+                <div
                   class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm"
-                  :class="testResult.is_compliant ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'"
+                  :class="
+                    testResult.is_compliant
+                      ? 'bg-emerald-100 text-emerald-600'
+                      : 'bg-red-100 text-red-600'
+                  "
                 >
-                  <CheckCircleFilled v-if="testResult.is_compliant" class="text-2xl" />
-                  <ExclamationCircleFilled v-else class="text-2xl" />
+                  <CheckCircleFilled
+                    v-if="testResult.is_compliant"
+                    class="text-2xl"
+                  />
+                  <ExclamationCircleFilled
+                    v-else
+                    class="text-2xl"
+                  />
                 </div>
                 <div>
-                  <div class="font-bold text-lg mb-1" :class="testResult.is_compliant ? 'text-emerald-700' : 'text-red-700'">
+                  <div
+                    class="font-bold text-lg mb-1"
+                    :class="testResult.is_compliant ? 'text-emerald-700' : 'text-red-700'"
+                  >
                     {{ testResult.is_compliant ? '符合规则要求' : '不符合规则要求' }}
                   </div>
-                  <p class="text-sm text-slate-600 leading-relaxed">{{ testResult.findings }}</p>
+                  <p class="text-sm text-slate-600 leading-relaxed">
+                    {{ testResult.findings }}
+                  </p>
                 </div>
               </div>
 
-              <div v-if="testResult.evidence" class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100">
-                <div class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1">
+              <div
+                v-if="testResult.evidence"
+                class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100"
+              >
+                <div
+                  class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1"
+                >
                   <SearchOutlined /> 证据引用
                 </div>
-                <div class="text-sm text-slate-700 font-mono bg-white p-3 rounded-lg border border-slate-200 border-l-4 border-l-blue-400 shadow-sm">
+                <div
+                  class="text-sm text-slate-700 font-mono bg-white p-3 rounded-lg border border-slate-200 border-l-4 border-l-blue-400 shadow-sm"
+                >
                   {{ testResult.evidence }}
                 </div>
               </div>
 
-              <div v-if="testResult.suggestion" class="flex gap-3 items-start text-sm bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100">
+              <div
+                v-if="testResult.suggestion"
+                class="flex gap-3 items-start text-sm bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100"
+              >
                 <InfoCircleFilled class="mt-0.5 flex-shrink-0 text-blue-600" />
                 <span class="font-medium">{{ testResult.suggestion }}</span>
               </div>
-             </div>
+            </div>
           </div>
         </transition>
       </div>
     </a-modal>
 
     <!-- 质控评估入口提示 -->
-    <a-modal v-model:open="showQCEvaluation" title="质控评估" :footer="null" centered>
+    <a-modal
+      v-model:open="showQCEvaluation"
+      title="质控评估"
+      :footer="null"
+      centered
+    >
       <div class="text-center p-8">
-        <a-result status="info" title="请前往质控评估页面" sub-title="在主导航中点击「质控评估」进入完整评估流程">
+        <a-result
+          status="info"
+          title="请前往质控评估页面"
+          sub-title="在主导航中点击「质控评估」进入完整评估流程"
+        >
           <template #extra>
-            <a-button type="primary" @click="showQCEvaluation = false">知道了</a-button>
+            <a-button
+              type="primary"
+              @click="showQCEvaluation = false"
+            >
+              知道了
+            </a-button>
           </template>
         </a-result>
       </div>
     </a-modal>
-
   </div>
 </template>
 
@@ -413,7 +615,7 @@ import {
   ExclamationCircleFilled,
   InfoCircleFilled,
   ThunderboltOutlined,
-  CodeOutlined
+  CodeOutlined,
 } from '@ant-design/icons-vue'
 import { ApiService } from '@/services/apiService'
 import type { User } from '@/types/auth'
@@ -450,7 +652,7 @@ const sichuanStats = ref<SichuanQCStats>({
   total_rules: 0,
   rule_categories: [],
   complexity_distribution: {},
-  defect_level_distribution: {}
+  defect_level_distribution: {},
 })
 const searchText = ref('')
 const currentUser = ref<User | null>(null)
@@ -458,14 +660,14 @@ const isAdmin = computed(() => currentUser.value?.roles?.includes(UserRole.ADMIN
 
 // 分页
 const tablePagination = ref({
-  current: 1, 
+  current: 1,
   pageSize: 20,
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
   pageSizeOptions: ['20', '50', '100'],
   showTotal: (total: number, range: [number, number]) => `共 ${total} 条`,
-  size: 'small'
+  size: 'small',
 })
 
 // 模态框状态
@@ -497,7 +699,7 @@ const complexityConicGradient = computed(() => {
   const p2 = p1 + (mid / total) * 100
 
   return {
-    background: `conic-gradient(#F87171 0% ${p1}%, #FBBF24 ${p1}% ${p2}%, #34D399 ${p2}% 100%)`
+    background: `conic-gradient(#F87171 0% ${p1}%, #FBBF24 ${p1}% ${p2}%, #34D399 ${p2}% 100%)`,
   }
 })
 
@@ -505,15 +707,16 @@ const complexityConicGradient = computed(() => {
 const filteredRules = computed(() => {
   if (!searchText.value.trim()) return sichuanRules.value
   const keyword = searchText.value.trim().toLowerCase()
-  return sichuanRules.value.filter(r =>
-    r.rule_id.toLowerCase().includes(keyword) ||
-    r.name.toLowerCase().includes(keyword) ||
-    r.description.toLowerCase().includes(keyword) ||
-    r.category.toLowerCase().includes(keyword) ||
-    (r.applicable_documents || []).some((d: string) => {
-      const zh = getDocTypeZh(d)
-      return d.toLowerCase().includes(keyword) || zh.includes(keyword)
-    })
+  return sichuanRules.value.filter(
+    (r) =>
+      r.rule_id.toLowerCase().includes(keyword) ||
+      r.name.toLowerCase().includes(keyword) ||
+      r.description.toLowerCase().includes(keyword) ||
+      r.category.toLowerCase().includes(keyword) ||
+      (r.applicable_documents || []).some((d: string) => {
+        const zh = getDocTypeZh(d)
+        return d.toLowerCase().includes(keyword) || zh.includes(keyword)
+      }),
   )
 })
 
@@ -524,13 +727,13 @@ const getPercentage = (count: number | undefined) => {
 }
 
 const getCategoryCount = (cat: string) => {
-  return sichuanRules.value.filter(r => r.category === cat).length
+  return sichuanRules.value.filter((r) => r.category === cat).length
 }
 
 // 动态获取 top 3 分类
 const topCategories = computed(() => {
   const counts: Record<string, number> = {}
-  sichuanRules.value.forEach(r => {
+  sichuanRules.value.forEach((r) => {
     counts[r.category] = (counts[r.category] || 0) + 1
   })
   return Object.entries(counts)
@@ -542,18 +745,26 @@ const topCategories = computed(() => {
 const categoryColors = [
   'bg-blue-50/50 border-blue-100 text-blue-600',
   'bg-cyan-50/50 border-cyan-100 text-cyan-600',
-  'bg-purple-50/50 border-purple-100 text-purple-600'
+  'bg-purple-50/50 border-purple-100 text-purple-600',
 ]
 
 // 表格列定义（去掉重复的"分类"列，该信息已融入规则名称行）
 const sichuanColumns = [
-  { title: '序号', key: 'index', width: 60, fixed: 'left', align: 'center', customRender: ({ index }: { index: number }) => (tablePagination.value.current - 1) * tablePagination.value.pageSize + index + 1 },
+  {
+    title: '序号',
+    key: 'index',
+    width: 60,
+    fixed: 'left',
+    align: 'center',
+    customRender: ({ index }: { index: number }) =>
+      (tablePagination.value.current - 1) * tablePagination.value.pageSize + index + 1,
+  },
   { title: '编号', key: 'rule_id', width: 90, fixed: 'left' },
   { title: '适用文书', key: 'applicable_documents', width: 100 },
   { title: '规则名称', key: 'name', width: 360 },
   { title: '复杂度', key: 'complexity', width: 100 },
   { title: '缺陷级别', key: 'defect_level', width: 100 },
-  { title: '操作', key: 'actions', width: 120, fixed: 'right', align: 'right' }
+  { title: '操作', key: 'actions', width: 120, fixed: 'right', align: 'right' },
 ]
 
 // 方法
@@ -575,16 +786,16 @@ const refreshSichuanRules = async () => {
         applicable_documents: r.applicable_documents || [],
         medical_domain: r.medical_domain || '通用',
         requires_rag: Boolean(r.requires_rag),
-        requires_cot: Boolean(r.requires_cot)
+        requires_cot: Boolean(r.requires_cot),
       })
-      
+
       sichuanRules.value = (data.rules || []).map(normalizeRule)
 
       // 从规则数据中计算统计分布（后端可能返回空对象）
       const rules = sichuanRules.value
       const computedComplexity: Record<string, number> = {}
       const computedDefect: Record<string, number> = {}
-      rules.forEach(r => {
+      rules.forEach((r) => {
         computedComplexity[r.complexity] = (computedComplexity[r.complexity] || 0) + 1
         computedDefect[r.defect_level] = (computedDefect[r.defect_level] || 0) + 1
       })
@@ -594,9 +805,10 @@ const refreshSichuanRules = async () => {
 
       sichuanStats.value = {
         total_rules: data.total_rules || rules.length,
-        rule_categories: data.rule_categories || [...new Set(rules.map(r => r.category))],
-        complexity_distribution: Object.keys(apiComplexity).length > 0 ? apiComplexity : computedComplexity,
-        defect_level_distribution: Object.keys(apiDefect).length > 0 ? apiDefect : computedDefect
+        rule_categories: data.rule_categories || [...new Set(rules.map((r) => r.category))],
+        complexity_distribution:
+          Object.keys(apiComplexity).length > 0 ? apiComplexity : computedComplexity,
+        defect_level_distribution: Object.keys(apiDefect).length > 0 ? apiDefect : computedDefect,
       }
       tablePagination.value.total = sichuanRules.value.length
       message.success('刷新成功')
@@ -628,7 +840,9 @@ const viewSichuanRuleDetail = async (rule: SichuanQCRule) => {
     // 从后端获取真实 Prompt
     promptLoading.value = true
     try {
-      const resp = await fetch(`/api/v1/qc/sichuan/rules/${encodeURIComponent(rule.rule_id)}/prompt`)
+      const resp = await fetch(
+        `/api/v1/qc/sichuan/rules/${encodeURIComponent(rule.rule_id)}/prompt`,
+      )
       if (resp.ok) {
         const data = await resp.json()
         currentPrompt.value = data.data?.prompt || '// 暂无提示词'
@@ -660,7 +874,12 @@ const switchExampleType = (type: 'positive' | 'negative') => {
     const ruleCase = qcRuleCaseMap[ruleId]
     if (ruleCase) {
       const example = type === 'positive' ? ruleCase.positive : ruleCase.negative
-      testMedicalText.value = buildCaseText(example, { includeHints: false, includeTitle: false, includeAnalysis: false, includeFocusPoints: false })
+      testMedicalText.value = buildCaseText(example, {
+        includeHints: false,
+        includeTitle: false,
+        includeAnalysis: false,
+        includeFocusPoints: false,
+      })
     } else {
       testMedicalText.value = '暂无示例文本，请手动输入。'
     }
@@ -680,8 +899,8 @@ const executeRuleTest = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         rule_id: testingRule.value.rule_id,
-        medical_text: testMedicalText.value
-      })
+        medical_text: testMedicalText.value,
+      }),
     })
     if (resp.ok) {
       const data = await resp.json()
@@ -691,7 +910,7 @@ const executeRuleTest = async () => {
         confidence: result.confidence ?? 0.7,
         findings: result.findings || '无详细发现',
         evidence: result.evidence || '',
-        suggestion: result.suggestion || ''
+        suggestion: result.suggestion || '',
       }
     } else {
       const errText = await resp.text()
@@ -719,13 +938,16 @@ const savePrompt = async () => {
   if (!selectedRule.value) return
   promptLoading.value = true
   try {
-    const resp = await fetch(`/api/v1/qc/sichuan/rules/${encodeURIComponent(selectedRule.value.rule_id)}/prompt`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        custom_prompt: editingPrompt.value.trim() || null
-      })
-    })
+    const resp = await fetch(
+      `/api/v1/qc/sichuan/rules/${encodeURIComponent(selectedRule.value.rule_id)}/prompt`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_prompt: editingPrompt.value.trim() || null,
+        }),
+      },
+    )
     if (resp.ok) {
       currentPrompt.value = editingPrompt.value
       isEditingPrompt.value = false
@@ -751,8 +973,10 @@ const getComplexityClass = (val: string) => {
 }
 
 const getDefectLevelClass = (val: string) => {
-  if (val?.includes('严重') || val === 'critical') return 'bg-rose-50 text-rose-700 border border-rose-100'
-  if (val?.includes('一般') || val === 'major') return 'bg-orange-50 text-orange-700 border border-orange-100'
+  if (val?.includes('严重') || val === 'critical')
+    return 'bg-rose-50 text-rose-700 border border-rose-100'
+  if (val?.includes('一般') || val === 'major')
+    return 'bg-orange-50 text-orange-700 border border-orange-100'
   return 'bg-slate-100 text-slate-600 border border-slate-200'
 }
 
@@ -772,7 +996,7 @@ const CANONICAL_LABEL_ZH: Record<string, string> = {
   medical_order: '医嘱',
   case_discussion: '疑难病例讨论',
   transfusion_record: '输血记录',
-  anesthesia_record: '麻醉记录'
+  anesthesia_record: '麻醉记录',
 }
 const getDocTypeZh = (val: string) => CANONICAL_LABEL_ZH[val] || val
 const getSeverityZh = (val: string) => val
@@ -780,32 +1004,33 @@ const getCategoryZh = (val: string) => val
 
 // 文书类型颜色映射
 const DOC_TYPE_COLORS: Record<string, string> = {
-  '入院记录': 'bg-blue-50 text-blue-600 border border-blue-100',
-  'admission_record': 'bg-blue-50 text-blue-600 border border-blue-100',
-  '病程记录': 'bg-teal-50 text-teal-600 border border-teal-100',
-  'progress_note': 'bg-teal-50 text-teal-600 border border-teal-100',
-  '出院记录': 'bg-violet-50 text-violet-600 border border-violet-100',
+  入院记录: 'bg-blue-50 text-blue-600 border border-blue-100',
+  admission_record: 'bg-blue-50 text-blue-600 border border-blue-100',
+  病程记录: 'bg-teal-50 text-teal-600 border border-teal-100',
+  progress_note: 'bg-teal-50 text-teal-600 border border-teal-100',
+  出院记录: 'bg-violet-50 text-violet-600 border border-violet-100',
   '(死亡)出院记录': 'bg-violet-50 text-violet-600 border border-violet-100',
-  'discharge_record': 'bg-violet-50 text-violet-600 border border-violet-100',
-  '手术记录': 'bg-rose-50 text-rose-600 border border-rose-100',
-  '手术相关记录': 'bg-rose-50 text-rose-600 border border-rose-100',
-  'operation_record': 'bg-rose-50 text-rose-600 border border-rose-100',
-  '辅助检查': 'bg-amber-50 text-amber-600 border border-amber-100',
-  'examination_report': 'bg-amber-50 text-amber-600 border border-amber-100',
-  '知情同意书': 'bg-cyan-50 text-cyan-600 border border-cyan-100',
-  '知情同意': 'bg-cyan-50 text-cyan-600 border border-cyan-100',
-  'consent_form': 'bg-cyan-50 text-cyan-600 border border-cyan-100',
-  '医嘱': 'bg-indigo-50 text-indigo-600 border border-indigo-100',
-  '会诊记录': 'bg-orange-50 text-orange-600 border border-orange-100',
-  '输血记录': 'bg-pink-50 text-pink-600 border border-pink-100',
-  '麻醉记录': 'bg-lime-50 text-lime-600 border border-lime-100',
+  discharge_record: 'bg-violet-50 text-violet-600 border border-violet-100',
+  手术记录: 'bg-rose-50 text-rose-600 border border-rose-100',
+  手术相关记录: 'bg-rose-50 text-rose-600 border border-rose-100',
+  operation_record: 'bg-rose-50 text-rose-600 border border-rose-100',
+  辅助检查: 'bg-amber-50 text-amber-600 border border-amber-100',
+  examination_report: 'bg-amber-50 text-amber-600 border border-amber-100',
+  知情同意书: 'bg-cyan-50 text-cyan-600 border border-cyan-100',
+  知情同意: 'bg-cyan-50 text-cyan-600 border border-cyan-100',
+  consent_form: 'bg-cyan-50 text-cyan-600 border border-cyan-100',
+  医嘱: 'bg-indigo-50 text-indigo-600 border border-indigo-100',
+  会诊记录: 'bg-orange-50 text-orange-600 border border-orange-100',
+  输血记录: 'bg-pink-50 text-pink-600 border border-pink-100',
+  麻醉记录: 'bg-lime-50 text-lime-600 border border-lime-100',
 }
-const getDocTypeColorClass = (val: string) => DOC_TYPE_COLORS[val] || 'bg-slate-50 text-slate-600 border border-slate-100'
+const getDocTypeColorClass = (val: string) =>
+  DOC_TYPE_COLORS[val] || 'bg-slate-50 text-slate-600 border border-slate-100'
 
 onMounted(() => {
   refreshSichuanRules()
-  ApiService.getCurrentUser().then(res => {
-    if (res.success) currentUser.value = res.data
+  ApiService.getCurrentUser().then((res) => {
+    if (res.success) currentUser.value = res.data ?? null
   })
 })
 </script>
@@ -820,7 +1045,7 @@ onMounted(() => {
   background: white;
   border-radius: 1.25rem; /* 20px */
   padding: 1.75rem;
-  box-shadow: 0 4px 24px -4px rgba(0,0,0,0.04);
+  box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.04);
   border: 1px solid #f1f5f9;
   height: 100%;
   min-height: 240px;

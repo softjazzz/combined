@@ -3,12 +3,16 @@
     v-model:open="visible"
     title="创建质控任务"
     :width="720"
-    :bodyStyle="{ padding: '24px' }"
+    :body-style="{ padding: '24px' }"
+    :destroy-on-close="true"
     @close="handleClose"
-    :destroyOnClose="true"
   >
     <!-- 步骤条 -->
-    <a-steps :current="currentStep" size="small" class="mb-8">
+    <a-steps
+      :current="currentStep"
+      size="small"
+      class="mb-8"
+    >
       <a-step title="基本信息" />
       <a-step title="病历范围" />
       <a-step title="抽样规则" />
@@ -18,8 +22,14 @@
 
     <!-- Step 1: 基本信息 -->
     <div v-show="currentStep === 0">
-      <a-form :model="formData" layout="vertical">
-        <a-form-item label="任务名称" required>
+      <a-form
+        :model="formData"
+        layout="vertical"
+      >
+        <a-form-item
+          label="任务名称"
+          required
+        >
           <a-input
             v-model:value="formData.task_name"
             placeholder="例如：2026年3月终末病历质控"
@@ -43,12 +53,12 @@
           <a-date-picker
             v-model:value="formData.deadline"
             style="width: 100%"
-            :disabledDate="(d: any) => d && d < Date.now() - 86400000"
+            :disabled-date="(d: any) => d && d < Date.now() - 86400000"
             placeholder="选择截止日期"
           />
         </a-form-item>
 
-        <a-form-item label="任务说明" >
+        <a-form-item label="任务说明">
           <a-textarea
             v-model:value="formData.description"
             placeholder="可选的任务备注说明"
@@ -65,8 +75,12 @@
       <a-form layout="vertical">
         <a-form-item label="选择方式">
           <a-radio-group v-model:value="rangeMode">
-            <a-radio-button value="date">按日期范围</a-radio-button>
-            <a-radio-button value="ids">指定病案号</a-radio-button>
+            <a-radio-button value="date">
+              按日期范围
+            </a-radio-button>
+            <a-radio-button value="ids">
+              指定病案号
+            </a-radio-button>
           </a-radio-group>
         </a-form-item>
 
@@ -109,7 +123,10 @@
     <div v-show="currentStep === 2">
       <a-form layout="vertical">
         <a-form-item label="抽样方式">
-          <a-radio-group v-model:value="formData.sampling_method" class="w-full">
+          <a-radio-group
+            v-model:value="formData.sampling_method"
+            class="w-full"
+          >
             <div class="grid grid-cols-3 gap-3">
               <div
                 v-for="opt in samplingOptions"
@@ -118,13 +135,23 @@
                   'border rounded-xl p-4 cursor-pointer transition-all text-center',
                   formData.sampling_method === opt.value
                     ? 'border-blue-500 bg-blue-50 shadow-sm'
-                    : 'border-gray-200 hover:border-blue-200'
+                    : 'border-gray-200 hover:border-blue-200',
                 ]"
                 @click="formData.sampling_method = opt.value"
               >
-                <component :is="opt.icon" class="text-2xl mb-2" :class="formData.sampling_method === opt.value ? 'text-blue-600' : 'text-gray-400'" />
-                <div class="font-medium text-sm">{{ opt.label }}</div>
-                <div class="text-xs text-gray-400 mt-1">{{ opt.desc }}</div>
+                <component
+                  :is="opt.icon"
+                  class="text-2xl mb-2"
+                  :class="
+                    formData.sampling_method === opt.value ? 'text-blue-600' : 'text-gray-400'
+                  "
+                />
+                <div class="font-medium text-sm">
+                  {{ opt.label }}
+                </div>
+                <div class="text-xs text-gray-400 mt-1">
+                  {{ opt.desc }}
+                </div>
               </div>
             </div>
           </a-radio-group>
@@ -153,7 +180,7 @@
               v-model:value="formData.sampling_config.percentage"
               :min="1"
               :max="100"
-              :tipFormatter="(val: number) => `${val}%`"
+              :tip-formatter="(val: number) => `${val}%`"
             />
             <div class="text-center text-blue-600 font-bold text-lg">
               {{ formData.sampling_config.percentage }}%
@@ -168,7 +195,7 @@
                 { value: 'department', label: '按科室' },
                 { value: 'doctor_name', label: '按主治医生' },
               ]"
-              allowClear
+              allow-clear
             />
           </a-form-item>
         </template>
@@ -180,9 +207,15 @@
       <a-form layout="vertical">
         <a-form-item label="分配方式">
           <a-radio-group v-model:value="formData.assign_method">
-            <a-radio value="keep">保持原有分配</a-radio>
-            <a-radio value="by_department">按科室分配</a-radio>
-            <a-radio value="by_ratio">按比例均分</a-radio>
+            <a-radio value="keep">
+              保持原有分配
+            </a-radio>
+            <a-radio value="by_department">
+              按科室分配
+            </a-radio>
+            <a-radio value="by_ratio">
+              按比例均分
+            </a-radio>
           </a-radio-group>
         </a-form-item>
 
@@ -211,7 +244,12 @@
 
     <!-- Step 5: 确认提交 -->
     <div v-show="currentStep === 4">
-      <a-descriptions title="任务概览" bordered :column="1" size="small">
+      <a-descriptions
+        title="任务概览"
+        bordered
+        :column="1"
+        size="small"
+      >
         <a-descriptions-item label="任务名称">
           {{ formData.task_name || '(未设置)' }}
         </a-descriptions-item>
@@ -249,26 +287,31 @@
     <!-- 底部按钮 -->
     <template #footer>
       <div class="flex justify-between">
-        <a-button v-if="currentStep > 0" @click="prevStep">
+        <a-button
+          v-if="currentStep > 0"
+          @click="prevStep"
+        >
           上一步
         </a-button>
-        <div v-else></div>
+        <div v-else />
 
         <div class="flex gap-3">
-          <a-button @click="handleClose">取消</a-button>
+          <a-button @click="handleClose">
+            取消
+          </a-button>
           <a-button
             v-if="currentStep < 4"
             type="primary"
-            @click="nextStep"
             :disabled="!canProceed"
+            @click="nextStep"
           >
             下一步
           </a-button>
           <a-button
             v-else
             type="primary"
-            @click="handleSubmit"
             :loading="submitting"
+            @click="handleSubmit"
           >
             <CheckOutlined /> 创建任务
           </a-button>
@@ -290,6 +333,7 @@ import {
   PercentageOutlined,
 } from '@ant-design/icons-vue'
 import { createTask } from '@/api/tasks'
+import type { TaskCreateData } from '@/api/tasks'
 
 // ============= Props & Emits =============
 const props = defineProps<{
@@ -359,7 +403,12 @@ const assigneeOptions = [
   { value: 'qc_user_5', label: '陈质控' },
 ]
 
-const samplingOptions = [
+const samplingOptions: Array<{
+  value: 'all' | 'count' | 'percentage'
+  label: string
+  desc: string
+  icon: unknown
+}> = [
   { value: 'all', label: '全部', desc: '取全部匹配病历', icon: DatabaseOutlined },
   { value: 'count', label: '按数量', desc: '随机抽取N条', icon: NumberOutlined },
   { value: 'percentage', label: '按比例', desc: '各组取X%', icon: PercentageOutlined },
@@ -369,17 +418,22 @@ const samplingOptions = [
 const parsedRecordIds = computed(() => {
   return recordIdsText.value
     .split('\n')
-    .map(id => id.trim())
-    .filter(id => id.length > 0)
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0)
 })
 
 const canProceed = computed(() => {
   switch (currentStep.value) {
-    case 0: return formData.value.task_name.trim().length > 0
-    case 1: return rangeMode.value === 'ids' ? parsedRecordIds.value.length > 0 : true
-    case 2: return true
-    case 3: return true
-    default: return true
+    case 0:
+      return formData.value.task_name.trim().length > 0
+    case 1:
+      return rangeMode.value === 'ids' ? parsedRecordIds.value.length > 0 : true
+    case 2:
+      return true
+    case 3:
+      return true
+    default:
+      return true
   }
 })
 
@@ -452,8 +506,8 @@ const handleSubmit = async () => {
     // 处理分配人员
     if (formData.value.assign_method !== 'keep' && selectedAssignees.value.length > 0) {
       formData.value.assignee_config = {
-        assignees: selectedAssignees.value.map(id => {
-          const opt = assigneeOptions.find(o => o.value === id)
+        assignees: selectedAssignees.value.map((id) => {
+          const opt = assigneeOptions.find((o) => o.value === id)
           return { user_id: id, user_name: opt?.label || id }
         }),
       }
@@ -463,20 +517,26 @@ const handleSubmit = async () => {
     const submitData = {
       ...formData.value,
       deadline: formData.value.deadline
-        ? (typeof formData.value.deadline === 'string'
+        ? typeof formData.value.deadline === 'string'
           ? formData.value.deadline
-          : (formData.value.deadline as any).format?.('YYYY-MM-DD'))
+          : (formData.value.deadline as any).format?.('YYYY-MM-DD')
         : undefined,
       sampling_config: {
         ...(formData.value.sampling_method === 'count'
-          ? { total: formData.value.sampling_config.total, by_department: formData.value.sampling_config.by_department }
+          ? {
+              total: formData.value.sampling_config.total,
+              by_department: formData.value.sampling_config.by_department,
+            }
           : formData.value.sampling_method === 'percentage'
-            ? { percentage: formData.value.sampling_config.percentage, group_by: formData.value.sampling_config.group_by }
+            ? {
+                percentage: formData.value.sampling_config.percentage,
+                group_by: formData.value.sampling_config.group_by,
+              }
             : {}),
       },
     }
 
-    const res = await createTask(submitData)
+    const res = await createTask(submitData as TaskCreateData)
     if (res.success) {
       message.success(`任务「${formData.value.task_name}」创建成功`)
       emit('created', res.data)

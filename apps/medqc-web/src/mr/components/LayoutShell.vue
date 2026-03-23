@@ -1,14 +1,24 @@
 <template>
-  <div class="layout-shell" :style="cssVars">
+  <div
+    class="layout-shell"
+    :style="cssVars"
+  >
     <!-- Header -->
     <div class="layout-header">
       <div class="header-left">
-        <a-button type="text" @click="$emit('back')" class="back-btn">
+        <a-button
+          type="text"
+          class="back-btn"
+          @click="$emit('back')"
+        >
           <ArrowLeftOutlined />
           返回
         </a-button>
         <a-divider type="vertical" />
-        <div class="patient-info" v-if="patient">
+        <div
+          v-if="patient"
+          class="patient-info"
+        >
           <h3>{{ patient.patient_info?.name || patient.record_name || '未知患者' }}</h3>
           <span class="patient-meta">
             {{ patient.patient_info?.age }}岁 {{ patient.patient_info?.gender }} |
@@ -17,7 +27,7 @@
         </div>
       </div>
       <div class="header-right">
-        <a-tag :color="getStatusColor(patient?.status)">
+        <a-tag :color="getStatusColor(patient?.status || '')">
           {{ patient?.status || '未知状态' }}
         </a-tag>
       </div>
@@ -26,47 +36,47 @@
     <!-- Main Layout -->
     <div class="layout-main">
       <!-- Left Navigation -->
-      <div 
-        v-show="!collapsedNav" 
+      <div
+        v-show="!collapsedNav"
         class="layout-nav"
         :style="{ width: navWidth + 'px' }"
       >
-        <slot name="nav"></slot>
+        <slot name="nav" />
       </div>
 
       <!-- Nav Resizer -->
-      <div 
+      <div
         v-show="!collapsedNav"
         class="layout-resizer nav-resizer"
         @mousedown="startResize('nav', $event)"
-      ></div>
+      />
 
       <!-- Center Content -->
       <div class="layout-content">
         <!-- Toolbar -->
         <div class="layout-toolbar">
           <div class="toolbar-left">
-            <a-button 
-              type="text" 
+            <a-button
+              type="text"
               size="small"
-              @click="toggleNav"
               :title="collapsedNav ? '展开导航' : '收起导航'"
+              @click="toggleNav"
             >
               <MenuFoldOutlined v-if="!collapsedNav" />
               <MenuUnfoldOutlined v-if="collapsedNav" />
             </a-button>
           </div>
-          
+
           <div class="toolbar-center">
-            <slot name="toolbar"></slot>
+            <slot name="toolbar" />
           </div>
-          
+
           <div class="toolbar-right">
-            <a-button 
-              type="text" 
+            <a-button
+              type="text"
               size="small"
-              @click="toggleAside"
               :title="collapsedAside ? '展开侧栏' : '收起侧栏'"
+              @click="toggleAside"
             >
               <MenuFoldOutlined v-if="!collapsedAside" />
               <MenuUnfoldOutlined v-if="collapsedAside" />
@@ -76,24 +86,24 @@
 
         <!-- Main Content -->
         <div class="layout-content-main">
-          <slot name="content"></slot>
+          <slot name="content" />
         </div>
       </div>
 
       <!-- Aside Resizer -->
-      <div 
+      <div
         v-show="!collapsedAside"
         class="layout-resizer aside-resizer"
         @mousedown="startResize('aside', $event)"
-      ></div>
+      />
 
       <!-- Right Aside -->
-      <div 
-        v-show="!collapsedAside" 
+      <div
+        v-show="!collapsedAside"
         class="layout-aside"
         :style="{ width: asideWidth + 'px' }"
       >
-        <slot name="aside"></slot>
+        <slot name="aside" />
       </div>
     </div>
   </div>
@@ -101,11 +111,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { 
-  ArrowLeftOutlined, 
-  MenuFoldOutlined, 
-  MenuUnfoldOutlined 
-} from '@ant-design/icons-vue'
+import { ArrowLeftOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons-vue'
 
 interface Props {
   navWidth?: number
@@ -132,7 +138,7 @@ const props = withDefaults(defineProps<Props>(), {
   asideWidth: 320,
   collapsedNav: false,
   collapsedAside: false,
-  patient: null
+  patient: null,
 })
 
 const emit = defineEmits<{
@@ -140,7 +146,7 @@ const emit = defineEmits<{
   'update:asideWidth': [width: number]
   'update:collapsedNav': [collapsed: boolean]
   'update:collapsedAside': [collapsed: boolean]
-  'back': []
+  back: []
 }>()
 
 // 拖拽状态
@@ -151,16 +157,16 @@ const startWidth = ref(0)
 // CSS 变量
 const cssVars = computed(() => ({
   '--nav-w': props.navWidth + 'px',
-  '--aside-w': props.asideWidth + 'px'
+  '--aside-w': props.asideWidth + 'px',
 }))
 
 // 状态颜色
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    'active': 'green',
-    'completed': 'blue',
-    'pending': 'orange',
-    'cancelled': 'red'
+    active: 'green',
+    completed: 'blue',
+    pending: 'orange',
+    cancelled: 'red',
   }
   return colors[status] || 'default'
 }
@@ -183,7 +189,7 @@ const startResize = (type: 'nav' | 'aside', event: MouseEvent) => {
   resizing.value = type
   startX.value = event.clientX
   startWidth.value = type === 'nav' ? props.navWidth : props.asideWidth
-  
+
   document.addEventListener('mousemove', handleResize)
   document.addEventListener('mouseup', stopResize)
   document.body.style.cursor = 'col-resize'
@@ -192,10 +198,10 @@ const startResize = (type: 'nav' | 'aside', event: MouseEvent) => {
 
 const handleResize = (e: MouseEvent) => {
   if (!resizing.value) return
-  
+
   const deltaX = e.clientX - startX.value
   let newWidth = startWidth.value
-  
+
   if (resizing.value === 'nav') {
     newWidth = startWidth.value + deltaX
     newWidth = Math.max(220, Math.min(480, newWidth))
@@ -213,7 +219,7 @@ const stopResize = () => {
     const width = resizing.value === 'nav' ? props.navWidth : props.asideWidth
     localStorage.setItem(key, String(width))
   }
-  
+
   resizing.value = null
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
@@ -352,7 +358,7 @@ onUnmounted(() => {
   .layout-resizer {
     display: none !important;
   }
-  
+
   .toolbar-left,
   .toolbar-right {
     display: none;

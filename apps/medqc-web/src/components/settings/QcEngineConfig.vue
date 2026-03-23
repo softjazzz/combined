@@ -1,10 +1,11 @@
 <template>
   <div class="ds-root">
-
     <!-- ══════════ Section 1: Prompt 策略 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">Prompt 策略</h2>
+        <h2 class="ds-section-title">
+          Prompt 策略
+        </h2>
         <p class="ds-section-desc">
           控制发送给 LLM 的规则信息量。
           <code class="ds-code">plan_a</code> 在准确性和 Token 消耗之间取得最佳平衡。
@@ -15,13 +16,26 @@
           <div class="ds-card__body ds-divide">
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">Prompt 模式</div>
-                <div class="ds-row__hint">决定发给 LLM 的规则上下文详细程度</div>
+                <div class="ds-row__label">
+                  Prompt 模式
+                </div>
+                <div class="ds-row__hint">
+                  决定发给 LLM 的规则上下文详细程度
+                </div>
               </div>
-              <select v-model="settings.prompt_mode" class="ds-select-native">
-                <option value="plan_a">plan_a（标准，推荐）</option>
-                <option value="current">current（精简）</option>
-                <option value="plan_c">plan_c（详细）</option>
+              <select
+                v-model="settings.prompt_mode"
+                class="ds-select-native"
+              >
+                <option value="plan_a">
+                  plan_a（标准，推荐）
+                </option>
+                <option value="current">
+                  current（精简）
+                </option>
+                <option value="plan_c">
+                  plan_c（详细）
+                </option>
               </select>
             </div>
           </div>
@@ -32,10 +46,12 @@
     <!-- ══════════ Section 2: 分段引擎 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">分段引擎</h2>
+        <h2 class="ds-section-title">
+          分段引擎
+        </h2>
         <p class="ds-section-desc">
-          控制质控任务的分批和并发策略。规则越少每次越精确但调用次数更多，
-          并发数过高可能触发 API 限流。
+          控制质控任务的分批和并发策略。规则越少每次越精确但调用次数更多， 并发数过高可能触发 API
+          限流。
         </p>
       </div>
       <div class="ds-split__main">
@@ -45,27 +61,33 @@
               <div class="ds-grid">
                 <div class="ds-field">
                   <label class="ds-field__label">每批规则数</label>
-                  <div class="ds-field__hint">分段模式下每次发给 LLM 的最大规则数（3-50）</div>
+                  <div class="ds-field__hint">
+                    分段模式下每次发给 LLM 的最大规则数（3-50）
+                  </div>
                   <div class="qc-input-group">
                     <input
                       v-model.number="settings.max_rules_per_batch"
                       type="number"
                       class="qc-input-group__input"
-                      min="3" max="50"
-                    />
+                      min="3"
+                      max="50"
+                    >
                     <span class="qc-input-group__suffix">条</span>
                   </div>
                 </div>
                 <div class="ds-field">
                   <label class="ds-field__label">LLM 并发数</label>
-                  <div class="ds-field__hint">同时请求 LLM 的最大数量（1-10）</div>
+                  <div class="ds-field__hint">
+                    同时请求 LLM 的最大数量（1-10）
+                  </div>
                   <div class="qc-input-group">
                     <input
                       v-model.number="settings.max_concurrency"
                       type="number"
                       class="qc-input-group__input"
-                      min="1" max="10"
-                    />
+                      min="1"
+                      max="10"
+                    >
                     <span class="qc-input-group__suffix">个</span>
                   </div>
                 </div>
@@ -79,7 +101,9 @@
     <!-- ══════════ Section 3: LLM 参数 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">LLM 参数</h2>
+        <h2 class="ds-section-title">
+          LLM 参数
+        </h2>
         <p class="ds-section-desc">
           直接影响 LLM 输出质量和成本。质控场景建议低温度（0.1-0.3）以保证一致性，
           规则较多时需适当增大 Max Tokens。
@@ -93,27 +117,40 @@
                 <div class="ds-field">
                   <label class="ds-field__label">
                     Temperature
-                    <span class="qc-param-badge" :class="settings.temperature <= 0.3 ? 'qc-param-badge--ok' : 'qc-param-badge--warn'">
+                    <span
+                      class="qc-param-badge"
+                      :class="
+                        settings.temperature <= 0.3 ? 'qc-param-badge--ok' : 'qc-param-badge--warn'
+                      "
+                    >
                       {{ settings.temperature }}
                     </span>
                   </label>
-                  <div class="ds-field__hint">越低越确定性，推荐 0.1-0.3</div>
+                  <div class="ds-field__hint">
+                    越低越确定性，推荐 0.1-0.3
+                  </div>
                   <a-slider
                     v-model:value="settings.temperature"
-                    :min="0" :max="1" :step="0.05"
+                    :min="0"
+                    :max="1"
+                    :step="0.05"
                     :marks="{ 0: '0', 0.2: '推荐', 1: '1' }"
                   />
                 </div>
                 <div class="ds-field">
                   <label class="ds-field__label">Max Tokens</label>
-                  <div class="ds-field__hint">LLM 最大输出 token 数（1024-65536）</div>
+                  <div class="ds-field__hint">
+                    LLM 最大输出 token 数（1024-65536）
+                  </div>
                   <div class="qc-input-group">
                     <input
                       v-model.number="settings.max_tokens"
                       type="number"
                       class="qc-input-group__input qc-input-group__input--wide"
-                      min="1024" max="65536" step="1024"
-                    />
+                      min="1024"
+                      max="65536"
+                      step="1024"
+                    >
                     <span class="qc-input-group__suffix">tokens</span>
                   </div>
                 </div>
@@ -121,8 +158,17 @@
             </div>
           </div>
           <div class="ds-card__footer">
-            <button class="ds-btn ds-btn--ghost-text" @click="resetSettings">恢复默认</button>
-            <button class="ds-btn ds-btn--primary" @click="saveSettings" :disabled="saving">
+            <button
+              class="ds-btn ds-btn--ghost-text"
+              @click="resetSettings"
+            >
+              恢复默认
+            </button>
+            <button
+              class="ds-btn ds-btn--primary"
+              :disabled="saving"
+              @click="saveSettings"
+            >
               保存质控配置
             </button>
           </div>
@@ -154,7 +200,9 @@ const loadSettings = async () => {
       const data = await resp.json()
       Object.assign(settings, data.settings)
     }
-  } catch {}
+  } catch (error) {
+    void error
+  }
 }
 
 const saveSettings = async () => {
@@ -216,15 +264,21 @@ onMounted(loadSettings)
   appearance: textfield;
   -moz-appearance: textfield;
 }
-.qc-input-group__input--wide { width: 120px; }
+.qc-input-group__input--wide {
+  width: 120px;
+}
 .qc-input-group__input::-webkit-inner-spin-button,
 .qc-input-group__input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 .qc-input-group__input:hover,
-.qc-input-group__input:focus { border-color: #2563eb; }
-.qc-input-group__input:focus { box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }
+.qc-input-group__input:focus {
+  border-color: #2563eb;
+}
+.qc-input-group__input:focus {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
 .qc-input-group__suffix {
   display: inline-flex;
   align-items: center;

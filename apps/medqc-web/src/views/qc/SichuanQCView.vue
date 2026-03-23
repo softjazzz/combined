@@ -22,7 +22,9 @@
               suffix="%"
               :value-style="{ color: '#3f8600' }"
             />
-            <div class="stat-desc">相比原始方案</div>
+            <div class="stat-desc">
+              相比原始方案
+            </div>
           </a-card>
         </a-col>
         <a-col :span="6">
@@ -33,7 +35,9 @@
               suffix="%"
               :value-style="{ color: '#1890ff' }"
             />
-            <div class="stat-desc">甲级病历评估</div>
+            <div class="stat-desc">
+              甲级病历评估
+            </div>
           </a-card>
         </a-col>
         <a-col :span="6">
@@ -44,7 +48,9 @@
               suffix="秒"
               :value-style="{ color: '#722ed1' }"
             />
-            <div class="stat-desc">单次质控评估</div>
+            <div class="stat-desc">
+              单次质控评估
+            </div>
           </a-card>
         </a-col>
         <a-col :span="6">
@@ -55,7 +61,9 @@
               prefix="¥"
               :value-style="{ color: '#cf1322' }"
             />
-            <div class="stat-desc">基于真实测试</div>
+            <div class="stat-desc">
+              基于真实测试
+            </div>
           </a-card>
         </a-col>
       </a-row>
@@ -69,77 +77,176 @@
         placeholder="关联的病历ID（从详情页跳转自动带入）"
         :disabled="evaluating"
       />
-      <a-select v-model:value="selectedProvider" style="width: 180px" placeholder="选择提供商" :disabled="evaluating">
-        <a-select-option v-for="p in providers" :key="(p.id || p.provider_code || p.code)" :value="(p.provider_code || p.id || p.code)">
+      <a-select
+        v-model:value="selectedProvider"
+        style="width: 180px"
+        placeholder="选择提供商"
+        :disabled="evaluating"
+      >
+        <a-select-option
+          v-for="p in providers"
+          :key="p.id || p.provider_code || p.code"
+          :value="p.provider_code || p.id || p.code"
+        >
           {{ getProviderLabel(p) }}
         </a-select-option>
       </a-select>
-      <a-select v-model:value="selectedModel" style="width: 220px" placeholder="选择模型" :disabled="evaluating">
-        <a-select-option v-for="m in filteredModels" :key="(m.id || m.model_code || m.code)" :value="(m.model_code || m.id || m.code)">
+      <a-select
+        v-model:value="selectedModel"
+        style="width: 220px"
+        placeholder="选择模型"
+        :disabled="evaluating"
+      >
+        <a-select-option
+          v-for="m in filteredModels"
+          :key="m.id || m.model_code || m.code"
+          :value="m.model_code || m.id || m.code"
+        >
           {{ getModelLabel(m) }}
         </a-select-option>
       </a-select>
-      <a-button type="primary" :loading="evaluating" @click="startEvaluationWithLinkedRecord">
-        <template #icon><play-circle-outlined /></template>
+      <a-button
+        type="primary"
+        :loading="evaluating"
+        @click="startEvaluationWithLinkedRecord"
+      >
+        <template #icon>
+          <play-circle-outlined />
+        </template>
         开始质控
       </a-button>
     </div>
 
     <!-- ⚙️ 高级设置折叠面板（始终可见） -->
-    <a-collapse :bordered="false" class="advanced-settings-collapse" style="margin-bottom: 12px;">
-      <a-collapse-panel key="advanced" header="⚙️ 高级设置">
+    <a-collapse
+      :bordered="false"
+      class="advanced-settings-collapse"
+      style="margin-bottom: 12px"
+    >
+      <a-collapse-panel
+        key="advanced"
+        header="⚙️ 高级设置"
+      >
         <a-row :gutter="[16, 12]">
           <!-- Prompt 模式 -->
           <a-col :span="6">
-            <div class="setting-label">Prompt 模式</div>
-            <a-select v-model:value="advancedSettings.prompt_mode" style="width: 100%">
-              <a-select-option value="plan_a">plan_a（标准，推荐）</a-select-option>
-              <a-select-option value="current">current（精简）</a-select-option>
-              <a-select-option value="plan_c">plan_c（详细）</a-select-option>
+            <div class="setting-label">
+              Prompt 模式
+            </div>
+            <a-select
+              v-model:value="advancedSettings.prompt_mode"
+              style="width: 100%"
+            >
+              <a-select-option value="plan_a">
+                plan_a（标准，推荐）
+              </a-select-option>
+              <a-select-option value="current">
+                current（精简）
+              </a-select-option>
+              <a-select-option value="plan_c">
+                plan_c（详细）
+              </a-select-option>
             </a-select>
-            <div class="setting-hint">控制发送给 LLM 的规则信息量</div>
+            <div class="setting-hint">
+              控制发送给 LLM 的规则信息量
+            </div>
           </a-col>
           <!-- 每批规则数 -->
           <a-col :span="5">
-            <div class="setting-label">每批规则数</div>
-            <a-input-number v-model:value="advancedSettings.max_rules_per_batch" :min="3" :max="50" style="width: 100%" />
-            <div class="setting-hint">每次发给 LLM 的规则数量</div>
+            <div class="setting-label">
+              每批规则数
+            </div>
+            <a-input-number
+              v-model:value="advancedSettings.max_rules_per_batch"
+              :min="3"
+              :max="50"
+              style="width: 100%"
+            />
+            <div class="setting-hint">
+              每次发给 LLM 的规则数量
+            </div>
           </a-col>
           <!-- 并发数 -->
           <a-col :span="4">
-            <div class="setting-label">LLM 并发数</div>
-            <a-input-number v-model:value="advancedSettings.max_concurrency" :min="1" :max="10" style="width: 100%" />
-            <div class="setting-hint">同时请求 LLM 数</div>
+            <div class="setting-label">
+              LLM 并发数
+            </div>
+            <a-input-number
+              v-model:value="advancedSettings.max_concurrency"
+              :min="1"
+              :max="10"
+              style="width: 100%"
+            />
+            <div class="setting-hint">
+              同时请求 LLM 数
+            </div>
           </a-col>
           <!-- Temperature -->
           <a-col :span="4">
-            <div class="setting-label">Temperature {{ advancedSettings.temperature }}</div>
-            <a-slider v-model:value="advancedSettings.temperature" :min="0" :max="1" :step="0.05" />
-            <div class="setting-hint">越低越确定</div>
+            <div class="setting-label">
+              Temperature {{ advancedSettings.temperature }}
+            </div>
+            <a-slider
+              v-model:value="advancedSettings.temperature"
+              :min="0"
+              :max="1"
+              :step="0.05"
+            />
+            <div class="setting-hint">
+              越低越确定
+            </div>
           </a-col>
           <!-- Max Tokens -->
           <a-col :span="4">
-            <div class="setting-label">Max Tokens</div>
-            <a-input-number v-model:value="advancedSettings.max_tokens" :min="1024" :max="65536" :step="1024" style="width: 100%" />
-            <div class="setting-hint">最大输出 token 数</div>
+            <div class="setting-label">
+              Max Tokens
+            </div>
+            <a-input-number
+              v-model:value="advancedSettings.max_tokens"
+              :min="1024"
+              :max="65536"
+              :step="1024"
+              style="width: 100%"
+            />
+            <div class="setting-hint">
+              最大输出 token 数
+            </div>
           </a-col>
           <!-- 恢复默认 -->
-          <a-col :span="1" style="display: flex; align-items: flex-end;">
-            <a-button @click="resetAdvancedSettings" size="small" type="link">重置</a-button>
+          <a-col
+            :span="1"
+            style="display: flex; align-items: flex-end"
+          >
+            <a-button
+              size="small"
+              type="link"
+              @click="resetAdvancedSettings"
+            >
+              重置
+            </a-button>
           </a-col>
         </a-row>
       </a-collapse-panel>
     </a-collapse>
 
     <!-- 功能选项卡 -->
-    <a-tabs v-model:activeKey="activeTab" class="function-tabs">
+    <a-tabs
+      v-model:active-key="activeTab"
+      class="function-tabs"
+    >
       <!-- 单文档质控 -->
-      <a-tab-pane key="single" tab="单文档质控">
+      <a-tab-pane
+        key="single"
+        tab="单文档质控"
+      >
         <div class="tab-content">
-          <a-card title="单文档四川省规则质控评估" class="function-card">
+          <a-card
+            title="单文档四川省规则质控评估"
+            class="function-card"
+          >
             <div class="upload-section">
               <a-upload-dragger
-                v-model:fileList="fileList"
+                v-model:file-list="fileList"
                 :before-upload="beforeUpload"
                 :remove="removeFile"
                 accept=".txt,.pdf,.doc,.docx"
@@ -148,101 +255,226 @@
                 <p class="ant-upload-drag-icon">
                   <inbox-outlined />
                 </p>
-                <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+                <p class="ant-upload-text">
+                  点击或拖拽文件到此区域上传
+                </p>
                 <p class="ant-upload-hint">
                   支持病程记录、入院记录等医疗文档格式
                 </p>
               </a-upload-dragger>
             </div>
 
-            <div class="form-section" v-if="documentContent">
+            <div
+              v-if="documentContent"
+              class="form-section"
+            >
               <a-form layout="vertical">
                 <a-form-item label="文档ID">
-                  <a-input v-model:value="documentId" placeholder="请输入文档标识" />
+                  <a-input
+                    v-model:value="documentId"
+                    placeholder="请输入文档标识"
+                  />
                 </a-form-item>
                 <a-form-item label="文档类型">
-                  <a-select v-model:value="documentType" placeholder="选择文档类型" show-search>
+                  <a-select
+                    v-model:value="documentType"
+                    placeholder="选择文档类型"
+                    show-search
+                  >
                     <a-select-opt-group label="入院/出院">
-                      <a-select-option value="入院记录">入院记录</a-select-option>
-                      <a-select-option value="出院记录">出院记录</a-select-option>
-                      <a-select-option value="死亡记录">死亡记录</a-select-option>
+                      <a-select-option value="入院记录">
+                        入院记录
+                      </a-select-option>
+                      <a-select-option value="出院记录">
+                        出院记录
+                      </a-select-option>
+                      <a-select-option value="死亡记录">
+                        死亡记录
+                      </a-select-option>
                     </a-select-opt-group>
                     <a-select-opt-group label="病程记录">
-                      <a-select-option value="首次病程记录">首次病程记录</a-select-option>
-                      <a-select-option value="日常病程记录">日常病程记录</a-select-option>
-                      <a-select-option value="上级查房记录">上级查房记录</a-select-option>
-                      <a-select-option value="抢救记录">抢救记录</a-select-option>
-                      <a-select-option value="交接班记录">交接班记录</a-select-option>
-                      <a-select-option value="转科记录">转科记录</a-select-option>
-                      <a-select-option value="阶段小结">阶段小结</a-select-option>
+                      <a-select-option value="首次病程记录">
+                        首次病程记录
+                      </a-select-option>
+                      <a-select-option value="日常病程记录">
+                        日常病程记录
+                      </a-select-option>
+                      <a-select-option value="上级查房记录">
+                        上级查房记录
+                      </a-select-option>
+                      <a-select-option value="抢救记录">
+                        抢救记录
+                      </a-select-option>
+                      <a-select-option value="交接班记录">
+                        交接班记录
+                      </a-select-option>
+                      <a-select-option value="转科记录">
+                        转科记录
+                      </a-select-option>
+                      <a-select-option value="阶段小结">
+                        阶段小结
+                      </a-select-option>
                     </a-select-opt-group>
                     <a-select-opt-group label="讨论/会诊">
-                      <a-select-option value="疑难病例讨论记录">疑难病例讨论记录</a-select-option>
-                      <a-select-option value="死亡病例讨论记录">死亡病例讨论记录</a-select-option>
-                      <a-select-option value="会诊记录">会诊记录</a-select-option>
+                      <a-select-option value="疑难病例讨论记录">
+                        疑难病例讨论记录
+                      </a-select-option>
+                      <a-select-option value="死亡病例讨论记录">
+                        死亡病例讨论记录
+                      </a-select-option>
+                      <a-select-option value="会诊记录">
+                        会诊记录
+                      </a-select-option>
                     </a-select-opt-group>
                     <a-select-opt-group label="手术相关">
-                      <a-select-option value="术前小结">术前小结</a-select-option>
-                      <a-select-option value="术前讨论">术前讨论</a-select-option>
-                      <a-select-option value="手术记录">手术记录</a-select-option>
-                      <a-select-option value="术后首次病程记录">术后首次病程记录</a-select-option>
-                      <a-select-option value="手术安全核查">手术安全核查</a-select-option>
-                      <a-select-option value="手术风险评估">手术风险评估</a-select-option>
-                      <a-select-option value="麻醉记录">麻醉记录</a-select-option>
+                      <a-select-option value="术前小结">
+                        术前小结
+                      </a-select-option>
+                      <a-select-option value="术前讨论">
+                        术前讨论
+                      </a-select-option>
+                      <a-select-option value="手术记录">
+                        手术记录
+                      </a-select-option>
+                      <a-select-option value="术后首次病程记录">
+                        术后首次病程记录
+                      </a-select-option>
+                      <a-select-option value="手术安全核查">
+                        手术安全核查
+                      </a-select-option>
+                      <a-select-option value="手术风险评估">
+                        手术风险评估
+                      </a-select-option>
+                      <a-select-option value="麻醉记录">
+                        麻醉记录
+                      </a-select-option>
                     </a-select-opt-group>
                     <a-select-opt-group label="其他文书">
-                      <a-select-option value="知情同意书">知情同意书</a-select-option>
-                      <a-select-option value="新生儿记录">新生儿记录</a-select-option>
-                      <a-select-option value="输血记录">输血记录</a-select-option>
-                      <a-select-option value="护理记录">护理记录</a-select-option>
-                      <a-select-option value="检查检验报告">检查检验报告</a-select-option>
+                      <a-select-option value="知情同意书">
+                        知情同意书
+                      </a-select-option>
+                      <a-select-option value="新生儿记录">
+                        新生儿记录
+                      </a-select-option>
+                      <a-select-option value="输血记录">
+                        输血记录
+                      </a-select-option>
+                      <a-select-option value="护理记录">
+                        护理记录
+                      </a-select-option>
+                      <a-select-option value="检查检验报告">
+                        检查检验报告
+                      </a-select-option>
                     </a-select-opt-group>
                   </a-select>
-
                 </a-form-item>
 
                 <!-- 高级设置折叠面板 -->
                 <a-form-item>
-                  <a-collapse :bordered="false" class="advanced-settings-collapse">
-                    <a-collapse-panel key="advanced" header="⚙️ 高级设置">
+                  <a-collapse
+                    :bordered="false"
+                    class="advanced-settings-collapse"
+                  >
+                    <a-collapse-panel
+                      key="advanced"
+                      header="⚙️ 高级设置"
+                    >
                       <a-row :gutter="[16, 12]">
                         <!-- Prompt 模式 -->
                         <a-col :span="12">
-                          <div class="setting-label">Prompt 模式</div>
-                          <a-select v-model:value="advancedSettings.prompt_mode" style="width: 100%">
-                            <a-select-option value="plan_a">plan_a（标准，推荐）</a-select-option>
-                            <a-select-option value="current">current（精简）</a-select-option>
-                            <a-select-option value="plan_c">plan_c（详细）</a-select-option>
+                          <div class="setting-label">
+                            Prompt 模式
+                          </div>
+                          <a-select
+                            v-model:value="advancedSettings.prompt_mode"
+                            style="width: 100%"
+                          >
+                            <a-select-option value="plan_a">
+                              plan_a（标准，推荐）
+                            </a-select-option>
+                            <a-select-option value="current">
+                              current（精简）
+                            </a-select-option>
+                            <a-select-option value="plan_c">
+                              plan_c（详细）
+                            </a-select-option>
                           </a-select>
-                          <div class="setting-hint">控制发送给 LLM 的规则信息量</div>
+                          <div class="setting-hint">
+                            控制发送给 LLM 的规则信息量
+                          </div>
                         </a-col>
                         <!-- 每批规则数 -->
                         <a-col :span="12">
-                          <div class="setting-label">每批规则数</div>
-                          <a-input-number v-model:value="advancedSettings.max_rules_per_batch" :min="3" :max="50" style="width: 100%" />
-                          <div class="setting-hint">分段模式下每次发给 LLM 的规则数量</div>
+                          <div class="setting-label">
+                            每批规则数
+                          </div>
+                          <a-input-number
+                            v-model:value="advancedSettings.max_rules_per_batch"
+                            :min="3"
+                            :max="50"
+                            style="width: 100%"
+                          />
+                          <div class="setting-hint">
+                            分段模式下每次发给 LLM 的规则数量
+                          </div>
                         </a-col>
                         <!-- 并发数 -->
                         <a-col :span="12">
-                          <div class="setting-label">LLM 并发数</div>
-                          <a-input-number v-model:value="advancedSettings.max_concurrency" :min="1" :max="10" style="width: 100%" />
-                          <div class="setting-hint">同时请求 LLM 的最大数量</div>
+                          <div class="setting-label">
+                            LLM 并发数
+                          </div>
+                          <a-input-number
+                            v-model:value="advancedSettings.max_concurrency"
+                            :min="1"
+                            :max="10"
+                            style="width: 100%"
+                          />
+                          <div class="setting-hint">
+                            同时请求 LLM 的最大数量
+                          </div>
                         </a-col>
                         <!-- Temperature -->
                         <a-col :span="12">
-                          <div class="setting-label">Temperature</div>
-                          <a-slider v-model:value="advancedSettings.temperature" :min="0" :max="1" :step="0.05" />
-                          <div class="setting-hint">越低越确定（推荐 0.1-0.3）</div>
+                          <div class="setting-label">
+                            Temperature
+                          </div>
+                          <a-slider
+                            v-model:value="advancedSettings.temperature"
+                            :min="0"
+                            :max="1"
+                            :step="0.05"
+                          />
+                          <div class="setting-hint">
+                            越低越确定（推荐 0.1-0.3）
+                          </div>
                         </a-col>
                         <!-- Max Tokens -->
                         <a-col :span="12">
-                          <div class="setting-label">Max Tokens</div>
-                          <a-input-number v-model:value="advancedSettings.max_tokens" :min="1024" :max="65536" :step="1024" style="width: 100%" />
-                          <div class="setting-hint">LLM 最大输出 token 数</div>
+                          <div class="setting-label">
+                            Max Tokens
+                          </div>
+                          <a-input-number
+                            v-model:value="advancedSettings.max_tokens"
+                            :min="1024"
+                            :max="65536"
+                            :step="1024"
+                            style="width: 100%"
+                          />
+                          <div class="setting-hint">
+                            LLM 最大输出 token 数
+                          </div>
                         </a-col>
                         <!-- 重置按钮 -->
-                        <a-col :span="12" style="display: flex; align-items: flex-end;">
-                          <a-button @click="resetAdvancedSettings" size="small">恢复默认</a-button>
+                        <a-col
+                          :span="12"
+                          style="display: flex; align-items: flex-end"
+                        >
+                          <a-button
+                            size="small"
+                            @click="resetAdvancedSettings"
+                          >
+                            恢复默认
+                          </a-button>
                         </a-col>
                       </a-row>
                     </a-collapse-panel>
@@ -250,14 +482,16 @@
                 </a-form-item>
 
                 <a-form-item>
-                  <a-button 
-                    type="primary" 
+                  <a-button
+                    type="primary"
                     size="large"
                     :loading="evaluating"
-                    @click="startEvaluation"
                     class="evaluate-btn"
+                    @click="startEvaluation"
                   >
-                    <template #icon><play-circle-outlined /></template>
+                    <template #icon>
+                      <play-circle-outlined />
+                    </template>
                     开始四川省规则质控评估
                   </a-button>
                 </a-form-item>
@@ -265,9 +499,12 @@
             </div>
 
             <!-- 评估结果 -->
-            <div class="results-section" v-if="evaluationResult">
+            <div
+              v-if="evaluationResult"
+              class="results-section"
+            >
               <a-divider>质控评估结果</a-divider>
-              
+
               <!-- 评估概要 -->
               <div class="result-summary">
                 <a-row :gutter="16">
@@ -278,7 +515,9 @@
                         :value="evaluationResult.evaluation_summary.compliance_rate"
                         suffix="%"
                         :precision="1"
-                        :value-style="getComplianceColor(evaluationResult.evaluation_summary.compliance_rate)"
+                        :value-style="
+                          getComplianceColor(evaluationResult.evaluation_summary.compliance_rate)
+                        "
                       />
                     </a-card>
                   </a-col>
@@ -287,7 +526,9 @@
                       <a-statistic
                         title="总体等级"
                         :value="evaluationResult.evaluation_summary.overall_grade"
-                        :value-style="getGradeColor(evaluationResult.evaluation_summary.overall_grade)"
+                        :value-style="
+                          getGradeColor(evaluationResult.evaluation_summary.overall_grade)
+                        "
                       />
                     </a-card>
                   </a-col>
@@ -305,19 +546,30 @@
 
               <!-- 优化指标 -->
               <div class="optimization-metrics">
-                <a-card title="Token优化效果" size="small">
+                <a-card
+                  title="Token优化效果"
+                  size="small"
+                >
                   <a-row :gutter="16">
                     <a-col :span="6">
                       <div class="metric-item">
-                        <div class="metric-label">节省率</div>
+                        <div class="metric-label">
+                          节省率
+                        </div>
                         <div class="metric-value success">
-                          {{ (evaluationResult.optimization_metrics.token_savings_rate * 100).toFixed(1) }}%
+                          {{
+                            (
+                              evaluationResult.optimization_metrics.token_savings_rate * 100
+                            ).toFixed(1)
+                          }}%
                         </div>
                       </div>
                     </a-col>
                     <a-col :span="6">
                       <div class="metric-item">
-                        <div class="metric-label">实际成本</div>
+                        <div class="metric-label">
+                          实际成本
+                        </div>
                         <div class="metric-value">
                           ¥{{ evaluationResult.performance_metrics.estimated_cost.toFixed(4) }}
                         </div>
@@ -325,7 +577,9 @@
                     </a-col>
                     <a-col :span="6">
                       <div class="metric-item">
-                        <div class="metric-label">节省金额</div>
+                        <div class="metric-label">
+                          节省金额
+                        </div>
                         <div class="metric-value success">
                           ¥{{ evaluationResult.optimization_metrics.cost_savings.toFixed(4) }}
                         </div>
@@ -333,7 +587,9 @@
                     </a-col>
                     <a-col :span="6">
                       <div class="metric-item">
-                        <div class="metric-label">处理时间</div>
+                        <div class="metric-label">
+                          处理时间
+                        </div>
                         <div class="metric-value">
                           {{ evaluationResult.performance_metrics.processing_time.toFixed(1) }}秒
                         </div>
@@ -345,9 +601,12 @@
 
               <!-- 详细评估结果 -->
               <div class="detailed-results">
-                <a-card title="详细规则评估结果" size="small">
+                <a-card
+                  title="详细规则评估结果"
+                  size="small"
+                >
                   <a-table
-                    :dataSource="evaluationResult.evaluation_results"
+                    :data-source="evaluationResult.evaluation_results"
                     :columns="resultColumns"
                     :pagination="{ pageSize: 10 }"
                     size="small"
@@ -368,7 +627,11 @@
                       <template v-if="column.key === 'findings'">
                         <a-tooltip :title="record.findings">
                           <span class="findings-text">
-                            {{ record.findings.length > 50 ? record.findings.substring(0, 50) + '...' : record.findings }}
+                            {{
+                              record.findings.length > 50
+                                ? record.findings.substring(0, 50) + '...'
+                                : record.findings
+                            }}
                           </span>
                         </a-tooltip>
                       </template>
@@ -382,9 +645,15 @@
       </a-tab-pane>
 
       <!-- 批量质控 -->
-      <a-tab-pane key="batch" tab="批量质控">
+      <a-tab-pane
+        key="batch"
+        tab="批量质控"
+      >
         <div class="tab-content">
-          <a-card title="批量文档四川省规则质控" class="function-card">
+          <a-card
+            title="批量文档四川省规则质控"
+            class="function-card"
+          >
             <a-alert
               message="批量质控功能"
               description="支持同时处理多个医疗文档，提供批量统计和成本分析"
@@ -401,7 +670,9 @@
                 <p class="ant-upload-drag-icon">
                   <inbox-outlined />
                 </p>
-                <p class="ant-upload-text">批量上传医疗文档</p>
+                <p class="ant-upload-text">
+                  批量上传医疗文档
+                </p>
                 <p class="ant-upload-hint">
                   支持多文件同时上传，自动进行批量质控分析
                 </p>
@@ -412,30 +683,52 @@
       </a-tab-pane>
 
       <!-- 规则管理 -->
-      <a-tab-pane key="rules" tab="规则管理">
+      <a-tab-pane
+        key="rules"
+        tab="规则管理"
+      >
         <div class="tab-content">
-          <a-card title="四川省住院病历质控规则" class="function-card">
+          <a-card
+            title="四川省住院病历质控规则"
+            class="function-card"
+          >
             <div class="rules-stats">
               <a-row :gutter="16">
                 <a-col :span="8">
-                  <a-statistic title="总规则数" :value="rulesStats.total_rules" />
+                  <a-statistic
+                    title="总规则数"
+                    :value="rulesStats.total_rules"
+                  />
                 </a-col>
                 <a-col :span="8">
-                  <a-statistic title="高复杂度" :value="rulesStats.complexity_distribution?.高复杂度 || 0" />
+                  <a-statistic
+                    title="高复杂度"
+                    :value="rulesStats.complexity_distribution?.高复杂度 || 0"
+                  />
                 </a-col>
                 <a-col :span="8">
-                  <a-statistic title="严重缺陷" :value="rulesStats.defect_level_distribution?.严重缺陷 || 0" />
+                  <a-statistic
+                    title="严重缺陷"
+                    :value="rulesStats.defect_level_distribution?.严重缺陷 || 0"
+                  />
                 </a-col>
               </a-row>
             </div>
-            
-            <a-button type="primary" @click="loadRules" :loading="loadingRules" style="margin: 16px 0">
-              <template #icon><reload-outlined /></template>
+
+            <a-button
+              type="primary"
+              :loading="loadingRules"
+              style="margin: 16px 0"
+              @click="loadRules"
+            >
+              <template #icon>
+                <reload-outlined />
+              </template>
               加载四川省规则
             </a-button>
 
             <a-table
-              :dataSource="rules"
+              :data-source="rules"
               :columns="rulesColumns"
               :pagination="{ pageSize: 15 }"
               size="small"
@@ -459,18 +752,41 @@
       </a-tab-pane>
 
       <!-- 统计监控 -->
-      <a-tab-pane key="stats" tab="统计监控">
+      <a-tab-pane
+        key="stats"
+        tab="统计监控"
+      >
         <div class="tab-content">
-          <a-card title="四川省质控系统统计" class="function-card">
-            <a-button type="primary" @click="loadStats" :loading="loadingStats" style="margin-bottom: 16px">
-              <template #icon><bar-chart-outlined /></template>
+          <a-card
+            title="四川省质控系统统计"
+            class="function-card"
+          >
+            <a-button
+              type="primary"
+              :loading="loadingStats"
+              style="margin-bottom: 16px"
+              @click="loadStats"
+            >
+              <template #icon>
+                <bar-chart-outlined />
+              </template>
               刷新统计数据
             </a-button>
 
-            <div v-if="systemStats" class="stats-display">
+            <div
+              v-if="systemStats"
+              class="stats-display"
+            >
               <!-- 服务统计 -->
-              <a-card title="服务运行状态" size="small" style="margin-bottom: 16px">
-                <a-descriptions :column="3" size="small">
+              <a-card
+                title="服务运行状态"
+                size="small"
+                style="margin-bottom: 16px"
+              >
+                <a-descriptions
+                  :column="3"
+                  size="small"
+                >
                   <a-descriptions-item label="运行时间">
                     {{ Math.round(systemStats.service_statistics.uptime_seconds) }}秒
                   </a-descriptions-item>
@@ -484,10 +800,24 @@
               </a-card>
 
               <!-- 性能指标 -->
-              <a-card title="性能指标" size="small" style="margin-bottom: 16px">
-                <a-descriptions :column="3" size="small">
+              <a-card
+                title="性能指标"
+                size="small"
+                style="margin-bottom: 16px"
+              >
+                <a-descriptions
+                  :column="3"
+                  size="small"
+                >
                   <a-descriptions-item label="API成功率">
-                    <span :style="{ color: systemStats.performance_metrics.success_rate >= 95 ? '#52c41a' : '#ff4d4f' }">
+                    <span
+                      :style="{
+                        color:
+                          systemStats.performance_metrics.success_rate >= 95
+                            ? '#52c41a'
+                            : '#ff4d4f',
+                      }"
+                    >
                       {{ systemStats.performance_metrics.success_rate.toFixed(1) }}%
                     </span>
                   </a-descriptions-item>
@@ -501,16 +831,26 @@
               </a-card>
 
               <!-- 优化成果 -->
-              <a-card title="优化成果" size="small">
-                <a-descriptions :column="2" size="small">
+              <a-card
+                title="优化成果"
+                size="small"
+              >
+                <a-descriptions
+                  :column="2"
+                  size="small"
+                >
                   <a-descriptions-item label="Token节省率">
-                    <span style="color: #52c41a; font-weight: bold;">
-                      {{ (systemStats.optimization_achievements.token_savings_rate * 100).toFixed(1) }}%
+                    <span style="color: #52c41a; font-weight: bold">
+                      {{
+                        (systemStats.optimization_achievements.token_savings_rate * 100).toFixed(1)
+                      }}%
                     </span>
                   </a-descriptions-item>
                   <a-descriptions-item label="预估日节省">
-                    <span style="color: #1890ff; font-weight: bold;">
-                      ¥{{ systemStats.optimization_achievements.estimated_daily_savings.toFixed(4) }}
+                    <span style="color: #1890ff; font-weight: bold">
+                      ¥{{
+                        systemStats.optimization_achievements.estimated_daily_savings.toFixed(4)
+                      }}
                     </span>
                   </a-descriptions-item>
                 </a-descriptions>
@@ -530,7 +870,7 @@ import {
   InboxOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
-  MedicineBoxOutlined
+  MedicineBoxOutlined,
 } from '@ant-design/icons-vue'
 import type { UploadFile } from 'ant-design-vue'
 
@@ -571,7 +911,9 @@ const loadAdvancedSettings = async () => {
       const data = await resp.json()
       Object.assign(advancedSettings, data.settings)
     }
-  } catch {}
+  } catch {
+    return
+  }
 }
 const resetAdvancedSettings = async () => {
   try {
@@ -581,12 +923,20 @@ const resetAdvancedSettings = async () => {
       Object.assign(advancedSettings, data.settings)
       message.success('已恢复默认设置')
     }
-  } catch {}
+  } catch {
+    return
+  }
 }
 
 // 友好标签生成
 const getProviderLabel = (p: any) => {
-  return p.name || p.provider_name || p.display_name || p.provider_code || (p.id ? String(p.id).slice(0, 8) : '未知提供商')
+  return (
+    p.name ||
+    p.provider_name ||
+    p.display_name ||
+    p.provider_code ||
+    (p.id ? String(p.id).slice(0, 8) : '未知提供商')
+  )
 }
 const getModelLabel = (m: any) => {
   return m.model_name || m.name || m.model_code || (m.id ? String(m.id).slice(0, 12) : '未知模型')
@@ -647,7 +997,7 @@ const resultColumns = [
   { title: '规则ID', dataIndex: 'rule_id', key: 'rule_id', width: 100 },
   { title: '合规状态', dataIndex: 'is_compliant', key: 'is_compliant', width: 100 },
   { title: '发现', dataIndex: 'findings', key: 'findings', ellipsis: true },
-  { title: '置信度', dataIndex: 'confidence', key: 'confidence', width: 120 }
+  { title: '置信度', dataIndex: 'confidence', key: 'confidence', width: 120 },
 ]
 
 const rulesColumns = [
@@ -655,7 +1005,7 @@ const rulesColumns = [
   { title: '规则名称', dataIndex: 'name', key: 'name', ellipsis: true },
   { title: '复杂度', dataIndex: 'complexity', key: 'complexity', width: 100 },
   { title: '缺陷级别', dataIndex: 'defect_level', key: 'defect_level', width: 120 },
-  { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true }
+  { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
 ]
 
 // 文件上传处理
@@ -686,7 +1036,7 @@ const startEvaluation = async () => {
     const response = await fetch('/api/v1/qc/sichuan/evaluate', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         document_id: documentId.value,
@@ -700,7 +1050,7 @@ const startEvaluation = async () => {
         max_tokens: advancedSettings.max_tokens,
       }),
       // 统一超时到3分钟（180秒）
-      signal: AbortSignal.timeout(180000)
+      signal: AbortSignal.timeout(180000),
     })
 
     if (response.ok) {
@@ -736,7 +1086,7 @@ const startEvaluationWithLinkedRecord = async () => {
         localStorage.getItem('access_token')
       // 统一使用后端兼容的公开详情接口 /api/medical-records/{id}
       const recResp = await fetch(`/api/medical-records/${linkedRecordId.value}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
       if (recResp.ok) {
         const rec = await recResp.json()
@@ -744,7 +1094,7 @@ const startEvaluationWithLinkedRecord = async () => {
       }
       // 进一步查询该病历的文档，优先选用真实的 document_id（UUID）
       const docsResp = await fetch(`/api/medical-records/${linkedRecordId.value}/documents`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
       if (docsResp.ok) {
         const dd = await docsResp.json()
@@ -769,7 +1119,7 @@ const startEvaluationWithLinkedRecord = async () => {
         max_concurrency: advancedSettings.max_concurrency,
         temperature: advancedSettings.temperature,
         max_tokens: advancedSettings.max_tokens,
-      })
+      }),
     })
     if (!resp.ok) {
       throw new Error(await resp.text())
@@ -786,10 +1136,7 @@ const startEvaluationWithLinkedRecord = async () => {
 // 加载提供商与模型（用于下拉）
 const loadProvidersAndModels = async () => {
   try {
-    const [p, m] = await Promise.all([
-      fetch('/api/v1/llm/providers'),
-      fetch('/api/v1/llm/models')
-    ])
+    const [p, m] = await Promise.all([fetch('/api/v1/llm/providers'), fetch('/api/v1/llm/models')])
     if (p.ok) {
       const pd = await p.json()
       providers.value = pd.providers || pd.data || []
@@ -799,14 +1146,18 @@ const loadProvidersAndModels = async () => {
       models.value = md.models || md.data || []
     }
     applyModelFilter() // 加载模型后立即应用过滤
-  } catch {}
+  } catch {
+    return
+  }
 }
 
 // 加载规则
 const loadRules = async () => {
   loadingRules.value = true
   try {
-    const response = await fetch(`/api/v1/qc/sichuan/rules?_ts=${Date.now()}`, { cache: 'no-store' })
+    const response = await fetch(`/api/v1/qc/sichuan/rules?_ts=${Date.now()}`, {
+      cache: 'no-store',
+    })
     if (response.ok) {
       const data = await response.json()
       rules.value = data.rules
@@ -849,10 +1200,14 @@ const getComplianceColor = (rate: number) => {
 
 const getGradeColor = (grade: string) => {
   switch (grade) {
-    case '甲级': return { color: '#52c41a' }
-    case '乙级': return { color: '#faad14' }
-    case '丙级': return { color: '#ff4d4f' }
-    default: return { color: '#666' }
+    case '甲级':
+      return { color: '#52c41a' }
+    case '乙级':
+      return { color: '#faad14' }
+    case '丙级':
+      return { color: '#ff4d4f' }
+    default:
+      return { color: '#666' }
   }
 }
 
@@ -864,10 +1219,14 @@ const getConfidenceColor = (confidence: number) => {
 
 const getComplexityColor = (complexity: string) => {
   switch (complexity) {
-    case '高复杂度': return 'red'
-    case '中复杂度': return 'orange'
-    case '低复杂度': return 'green'
-    default: return 'default'
+    case '高复杂度':
+      return 'red'
+    case '中复杂度':
+      return 'orange'
+    case '低复杂度':
+      return 'green'
+    default:
+      return 'default'
   }
 }
 

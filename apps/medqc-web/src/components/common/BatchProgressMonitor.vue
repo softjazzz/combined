@@ -3,32 +3,48 @@
     <!-- 监控面板头部 -->
     <div class="monitor-header">
       <div class="header-left">
-        <i class="fas fa-tasks text-xl text-blue-600"></i>
-        <h3 class="text-lg font-semibold text-gray-800">批量任务监控</h3>
+        <i class="fas fa-tasks text-xl text-blue-600" />
+        <h3 class="text-lg font-semibold text-gray-800">
+          批量任务监控
+        </h3>
         <span class="task-count">{{ activeTasks.length }} 个活跃任务</span>
       </div>
       <div class="header-right">
         <button
-          @click="refreshTasks"
           class="btn-refresh"
           :disabled="isRefreshing"
+          @click="refreshTasks"
         >
-          <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+          <i
+            class="fas fa-sync-alt"
+            :class="{ 'fa-spin': isRefreshing }"
+          />
         </button>
         <button
-          @click="toggleMinimize"
           class="btn-minimize"
+          @click="toggleMinimize"
         >
-          <i class="fas" :class="isMinimized ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+          <i
+            class="fas"
+            :class="isMinimized ? 'fa-chevron-down' : 'fa-chevron-up'"
+          />
         </button>
       </div>
     </div>
 
     <!-- 任务列表 -->
-    <div v-if="!isMinimized" class="task-list">
-      <div v-if="activeTasks.length === 0" class="empty-state">
-        <i class="fas fa-check-circle text-4xl text-green-500 mb-3"></i>
-        <p class="text-gray-600">暂无活跃的批量任务</p>
+    <div
+      v-if="!isMinimized"
+      class="task-list"
+    >
+      <div
+        v-if="activeTasks.length === 0"
+        class="empty-state"
+      >
+        <i class="fas fa-check-circle text-4xl text-green-500 mb-3" />
+        <p class="text-gray-600">
+          暂无活跃的批量任务
+        </p>
       </div>
 
       <div
@@ -39,22 +55,28 @@
           'task-pending': task.status === 'pending',
           'task-processing': task.status === 'processing',
           'task-completed': task.status === 'completed',
-          'task-failed': task.status === 'failed'
+          'task-failed': task.status === 'failed',
         }"
       >
         <!-- 任务基本信息 -->
         <div class="task-info">
           <div class="task-header">
             <div class="task-title">
-              <i :class="getTaskIcon(task.task_type)"></i>
+              <i :class="getTaskIcon(task.task_type)" />
               <span class="task-name">{{ getTaskName(task.task_type) }}</span>
-              <span class="task-status-badge" :class="getStatusClass(task.status)">
+              <span
+                class="task-status-badge"
+                :class="getStatusClass(task.status)"
+              >
                 {{ getStatusText(task.status) }}
               </span>
             </div>
             <div class="task-meta">
               <span class="task-time">{{ formatTime(task.created_at) }}</span>
-              <span class="task-duration" v-if="task.started_at">
+              <span
+                v-if="task.started_at"
+                class="task-duration"
+              >
                 {{ formatDuration(task.started_at, task.completed_at) }}
               </span>
             </div>
@@ -63,11 +85,11 @@
           <!-- 进度条 -->
           <div class="progress-section">
             <div class="progress-bar">
-              <div 
+              <div
                 class="progress-fill"
                 :class="getProgressClass(task.status)"
                 :style="{ width: task.progress_percentage + '%' }"
-              ></div>
+              />
             </div>
             <div class="progress-text">
               <span class="progress-percentage">{{ Math.round(task.progress_percentage) }}%</span>
@@ -87,20 +109,29 @@
               <span class="stat-label">已处理</span>
               <span class="stat-value text-blue-600">{{ task.processed_items }}</span>
             </div>
-            <div class="stat-item" v-if="task.failed_items > 0">
+            <div
+              v-if="task.failed_items > 0"
+              class="stat-item"
+            >
               <span class="stat-label">失败</span>
               <span class="stat-value text-red-600">{{ task.failed_items }}</span>
             </div>
-            <div class="stat-item" v-if="task.status === 'processing'">
+            <div
+              v-if="task.status === 'processing'"
+              class="stat-item"
+            >
               <span class="stat-label">预计剩余</span>
               <span class="stat-value">{{ estimateRemainingTime(task) }}</span>
             </div>
           </div>
 
           <!-- 错误信息 -->
-          <div v-if="task.error_details && task.status === 'failed'" class="error-section">
+          <div
+            v-if="task.error_details && task.status === 'failed'"
+            class="error-section"
+          >
             <div class="error-header">
-              <i class="fas fa-exclamation-triangle text-red-500"></i>
+              <i class="fas fa-exclamation-triangle text-red-500" />
               <span class="error-title">错误详情</span>
             </div>
             <div class="error-content">
@@ -113,27 +144,27 @@
         <div class="task-actions">
           <button
             v-if="task.status === 'failed'"
-            @click="retryTask(task.id)"
             class="btn-retry"
             :disabled="isRetrying"
+            @click="retryTask(task.id)"
           >
-            <i class="fas fa-redo"></i>
+            <i class="fas fa-redo" />
             <span>重试</span>
           </button>
           <button
             v-if="task.status === 'processing'"
-            @click="cancelTask(task.id)"
             class="btn-cancel"
             :disabled="isCancelling"
+            @click="cancelTask(task.id)"
           >
-            <i class="fas fa-stop"></i>
+            <i class="fas fa-stop" />
             <span>取消</span>
           </button>
           <button
-            @click="viewTaskDetails(task)"
             class="btn-details"
+            @click="viewTaskDetails(task)"
           >
-            <i class="fas fa-info-circle"></i>
+            <i class="fas fa-info-circle" />
             <span>详情</span>
           </button>
         </div>
@@ -141,10 +172,18 @@
     </div>
 
     <!-- 历史任务快速访问 -->
-    <div v-if="!isMinimized && recentTasks.length > 0" class="recent-tasks">
+    <div
+      v-if="!isMinimized && recentTasks.length > 0"
+      class="recent-tasks"
+    >
       <div class="recent-header">
-        <h4 class="text-sm font-medium text-gray-700">最近完成</h4>
-        <button @click="viewAllTasks" class="btn-view-all">
+        <h4 class="text-sm font-medium text-gray-700">
+          最近完成
+        </h4>
+        <button
+          class="btn-view-all"
+          @click="viewAllTasks"
+        >
           查看全部
         </button>
       </div>
@@ -156,13 +195,16 @@
           @click="viewTaskDetails(task)"
         >
           <div class="recent-info">
-            <i :class="getTaskIcon(task.task_type)"></i>
+            <i :class="getTaskIcon(task.task_type)" />
             <span class="recent-name">{{ getTaskName(task.task_type) }}</span>
             <span class="recent-time">{{ formatRelativeTime(task.completed_at!) }}</span>
           </div>
           <div class="recent-result">
             <span class="recent-success">{{ task.total_items - task.failed_items }}</span>
-            <span v-if="task.failed_items > 0" class="recent-failed">{{ task.failed_items }}</span>
+            <span
+              v-if="task.failed_items > 0"
+              class="recent-failed"
+            >{{ task.failed_items }}</span>
           </div>
         </div>
       </div>
@@ -219,7 +261,7 @@ const {
   refreshTasks: refreshTasksComposable,
   subscribeToTasks,
   retryTask: retryTaskComposable,
-  cancelTask: cancelTaskComposable
+  cancelTask: cancelTaskComposable,
 } = useBatchMonitor()
 
 // 自动刷新定时器
@@ -235,7 +277,7 @@ const toggleMinimize = () => {
 
 const refreshTasks = async () => {
   if (isRefreshing.value) return
-  
+
   isRefreshing.value = true
   try {
     await refreshTasksComposable()
@@ -246,7 +288,7 @@ const refreshTasks = async () => {
 
 const retryTask = async (taskId: string) => {
   if (isRetrying.value) return
-  
+
   isRetrying.value = true
   try {
     await retryTaskComposable(taskId)
@@ -257,7 +299,7 @@ const retryTask = async (taskId: string) => {
 
 const cancelTask = async (taskId: string) => {
   if (isCancelling.value) return
-  
+
   isCancelling.value = true
   try {
     await cancelTaskComposable(taskId)
@@ -281,7 +323,7 @@ const getTaskIcon = (taskType: string): string => {
   const icons = {
     upload: 'fas fa-upload text-blue-500',
     analysis: 'fas fa-brain text-purple-500',
-    export: 'fas fa-download text-green-500'
+    export: 'fas fa-download text-green-500',
   }
   return icons[taskType as keyof typeof icons] || 'fas fa-tasks text-gray-500'
 }
@@ -290,7 +332,7 @@ const getTaskName = (taskType: string): string => {
   const names = {
     upload: '批量上传',
     analysis: '批量分析',
-    export: '批量导出'
+    export: '批量导出',
   }
   return names[taskType as keyof typeof names] || '未知任务'
 }
@@ -300,7 +342,7 @@ const getStatusText = (status: string): string => {
     pending: '等待中',
     processing: '处理中',
     completed: '已完成',
-    failed: '失败'
+    failed: '失败',
   }
   return texts[status as keyof typeof texts] || status
 }
@@ -310,7 +352,7 @@ const getStatusClass = (status: string): string => {
     pending: 'status-pending',
     processing: 'status-processing',
     completed: 'status-completed',
-    failed: 'status-failed'
+    failed: 'status-failed',
   }
   return classes[status as keyof typeof classes] || ''
 }
@@ -320,7 +362,7 @@ const getProgressClass = (status: string): string => {
     pending: 'progress-pending',
     processing: 'progress-processing',
     completed: 'progress-completed',
-    failed: 'progress-failed'
+    failed: 'progress-failed',
   }
   return classes[status as keyof typeof classes] || ''
 }
@@ -330,7 +372,7 @@ const formatTime = (dateString: string): string => {
   return date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
   })
 }
 
@@ -355,7 +397,7 @@ const formatDuration = (startTime: string, endTime?: string): string => {
   const start = new Date(startTime)
   const end = endTime ? new Date(endTime) : new Date()
   const duration = Math.floor((end.getTime() - start.getTime()) / 1000)
-  
+
   if (duration < 60) return `${duration}秒`
   if (duration < 3600) return `${Math.floor(duration / 60)}分钟`
   return `${Math.floor(duration / 3600)}小时${Math.floor((duration % 3600) / 60)}分钟`
@@ -363,21 +405,24 @@ const formatDuration = (startTime: string, endTime?: string): string => {
 
 const estimateRemainingTime = (task: BatchTask): string => {
   if (!task.started_at || task.processed_items === 0) return '计算中...'
-  
+
   const elapsed = Date.now() - new Date(task.started_at).getTime()
   const avgTimePerItem = elapsed / task.processed_items
   const remainingItems = task.total_items - task.processed_items
   const remainingTime = Math.floor((avgTimePerItem * remainingItems) / 1000)
-  
+
   if (remainingTime < 60) return `约${remainingTime}秒`
   if (remainingTime < 3600) return `约${Math.floor(remainingTime / 60)}分钟`
   return `约${Math.floor(remainingTime / 3600)}小时`
 }
 
-const formatErrorDetails = (errorDetails): string => {
+const formatErrorDetails = (errorDetails: unknown): string => {
   if (typeof errorDetails === 'string') return errorDetails
-  if (typeof errorDetails === 'object') {
-    return errorDetails.message || JSON.stringify(errorDetails, null, 2)
+  if (errorDetails && typeof errorDetails === 'object') {
+    const details = errorDetails as Record<string, unknown>
+    return typeof details.message === 'string'
+      ? details.message
+      : JSON.stringify(errorDetails, null, 2)
   }
   return '未知错误'
 }
@@ -392,10 +437,10 @@ const emit = defineEmits<{
 onMounted(async () => {
   // 初始加载任务
   await refreshTasks()
-  
+
   // 订阅实时更新
   subscribeToTasks()
-  
+
   // 设置自动刷新
   if (autoRefresh) {
     refreshTimer = setInterval(refreshTasks, refreshInterval)

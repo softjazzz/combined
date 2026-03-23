@@ -7,33 +7,36 @@
         <h3 class="header-title">
           <BellOutlined />
           消息中心
-          <a-badge :count="unreadCount" :offset="[10, 0]" />
+          <a-badge
+            :count="unreadCount"
+            :offset="[10, 0]"
+          />
         </h3>
         <div class="header-stats">
           <span>共 {{ totalMessages }} 条消息</span>
           <span v-if="unreadCount > 0">，{{ unreadCount }} 条未读</span>
         </div>
       </div>
-      
+
       <div class="header-actions">
         <a-space>
-          <a-button 
-            @click="markAllAsRead"
+          <a-button
             :disabled="unreadCount === 0"
             size="small"
+            @click="markAllAsRead"
           >
             全部已读
           </a-button>
-          
-          <a-button 
-            @click="refreshMessages"
+
+          <a-button
             :loading="loading"
             size="small"
+            @click="refreshMessages"
           >
             <ReloadOutlined />
             刷新
           </a-button>
-          
+
           <a-dropdown>
             <a-button size="small">
               <FilterOutlined />
@@ -42,14 +45,28 @@
             </a-button>
             <template #overlay>
               <a-menu @click="handleFilterChange">
-                <a-menu-item key="all">全部消息</a-menu-item>
-                <a-menu-item key="unread">未读消息</a-menu-item>
-                <a-menu-item key="urgent">紧急消息</a-menu-item>
-                <a-menu-item key="today">今日消息</a-menu-item>
+                <a-menu-item key="all">
+                  全部消息
+                </a-menu-item>
+                <a-menu-item key="unread">
+                  未读消息
+                </a-menu-item>
+                <a-menu-item key="urgent">
+                  紧急消息
+                </a-menu-item>
+                <a-menu-item key="today">
+                  今日消息
+                </a-menu-item>
                 <a-menu-divider />
-                <a-menu-item key="rectification_required">整改要求</a-menu-item>
-                <a-menu-item key="audit_result">审核结果</a-menu-item>
-                <a-menu-item key="task_assigned">任务分配</a-menu-item>
+                <a-menu-item key="rectification_required">
+                  整改要求
+                </a-menu-item>
+                <a-menu-item key="audit_result">
+                  审核结果
+                </a-menu-item>
+                <a-menu-item key="task_assigned">
+                  任务分配
+                </a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
@@ -71,17 +88,17 @@
               :class="[
                 'message-item',
                 `priority-${item.priority}`,
-                { 
-                  'unread': item.status !== 'read' && item.status !== 'processed',
-                  'processed': item.status === 'processed',
-                  'urgent': item.priority === 'urgent'
-                }
+                {
+                  unread: item.status !== 'read' && item.status !== 'processed',
+                  processed: item.status === 'processed',
+                  urgent: item.priority === 'urgent',
+                },
               ]"
               @click="handleMessageClick(item)"
             >
               <!-- 优先级指示器 -->
               <div class="priority-indicator">
-                <div :class="`priority-dot priority-${item.priority}`"></div>
+                <div :class="`priority-dot priority-${item.priority}`" />
               </div>
 
               <!-- 消息内容 -->
@@ -90,8 +107,8 @@
                   <div class="message-title">
                     <span class="title-text">{{ item.title }}</span>
                     <div class="message-meta">
-                      <a-tag 
-                        :color="getMessageTypeColor(item.type)" 
+                      <a-tag
+                        :color="getMessageTypeColor(item.type)"
                         size="small"
                       >
                         {{ getMessageTypeLabel(item.type) }}
@@ -102,15 +119,18 @@
                     </div>
                   </div>
                 </template>
-                
+
                 <template #description>
                   <div class="message-content">
                     <p class="content-text">
                       {{ item.summary || item.content.substring(0, 120) + '...' }}
                     </p>
-                    
+
                     <!-- 关联信息 -->
-                    <div class="related-info" v-if="hasRelatedInfo(item)">
+                    <div
+                      v-if="hasRelatedInfo(item)"
+                      class="related-info"
+                    >
                       <a-space size="small">
                         <span v-if="item.related_data.patient_id">
                           <UserOutlined />
@@ -135,8 +155,8 @@
                 <div class="message-actions">
                   <a-space size="small">
                     <!-- 主要操作按钮 -->
-                    <a-button 
-                      v-for="action in getPrimaryActions(item)" 
+                    <a-button
+                      v-for="action in getPrimaryActions(item)"
                       :key="action.id"
                       :type="action.type"
                       size="small"
@@ -144,15 +164,18 @@
                     >
                       {{ action.label }}
                     </a-button>
-                    
+
                     <!-- 更多操作下拉菜单 -->
                     <a-dropdown v-if="hasSecondaryActions(item)">
-                      <a-button size="small" type="text">
+                      <a-button
+                        size="small"
+                        type="text"
+                      >
                         <MoreOutlined />
                       </a-button>
                       <template #overlay>
                         <a-menu>
-                          <a-menu-item 
+                          <a-menu-item
                             v-for="action in getSecondaryActions(item)"
                             :key="action.id"
                             @click="executeAction(action, item)"
@@ -160,23 +183,23 @@
                             {{ action.label }}
                           </a-menu-item>
                           <a-menu-divider />
-                          <a-menu-item 
-                            @click="markAsRead(item.id)" 
+                          <a-menu-item
                             v-if="item.status !== 'read'"
+                            @click="markAsRead(item.id)"
                           >
                             <CheckOutlined />
                             标记已读
                           </a-menu-item>
-                          <a-menu-item 
-                            @click="markAsProcessed(item.id)" 
+                          <a-menu-item
                             v-if="item.status !== 'processed'"
+                            @click="markAsProcessed(item.id)"
                           >
                             <CheckCircleOutlined />
                             标记已处理
                           </a-menu-item>
-                          <a-menu-item 
-                            @click="deleteMessage(item.id)"
+                          <a-menu-item
                             danger
+                            @click="deleteMessage(item.id)"
                           >
                             <DeleteOutlined />
                             删除消息
@@ -193,7 +216,10 @@
           <!-- 空状态 -->
           <template #empty>
             <a-empty description="暂无消息">
-              <a-button @click="refreshMessages" type="primary">
+              <a-button
+                type="primary"
+                @click="refreshMessages"
+              >
                 刷新消息
               </a-button>
             </a-empty>
@@ -234,14 +260,14 @@ import {
   MoreOutlined,
   CheckOutlined,
   CheckCircleOutlined,
-  DeleteOutlined
+  DeleteOutlined,
 } from '@ant-design/icons-vue'
 
-import type { 
-  QCNotification, 
-  MessageType, 
+import type {
+  QCNotification,
+  MessageType,
   MessageAction,
-  RecipientType
+  RecipientType,
 } from '@/types/audit-module'
 
 import { useAuthStore } from '@/stores/auth'
@@ -264,8 +290,8 @@ const detailDrawerVisible = ref(false)
 const selectedMessage = ref<QCNotification | null>(null)
 
 // 计算属性
-const unreadCount = computed(() => 
-  messages.value.filter(m => m.status !== 'read' && m.status !== 'processed').length
+const unreadCount = computed(
+  () => messages.value.filter((m) => m.status !== 'read' && m.status !== 'processed').length,
 )
 
 const totalMessages = computed(() => messages.value.length)
@@ -275,21 +301,21 @@ const filteredMessages = computed(() => {
 
   switch (currentFilter.value) {
     case 'unread':
-      filtered = filtered.filter(m => m.status !== 'read' && m.status !== 'processed')
+      filtered = filtered.filter((m) => m.status !== 'read' && m.status !== 'processed')
       break
     case 'urgent':
-      filtered = filtered.filter(m => m.priority === 'urgent')
+      filtered = filtered.filter((m) => m.priority === 'urgent')
       break
     case 'today':
-      const today = new Date().toDateString()
-      filtered = filtered.filter(m => 
-        new Date(m.created_at).toDateString() === today
-      )
+      {
+        const today = new Date().toDateString()
+        filtered = filtered.filter((m) => new Date(m.created_at).toDateString() === today)
+      }
       break
     default:
       if (currentFilter.value !== 'all') {
         // 按消息类型筛选
-        filtered = filtered.filter(m => m.type === currentFilter.value)
+        filtered = filtered.filter((m) => m.type === currentFilter.value)
       }
   }
 
@@ -302,27 +328,30 @@ const paginationConfig = computed(() => ({
   total: filteredMessages.value.length,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number, range: [number, number]) => 
-    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+  showTotal: (total: number, range: [number, number]) =>
+    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
 }))
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
 
 // 方法
 const loadMessages = async () => {
   try {
     loading.value = true
-    
-    const userMessages = await notificationService.getUserNotifications(
-      authStore.user.id,
-      {
-        limit: 100,
-        offset: 0
-      }
-    )
-    
+    if (!authStore.user?.id) {
+      messages.value = []
+      return
+    }
+
+    const userMessages = await notificationService.getUserNotifications(authStore.user.id, {
+      limit: 100,
+      offset: 0,
+    })
+
     messages.value = userMessages
-    
   } catch (error) {
-    message.error(`加载消息失败: ${error.message}`)
+    message.error(`加载消息失败: ${getErrorMessage(error)}`)
   } finally {
     loading.value = false
   }
@@ -335,19 +364,18 @@ const refreshMessages = async () => {
 
 const markAllAsRead = async () => {
   try {
-    const unreadMessages = messages.value.filter(m => 
-      m.status !== 'read' && m.status !== 'processed'
+    const unreadMessages = messages.value.filter(
+      (m) => m.status !== 'read' && m.status !== 'processed',
     )
-    
+
     for (const msg of unreadMessages) {
       await notificationService.markAsRead(msg.id)
     }
-    
+
     await loadMessages()
     message.success('所有消息已标记为已读')
-    
   } catch (error) {
-    message.error(`操作失败: ${error.message}`)
+    message.error(`操作失败: ${getErrorMessage(error)}`)
   }
 }
 
@@ -373,15 +401,17 @@ const markAsProcessed = async (messageId: string) => {
 
 const deleteMessage = async (messageId: string) => {
   Modal.confirm({
-    title: '确认删除', content: '确定要删除这条消息吗？', onOk: async () => {
+    title: '确认删除',
+    content: '确定要删除这条消息吗？',
+    onOk: async () => {
       try {
         // 实现删除逻辑
-        messages.value = messages.value.filter(m => m.id !== messageId)
+        messages.value = messages.value.filter((m) => m.id !== messageId)
         message.success('消息已删除')
       } catch (error) {
         message.error('删除失败')
       }
-    }
+    },
   })
 }
 
@@ -398,7 +428,7 @@ const handlePageChange = (page: number, size: number) => {
 const handleMessageClick = (notification: QCNotification) => {
   selectedMessage.value = notification
   detailDrawerVisible.value = true
-  
+
   // 自动标记为已读
   if (notification.status === 'pending' || notification.status === 'delivered') {
     markAsRead(notification.id)
@@ -412,49 +442,46 @@ const executeAction = async (action: MessageAction, notification: QCNotification
         if (action.config.url) {
           await router.push({
             path: action.config.url,
-            query: action.config.params
+            query: (action.config.params || {}) as any,
           })
         }
         break
-        
+
       case 'api_call':
         if (action.config.api_endpoint) {
           // 实现API调用
           message.success('操作已执行')
         }
         break
-        
+
       case 'modal':
         // 实现模态框打开
         break
-        
+
       case 'confirm':
         Modal.confirm({
-          title: '确认操作', content: action.config.confirm_message || '确定要执行此操作吗？', onOk: () => {
+          title: '确认操作',
+          content: action.config.confirm_message || '确定要执行此操作吗？',
+          onOk: () => {
             // 执行确认后的操作
-          }
+          },
         })
         break
     }
-    
+
     // 标记消息为已处理
     await markAsProcessed(notification.id)
-    
   } catch (error: unknown) {
     message.error('操作失败')
   }
 }
 
 const getPrimaryActions = (notification: QCNotification): MessageAction[] => {
-  return (notification.actions || []).filter(action => 
-    action.type === 'primary'
-  ).slice(0, 2) // 最多显示2个主要操作
+  return (notification.actions || []).filter((action) => action.type === 'primary').slice(0, 2) // 最多显示2个主要操作
 }
 
 const getSecondaryActions = (notification: QCNotification): MessageAction[] => {
-  return (notification.actions || []).filter(action => 
-    action.type !== 'primary'
-  )
+  return (notification.actions || []).filter((action) => action.type !== 'primary')
 }
 
 const hasSecondaryActions = (notification: QCNotification): boolean => {
@@ -468,36 +495,36 @@ const hasRelatedInfo = (notification: QCNotification): boolean => {
 
 const getMessageTypeColor = (type: MessageType): string => {
   const colorMap: Record<MessageType, string> = {
-    'qc_completed': 'green',
-    'rectification_required': 'orange',
-    'audit_result': 'blue',
-    'appeal_result': 'purple',
-    'deadline_reminder': 'red',
-    'system_announcement': 'cyan',
-    'rectification_submitted': 'geekblue',
-    'appeal_submitted': 'magenta',
-    'task_assigned': 'volcano',
-    'task_overdue': 'red',
-    'batch_completed': 'lime',
-    'expert_consultation': 'gold'
+    qc_completed: 'green',
+    rectification_required: 'orange',
+    audit_result: 'blue',
+    appeal_result: 'purple',
+    deadline_reminder: 'red',
+    system_announcement: 'cyan',
+    rectification_submitted: 'geekblue',
+    appeal_submitted: 'magenta',
+    task_assigned: 'volcano',
+    task_overdue: 'red',
+    batch_completed: 'lime',
+    expert_consultation: 'gold',
   }
   return colorMap[type] || 'default'
 }
 
 const getMessageTypeLabel = (type: MessageType): string => {
   const labelMap: Record<MessageType, string> = {
-    'qc_completed': '质控完成',
-    'rectification_required': '整改要求',
-    'audit_result': '审核结果',
-    'appeal_result': '申诉结果',
-    'deadline_reminder': '截止提醒',
-    'system_announcement': '系统公告',
-    'rectification_submitted': '整改提交',
-    'appeal_submitted': '申诉提交',
-    'task_assigned': '任务分配',
-    'task_overdue': '任务超期',
-    'batch_completed': '批量完成',
-    'expert_consultation': '专家会诊'
+    qc_completed: '质控完成',
+    rectification_required: '整改要求',
+    audit_result: '审核结果',
+    appeal_result: '申诉结果',
+    deadline_reminder: '截止提醒',
+    system_announcement: '系统公告',
+    rectification_submitted: '整改提交',
+    appeal_submitted: '申诉提交',
+    task_assigned: '任务分配',
+    task_overdue: '任务超期',
+    batch_completed: '批量完成',
+    expert_consultation: '专家会诊',
   }
   return labelMap[type] || type
 }
@@ -519,20 +546,20 @@ const setupRealTimeListener = () => {
   window.addEventListener('new-notification', (event: Event) => {
     const newNotification = (event as CustomEvent<QCNotification>).detail
     messages.value.unshift(newNotification)
-    
+
     // 显示通知提示
     if (newNotification.priority === 'urgent') {
       message.warning({
         content: `紧急消息：${newNotification.title}`,
-        duration: 5
+        duration: 5,
       })
     }
   })
-  
+
   // 监听消息更新事件
   window.addEventListener('notification-updated', (event: Event) => {
     const updatedNotification = (event as CustomEvent<QCNotification>).detail
-    const index = messages.value.findIndex(m => m.id === updatedNotification.id)
+    const index = messages.value.findIndex((m) => m.id === updatedNotification.id)
     if (index !== -1) {
       messages.value[index] = updatedNotification
     }
@@ -548,12 +575,11 @@ const cleanupRealTimeListener = () => {
 onMounted(async () => {
   await loadMessages()
   setupRealTimeListener()
-  
+
   // 初始化实时通信
-  await notificationService.initializeRealTime(
-    authStore.user.id,
-    resolveRecipientType()
-  )
+  if (authStore.user?.id) {
+    await notificationService.initializeRealTime(authStore.user.id, resolveRecipientType())
+  }
 })
 
 onUnmounted(() => {
@@ -625,7 +651,7 @@ onUnmounted(() => {
 
 .message-item:hover {
   background-color: #fafafa;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transform: translateY(-1px);
 }
 
@@ -716,9 +742,15 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(255, 77, 79, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 77, 79, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
+  }
 }
 
 /* 响应式设计 */
@@ -728,17 +760,17 @@ onUnmounted(() => {
     gap: 16px;
     align-items: stretch;
   }
-  
+
   .header-actions {
     align-self: flex-end;
   }
-  
+
   .message-title {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .message-meta {
     align-self: flex-start;
   }

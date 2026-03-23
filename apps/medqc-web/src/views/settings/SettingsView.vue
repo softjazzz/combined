@@ -34,7 +34,7 @@
       </a-card>
 
       <a-card class="settings-card settings-tabs-card" :bordered="false">
-        <a-tabs v-model:activeKey="activeTab" type="card" class="settings-tabs">
+        <a-tabs v-model:active-key="activeTab" type="card" class="settings-tabs">
           <a-tab-pane key="users" tab="用户管理">
             <template #tab>
               <UserOutlined class="settings-tabs__icon" />
@@ -86,24 +86,17 @@
         </a-tabs>
       </a-card>
 
-
       <div v-if="activeTab === 'users'">
-        <UserManagement
-          @create-user="showCreateUserModal"
-          @edit-user="editUser"
-        />
+        <UserManagement @create-user="showCreateUserModal" @edit-user="editUser" />
       </div>
-
 
       <div v-if="activeTab === 'roles'">
         <RoleManagement @edit-role="editRole" />
       </div>
 
-
       <div v-if="activeTab === 'permissions'">
         <PermissionConfig />
       </div>
-
 
       <div v-if="activeTab === 'system'">
         <SystemConfig />
@@ -119,8 +112,8 @@
               </p>
             </div>
             <div class="ds-split__main">
-              <div class="ds-card" style="overflow: visible;">
-                <div class="ds-card__body" style="padding: 20px;">
+              <div class="ds-card" style="overflow: visible">
+                <div class="ds-card__body" style="padding: 20px">
                   <LLMApiConfig />
                 </div>
               </div>
@@ -128,7 +121,6 @@
           </div>
         </div>
       </div>
-
 
       <div v-if="activeTab === 'classification'">
         <div class="ds-root">
@@ -140,8 +132,8 @@
               </p>
             </div>
             <div class="ds-split__main">
-              <div class="ds-card" style="overflow: visible;">
-                <div class="ds-card__body" style="padding: 20px;">
+              <div class="ds-card" style="overflow: visible">
+                <div class="ds-card__body" style="padding: 20px">
                   <ClassificationVersionManager />
                 </div>
               </div>
@@ -149,7 +141,6 @@
           </div>
         </div>
       </div>
-
 
       <!-- 质控引擎配置 -->
       <div v-if="activeTab === 'qc_engine'">
@@ -200,7 +191,7 @@ import {
   BranchesOutlined,
   ApiOutlined,
   ExperimentOutlined,
-  SyncOutlined
+  SyncOutlined,
 } from '@ant-design/icons-vue'
 
 import UserEditModal from '@/components/settings/UserEditModal.vue'
@@ -234,7 +225,7 @@ const validTabs: SettingsTab[] = [
   'llm',
   'classification',
   'qc_engine',
-  'data_sync'
+  'data_sync',
 ]
 
 const resolveTab = (tab: unknown): SettingsTab => {
@@ -250,20 +241,19 @@ watch(
   (tab) => {
     activeTab.value = resolveTab(tab)
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 const modals = reactive({
   userEdit: false,
-  roleEdit: false
+  roleEdit: false,
 })
 
-const selectedUser = ref(null)
-const selectedRole = ref(null)
-
+const selectedUser = ref<Record<string, unknown> | undefined>(undefined)
+const selectedRole = ref<Record<string, unknown> | undefined>(undefined)
 
 const showCreateUserModal = () => {
-  selectedUser.value = null
+  selectedUser.value = undefined
   modals.userEdit = true
 }
 
@@ -558,7 +548,9 @@ const importConfig = () => {
 
 .role-card {
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 
   :deep(.ant-card-body) {
     padding: 20px;

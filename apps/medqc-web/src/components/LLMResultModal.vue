@@ -1,13 +1,13 @@
 <template>
   <a-modal
     :open="visible"
-    @update:open="$emit('update:visible', $event)"
     title="LLM 精准解析结果"
     width="1400px"
     :footer="null"
-    :destroyOnClose="true"
-    :maskClosable="false"
+    :destroy-on-close="true"
+    :mask-closable="false"
     class="llm-result-modal"
+    @update:open="$emit('update:visible', $event)"
   >
     <div class="modal-content">
       <!-- 顶部统计信息 -->
@@ -15,7 +15,9 @@
         <a-row :gutter="16">
           <a-col :span="8">
             <div class="stat-card">
-              <div class="stat-title">模型信息</div>
+              <div class="stat-title">
+                模型信息
+              </div>
               <div class="stat-content">
                 <div>提供商：{{ providerName || '未知' }}</div>
                 <div>模型：{{ modelCode || '未知' }}</div>
@@ -25,21 +27,29 @@
           </a-col>
           <a-col :span="8">
             <div class="stat-card">
-              <div class="stat-title">用量与耗时</div>
+              <div class="stat-title">
+                用量与耗时
+              </div>
               <div class="stat-content">
                 <div>Tokens：{{ tokensUsed || 0 }}</div>
                 <div>耗时：{{ processingTime || 0 }} ms</div>
-                <div v-if="savedPct != null">预计节省：{{ savedPct }}%</div>
+                <div v-if="savedPct != null">
+                  预计节省：{{ savedPct }}%
+                </div>
               </div>
             </div>
           </a-col>
           <a-col :span="8">
             <div class="stat-card">
-              <div class="stat-title">整体置信度</div>
+              <div class="stat-title">
+                整体置信度
+              </div>
               <div class="stat-content">
-                <a-progress 
-                  :percent="confidencePct" 
-                  :status="confidencePct>=80?'success':(confidencePct>=60?'active':'normal')" 
+                <a-progress
+                  :percent="confidencePct"
+                  :status="
+                    confidencePct >= 80 ? 'success' : confidencePct >= 60 ? 'active' : 'normal'
+                  "
                   size="small"
                 />
               </div>
@@ -50,7 +60,9 @@
 
       <!-- 患者基本信息 -->
       <div class="patient-info mb-4">
-        <div class="info-title">患者基本信息</div>
+        <div class="info-title">
+          患者基本信息
+        </div>
         <a-row :gutter="24">
           <a-col :span="6">
             <div class="info-item">
@@ -84,7 +96,9 @@
         <a-row :gutter="16">
           <a-col :span="12">
             <div class="diagnosis-card">
-              <div class="diagnosis-title">诊断信息</div>
+              <div class="diagnosis-title">
+                诊断信息
+              </div>
               <div class="diagnosis-content">
                 <div class="diagnosis-item">
                   <span class="diagnosis-label">主要诊断：</span>
@@ -93,7 +107,11 @@
                 <div class="diagnosis-item">
                   <span class="diagnosis-label">次要诊断：</span>
                   <div class="diagnosis-tags">
-                    <a-tag v-for="(d, i) in (data?.secondaryDiagnosis || [])" :key="i" color="blue">
+                    <a-tag
+                      v-for="(d, i) in data?.secondaryDiagnosis || []"
+                      :key="i"
+                      color="blue"
+                    >
                       {{ d }}
                     </a-tag>
                     <span v-if="!(data?.secondaryDiagnosis || []).length">-</span>
@@ -104,7 +122,9 @@
           </a-col>
           <a-col :span="12">
             <div class="diagnosis-card">
-              <div class="diagnosis-title">手术信息</div>
+              <div class="diagnosis-title">
+                手术信息
+              </div>
               <div class="diagnosis-content">
                 <div class="diagnosis-item">
                   <span class="diagnosis-label">主要手术：</span>
@@ -118,11 +138,15 @@
 
       <!-- 主要内容区域：左右分栏 -->
       <div class="main-content">
-        <div class="content-title">文书分类与预览</div>
+        <div class="content-title">
+          文书分类与预览
+        </div>
         <div class="content-body">
           <!-- 左侧：文书树状结构 -->
           <div class="left-panel">
-            <div class="panel-title">医疗文书目录</div>
+            <div class="panel-title">
+              医疗文书目录
+            </div>
             <div class="document-tree">
               <a-tree
                 v-if="treeData.length > 0"
@@ -130,19 +154,25 @@
                 :selected-keys="selectedKeys"
                 :expanded-keys="expandedKeys"
                 :default-expand-all="true"
+                class="custom-tree"
                 @select="onDocumentSelect"
                 @expand="onTreeExpand"
-                class="custom-tree"
               >
                 <template #title="{ title, confidence, type, icon, isLeaf }">
-                  <div class="tree-node" :class="{ 'category-node': !isLeaf, 'document-node': isLeaf }">
+                  <div
+                    class="tree-node"
+                    :class="{ 'category-node': !isLeaf, 'document-node': isLeaf }"
+                  >
                     <component
                       :is="isLeaf ? getDocumentIcon(type) : getCategoryIcon(icon)"
                       class="node-icon"
                       :class="{ 'category-icon': !isLeaf }"
                     />
                     <span class="node-title">{{ title }}</span>
-                    <span v-if="confidence != null && isLeaf" class="node-confidence">
+                    <span
+                      v-if="confidence != null && isLeaf"
+                      class="node-confidence"
+                    >
                       {{ Math.round(confidence) }}%
                     </span>
                   </div>
@@ -151,7 +181,10 @@
                   <component :is="expanded ? FolderOpenOutlined : FolderOutlined" />
                 </template>
               </a-tree>
-              <div v-else class="empty-tree">
+              <div
+                v-else
+                class="empty-tree"
+              >
                 <a-empty description="暂无文书数据" />
               </div>
             </div>
@@ -161,19 +194,34 @@
           <div class="right-panel">
             <div class="panel-title">
               {{ selectedDocument?.title || '文书内容' }}
-              <a-tag v-if="selectedDocument" :color="getDocumentTypeColor(selectedDocument.type)" size="small">
+              <a-tag
+                v-if="selectedDocument"
+                :color="getDocumentTypeColor(selectedDocument.type)"
+                size="small"
+              >
                 {{ getDocumentTypeLabel(selectedDocument.type) }}
               </a-tag>
             </div>
             <div class="document-content">
-              <div v-if="loading" class="content-loading">
+              <div
+                v-if="loading"
+                class="content-loading"
+              >
                 <a-spin size="large" />
-                <div class="loading-text">加载中...</div>
+                <div class="loading-text">
+                  加载中...
+                </div>
               </div>
-              <div v-else-if="selectedDocument" class="content-text">
+              <div
+                v-else-if="selectedDocument"
+                class="content-text"
+              >
                 <pre class="document-text">{{ getDocumentContent(selectedDocument) }}</pre>
               </div>
-              <div v-else class="content-empty">
+              <div
+                v-else
+                class="content-empty"
+              >
                 <a-empty description="请选择左侧文书查看内容" />
               </div>
             </div>
@@ -186,18 +234,18 @@
         <a-space size="large">
           <!-- 保存操作 -->
           <a-space>
-            <a-button 
-              type="primary" 
-              :loading="saving" 
-              @click="saveAndRedirect"
+            <a-button
+              type="primary"
+              :loading="saving"
               :icon="h(DatabaseOutlined)"
+              @click="saveAndRedirect"
             >
               保存并查看详情
             </a-button>
-            <a-button 
-              :loading="saving" 
-              @click="saveOnly"
+            <a-button
+              :loading="saving"
               :icon="h(SaveOutlined)"
+              @click="saveOnly"
             >
               仅保存到数据库
             </a-button>
@@ -205,20 +253,32 @@
 
           <!-- 导出操作 -->
           <a-space>
-            <a-button @click="exportResult" :icon="h(DownloadOutlined)">
+            <a-button
+              :icon="h(DownloadOutlined)"
+              @click="exportResult"
+            >
               导出JSON
             </a-button>
-            <a-button @click="exportPDF" :icon="h(FilePdfOutlined)">
+            <a-button
+              :icon="h(FilePdfOutlined)"
+              @click="exportPDF"
+            >
               导出PDF报告
             </a-button>
           </a-space>
 
           <!-- 其他操作 -->
           <a-space>
-            <a-button @click="goToImport" :icon="h(PlusOutlined)">
+            <a-button
+              :icon="h(PlusOutlined)"
+              @click="goToImport"
+            >
               继续导入
             </a-button>
-            <a-button @click="handleClose" :icon="h(CloseOutlined)">
+            <a-button
+              :icon="h(CloseOutlined)"
+              @click="handleClose"
+            >
               关闭
             </a-button>
           </a-space>
@@ -229,7 +289,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, h, defineProps, defineEmits } from 'vue'
+import { ref, computed, watch, h, defineProps, defineEmits, type Component } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   DatabaseOutlined,
@@ -248,14 +308,14 @@ import {
   EditOutlined,
   ExportOutlined,
   FolderOutlined,
-  FolderOpenOutlined
+  FolderOpenOutlined,
 } from '@ant-design/icons-vue'
 import type { ExtractedDocument } from '@/services/llmService'
 import { DocumentType } from '@/services/llmService'
 import {
   getDocumentTypeLabel,
   getDocumentTypeColor,
-  getDocumentCategory
+  getDocumentCategory,
 } from '@/utils/documentTypeUtils'
 
 interface LLMAnalysisMeta {
@@ -335,15 +395,17 @@ const confidencePct = computed(() => {
 const savedPct = computed(() => {
   try {
     const text = typeof props.data?.content === 'string' ? props.data!.content : ''
-    const baseline = (text ? Math.round(text.length/4) : 0) + 1000
+    const baseline = (text ? Math.round(text.length / 4) : 0) + 1000
     const used = tokensUsed.value || 0
     if (baseline <= 0) return null
     return Math.max(0, Math.round((Math.max(0, baseline - used) / baseline) * 100))
-  } catch { return null }
+  } catch {
+    return null
+  }
 })
 
 // 构建树形数据
-const treeData = computed<(CategoryTreeNode)[]>(() => {
+const treeData = computed<CategoryTreeNode[]>(() => {
   const documents = Array.isArray(props.data?.documents) ? props.data!.documents : []
 
   // 按分类分组文书
@@ -355,13 +417,15 @@ const treeData = computed<(CategoryTreeNode)[]>(() => {
     if (!groupedDocs.has(category)) {
       groupedDocs.set(category, [])
     }
-    groupedDocs.get(category).push({
+    const categoryBucket = groupedDocs.get(category)
+    if (!categoryBucket) return
+    categoryBucket.push({
       key: doc.id || `doc_${index}`,
       title: doc.title || getDocumentTypeLabel(docType),
       confidence: doc.confidence,
       type: docType,
       document: doc,
-      isLeaf: true
+      isLeaf: true,
     })
   })
 
@@ -375,10 +439,10 @@ const treeData = computed<(CategoryTreeNode)[]>(() => {
     { key: 'operation_record', label: '手术记录', icon: 'ScissorOutlined' },
     { key: 'discharge_record', label: '出院记录', icon: 'ExportOutlined' },
     { key: 'auxiliary_examination', label: '检验检查报告', icon: 'ExperimentOutlined' },
-    { key: 'informed_consent', label: '知情同意书', icon: 'SafetyOutlined' }
+    { key: 'informed_consent', label: '知情同意书', icon: 'SafetyOutlined' },
   ]
 
-  categoryOrder.forEach(category => {
+  categoryOrder.forEach((category) => {
     const categoryDocs = groupedDocs.get(category.key) || []
     if (categoryDocs.length > 0) {
       treeNodes.push({
@@ -387,7 +451,7 @@ const treeData = computed<(CategoryTreeNode)[]>(() => {
         icon: category.icon,
         children: categoryDocs,
         isLeaf: false,
-        selectable: false // 分类节点不可选择
+        selectable: false, // 分类节点不可选择
       })
     }
   })
@@ -407,7 +471,14 @@ watch(
       selectedDocument.value = firstDoc
 
       // 展开所有分类节点
-      const categoryKeys = ['admission_record', 'progress_note', 'operation_record', 'discharge_record', 'auxiliary_examination', 'informed_consent']
+      const categoryKeys = [
+        'admission_record',
+        'progress_note',
+        'operation_record',
+        'discharge_record',
+        'auxiliary_examination',
+        'informed_consent',
+      ]
       expandedKeys.value = categoryKeys
     } else {
       selectedKeys.value = []
@@ -415,7 +486,7 @@ watch(
       expandedKeys.value = []
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 // 方法
@@ -425,7 +496,8 @@ const handleClose = () => {
 
 const onDocumentSelect = (keys: string[], info: unknown) => {
   if (keys.length > 0) {
-    const selectedNode = (info as { node?: { isLeaf?: boolean; document?: ExtractedDocument } }).node
+    const selectedNode = (info as { node?: { isLeaf?: boolean; document?: ExtractedDocument } })
+      .node
     // 只有文书节点（叶子节点）才能被选中
     if (selectedNode?.isLeaf && selectedNode.document) {
       selectedKeys.value = keys
@@ -446,13 +518,13 @@ const onTreeExpand = (keys: string[]) => {
 }
 
 const getCategoryIcon = (iconName: string) => {
-  const iconMap = {
+  const iconMap: Record<string, Component> = {
     FileTextOutlined,
     EditOutlined,
     ScissorOutlined,
     ExportOutlined,
     ExperimentOutlined,
-    SafetyOutlined
+    SafetyOutlined,
   }
   return iconMap[iconName] || FolderOutlined
 }
@@ -485,7 +557,7 @@ const getDocumentIcon = (type: DocumentType) => {
     [DocumentType.ANESTHESIA_CONSENT]: SafetyOutlined,
     [DocumentType.BLOOD_TRANSFUSION_CONSENT]: SafetyOutlined,
     [DocumentType.SPECIAL_TREATMENT_CONSENT]: SafetyOutlined,
-    [DocumentType.CRITICAL_ILLNESS_NOTICE]: SafetyOutlined
+    [DocumentType.CRITICAL_ILLNESS_NOTICE]: SafetyOutlined,
   }
   return iconMap[type] || FileOutlined
 }
@@ -494,16 +566,22 @@ const getDocumentContent = (doc: ExtractedDocument): string => {
   if (doc.position?.fullContent && doc.position.fullContent.trim()) {
     return doc.position.fullContent
   }
-  
+
   const source = props.originalText || props.data?.content || ''
   if (source) {
     const si = doc.position?.startIndex
     const ei = doc.position?.endIndex
-    if (typeof si === 'number' && typeof ei === 'number' && ei > si && si >= 0 && ei <= source.length) {
+    if (
+      typeof si === 'number' &&
+      typeof ei === 'number' &&
+      ei > si &&
+      si >= 0 &&
+      ei <= source.length
+    ) {
       return source.slice(si, ei)
     }
   }
-  
+
   return doc.content || '暂无内容'
 }
 

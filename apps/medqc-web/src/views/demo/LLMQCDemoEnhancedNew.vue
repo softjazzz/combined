@@ -34,9 +34,15 @@
       <DemoControlPanel />
 
       <!-- 主工作区 + 侧边栏 -->
-      <a-row :gutter="20" class="main-area">
+      <a-row
+        :gutter="20"
+        class="main-area"
+      >
         <!-- 左侧主工作区 (70%) -->
-        <a-col :xs="24" :lg="17">
+        <a-col
+          :xs="24"
+          :lg="17"
+        >
           <div class="work-area">
             <!-- 步骤指示器 -->
             <a-steps
@@ -46,7 +52,10 @@
             />
 
             <!-- 步骤内容 -->
-            <a-card :bordered="false" class="step-content-card">
+            <a-card
+              :bordered="false"
+              class="step-content-card"
+            >
               <!-- 测试对象选择步骤 - P1 组件 -->
               <TargetSelectionStep v-if="demoStore.currentStep === 'target'" />
 
@@ -55,9 +64,11 @@
                 v-else-if="demoStore.currentStep === 'rules'"
                 :selected-rules="demoStore.selectedRules"
                 :available-rules="demoStore.applicableRules"
-                :test-record="demoStore.testRecord"
+                :test-record="
+                  (demoStore.testRecord as unknown as Record<string, unknown>) || undefined
+                "
                 :selected-documents="demoStore.selectedDocumentList"
-                @rules-updated="(rules) => demoStore.selectedRules = rules"
+                @rules-updated="(rules) => (demoStore.selectedRules = rules)"
                 @start-analysis="demoStore.startDemo"
               />
 
@@ -97,12 +108,25 @@
         </a-col>
 
         <!-- 右侧边栏 (30%) -->
-        <a-col :xs="24" :lg="7">
-          <a-card :bordered="false" class="sidebar-card">
-            <a-tabs v-model:active-key="sidebarTab" size="small" class="sidebar-tabs">
+        <a-col
+          :xs="24"
+          :lg="7"
+        >
+          <a-card
+            :bordered="false"
+            class="sidebar-card"
+          >
+            <a-tabs
+              v-model:active-key="sidebarTab"
+              size="small"
+              class="sidebar-tabs"
+            >
               <a-tab-pane key="notifications">
                 <template #tab>
-                  <a-badge :count="demoStore.unreadNotificationsCount" :offset="[10, 0]">
+                  <a-badge
+                    :count="demoStore.unreadNotificationsCount"
+                    :offset="[10, 0]"
+                  >
                     <BellOutlined />
                     通知管理
                   </a-badge>
@@ -112,7 +136,10 @@
 
               <a-tab-pane key="appeals">
                 <template #tab>
-                  <a-badge :count="demoStore.pendingAppealsCount" :offset="[10, 0]">
+                  <a-badge
+                    :count="demoStore.pendingAppealsCount"
+                    :offset="[10, 0]"
+                  >
                     <FileTextOutlined />
                     申诉管理
                   </a-badge>
@@ -151,7 +178,7 @@ import {
   SettingOutlined,
   ThunderboltOutlined,
   LeftOutlined,
-  RightOutlined
+  RightOutlined,
 } from '@ant-design/icons-vue'
 
 const demoStore = useQCDemoStore()
@@ -163,7 +190,7 @@ const sidebarTab = ref('notifications')
 const stepItems = [
   { title: '测试对象选择', icon: h(FileSearchOutlined) },
   { title: '规则配置', icon: h(SettingOutlined) },
-  { title: '运行与结果', icon: h(ThunderboltOutlined) }
+  { title: '运行与结果', icon: h(ThunderboltOutlined) },
 ]
 
 // 当前步骤索引
@@ -175,9 +202,9 @@ const currentStepIndex = computed(() => {
 // 当前步骤组件
 const currentStepComponent = computed(() => {
   const components = {
-    target: TargetSelectionStep,  // P1: 测试对象选择
-    rules: QCRulesDemoPanel,      // 规则配置面板
-    run: QCAnalysisDemoPanel      // 分析面板
+    target: TargetSelectionStep, // P1: 测试对象选择
+    rules: QCRulesDemoPanel, // 规则配置面板
+    run: QCAnalysisDemoPanel, // 分析面板
   }
   return components[demoStore.currentStep as keyof typeof components]
 })

@@ -1,13 +1,27 @@
 <template>
   <div class="diagnosis-code-editor">
-    <div class="diagnosis-item" v-for="(diag, index) in diagnoses" :key="index">
+    <div
+      v-for="(diag, index) in diagnoses"
+      :key="index"
+      class="diagnosis-item"
+    >
       <div class="diagnosis-row">
         <div class="diagnosis-info">
-          <a-tag v-if="index === 0" color="blue">主诊断</a-tag>
-          <a-tag v-else color="default">其他诊断</a-tag>
+          <a-tag
+            v-if="index === 0"
+            color="blue"
+          >
+            主诊断
+          </a-tag>
+          <a-tag
+            v-else
+            color="default"
+          >
+            其他诊断
+          </a-tag>
           <span class="diagnosis-name">{{ diag.name }}</span>
         </div>
-        
+
         <!-- ICD 编码选择 -->
         <div class="icd-code-section">
           <template v-if="diag.suggestions && diag.suggestions.length > 0">
@@ -15,19 +29,30 @@
               v-model:value="diag.selectedCode"
               style="width: 280px"
               placeholder="选择 ICD 编码"
-              @change="(val) => handleCodeChange(index, val)"
+              @change="(val: string) => handleCodeChange(index, val)"
             >
-              <a-select-option 
-                v-for="suggestion in diag.suggestions" 
-                :key="suggestion.code" 
+              <a-select-option
+                v-for="suggestion in diag.suggestions"
+                :key="suggestion.code"
                 :value="suggestion.code"
               >
                 <div class="suggestion-option">
-                  <a-tag color="green" size="small">{{ suggestion.code }}</a-tag>
+                  <a-tag
+                    color="green"
+                    size="small"
+                  >
+                    {{ suggestion.code }}
+                  </a-tag>
                   <span class="suggestion-name">{{ suggestion.name }}</span>
-                  <a-tag 
-                    v-if="suggestion.confidence" 
-                    :color="suggestion.confidence > 0.9 ? 'green' : suggestion.confidence > 0.7 ? 'orange' : 'default'"
+                  <a-tag
+                    v-if="suggestion.confidence"
+                    :color="
+                      suggestion.confidence > 0.9
+                        ? 'green'
+                        : suggestion.confidence > 0.7
+                          ? 'orange'
+                          : 'default'
+                    "
                     size="small"
                   >
                     {{ Math.round(suggestion.confidence * 100) }}%
@@ -36,20 +61,23 @@
               </a-select-option>
             </a-select>
           </template>
-          
+
           <!-- 手动搜索 -->
           <ICDCodeSearch
             v-else
             :category="'diagnosis'"
             :value="diag.selectedCode"
             :placeholder="'搜索 ICD-10 编码'"
-            @update:value="(val) => handleCodeChange(index, val)"
+            @update:value="(val: string) => handleCodeChange(index, val)"
           />
         </div>
       </div>
-      
+
       <!-- 显示当前选中的编码 -->
-      <div v-if="diag.selectedCode" class="selected-code">
+      <div
+        v-if="diag.selectedCode"
+        class="selected-code"
+      >
         <CheckCircleOutlined class="text-green-500" />
         <span>已选编码: <a-tag color="blue">{{ diag.selectedCode }}</a-tag></span>
       </div>
@@ -94,28 +122,28 @@ const emit = defineEmits<Emits>()
 // 构建诊断列表
 const diagnoses = computed<DiagnosisItem[]>(() => {
   const result: DiagnosisItem[] = []
-  
+
   // 主诊断
   if (props.mainDiagnosis) {
     result.push({
       name: props.mainDiagnosis,
       selectedCode: props.mainDiagnosisCode,
-      suggestions: props.mainDiagnosisSuggestions || []
+      suggestions: props.mainDiagnosisSuggestions || [],
     })
   }
-  
+
   // 其他诊断
   if (props.otherDiagnoses) {
     props.otherDiagnoses.forEach((diag, idx) => {
-      const suggestionItem = props.otherDiagnosesSuggestions?.find(s => s.diagnosis === diag)
+      const suggestionItem = props.otherDiagnosesSuggestions?.find((s) => s.diagnosis === diag)
       result.push({
         name: diag,
         selectedCode: props.otherDiagnosesCodes?.[idx] || undefined,
-        suggestions: suggestionItem?.suggestions || []
+        suggestions: suggestionItem?.suggestions || [],
       })
     })
   }
-  
+
   return result
 })
 

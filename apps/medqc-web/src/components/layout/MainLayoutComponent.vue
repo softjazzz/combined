@@ -7,7 +7,7 @@
       collapsible
       class="shadow-2xl border-r border-gray-200"
       :style="{
-        background: 'linear-gradient(180deg, #1e40af 0%, #1e3a8a 50%, #1e40af 100%)'
+        background: 'linear-gradient(180deg, #1e40af 0%, #1e3a8a 50%, #1e40af 100%)',
       }"
       :width="280"
       :collapsed-width="80"
@@ -17,20 +17,33 @@
         <div class="flex items-center justify-center">
           <div class="relative">
             <!-- 主Logo -->
-            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+            <div
+              class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"
+            >
               <MedicineBoxOutlined class="text-xl text-white" />
             </div>
             <!-- 医疗十字装饰 -->
-            <div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+            <div
+              class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center"
+            >
               <div class="w-2 h-2 relative">
-                <div class="absolute inset-x-0 top-1/2 h-0.5 bg-white transform -translate-y-1/2"></div>
-                <div class="absolute inset-y-0 left-1/2 w-0.5 bg-white transform -translate-x-1/2"></div>
+                <div class="absolute inset-x-0 top-1/2 h-0.5 bg-white transform -translate-y-1/2" />
+                <div
+                  class="absolute inset-y-0 left-1/2 w-0.5 bg-white transform -translate-x-1/2"
+                />
               </div>
             </div>
           </div>
-          <div v-if="!collapsed" class="ml-3">
-            <div class="text-white font-bold text-lg">病案质控</div>
-            <div class="text-blue-200 text-xs">医疗质控平台</div>
+          <div
+            v-if="!collapsed"
+            class="ml-3"
+          >
+            <div class="text-white font-bold text-lg">
+              病案质控
+            </div>
+            <div class="text-blue-200 text-xs">
+              医疗质控平台
+            </div>
           </div>
         </div>
       </div>
@@ -41,18 +54,23 @@
         <template v-if="authStore.hasRole('doctor')">
           <div class="space-y-1">
             <button
-              @click="handleMenuClick('/dashboard/doctor-workstation')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard/doctor-workstation')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard/doctor-workstation')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 group-hover:bg-green-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 group-hover:bg-green-500/30 transition-colors duration-200"
+              >
                 <UserOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">医生工作站</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >医生工作站</span>
             </button>
           </div>
         </template>
@@ -62,94 +80,125 @@
           <div class="space-y-1">
             <!-- 仪表板 -->
             <button
-              @click="handleMenuClick('/dashboard')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 group-hover:bg-blue-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/20 group-hover:bg-blue-500/30 transition-colors duration-200"
+              >
                 <DashboardOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">仪表板</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >仪表板</span>
             </button>
 
             <!-- 病案管理 -->
             <button
-              @click="handleMenuClick('/dashboard/records')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard/records')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard/records')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-purple-500/20 group-hover:bg-purple-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-purple-500/20 group-hover:bg-purple-500/30 transition-colors duration-200"
+              >
                 <FileTextOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">病案管理</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >病案管理</span>
             </button>
 
             <!-- 质控分析 -->
             <div class="space-y-1">
               <button
-                @click="toggleQCSubmenu"
                 :class="[
                   'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
-                  (selectedKeys.includes('/dashboard/qc') || selectedKeys.includes('/dashboard/qc/analysis'))
+                  selectedKeys.includes('/dashboard/qc') ||
+                    selectedKeys.includes('/dashboard/qc/analysis')
                     ? 'bg-white/20 text-white shadow-lg'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white'
+                    : 'text-white/80 hover:bg-white/10 hover:text-white',
                 ]"
+                @click="toggleQCSubmenu"
               >
-                <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 group-hover:bg-green-500/30 transition-colors duration-200">
+                <div
+                  class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 group-hover:bg-green-500/30 transition-colors duration-200"
+                >
                   <SafetyCertificateOutlined class="text-lg" />
                 </div>
-                <span v-if="!collapsed" class="ml-3 font-medium flex-1 text-left">质控分析</span>
-                <div v-if="!collapsed" class="ml-2 transition-transform duration-200" :class="{ 'rotate-90': qcSubmenuOpen }">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                <span
+                  v-if="!collapsed"
+                  class="ml-3 font-medium flex-1 text-left"
+                >质控分析</span>
+                <div
+                  v-if="!collapsed"
+                  class="ml-2 transition-transform duration-200"
+                  :class="{ 'rotate-90': qcSubmenuOpen }"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 </div>
               </button>
 
               <!-- 质控子菜单 -->
-              <div v-if="qcSubmenuOpen && !collapsed" class="ml-4 space-y-1">
+              <div
+                v-if="qcSubmenuOpen && !collapsed"
+                class="ml-4 space-y-1"
+              >
                 <button
-                  @click="handleMenuClick('/dashboard/qc')"
                   :class="[
                     'w-full flex items-center px-3 py-2 rounded-lg transition-all duration-200 text-sm',
                     selectedKeys.includes('/dashboard/qc')
                       ? 'bg-white/15 text-white'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
                   ]"
+                  @click="handleMenuClick('/dashboard/qc')"
                 >
-                  <div class="w-2 h-2 bg-current rounded-full mr-3"></div>
+                  <div class="w-2 h-2 bg-current rounded-full mr-3" />
                   质控管理
                 </button>
                 <button
-                  @click="handleMenuClick('/dashboard/qc/analysis')"
                   :class="[
                     'w-full flex items-center px-3 py-2 rounded-lg transition-all duration-200 text-sm',
                     selectedKeys.includes('/dashboard/qc/analysis')
                       ? 'bg-white/15 text-white'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
                   ]"
+                  @click="handleMenuClick('/dashboard/qc/analysis')"
                 >
-                  <div class="w-2 h-2 bg-current rounded-full mr-3"></div>
+                  <div class="w-2 h-2 bg-current rounded-full mr-3" />
                   AI质控分析
                 </button>
                 <button
-                  @click="handleMenuClick('/dashboard/qc/realtime')"
                   :class="[
                     'w-full flex items-center px-3 py-2 rounded-lg transition-all duration-200 text-sm',
                     selectedKeys.includes('/dashboard/qc/realtime')
                       ? 'bg-white/15 text-white'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
                   ]"
+                  @click="handleMenuClick('/dashboard/qc/realtime')"
                 >
-                  <div class="w-2 h-2 bg-current rounded-full mr-3"></div>
+                  <div class="w-2 h-2 bg-current rounded-full mr-3" />
                   实时质控监控
                 </button>
               </div>
@@ -157,68 +206,88 @@
 
             <!-- 质控规则 -->
             <button
-              @click="handleMenuClick('/dashboard/rules')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard/rules')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard/rules')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-orange-500/20 group-hover:bg-orange-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-orange-500/20 group-hover:bg-orange-500/30 transition-colors duration-200"
+              >
                 <SettingOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">质控规则</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >质控规则</span>
             </button>
 
             <!-- 统计报表 -->
             <button
-              @click="handleMenuClick('/dashboard/statistics')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard/statistics')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard/statistics')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-500/20 group-hover:bg-indigo-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-indigo-500/20 group-hover:bg-indigo-500/30 transition-colors duration-200"
+              >
                 <BarChartOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">统计报表</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >统计报表</span>
             </button>
 
             <!-- 360度分析 (管理员和质控员) -->
             <button
               v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
-              @click="handleMenuClick('/dashboard/analytics')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard/analytics')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard/analytics')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-pink-500/20 group-hover:bg-pink-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-pink-500/20 group-hover:bg-pink-500/30 transition-colors duration-200"
+              >
                 <RadarChartOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">360度分析</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >360度分析</span>
             </button>
 
             <!-- 系统设置 (仅管理员) -->
             <button
               v-if="authStore.hasRole('admin')"
-              @click="handleMenuClick('/dashboard/settings')"
               :class="[
                 'w-full flex items-center px-3 py-3 rounded-lg transition-all duration-200 group',
                 selectedKeys.includes('/dashboard/settings')
                   ? 'bg-white/20 text-white shadow-lg'
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  : 'text-white/80 hover:bg-white/10 hover:text-white',
               ]"
+              @click="handleMenuClick('/dashboard/settings')"
             >
-              <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-500/20 group-hover:bg-gray-500/30 transition-colors duration-200">
+              <div
+                class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-500/20 group-hover:bg-gray-500/30 transition-colors duration-200"
+              >
                 <ToolOutlined class="text-lg" />
               </div>
-              <span v-if="!collapsed" class="ml-3 font-medium">系统设置</span>
+              <span
+                v-if="!collapsed"
+                class="ml-3 font-medium"
+              >系统设置</span>
             </button>
           </div>
         </template>
@@ -228,15 +297,23 @@
     <!-- 主内容区域 -->
     <a-layout>
       <!-- 医疗风格顶部导航栏 -->
-      <a-layout-header class="bg-white shadow-lg border-b border-gray-200 px-6 flex items-center justify-between h-16">
+      <a-layout-header
+        class="bg-white shadow-lg border-b border-gray-200 px-6 flex items-center justify-between h-16"
+      >
         <div class="flex items-center space-x-4">
           <!-- 折叠按钮 -->
           <button
-            @click="collapsed = !collapsed"
             class="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200 group"
+            @click="collapsed = !collapsed"
           >
-            <MenuUnfoldOutlined v-if="collapsed" class="text-lg group-hover:scale-110 transition-transform duration-200" />
-            <MenuFoldOutlined v-else class="text-lg group-hover:scale-110 transition-transform duration-200" />
+            <MenuUnfoldOutlined
+              v-if="collapsed"
+              class="text-lg group-hover:scale-110 transition-transform duration-200"
+            />
+            <MenuFoldOutlined
+              v-else
+              class="text-lg group-hover:scale-110 transition-transform duration-200"
+            />
           </button>
 
           <!-- 医疗风格面包屑 -->
@@ -244,10 +321,21 @@
             <div class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
               <HomeOutlined class="text-blue-600 text-xs" />
             </div>
-            <template v-for="(item, index) in breadcrumbItems" :key="item.path">
+            <template
+              v-for="item in breadcrumbItems"
+              :key="item.path"
+            >
               <div class="flex items-center space-x-2">
-                <svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                    clip-rule="evenodd"
+                  />
                 </svg>
                 <router-link
                   v-if="item.path"
@@ -256,7 +344,10 @@
                 >
                   {{ item.title }}
                 </router-link>
-                <span v-else class="text-gray-800 font-semibold">{{ item.title }}</span>
+                <span
+                  v-else
+                  class="text-gray-800 font-semibold"
+                >{{ item.title }}</span>
               </div>
             </template>
           </div>
@@ -266,61 +357,82 @@
         <div class="flex items-center space-x-4">
           <!-- 通知中心 -->
           <div class="relative">
-            <button class="w-10 h-10 bg-gray-100 hover:bg-blue-50 rounded-full flex items-center justify-center transition-all duration-200 group">
+            <button
+              class="w-10 h-10 bg-gray-100 hover:bg-blue-50 rounded-full flex items-center justify-center transition-all duration-200 group"
+            >
               <BellOutlined class="text-gray-600 group-hover:text-blue-600 text-lg" />
             </button>
-            <div class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+            <div
+              class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
+            >
               <span class="text-xs text-white font-bold">5</span>
             </div>
           </div>
 
           <!-- 用户信息下拉菜单 -->
           <a-dropdown placement="bottomRight">
-            <div class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 group">
+            <div
+              class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 group"
+            >
               <!-- 用户头像 -->
               <div class="relative">
-                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-md">
+                <div
+                  class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-md"
+                >
                   <UserOutlined class="text-white text-lg" />
                 </div>
                 <!-- 在线状态指示器 -->
-                <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                <div
+                  class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white"
+                />
               </div>
 
               <!-- 用户信息 -->
               <div class="flex flex-col">
                 <span class="text-sm font-semibold text-gray-800">{{ authStore.userName }}</span>
                 <div class="flex items-center space-x-1">
-                  <div class="w-2 h-2 rounded-full" :class="{
-                    'bg-orange-500': authStore.hasRole('admin'),
-                    'bg-blue-500': authStore.hasRole('qc_manager'),
-                    'bg-green-500': authStore.hasRole('doctor')
-                  }"></div>
-                  <span class="text-xs text-gray-500">{{ getRoleDisplayName(authStore.userRoles?.[0]) }}</span>
+                  <div
+                    class="w-2 h-2 rounded-full"
+                    :class="{
+                      'bg-orange-500': authStore.hasRole('admin'),
+                      'bg-blue-500': authStore.hasRole('qc_manager'),
+                      'bg-green-500': authStore.hasRole('doctor'),
+                    }"
+                  />
+                  <span class="text-xs text-gray-500">{{
+                    getRoleDisplayName(authStore.userRoles?.[0])
+                  }}</span>
                 </div>
               </div>
 
               <!-- 下拉箭头 -->
-              <DownOutlined class="text-gray-400 text-xs group-hover:text-gray-600 transition-colors duration-200" />
+              <DownOutlined
+                class="text-gray-400 text-xs group-hover:text-gray-600 transition-colors duration-200"
+              />
             </div>
 
             <template #overlay>
               <div class="bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-48">
                 <div class="px-4 py-3 border-b border-gray-100">
-                  <div class="text-sm font-semibold text-gray-800">{{ authStore.userName }}</div>
-                  <div class="text-xs text-gray-500">{{ authStore.user?.email || '' }}</div>
+                  <div class="text-sm font-semibold text-gray-800">
+                    {{ authStore.userName }}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {{ authStore.user?.email || '' }}
+                  </div>
                 </div>
 
                 <div class="py-1">
                   <button
-                    @click="handleProfile"
                     class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors duration-200"
+                    @click="handleProfile"
                   >
                     <UserOutlined class="text-gray-500" />
                     <span>个人资料</span>
                   </button>
                   <button
-                    @click="handleSettings"
                     class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors duration-200"
+                    @click="handleSettings"
                   >
                     <SettingOutlined class="text-gray-500" />
                     <span>账户设置</span>
@@ -329,8 +441,8 @@
 
                 <div class="border-t border-gray-100 py-1">
                   <button
-                    @click="handleLogout"
                     class="w-full px-4 py-2 text-left text-sm text-red-600 hover: bg-red-50 flex items-center space-x-2 transition-colors duration-200"
+                    @click="handleLogout"
                   >
                     <LogoutOutlined class="text-red-500" />
                     <span>退出登录</span>
@@ -344,7 +456,9 @@
 
       <!-- 医疗风格内容区域 -->
       <a-layout-content class="bg-gradient-to-br from-gray-50 to-blue-50/30 p-6 min-h-screen">
-        <div class="bg-white rounded-2xl shadow-lg border border-gray-200 min-h-full overflow-hidden">
+        <div
+          class="bg-white rounded-2xl shadow-lg border border-gray-200 min-h-full overflow-hidden"
+        >
           <router-view />
         </div>
       </a-layout-content>
@@ -372,7 +486,7 @@ import {
   UserOutlined,
   DownOutlined,
   LogoutOutlined,
-  MedicineBoxOutlined
+  MedicineBoxOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -440,9 +554,9 @@ const toggleQCSubmenu = () => {
 
 const getRoleDisplayName = (role: string) => {
   const roleMap: Record<string, string> = {
-    'admin': '系统管理员',
-    'qc_manager': '质控管理员',
-    'doctor': '医务人员'
+    admin: '系统管理员',
+    qc_manager: '质控管理员',
+    doctor: '医务人员',
   }
   return roleMap[role] || role
 }
@@ -475,7 +589,11 @@ const forceLogout = () => {
 
 const handleLogout = async () => {
   Modal.confirm({
-    title: '退出登录', content: '确定要退出当前账户吗？', okText: '确定', cancelText: '取消', onOk: async () => {
+    title: '退出登录',
+    content: '确定要退出当前账户吗？',
+    okText: '确定',
+    cancelText: '取消',
+    onOk: async () => {
       console.log('开始退出登录流程...')
       const loadingMessage = message.loading('正在退出...', 0)
 
@@ -490,7 +608,7 @@ const handleLogout = async () => {
         })
 
         const signOutPromise = authStore.signOut()
-        const result = await Promise.race([signOutPromise, timeoutPromise]) as {
+        const result = (await Promise.race([signOutPromise, timeoutPromise])) as {
           success?: boolean
           error?: { message?: string }
         }
@@ -518,7 +636,7 @@ const handleLogout = async () => {
           forceLogout()
         }, 1500)
       }
-    }
+    },
   })
 }
 
@@ -532,7 +650,7 @@ watch(
       qcSubmenuOpen.value = true
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 </script>
 

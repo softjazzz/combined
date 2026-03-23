@@ -4,21 +4,37 @@
       <div class="toolbar-grid">
         <label class="field field-search">
           <div class="search-box">
-            <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              class="search-icon"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
             <input
               v-model="searchText"
               type="text"
               placeholder="搜索规则编号、名称、字段或说明"
-            />
+            >
           </div>
         </label>
 
         <label class="field">
           <select v-model="filterCategory">
             <option :value="undefined">全部分类</option>
-            <option v-for="cat in categoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
+            <option
+              v-for="cat in categoryOptions"
+              :key="cat.value"
+              :value="cat.value"
+            >
+              {{ cat.label }}
+            </option>
           </select>
         </label>
 
@@ -40,9 +56,22 @@
         </label>
 
         <div class="toolbar-actions">
-          <button class="refresh-btn" @click="fetchRules">
-            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <button
+            class="refresh-btn"
+            @click="fetchRules"
+          >
+            <svg
+              class="btn-icon"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
             刷新
           </button>
@@ -54,7 +83,9 @@
       <article class="summary-card">
         <div class="summary-head">
           <div>
-            <div class="summary-kicker">规则总览</div>
+            <div class="summary-kicker">
+              规则总览
+            </div>
             <h3>结算清单质控</h3>
           </div>
           <span class="summary-pill">{{ statistics.total }} 条</span>
@@ -70,13 +101,17 @@
             <span class="summary-stat-label">影响分组</span>
           </div>
         </div>
-        <div class="summary-note">统一查看结算规则总量与分组影响范围。</div>
+        <div class="summary-note">
+          统一查看结算规则总量与分组影响范围。
+        </div>
       </article>
 
       <article class="summary-card">
         <div class="summary-head">
           <div>
-            <div class="summary-kicker">严重度分布</div>
+            <div class="summary-kicker">
+              严重度分布
+            </div>
             <h3>规则关注结构</h3>
           </div>
           <span class="summary-pill summary-pill-neutral">{{ severityTotal }} 条</span>
@@ -89,7 +124,10 @@
               <strong>{{ statistics.severity_counts?.error || 0 }}</strong>
             </div>
             <div class="progress-track">
-              <div class="progress-fill progress-fill-strong" :style="{ width: severityPercent('error') }"></div>
+              <div
+                class="progress-fill progress-fill-strong"
+                :style="{ width: severityPercent('error') }"
+              />
             </div>
           </div>
           <div class="progress-item">
@@ -98,7 +136,10 @@
               <strong>{{ statistics.severity_counts?.warning || 0 }}</strong>
             </div>
             <div class="progress-track">
-              <div class="progress-fill progress-fill-medium" :style="{ width: severityPercent('warning') }"></div>
+              <div
+                class="progress-fill progress-fill-medium"
+                :style="{ width: severityPercent('warning') }"
+              />
             </div>
           </div>
           <div class="progress-item">
@@ -107,7 +148,10 @@
               <strong>{{ statistics.severity_counts?.info || 0 }}</strong>
             </div>
             <div class="progress-track">
-              <div class="progress-fill progress-fill-soft" :style="{ width: severityPercent('info') }"></div>
+              <div
+                class="progress-fill progress-fill-soft"
+                :style="{ width: severityPercent('info') }"
+              />
             </div>
           </div>
         </div>
@@ -116,7 +160,9 @@
       <article class="summary-card">
         <div class="summary-head">
           <div>
-            <div class="summary-kicker">分类分布</div>
+            <div class="summary-kicker">
+              分类分布
+            </div>
             <h3>规则覆盖结构</h3>
           </div>
           <span class="summary-pill">{{ categoryTotal }} 类</span>
@@ -146,45 +192,73 @@
     <section class="table-shell">
       <div class="table-head">
         <div>
-          <div class="table-kicker">规则明细</div>
+          <div class="table-kicker">
+            规则明细
+          </div>
           <div class="table-title-row">
             <h3>规则列表</h3>
             <span class="table-chip">{{ filteredRules.length }} 条已筛选</span>
           </div>
         </div>
-        <div class="table-meta">点击任意行可编辑，右侧按钮显示影响分组状态</div>
+        <div class="table-meta">
+          点击任意行可编辑，右侧按钮显示影响分组状态
+        </div>
       </div>
 
       <div class="table-scroll">
-        <div v-if="loading" class="loading-mask">
+        <div
+          v-if="loading"
+          class="loading-mask"
+        >
           <a-spin />
         </div>
 
         <table class="rules-table">
           <thead>
             <tr>
-              <th class="col-code">编号</th>
-              <th class="col-name">规则名称</th>
-              <th class="col-field">校验字段</th>
-              <th class="col-category">分类</th>
-              <th class="col-severity">严重度</th>
-              <th class="col-group text-center">分组影响</th>
-              <th class="col-action text-right">操作</th>
+              <th class="col-code">
+                编号
+              </th>
+              <th class="col-name">
+                规则名称
+              </th>
+              <th class="col-field">
+                校验字段
+              </th>
+              <th class="col-category">
+                分类
+              </th>
+              <th class="col-severity">
+                严重度
+              </th>
+              <th class="col-group text-center">
+                分组影响
+              </th>
+              <th class="col-action text-right">
+                操作
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="record in pagedRules"
               :key="record.rule_id"
-              @click="editRule(record)"
               class="rule-row"
+              @click="editRule(record)"
             >
               <td class="code-cell">
                 <span class="rule-code">{{ record.rule_id }}</span>
               </td>
               <td class="name-cell">
-                <div class="rule-name">{{ record.rule_name }}</div>
-                <div class="rule-desc" :title="record.description">{{ record.description }}</div>
+                <div class="rule-name">
+                  {{ record.rule_name }}
+                </div>
+                <div
+                  class="rule-desc"
+                  :title="record.description"
+                >
+                  {{ record.description }}
+                </div>
               </td>
               <td>
                 <span class="pill pill-neutral">{{ record.field_name }}</span>
@@ -193,44 +267,87 @@
                 <span class="pill pill-neutral">{{ getCategoryLabel(record.category) }}</span>
               </td>
               <td>
-                <span :class="['pill', severityClass(record.severity)]">{{ getSeverityLabel(record.severity) }}</span>
+                <span :class="['pill', severityClass(record.severity)]">{{
+                  getSeverityLabel(record.severity)
+                }}</span>
               </td>
               <td class="text-center">
-                <span v-if="record.affects_grouping" class="pill pill-strong">影响分组</span>
-                <span v-else class="pill pill-soft">不影响</span>
+                <span
+                  v-if="record.affects_grouping"
+                  class="pill pill-strong"
+                >影响分组</span>
+                <span
+                  v-else
+                  class="pill pill-soft"
+                >不影响</span>
               </td>
-              <td class="text-right" @click.stop>
-                  <button class="edit-btn" @click="editRule(record)">编辑</button>
+              <td
+                class="text-right"
+                @click.stop
+              >
+                <button
+                  class="edit-btn"
+                  @click="editRule(record)"
+                >
+                  编辑
+                </button>
               </td>
             </tr>
             <tr v-if="filteredRules.length === 0 && !loading">
-              <td colspan="7" class="empty-row">暂无匹配数据</td>
+              <td
+                colspan="7"
+                class="empty-row"
+              >
+                暂无匹配数据
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div v-if="filteredRules.length > 0" class="pagination-bar">
+      <div
+        v-if="filteredRules.length > 0"
+        class="pagination-bar"
+      >
         <div class="pagination-meta">
           第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ filteredRules.length }} 条
         </div>
         <div class="pagination-actions">
           <label class="page-size-wrap">
             每页
-            <select v-model.number="pageSize" class="page-size-select">
-              <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+            <select
+              v-model.number="pageSize"
+              class="page-size-select"
+            >
+              <option
+                v-for="size in pageSizeOptions"
+                :key="size"
+                :value="size"
+              >{{ size }}</option>
             </select>
             条
           </label>
-          <button class="page-btn" :disabled="currentPage <= 1" @click="prevPage">上一页</button>
-          <button class="page-btn" :disabled="currentPage >= totalPages" @click="nextPage">下一页</button>
+          <button
+            class="page-btn"
+            :disabled="currentPage <= 1"
+            @click="prevPage"
+          >
+            上一页
+          </button>
+          <button
+            class="page-btn"
+            :disabled="currentPage >= totalPages"
+            @click="nextPage"
+          >
+            下一页
+          </button>
         </div>
       </div>
     </section>
 
     <RuleEditorDrawer
       v-model:open="drawerVisible"
-      :record="currentRecord"
+      :record="currentRecord || undefined"
       @save="handleSaveRule"
     />
   </div>
@@ -302,20 +419,25 @@ const filteredRules = computed(() => {
   return result
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRules.value.length / pageSize.value)))
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredRules.value.length / pageSize.value)),
+)
 
 const pagedRules = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredRules.value.slice(start, start + pageSize.value)
 })
 
-const severityTotal = computed(() =>
-  (statistics.severity_counts?.error || 0)
-  + (statistics.severity_counts?.warning || 0)
-  + (statistics.severity_counts?.info || 0),
+const severityTotal = computed(
+  () =>
+    (statistics.severity_counts?.error || 0) +
+    (statistics.severity_counts?.warning || 0) +
+    (statistics.severity_counts?.info || 0),
 )
 
-const categoryTotal = computed(() => Object.values(statistics.category_counts || {}).reduce((sum, n) => sum + n, 0))
+const categoryTotal = computed(() =>
+  Object.values(statistics.category_counts || {}).reduce((sum, n) => sum + n, 0),
+)
 
 watch([searchText, filterCategory, filterSeverity, filterGrouping, pageSize], () => {
   currentPage.value = 1
@@ -349,20 +471,24 @@ const handleSaveRule = (updatedRecord: Partial<SettlementRule> & { rule_id: stri
 }
 
 const getCategoryLabel = (category: string) => {
-  return {
-    required: '完整性',
-    format: '规范性',
-    logic: '合理性',
-    consistency: '逻辑质控',
-  }[category] || category
+  return (
+    {
+      required: '完整性',
+      format: '规范性',
+      logic: '合理性',
+      consistency: '逻辑质控',
+    }[category] || category
+  )
 }
 
 const severityClass = (severity: string) => {
-  return {
-    error: 'pill-severity-strong',
-    warning: 'pill-severity-medium',
-    info: 'pill-severity-soft',
-  }[severity] || 'pill-severity-soft'
+  return (
+    {
+      error: 'pill-severity-strong',
+      warning: 'pill-severity-medium',
+      info: 'pill-severity-soft',
+    }[severity] || 'pill-severity-soft'
+  )
 }
 
 const getSeverityLabel = (severity: string) => {
@@ -381,7 +507,9 @@ const fetchRules = async () => {
     const resp = await fetch('/api/medical-records/settlement/rules/list')
     const data = await resp.json()
     if (data.success && data.data) {
-      const sorted = (data.data as SettlementRule[]).slice().sort((a, b) => a.rule_id.localeCompare(b.rule_id, 'zh-Hans-CN', { numeric: true }))
+      const sorted = (data.data as SettlementRule[])
+        .slice()
+        .sort((a, b) => a.rule_id.localeCompare(b.rule_id, 'zh-Hans-CN', { numeric: true }))
       allRules.value = sorted
       currentPage.value = 1
 
@@ -788,7 +916,9 @@ onMounted(() => {
 
 .rule-row {
   cursor: pointer;
-  transition: background-color 0.18s ease, transform 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    transform 0.18s ease;
 }
 
 .rule-row:hover {
@@ -949,4 +1079,3 @@ onMounted(() => {
   }
 }
 </style>
-

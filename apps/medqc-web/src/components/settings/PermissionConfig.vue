@@ -3,7 +3,9 @@
     <!-- ══════════ Section: 权限矩阵 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">权限配置</h2>
+        <h2 class="ds-section-title">
+          权限配置
+        </h2>
         <p class="ds-section-desc">
           通过权限矩阵控制各角色对系统资源的访问。勾选或取消勾选即时生效。
         </p>
@@ -22,8 +24,14 @@
         <div class="ds-card">
           <!-- 矩阵表头 -->
           <div class="pm-header">
-            <div class="pm-cell pm-cell--resource">资源/功能</div>
-            <div class="pm-cell pm-cell--role" v-for="role in roleColumns" :key="role.key">
+            <div class="pm-cell pm-cell--resource">
+              资源/功能
+            </div>
+            <div
+              v-for="role in roleColumns"
+              :key="role.key"
+              class="pm-cell pm-cell--role"
+            >
               {{ role.title }}
             </div>
           </div>
@@ -46,8 +54,14 @@
                   <input
                     type="checkbox"
                     :checked="row[role.key]"
-                    @change="handlePermissionChange(row.resource, role.key, ($event.target as HTMLInputElement).checked)"
-                  />
+                    @change="
+                      handlePermissionChange(
+                        row.resource,
+                        role.key,
+                        ($event.target as HTMLInputElement).checked,
+                      )
+                    "
+                  >
                   <span class="pm-checkbox__visual">
                     {{ row[role.key] ? '✓' : '' }}
                   </span>
@@ -57,7 +71,9 @@
           </div>
           <div class="ds-card__footer">
             <span class="ds-row__hint">共 {{ permissionMatrix.length }} 项资源</span>
-            <button class="ds-btn ds-btn--primary">保存权限</button>
+            <button class="ds-btn ds-btn--primary">
+              保存权限
+            </button>
           </div>
         </div>
       </div>
@@ -70,14 +86,17 @@ import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import '@/styles/settings-design-system.css'
 
+type RoleKey = 'admin' | 'qc_manager' | 'qc_staff' | 'doctor'
+type PermissionRow = { resource: string } & Record<RoleKey, boolean>
+
 const roleColumns = [
   { key: 'admin', title: '管理员' },
   { key: 'qc_manager', title: '质控管理员' },
   { key: 'qc_staff', title: '质控人员' },
   { key: 'doctor', title: '医务人员' },
-]
+] as const
 
-const permissionMatrix = ref([
+const permissionMatrix = ref<PermissionRow[]>([
   { resource: '仪表板', admin: true, qc_manager: true, qc_staff: true, doctor: true },
   { resource: '质控工作站', admin: true, qc_manager: true, qc_staff: true, doctor: false },
   { resource: '质控规则管理', admin: true, qc_manager: true, qc_staff: false, doctor: false },
@@ -90,10 +109,10 @@ const permissionMatrix = ref([
   { resource: '数据同步', admin: true, qc_manager: true, qc_staff: false, doctor: false },
 ])
 
-const handlePermissionChange = (resource: string, role: string, checked: boolean) => {
-  const row = permissionMatrix.value.find(r => r.resource === resource)
+const handlePermissionChange = (resource: string, role: RoleKey, checked: boolean) => {
+  const row = permissionMatrix.value.find((r) => r.resource === resource)
   if (row) {
-    ;(row as any)[role] = checked
+    row[role] = checked
   }
   message.info(`${resource} - ${role}: ${checked ? '授权' : '取消授权'}`)
 }
@@ -121,7 +140,9 @@ const handlePermissionChange = (resource: string, role: string, checked: boolean
   padding: 8px 20px;
   transition: background 0.12s;
 }
-.pm-row:hover { background: rgba(248, 250, 252, 0.7); }
+.pm-row:hover {
+  background: rgba(248, 250, 252, 0.7);
+}
 
 /* 单元格 */
 .pm-cell {

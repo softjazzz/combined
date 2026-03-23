@@ -12,7 +12,7 @@ import type { MedicalRecord } from '../types/medical-records'
 const DEEPSEEK_CONFIG = {
   apiKey: 'sk-f1fa15b00fb042a9a80943a40e142daf',
   baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-  model: 'deepseek-v3'
+  model: 'deepseek-v3',
 }
 
 type QCResultRow = Database['public']['Tables']['qc_results']['Row']
@@ -22,7 +22,7 @@ type QCResultInsert = Database['public']['Tables']['qc_results']['Insert']
  * 分析单个医疗记录
  */
 export async function analyzeRecord(
-  recordId: string
+  recordId: string,
 ): Promise<{ data: QCAnalysisResult | null; error: Error | null }> {
   try {
     // 1. 获取医疗记录
@@ -51,7 +51,7 @@ export async function analyzeRecord(
       await updateMedicalRecord(recordId, {
         status: 'completed',
         qc_score: analysisResult.overallScore,
-        qc_grade: analysisResult.grade
+        qc_grade: analysisResult.grade,
       })
 
       return { data: analysisResult, error: null }
@@ -64,7 +64,7 @@ export async function analyzeRecord(
     console.error('分析医疗记录失败:', error)
     return {
       data: null,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -72,11 +72,9 @@ export async function analyzeRecord(
 /**
  * 批量分析医疗记录
  */
-export async function batchAnalyzeRecords(
-  recordIds: string[]
-): Promise<{ 
-  data: { successful: QCAnalysisResult[]; failed: string[] }; 
-  error: Error | null 
+export async function batchAnalyzeRecords(recordIds: string[]): Promise<{
+  data: { successful: QCAnalysisResult[]; failed: string[] }
+  error: Error | null
 }> {
   try {
     const successful: QCAnalysisResult[] = []
@@ -86,7 +84,7 @@ export async function batchAnalyzeRecords(
     const batchSize = 3
     for (let i = 0; i < recordIds.length; i += batchSize) {
       const batch = recordIds.slice(i, i + batchSize)
-      
+
       const promises = batch.map(async (recordId) => {
         const { data, error } = await analyzeRecord(recordId)
         if (error) {
@@ -97,21 +95,22 @@ export async function batchAnalyzeRecords(
       })
 
       await Promise.all(promises)
-      
+
       // 避免过快调用API
       if (i + batchSize < recordIds.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
     }
 
     return {
       data: { successful, failed },
-      error: null
+      error: null,
     }
-  } catch (error) { console.error('批量分析失败:', error)
+  } catch (error) {
+    console.error('批量分析失败:', error)
     return {
-      data: { successful:  [], failed: recordIds },
-      error: error as Error
+      data: { successful: [], failed: recordIds },
+      error: error as Error,
     }
   }
 }
@@ -120,7 +119,7 @@ export async function batchAnalyzeRecords(
  * 获取质控分析结果
  */
 export async function getQCResult(
-  recordId: string
+  recordId: string,
 ): Promise<{ data: QCAnalysisResult | null; error: Error | null }> {
   try {
     const { data, error } = await supabase
@@ -141,7 +140,7 @@ export async function getQCResult(
     console.error('获取质控结果失败:', error)
     return {
       data: null,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -150,7 +149,7 @@ export async function getQCResult(
  * 获取多个记录的质控结果
  */
 export async function getMultipleQCResults(
-  recordIds: string[]
+  recordIds: string[],
 ): Promise<{ data: QCAnalysisResult[]; error: Error | null }> {
   try {
     const { data, error } = await supabase
@@ -163,12 +162,13 @@ export async function getMultipleQCResults(
       throw new Error(`获取质控结果失败: ${error.message}`)
     }
 
-    const results = ((data || []) as unknown[]).map(convertRowToQCResult)
+    const results = (data || []).map((row) => convertRowToQCResult(row as QCResultRow))
     return { data: results, error: null }
-  } catch (error) { console.error('获取质控结果失败:', error)
+  } catch (error) {
+    console.error('获取质控结果失败:', error)
     return {
-      data:  [],
-      error: error as Error
+      data: [],
+      error: error as Error,
     }
   }
 }
@@ -223,23 +223,24 @@ ${content}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_CONFIG.apiKey}`
+        Authorization: `Bearer ${DEEPSEEK_CONFIG.apiKey}`,
       },
       body: JSON.stringify({
         model: DEEPSEEK_CONFIG.model,
         messages: [
           {
             role: 'system',
-            content: '你是一名专业的医疗质控专家，擅长分析病案质量并提供改进建议。请严格按照要求的JSON格式返回分析结果。'
+            content:
+              '你是一名专业的医疗质控专家，擅长分析病案质量并提供改进建议。请严格按照要求的JSON格式返回分析结果。',
           },
           {
             role: 'user',
-            content: QC_ANALYSIS_PROMPT
-          }
+            content: QC_ANALYSIS_PROMPT,
+          },
         ],
         max_tokens: 2000,
-        temperature: 0.1
-      })
+        temperature: 0.1,
+      }),
     })
 
     if (!response.ok) {
@@ -247,9 +248,9 @@ ${content}
       throw new Error(`DeepSeek API调用失败: ${response.status} ${errorText}`)
     }
 
-    const result = await response.json() as any
+    const result = (await response.json()) as any
     const aiResponse = result.choices?.[0]?.message?.content || ''
-    
+
     // 解析JSON结果
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
@@ -260,27 +261,28 @@ ${content}
     const analysisTime = Date.now() - startTime
 
     // 构造标准化结果
-    const qcResult: QCAnalysisResult = { recordId: '', // 在调用方设置
+    const qcResult: QCAnalysisResult = {
+      recordId: '', // 在调用方设置
       overallScore: analysisData.overall_score || 0,
       grade: analysisData.grade || 'C',
       status: 'completed',
-      ruleResults:  [], // 简化实现
+      ruleResults: [], // 简化实现
       categoryScores: {
         completeness: analysisData.completeness_score || 0,
         consistency: analysisData.consistency_score || 0,
         rationality: analysisData.rationality_score || 0,
-        timeliness: analysisData.timeliness_score || 0
+        timeliness: analysisData.timeliness_score || 0,
       },
       summary: {
         totalRules: 18,
         violatedRules: analysisData.issues?.length || 0,
         criticalIssues: Math.min(analysisData.issues?.length || 0, 2),
         majorIssues: Math.max(0, (analysisData.issues?.length || 0) - 2),
-        minorIssues: 0
+        minorIssues: 0,
       },
       suggestions: analysisData.suggestions || [],
       analysisTime: analysisTime,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     }
 
     return qcResult
@@ -295,15 +297,15 @@ ${content}
  */
 async function saveQCResult(
   recordId: string,
-  analysisResult: QCAnalysisResult
+  analysisResult: QCAnalysisResult,
 ): Promise<QCResultRow> {
   try {
     const issuesPayload: Record<string, unknown> = {
-      items: analysisResult.ruleResults
+      items: analysisResult.ruleResults,
     }
 
     const suggestionsPayload: Record<string, unknown> = {
-      list: analysisResult.suggestions
+      list: analysisResult.suggestions,
     }
 
     const insertData: QCResultInsert = {
@@ -322,7 +324,7 @@ async function saveQCResult(
       summary: JSON.stringify(analysisResult.summary),
       is_reviewed: false,
       reviewer_id: null,
-      review_notes: null
+      review_notes: null,
     }
 
     const { data, error } = await supabase
@@ -366,25 +368,27 @@ function convertRowToQCResult(row: QCResultRow): QCAnalysisResult {
       ? (suggestionsSource as string[])
       : []
 
-  const summary = typeof row.summary === 'string'
-    ? (() => {
-        try {
-          return JSON.parse(row.summary) as QCAnalysisResult['summary']
-        } catch {
-          return undefined
-        }
-      })()
-    : undefined
+  const summary =
+    typeof row.summary === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(row.summary) as QCAnalysisResult['summary']
+          } catch {
+            return undefined
+          }
+        })()
+      : undefined
 
-  const rawAnalysis = typeof row.raw_analysis === 'string'
-    ? (() => {
-        try {
-          return JSON.parse(row.raw_analysis) as Partial<QCAnalysisResult>
-        } catch {
-          return undefined
-        }
-      })()
-    : undefined
+  const rawAnalysis =
+    typeof row.raw_analysis === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(row.raw_analysis) as Partial<QCAnalysisResult>
+          } catch {
+            return undefined
+          }
+        })()
+      : undefined
 
   return {
     recordId: row.record_id,
@@ -396,54 +400,54 @@ function convertRowToQCResult(row: QCResultRow): QCAnalysisResult {
       completeness: parseCategoryScore('completeness'),
       consistency: parseCategoryScore('consistency'),
       rationality: parseCategoryScore('rationality'),
-      timeliness: parseCategoryScore('timeliness')
+      timeliness: parseCategoryScore('timeliness'),
     },
     summary: summary || {
       totalRules: 18,
       violatedRules: issueList.length,
-      criticalIssues: issueList.filter(item => item?.severity === 'critical').length,
-      majorIssues: issueList.filter(item => item?.severity === 'major').length,
-      minorIssues: issueList.filter(item => item?.severity === 'minor').length
+      criticalIssues: issueList.filter((item) => item?.severity === 'critical').length,
+      majorIssues: issueList.filter((item) => item?.severity === 'major').length,
+      minorIssues: issueList.filter((item) => item?.severity === 'minor').length,
     },
     suggestions: suggestionList.map(String),
     analysisTime: Number(row.analysis_time ?? rawAnalysis?.analysisTime ?? 0) || 0,
-    createdAt: row.analysis_time ?? rawAnalysis?.createdAt ?? new Date().toISOString()
+    createdAt: row.analysis_time ?? rawAnalysis?.createdAt ?? new Date().toISOString(),
   }
 }
 
 /**
  * 健康检查 - 测试DeepSeek API连接
  */
-export async function healthCheck(): Promise<{ 
-  status: 'ok' | 'error'; 
-  message: string; 
-  details?: Record<string, unknown> 
+export async function healthCheck(): Promise<{
+  status: 'ok' | 'error'
+  message: string
+  details?: Record<string, unknown>
 }> {
   try {
     const response = await fetch(`${DEEPSEEK_CONFIG.baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_CONFIG.apiKey}`
+        Authorization: `Bearer ${DEEPSEEK_CONFIG.apiKey}`,
       },
       body: JSON.stringify({
         model: DEEPSEEK_CONFIG.model,
         messages: [
           {
             role: 'user',
-            content: '你好，请回复"连接正常"'
-          }
+            content: '你好，请回复"连接正常"',
+          },
         ],
         max_tokens: 50,
-        temperature: 0
-      })
+        temperature: 0,
+      }),
     })
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }
 
-    const result = await response.json() as any
+    const result = (await response.json()) as any
     const content = result.choices?.[0]?.message?.content || ''
 
     return {
@@ -451,16 +455,16 @@ export async function healthCheck(): Promise<{
       message: 'DeepSeek API连接正常',
       details: {
         model: DEEPSEEK_CONFIG.model,
-        response: content
-      }
+        response: content,
+      },
     }
   } catch (error) {
     return {
       status: 'error',
       message: 'DeepSeek API连接失败',
       details: {
-        error: error instanceof Error ? error.message : '未知错误'
-      }
+        error: error instanceof Error ? error.message : '未知错误',
+      },
     }
   }
-} 
+}

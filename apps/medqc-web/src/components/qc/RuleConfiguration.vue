@@ -8,27 +8,29 @@
             <SettingOutlined class="text-purple-400" />
             质控规则配置
           </h3>
-          <p class="text-sm text-slate-400">管理和配置质控分析规则，自定义检查标准</p>
+          <p class="text-sm text-slate-400">
+            管理和配置质控分析规则，自定义检查标准
+          </p>
         </div>
         <div class="flex items-center gap-3">
           <a-button
-            @click="importRules"
             class="bg-blue-500/20 border-blue-400/30 text-blue-100 hover:bg-blue-500/30 hover:text-white"
+            @click="importRules"
           >
             <ImportOutlined />
             导入规则
           </a-button>
           <a-button
-            @click="exportRules"
             class="bg-emerald-500/20 border-emerald-400/30 text-emerald-100 hover:bg-emerald-500/30 hover:text-white"
+            @click="exportRules"
           >
             <ExportOutlined />
             导出规则
           </a-button>
-          <a-button 
+          <a-button
             type="primary"
-            @click="showCreateRuleModal"
             class="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 border-none"
+            @click="showCreateRuleModal"
           >
             <PlusOutlined />
             新增规则
@@ -44,8 +46,8 @@
               v-model:value="searchKeyword"
               placeholder="搜索规则名称、描述或类别..."
               size="large"
-              @search="searchRules"
               class="search-input"
+              @search="searchRules"
             >
               <template #prefix>
                 <SearchOutlined class="text-slate-400" />
@@ -59,36 +61,36 @@
               size="large"
               style="width: 150px"
               allow-clear
-              @change="filterRules"
               class="category-filter"
+              @change="filterRules"
             >
-              <a-select-option 
-                v-for="category in categories" 
-                :key="category" 
+              <a-select-option
+                v-for="category in categories"
+                :key="category"
                 :value="category"
               >
                 {{ category }}
               </a-select-option>
             </a-select>
-            
+
             <a-select
               v-model:value="selectedStatus"
               placeholder="状态"
               size="large"
               style="width: 100px"
               allow-clear
-              @change="filterRules"
               class="status-filter"
+              @change="filterRules"
             >
               <a-select-option value="active">
                 <div class="flex items-center gap-2">
-                  <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                  <div class="w-2 h-2 rounded-full bg-emerald-400" />
                   启用
                 </div>
               </a-select-option>
               <a-select-option value="inactive">
                 <div class="flex items-center gap-2">
-                  <div class="w-2 h-2 rounded-full bg-red-400"></div>
+                  <div class="w-2 h-2 rounded-full bg-red-400" />
                   禁用
                 </div>
               </a-select-option>
@@ -107,11 +109,11 @@
           <div class="flex items-start gap-4">
             <!-- 规则状态指示器 -->
             <div class="flex flex-col items-center gap-2 pt-1">
-              <div 
+              <div
                 class="w-4 h-4 rounded-full"
                 :class="rule.is_active ? 'bg-emerald-400' : 'bg-red-400'"
-              ></div>
-              <a-switch 
+              />
+              <a-switch
                 v-model:checked="rule.is_active"
                 size="small"
                 @change="toggleRuleStatus(rule)"
@@ -122,16 +124,18 @@
               <!-- 规则标题和操作 -->
               <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-3">
-                  <h4 class="font-semibold text-slate-100 text-base">{{ rule.name }}</h4>
-                  <a-tag 
-                    :color="getCategoryColor(rule.category)" 
+                  <h4 class="font-semibold text-slate-100 text-base">
+                    {{ rule.name }}
+                  </h4>
+                  <a-tag
+                    :color="getCategoryColor(rule.category)"
                     size="small"
                     class="category-tag"
                   >
                     {{ rule.category }}
                   </a-tag>
-                  <a-tag 
-                    :color="getSeverityColor(rule.severity)" 
+                  <a-tag
+                    :color="getSeverityColor(rule.severity)"
                     size="small"
                     class="severity-tag"
                   >
@@ -143,8 +147,8 @@
                     <a-button
                       size="small"
                       type="text"
-                      @click="editRule(rule)"
                       class="text-blue-200 hover:text-blue-100 hover:bg-blue-500/20"
+                      @click="editRule(rule)"
                     >
                       <EditOutlined />
                     </a-button>
@@ -153,8 +157,8 @@
                     <a-button
                       size="small"
                       type="text"
-                      @click="duplicateRule(rule)"
                       class="text-emerald-200 hover:text-emerald-100 hover:bg-emerald-500/20"
+                      @click="duplicateRule(rule)"
                     >
                       <CopyOutlined />
                     </a-button>
@@ -163,8 +167,8 @@
                     <a-button
                       size="small"
                       type="text"
-                      @click="deleteRule(rule)"
                       class="text-red-200 hover:text-red-100 hover:bg-red-500/20"
+                      @click="deleteRule(rule)"
                     >
                       <DeleteOutlined />
                     </a-button>
@@ -173,14 +177,18 @@
               </div>
 
               <!-- 规则描述 -->
-              <p class="text-sm text-slate-300 mb-4 leading-relaxed">{{ rule.description }}</p>
+              <p class="text-sm text-slate-300 mb-4 leading-relaxed">
+                {{ rule.description }}
+              </p>
 
               <!-- 规则详情 -->
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div class="flex items-center gap-2">
                   <CodeOutlined class="text-slate-400 text-sm" />
                   <span class="text-xs text-slate-400">规则代码：</span>
-                  <code class="text-xs text-cyan-300 bg-slate-800/50 px-2 py-1 rounded">{{ rule.rule_code }}</code>
+                  <code class="text-xs text-cyan-300 bg-slate-800/50 px-2 py-1 rounded">{{
+                    rule.rule_code
+                  }}</code>
                 </div>
                 <div class="flex items-center gap-2">
                   <ThunderboltOutlined class="text-slate-400 text-sm" />
@@ -190,7 +198,9 @@
                 <div class="flex items-center gap-2">
                   <ClockCircleOutlined class="text-slate-400 text-sm" />
                   <span class="text-xs text-slate-400">更新时间：</span>
-                  <span class="text-xs text-slate-200">{{ formatDate(rule.updated_at) }}</span>
+                  <span class="text-xs text-slate-200">{{
+                    formatDate(rule.updated_at || '')
+                  }}</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <UserOutlined class="text-slate-400 text-sm" />
@@ -205,7 +215,9 @@
                   <FilterOutlined class="text-purple-400 text-sm" />
                   <span class="text-sm font-medium text-slate-200">规则条件</span>
                 </div>
-                <div class="text-xs text-slate-300 font-mono bg-slate-900/50 p-2 rounded border border-slate-600/20">
+                <div
+                  class="text-xs text-slate-300 font-mono bg-slate-900/50 p-2 rounded border border-slate-600/20"
+                >
                   {{ rule.conditions || '暂无条件配置' }}
                 </div>
               </div>
@@ -229,16 +241,16 @@
                 <div class="flex items-center gap-2">
                   <a-button
                     size="small"
-                    @click="testRule(rule)"
                     class="bg-amber-500/20 border-amber-400/30 text-amber-100 hover:bg-amber-500/30 hover:text-white"
+                    @click="testRule(rule)"
                   >
                     <ExperimentOutlined />
                     测试规则
                   </a-button>
                   <a-button
                     size="small"
-                    @click="viewRuleHistory(rule)"
                     class="bg-slate-600/50 border-slate-500/50 text-slate-100 hover:bg-slate-600/70 hover:text-white"
+                    @click="viewRuleHistory(rule)"
                   >
                     <HistoryOutlined />
                     历史记录
@@ -251,23 +263,35 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="filteredRules.length === 0" class="text-center py-12">
-        <div class="w-20 h-20 rounded-full bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
+      <div
+        v-if="filteredRules.length === 0"
+        class="text-center py-12"
+      >
+        <div
+          class="w-20 h-20 rounded-full bg-slate-700/50 flex items-center justify-center mx-auto mb-4"
+        >
           <SettingOutlined class="text-slate-400 text-3xl" />
         </div>
-        <div class="text-slate-400 mb-2">暂无匹配的质控规则</div>
-        <div class="text-sm text-slate-500">尝试调整筛选条件或创建新的规则</div>
+        <div class="text-slate-400 mb-2">
+          暂无匹配的质控规则
+        </div>
+        <div class="text-sm text-slate-500">
+          尝试调整筛选条件或创建新的规则
+        </div>
       </div>
 
       <!-- 分页 -->
-      <div v-if="filteredRules.length > 0" class="flex justify-center">
+      <div
+        v-if="filteredRules.length > 0"
+        class="flex justify-center"
+      >
         <a-pagination
           v-model:current="currentPage"
           v-model:page-size="pageSize"
           :total="totalRules"
           :show-size-changer="true"
           :show-quick-jumper="true"
-          :show-total="(total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条规则`"
+          :show-total="showPaginationTotal"
           class="rule-pagination"
         />
       </div>
@@ -296,11 +320,19 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   ExperimentOutlined,
-  HistoryOutlined
+  HistoryOutlined,
 } from '@ant-design/icons-vue'
-import type { QCRule } from '@/types'
-
-type RuleWithStats = QCRule & {
+type RuleWithStats = {
+  id: string
+  rule_code: string
+  name: string
+  description: string
+  category: string
+  severity: 'critical' | 'major' | 'minor'
+  weight: number
+  is_active: boolean
+  created_at: string
+  created_by?: string
   updated_at?: string
   conditions?: string
   execution_count?: number
@@ -314,7 +346,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  rules: () => []
+  rules: () => [],
 })
 
 // Emits
@@ -332,7 +364,7 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 
 // 模拟规则数据
-const rules = ref<RuleWithStats[]>([
+const ruleList = ref<RuleWithStats[]>([
   {
     id: '1',
     rule_code: 'QC001',
@@ -347,7 +379,7 @@ const rules = ref<RuleWithStats[]>([
     updated_at: '2024-01-20T15:30:00Z',
     execution_count: 1250,
     pass_rate: 85,
-    issue_count: 187
+    issue_count: 187,
   },
   {
     id: '2',
@@ -363,7 +395,7 @@ const rules = ref<RuleWithStats[]>([
     updated_at: '2024-01-25T11:45:00Z',
     execution_count: 980,
     pass_rate: 78,
-    issue_count: 215
+    issue_count: 215,
   },
   {
     id: '3',
@@ -379,45 +411,48 @@ const rules = ref<RuleWithStats[]>([
     updated_at: '2024-01-22T16:10:00Z',
     execution_count: 756,
     pass_rate: 92,
-    issue_count: 60
-  }
+    issue_count: 60,
+  },
 ])
 
 // 计算属性
 const categories = computed(() => {
-  const cats = [...new Set(rules.value.map(r => r.category))]
+  const cats = [...new Set(ruleList.value.map((r) => r.category))]
   return cats.sort()
 })
 
 const filteredRules = computed(() => {
-  let filtered = rules.value
+  let filtered = ruleList.value
 
   // 搜索筛选
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
-    filtered = filtered.filter(rule => 
-      rule.name.toLowerCase().includes(keyword) ||
-      rule.description.toLowerCase().includes(keyword) ||
-      rule.category.toLowerCase().includes(keyword) ||
-      rule.rule_code.toLowerCase().includes(keyword)
+    filtered = filtered.filter(
+      (rule) =>
+        rule.name.toLowerCase().includes(keyword) ||
+        rule.description.toLowerCase().includes(keyword) ||
+        rule.category.toLowerCase().includes(keyword) ||
+        rule.rule_code.toLowerCase().includes(keyword),
     )
   }
 
   // 类别筛选
   if (selectedCategory.value) {
-    filtered = filtered.filter(rule => rule.category === selectedCategory.value)
+    filtered = filtered.filter((rule) => rule.category === selectedCategory.value)
   }
 
   // 状态筛选
   if (selectedStatus.value) {
     const isActive = selectedStatus.value === 'active'
-    filtered = filtered.filter(rule => rule.is_active === isActive)
+    filtered = filtered.filter((rule) => rule.is_active === isActive)
   }
 
   return filtered
 })
 
 const totalRules = computed(() => filteredRules.value.length)
+const showPaginationTotal = (total: number, range: [number, number]) =>
+  `第 ${range[0]}-${range[1]} 条，共 ${total} 条规则`
 
 // 方法
 const searchRules = () => {
@@ -431,8 +466,8 @@ const filterRules = () => {
 const toggleRuleStatus = async (rule: RuleWithStats) => {
   try {
     // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
     message.success(`规则"${rule.name}"已${rule.is_active ? '启用' : '禁用'}`)
     emit('rule-updated', rule)
   } catch (error) {
@@ -457,24 +492,29 @@ const duplicateRule = (rule: RuleWithStats) => {
     name: `${rule.name}_副本`,
     rule_code: `${rule.rule_code}_COPY`,
     created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
   }
-  
-  rules.value.unshift(newRule)
+
+  ruleList.value.unshift(newRule)
   message.success(`规则"${rule.name}"已复制`)
   emit('rule-created', newRule)
 }
 
 const deleteRule = (rule: RuleWithStats) => {
   Modal.confirm({
-    title: '确认删除', content: `确定要删除规则"${rule.name}"吗？此操作不可撤销。`, okText: '确认删除', okType: 'danger', cancelText: '取消', onOk: () => {
-      const index = rules.value.findIndex(r => r.id === rule.id)
+    title: '确认删除',
+    content: `确定要删除规则"${rule.name}"吗？此操作不可撤销。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: () => {
+      const index = ruleList.value.findIndex((r) => r.id === rule.id)
       if (index > -1) {
-        rules.value.splice(index, 1)
+        ruleList.value.splice(index, 1)
         message.success(`规则"${rule.name}"已删除`)
         emit('rule-deleted', rule.id)
       }
-    }
+    },
   })
 }
 
@@ -499,11 +539,11 @@ const exportRules = () => {
 
 const getCategoryColor = (category: string) => {
   const colors = {
-    '基本信息': 'blue',
-    '诊断质量': 'red',
-    '治疗方案': 'green',
-    '检查检验': 'orange',
-    '护理记录': 'purple'
+    基本信息: 'blue',
+    诊断质量: 'red',
+    治疗方案: 'green',
+    检查检验: 'orange',
+    护理记录: 'purple',
   }
   return colors[category as keyof typeof colors] || 'default'
 }
@@ -513,7 +553,7 @@ const getSeverityColor = (severity: string) => {
     critical: 'red',
     major: 'orange',
     minor: 'yellow',
-    low: 'blue'
+    low: 'blue',
   }
   return colors[severity as keyof typeof colors] || 'default'
 }
@@ -523,7 +563,7 @@ const getSeverityLabel = (severity: string) => {
     critical: '严重',
     major: '重要',
     minor: '轻微',
-    low: '提示'
+    low: '提示',
   }
   return labels[severity as keyof typeof labels] || severity
 }
@@ -624,11 +664,11 @@ onMounted(() => {
   .flex.flex-col.lg\\:flex-row {
     flex-direction: column;
   }
-  
+
   .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4 {
     grid-template-columns: 1fr;
   }
-  
+
   .rule-card {
     padding: 1rem;
   }

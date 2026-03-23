@@ -4,12 +4,15 @@
       ref="formRef"
       :model="loginForm"
       :rules="loginRules"
-      @finish="handleLogin"
       layout="vertical"
       size="large"
+      @finish="handleLogin"
     >
       <!-- 邮箱输入 -->
-      <a-form-item name="email" class="mb-5">
+      <a-form-item
+        name="email"
+        class="mb-5"
+      >
         <label class="block text-sm font-medium text-gray-700 mb-2">邮箱</label>
         <div class="relative">
           <a-input
@@ -24,7 +27,10 @@
       </a-form-item>
 
       <!-- 密码输入 -->
-      <a-form-item name="password" class="mb-5">
+      <a-form-item
+        name="password"
+        class="mb-5"
+      >
         <label class="block text-sm font-medium text-gray-700 mb-2">密码</label>
         <div class="relative">
           <a-input-password
@@ -39,7 +45,10 @@
       </a-form-item>
 
       <!-- 角色选择 -->
-      <a-form-item name="role" class="mb-6">
+      <a-form-item
+        name="role"
+        class="mb-6"
+      >
         <label class="block text-sm font-medium text-gray-700 mb-2">角色</label>
         <a-select
           v-model:value="loginForm.role"
@@ -49,25 +58,41 @@
         >
           <a-select-option value="admin">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold">管</div>
+              <div
+                class="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold"
+              >
+                管
+              </div>
               系统管理员
             </div>
           </a-select-option>
           <a-select-option value="qc_manager">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">质</div>
+              <div
+                class="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold"
+              >
+                质
+              </div>
               质控主管
             </div>
           </a-select-option>
           <a-select-option value="doctor">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold">医</div>
+              <div
+                class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold"
+              >
+                医
+              </div>
               医务人员
             </div>
           </a-select-option>
           <a-select-option value="viewer">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold">查</div>
+              <div
+                class="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold"
+              >
+                查
+              </div>
               查看者
             </div>
           </a-select-option>
@@ -76,7 +101,10 @@
 
       <!-- 记住我和忘记密码 -->
       <div class="flex items-center justify-between mb-6">
-        <a-checkbox v-model:checked="loginForm.remember_me" class="text-sm text-gray-600">
+        <a-checkbox
+          v-model:checked="loginForm.remember_me"
+          class="text-sm text-gray-600"
+        >
           记住我
         </a-checkbox>
         <a
@@ -96,15 +124,18 @@
         size="large"
         class="h-12 rounded-lg bg-blue-600 hover:bg-blue-700 border-none font-medium shadow-sm hover:shadow-md transition-all"
       >
-        <LoginOutlined v-if="!loading" class="mr-2" />
+        <LoginOutlined
+          v-if="!loading"
+          class="mr-2"
+        />
         立即登录
       </a-button>
     </a-form>
 
     <!-- 密码强度提示 -->
-    <PasswordStrength 
-      v-if="showPasswordStrength" 
-      :password="loginForm.password" 
+    <PasswordStrength
+      v-if="showPasswordStrength"
+      :password="loginForm.password"
       class="mt-4"
     />
   </div>
@@ -126,7 +157,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  showPasswordStrength: false
+  showPasswordStrength: false,
 })
 
 // Emits
@@ -143,22 +174,20 @@ const loginForm = reactive<LoginRequest>({
   email: '',
   password: '',
   role: undefined,
-  remember_me: false
+  remember_me: false,
 })
 
 // Form validation rules
 const loginRules = {
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6位字符', trigger: 'blur' }
+    { min: 6, message: '密码至少6位字符', trigger: 'blur' },
   ],
-  role: [
-    { required: true, message: '请选择角色', trigger: 'change' }
-  ]
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
 
 // Handle login
@@ -167,7 +196,8 @@ const handleLogin = async () => {
     await formRef.value?.validate()
     emit('login', { ...loginForm })
   } catch (error) {
-    if (error?.errorFields) {
+    const validateError = error as { errorFields?: unknown[] }
+    if (validateError?.errorFields) {
       message.warning('请检查输入信息')
     }
   }
@@ -175,11 +205,13 @@ const handleLogin = async () => {
 
 // Computed
 const isFormValid = computed(() => {
-  return loginForm.email && 
-         loginForm.password && 
-         loginForm.role &&
-         loginForm.email.includes('@') &&
-         loginForm.password.length >= 6
+  return (
+    loginForm.email &&
+    loginForm.password &&
+    loginForm.role &&
+    loginForm.email.includes('@') &&
+    loginForm.password.length >= 6
+  )
 })
 
 // Expose methods for parent component
@@ -190,14 +222,14 @@ defineExpose({
       email: '',
       password: '',
       role: undefined,
-      remember_me: false
+      remember_me: false,
     })
   },
   setFormData: (data: Partial<LoginRequest>) => {
     Object.assign(loginForm, data)
   },
   validateForm: () => formRef.value?.validate(),
-  isValid: isFormValid
+  isValid: isFormValid,
 })
 </script>
 

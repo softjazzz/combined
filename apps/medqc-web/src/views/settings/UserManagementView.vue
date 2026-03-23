@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  UserOutlined, 
-  PlusOutlined, 
-  EditOutlined, 
+import {
+  UserOutlined,
+  PlusOutlined,
+  EditOutlined,
   DeleteOutlined,
   SearchOutlined,
   ReloadOutlined,
   SettingOutlined,
   CrownOutlined,
-  SafetyCertificateOutlined
+  SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 import PermissionGuard from '@/components/auth/PermissionGuard.vue'
 import PermissionButton from '@/components/auth/PermissionButton.vue'
@@ -38,7 +38,7 @@ const users = ref<User[]>([
     roles: ['admin'],
     status: 'active',
     last_login: '2024-01-15 10:30:00',
-    created_at: '2024-01-01 00:00:00'
+    created_at: '2024-01-01 00:00:00',
   },
   {
     id: '2',
@@ -48,7 +48,7 @@ const users = ref<User[]>([
     roles: ['qc_manager'],
     status: 'active',
     last_login: '2024-01-15 09:15:00',
-    created_at: '2024-01-02 00:00:00'
+    created_at: '2024-01-02 00:00:00',
   },
   {
     id: '3',
@@ -58,8 +58,8 @@ const users = ref<User[]>([
     roles: ['doctor'],
     status: 'active',
     last_login: '2024-01-15 08:45:00',
-    created_at: '2024-01-03 00:00:00'
-  }
+    created_at: '2024-01-03 00:00:00',
+  },
 ])
 
 // 搜索和过滤
@@ -67,7 +67,7 @@ const searchForm = reactive({
   keyword: '',
   department: '',
   role: '',
-  status: ''
+  status: '',
 })
 
 const loading = ref(false)
@@ -75,15 +75,16 @@ const selectedRowKeys = ref<string[]>([])
 
 // 过滤后的用户列表
 const filteredUsers = computed(() => {
-  return users.value.filter(user => {
-    const matchKeyword = !searchForm.keyword || 
+  return users.value.filter((user) => {
+    const matchKeyword =
+      !searchForm.keyword ||
       user.display_name.includes(searchForm.keyword) ||
       user.email.includes(searchForm.keyword)
-    
+
     const matchDepartment = !searchForm.department || user.department === searchForm.department
     const matchRole = !searchForm.role || user.roles.includes(searchForm.role)
     const matchStatus = !searchForm.status || user.status === searchForm.status
-    
+
     return matchKeyword && matchDepartment && matchRole && matchStatus
   })
 })
@@ -104,56 +105,56 @@ const columns = [
             {
               type: 'div',
               props: { class: 'user-name' },
-              children: record.display_name
+              children: record.display_name,
             },
             {
               type: 'div',
               props: { class: 'user-email' },
-              children: record.email
-            }
-          ]
-        }
-      ]
-    })
+              children: record.email,
+            },
+          ],
+        },
+      ],
+    }),
   },
   {
     title: '科室',
     dataIndex: 'department',
     key: 'department',
-    width: 120
+    width: 120,
   },
   {
     title: '角色',
     dataIndex: 'roles',
     key: 'roles',
     width: 150,
-    customRender: ({ record }: { record: User }) => record.roles.map(role => getRoleTag(role))
+    customRender: ({ record }: { record: User }) => record.roles.map((role) => getRoleTag(role)),
   },
   {
     title: '状态',
     dataIndex: 'status',
     key: 'status',
     width: 100,
-    customRender: ({ record }: { record: User }) => getStatusTag(record.status)
+    customRender: ({ record }: { record: User }) => getStatusTag(record.status),
   },
   {
     title: '最后登录',
     dataIndex: 'last_login',
     key: 'last_login',
-    width: 150
+    width: 150,
   },
   {
     title: '创建时间',
     dataIndex: 'created_at',
     key: 'created_at',
-    width: 150
+    width: 150,
   },
   {
     title: '操作',
     key: 'actions',
     width: 200,
-    fixed: 'right'
-  }
+    fixed: 'right',
+  },
 ]
 
 // 获取角色标签
@@ -162,10 +163,16 @@ const getRoleTag = (role: string) => {
     admin: { color: 'red', text: '管理员', icon: CrownOutlined },
     qc_manager: { color: 'blue', text: '质控管理员', icon: SafetyCertificateOutlined },
     qc_staff: { color: 'green', text: '质控人员', icon: SettingOutlined },
-    doctor: { color: 'orange', text: '医务人员', icon: UserOutlined }
+    doctor: { color: 'orange', text: '医务人员', icon: UserOutlined },
   }
-  
-  return roleConfig[role as keyof typeof roleConfig] || { color: 'default', text: role, icon: UserOutlined }
+
+  return (
+    roleConfig[role as keyof typeof roleConfig] || {
+      color: 'default',
+      text: role,
+      icon: UserOutlined,
+    }
+  )
 }
 
 // 获取状态标签
@@ -173,28 +180,30 @@ const getStatusTag = (status: string) => {
   const statusConfig = {
     active: { color: 'success', text: '正常' },
     inactive: { color: 'default', text: '停用' },
-    locked: { color: 'error', text: '锁定' }
+    locked: { color: 'error', text: '锁定' },
   }
-  
+
   return statusConfig[status as keyof typeof statusConfig] || { color: 'default', text: status }
 }
 
 // 新增用户
 const showCreateModal = ref(false)
-const createForm = reactive({ email: '',
+const createForm = reactive({
+  email: '',
   display_name: '',
   department: '',
   roles: [] as string[],
-  password: ''
+  password: '',
 })
 
-const handleCreateUser = () => { showCreateModal.value = true
+const handleCreateUser = () => {
+  showCreateModal.value = true
   Object.assign(createForm, {
     email: '',
     display_name: '',
     department: '',
-    roles:  [],
-    password: ''
+    roles: [],
+    password: '',
   })
 }
 
@@ -207,9 +216,9 @@ const handleCreateSubmit = () => {
     department: createForm.department,
     roles: createForm.roles,
     status: 'active',
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   }
-  
+
   users.value.unshift(newUser)
   showCreateModal.value = false
   message.success('用户创建成功')
@@ -217,12 +226,20 @@ const handleCreateSubmit = () => {
 
 // 编辑用户
 const showEditModal = ref(false)
-const editForm = reactive({ id: '',
+const editForm = reactive<{
+  id: string
+  email: string
+  display_name: string
+  department: string
+  roles: string[]
+  status: User['status']
+}>({
+  id: '',
   email: '',
   display_name: '',
   department: '',
-  roles: [] as string[],
-  status: 'active'
+  roles: [],
+  status: 'active',
 })
 
 const handleEditUser = (user: User) => {
@@ -233,12 +250,12 @@ const handleEditUser = (user: User) => {
     display_name: user.display_name,
     department: user.department,
     roles: [...user.roles],
-    status: user.status
+    status: user.status,
   })
 }
 
 const handleEditSubmit = () => {
-  const userIndex = users.value.findIndex(u => u.id === editForm.id)
+  const userIndex = users.value.findIndex((u) => u.id === editForm.id)
   if (userIndex !== -1) {
     users.value[userIndex] = {
       ...users.value[userIndex],
@@ -246,7 +263,7 @@ const handleEditSubmit = () => {
       display_name: editForm.display_name,
       department: editForm.department,
       roles: editForm.roles,
-      status: editForm.status as any
+      status: editForm.status,
     }
     showEditModal.value = false
     message.success('用户更新成功')
@@ -255,7 +272,7 @@ const handleEditSubmit = () => {
 
 // 删除用户
 const handleDeleteUser = (user: User) => {
-  const userIndex = users.value.findIndex(u => u.id === user.id)
+  const userIndex = users.value.findIndex((u) => u.id === user.id)
   if (userIndex !== -1) {
     users.value.splice(userIndex, 1)
     message.success('用户删除成功')
@@ -268,8 +285,8 @@ const handleBatchDelete = () => {
     message.warning('请选择要删除的用户')
     return
   }
-  
-  users.value = users.value.filter(user => !selectedRowKeys.value.includes(user.id))
+
+  users.value = users.value.filter((user) => !selectedRowKeys.value.includes(user.id))
   selectedRowKeys.value = []
   message.success('批量删除成功')
 }
@@ -300,7 +317,7 @@ const handleResetSearch = () => {
     keyword: '',
     department: '',
     role: '',
-    status: ''
+    status: '',
   })
 }
 
@@ -341,7 +358,7 @@ onMounted(() => {
             </template>
           </a-input>
         </a-form-item>
-        
+
         <a-form-item label="科室">
           <a-select
             v-model:value="searchForm.department"
@@ -349,13 +366,13 @@ onMounted(() => {
             allow-clear
             style="width: 150px"
           >
-            <a-select-option value="信息科">信息科</a-select-option>
-            <a-select-option value="质控科">质控科</a-select-option>
-            <a-select-option value="内科">内科</a-select-option>
-            <a-select-option value="外科">外科</a-select-option>
+            <a-select-option value="信息科"> 信息科 </a-select-option>
+            <a-select-option value="质控科"> 质控科 </a-select-option>
+            <a-select-option value="内科"> 内科 </a-select-option>
+            <a-select-option value="外科"> 外科 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item label="角色">
           <a-select
             v-model:value="searchForm.role"
@@ -363,13 +380,13 @@ onMounted(() => {
             allow-clear
             style="width: 150px"
           >
-            <a-select-option value="admin">管理员</a-select-option>
-            <a-select-option value="qc_manager">质控管理员</a-select-option>
-            <a-select-option value="qc_staff">质控人员</a-select-option>
-            <a-select-option value="doctor">医务人员</a-select-option>
+            <a-select-option value="admin"> 管理员 </a-select-option>
+            <a-select-option value="qc_manager"> 质控管理员 </a-select-option>
+            <a-select-option value="qc_staff"> 质控人员 </a-select-option>
+            <a-select-option value="doctor"> 医务人员 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item label="状态">
           <a-select
             v-model:value="searchForm.status"
@@ -377,20 +394,18 @@ onMounted(() => {
             allow-clear
             style="width: 120px"
           >
-            <a-select-option value="active">正常</a-select-option>
-            <a-select-option value="inactive">停用</a-select-option>
-            <a-select-option value="locked">锁定</a-select-option>
+            <a-select-option value="active"> 正常 </a-select-option>
+            <a-select-option value="inactive"> 停用 </a-select-option>
+            <a-select-option value="locked"> 锁定 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item>
           <a-button type="primary" @click="handleSearch">
             <SearchOutlined />
             搜索
           </a-button>
-          <a-button style="margin-left: 8px" @click="handleResetSearch">
-            重置
-          </a-button>
+          <a-button style="margin-left: 8px" @click="handleResetSearch"> 重置 </a-button>
         </a-form-item>
       </a-form>
     </a-card>
@@ -408,7 +423,7 @@ onMounted(() => {
             <PlusOutlined />
             新增用户
           </PermissionButton>
-          
+
           <PermissionButton
             resource="users"
             action="delete"
@@ -420,9 +435,9 @@ onMounted(() => {
             批量删除
           </PermissionButton>
         </div>
-        
+
         <div class="toolbar-right">
-          <a-button @click="handleRefresh" :loading="loading">
+          <a-button :loading="loading" @click="handleRefresh">
             <ReloadOutlined />
             刷新
           </a-button>
@@ -439,11 +454,11 @@ onMounted(() => {
         :pagination="{
           showSizeChanger: true,
           showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条记录`
+          showTotal: (total: number) => `共 ${total} 条记录`,
         }"
         :row-selection="{
           selectedRowKeys,
-          onChange: onSelectChange
+          onChange: onSelectChange,
         }"
         row-key="id"
         size="middle"
@@ -452,11 +467,15 @@ onMounted(() => {
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'display_name'">
             <div class="user-info">
-              <div class="user-name">{{ record.display_name }}</div>
-              <div class="user-email">{{ record.email }}</div>
+              <div class="user-name">
+                {{ record.display_name }}
+              </div>
+              <div class="user-email">
+                {{ record.email }}
+              </div>
             </div>
           </template>
-          
+
           <!-- 角色列 -->
           <template v-else-if="column.key === 'roles'">
             <div class="role-tags">
@@ -471,14 +490,14 @@ onMounted(() => {
               </a-tag>
             </div>
           </template>
-          
+
           <!-- 状态列 -->
           <template v-else-if="column.key === 'status'">
             <a-tag :color="getStatusTag(record.status).color">
               {{ getStatusTag(record.status).text }}
             </a-tag>
           </template>
-          
+
           <!-- 操作列 -->
           <template v-else-if="column.key === 'actions'">
             <div class="action-buttons">
@@ -492,7 +511,7 @@ onMounted(() => {
                 <EditOutlined />
                 编辑
               </PermissionButton>
-              
+
               <PermissionButton
                 resource="users"
                 action="update"
@@ -503,7 +522,7 @@ onMounted(() => {
                 <SettingOutlined />
                 重置密码
               </PermissionButton>
-              
+
               <PermissionButton
                 resource="users"
                 action="delete"
@@ -522,43 +541,34 @@ onMounted(() => {
     </a-card>
 
     <!-- 新增用户模态框 -->
-    <a-modal
-      v-model:open="showCreateModal"
-      title="新增用户"
-      :width="600"
-      @ok="handleCreateSubmit"
-    >
+    <a-modal v-model:open="showCreateModal" title="新增用户" :width="600" @ok="handleCreateSubmit">
       <a-form :model="createForm" layout="vertical">
         <a-form-item label="邮箱地址" required>
           <a-input v-model:value="createForm.email" placeholder="请输入邮箱地址" />
         </a-form-item>
-        
+
         <a-form-item label="显示名称" required>
           <a-input v-model:value="createForm.display_name" placeholder="请输入显示名称" />
         </a-form-item>
-        
+
         <a-form-item label="所属科室" required>
           <a-select v-model:value="createForm.department" placeholder="请选择科室">
-            <a-select-option value="信息科">信息科</a-select-option>
-            <a-select-option value="质控科">质控科</a-select-option>
-            <a-select-option value="内科">内科</a-select-option>
-            <a-select-option value="外科">外科</a-select-option>
+            <a-select-option value="信息科"> 信息科 </a-select-option>
+            <a-select-option value="质控科"> 质控科 </a-select-option>
+            <a-select-option value="内科"> 内科 </a-select-option>
+            <a-select-option value="外科"> 外科 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item label="用户角色" required>
-          <a-select
-            v-model:value="createForm.roles"
-            mode="multiple"
-            placeholder="请选择角色"
-          >
-            <a-select-option value="admin">管理员</a-select-option>
-            <a-select-option value="qc_manager">质控管理员</a-select-option>
-            <a-select-option value="qc_staff">质控人员</a-select-option>
-            <a-select-option value="doctor">医务人员</a-select-option>
+          <a-select v-model:value="createForm.roles" mode="multiple" placeholder="请选择角色">
+            <a-select-option value="admin"> 管理员 </a-select-option>
+            <a-select-option value="qc_manager"> 质控管理员 </a-select-option>
+            <a-select-option value="qc_staff"> 质控人员 </a-select-option>
+            <a-select-option value="doctor"> 医务人员 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item label="初始密码" required>
           <a-input-password v-model:value="createForm.password" placeholder="请输入初始密码" />
         </a-form-item>
@@ -566,48 +576,39 @@ onMounted(() => {
     </a-modal>
 
     <!-- 编辑用户模态框 -->
-    <a-modal
-      v-model:open="showEditModal"
-      title="编辑用户"
-      :width="600"
-      @ok="handleEditSubmit"
-    >
+    <a-modal v-model:open="showEditModal" title="编辑用户" :width="600" @ok="handleEditSubmit">
       <a-form :model="editForm" layout="vertical">
         <a-form-item label="邮箱地址" required>
           <a-input v-model:value="editForm.email" placeholder="请输入邮箱地址" />
         </a-form-item>
-        
+
         <a-form-item label="显示名称" required>
           <a-input v-model:value="editForm.display_name" placeholder="请输入显示名称" />
         </a-form-item>
-        
+
         <a-form-item label="所属科室" required>
           <a-select v-model:value="editForm.department" placeholder="请选择科室">
-            <a-select-option value="信息科">信息科</a-select-option>
-            <a-select-option value="质控科">质控科</a-select-option>
-            <a-select-option value="内科">内科</a-select-option>
-            <a-select-option value="外科">外科</a-select-option>
+            <a-select-option value="信息科"> 信息科 </a-select-option>
+            <a-select-option value="质控科"> 质控科 </a-select-option>
+            <a-select-option value="内科"> 内科 </a-select-option>
+            <a-select-option value="外科"> 外科 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item label="用户角色" required>
-          <a-select
-            v-model:value="editForm.roles"
-            mode="multiple"
-            placeholder="请选择角色"
-          >
-            <a-select-option value="admin">管理员</a-select-option>
-            <a-select-option value="qc_manager">质控管理员</a-select-option>
-            <a-select-option value="qc_staff">质控人员</a-select-option>
-            <a-select-option value="doctor">医务人员</a-select-option>
+          <a-select v-model:value="editForm.roles" mode="multiple" placeholder="请选择角色">
+            <a-select-option value="admin"> 管理员 </a-select-option>
+            <a-select-option value="qc_manager"> 质控管理员 </a-select-option>
+            <a-select-option value="qc_staff"> 质控人员 </a-select-option>
+            <a-select-option value="doctor"> 医务人员 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item label="用户状态" required>
           <a-select v-model:value="editForm.status" placeholder="请选择状态">
-            <a-select-option value="active">正常</a-select-option>
-            <a-select-option value="inactive">停用</a-select-option>
-            <a-select-option value="locked">锁定</a-select-option>
+            <a-select-option value="active"> 正常 </a-select-option>
+            <a-select-option value="inactive"> 停用 </a-select-option>
+            <a-select-option value="locked"> 锁定 </a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -712,4 +713,4 @@ onMounted(() => {
   margin-right: 16px;
   margin-bottom: 8px;
 }
-</style> 
+</style>

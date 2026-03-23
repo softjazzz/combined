@@ -13,18 +13,15 @@
           :value="systemStatus?.status || '未知'"
           :value-style="{ color: systemStatus?.status === 'running' ? '#3f8600' : '#cf1322' }"
         />
-        <a-statistic
-          title="服务版本"
-          :value="systemStatus?.version || '未知'"
-        />
+        <a-statistic title="服务版本" :value="systemStatus?.version || '未知'" />
         <a-statistic
           title="健康状态"
           :value="healthStatus?.status || '未知'"
           :value-style="{ color: healthStatus?.status === 'healthy' ? '#3f8600' : '#cf1322' }"
         />
       </div>
-      
-      <a-button @click="checkSystemStatus" :loading="statusLoading" class="mt-4">
+
+      <a-button :loading="statusLoading" class="mt-4" @click="checkSystemStatus">
         刷新状态
       </a-button>
     </a-card>
@@ -47,10 +44,7 @@
               />
             </a-col>
             <a-col :span="6">
-              <a-statistic
-                title="成本降低"
-                :value="demoData.benefits?.cost_reduction || '未知'"
-              />
+              <a-statistic title="成本降低" :value="demoData.benefits?.cost_reduction || '未知'" />
             </a-col>
             <a-col :span="6">
               <a-statistic
@@ -76,16 +70,21 @@
         <div class="real-world-impact mt-4">
           <h4>实际效果：</h4>
           <ul>
-            <li><strong>年度成本节省：</strong>{{ demoData.real_world_impact?.annual_cost_savings }}</li>
-            <li><strong>Token使用减少：</strong>{{ demoData.real_world_impact?.token_usage_reduction }}</li>
-            <li><strong>准确率保持：</strong>{{ demoData.real_world_impact?.accuracy_maintained }}</li>
+            <li>
+              <strong>年度成本节省：</strong>{{ demoData.real_world_impact?.annual_cost_savings }}
+            </li>
+            <li>
+              <strong>Token使用减少：</strong
+              >{{ demoData.real_world_impact?.token_usage_reduction }}
+            </li>
+            <li>
+              <strong>准确率保持：</strong>{{ demoData.real_world_impact?.accuracy_maintained }}
+            </li>
           </ul>
         </div>
       </div>
-      
-      <a-button @click="loadDemo" :loading="demoLoading" class="mt-4">
-        加载演示数据
-      </a-button>
+
+      <a-button :loading="demoLoading" class="mt-4" @click="loadDemo"> 加载演示数据 </a-button>
     </a-card>
 
     <!-- 质控分析测试 -->
@@ -94,7 +93,7 @@
         <a-form-item label="病历ID">
           <a-input v-model:value="testRequest.record_id" placeholder="例如：MR_20241223_001" />
         </a-form-item>
-        
+
         <a-form-item label="病历内容">
           <a-textarea
             v-model:value="testRequest.record_text"
@@ -102,39 +101,37 @@
             placeholder="请输入病历内容进行质控分析..."
           />
         </a-form-item>
-        
+
         <a-form-item label="质控规则">
           <a-select
             v-model:value="testRequest.rule_ids"
             mode="multiple"
             placeholder="选择要应用的质控规则"
           >
-            <a-select-option value="S3.5.1">主诉与主要诊断一致性</a-select-option>
-            <a-select-option value="S4.13.2b">病史逻辑合理性</a-select-option>
-            <a-select-option value="S5.10.1">治疗方案适宜性</a-select-option>
+            <a-select-option value="S3.5.1"> 主诉与主要诊断一致性 </a-select-option>
+            <a-select-option value="S4.13.2b"> 病史逻辑合理性 </a-select-option>
+            <a-select-option value="S5.10.1"> 治疗方案适宜性 </a-select-option>
           </a-select>
         </a-form-item>
-        
+
         <a-form-item>
           <a-checkbox v-model:checked="testRequest.enable_optimization">
             启用三层漏斗优化
           </a-checkbox>
         </a-form-item>
-        
+
         <a-form-item>
-          <a-button type="primary" @click="runAnalysis" :loading="analysisLoading">
+          <a-button type="primary" :loading="analysisLoading" @click="runAnalysis">
             开始分析
           </a-button>
-          <a-button @click="loadSampleData" class="ml-2">
-            加载示例数据
-          </a-button>
+          <a-button class="ml-2" @click="loadSampleData"> 加载示例数据 </a-button>
         </a-form-item>
       </a-form>
-      
+
       <!-- 分析结果 -->
       <div v-if="analysisResult" class="analysis-result mt-4">
         <a-divider>分析结果</a-divider>
-        
+
         <!-- 优化统计 -->
         <div v-if="analysisResult.optimization_stats" class="optimization-stats mb-4">
           <h4>Token优化效果：</h4>
@@ -160,18 +157,18 @@
             </a-col>
           </a-row>
         </div>
-        
+
         <!-- 质控结果 -->
         <div class="qc-results">
           <h4>质控结果：</h4>
           <a-table
-            :dataSource="analysisResult.rule_results"
+            :data-source="analysisResult.rule_results"
             :columns="resultColumns"
             :pagination="false"
             size="small"
           />
         </div>
-        
+
         <!-- 总体统计 -->
         <div class="total-stats mt-4">
           <a-row :gutter="16">
@@ -184,10 +181,7 @@
               />
             </a-col>
             <a-col :span="8">
-              <a-statistic
-                title="总Token使用"
-                :value="analysisResult.total_tokens_used"
-              />
+              <a-statistic title="总Token使用" :value="analysisResult.total_tokens_used" />
             </a-col>
             <a-col :span="8">
               <a-statistic
@@ -207,7 +201,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { medicalQcApi, type QCAnalysisRequest, type QCAnalysisResponse, type SystemStatus } from '@/services/medicalQcApi'
+import {
+  medicalQcApi,
+  type QCAnalysisRequest,
+  type QCAnalysisResponse,
+  type SystemStatus,
+} from '@/services/medicalQcApi'
 
 interface HealthStatusLite {
   status?: string
@@ -247,7 +246,7 @@ const testRequest = ref<QCAnalysisRequest>({
   record_text: '',
   rule_ids: ['S3.5.1'],
   max_tokens: 500,
-  enable_optimization: true
+  enable_optimization: true,
 })
 
 // 表格列定义
@@ -266,7 +265,7 @@ const checkSystemStatus = async () => {
   try {
     const [status, health] = await Promise.all([
       medicalQcApi.getSystemStatus(),
-      medicalQcApi.healthCheck()
+      medicalQcApi.healthCheck(),
     ])
     systemStatus.value = status
     healthStatus.value = health
@@ -284,7 +283,7 @@ const loadDemo = async () => {
   demoLoading.value = true
   try {
     const demo = await medicalQcApi.getOptimizationDemo()
-    demoData.value = demo
+    demoData.value = demo as typeof demoData.value
     message.success('演示数据加载完成')
   } catch (error) {
     message.error('演示数据加载失败')
@@ -300,7 +299,7 @@ const runAnalysis = async () => {
     message.warning('请输入病历内容')
     return
   }
-  
+
   analysisLoading.value = true
   try {
     const result = await medicalQcApi.analyzeRecord(testRequest.value)
@@ -335,7 +334,7 @@ const loadSampleData = () => {
 治疗：给予阿司匹林、氯吡格雷双抗血小板，阿托伐他汀调脂，美托洛尔控制心率等治疗。`,
     rule_ids: ['S3.5.1', 'S4.13.2b', 'S5.10.1'],
     max_tokens: 500,
-    enable_optimization: true
+    enable_optimization: true,
   }
   message.success('示例数据已加载')
 }

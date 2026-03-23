@@ -7,11 +7,11 @@ vi.mock('ant-design-vue', () => ({
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn(),
-    info: vi.fn()
+    info: vi.fn(),
   },
   Modal: {
-    confirm: vi.fn()
-  }
+    confirm: vi.fn(),
+  },
 }))
 
 // Mock router
@@ -21,15 +21,15 @@ vi.mock('vue-router', () => ({
     replace: vi.fn(),
     go: vi.fn(),
     back: vi.fn(),
-    forward: vi.fn()
+    forward: vi.fn(),
   }),
   useRoute: () => ({
     path: '/dashboard',
     name: 'Dashboard',
     params: {},
     query: {},
-    meta: {}
-  })
+    meta: {},
+  }),
 }))
 
 // Mock auth store
@@ -37,28 +37,28 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     user: {
       id: 'test-user-id',
-      email: 'test@example.com'
+      email: 'test@example.com',
     },
     userName: '测试用户',
     userDepartment: '测试科室',
     isAuthenticated: true,
     signIn: vi.fn(),
     signOut: vi.fn(),
-    initialize: vi.fn()
-  })
+    initialize: vi.fn(),
+  }),
 }))
 
 // Global test configuration
 config.global.mocks = {
-  $t: (key: string) => key,
-  $tc: (key: string) => key,
-  $te: (key: string) => true
+  $t: (_key: string) => _key,
+  $tc: (_key: string) => _key,
+  $te: (_key: string) => true,
 }
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation(query => ({
+  value: vi.fn().mockImplementation((query: string) => ({
     matches: false,
     media: query,
     onchange: null,
@@ -71,21 +71,21 @@ Object.defineProperty(window, 'matchMedia', {
 })
 
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
+globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }))
 
 // Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+globalThis.IntersectionObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }))
 
 // Mock console methods for cleaner test output
-global.console = {
+globalThis.console = {
   ...console,
   log: vi.fn(),
   debug: vi.fn(),

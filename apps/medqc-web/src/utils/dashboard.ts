@@ -34,14 +34,14 @@ export function calculateTrend(current: number, previous: number): TrendChange {
   if (previous === 0) {
     return {
       value: current,
-      type: 'increase'
+      type: 'increase',
     }
   }
-  
+
   const change = ((current - previous) / previous) * 100
   return {
     value: Math.abs(change),
-    type: change >= 0 ? 'increase' : 'decrease'
+    type: change >= 0 ? 'increase' : 'decrease',
   }
 }
 
@@ -70,42 +70,56 @@ export function validateDashboardData(data: unknown): { isValid: boolean; errors
     return { isValid: false, errors: ['data must be an object'] }
   }
   const dashboardData = data as Partial<DashboardDataShape>
-  
+
   // 检查必需字段
   const requiredFields = [
-    'totalRecords', 'pendingRecords', 'analyzingRecords', 
-    'completedRecords', 'averageScore', 'passRate', 
-    'todayUploads', 'weeklyTrend'
+    'totalRecords',
+    'pendingRecords',
+    'analyzingRecords',
+    'completedRecords',
+    'averageScore',
+    'passRate',
+    'todayUploads',
+    'weeklyTrend',
   ]
-  
-  requiredFields.forEach(field => {
+
+  requiredFields.forEach((field) => {
     if (!(field in dashboardData)) {
       errors.push(`${field} is required`)
     }
   })
-  
+
   if (errors.length > 0) {
     return { isValid: false, errors }
   }
-  
+
   // 检查数值范围
   if ((dashboardData.totalRecords || 0) < 0) errors.push('totalRecords must be non-negative')
   if ((dashboardData.pendingRecords || 0) < 0) errors.push('pendingRecords must be non-negative')
-  if ((dashboardData.analyzingRecords || 0) < 0) errors.push('analyzingRecords must be non-negative')
-  if ((dashboardData.completedRecords || 0) < 0) errors.push('completedRecords must be non-negative')
-  if ((dashboardData.averageScore || 0) < 0 || (dashboardData.averageScore || 0) > 100) errors.push('averageScore must be between 0 and 100')
-  if ((dashboardData.passRate || 0) < 0 || (dashboardData.passRate || 0) > 100) errors.push('passRate must be between 0 and 100')
+  if ((dashboardData.analyzingRecords || 0) < 0)
+    errors.push('analyzingRecords must be non-negative')
+  if ((dashboardData.completedRecords || 0) < 0)
+    errors.push('completedRecords must be non-negative')
+  if ((dashboardData.averageScore || 0) < 0 || (dashboardData.averageScore || 0) > 100)
+    errors.push('averageScore must be between 0 and 100')
+  if ((dashboardData.passRate || 0) < 0 || (dashboardData.passRate || 0) > 100)
+    errors.push('passRate must be between 0 and 100')
   if ((dashboardData.todayUploads || 0) < 0) errors.push('todayUploads must be non-negative')
-  
+
   // 检查数据一致性
   if ((dashboardData.completedRecords || 0) > (dashboardData.totalRecords || 0)) {
     errors.push('completedRecords cannot exceed totalRecords')
   }
-  
-  if ((dashboardData.pendingRecords || 0) + (dashboardData.analyzingRecords || 0) + (dashboardData.completedRecords || 0) > (dashboardData.totalRecords || 0)) {
+
+  if (
+    (dashboardData.pendingRecords || 0) +
+      (dashboardData.analyzingRecords || 0) +
+      (dashboardData.completedRecords || 0) >
+    (dashboardData.totalRecords || 0)
+  ) {
     errors.push('sum of pending, analyzing, and completed records cannot exceed total records')
   }
-  
+
   return { isValid: errors.length === 0, errors }
 }
 
@@ -115,17 +129,17 @@ export function validateDashboardData(data: unknown): { isValid: boolean; errors
 export function generateMockData(count: number): ChartDataPoint[] {
   const data: ChartDataPoint[] = []
   const now = new Date()
-  
+
   for (let i = 0; i < count; i++) {
     const date = new Date(now.getTime() - (count - i - 1) * 24 * 60 * 60 * 1000)
     data.push({
       date: date.toISOString().split('T')[0],
       count: Math.floor(Math.random() * 1000),
       score: Math.floor(Math.random() * 100),
-      passRate: Math.floor(Math.random() * 100)
+      passRate: Math.floor(Math.random() * 100),
     })
   }
-  
+
   return data
 }
 
@@ -135,21 +149,21 @@ export function generateMockData(count: number): ChartDataPoint[] {
 export function formatTimeAgo(date: Date): string {
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-  
+
   if (diffInSeconds < 60) return '刚刚'
-  
+
   const diffInMinutes = Math.floor(diffInSeconds / 60)
   if (diffInMinutes < 60) return `${diffInMinutes}分钟前`
-  
+
   const diffInHours = Math.floor(diffInMinutes / 60)
   if (diffInHours < 24) return `${diffInHours}小时前`
-  
+
   const diffInDays = Math.floor(diffInHours / 24)
   if (diffInDays < 30) return `${diffInDays}天前`
-  
+
   const diffInMonths = Math.floor(diffInDays / 30)
   if (diffInMonths < 12) return `${diffInMonths}个月前`
-  
+
   const diffInYears = Math.floor(diffInMonths / 12)
   return `${diffInYears}年前`
 }
@@ -159,10 +173,10 @@ export function formatTimeAgo(date: Date): string {
  */
 export function debounce<T extends (...args: unknown[]) => any>(
   func: T,
-  wait: number
+  wait: number,
 ): (...args: Parameters<T>) => void {
   let timeout: NodeJS.Timeout | null = null
-  
+
   return (...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout)
     timeout = setTimeout(() => func(...args), wait)
@@ -174,15 +188,15 @@ export function debounce<T extends (...args: unknown[]) => any>(
  */
 export function throttle<T extends (...args: unknown[]) => any>(
   func: T,
-  limit: number
+  limit: number,
 ): (...args: Parameters<T>) => void {
   let inThrottle: boolean = false
-  
+
   return (...args: Parameters<T>) => {
     if (!inThrottle) {
       func(...args)
       inThrottle = true
-      setTimeout(() => inThrottle = false, limit)
+      setTimeout(() => (inThrottle = false), limit)
     }
   }
 }
@@ -193,11 +207,11 @@ export function throttle<T extends (...args: unknown[]) => any>(
 export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') return obj
   if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T
-  if (obj instanceof Array) return obj.map(item => deepClone(item)) as unknown as T
+  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as unknown as T
   if (typeof obj === 'object') {
     const clonedObj = {} as T
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
         clonedObj[key] = deepClone(obj[key])
       }
     }

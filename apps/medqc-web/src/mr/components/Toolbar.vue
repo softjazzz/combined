@@ -5,8 +5,8 @@
       <a-button-group size="small">
         <a-button
           :type="summary ? 'primary' : 'default'"
-          @click="toggleSummary"
           title="切换摘要/全文"
+          @click="toggleSummary"
         >
           <FileTextOutlined />
           {{ summary ? '摘要' : '全文' }}
@@ -16,27 +16,30 @@
       <a-divider type="vertical" />
 
       <!-- 文档管理功能 -->
-      <a-button-group size="small" v-if="!isEditing">
+      <a-button-group
+        v-if="!isEditing"
+        size="small"
+      >
         <a-button
-          @click="createDocument"
           title="新增文档"
+          @click="createDocument"
         >
           <PlusOutlined />
           新增
         </a-button>
         <a-button
-          @click="startEdit"
           title="编辑文档内容"
           :disabled="!canEdit"
+          @click="startEdit"
         >
           <EditOutlined />
           编辑
         </a-button>
         <a-button
-          @click="deleteDocument"
           title="删除文档"
           :disabled="!canDelete"
           danger
+          @click="deleteDocument"
         >
           <DeleteOutlined />
           删除
@@ -44,19 +47,22 @@
       </a-button-group>
 
       <!-- 编辑模式下的操作 -->
-      <a-button-group size="small" v-else>
+      <a-button-group
+        v-else
+        size="small"
+      >
         <a-button
           type="primary"
-          @click="saveEdit"
           title="保存修改 (Ctrl+S)"
           :loading="saving"
+          @click="saveEdit"
         >
           <SaveOutlined />
           保存
         </a-button>
         <a-button
-          @click="cancelEdit"
           title="取消编辑 (Esc)"
+          @click="cancelEdit"
         >
           <CloseOutlined />
           取消
@@ -67,10 +73,16 @@
     <!-- 中间工具 -->
     <div class="toolbar-section toolbar-center">
       <a-button-group size="small">
-        <a-button @click="fontDown" title="减小字号 (Ctrl+-)">
+        <a-button
+          title="减小字号 (Ctrl+-)"
+          @click="fontDown"
+        >
           <span class="font-btn">A-</span>
         </a-button>
-        <a-button @click="fontUp" title="增大字号 (Ctrl++)">
+        <a-button
+          title="增大字号 (Ctrl++)"
+          @click="fontUp"
+        >
           <span class="font-btn">A+</span>
         </a-button>
       </a-button-group>
@@ -85,7 +97,7 @@
         size="small"
         allow-clear
         @search="handleSearch"
-        @pressEnter="handleSearch"
+        @press-enter="handleSearch"
       >
         <template #enterButton>
           <SearchOutlined />
@@ -93,15 +105,22 @@
       </a-input-search>
 
       <!-- 搜索导航 -->
-      <div v-if="searchResults.length > 0" class="search-nav">
-        <span class="search-info">
-          {{ currentSearchIndex + 1 }}/{{ searchResults.length }}
-        </span>
+      <div
+        v-if="searchResults.length > 0"
+        class="search-nav"
+      >
+        <span class="search-info"> {{ currentSearchIndex + 1 }}/{{ searchResults.length }} </span>
         <a-button-group size="small">
-          <a-button @click="prevSearch" :disabled="searchResults.length === 0">
+          <a-button
+            :disabled="searchResults.length === 0"
+            @click="prevSearch"
+          >
             <UpOutlined />
           </a-button>
-          <a-button @click="nextSearch" :disabled="searchResults.length === 0">
+          <a-button
+            :disabled="searchResults.length === 0"
+            @click="nextSearch"
+          >
             <DownOutlined />
           </a-button>
         </a-button-group>
@@ -111,21 +130,35 @@
     <!-- 右侧工具 -->
     <div class="toolbar-section">
       <a-button-group size="small">
-        <a-button @click="copyLink" title="复制链接">
+        <a-button
+          title="复制链接"
+          @click="copyLink"
+        >
           <LinkOutlined />
         </a-button>
-        <a-button @click="toggleFullscreen" title="全屏">
+        <a-button
+          title="全屏"
+          @click="toggleFullscreen"
+        >
           <FullscreenOutlined v-if="!isFullscreen" />
           <FullscreenExitOutlined v-else />
         </a-button>
-        <a-button @click="print" title="打印">
+        <a-button
+          title="打印"
+          @click="print"
+        >
           <PrinterOutlined />
         </a-button>
       </a-button-group>
 
       <a-divider type="vertical" />
 
-      <a-button size="small" @click="openCompare" title="对比视图（开发中）" disabled>
+      <a-button
+        size="small"
+        title="对比视图（开发中）"
+        disabled
+        @click="openCompare"
+      >
         <SwapOutlined />
         对比
       </a-button>
@@ -150,8 +183,10 @@ import {
   SaveOutlined,
   CloseOutlined,
   PlusOutlined,
-  DeleteOutlined
+  DeleteOutlined,
 } from '@ant-design/icons-vue'
+
+defineOptions({ name: 'MrToolbar' })
 
 interface Props {
   summary?: boolean
@@ -166,7 +201,7 @@ const props = withDefaults(defineProps<Props>(), {
   isEditing: false,
   canEdit: true,
   canDelete: true,
-  saving: false
+  saving: false,
 })
 
 const emit = defineEmits<{
@@ -174,10 +209,10 @@ const emit = defineEmits<{
   'font-up': []
   'font-down': []
   'toggle-summary': []
-  'search': [keyword: string, results: Element[]]
+  search: [keyword: string, results: Element[]]
   'copy-link': []
-  'fullscreen': []
-  'print': []
+  fullscreen: []
+  print: []
   'open-compare': []
   'start-edit': []
   'save-edit': []
@@ -218,7 +253,7 @@ const handleSearch = () => {
 
   const keyword = searchText.value.trim()
   const contentEl = document.querySelector('.layout-content-main')
-  
+
   if (!contentEl) return
 
   // 清除之前的高亮
@@ -242,34 +277,31 @@ const handleSearch = () => {
 // 查找并高亮
 const findAndHighlight = (container: Element, keyword: string): Element[] => {
   const results: Element[] = []
-  const walker = document.createTreeWalker(
-    container,
-    NodeFilter.SHOW_TEXT,
-    null
-  )
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null)
 
   const textNodes: Text[] = []
   let node: Node | null
-  
-  while (node = walker.nextNode()) {
+
+  while ((node = walker.nextNode()) !== null) {
     textNodes.push(node as Text)
   }
 
   const regex = new RegExp(escapeRegExp(keyword), 'gi')
-  
-  textNodes.forEach(textNode => {
+
+  textNodes.forEach((textNode) => {
     const text = textNode.textContent || ''
     if (regex.test(text)) {
       const parent = textNode.parentElement
       if (parent && !parent.closest('.toolbar')) {
-        const highlightedHTML = text.replace(regex, (match) => 
-          `<mark class="search-highlight" data-search-result>${match}</mark>`
+        const highlightedHTML = text.replace(
+          regex,
+          (match) => `<mark class="search-highlight" data-search-result>${match}</mark>`,
         )
-        
+
         const wrapper = document.createElement('span')
         wrapper.innerHTML = highlightedHTML
         parent.replaceChild(wrapper, textNode)
-        
+
         const marks = wrapper.querySelectorAll('.search-highlight')
         results.push(...Array.from(marks))
       }
@@ -282,13 +314,10 @@ const findAndHighlight = (container: Element, keyword: string): Element[] => {
 // 清除高亮
 const clearHighlights = (container: Element) => {
   const highlights = container.querySelectorAll('.search-highlight')
-  highlights.forEach(highlight => {
+  highlights.forEach((highlight) => {
     const parent = highlight.parentNode
     if (parent) {
-      parent.replaceChild(
-        document.createTextNode(highlight.textContent || ''),
-        highlight
-      )
+      parent.replaceChild(document.createTextNode(highlight.textContent || ''), highlight)
       parent.normalize()
     }
   })
@@ -308,17 +337,17 @@ const clearSearch = () => {
 const scrollToResult = (index: number) => {
   if (index >= 0 && index < searchResults.value.length) {
     const element = searchResults.value[index]
-    
+
     // 移除之前的当前高亮
-    searchResults.value.forEach(el => el.classList.remove('current-result'))
-    
+    searchResults.value.forEach((el) => el.classList.remove('current-result'))
+
     // 添加当前高亮
     element.classList.add('current-result')
-    
+
     // 滚动到视图
     element.scrollIntoView({
       behavior: 'smooth',
-      block: 'center'
+      block: 'center',
     })
   }
 }
@@ -331,20 +360,22 @@ const nextSearch = () => {
 
 const prevSearch = () => {
   if (searchResults.value.length === 0) return
-  currentSearchIndex.value = currentSearchIndex.value === 0 
-    ? searchResults.value.length - 1 
-    : currentSearchIndex.value - 1
+  currentSearchIndex.value =
+    currentSearchIndex.value === 0 ? searchResults.value.length - 1 : currentSearchIndex.value - 1
   scrollToResult(currentSearchIndex.value)
 }
 
 // 复制链接
 const copyLink = () => {
-  navigator.clipboard.writeText(window.location.href).then(() => {
-    message.success('链接已复制到剪贴板')
-    emit('copy-link')
-  }).catch(() => {
-    message.error('复制失败')
-  })
+  navigator.clipboard
+    .writeText(window.location.href)
+    .then(() => {
+      message.success('链接已复制到剪贴板')
+      emit('copy-link')
+    })
+    .catch(() => {
+      message.error('复制失败')
+    })
 }
 
 // 全屏切换
@@ -359,7 +390,7 @@ const toggleFullscreen = () => {
     document.exitFullscreen?.()
     isFullscreen.value = false
   }
-  
+
   emit('fullscreen')
 }
 
@@ -488,13 +519,13 @@ document.addEventListener('keydown', (e) => {
     flex-wrap: wrap;
     gap: 8px;
   }
-  
+
   .toolbar-center {
     order: 3;
     width: 100%;
     justify-content: flex-start;
   }
-  
+
   .toolbar-center .ant-input-search {
     width: 100% !important;
   }

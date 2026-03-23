@@ -5,12 +5,19 @@
     width="900px"
     :footer="null"
     :destroy-on-close="true"
-    @cancel="handleClose"
     class="rule-test-modal"
+    @cancel="handleClose"
   >
-    <div v-if="rule" class="rule-test-container">
+    <div
+      v-if="rule"
+      class="rule-test-container"
+    >
       <!-- 规则信息展示区 -->
-      <a-card title="规则信息" :bordered="true" class="rule-info-card">
+      <a-card
+        title="规则信息"
+        :bordered="true"
+        class="rule-info-card"
+      >
         <a-row :gutter="[16, 12]">
           <a-col :span="12">
             <div class="info-item">
@@ -45,8 +52,16 @@
           <a-col :span="24">
             <div class="info-item">
               <span class="info-label">适用文书</span>
-              <a-space :size="4" wrap>
-                <a-tag v-for="(doc, idx) in rule.applicable_documents" :key="idx" color="geekblue" class="doc-tag">
+              <a-space
+                :size="4"
+                wrap
+              >
+                <a-tag
+                  v-for="(doc, idx) in rule.applicable_documents"
+                  :key="idx"
+                  color="geekblue"
+                  class="doc-tag"
+                >
                   {{ getDocTypeZh(doc) }}
                 </a-tag>
               </a-space>
@@ -55,14 +70,20 @@
           <a-col :span="24">
             <div class="info-item">
               <span class="info-label">规则描述</span>
-              <p class="info-description">{{ rule.description }}</p>
+              <p class="info-description">
+                {{ rule.description }}
+              </p>
             </div>
           </a-col>
         </a-row>
       </a-card>
 
       <!-- 病历输入区 -->
-      <a-card title="病历文本" :bordered="true" class="medical-text-card">
+      <a-card
+        title="病历文本"
+        :bordered="true"
+        class="medical-text-card"
+      >
         <template #extra>
           <a-radio-group
             v-model:value="exampleType"
@@ -70,11 +91,17 @@
             size="small"
             class="example-type-selector"
           >
-            <a-radio-button value="negative" class="negative-btn">
+            <a-radio-button
+              value="negative"
+              class="negative-btn"
+            >
               <CloseCircleOutlined class="radio-icon" />
               <span>反例</span>
             </a-radio-button>
-            <a-radio-button value="positive" class="positive-btn">
+            <a-radio-button
+              value="positive"
+              class="positive-btn"
+            >
               <CheckCircleOutlined class="radio-icon" />
               <span>正例</span>
             </a-radio-button>
@@ -83,23 +110,30 @@
 
         <div class="medical-input-container">
           <a-alert
-            :message="exampleType === 'negative' ? '当前示例：不符合规则要求的病历（用于测试规则识别能力）' : '当前示例：符合规则要求的病历（用于测试误报率）'"
+            :message="
+              exampleType === 'negative'
+                ? '当前示例：不符合规则要求的病历（用于测试规则识别能力）'
+                : '当前示例：符合规则要求的病历（用于测试误报率）'
+            "
             :type="exampleType === 'negative' ? 'warning' : 'success'"
             show-icon
             :banner="true"
-            style="margin-bottom: 12px; border-radius: 8px;"
+            style="margin-bottom: 12px; border-radius: 8px"
           />
 
           <!-- 示例说明折叠面板 -->
           <a-collapse
-            v-model:activeKey="showExampleInfo"
+            v-model:active-key="showExampleInfo"
             class="example-info-collapse"
-            style="margin-bottom: 12px;"
+            style="margin-bottom: 12px"
           >
-            <a-collapse-panel key="1" class="example-info-panel">
+            <a-collapse-panel
+              key="1"
+              class="example-info-panel"
+            >
               <template #header>
                 <div class="panel-header">
-                  <InfoCircleOutlined style="margin-right: 8px;" />
+                  <InfoCircleOutlined style="margin-right: 8px" />
                   <span class="panel-title">示例说明</span>
                   <span class="panel-subtitle">（仅供参考，不会提交给 LLM）</span>
                 </div>
@@ -108,8 +142,14 @@
               <div class="example-info-content">
                 <div class="info-section info-section--analysis">
                   <div class="section-title">
-                    <SearchOutlined v-if="exampleType === 'negative'" class="section-title__icon" />
-                    <HighlightOutlined v-else class="section-title__icon" />
+                    <SearchOutlined
+                      v-if="exampleType === 'negative'"
+                      class="section-title__icon"
+                    />
+                    <HighlightOutlined
+                      v-else
+                      class="section-title__icon"
+                    />
                     <span>质控分析</span>
                   </div>
                   <div class="section-content">
@@ -119,7 +159,11 @@
                       </div>
                       <div class="focus-point-item">
                         <span class="point-index">1.</span>
-                        <span class="point-text">{{ exampleType === 'negative' ? '所有检查项目均未写出具体检查结果，未记录任何具体检查数值' : '所有检查项目均有具体结果记录' }}</span>
+                        <span class="point-text">{{
+                          exampleType === 'negative'
+                            ? '所有检查项目均未写出具体检查结果，未记录任何具体检查数值'
+                            : '所有检查项目均有具体结果记录'
+                        }}</span>
                       </div>
                     </div>
                   </div>
@@ -133,7 +177,7 @@
             placeholder="请输入或粘贴病历文本片段（500-2000字）"
             :rows="10"
             :maxlength="2000"
-            showCount
+            show-count
             class="medical-textarea"
           />
 
@@ -142,29 +186,49 @@
               <BulbOutlined class="hint-icon" />
               提示：可以修改示例文本或输入自己的病历
             </span>
-            <a-button type="primary" :loading="testing" @click="executeTest" class="test-btn">
-              <template #icon><ThunderboltOutlined /></template>
+            <a-button
+              type="primary"
+              :loading="testing"
+              class="test-btn"
+              @click="executeTest"
+            >
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
               开始测试
             </a-button>
           </div>
 
           <!-- AI调用加载遮罩 -->
-          <div v-if="showAILoadingMask" class="ai-loading-mask">
+          <div
+            v-if="showAILoadingMask"
+            class="ai-loading-mask"
+          >
             <div class="ai-loading-content">
               <a-spin size="large" />
-              <div class="ai-loading-text">正在调用大模型，请稍候...</div>
+              <div class="ai-loading-text">
+                正在调用大模型，请稍候...
+              </div>
             </div>
           </div>
         </div>
       </a-card>
 
       <!-- 结果展示区 -->
-      <div v-if="testResult" class="result-card">
+      <div
+        v-if="testResult"
+        class="result-card"
+      >
         <div class="card-header">
-          <h3 class="card-title">测试结果</h3>
+          <h3 class="card-title">
+            测试结果
+          </h3>
         </div>
         <div class="card-body">
-          <div class="result-status" :class="testResult.compliant ? 'result-status--success' : 'result-status--warning'">
+          <div
+            class="result-status"
+            :class="testResult.compliant ? 'result-status--success' : 'result-status--warning'"
+          >
             <div class="status-icon">
               <CheckCircleTwoTone
                 v-if="testResult.compliant"
@@ -199,22 +263,45 @@
               </div>
               <div class="detail-content structured-findings">
                 <template v-if="parsedFindings.items.length > 0">
-                  <p v-if="parsedFindings.summary" class="findings-summary">{{ parsedFindings.summary }}</p>
+                  <p
+                    v-if="parsedFindings.summary"
+                    class="findings-summary"
+                  >
+                    {{ parsedFindings.summary }}
+                  </p>
                   <div class="findings-list">
-                    <div v-for="(item, index) in parsedFindings.items" :key="index" class="findings-item">
+                    <div
+                      v-for="(item, index) in parsedFindings.items"
+                      :key="index"
+                      class="findings-item"
+                    >
                       <div class="findings-item-header">
                         <span class="findings-item-number">{{ index + 1 }}</span>
                         <strong>{{ item.title }}</strong>
                       </div>
-                      <div v-if="item.content" class="findings-item-content">{{ item.content }}</div>
+                      <div
+                        v-if="item.content"
+                        class="findings-item-content"
+                      >
+                        {{ item.content }}
+                      </div>
                     </div>
                   </div>
                 </template>
                 <template v-else>
-                  <p v-if="testResult.compliant">未发现明显问题。</p>
+                  <p v-if="testResult.compliant">
+                    未发现明显问题。
+                  </p>
                   <template v-else>
-                    <p v-if="parsedFindings.fallback" class="findings-fallback">{{ parsedFindings.fallback }}</p>
-                    <p v-else>{{ testResult.evidence || '未发现明显问题。' }}</p>
+                    <p
+                      v-if="parsedFindings.fallback"
+                      class="findings-fallback"
+                    >
+                      {{ parsedFindings.fallback }}
+                    </p>
+                    <p v-else>
+                      {{ testResult.evidence || '未发现明显问题。' }}
+                    </p>
                   </template>
                 </template>
               </div>
@@ -230,24 +317,43 @@
               </div>
             </div>
 
-            <div v-if="testResult.suggestion" class="detail-item">
+            <div
+              v-if="testResult.suggestion"
+              class="detail-item"
+            >
               <div class="detail-label">
                 <BulbOutlined />
                 改进建议
               </div>
               <div class="detail-content suggestion-box">
-                <div class="suggestion-text">{{ testResult.suggestion }}</div>
+                <div class="suggestion-text">
+                  {{ testResult.suggestion }}
+                </div>
               </div>
             </div>
           </div>
 
           <div class="result-actions">
             <a-space :size="8">
-              <a-button @click="testResult = null" class="secondary-btn">清除结果</a-button>
-              <a-button type="primary" @click="provideFeedback" class="feedback-btn">
+              <a-button
+                class="secondary-btn"
+                @click="testResult = null"
+              >
+                清除结果
+              </a-button>
+              <a-button
+                type="primary"
+                class="feedback-btn"
+                @click="provideFeedback"
+              >
                 提供反馈
               </a-button>
-              <a-button type="primary" @click="executeTest" :loading="testing" class="primary-btn">
+              <a-button
+                type="primary"
+                :loading="testing"
+                class="primary-btn"
+                @click="executeTest"
+              >
                 重新测试
               </a-button>
             </a-space>
@@ -276,7 +382,7 @@ import {
   CloseCircleFilled,
   InfoCircleFilled,
   CheckCircleTwoTone,
-  ExclamationCircleTwoTone
+  ExclamationCircleTwoTone,
 } from '@ant-design/icons-vue'
 import type { QCRule, EvaluationResult } from '@/types/demo'
 import {
@@ -284,7 +390,7 @@ import {
   buildCaseText,
   extractHints,
   extractFocusPoints,
-  type QCRuleCaseExample
+  type QCRuleCaseExample,
 } from '@/data/qcRuleCases'
 import { customRuleCaseMap } from '@/data/customRuleCases'
 
@@ -296,12 +402,12 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  'feedback': [result: EvaluationResult]
+  feedback: [result: EvaluationResult]
 }>()
 
 const isVisible = computed({
   get: () => props.visible,
-  set: (value) => emit('update:visible', value)
+  set: (value) => emit('update:visible', value),
 })
 
 type StatusTone = 'success' | 'warning' | 'error' | 'info'
@@ -310,7 +416,7 @@ const statusToneIcons: Record<StatusTone, any> = {
   success: CheckCircleFilled,
   warning: ExclamationCircleFilled,
   error: CloseCircleFilled,
-  info: InfoCircleFilled
+  info: InfoCircleFilled,
 }
 
 // 文书类别映射
@@ -321,19 +427,19 @@ const CANONICAL_LABEL_ZH: Record<string, string> = {
   discharge_record: '出院记录',
   operation_record: '手术相关记录',
   examination_report: '辅助检查',
-  consent_form: '知情同意书'
+  consent_form: '知情同意书',
 }
 
 const ALIAS_TO_CANONICAL: Record<string, string> = {
-  '手术记录': 'operation_record',
-  '检查记录': 'examination_report',
-  '检验检查': 'examination_report',
-  '输血记录': 'progress_note',
-  '治疗记录': 'progress_note',
-  '医嘱记录': 'progress_note',
-  'medical_order': 'progress_note',
-  '出院医嘱': 'progress_note',
-  '输血同意书': 'consent_form'
+  手术记录: 'operation_record',
+  检查记录: 'examination_report',
+  检验检查: 'examination_report',
+  输血记录: 'progress_note',
+  治疗记录: 'progress_note',
+  医嘱记录: 'progress_note',
+  medical_order: 'progress_note',
+  出院医嘱: 'progress_note',
+  输血同意书: 'consent_form',
 }
 
 const mapDocTypeToCanonical = (raw: string | undefined | null): string | null => {
@@ -346,7 +452,8 @@ const mapDocTypeToCanonical = (raw: string | undefined | null): string | null =>
   if (key === 'operation' || key === 'operation_record') return 'operation_record'
   if (key === 'examination' || key === 'examination_report') return 'examination_report'
   if (key === 'admission' || key === 'admission_record') return 'admission_record'
-  if (key === 'progress' || key === 'progress_note' || key === 'course_record') return 'progress_note'
+  if (key === 'progress' || key === 'progress_note' || key === 'course_record')
+    return 'progress_note'
   if (key === 'discharge' || key === 'discharge_record') return 'discharge_record'
   if (key === 'consent' || key === 'consent_form') return 'consent_form'
   return null
@@ -372,7 +479,11 @@ const getExampleMedicalText = (rule: QCRule, type: 'positive' | 'negative'): str
       if (rawField.trim()) {
         return normalizeExampleText(rawField)
       }
-    } else if (typeof rawField === 'object' && rawField.content && String(rawField.content).trim()) {
+    } else if (
+      typeof rawField === 'object' &&
+      rawField.content &&
+      String(rawField.content).trim()
+    ) {
       return normalizeExampleText(String(rawField.content))
     }
   }
@@ -389,7 +500,7 @@ const getExampleMedicalText = (rule: QCRule, type: 'positive' | 'negative'): str
       includeHints: false,
       includeFocusPoints: false,
       includeTitle: false,
-      includeAnalysis: false
+      includeAnalysis: false,
     })
     return normalizeExampleText(built)
   }
@@ -404,12 +515,15 @@ const getExampleMedicalText = (rule: QCRule, type: 'positive' | 'negative'): str
 const currentCaseExample = computed<QCRuleCaseExample | null>(() => {
   if (!props.rule) return null
 
+  const ruleId = props.rule.rule_id
+  if (!ruleId) return null
+
   // 优先从泸县33条规则库查找
-  let ruleCase = customRuleCaseMap[props.rule.rule_id]
+  let ruleCase = customRuleCaseMap[ruleId]
 
   // 如果没找到，从四川省规则库查找
   if (!ruleCase) {
-    ruleCase = qcRuleCaseMap[props.rule.rule_id]
+    ruleCase = qcRuleCaseMap[ruleId]
   }
 
   if (!ruleCase) return null
@@ -458,32 +572,36 @@ const defaultPositiveText = `入院记录：患者主诉胃痛3天，既往有�
 诊断：慢性胃炎急性发作`
 
 // 监听示例类型切换或规则变化，自动加载对应的案例文本
-watch([exampleType, () => props.rule], () => {
-  const rule = props.rule
+watch(
+  [exampleType, () => props.rule],
+  () => {
+    const rule = props.rule
 
-  // 1. 优先使用后端规则对象里自带的 positive_example / negative_example
-  if (rule) {
-    const textFromRule = getExampleMedicalText(rule, exampleType.value)
-    if (textFromRule && textFromRule.trim()) {
-      medicalText.value = textFromRule
+    // 1. 优先使用后端规则对象里自带的 positive_example / negative_example
+    if (rule) {
+      const textFromRule = getExampleMedicalText(rule, exampleType.value)
+      if (textFromRule && textFromRule.trim()) {
+        medicalText.value = textFromRule
+        return
+      }
+    }
+
+    // 2. 若规则中未配置示例，则回退到前端内置案例（与另一个质控评估页面保持一致）
+    if (currentCaseExample.value) {
+      medicalText.value = buildCaseText(currentCaseExample.value, {
+        includeHints: false,
+        includeFocusPoints: false,
+        includeTitle: false,
+        includeAnalysis: false,
+      })
       return
     }
-  }
 
-  // 2. 若规则中未配置示例，则回退到前端内置案例（与另一个质控评估页面保持一致）
-  if (currentCaseExample.value) {
-    medicalText.value = buildCaseText(currentCaseExample.value, {
-      includeHints: false,
-      includeFocusPoints: false,
-      includeTitle: false,
-      includeAnalysis: false
-    })
-    return
-  }
-
-  // 3. 最终兜底：使用简单默认示例
-  medicalText.value = exampleType.value === 'negative' ? defaultNegativeText : defaultPositiveText
-}, { immediate: true })
+    // 3. 最终兜底：使用简单默认示例
+    medicalText.value = exampleType.value === 'negative' ? defaultNegativeText : defaultPositiveText
+  },
+  { immediate: true },
+)
 
 // 结构化解析"发现的问题"
 interface ParsedFindings {
@@ -498,7 +616,10 @@ const parsedFindings = computed<ParsedFindings>(() => {
   }
 
   const text = testResult.value.evidence
-  const rawLines = text.split('\n').map(line => line.trim()).filter(Boolean)
+  const rawLines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
   const dedupedLines: string[] = []
   const seenLines = new Set<string>()
   for (const line of rawLines) {
@@ -514,14 +635,14 @@ const parsedFindings = computed<ParsedFindings>(() => {
 
   // 如果第一行是总结性的句子（不以数字开头）
   const lines = [...dedupedLines]
-  if (lines.length > 0 && !lines[0].match(/^[\d一二三四五六①②③④⑤⑥⑦⑧⑨⑩][\.\、、]/)) {
+  if (lines.length > 0 && !lines[0].match(/^[\d一二三四五六①②③④⑤⑥⑦⑧⑨⑩][.、]/)) {
     summary = lines[0]
     lines.shift()
   }
 
   // 解析每一行为条目
   for (const line of lines) {
-    const match = line.match(/^([\d一二三四五六①②③④⑤⑥⑦⑧⑨⑩][\.\、、])\s*(.*)$/)
+    const match = line.match(/^([\d一二三四五六①②③④⑤⑥⑦⑧⑨⑩][.、])\s*(.*)$/)
     if (match) {
       // 匹配到编号列表
       const content = match[2]
@@ -530,12 +651,12 @@ const parsedFindings = computed<ParsedFindings>(() => {
       if (colonIndex > 0) {
         items.push({
           title: content.substring(0, colonIndex),
-          content: content.substring(colonIndex + 1).trim()
+          content: content.substring(colonIndex + 1).trim(),
         })
       } else {
         items.push({
           title: content,
-          content: ''
+          content: '',
         })
       }
     }
@@ -553,34 +674,34 @@ const parsedFindings = computed<ParsedFindings>(() => {
 })
 
 // 辅助函数
-const getDefectTone = (level: string): StatusTone => {
+const getDefectTone = (level: string | undefined): StatusTone => {
   const map: Record<string, StatusTone> = {
-    '严重缺陷': 'error',
-    'critical': 'error',
-    '一般缺陷': 'warning',
-    'major': 'warning',
-    '轻微缺陷': 'success',
-    'minor': 'success'
+    严重缺陷: 'error',
+    critical: 'error',
+    一般缺陷: 'warning',
+    major: 'warning',
+    轻微缺陷: 'success',
+    minor: 'success',
   }
-  return map[level] || 'warning'
+  return (level && map[level]) || 'warning'
 }
 
-const getComplexityTone = (complexity: string): StatusTone => {
+const getComplexityTone = (complexity: string | undefined): StatusTone => {
   const map: Record<string, StatusTone> = {
-    '高复杂度': 'error',
-    '中复杂度': 'warning',
-    '低复杂度': 'success'
+    高复杂度: 'error',
+    中复杂度: 'warning',
+    低复杂度: 'success',
   }
-  return map[complexity] || 'info'
+  return (complexity && map[complexity]) || 'info'
 }
 
-const getDefectLevelText = (level: string) => {
+const getDefectLevelText = (level: string | undefined) => {
   const textMap: Record<string, string> = {
-    'critical': '严重缺陷',
-    'major': '一般缺陷',
-    'minor': '轻微缺陷'
+    critical: '严重缺陷',
+    major: '一般缺陷',
+    minor: '轻微缺陷',
   }
-  return textMap[level] || level
+  return (level && textMap[level]) || level || ''
 }
 
 // 执行测试
@@ -624,7 +745,7 @@ const executeTest = async () => {
         reasoning: data.evidence, // 证据引用
         suggestion: data.suggestion,
         execution_time: data.execution_time,
-        medical_text: medicalText.value // 保存病历原文
+        medical_text: medicalText.value, // 保存病历原文
       }
       message.success('测试完成')
     } else {
@@ -762,7 +883,7 @@ const handleClose = () => {
 
       .example-type-selector {
         display: inline-flex;
-        background: #F5F7FB;
+        background: #f5f7fb;
         padding: 4px;
         border-radius: 24px;
         gap: 4px;
@@ -787,15 +908,15 @@ const handleClose = () => {
           }
 
           &.negative-btn.ant-radio-button-wrapper-checked {
-            background: #FFF1F0 !important;
+            background: #fff1f0 !important;
             border-color: rgba(245, 34, 45, 0.3) !important;
-            color: #CF1322 !important;
+            color: #cf1322 !important;
           }
 
           &.positive-btn.ant-radio-button-wrapper-checked {
-            background: #E8F8E5 !important;
+            background: #e8f8e5 !important;
             border-color: rgba(82, 196, 26, 0.3) !important;
-            color: #389E0D !important;
+            color: #389e0d !important;
           }
         }
 

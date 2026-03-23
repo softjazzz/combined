@@ -2,7 +2,9 @@
   <div class="content-highlighter">
     <div class="relative">
       <!-- 工具栏 -->
-      <div class="flex items-center justify-between mb-4 p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
+      <div
+        class="flex items-center justify-between mb-4 p-3 rounded-lg bg-slate-700/30 border border-slate-600/30"
+      >
         <div class="flex items-center gap-3">
           <h4 class="text-sm font-medium text-slate-200 flex items-center gap-2">
             <HighlightOutlined class="text-cyan-400" />
@@ -10,57 +12,65 @@
           </h4>
           <div class="flex items-center gap-2">
             <span class="text-xs text-slate-400">问题高亮：</span>
-            <a-switch 
-              v-model:checked="highlightEnabled" 
+            <a-switch
+              v-model:checked="highlightEnabled"
               size="small"
               @change="toggleHighlight"
             />
           </div>
         </div>
-        
+
         <div class="flex items-center gap-2">
           <!-- 问题筛选 -->
           <a-select
             v-model:value="selectedSeverity"
             size="small"
             style="width: 100px"
-            @change="updateHighlights"
             class="severity-filter"
+            @change="updateHighlights"
           >
-            <a-select-option value="all">全部</a-select-option>
-            <a-select-option value="critical">严重</a-select-option>
-            <a-select-option value="major">重要</a-select-option>
-            <a-select-option value="minor">轻微</a-select-option>
+            <a-select-option value="all">
+              全部
+            </a-select-option>
+            <a-select-option value="critical">
+              严重
+            </a-select-option>
+            <a-select-option value="major">
+              重要
+            </a-select-option>
+            <a-select-option value="minor">
+              轻微
+            </a-select-option>
           </a-select>
 
           <!-- 导航按钮 -->
           <div class="flex items-center gap-1">
-            <a-button 
-              size="small" 
-              @click="previousHighlight"
+            <a-button
+              size="small"
               :disabled="currentHighlightIndex <= 0"
               class="nav-btn"
+              @click="previousHighlight"
             >
               <UpOutlined />
             </a-button>
             <span class="text-xs text-slate-400 px-2">
               {{ currentHighlightIndex + 1 }}/{{ visibleHighlights.length }}
             </span>
-            <a-button 
-              size="small" 
-              @click="nextHighlight"
+            <a-button
+              size="small"
               :disabled="currentHighlightIndex >= visibleHighlights.length - 1"
               class="nav-btn"
+              @click="nextHighlight"
             >
               <DownOutlined />
             </a-button>
           </div>
 
           <!-- 全屏按钮 -->
-          <a-button 
+          <a-button
             size="small"
-            @click="toggleFullscreen"
             class="nav-btn"
+            @click="toggleFullscreen"
           >
             <ExpandOutlined v-if="!isFullscreen" />
             <CompressOutlined v-else />
@@ -69,30 +79,30 @@
       </div>
 
       <!-- 内容区域 -->
-      <div 
+      <div
         class="relative content-container"
-        :class="{ 'fullscreen': isFullscreen }"
+        :class="{ fullscreen: isFullscreen }"
       >
-        <div 
+        <div
           v-if="isFullscreen"
           class="absolute top-4 right-4 z-10"
         >
-          <a-button 
+          <a-button
             size="large"
-            @click="toggleFullscreen"
             class="bg-slate-800/80 border-slate-600/50 text-slate-300"
+            @click="toggleFullscreen"
           >
             <CompressOutlined />
             退出全屏
           </a-button>
         </div>
 
-        <div 
+        <div
           ref="contentRef"
           class="content-text"
           :class="{ 'fullscreen-content': isFullscreen }"
           v-html="highlightedContent"
-        ></div>
+        />
 
         <!-- 问题详情浮层 -->
         <div
@@ -101,7 +111,7 @@
           :style="tooltipStyle"
         >
           <div class="flex items-start gap-3">
-            <div 
+            <div
               class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
               :class="getSeverityIconClass(selectedIssue.severity)"
             >
@@ -109,41 +119,53 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-2">
-                <h5 class="font-medium text-slate-100 text-sm">{{ selectedIssue.rule_name }}</h5>
-                <a-tag 
-                  :color="getSeverityColor(selectedIssue.severity)" 
+                <h5 class="font-medium text-slate-100 text-sm">
+                  {{ selectedIssue.rule_name }}
+                </h5>
+                <a-tag
+                  :color="getSeverityColor(selectedIssue.severity)"
                   size="small"
                 >
                   {{ getSeverityLabel(selectedIssue.severity) }}
                 </a-tag>
               </div>
-              <p class="text-xs text-slate-300 mb-2">{{ selectedIssue.description }}</p>
+              <p class="text-xs text-slate-300 mb-2">
+                {{ selectedIssue.description }}
+              </p>
               <div class="text-xs text-slate-400 mb-2">
                 位置：{{ selectedIssue.location }}
               </div>
               <div class="p-2 rounded bg-blue-500/10 border border-blue-500/20">
-                <div class="text-xs text-blue-200 font-medium mb-1">建议：</div>
-                <div class="text-xs text-blue-300">{{ selectedIssue.suggestion }}</div>
+                <div class="text-xs text-blue-200 font-medium mb-1">
+                  建议：
+                </div>
+                <div class="text-xs text-blue-300">
+                  {{ selectedIssue.suggestion }}
+                </div>
               </div>
             </div>
           </div>
-          <div class="absolute -bottom-2 left-6 w-4 h-4 bg-slate-800 border-r border-b border-slate-600 transform rotate-45"></div>
+          <div
+            class="absolute -bottom-2 left-6 w-4 h-4 bg-slate-800 border-r border-b border-slate-600 transform rotate-45"
+          />
         </div>
       </div>
 
       <!-- 问题统计 -->
-      <div class="mt-4 flex items-center justify-between p-3 rounded-lg bg-slate-700/20 border border-slate-600/20">
+      <div
+        class="mt-4 flex items-center justify-between p-3 rounded-lg bg-slate-700/20 border border-slate-600/20"
+      >
         <div class="flex items-center gap-4 text-xs">
           <div class="flex items-center gap-1">
-            <div class="w-3 h-3 rounded-full bg-red-500"></div>
+            <div class="w-3 h-3 rounded-full bg-red-500" />
             <span class="text-slate-400">严重: {{ getSeverityCount('critical') }}</span>
           </div>
           <div class="flex items-center gap-1">
-            <div class="w-3 h-3 rounded-full bg-orange-500"></div>
+            <div class="w-3 h-3 rounded-full bg-orange-500" />
             <span class="text-slate-400">重要: {{ getSeverityCount('major') }}</span>
           </div>
           <div class="flex items-center gap-1">
-            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div class="w-3 h-3 rounded-full bg-yellow-500" />
             <span class="text-slate-400">轻微: {{ getSeverityCount('minor') }}</span>
           </div>
         </div>
@@ -163,7 +185,7 @@ import {
   DownOutlined,
   ExpandOutlined,
   CompressOutlined,
-  ExclamationOutlined
+  ExclamationOutlined,
 } from '@ant-design/icons-vue'
 import type { QCIssue } from '@/types'
 
@@ -175,7 +197,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  activeIssue: null
+  activeIssue: null,
 })
 
 // Emits
@@ -197,7 +219,7 @@ const visibleHighlights = computed(() => {
   if (selectedSeverity.value === 'all') {
     return props.issues
   }
-  return props.issues.filter(issue => issue.severity === selectedSeverity.value)
+  return props.issues.filter((issue) => issue.severity === selectedSeverity.value)
 })
 
 const highlightedContent = computed(() => {
@@ -215,18 +237,18 @@ const highlightedContent = computed(() => {
 
   // 模拟问题位置检测（实际应用中应该由后端提供精确位置）
   visibleHighlights.value.forEach((issue: QCIssue) => {
-    const keywords = extractKeywords(issue.description, issue.location)
-    
-    keywords.forEach(keyword => {
+    const keywords = extractKeywords(issue.description, issue.location || '')
+
+    keywords.forEach((keyword) => {
       const regex = new RegExp(keyword, 'gi')
       let match
-      
+
       while ((match = regex.exec(content)) !== null) {
         highlights.push({
           issue,
           start: match.index,
           end: match.index + match[0].length,
-          text: match[0]
+          text: match[0],
         })
       }
     })
@@ -240,10 +262,9 @@ const highlightedContent = computed(() => {
     const className = `highlight-${highlight.issue.severity}`
     const dataAttrs = `data-issue-id="${highlight.issue.id}" data-highlight-index="${index}"`
     const highlightHtml = `<span class="${className} highlight-text" ${dataAttrs}>${highlight.text}</span>`
-    
-    content = content.substring(0, highlight.start) + 
-              highlightHtml + 
-              content.substring(highlight.end)
+
+    content =
+      content.substring(0, highlight.start) + highlightHtml + content.substring(highlight.end)
   })
 
   return content.replace(/\n/g, '<br>')
@@ -253,16 +274,16 @@ const highlightedContent = computed(() => {
 const extractKeywords = (description: string, location: string): string[] => {
   // 简单的关键词提取逻辑，实际应用中应该更智能
   const keywords: string[] = []
-  
+
   // 从描述中提取关键词
   const descWords = description.match(/[\u4e00-\u9fa5]{2,}/g) || []
   keywords.push(...descWords.slice(0, 3))
-  
+
   // 从位置中提取关键词
   const locationWords = location.match(/[\u4e00-\u9fa5]{2,}/g) || []
   keywords.push(...locationWords)
-  
-  return [...new Set(keywords)].filter(word => word.length >= 2)
+
+  return [...new Set(keywords)].filter((word) => word.length >= 2)
 }
 
 const toggleHighlight = () => {
@@ -278,28 +299,28 @@ const updateHighlights = () => {
 
 const setupHighlightEvents = () => {
   if (!contentRef.value) return
-  
+
   const highlightElements = contentRef.value.querySelectorAll('.highlight-text')
-  
+
   highlightElements.forEach((element) => {
     element.addEventListener('mouseenter', (e: Event) => {
       const issueId = (e.target as HTMLElement).getAttribute('data-issue-id')
-      const issue = props.issues.find(i => i.id === issueId)
-      
+      const issue = props.issues.find((i) => i.id === issueId)
+
       if (issue) {
         selectedIssue.value = issue
         updateTooltipPosition(e as MouseEvent)
       }
     })
-    
+
     element.addEventListener('mouseleave', () => {
       selectedIssue.value = null
     })
-    
+
     element.addEventListener('click', (e: Event) => {
       const issueId = (e.target as HTMLElement).getAttribute('data-issue-id')
-      const issue = props.issues.find(i => i.id === issueId)
-      
+      const issue = props.issues.find((i) => i.id === issueId)
+
       if (issue) {
         emit('issue-click', issue)
       }
@@ -310,11 +331,11 @@ const setupHighlightEvents = () => {
 const updateTooltipPosition = (event: MouseEvent) => {
   const rect = (event.target as HTMLElement).getBoundingClientRect()
   const containerRect = contentRef.value?.getBoundingClientRect()
-  
+
   if (containerRect) {
     tooltipStyle.value = {
       top: `${rect.bottom - containerRect.top + 10}px`,
-      left: `${rect.left - containerRect.left}px`
+      left: `${rect.left - containerRect.left}px`,
     }
   }
 }
@@ -335,16 +356,16 @@ const nextHighlight = () => {
 
 const scrollToHighlight = () => {
   if (!contentRef.value) return
-  
+
   const highlightElements = contentRef.value.querySelectorAll('.highlight-text')
   const targetElement = highlightElements[currentHighlightIndex.value]
-  
+
   if (targetElement) {
-    targetElement.scrollIntoView({ 
-      behavior: 'smooth', 
-      block: 'center' 
+    targetElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
     })
-    
+
     // 临时高亮当前项
     targetElement.classList.add('current-highlight')
     setTimeout(() => {
@@ -362,7 +383,7 @@ const getSeverityColor = (severity: string) => {
     critical: 'red',
     major: 'orange',
     minor: 'yellow',
-    low: 'blue'
+    low: 'blue',
   }
   return colors[severity as keyof typeof colors] || 'default'
 }
@@ -372,7 +393,7 @@ const getSeverityLabel = (severity: string) => {
     critical: '严重',
     major: '重要',
     minor: '轻微',
-    low: '提示'
+    low: '提示',
   }
   return labels[severity as keyof typeof labels] || severity
 }
@@ -382,27 +403,30 @@ const getSeverityIconClass = (severity: string) => {
     critical: 'bg-red-500 text-white',
     major: 'bg-orange-500 text-white',
     minor: 'bg-yellow-500 text-white',
-    low: 'bg-blue-500 text-white'
+    low: 'bg-blue-500 text-white',
   }
   return classes[severity as keyof typeof classes] || 'bg-gray-500 text-white'
 }
 
 const getSeverityCount = (severity: string) => {
-  return props.issues.filter(issue => issue.severity === severity).length
+  return props.issues.filter((issue) => issue.severity === severity).length
 }
 
 // 监听 activeIssue 变化
-watch(() => props.activeIssue, (newIssue: QCIssue | null | undefined) => {
-  if (newIssue) {
-    const index = visibleHighlights.value.findIndex(issue => issue.id === newIssue.id)
-    if (index !== -1) {
-      currentHighlightIndex.value = index
-      nextTick(() => {
-        scrollToHighlight()
-      })
+watch(
+  () => props.activeIssue,
+  (newIssue: QCIssue | null | undefined) => {
+    if (newIssue) {
+      const index = visibleHighlights.value.findIndex((issue) => issue.id === newIssue.id)
+      if (index !== -1) {
+        currentHighlightIndex.value = index
+        nextTick(() => {
+          scrollToHighlight()
+        })
+      }
     }
-  }
-})
+  },
+)
 
 // 生命周期
 onMounted(() => {
@@ -416,17 +440,24 @@ onUnmounted(() => {
 })
 
 // 监听内容变化
-watch(() => props.content, () => {
-  nextTick(() => {
-    setupHighlightEvents()
-  })
-})
+watch(
+  () => props.content,
+  () => {
+    nextTick(() => {
+      setupHighlightEvents()
+    })
+  },
+)
 
-watch(() => props.issues, () => {
-  nextTick(() => {
-    setupHighlightEvents()
-  })
-}, { deep: true })
+watch(
+  () => props.issues,
+  () => {
+    nextTick(() => {
+      setupHighlightEvents()
+    })
+  },
+  { deep: true },
+)
 </script>
 
 <style scoped>
@@ -455,7 +486,8 @@ watch(() => props.issues, () => {
   border-radius: 0.75rem;
   color: rgb(241 245 249);
   line-height: 1.8;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family:
+    'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 }
 
 .content-text.fullscreen-content {
@@ -509,7 +541,8 @@ watch(() => props.issues, () => {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 20px rgba(6, 182, 212, 0.6);
   }
   50% {
@@ -568,12 +601,12 @@ watch(() => props.issues, () => {
     align-items: flex-start;
     gap: 0.75rem;
   }
-  
+
   .content-text {
     font-size: 0.875rem;
     padding: 1rem;
   }
-  
+
   .content-container.fullscreen {
     padding: 1rem;
   }

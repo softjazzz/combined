@@ -6,7 +6,7 @@
       class="upload-area"
       :class="{
         'drag-over': isDragOver,
-        'uploading': isUploading
+        uploading: isUploading,
       }"
       @drop="handleDrop"
       @dragover="handleDragOver"
@@ -18,14 +18,17 @@
         type="file"
         multiple
         accept=".pdf,.doc,.docx,.txt"
-        @change="handleFileSelect"
         class="hidden"
-      />
-      
+        @change="handleFileSelect"
+      >
+
       <div class="upload-content">
-        <div v-if="!isUploading" class="upload-prompt">
+        <div
+          v-if="!isUploading"
+          class="upload-prompt"
+        >
           <div class="upload-icon">
-            <i class="fas fa-cloud-upload-alt text-6xl text-blue-500"></i>
+            <i class="fas fa-cloud-upload-alt text-6xl text-blue-500" />
           </div>
           <h3 class="text-xl font-semibold text-gray-700 mb-2">
             拖拽文件到此处或点击上传
@@ -36,16 +39,17 @@
           <div class="upload-stats">
             <span class="text-sm text-gray-400">
               已选择 {{ selectedFiles.length }} 个文件
-              <span v-if="totalSize > 0">
-                ({{ formatFileSize(totalSize) }})
-              </span>
+              <span v-if="totalSize > 0"> ({{ formatFileSize(totalSize) }}) </span>
             </span>
           </div>
         </div>
 
-        <div v-else class="upload-progress">
+        <div
+          v-else
+          class="upload-progress"
+        >
           <div class="progress-circle">
-            <i class="fas fa-spinner fa-spin text-4xl text-blue-500"></i>
+            <i class="fas fa-spinner fa-spin text-4xl text-blue-500" />
           </div>
           <h3 class="text-xl font-semibold text-gray-700 mb-2">
             正在上传文件...
@@ -53,10 +57,10 @@
           <div class="progress-details">
             <div class="progress-bar-container">
               <div class="progress-bar">
-                <div 
+                <div
                   class="progress-fill"
                   :style="{ width: uploadProgress + '%' }"
-                ></div>
+                />
               </div>
               <span class="progress-text">{{ uploadProgress }}%</span>
             </div>
@@ -69,26 +73,29 @@
     </div>
 
     <!-- 文件列表 -->
-    <div v-if="selectedFiles.length > 0" class="file-list mt-6">
+    <div
+      v-if="selectedFiles.length > 0"
+      class="file-list mt-6"
+    >
       <div class="file-list-header">
         <h4 class="text-lg font-semibold text-gray-700">
           待上传文件 ({{ selectedFiles.length }})
         </h4>
         <div class="file-actions">
           <button
-            @click="clearFiles"
             class="btn-secondary"
             :disabled="isUploading"
+            @click="clearFiles"
           >
-            <i class="fas fa-trash mr-2"></i>
+            <i class="fas fa-trash mr-2" />
             清空
           </button>
           <button
-            @click="startUpload"
             class="btn-primary"
             :disabled="isUploading || selectedFiles.length === 0"
+            @click="startUpload"
           >
-            <i class="fas fa-upload mr-2"></i>
+            <i class="fas fa-upload mr-2" />
             开始上传
           </button>
         </div>
@@ -102,15 +109,17 @@
           :class="{
             'file-success': file.status === 'success',
             'file-error': file.status === 'error',
-            'file-uploading': file.status === 'uploading'
+            'file-uploading': file.status === 'uploading',
           }"
         >
           <div class="file-info">
             <div class="file-icon">
-              <i :class="getFileIcon(file.type)"></i>
+              <i :class="getFileIcon(file.type)" />
             </div>
             <div class="file-details">
-              <div class="file-name">{{ file.name }}</div>
+              <div class="file-name">
+                {{ file.name }}
+              </div>
               <div class="file-meta">
                 {{ formatFileSize(file.size) }} • {{ getFileType(file.type) }}
               </div>
@@ -118,20 +127,32 @@
           </div>
 
           <div class="file-status">
-            <div v-if="file.status === 'pending'" class="status-pending">
-              <i class="fas fa-clock text-gray-400"></i>
+            <div
+              v-if="file.status === 'pending'"
+              class="status-pending"
+            >
+              <i class="fas fa-clock text-gray-400" />
               <span class="text-sm text-gray-500">等待中</span>
             </div>
-            <div v-else-if="file.status === 'uploading'" class="status-uploading">
-              <i class="fas fa-spinner fa-spin text-blue-500"></i>
+            <div
+              v-else-if="file.status === 'uploading'"
+              class="status-uploading"
+            >
+              <i class="fas fa-spinner fa-spin text-blue-500" />
               <span class="text-sm text-blue-600">上传中</span>
             </div>
-            <div v-else-if="file.status === 'success'" class="status-success">
-              <i class="fas fa-check-circle text-green-500"></i>
+            <div
+              v-else-if="file.status === 'success'"
+              class="status-success"
+            >
+              <i class="fas fa-check-circle text-green-500" />
               <span class="text-sm text-green-600">成功</span>
             </div>
-            <div v-else-if="file.status === 'error'" class="status-error">
-              <i class="fas fa-exclamation-circle text-red-500"></i>
+            <div
+              v-else-if="file.status === 'error'"
+              class="status-error"
+            >
+              <i class="fas fa-exclamation-circle text-red-500" />
               <span class="text-sm text-red-600">失败</span>
               <div class="error-message text-xs text-red-500 mt-1">
                 {{ file.error }}
@@ -142,18 +163,18 @@
           <div class="file-actions">
             <button
               v-if="file.status === 'error'"
-              @click="retryFile(index)"
               class="btn-retry"
               :disabled="isUploading"
+              @click="retryFile(index)"
             >
-              <i class="fas fa-redo text-sm"></i>
+              <i class="fas fa-redo text-sm" />
             </button>
             <button
-              @click="removeFile(index)"
               class="btn-remove"
               :disabled="isUploading"
+              @click="removeFile(index)"
             >
-              <i class="fas fa-times text-sm"></i>
+              <i class="fas fa-times text-sm" />
             </button>
           </div>
         </div>
@@ -161,11 +182,16 @@
     </div>
 
     <!-- 上传结果统计 -->
-    <div v-if="uploadComplete" class="upload-summary mt-6">
+    <div
+      v-if="uploadComplete"
+      class="upload-summary mt-6"
+    >
       <div class="summary-card">
         <div class="summary-header">
-          <i class="fas fa-chart-pie text-2xl text-blue-500"></i>
-          <h4 class="text-lg font-semibold text-gray-700">上传结果</h4>
+          <i class="fas fa-chart-pie text-2xl text-blue-500" />
+          <h4 class="text-lg font-semibold text-gray-700">
+            上传结果
+          </h4>
         </div>
         <div class="summary-stats">
           <div class="stat-item">
@@ -188,17 +214,17 @@
         <div class="summary-actions">
           <button
             v-if="errorCount > 0"
-            @click="retryFailedFiles"
             class="btn-secondary"
+            @click="retryFailedFiles"
           >
-            <i class="fas fa-redo mr-2"></i>
+            <i class="fas fa-redo mr-2" />
             重试失败文件
           </button>
           <button
-            @click="resetUpload"
             class="btn-primary"
+            @click="resetUpload"
           >
-            <i class="fas fa-plus mr-2"></i>
+            <i class="fas fa-plus mr-2" />
             继续上传
           </button>
         </div>
@@ -253,18 +279,16 @@ import { useBatchUploadMock } from '@/composables/useBatchUploadMock'
 const mockUpload = useBatchUploadMock()
 
 // 计算属性
-const totalSize = computed(() => 
-  selectedFiles.value.reduce((sum, file) => sum + file.size, 0)
-)
+const totalSize = computed(() => selectedFiles.value.reduce((sum, file) => sum + file.size, 0))
 
 const totalFiles = computed(() => selectedFiles.value.length)
 
-const successCount = computed(() => 
-  selectedFiles.value.filter(file => file.status === 'success').length
+const successCount = computed(
+  () => selectedFiles.value.filter((file) => file.status === 'success').length,
 )
 
-const errorCount = computed(() => 
-  selectedFiles.value.filter(file => file.status === 'error').length
+const errorCount = computed(
+  () => selectedFiles.value.filter((file) => file.status === 'error').length,
 )
 
 const successRate = computed(() => {
@@ -301,9 +325,7 @@ const addFiles = (files: FileList | File[]) => {
     }
 
     // 检查是否已存在
-    const exists = selectedFiles.value.some(f => 
-      f.name === file.name && f.size === file.size
-    )
+    const exists = selectedFiles.value.some((f) => f.name === file.name && f.size === file.size)
     if (exists) {
       message.warning(`文件已存在: ${file.name}`)
       continue
@@ -314,7 +336,7 @@ const addFiles = (files: FileList | File[]) => {
       size: file.size,
       type: file.type,
       file,
-      status: 'pending'
+      status: 'pending',
     })
   }
 
@@ -333,7 +355,7 @@ const addFiles = (files: FileList | File[]) => {
 const handleDrop = (e: DragEvent) => {
   e.preventDefault()
   isDragOver.value = false
-  
+
   const files = e.dataTransfer?.files
   if (files) {
     addFiles(files)
@@ -380,7 +402,7 @@ const retryFile = (index: number) => {
 }
 
 const retryFailedFiles = () => {
-  selectedFiles.value.forEach(file => {
+  selectedFiles.value.forEach((file) => {
     if (file.status === 'error') {
       file.status = 'pending'
       file.error = undefined
@@ -407,20 +429,20 @@ const startUpload = async () => {
 
   try {
     // 只上传待处理的文件
-    const pendingFiles = selectedFiles.value.filter(f => f.status === 'pending')
-    
+    const pendingFiles = selectedFiles.value.filter((f) => f.status === 'pending')
+
     await uploadBatch(pendingFiles, {
       onProgress: (progress) => {
         uploadProgress.value = progress
       },
-      onFileComplete: (index: unknown,  success: unknown, error: unknown) => {
+      onFileComplete: (index: number, success: boolean, error?: string) => {
         const file = pendingFiles[index]
         if (file) {
           file.status = success ? 'success' : 'error'
           if (error) file.error = error
           processedFiles.value++
         }
-      }
+      },
     })
 
     uploadComplete.value = true

@@ -4,12 +4,15 @@
       ref="formRef"
       :model="passwordForm"
       :rules="passwordRules"
-      @finish="handleSubmit"
       layout="vertical"
       size="large"
+      @finish="handleSubmit"
     >
       <!-- 当前密码 -->
-      <a-form-item name="current_password" class="mb-4">
+      <a-form-item
+        name="current_password"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">当前密码</label>
         <div class="relative">
           <a-input-password
@@ -24,7 +27,10 @@
       </a-form-item>
 
       <!-- 新密码 -->
-      <a-form-item name="new_password" class="mb-4">
+      <a-form-item
+        name="new_password"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">新密码</label>
         <div class="relative">
           <a-input-password
@@ -39,7 +45,10 @@
       </a-form-item>
 
       <!-- 确认新密码 -->
-      <a-form-item name="confirm_password" class="mb-4">
+      <a-form-item
+        name="confirm_password"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">确认新密码</label>
         <div class="relative">
           <a-input-password
@@ -54,9 +63,9 @@
       </a-form-item>
 
       <!-- 密码强度指示器 -->
-      <PasswordStrength 
-        v-if="passwordForm.new_password" 
-        :password="passwordForm.new_password" 
+      <PasswordStrength
+        v-if="passwordForm.new_password"
+        :password="passwordForm.new_password"
         class="mb-6"
       />
 
@@ -65,7 +74,9 @@
         <div class="flex items-start gap-3">
           <InfoCircleOutlined class="text-blue-400 text-sm mt-0.5" />
           <div class="text-xs text-blue-200">
-            <div class="font-medium mb-2">密码安全建议：</div>
+            <div class="font-medium mb-2">
+              密码安全建议：
+            </div>
             <ul class="space-y-1 text-blue-200/80">
               <li>• 使用至少8个字符，包含大小写字母、数字和特殊符号</li>
               <li>• 避免使用个人信息（如姓名、生日）作为密码</li>
@@ -85,14 +96,17 @@
           size="large"
           class="flex-1 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-none font-semibold shadow-lg hover:shadow-xl"
         >
-          <SaveOutlined v-if="!loading" class="mr-2" />
+          <SaveOutlined
+            v-if="!loading"
+            class="mr-2"
+          />
           确认修改
         </a-button>
-        
+
         <a-button
           size="large"
-          @click="handleCancel"
           class="h-12 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20"
+          @click="handleCancel"
         >
           <CloseOutlined class="mr-2" />
           取消
@@ -104,9 +118,11 @@
     <div class="mt-8 p-4 rounded-xl bg-slate-700/30 border border-slate-600/30">
       <div class="flex items-center gap-2 mb-3">
         <HistoryOutlined class="text-slate-400" />
-        <h4 class="text-sm font-medium text-slate-300">密码修改记录</h4>
+        <h4 class="text-sm font-medium text-slate-300">
+          密码修改记录
+        </h4>
       </div>
-      
+
       <div class="space-y-2">
         <div class="flex items-center justify-between text-xs">
           <span class="text-slate-400">上次修改时间</span>
@@ -124,18 +140,20 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  LockOutlined, 
-  SafetyCertificateOutlined, 
+import {
+  LockOutlined,
+  SafetyCertificateOutlined,
   CheckCircleOutlined,
   InfoCircleOutlined,
   SaveOutlined,
   CloseOutlined,
-  HistoryOutlined
+  HistoryOutlined,
 } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 import type { PasswordUpdateRequest } from '@/types/auth'
 import PasswordStrength from './PasswordStrength.vue'
+
+const passwordSymbolPattern = new RegExp('[!@#$%^&*()_+=[\\]{};:\'"\\\\|,.<>/?-]')
 
 // Props
 interface Props {
@@ -146,13 +164,14 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  passwordChangeCount: 0
+  lastPasswordChange: '',
+  passwordChangeCount: 0,
 })
 
 // Emits
 const emit = defineEmits<{
   'change-password': [data: PasswordUpdateRequest]
-  'cancel': []
+  cancel: []
 }>()
 
 // Form reference
@@ -162,40 +181,38 @@ const formRef = ref<FormInstance>()
 const passwordForm = reactive({
   current_password: '',
   new_password: '',
-  confirm_password: ''
+  confirm_password: '',
 })
 
 // Form validation rules
 const passwordRules = {
-  current_password: [
-    { required: true, message: '请输入当前密码', trigger: 'blur' }
-  ],
+  current_password: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
   new_password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
     { min: 8, message: '新密码至少8位字符', trigger: 'blur' },
-    { 
+    {
       validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
-        
+
         // 检查是否与当前密码相同
         if (value === passwordForm.current_password) {
           return Promise.reject('新密码不能与当前密码相同')
         }
-        
+
         // 检查密码强度
         const hasUpper = /[A-Z]/.test(value)
         const hasLower = /[a-z]/.test(value)
         const hasNumber = /\d/.test(value)
-        const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value)
-        
+        const hasSymbol = passwordSymbolPattern.test(value)
+
         if (!hasUpper || !hasLower || !hasNumber) {
           return Promise.reject('密码必须包含大小写字母和数字')
         }
-        
+
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
+      trigger: 'blur',
+    },
   ],
   confirm_password: [
     { required: true, message: '请确认新密码', trigger: 'blur' },
@@ -207,20 +224,21 @@ const passwordRules = {
         }
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
-  ]
+      trigger: 'blur',
+    },
+  ],
 }
 
 // Handle form submit
 const handleSubmit = async () => {
   try {
     await formRef.value?.validate()
-    
+
     const { confirm_password, ...passwordData } = passwordForm
     emit('change-password', passwordData as PasswordUpdateRequest)
   } catch (error) {
-    if (error?.errorFields) {
+    const validateError = error as { errorFields?: unknown[] }
+    if (validateError?.errorFields) {
       message.warning('请检查输入信息')
     }
   }
@@ -233,9 +251,9 @@ const handleCancel = () => {
   Object.assign(passwordForm, {
     current_password: '',
     new_password: '',
-    confirm_password: ''
+    confirm_password: '',
   })
-  
+
   emit('cancel')
 }
 
@@ -243,14 +261,14 @@ const handleCancel = () => {
 const passwordStrength = computed(() => {
   const password = passwordForm.new_password
   if (!password) return 0
-  
+
   let score = 0
   if (password.length >= 8) score++
   if (/[A-Z]/.test(password)) score++
   if (/[a-z]/.test(password)) score++
   if (/\d/.test(password)) score++
-  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) score++
-  
+  if (passwordSymbolPattern.test(password)) score++
+
   return score
 })
 
@@ -260,7 +278,7 @@ const isStrongPassword = computed(() => passwordStrength.value >= 4)
 // 格式化最后修改时间
 const lastPasswordChange = computed(() => {
   if (!props.lastPasswordChange) return null
-  
+
   try {
     const date = new Date(props.lastPasswordChange)
     return date.toLocaleString('zh-CN', {
@@ -268,7 +286,7 @@ const lastPasswordChange = computed(() => {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     })
   } catch {
     return '时间格式错误'
@@ -282,11 +300,11 @@ defineExpose({
     Object.assign(passwordForm, {
       current_password: '',
       new_password: '',
-      confirm_password: ''
+      confirm_password: '',
     })
   },
   validateForm: () => formRef.value?.validate(),
-  isStrongPassword
+  isStrongPassword,
 })
 </script>
 

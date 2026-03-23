@@ -1,50 +1,112 @@
 <template>
   <div class="qc-dashboard">
-    <a-page-header title="质控看板" sub-title="汇总执行与质量指标">
+    <a-page-header
+      title="质控看板"
+      sub-title="汇总执行与质量指标"
+    >
       <template #extra>
         <a-space>
-          <a-button :loading="loading" @click="fetchSummary">
-            <template #icon><ReloadOutlined /></template>
+          <a-button
+            :loading="loading"
+            @click="fetchSummary"
+          >
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             刷新
           </a-button>
-          <a-button type="primary" :loading="exporting" @click="exportSummary">
-            <template #icon><DownloadOutlined /></template>
+          <a-button
+            type="primary"
+            :loading="exporting"
+            @click="exportSummary"
+          >
+            <template #icon>
+              <DownloadOutlined />
+            </template>
             导出
           </a-button>
         </a-space>
       </template>
     </a-page-header>
 
-    <a-row :gutter="16" class="kpi-row">
+    <a-row
+      :gutter="16"
+      class="kpi-row"
+    >
       <a-col :span="6">
-        <a-card size="small"><a-statistic title="病历数" :value="kpis.total_records" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="病历数"
+            :value="kpis.total_records"
+          />
+        </a-card>
       </a-col>
       <a-col :span="6">
-        <a-card size="small"><a-statistic title="执行数" :value="kpis.qc_executions" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="执行数"
+            :value="kpis.qc_executions"
+          />
+        </a-card>
       </a-col>
       <a-col :span="6">
-        <a-card size="small"><a-statistic title="平均得分" :value="kpis.avg_qc_score" :precision="1" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="平均得分"
+            :value="kpis.avg_qc_score"
+            :precision="1"
+          />
+        </a-card>
       </a-col>
       <a-col :span="6">
-        <a-card size="small"><a-statistic title="启用规则" :value="kpis.active_rules" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="启用规则"
+            :value="kpis.active_rules"
+          />
+        </a-card>
       </a-col>
     </a-row>
 
-    <a-row :gutter="16" style="margin-top: 12px;">
+    <a-row
+      :gutter="16"
+      style="margin-top: 12px"
+    >
       <a-col :span="8">
-        <a-card size="small"><a-statistic title="通过" :value="kpis.passed" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="通过"
+            :value="kpis.passed"
+          />
+        </a-card>
       </a-col>
       <a-col :span="8">
-        <a-card size="small"><a-statistic title="告警" :value="kpis.warning" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="告警"
+            :value="kpis.warning"
+          />
+        </a-card>
       </a-col>
       <a-col :span="8">
-        <a-card size="small"><a-statistic title="失败" :value="kpis.failed" /></a-card>
+        <a-card size="small">
+          <a-statistic
+            title="失败"
+            :value="kpis.failed"
+          />
+        </a-card>
       </a-col>
     </a-row>
 
-    <div v-if="downloadUrl" class="export-tip">
+    <div
+      v-if="downloadUrl"
+      class="export-tip"
+    >
       导出已生成：
-      <a href="javascript:void(0)" @click="openDownload">{{ downloadUrl }}</a>
+      <a
+        href="javascript:void(0)"
+        @click="openDownload"
+      >{{ downloadUrl }}</a>
     </div>
   </div>
 </template>
@@ -94,10 +156,10 @@ const fetchSummary = async () => {
   try {
     const resp = await fetch('/api/reports/qc/summary')
     if (!resp.ok) throw new Error(await resp.text())
-    const data = await resp.json() as { kpis?: Partial<KPIData> }
+    const data = (await resp.json()) as { kpis?: Partial<KPIData> }
     kpis.value = {
       ...kpis.value,
-      ...(data.kpis || {})
+      ...(data.kpis || {}),
     }
   } catch (e: unknown) {
     message.error('加载看板失败: ' + getErrorMessage(e))
@@ -115,8 +177,8 @@ const exportSummary = async () => {
       body: JSON.stringify({ record_ids: [] }),
     })
     if (!resp.ok) throw new Error(await resp.text())
-    const data = await resp.json() as { download_url?: string }
-    downloadUrl.value = data.download_url
+    const data = (await resp.json()) as { download_url?: string }
+    downloadUrl.value = data.download_url || ''
     message.success('导出任务已创建')
   } catch (e: unknown) {
     message.error('导出失败: ' + getErrorMessage(e))
@@ -140,6 +202,10 @@ onMounted(() => {
 .qc-dashboard {
   padding: 16px;
 }
-.kpi-row { margin-top: 8px; }
-.export-tip { margin-top: 16px; }
+.kpi-row {
+  margin-top: 8px;
+}
+.export-tip {
+  margin-top: 16px;
+}
 </style>

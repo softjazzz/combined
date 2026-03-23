@@ -1,12 +1,19 @@
 <template>
   <div class="all-tasks-container p-8 bg-gray-50 min-h-screen">
     <!-- CreateTaskDrawer -->
-    <CreateTaskDrawer v-model:open="showCreateDrawer" @created="onTaskCreated" />
+    <CreateTaskDrawer
+      v-model:open="showCreateDrawer"
+      @created="onTaskCreated"
+    />
 
     <!-- 页面标题 -->
     <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">全部任务</h1>
-      <p class="text-gray-600">管理和监控系统中的所有质控任务</p>
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">
+        全部任务
+      </h1>
+      <p class="text-gray-600">
+        管理和监控系统中的所有质控任务
+      </p>
     </div>
 
     <!-- 任务统计概览 -->
@@ -14,56 +21,76 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">总任务数</p>
-            <p class="text-3xl font-bold text-gray-800">{{ taskStats.total }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              总任务数
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              {{ taskStats.total }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
             <ProjectOutlined class="text-gray-600 text-xl" />
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">待分配</p>
-            <p class="text-3xl font-bold text-orange-600">{{ taskStats.draft }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              待分配
+            </p>
+            <p class="text-3xl font-bold text-orange-600">
+              {{ taskStats.draft }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
             <ClockCircleOutlined class="text-orange-600 text-xl" />
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">进行中</p>
-            <p class="text-3xl font-bold text-blue-600">{{ taskStats.in_progress }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              进行中
+            </p>
+            <p class="text-3xl font-bold text-blue-600">
+              {{ taskStats.in_progress }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
             <SyncOutlined class="text-blue-600 text-xl" />
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">已完成</p>
-            <p class="text-3xl font-bold text-green-600">{{ taskStats.completed }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              已完成
+            </p>
+            <p class="text-3xl font-bold text-green-600">
+              {{ taskStats.completed }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <CheckCircleOutlined class="text-green-600 text-xl" />
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">逾期任务</p>
-            <p class="text-3xl font-bold text-red-600">{{ taskStats.cancelled }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              逾期任务
+            </p>
+            <p class="text-3xl font-bold text-red-600">
+              {{ taskStats.cancelled }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
             <ExclamationCircleOutlined class="text-red-600 text-xl" />
@@ -74,21 +101,40 @@
 
     <!-- 管理操作区域 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
-      <h2 class="text-xl font-semibold text-gray-800 mb-4">任务管理</h2>
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">
+        任务管理
+      </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <a-button type="primary" size="large" @click="handleCreateTask" class="rounded-lg h-16">
+        <a-button
+          type="primary"
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleCreateTask"
+        >
           <PlusOutlined class="text-lg" />
           <span class="ml-2">创建任务</span>
         </a-button>
-        <a-button size="large" @click="handleBatchAssign" class="rounded-lg h-16">
+        <a-button
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleBatchAssign"
+        >
           <TeamOutlined class="text-lg" />
           <span class="ml-2">批量分配</span>
         </a-button>
-        <a-button size="large" @click="handleTaskTemplate" class="rounded-lg h-16">
+        <a-button
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleTaskTemplate"
+        >
           <FileOutlined class="text-lg" />
           <span class="ml-2">任务模板</span>
         </a-button>
-        <a-button size="large" @click="handleTaskAnalysis" class="rounded-lg h-16">
+        <a-button
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleTaskAnalysis"
+        >
           <BarChartOutlined class="text-lg" />
           <span class="ml-2">任务分析</span>
         </a-button>
@@ -107,40 +153,47 @@
             <SearchOutlined class="text-gray-400" />
           </template>
         </a-input>
-        
+
         <a-select
           v-model:value="selectedStatus"
           placeholder="选择状态"
           class="rounded-lg"
           :options="statusOptions"
         />
-        
+
         <a-select
           v-model:value="selectedAssignee"
           placeholder="选择负责人"
           class="rounded-lg"
           :options="assigneeOptions"
         />
-        
+
         <a-select
           v-model:value="selectedDepartment"
           placeholder="选择科室"
           class="rounded-lg"
           :options="departmentOptions"
         />
-        
+
         <a-range-picker
           v-model:value="dateRange"
           placeholder="选择日期范围"
           class="rounded-lg"
         />
-        
+
         <div class="flex space-x-2">
-          <a-button type="primary" @click="handleSearch" class="rounded-lg">
+          <a-button
+            type="primary"
+            class="rounded-lg"
+            @click="handleSearch"
+          >
             <SearchOutlined />
             搜索
           </a-button>
-          <a-button @click="handleReset" class="rounded-lg">
+          <a-button
+            class="rounded-lg"
+            @click="handleReset"
+          >
             <ReloadOutlined />
             重置
           </a-button>
@@ -151,13 +204,23 @@
     <!-- 任务列表 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
       <div class="flex justify-between items-center mb-6">
-        <h2 class="text-xl font-semibold text-gray-800">任务列表</h2>
+        <h2 class="text-xl font-semibold text-gray-800">
+          任务列表
+        </h2>
         <div class="flex space-x-2">
-          <a-button type="primary" @click="handleRefresh" :loading="loading" class="rounded-lg">
+          <a-button
+            type="primary"
+            :loading="loading"
+            class="rounded-lg"
+            @click="handleRefresh"
+          >
             <ReloadOutlined />
             刷新
           </a-button>
-          <a-button @click="handleExport" class="rounded-lg">
+          <a-button
+            class="rounded-lg"
+            @click="handleExport"
+          >
             <DownloadOutlined />
             导出
           </a-button>
@@ -170,9 +233,9 @@
         :loading="loading"
         :pagination="pagination"
         :row-selection="rowSelection"
-        @change="handleTableChange"
         row-key="id"
         class="rounded-lg"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'priority'">
@@ -186,11 +249,17 @@
             </a-tag>
           </template>
           <template v-if="column.key === 'progress'">
-            <a-progress :percent="record.progress" size="small" />
+            <a-progress
+              :percent="record.progress"
+              size="small"
+            />
           </template>
           <template v-if="column.key === 'assignee'">
             <div class="flex items-center">
-              <a-avatar size="small" class="mr-2">
+              <a-avatar
+                size="small"
+                class="mr-2"
+              >
                 {{ record.assignee?.charAt(0) }}
               </a-avatar>
               {{ record.assignee || '未分配' }}
@@ -198,24 +267,37 @@
           </template>
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
-              <a-button type="link" size="small" @click="handleViewDetail(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleViewDetail(record)"
+              >
                 <EyeOutlined />
                 详情
               </a-button>
-              <a-button 
-                type="link" 
-                size="small" 
-                @click="handleAssign(record)"
+              <a-button
                 v-if="!record.assignee"
+                type="link"
+                size="small"
+                @click="handleAssign(record)"
               >
                 <UserAddOutlined />
                 分配
               </a-button>
-              <a-button type="link" size="small" @click="handleEdit(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleEdit(record)"
+              >
                 <EditOutlined />
                 编辑
               </a-button>
-              <a-button type="link" size="small" danger @click="handleDelete(record)">
+              <a-button
+                type="link"
+                size="small"
+                danger
+                @click="handleDelete(record)"
+              >
                 <DeleteOutlined />
                 删除
               </a-button>
@@ -249,7 +331,7 @@ import {
   EyeOutlined,
   UserAddOutlined,
   EditOutlined,
-  DeleteOutlined
+  DeleteOutlined,
 } from '@ant-design/icons-vue'
 
 // 响应式数据
@@ -260,7 +342,7 @@ const selectedAssignee = ref(undefined)
 const selectedDepartment = ref(undefined)
 const dateRange = ref([])
 const tasks = ref<TaskItem[]>([])
-const selectedRowKeys = ref([])
+const selectedRowKeys = ref<string[]>([])
 const showCreateDrawer = ref(false)
 
 // 任务统计
@@ -280,7 +362,7 @@ const pagination = ref({
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条任务`
+  showTotal: (total: number) => `共 ${total} 条任务`,
 })
 
 // 行选择配置
@@ -288,7 +370,7 @@ const rowSelection = {
   selectedRowKeys: selectedRowKeys,
   onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
-  }
+  },
 }
 
 // 选项配置
@@ -298,20 +380,20 @@ const statusOptions = [
   { value: 'assigned', label: '已分配' },
   { value: 'in_progress', label: '进行中' },
   { value: 'completed', label: '已完成' },
-  { value: 'cancelled', label: '已取消' }
+  { value: 'cancelled', label: '已取消' },
 ]
 
 const assigneeOptions = [
   { value: 'zhang_san', label: '张三' },
   { value: 'li_si', label: '李四' },
-  { value: 'wang_wu', label: '王五' }
+  { value: 'wang_wu', label: '王五' },
 ]
 
 const departmentOptions = [
   { value: 'internal', label: '内科' },
   { value: 'surgery', label: '外科' },
   { value: 'pediatrics', label: '儿科' },
-  { value: 'obstetrics', label: '妇产科' }
+  { value: 'obstetrics', label: '妇产科' },
 ]
 
 // 表格列配置
@@ -326,16 +408,15 @@ const columns = [
   { title: '创建人', dataIndex: 'creator_name', key: 'creatorName', width: 100 },
   { title: '创建时间', dataIndex: 'created_at', key: 'createTime', width: 150 },
   { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
-  { title: '操作', key: 'action', width: 250, fixed: 'right' as const }
+  { title: '操作', key: 'action', width: 250, fixed: 'right' as const },
 ]
-
 
 // 工具函数
 const getPriorityColor = (priority: string) => {
   const colorMap: Record<string, string> = {
     high: 'red',
     medium: 'orange',
-    low: 'green'
+    low: 'green',
   }
   return colorMap[priority] || 'default'
 }
@@ -344,23 +425,31 @@ const getPriorityText = (priority: string) => {
   const textMap: Record<string, string> = {
     high: '高',
     medium: '中',
-    low: '低'
+    low: '低',
   }
   return textMap[priority] || priority
 }
 
 const getStatusColor = (status: string) => {
   const colorMap: Record<string, string> = {
-    draft: 'default', sampling: 'cyan', assigned: 'orange',
-    in_progress: 'blue', completed: 'green', cancelled: 'red'
+    draft: 'default',
+    sampling: 'cyan',
+    assigned: 'orange',
+    in_progress: 'blue',
+    completed: 'green',
+    cancelled: 'red',
   }
   return colorMap[status] || 'default'
 }
 
 const getStatusText = (status: string) => {
   const textMap: Record<string, string> = {
-    draft: '草稿', sampling: '抽样中', assigned: '已分配',
-    in_progress: '进行中', completed: '已完成', cancelled: '已取消'
+    draft: '草稿',
+    sampling: '抽样中',
+    assigned: '已分配',
+    in_progress: '进行中',
+    completed: '已完成',
+    cancelled: '已取消',
   }
   return textMap[status] || status
 }

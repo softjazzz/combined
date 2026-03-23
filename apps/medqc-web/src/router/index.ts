@@ -8,7 +8,7 @@ import LLMParseResultView from '@/views/medical-records/LLMParseResultView.vue'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/dashboard'
+    redirect: '/dashboard',
   },
   // 认证相关路由
   {
@@ -22,8 +22,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/auth/LoginView.vue'),
         meta: {
           requiresAuth: false,
-          title: '登录'
-        }
+          title: '登录',
+        },
       },
       {
         path: 'register',
@@ -31,8 +31,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/auth/RegisterView.vue'),
         meta: {
           requiresAuth: false,
-          title: '注册'
-        }
+          title: '注册',
+        },
       },
       {
         path: 'forgot-password',
@@ -40,8 +40,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/auth/ForgotPasswordView.vue'),
         meta: {
           requiresAuth: false,
-          title: '忘记密码'
-        }
+          title: '忘记密码',
+        },
       },
       {
         path: 'profile',
@@ -49,16 +49,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/auth/ProfileView.vue'),
         meta: {
           requiresAuth: true,
-          title: '个人资料'
-        }
-      }
-    ]
+          title: '个人资料',
+        },
+      },
+    ],
   },
   {
     path: '/dashboard',
     component: () => import('@/components/layout/MainLayout.vue'),
     meta: {
-      requiresAuth: true
+      requiresAuth: true,
     },
     children: [
       {
@@ -67,8 +67,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/DashboardView.vue'),
         meta: {
           title: '仪表板',
-          icon: 'DashboardOutlined'
-        }
+          icon: 'DashboardOutlined',
+        },
       },
       // 病案质控相关路由
       {
@@ -78,8 +78,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '运行病历',
           icon: 'PlayCircleOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'records/final',
@@ -88,8 +88,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '终末病历',
           icon: 'CheckCircleOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       // 智能质控工作站 V4（主质控工作台）
       {
@@ -99,8 +99,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '智能质控工作站',
           icon: 'DesktopOutlined',
-          permission: ['admin', 'qc_manager', 'coder', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'coder', 'doctor'],
+        },
       },
       {
         path: 'workstation/import',
@@ -109,8 +109,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '病历数据导入',
           hidden: true,
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'workstation/qc-overview',
@@ -119,8 +119,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控消息概览',
           hidden: true,
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'workstation/qc-stats',
@@ -129,8 +129,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控统计分析',
           hidden: true,
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'frontpage-demo',
@@ -139,8 +139,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '首页自动生成（Demo）',
           icon: 'FileTextOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'records/test',
@@ -149,8 +149,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '测试病历管理',
           icon: 'ProfileOutlined',
-          permission: ['admin', 'qc_manager', 'developer']
-        }
+          permission: ['admin', 'qc_manager', 'developer'],
+        },
       },
       {
         path: 'records/:id',
@@ -158,8 +158,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/records/RecordDetailView.vue'),
         meta: {
           title: '病案详情',
-          hidden: true
-        }
+          hidden: true,
+        },
       },
       // 任务管理相关路由
       {
@@ -168,8 +168,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dashboard/tasks/MyTasksView.vue'),
         meta: {
           title: '我的任务',
-          icon: 'UserOutlined'
-        }
+          icon: 'UserOutlined',
+        },
       },
       {
         path: 'tasks/all',
@@ -178,8 +178,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '全部任务',
           icon: 'TeamOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       // 质控流程相关路由
       {
@@ -189,8 +189,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控申诉',
           icon: 'MessageOutlined',
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'qc/scoring-config',
@@ -199,8 +199,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '评分阈值配置',
           icon: 'SettingOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'qc/rectifications',
@@ -209,10 +209,9 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '整改任务',
           icon: 'ToolOutlined',
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
-
 
       // 质控规则管理路由（统一的标签页版本，包含传统规则、语义规则和科室规则）
       {
@@ -222,8 +221,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控规则管理',
           icon: 'SettingOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'rules/docs',
@@ -233,39 +232,39 @@ const routes: RouteRecordRaw[] = [
           title: '质控规则说明',
           icon: 'FileTextOutlined',
           permission: ['admin', 'qc_manager'],
-          hidden: true
-        }
+          hidden: true,
+        },
       },
       // 科室级质控规则管理路由（重定向到统一的规则管理页面）
       {
         path: 'department-rules',
         redirect: '/dashboard/rules?tab=department',
         meta: {
-          hidden: true // 隐藏在菜单中，已整合到主规则管理页面
-        }
+          hidden: true, // 隐藏在菜单中，已整合到主规则管理页面
+        },
       },
       // 质控集成测试路由
       {
         path: 'qc-integration-test',
         name: 'QCIntegrationTest',
-        component: () => import('@/views/test/QCIntegrationTest.vue'),
+        component: () => import('@/views/test/' + 'QCIntegrationTest.vue'),
         meta: {
           title: '质控集成测试',
           icon: 'ExperimentOutlined',
-          permission: ['admin', 'developer']
-        }
+          permission: ['admin', 'developer'],
+        },
       },
       // 语义质控规则管理路由（独立路由，保留作为备用）
       {
         path: 'semantic-rules',
         name: 'SemanticRules',
-        component: () => import('@/views/rules/SemanticRulesView.vue'),
+        component: () => import('@/views/rules/' + 'SemanticRulesView.vue'),
         meta: {
           title: '语义质控规则管理',
           icon: 'BranchesOutlined',
           permission: ['admin'],
-          hidden: true // 隐藏在菜单中，因为现在集成到主规则管理页面
-        }
+          hidden: true, // 隐藏在菜单中，因为现在集成到主规则管理页面
+        },
       },
       // 自定义质控规则管理路由（泸县33条规则）
       {
@@ -275,8 +274,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '自定义质控规则',
           icon: 'AppstoreOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       // 批量质控评估路由
       {
@@ -288,19 +287,20 @@ const routes: RouteRecordRaw[] = [
           icon: 'CheckSquareOutlined',
           hidden: true,
           permission: ['admin', 'qc_manager'],
-          allowDemo: true  // 允许演示模式访问（通过?demo=true参数）
-        }
+          allowDemo: true, // 允许演示模式访问（通过?demo=true参数）
+        },
       },
       // 质控点管理路由
       {
         path: 'quality-control',
         name: 'QualityControlPointManagement',
-        component: () => import('@/views/dashboard/quality-control/QualityControlPointManagement.vue'),
+        component: () =>
+          import('@/views/dashboard/quality-control/QualityControlPointManagement.vue'),
         meta: {
           title: '非编码质控点管理',
           icon: 'ControlOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'quality-control/create',
@@ -309,8 +309,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '新建质控点',
           hidden: true,
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
 
       // 评分标准配置路由
@@ -321,8 +321,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '评分标准配置',
           icon: 'StarOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'staff-ranking',
@@ -331,8 +331,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控员工作量排名',
           icon: 'TrophyOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       {
         path: 'notifications',
@@ -341,7 +341,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '通知与整改',
           icon: 'BellOutlined',
-        }
+        },
       },
 
       // 数据权限配置路由
@@ -352,8 +352,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '数据权限配置',
           icon: 'SafetyCertificateOutlined',
-          permission: ['admin']
-        }
+          permission: ['admin'],
+        },
       },
       {
         path: 'llm-qc-demo',
@@ -362,8 +362,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'LLM质控演示',
           icon: 'ExperimentOutlined',
-          permission: ['admin']
-        }
+          permission: ['admin'],
+        },
       },
       {
         path: 'llm-qc-demo-enhanced',
@@ -373,8 +373,8 @@ const routes: RouteRecordRaw[] = [
           title: 'LLM质控演示增强版',
           icon: 'ExperimentOutlined',
           permission: ['admin'],
-          description: '完整的LLM质控演示系统，包含规则应用、通知提醒和申诉功能'
-        }
+          description: '完整的LLM质控演示系统，包含规则应用、通知提醒和申诉功能',
+        },
       },
       {
         path: 'llm-qc-demo-new',
@@ -384,8 +384,8 @@ const routes: RouteRecordRaw[] = [
           title: 'LLM质控演示新版（测试）',
           icon: 'ExperimentOutlined',
           permission: ['admin'],
-          description: '重构后的LLM质控演示系统 - P0测试版'
-        }
+          description: '重构后的LLM质控演示系统 - P0测试版',
+        },
       },
       {
         path: 'sichuan-qc-demo',
@@ -395,8 +395,8 @@ const routes: RouteRecordRaw[] = [
           title: '四川质控引擎演示',
           icon: 'ThunderboltOutlined',
           permission: ['admin'],
-          description: '基于阿里云百炼 LLM 的四川质控引擎演示，展示首次病程记录质控分析'
-        }
+          description: '基于阿里云百炼 LLM 的四川质控引擎演示，展示首次病程记录质控分析',
+        },
       },
       {
         path: 'test-demo',
@@ -406,8 +406,8 @@ const routes: RouteRecordRaw[] = [
           title: '组件测试',
           icon: 'BugOutlined',
           permission: ['admin'],
-          description: '测试演示组件功能'
-        }
+          description: '测试演示组件功能',
+        },
       },
       {
         path: 'test/llm-config',
@@ -416,8 +416,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'LLM配置测试',
           icon: 'SettingOutlined',
-          hidden: true // 隐藏在菜单中，只能直接访问
-        }
+          hidden: true, // 隐藏在菜单中，只能直接访问
+        },
       },
       {
         path: 'test/simple-llm',
@@ -426,15 +426,15 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '简化LLM测试',
           icon: 'ExperimentOutlined',
-          hidden: true
-        }
+          hidden: true,
+        },
       },
 
       {
         path: 'llm-result',
         name: 'LLMParseResult',
         component: LLMParseResultView,
-        meta: { title: 'LLM解析结果', icon: 'FileTextOutlined', hidden: true }
+        meta: { title: 'LLM解析结果', icon: 'FileTextOutlined', hidden: true },
       },
 
       // 测试页面
@@ -442,31 +442,31 @@ const routes: RouteRecordRaw[] = [
         path: 'test/modal',
         name: 'ModalTest',
         component: () => import('@/views/test/ModalTest.vue'),
-        meta: { title: 'Modal测试', icon: 'ExperimentOutlined', hidden: true }
+        meta: { title: 'Modal测试', icon: 'ExperimentOutlined', hidden: true },
       },
       {
         path: 'test/batch-processor',
         name: 'BatchProcessorTest',
         component: () => import('@/views/test/BatchProcessorTest.vue'),
-        meta: { title: '批量处理测试', icon: 'ExperimentOutlined', hidden: true }
+        meta: { title: '批量处理测试', icon: 'ExperimentOutlined', hidden: true },
       },
       {
         path: 'test/multi-file-upload',
         name: 'MultiFileUploadTest',
         component: () => import('@/views/test/MultiFileUploadTest.vue'),
-        meta: { title: '多文件上传测试', icon: 'ExperimentOutlined', hidden: true }
+        meta: { title: '多文件上传测试', icon: 'ExperimentOutlined', hidden: true },
       },
       {
         path: 'test/multi-document-merge',
         name: 'MultiDocumentMergeTest',
         component: () => import('@/views/test/MultiDocumentMergeTest.vue'),
-        meta: { title: '多文档合并测试', icon: 'ExperimentOutlined', hidden: true }
+        meta: { title: '多文档合并测试', icon: 'ExperimentOutlined', hidden: true },
       },
       {
         path: 'test/classification-version',
         name: 'ClassificationVersionTest',
         component: () => import('@/views/test/ClassificationVersionTest.vue'),
-        meta: { title: '分类算法版本测试', icon: 'BranchesOutlined', hidden: true }
+        meta: { title: '分类算法版本测试', icon: 'BranchesOutlined', hidden: true },
       },
 
       // 测试病历管理路由
@@ -477,8 +477,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '测试病历管理',
           icon: 'FileTextOutlined',
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'medical-records/create',
@@ -487,8 +487,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '新建病历',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'medical-records/:id',
@@ -497,8 +497,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '病历详情',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'medical-records/:id/legacy',
@@ -507,8 +507,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '病历详情（经典版）',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'test/three-column',
@@ -517,8 +517,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '三栏布局测试',
           hidden: true,
-          requiresAuth: false
-        }
+          requiresAuth: false,
+        },
       },
       {
         path: 'test/basic',
@@ -527,8 +527,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '基础功能测试',
           hidden: true,
-          requiresAuth: false
-        }
+          requiresAuth: false,
+        },
       },
       {
         path: 'test/validation',
@@ -537,8 +537,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '三栏布局验证',
           hidden: true,
-          requiresAuth: false
-        }
+          requiresAuth: false,
+        },
       },
       {
         path: 'medical-records/:id/simple',
@@ -547,8 +547,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '病历详情（简化版）',
           hidden: true,
-          requiresAuth: false
-        }
+          requiresAuth: false,
+        },
       },
       {
         path: 'medical-records/:id/qc-sichuan',
@@ -557,8 +557,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '四川省质控结果',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'medical-records/edit/:id',
@@ -567,8 +567,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '编辑病历',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'medical-records/smart-import',
@@ -578,8 +578,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '智能导入病历',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'medical-records/batch-import',
@@ -588,8 +588,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '批量智能导入',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       // 简化版本作为备用
       {
@@ -599,8 +599,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '智能导入病历（简化版）',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       // 保留原版本作为备用（可选）
       {
@@ -610,8 +610,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '智能导入病历（经典版）',
           hidden: true,
-          permission: ['admin', 'qc_manager', 'doctor']
-        }
+          permission: ['admin', 'qc_manager', 'doctor'],
+        },
       },
       {
         path: 'department-config',
@@ -620,8 +620,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '专科化配置',
           icon: 'BranchesOutlined',
-          permission: ['admin']
-        }
+          permission: ['admin'],
+        },
       },
       {
         path: 'department-config-test',
@@ -630,8 +630,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '专科化配置测试',
           icon: 'ExperimentOutlined',
-          permission: ['admin']
-        }
+          permission: ['admin'],
+        },
       },
       {
         path: 'statistics',
@@ -639,8 +639,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/statistics/StatisticsView.vue'),
         meta: {
           title: '统计分析',
-          icon: 'BarChartOutlined'
-        }
+          icon: 'BarChartOutlined',
+        },
       },
       {
         path: 'analytics',
@@ -649,8 +649,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '360度分析',
           icon: 'RadarChartOutlined',
-          permission: ['admin', 'qc_manager']
-        }
+          permission: ['admin', 'qc_manager'],
+        },
       },
       // DRG/DIP 模块路由
       {
@@ -661,7 +661,7 @@ const routes: RouteRecordRaw[] = [
           title: 'DRG/DIP',
           icon: 'MedicineBoxOutlined',
           allowDemo: true,
-          permission: ['admin', 'qc_manager', 'coder', 'reviewer']
+          permission: ['admin', 'qc_manager', 'coder', 'reviewer'],
         },
         children: [
           {
@@ -670,8 +670,8 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/drg/Index.vue'),
             meta: {
               title: 'DRG 首页',
-              icon: 'HomeOutlined'
-            }
+              icon: 'HomeOutlined',
+            },
           },
           {
             path: 'coding',
@@ -680,8 +680,8 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: '编码辅助',
               icon: 'EditOutlined',
-              description: 'ICD 编码推荐和校验'
-            }
+              description: 'ICD 编码推荐和校验',
+            },
           },
           {
             path: 'coding/:admissionId',
@@ -689,8 +689,8 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/drg/CodingDetail.vue'),
             meta: {
               title: '编码详情',
-              hidden: true
-            }
+              hidden: true,
+            },
           },
           {
             path: 'grouping',
@@ -699,8 +699,8 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'DRG 分组',
               icon: 'ClusterOutlined',
-              description: 'DRG 入组预测和费用分析'
-            }
+              description: 'DRG 入组预测和费用分析',
+            },
           },
           {
             path: 'config',
@@ -709,8 +709,8 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: '分组器配置',
               icon: 'SettingOutlined',
-              description: '分组规则与参数配置'
-            }
+              description: '分组规则与参数配置',
+            },
           },
           {
             path: 'settlement',
@@ -719,8 +719,8 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: '医保结算清单',
               icon: 'FileProtectOutlined',
-              description: '医保结算清单填报与质控'
-            }
+              description: '医保结算清单填报与质控',
+            },
           },
           {
             path: 'monitor',
@@ -729,8 +729,8 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: '事中监控',
               icon: 'DashboardOutlined',
-              description: '实时预警和编码建议'
-            }
+              description: '实时预警和编码建议',
+            },
           },
           {
             path: 'fee-monitoring',
@@ -739,8 +739,8 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: '付费监测',
               icon: 'DollarOutlined',
-              description: '费用监测与未入组修正建议'
-            }
+              description: '费用监测与未入组修正建议',
+            },
           },
           {
             path: 'analysis',
@@ -750,10 +750,10 @@ const routes: RouteRecordRaw[] = [
               title: '事后分析',
               icon: 'BarChartOutlined',
               description: 'DRG 绩效统计和盈亏分析',
-              permission: ['admin', 'qc_manager']
-            }
-          }
-        ]
+              permission: ['admin', 'qc_manager'],
+            },
+          },
+        ],
       },
       {
         path: 'settings',
@@ -762,8 +762,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '系统设置',
           icon: 'SettingOutlined',
-          permission: ['admin']
-        }
+          permission: ['admin'],
+        },
       },
       {
         path: 'debug/api-test',
@@ -772,17 +772,17 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'API测试',
           icon: 'ApiOutlined',
-          hidden: true // 隐藏在菜单中，仅用于调试
-        }
-      }
-    ]
+          hidden: true, // 隐藏在菜单中，仅用于调试
+        },
+      },
+    ],
   },
   // 演示页面路由 (无需登录)
   {
     path: '/demo/lx33',
     component: () => import('@/layouts/SimpleLayout.vue'),
     meta: {
-      requiresAuth: false
+      requiresAuth: false,
     },
     children: [
       {
@@ -791,8 +791,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/demo/LX33DemoView.vue'),
         meta: {
           requiresAuth: false,
-          title: '泸县33条质控规则演示'
-        }
+          title: '泸县33条质控规则演示',
+        },
       },
       {
         path: 'feedbacks',
@@ -800,8 +800,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/demo/FeedbacksView.vue'),
         meta: {
           requiresAuth: false,
-          title: '反馈记录'
-        }
+          title: '反馈记录',
+        },
       },
       {
         path: 'create',
@@ -809,8 +809,8 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/demo/LX33CreateRuleView.vue'),
         meta: {
           requiresAuth: false,
-          title: 'AI智能创建质控规则'
-        }
+          title: 'AI智能创建质控规则',
+        },
       },
       {
         path: 'frontpage-demo',
@@ -818,10 +818,10 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/demo/FrontPageDemoView.vue'),
         meta: {
           requiresAuth: false,
-          title: '病案首页自动生成 Demo'
-        }
-      }
-    ]
+          title: '病案首页自动生成 Demo',
+        },
+      },
+    ],
   },
   // 验收工作站 V2（独立 Layout，与 Dashboard 完全隔离）
   {
@@ -829,7 +829,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/components/layout/WorkstationLayout.vue'),
     meta: {
       requiresAuth: false,
-      title: '病案智能质控工作站'
+      title: '病案智能质控工作站',
     },
     children: [
       {
@@ -837,7 +837,7 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV2',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'workbench' },
-        meta: { title: '工作台' }
+        meta: { title: '工作台' },
       },
 
       {
@@ -845,57 +845,57 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV2ICD',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'icd-search' },
-        meta: { title: 'ICD 编码查询' }
+        meta: { title: 'ICD 编码查询' },
       },
       {
         path: 'upload',
         name: 'WorkstationV2Upload',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'upload' },
-        meta: { title: '数据上传' }
+        meta: { title: '数据上传' },
       },
       {
         path: 'stats',
         name: 'WorkstationV2Stats',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'workbench' },
-        meta: { title: '统计分析' }
+        meta: { title: '统计分析' },
       },
       {
         path: 'drg/pre',
         name: 'WorkstationV2DRGPre',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'pre-analysis' },
-        meta: { title: '事前分析' }
+        meta: { title: '事前分析' },
       },
       {
         path: 'drg/mid',
         name: 'WorkstationV2DRGMid',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'mid-analysis' },
-        meta: { title: '事中监控' }
+        meta: { title: '事中监控' },
       },
       {
         path: 'drg/payment',
         name: 'WorkstationV2DRGPayment',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'payment' },
-        meta: { title: '付费监测' }
+        meta: { title: '付费监测' },
       },
       {
         path: 'drg/post',
         name: 'WorkstationV2DRGPost',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'post-analysis' },
-        meta: { title: '事后分析' }
+        meta: { title: '事后分析' },
       },
       {
         path: 'data',
         name: 'WorkstationV2Data',
         component: () => import('@/views/workstation-v2/CDMDataView.vue'),
-        meta: { title: '数据管理' }
+        meta: { title: '数据管理' },
       },
-    ]
+    ],
   },
   // 工作台 V3 (卡片式布局)
   {
@@ -903,106 +903,115 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/components/layout/WorkstationLayout.vue'),
     meta: {
       requiresAuth: false,
-      title: '病案智能提取工作台 V3'
+      title: '病案智能提取工作台 V3',
     },
     children: [
       {
         path: '',
         name: 'WorkstationV3Index',
         component: () => import('@/views/workstation-v2/WorkstationV3View.vue'),
-        meta: { title: '工作台 V3', permission: ['admin', 'qc_manager', 'doctor'] }
-      }
-    ]
+        meta: { title: '工作台 V3', permission: ['admin', 'qc_manager', 'doctor'] },
+      },
+    ],
+  },
+  {
+    path: '/workstation-v4/login',
+    name: 'WorkstationV4Login',
+    component: () => import('@/views/workstation-v2/WorkstationLoginView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: '工作台登录',
+    },
   },
   // 病案工作台 V4（科室侧边栏 + 表格）
   {
     path: '/workstation-v4',
     component: () => import('@/components/layout/WorkstationLayout.vue'),
     meta: {
-      requiresAuth: false,
-      title: '病案工作台 V4'
+      requiresAuth: true,
+      title: '病案工作台 V4',
     },
     children: [
       {
         path: '',
         name: 'WorkstationV4Index',
         component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
-        meta: { title: '工作台', permission: ['admin', 'qc_manager', 'doctor'] }
+        meta: { title: '工作台', permission: ['admin', 'qc_manager', 'doctor'] },
       },
       {
         path: 'icd',
         name: 'WorkstationV4ICD',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'icd-search' },
-        meta: { title: 'ICD 编码查询' }
+        meta: { title: 'ICD 编码查询' },
       },
       {
         path: 'upload',
         name: 'WorkstationV4Upload',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'upload' },
-        meta: { title: '数据上传' }
+        meta: { title: '数据上传' },
       },
       {
         path: 'stats',
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'workbench' },
-        meta: { title: '统计分析' }
+        meta: { title: '统计分析' },
       },
       {
         path: 'drg/pre',
         name: 'WorkstationV4DRGPre',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'pre-analysis' },
-        meta: { title: '事前分析' }
+        meta: { title: '事前分析' },
       },
       {
         path: 'drg/mid',
         name: 'WorkstationV4DRGMid',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'mid-analysis' },
-        meta: { title: '事中监控' }
+        meta: { title: '事中监控' },
       },
       {
         path: 'drg/payment',
         name: 'WorkstationV4DRGPayment',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'payment' },
-        meta: { title: '付费监测' }
+        meta: { title: '付费监测' },
       },
       {
         path: 'drg/post',
         name: 'WorkstationV4DRGPost',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'post-analysis' },
-        meta: { title: '事后分析' }
+        meta: { title: '事后分析' },
       },
       {
         path: 'grouper',
         name: 'WorkstationV4Grouper',
         component: () => import('@/views/drg-grouper/GrouperTabsView.vue'),
-        meta: { title: '医保分组器' }
+        meta: { title: '医保分组器' },
       },
       {
         path: 'data',
         name: 'WorkstationV4Data',
         component: () => import('@/views/workstation-v2/CDMDataView.vue'),
-        meta: { title: '数据管理' }
+        meta: { title: '数据管理' },
       },
       {
         path: 'rules',
         name: 'WorkstationV4Rules',
         component: () => import('@/views/workstation-v2/WorkstationRulesView.vue'),
-        meta: { title: '质控规则管理' }
+        meta: { title: '质控规则管理' },
       },
       {
         path: 'system-config',
         name: 'WorkstationV4SystemConfig',
         component: () => import('@/views/workstation-v2/DataSyncConfigPage.vue'),
-        meta: { title: '数据同步配置', permission: ['admin'] }
-      }
-    ]
+        meta: { title: '数据同步配置', permission: ['admin'] },
+      },
+    ],
   },
   // 系统配置（数据库连接、同步管理）
   {
@@ -1010,8 +1019,8 @@ const routes: RouteRecordRaw[] = [
     redirect: { path: '/workstation-v4/system-config' },
     meta: {
       requiresAuth: false,
-      title: '数据同步配置'
-    }
+      title: '数据同步配置',
+    },
   },
   {
     path: '/demo/clinical-workstation',
@@ -1019,17 +1028,17 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/demo/ClinicalWorkstationDemoView.vue'),
     meta: {
       requiresAuth: false,
-      title: '临床工作站 Demo'
-    }
+      title: '临床工作站 Demo',
+    },
   },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/error/NotFoundView.vue'),
     meta: {
-      title: '页面未找到'
-    }
-  }
+      title: '页面未找到',
+    },
+  },
 ]
 
 // 创建路由实例
@@ -1042,12 +1051,14 @@ const router = createRouter({
     } else {
       return { top: 0 }
     }
-  }
+  },
 })
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  const isWorkstationRoute = to.path.startsWith('/workstation-v4')
+  const isWorkstationLogin = to.name === 'WorkstationV4Login'
 
   // 检查是否为演示模式（通过URL参数 ?demo=true）
   const isDemoMode = to.query.demo === 'true'
@@ -1063,6 +1074,22 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
+  // 工作台专属登录页：已登录则直接回工作台目标页
+  if (isWorkstationLogin) {
+    if (!authStore.isAuthenticated) {
+      await authStore.initialize()
+    }
+
+    if (authStore.isAuthenticated) {
+      const redirect =
+        typeof to.query.redirect === 'string' && to.query.redirect.startsWith('/workstation-v4')
+          ? to.query.redirect
+          : '/workstation-v4'
+      next(redirect)
+      return
+    }
+  }
+
   // 检查是否需要认证
   if (to.meta.requiresAuth !== false) {
     // 检查用户是否已登录
@@ -1071,7 +1098,17 @@ router.beforeEach(async (to, from, next) => {
       await authStore.initialize()
 
       if (!authStore.isAuthenticated) {
-        next('/auth/login')
+        if (isWorkstationRoute) {
+          next({
+            path: '/workstation-v4/login',
+            query: { redirect: to.fullPath },
+          })
+        } else {
+          next({
+            path: '/auth/login',
+            query: { redirect: to.fullPath },
+          })
+        }
         return
       }
     }
@@ -1081,9 +1118,7 @@ router.beforeEach(async (to, from, next) => {
       const userRoles = authStore.userRoles
       const requiredPermissions = to.meta.permission as string[]
 
-      const hasPermission = requiredPermissions.some(permission =>
-        userRoles.includes(permission)
-      )
+      const hasPermission = requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
         // 没有权限，重定向到仪表板

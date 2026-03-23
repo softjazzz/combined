@@ -3,27 +3,46 @@
     <!-- 顶部欢迎区 -->
     <div class="welcome-section">
       <div class="welcome-content">
-        <h1 class="welcome-title">DRG/DIP 智能质控平台</h1>
-        <p class="welcome-subtitle">基于 AI 的病案首页编码辅助与分组预警系统</p>
+        <h1 class="welcome-title">
+          DRG/DIP 智能质控平台
+        </h1>
+        <p class="welcome-subtitle">
+          基于 AI 的病案首页编码辅助与分组预警系统
+        </p>
         <div class="stats-row">
           <div class="stat-item">
-            <div class="stat-value">{{ statistics.pendingCoding }}</div>
-            <div class="stat-label">待编码病案</div>
+            <div class="stat-value">
+              {{ statistics.pendingCoding }}
+            </div>
+            <div class="stat-label">
+              待编码病案
+            </div>
           </div>
-          <div class="stat-divider"></div>
+          <div class="stat-divider" />
           <div class="stat-item">
-            <div class="stat-value warning">{{ statistics.pendingAlerts }}</div>
-            <div class="stat-label">待处理预警</div>
+            <div class="stat-value warning">
+              {{ statistics.pendingAlerts }}
+            </div>
+            <div class="stat-label">
+              待处理预警
+            </div>
           </div>
-          <div class="stat-divider"></div>
+          <div class="stat-divider" />
           <div class="stat-item">
-            <div class="stat-value success">{{ statistics.drgGroupRate }}%</div>
-            <div class="stat-label">入组率</div>
+            <div class="stat-value success">
+              {{ statistics.drgGroupRate }}%
+            </div>
+            <div class="stat-label">
+              入组率
+            </div>
           </div>
         </div>
       </div>
       <div class="welcome-decoration">
-        <img src="https://gw.alipayobjects.com/zos/bmw-prod/677b102c-4740-4c32-b43f-679fc40d3a57.svg" alt="decoration" />
+        <img
+          src="https://gw.alipayobjects.com/zos/bmw-prod/677b102c-4740-4c32-b43f-679fc40d3a57.svg"
+          alt="decoration"
+        >
       </div>
     </div>
 
@@ -31,10 +50,23 @@
       <!-- 核心功能区 (3+2 布局) -->
       <a-row :gutter="[24, 24]">
         <!-- 第一行：核心流程 -->
-        <a-col :span="8" v-for="module in mainModules" :key="module.key">
-          <div class="feature-card" @click="navigateTo(module.path)">
-            <div class="card-bg" :style="{ background: module.gradient }"></div>
-            <div class="card-icon" :style="{ color: module.color, background: module.iconBg }">
+        <a-col
+          v-for="module in mainModules"
+          :key="module.key"
+          :span="8"
+        >
+          <div
+            class="feature-card"
+            @click="navigateTo(module.path)"
+          >
+            <div
+              class="card-bg"
+              :style="{ background: module.gradient }"
+            />
+            <div
+              class="card-icon"
+              :style="{ color: module.color, background: module.iconBg }"
+            >
               <component :is="module.icon" />
             </div>
             <div class="card-info">
@@ -48,16 +80,26 @@
         </a-col>
 
         <!-- 第二行：分析与监测 -->
-        <a-col :span="12" v-for="module in analysisModules" :key="module.key">
-           <div class="feature-card horizontal" @click="navigateTo(module.path)">
-            <div class="card-icon" :style="{ color: module.color, background: module.iconBg }">
+        <a-col
+          v-for="module in analysisModules"
+          :key="module.key"
+          :span="12"
+        >
+          <div
+            class="feature-card horizontal"
+            @click="navigateTo(module.path)"
+          >
+            <div
+              class="card-icon"
+              :style="{ color: module.color, background: module.iconBg }"
+            >
               <component :is="module.icon" />
             </div>
             <div class="card-info">
               <h3>{{ module.title }}</h3>
               <p>{{ module.description }}</p>
             </div>
-             <div class="card-action">
+            <div class="card-action">
               <span class="enter-text">进入功能</span>
               <ArrowRightOutlined />
             </div>
@@ -66,22 +108,39 @@
       </a-row>
 
       <!-- 最近动态与快捷入口 -->
-      <a-row :gutter="24" style="margin-top: 24px">
+      <a-row
+        :gutter="24"
+        style="margin-top: 24px"
+      >
         <a-col :span="16">
-          <a-card title="最近操作动态" :bordered="false" class="activity-card">
-            <template #extra><a href="#">查看全部</a></template>
-            <a-list item-layout="horizontal" :data-source="recentActivities">
+          <a-card
+            title="最近操作动态"
+            :bordered="false"
+            class="activity-card"
+          >
+            <template #extra>
+              <a href="#">查看全部</a>
+            </template>
+            <a-list
+              item-layout="horizontal"
+              :data-source="recentActivities"
+            >
               <template #renderItem="{ item }">
                 <a-list-item>
-                  <a-list-item-meta
-                    :description="item.time"
-                  >
+                  <a-list-item-meta :description="item.time">
                     <template #title>
                       <span class="activity-title">{{ item.title }}</span>
-                      <span class="activity-desc" v-if="item.description"> - {{ item.description }}</span>
+                      <span
+                        v-if="item.description"
+                        class="activity-desc"
+                      >
+                        - {{ item.description }}</span>
                     </template>
                     <template #avatar>
-                      <div class="activity-icon" :class="item.type">
+                      <div
+                        class="activity-icon"
+                        :class="item.type"
+                      >
                         <component :is="item.icon" />
                       </div>
                     </template>
@@ -92,17 +151,38 @@
           </a-card>
         </a-col>
         <a-col :span="8">
-          <a-card title="智能助手建议" :bordered="false" class="suggestion-card">
-             <div class="suggestion-list">
-               <div class="suggestion-item" v-for="i in 3" :key="i">
-                 <div class="suggestion-icon"><BulbFilled /></div>
-                 <div class="suggestion-content">
-                   <div class="suggestion-text">发现 3 份病案存在主要诊断选择风险，建议复核。</div>
-                   <div class="suggestion-meta">刚刚</div>
-                 </div>
-               </div>
-             </div>
-             <a-button type="primary" ghost block style="margin-top: 16px">查看所有建议</a-button>
+          <a-card
+            title="智能助手建议"
+            :bordered="false"
+            class="suggestion-card"
+          >
+            <div class="suggestion-list">
+              <div
+                v-for="i in 3"
+                :key="i"
+                class="suggestion-item"
+              >
+                <div class="suggestion-icon">
+                  <BulbFilled />
+                </div>
+                <div class="suggestion-content">
+                  <div class="suggestion-text">
+                    发现 3 份病案存在主要诊断选择风险，建议复核。
+                  </div>
+                  <div class="suggestion-meta">
+                    刚刚
+                  </div>
+                </div>
+              </div>
+            </div>
+            <a-button
+              type="primary"
+              ghost
+              block
+              style="margin-top: 16px"
+            >
+              查看所有建议
+            </a-button>
           </a-card>
         </a-col>
       </a-row>
@@ -111,6 +191,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'DrgIndexView' })
 import { ref, onMounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -125,7 +206,7 @@ import {
   BulbFilled,
   ArrowRightOutlined,
   CheckCircleOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
 } from '@ant-design/icons-vue'
 import { drgApi } from '@/api/drg'
 
@@ -142,7 +223,7 @@ const allModules = [
     iconBg: '#e6f7ff',
     gradient: 'linear-gradient(135deg, #e6f7ff 0%, #ffffff 100%)',
     path: '/dashboard/drg/coding',
-    type: 'main'
+    type: 'main',
   },
   {
     key: 'grouping',
@@ -153,7 +234,7 @@ const allModules = [
     iconBg: '#f6ffed',
     gradient: 'linear-gradient(135deg, #f6ffed 0%, #ffffff 100%)',
     path: '/dashboard/drg/grouping',
-    type: 'main'
+    type: 'main',
   },
   {
     key: 'monitor',
@@ -164,7 +245,7 @@ const allModules = [
     iconBg: '#fffbe6',
     gradient: 'linear-gradient(135deg, #fffbe6 0%, #ffffff 100%)',
     path: '/dashboard/drg/monitor',
-    type: 'main'
+    type: 'main',
   },
   {
     key: 'fee-monitoring',
@@ -175,7 +256,7 @@ const allModules = [
     iconBg: '#e6fffb',
     gradient: 'linear-gradient(135deg, #e6fffb 0%, #ffffff 100%)',
     path: '/dashboard/drg/fee-monitoring',
-    type: 'analysis'
+    type: 'analysis',
   },
   {
     key: 'analysis',
@@ -186,12 +267,12 @@ const allModules = [
     iconBg: '#f9f0ff',
     gradient: 'linear-gradient(135deg, #f9f0ff 0%, #ffffff 100%)',
     path: '/dashboard/drg/analysis',
-    type: 'analysis'
-  }
+    type: 'analysis',
+  },
 ]
 
-const mainModules = computed(() => allModules.filter(m => m.type === 'main'))
-const analysisModules = computed(() => allModules.filter(m => m.type === 'analysis'))
+const mainModules = computed(() => allModules.filter((m) => m.type === 'main'))
+const analysisModules = computed(() => allModules.filter((m) => m.type === 'analysis'))
 
 /** 统计数据 */
 const statistics = ref({
@@ -199,7 +280,7 @@ const statistics = ref({
   pendingReview: 0,
   pendingAlerts: 0,
   codingSuggestions: 0,
-  drgGroupRate: 98.5
+  drgGroupRate: 98.5,
 })
 
 /** 最近操作记录 */
@@ -219,7 +300,7 @@ const loadStatistics = async () => {
       pendingReview: 5,
       pendingAlerts: 3,
       codingSuggestions: 8,
-      drgGroupRate: 98.5
+      drgGroupRate: 98.5,
     }
   } catch (error) {
     console.error('加载统计数据失败:', error)
@@ -235,29 +316,29 @@ const loadRecentActivities = async () => {
         description: '主要诊断：I21.900 急性心肌梗死',
         icon: CheckCircleOutlined,
         type: 'success',
-        time: '2分钟前'
+        time: '2分钟前',
       },
       {
         title: 'DRG 分组预测：李四',
         description: '预测分组：FB19 (心力衰竭，不伴并发症)',
         icon: ClusterOutlined,
         type: 'info',
-        time: '10分钟前'
+        time: '10分钟前',
       },
       {
         title: '费用预警确认',
         description: '王五 (ADM...) 药品占比超标',
         icon: WarningOutlined,
         type: 'warning',
-        time: '1小时前'
+        time: '1小时前',
       },
-       {
+      {
         title: '病案提交审核',
         description: '赵六 (ADM...)',
         icon: ClockCircleOutlined,
         type: 'normal',
-        time: '2小时前'
-      }
+        time: '2小时前',
+      },
     ]
   } catch (error) {
     console.error('加载最近操作失败:', error)
@@ -312,20 +393,24 @@ onMounted(() => {
       padding: 16px 32px;
       border-radius: 12px;
       width: fit-content;
-      
+
       .stat-item {
         text-align: center;
         padding: 0 16px;
-        
+
         .stat-value {
           font-size: 24px;
           font-weight: bold;
           line-height: 1.2;
-          
-          &.warning { color: #ffec3d; }
-          &.success { color: #73d13d; }
+
+          &.warning {
+            color: #ffec3d;
+          }
+          &.success {
+            color: #73d13d;
+          }
         }
-        
+
         .stat-label {
           font-size: 12px;
           opacity: 0.8;
@@ -336,7 +421,7 @@ onMounted(() => {
       .stat-divider {
         width: 1px;
         height: 30px;
-        background: rgba(255,255,255,0.3);
+        background: rgba(255, 255, 255, 0.3);
         margin: 0 8px;
       }
     }
@@ -348,7 +433,7 @@ onMounted(() => {
       transform: translateY(-50%);
       z-index: 1;
       opacity: 0.8;
-      
+
       img {
         height: 200px;
       }
@@ -380,7 +465,7 @@ onMounted(() => {
       transform: translateY(-5px);
       box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
       border-color: transparent;
-      
+
       .card-action {
         color: #1890ff;
         transform: translateX(5px);
@@ -415,14 +500,14 @@ onMounted(() => {
     .card-info {
       z-index: 1;
       flex: 1;
-      
+
       h3 {
         font-size: 18px;
         font-weight: 600;
         margin-bottom: 8px;
         color: #1f1f1f;
       }
-      
+
       p {
         color: #8c8c8c;
         font-size: 14px;
@@ -449,7 +534,7 @@ onMounted(() => {
         transition: all 0.3s;
       }
     }
-    
+
     &:hover .card-action .enter-text {
       opacity: 1;
       transform: translateX(0);
@@ -459,12 +544,12 @@ onMounted(() => {
     &.horizontal {
       flex-direction: row;
       align-items: center;
-      
+
       .card-icon {
         margin-bottom: 0;
         margin-right: 20px;
       }
-      
+
       .card-action {
         margin-top: 0;
         align-self: center;
@@ -475,8 +560,8 @@ onMounted(() => {
 
   .activity-card {
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-    
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+
     .activity-icon {
       width: 36px;
       height: 36px;
@@ -485,13 +570,25 @@ onMounted(() => {
       justify-content: center;
       align-items: center;
       font-size: 16px;
-      
-      &.success { background: #f6ffed; color: #52c41a; }
-      &.info { background: #e6f7ff; color: #1890ff; }
-      &.warning { background: #fffbe6; color: #faad14; }
-      &.normal { background: #f0f2f5; color: #8c8c8c; }
+
+      &.success {
+        background: #f6ffed;
+        color: #52c41a;
+      }
+      &.info {
+        background: #e6f7ff;
+        color: #1890ff;
+      }
+      &.warning {
+        background: #fffbe6;
+        color: #faad14;
+      }
+      &.normal {
+        background: #f0f2f5;
+        color: #8c8c8c;
+      }
     }
-    
+
     .activity-title {
       font-weight: 500;
       color: #262626;
@@ -504,7 +601,7 @@ onMounted(() => {
 
   .suggestion-card {
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
     height: 100%;
 
     .suggestion-list {
@@ -512,16 +609,18 @@ onMounted(() => {
         display: flex;
         padding: 12px 0;
         border-bottom: 1px solid #f0f0f0;
-        
-        &:last-child { border-bottom: none; }
-        
+
+        &:last-child {
+          border-bottom: none;
+        }
+
         .suggestion-icon {
           color: #faad14;
           font-size: 16px;
           margin-top: 2px;
           margin-right: 12px;
         }
-        
+
         .suggestion-content {
           .suggestion-text {
             color: #595959;
@@ -544,8 +643,10 @@ onMounted(() => {
   .drg-index .welcome-section {
     height: auto;
     padding-bottom: 60px;
-    
-    .welcome-decoration { display: none; }
+
+    .welcome-decoration {
+      display: none;
+    }
   }
 }
 </style>

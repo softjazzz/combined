@@ -40,7 +40,7 @@ interface RealtimeChannelLike {
   on(
     event: string,
     filterOrCallback: unknown,
-    callback?: (payload: unknown) => void
+    callback?: (payload: unknown) => void,
   ): RealtimeChannelLike
 }
 
@@ -50,13 +50,13 @@ export class WebSocketManager {
   private connectionStats: Map<string, ConnectionStats> = new Map()
   private heartbeatTimers: Map<string, NodeJS.Timeout> = new Map()
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map()
-  
+
   private config: ConnectionConfig = {
     maxRetries: 5,
     retryDelay: 1000,
     heartbeatInterval: 30000, // 30秒
     reconnectOnError: true,
-    bufferSize: 100
+    bufferSize: 100,
   }
 
   /**
@@ -64,7 +64,7 @@ export class WebSocketManager {
    */
   async createConnection(
     channelName: string,
-    config?: Partial<ConnectionConfig>
+    config?: Partial<ConnectionConfig>,
   ): Promise<unknown> {
     try {
       console.log(`🔌 创建WebSocket连接: ${channelName}`)
@@ -84,7 +84,7 @@ export class WebSocketManager {
         averageLatency: 0,
         reconnectCount: 0,
         lastHeartbeat: Date.now(),
-        uptime: Date.now()
+        uptime: Date.now(),
       })
 
       // 初始化消息队列
@@ -94,9 +94,9 @@ export class WebSocketManager {
       const channel = supabase.channel(channelName, {
         config: {
           presence: {
-            key: `user_${Date.now()}`
-          }
-        }
+            key: `user_${Date.now()}`,
+          },
+        },
       })
 
       // 设置连接事件监听
@@ -116,7 +116,6 @@ export class WebSocketManager {
 
       console.log(`✅ WebSocket连接创建成功: ${channelName}`)
       return channel
-
     } catch (error) {
       console.error(`❌ 创建WebSocket连接失败 [${channelName}]:`, error)
       throw error
@@ -129,40 +128,39 @@ export class WebSocketManager {
   private setupConnectionEvents(
     channel: RealtimeChannelLike,
     channelName: string,
-    config: ConnectionConfig
+    config: ConnectionConfig,
   ) {
     // 监听数据库变化
-    channel.on('postgres_changes',  { event: '*', schema: 'public' }, (payload: unknown) => {
+    channel.on('postgres_changes', { event: '*', schema: 'public' }, (payload: unknown) => {
       this.handleMessage(channelName, {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'postgres_changes',
-        payload: (payload as Record<string, unknown>),
+        payload: payload as Record<string, unknown>,
         timestamp: Date.now(),
-        priority: this.determinePriority(payload)
+        priority: this.determinePriority(payload as { eventType?: string; table?: string }),
       })
     })
 
     // 监听自定义事件
-    channel.on('realtime_qc_event',  (payload: unknown) => {
+    channel.on('realtime_qc_event', (payload: unknown) => {
       this.handleMessage(channelName, {
         id: `qc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'realtime_qc_event',
-        payload: (payload as Record<string, unknown>),
+        payload: payload as Record<string, unknown>,
         timestamp: Date.now(),
-        priority: 'high'
+        priority: 'high',
       })
     })
 
     // 监听心跳响应
-    channel.on('heartbeat_response',  (payload: unknown) => {
-      const timestamp = (
+    channel.on('heartbeat_response', (payload: unknown) => {
+      const timestamp =
         typeof payload === 'object' &&
         payload !== null &&
         'timestamp' in payload &&
         typeof (payload as { timestamp: unknown }).timestamp === 'number'
-      )
-        ? (payload as { timestamp: number }).timestamp
-        : Date.now()
+          ? (payload as { timestamp: number }).timestamp
+          : Date.now()
       this.updateHeartbeat(channelName, timestamp)
     })
   }
@@ -203,7 +201,7 @@ export class WebSocketManager {
 
     // 更新统计信息
     stats.totalMessages++
-    
+
     // 计算延迟
     const latency = Date.now() - message.timestamp
     stats.averageLatency = (stats.averageLatency + latency) / 2
@@ -216,14 +214,14 @@ export class WebSocketManager {
       // 将消息加入队列
       const queue = this.messageQueue.get(channelName) || []
       queue.push(message)
-      
+
       // 保持队列大小
       if (queue.length > this.config.bufferSize) {
         queue.shift() // 移除最老的消息
       }
-      
+
       this.messageQueue.set(channelName, queue)
-      
+
       // 批量处理消息
       this.processBatchMessages(channelName)
     }
@@ -235,7 +233,7 @@ export class WebSocketManager {
   private processMessage(channelName: string, message: WebSocketMessage) {
     // 触发自定义事件
     const event = new CustomEvent(`ws_message_${channelName}`, {
-      detail: message
+      detail: message,
     })
     window.dispatchEvent(event)
   }
@@ -257,7 +255,7 @@ export class WebSocketManager {
     const batchSize = Math.min(10, queue.length)
     const batch = queue.splice(0, batchSize)
 
-    batch.forEach(message => {
+    batch.forEach((message) => {
       this.processMessage(channelName, message)
     })
 
@@ -267,7 +265,10 @@ export class WebSocketManager {
   /**
    * 确定消息优先级
    */
-  private determinePriority(payload): WebSocketMessage['priority'] {
+  private determinePriority(payload: {
+    eventType?: string
+    table?: string
+  }): WebSocketMessage['priority'] {
     if (payload.eventType === 'INSERT' && payload.table === 'medical_records') {
       return 'high' // 新病案记录优先级高
     }
@@ -290,7 +291,7 @@ export class WebSocketManager {
         // 发送心跳
         channel.send({
           type: 'heartbeat',
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
       }
     }, interval)
@@ -321,7 +322,7 @@ export class WebSocketManager {
     }
 
     const delay = this.config.retryDelay * Math.pow(2, stats.reconnectCount) // 指数退避
-    
+
     console.log(`🔄 安排重连 [${channelName}]: ${delay}ms 后重试`)
 
     const timer = setTimeout(async () => {
@@ -349,7 +350,7 @@ export class WebSocketManager {
 
     // 计算每秒消息数
     if (stats.uptime > 0) {
-      stats.messagesPerSecond = (stats.totalMessages / (stats.uptime / 1000))
+      stats.messagesPerSecond = stats.totalMessages / (stats.uptime / 1000)
     }
 
     return { ...stats }
@@ -360,11 +361,11 @@ export class WebSocketManager {
    */
   getAllConnectionStats(): Map<string, ConnectionStats> {
     const allStats = new Map<string, ConnectionStats>()
-    
+
     for (const [channelName, stats] of this.connectionStats) {
       allStats.set(channelName, this.getConnectionStats(channelName)!)
     }
-    
+
     return allStats
   }
 
@@ -410,11 +411,9 @@ export class WebSocketManager {
    */
   async closeAllConnections(): Promise<void> {
     const channelNames = Array.from(this.connections.keys())
-    
-    await Promise.all(
-      channelNames.map(channelName => this.closeConnection(channelName))
-    )
-    
+
+    await Promise.all(channelNames.map((channelName) => this.closeConnection(channelName)))
+
     console.log('✅ 所有WebSocket连接已关闭')
   }
 
@@ -448,7 +447,7 @@ export class WebSocketManager {
       channel.send({
         type,
         payload,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       })
       return true
     } catch (error) {

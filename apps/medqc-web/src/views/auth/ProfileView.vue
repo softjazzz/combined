@@ -4,42 +4,59 @@
       <!-- 页面标题 -->
       <div class="mb-8">
         <div class="flex items-center gap-3 mb-2">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center">
+          <div
+            class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center"
+          >
             <UserOutlined class="text-white text-sm" />
           </div>
-          <h1 class="text-2xl font-bold text-slate-100">个人资料</h1>
+          <h1 class="text-2xl font-bold text-slate-100">
+            个人资料
+          </h1>
         </div>
-        <p class="text-slate-400 text-sm">管理您的个人信息和账户设置</p>
+        <p class="text-slate-400 text-sm">
+          管理您的个人信息和账户设置
+        </p>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- 左侧：个人信息卡片 -->
         <div class="lg:col-span-1">
-          <div class="rounded-2xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6 sticky top-6">
+          <div
+            class="rounded-2xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6 sticky top-6"
+          >
             <!-- 用户头像和基本信息 -->
             <div class="text-center mb-6">
               <div class="relative inline-block mb-4">
-                <div class="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center shadow-xl">
-                  <img 
-                    v-if="user?.avatar" 
-                    :src="user.avatar" 
+                <div
+                  class="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center shadow-xl"
+                >
+                  <img
+                    v-if="user?.avatar"
+                    :src="user.avatar"
                     :alt="user.display_name || '用户头像'"
                     class="w-full h-full object-cover"
-                  />
-                  <div v-else class="text-white text-3xl font-bold">
+                  >
+                  <div
+                    v-else
+                    class="text-white text-3xl font-bold"
+                  >
                     {{ avatarInitial }}
                   </div>
                 </div>
-                <div class="absolute -bottom-1 -right-1 w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center border-4 border-slate-800">
+                <div
+                  class="absolute -bottom-1 -right-1 w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center border-4 border-slate-800"
+                >
                   <CheckOutlined class="text-white text-xs" />
                 </div>
               </div>
-              
+
               <h2 class="text-xl font-semibold text-slate-100 mb-1">
                 {{ user?.display_name || '未设置姓名' }}
               </h2>
-              <p class="text-slate-400 text-sm mb-3">{{ user?.email }}</p>
-              
+              <p class="text-slate-400 text-sm mb-3">
+                {{ user?.email }}
+              </p>
+
               <!-- 角色标签 -->
               <div class="flex flex-wrap justify-center gap-2 mb-4">
                 <div
@@ -48,7 +65,7 @@
                   class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
                   :class="getRoleStyle(role)"
                 >
-                  <div 
+                  <div
                     class="w-3 h-3 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
                     :class="getRoleColor(role)"
                   >
@@ -70,7 +87,7 @@
                   {{ formatDate(user?.created_at) }}
                 </span>
               </div>
-              
+
               <div class="flex items-center justify-between p-3 rounded-lg bg-slate-700/30">
                 <div class="flex items-center gap-2">
                   <ClockCircleOutlined class="text-slate-400" />
@@ -80,7 +97,7 @@
                   {{ formatDate(user?.last_login) }}
                 </span>
               </div>
-              
+
               <div class="flex items-center justify-between p-3 rounded-lg bg-slate-700/30">
                 <div class="flex items-center gap-2">
                   <TeamOutlined class="text-slate-400" />
@@ -94,21 +111,21 @@
 
             <!-- 快捷操作 -->
             <div class="mt-6 space-y-2">
-              <a-button 
-                block 
+              <a-button
+                block
                 size="large"
-                @click="showChangePasswordModal = true"
                 class="bg-amber-500/20 border-amber-400/30 text-amber-300 hover:bg-amber-500/30"
+                @click="showChangePasswordModal = true"
               >
                 <LockOutlined class="mr-2" />
                 修改密码
               </a-button>
-              
-              <a-button 
-                block 
+
+              <a-button
+                block
                 size="large"
-                @click="handleLogout"
                 class="bg-red-500/20 border-red-400/30 text-red-300 hover:bg-red-500/30"
+                @click="handleLogout"
               >
                 <LogoutOutlined class="mr-2" />
                 退出登录
@@ -121,16 +138,18 @@
         <div class="lg:col-span-2">
           <div class="rounded-2xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6">
             <div class="flex items-center justify-between mb-6">
-              <h3 class="text-lg font-semibold text-slate-100">编辑资料</h3>
+              <h3 class="text-lg font-semibold text-slate-100">
+                编辑资料
+              </h3>
               <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                <div class="w-2 h-2 rounded-full bg-emerald-400" />
                 <span class="text-xs text-slate-400">实时保存</span>
               </div>
             </div>
 
             <!-- 个人资料表单 -->
-            <ProfileForm 
-              :user="user"
+            <ProfileForm
+              :user="profileUser || undefined"
               :loading="updateLoading"
               @update-profile="handleUpdateProfile"
               @change-password="showChangePasswordModal = true"
@@ -148,7 +167,7 @@
       width="500px"
       class="change-password-modal"
     >
-      <ChangePasswordForm 
+      <ChangePasswordForm
         :loading="changePasswordLoading"
         @change-password="handleChangePassword"
         @cancel="showChangePasswordModal = false"
@@ -161,19 +180,48 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { 
-  UserOutlined, 
-  CheckOutlined, 
-  CalendarOutlined, 
+import {
+  UserOutlined,
+  CheckOutlined,
+  CalendarOutlined,
   ClockCircleOutlined,
   TeamOutlined,
   LockOutlined,
-  LogoutOutlined
+  LogoutOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import type { User, UserRole } from '@/types/auth'
 import ProfileForm from '@/components/auth/ProfileForm.vue'
 import ChangePasswordForm from '@/components/auth/ChangePasswordForm.vue'
+
+type UserProfileModel = User & {
+  avatar?: string
+  phone?: string
+  bio?: string
+  notifications?: {
+    email?: boolean
+    sms?: boolean
+    push?: boolean
+  }
+}
+
+interface ProfileUpdatePayload {
+  display_name?: string
+  email?: string
+  department?: string
+  avatar?: string
+  phone?: string
+  bio?: string
+  notifications?: {
+    email?: boolean
+    sms?: boolean
+    push?: boolean
+  }
+}
+
+interface PasswordUpdatePayload {
+  new_password: string
+}
 
 // 路由和状态管理
 const router = useRouter()
@@ -186,7 +234,21 @@ const showChangePasswordModal = ref(false)
 
 // 用户信息
 const user = computed(() => authStore.user)
-const userRoles = computed(() => user.value?.roles || [])
+const profileUser = computed<UserProfileModel | null>(() => {
+  if (!user.value) return null
+  return {
+    ...user.value,
+    roles: [...(user.value.roles || [])],
+    notifications: user.value.notifications ? { ...user.value.notifications } : undefined,
+  } as UserProfileModel
+})
+const isUserRole = (role: string): role is UserRole =>
+  ['admin', 'qc_manager', 'qc_staff', 'doctor', 'viewer'].includes(role)
+const userRoles = computed<UserRole[]>(() =>
+  ((profileUser.value?.roles || []) as string[]).filter((role): role is UserRole =>
+    isUserRole(role),
+  ),
+)
 
 // 头像首字母
 const avatarInitial = computed(() => {
@@ -197,13 +259,14 @@ const avatarInitial = computed(() => {
 })
 
 // 处理资料更新
-const handleUpdateProfile = async (profileData) => {
+const handleUpdateProfile = async (profileData: unknown) => {
   try {
     updateLoading.value = true
-    
+    const payload = (profileData ?? {}) as ProfileUpdatePayload
+
     // 调用认证存储的更新方法
-    const result = await authStore.updateProfile(profileData)
-    
+    const result = await authStore.updateProfile(payload as Partial<User>)
+
     if (result.success) {
       message.success('个人资料更新成功')
     } else {
@@ -218,13 +281,18 @@ const handleUpdateProfile = async (profileData) => {
 }
 
 // 处理密码修改
-const handleChangePassword = async (passwordData) => {
+const handleChangePassword = async (passwordData: unknown) => {
   try {
     changePasswordLoading.value = true
-    
+    const payload = (passwordData ?? {}) as PasswordUpdatePayload
+    if (!payload.new_password) {
+      message.error('新密码不能为空')
+      return
+    }
+
     // 调用认证存储的密码更新方法
-    const result = await authStore.updatePassword(passwordData.new_password)
-    
+    const result = await authStore.updatePassword(payload.new_password)
+
     if (result.success) {
       message.success('密码修改成功')
       showChangePasswordModal.value = false
@@ -256,13 +324,13 @@ const handleLogout = async () => {
 // 格式化日期
 const formatDate = (dateString?: string) => {
   if (!dateString) return '未知'
-  
+
   try {
     const date = new Date(dateString)
     return date.toLocaleDateString('zh-CN', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     })
   } catch {
     return '未知'
@@ -276,7 +344,7 @@ const getRoleStyle = (role: UserRole) => {
     qc_manager: 'bg-blue-500/20 text-blue-300 border border-blue-400/30',
     qc_staff: 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30',
     doctor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30',
-    viewer: 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+    viewer: 'bg-purple-500/20 text-purple-300 border border-purple-400/30',
   }
   return styles[role] || 'bg-gray-500/20 text-gray-300 border border-gray-400/30'
 }
@@ -288,7 +356,7 @@ const getRoleColor = (role: UserRole) => {
     qc_manager: 'bg-blue-500',
     qc_staff: 'bg-cyan-500',
     doctor: 'bg-emerald-500',
-    viewer: 'bg-purple-500'
+    viewer: 'bg-purple-500',
   }
   return colors[role] || 'bg-gray-500'
 }
@@ -300,7 +368,7 @@ const getRoleInitial = (role: UserRole) => {
     qc_manager: 'Q',
     qc_staff: 'S',
     doctor: 'D',
-    viewer: 'V'
+    viewer: 'V',
   }
   return initials[role] || 'U'
 }
@@ -312,7 +380,7 @@ const getRoleLabel = (role: UserRole) => {
     qc_manager: '质控主管',
     qc_staff: '质控员',
     doctor: '医生',
-    viewer: '查看者'
+    viewer: '查看者',
   }
   return labels[role] || '未知角色'
 }
@@ -399,7 +467,7 @@ const getRoleLabel = (role: UserRole) => {
   .sticky {
     position: static;
   }
-  
+
   .grid-cols-1.lg\\:grid-cols-3 {
     grid-template-columns: 1fr;
   }
@@ -409,11 +477,11 @@ const getRoleLabel = (role: UserRole) => {
   .p-6 {
     padding: 1rem;
   }
-  
+
   .text-2xl {
     font-size: 1.5rem;
   }
-  
+
   .w-24.h-24 {
     width: 5rem;
     height: 5rem;

@@ -5,6 +5,24 @@ declare module '*.vue' {
   export default component
 }
 
+declare module '@/views/test/QCIntegrationTest.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<Record<string, unknown>, Record<string, unknown>, unknown>
+  export default component
+}
+
+declare module '@/views/rules/SemanticRulesView.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<Record<string, unknown>, Record<string, unknown>, unknown>
+  export default component
+}
+
+declare module './SemanticRulesView.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<Record<string, unknown>, Record<string, unknown>, unknown>
+  export default component
+}
+
 declare module '@vue/runtime-core' {
   import type { Component } from 'vue'
 

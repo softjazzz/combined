@@ -47,7 +47,7 @@ const props = withDefaults(defineProps<Props>(), {
   block: false,
   disabled: false,
   loading: false,
-  noPermissionText: '暂无权限'
+  noPermissionText: '暂无权限',
 })
 
 // const { checkPermission, hasAnyRole } = usePermissions()
@@ -60,12 +60,12 @@ const permissionResult = computed(() => {
     // return hasAnyRole(roleEnums) ? { allowed: true } : { allowed: false, reason: '用户角色不足' }
     return { allowed: true, reason: '' } // 临时允许
   }
-  
+
   // 如果指定了资源和操作，进行权限检查
   if (props.resource && props.action) {
     return checkPermission(props.resource, props.action, props.context)
   }
-  
+
   // 默认允许
   return { allowed: true }
 })
@@ -93,7 +93,7 @@ const emit = defineEmits<{
   click: [event: unknown]
 }>()
 
-const handleClick = (event) => {
+const handleClick = (event: MouseEvent) => {
   if (permissionResult.value.allowed) {
     emit('click', event)
   }
@@ -120,4 +120,4 @@ const handleClick = (event) => {
 
 <style scoped>
 /* 可以添加自定义样式 */
-</style> 
+</style>

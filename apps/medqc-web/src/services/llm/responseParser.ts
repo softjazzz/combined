@@ -59,7 +59,7 @@ export class ResponseParser {
         majorSurgery: this.cleanString(data.majorSurgery) || '无',
         documents: this.parseDocuments(data.documents || []),
         confidence: this.parseConfidence(data.confidence),
-        content: data.content
+        content: data.content,
       }
 
       return result
@@ -87,43 +87,68 @@ export class ResponseParser {
         primaryDiagnosis: fallbackData.primaryDiagnosis || '未识别',
         majorSurgery: fallbackData.majorSurgery || '无',
         documents: [],
-        confidence: 0.1
+        confidence: 0.1,
       }
     }
   }
 
   // 尝试宽松解析字符串中的 JSON
   private static tryParseJsonLoose(raw: string): unknown {
-    const removeCodeFence = (s: string) => s.replace(/```json/gi, '').replace(/```/g, '').trim()
+    const removeCodeFence = (s: string) =>
+      s
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim()
     const removeTrailingCommas = (s: string) => s.replace(/,\s*([}\]])/g, '$1')
-    const sanitize = (s: string) => s.replace(/[\u0000-\u001F]+/g, ' ').trim()
+    const sanitize = (s: string) =>
+      s
+        .split('')
+        .map((ch) => (ch.charCodeAt(0) < 0x20 ? ' ' : ch))
+        .join('')
+        .trim()
 
     const cleaned = sanitize(removeCodeFence(raw))
 
     // 如果返回里包含 "error" 或 "message" 且不是 JSON，很可能是供应商的提示文本；尽量截取第一对大括号
-    if (/error\s*:/.test(cleaned) && !/^\s*[\[{]/.test(cleaned)) {
+    if (/error\s*:/.test(cleaned) && !/^\s*(?:\[|\{)/.test(cleaned)) {
       const fb = cleaned.indexOf('{')
       const lb = cleaned.lastIndexOf('}')
       if (fb !== -1 && lb !== -1 && lb > fb) {
         const obj = cleaned.slice(fb, lb + 1)
-        try { return JSON.parse(removeTrailingCommas(obj)) } catch {}
+        try {
+          return JSON.parse(removeTrailingCommas(obj))
+        } catch (error) {
+          void error
+        }
       }
     }
 
     // 1) 优先尝试直接解析（去掉尾随逗号）
     const direct = removeTrailingCommas(cleaned)
-    try { return JSON.parse(direct) } catch {}
+    try {
+      return JSON.parse(direct)
+    } catch (error) {
+      void error
+    }
 
     // 2) 检查是否是被截断的JSON，尝试修复
     const repaired = this.repairTruncatedJson(cleaned)
     if (repaired) {
-      try { return JSON.parse(removeTrailingCommas(repaired)) } catch {}
+      try {
+        return JSON.parse(removeTrailingCommas(repaired))
+      } catch (error) {
+        void error
+      }
     }
 
     // 3) 提取最外层大括号或方括号中，最长“平衡”的片段
     const longestBalanced = this.extractLongestBalancedJson(cleaned)
     if (longestBalanced) {
-      try { return JSON.parse(removeTrailingCommas(longestBalanced)) } catch {}
+      try {
+        return JSON.parse(removeTrailingCommas(longestBalanced))
+      } catch (error) {
+        void error
+      }
     }
 
     // 4) 简单的 { ... } 回退
@@ -131,7 +156,11 @@ export class ResponseParser {
     const lb = cleaned.lastIndexOf('}')
     if (fb !== -1 && lb !== -1 && lb > fb) {
       const obj = cleaned.slice(fb, lb + 1)
-      try { return JSON.parse(removeTrailingCommas(obj)) } catch {}
+      try {
+        return JSON.parse(removeTrailingCommas(obj))
+      } catch (error) {
+        void error
+      }
     }
 
     throw new Error('无法从字符串中解析出有效的JSON')
@@ -159,7 +188,7 @@ export class ResponseParser {
         let openQuotes = 0
         let lastQuoteIndex = -1
         for (let i = 0; i < repaired.length; i++) {
-          if (repaired[i] === '"' && (i === 0 || repaired[i-1] !== '\\')) {
+          if (repaired[i] === '"' && (i === 0 || repaired[i - 1] !== '\\')) {
             openQuotes++
             lastQuoteIndex = i
           }
@@ -209,8 +238,16 @@ export class ResponseParser {
         continue
       }
 
-      if (ch === '"') { inString = true; if (start === -1) start = i; continue }
-      if (openers.has(ch)) { stack.push(ch); if (start === -1) start = i; continue }
+      if (ch === '"') {
+        inString = true
+        if (start === -1) start = i
+        continue
+      }
+      if (openers.has(ch)) {
+        stack.push(ch)
+        if (start === -1) start = i
+        continue
+      }
       if (ch in closers) {
         if (stack.length === 0 || stack[stack.length - 1] !== closers[ch]) {
           // 非法配对，重置
@@ -264,7 +301,7 @@ export class ResponseParser {
         secondaryDiagnosis: this.parseStringArray(data.secondaryDiagnosis),
         majorSurgery: this.cleanString(data.majorSurgery) || '无',
         documents: Array.isArray(data.documents) ? data.documents : [],
-        confidence: this.parseConfidence(data.confidence)
+        confidence: this.parseConfidence(data.confidence),
       }
     } catch (error) {
       console.error('解析索引响应失败:', error)
@@ -277,7 +314,7 @@ export class ResponseParser {
         primaryDiagnosis: '未识别',
         majorSurgery: '无',
         documents: [],
-        confidence: 0.1
+        confidence: 0.1,
       }
     }
   }
@@ -302,13 +339,15 @@ export class ResponseParser {
           content: this.cleanString(doc.content) || '暂无内容',
           confidence: this.parseConfidence(doc.confidence),
           extractedAt: new Date(),
-          position: doc.position ? {
-            startMarker: doc.position.startMarker || '',
-            endMarker: doc.position.endMarker || '',
-            startIndex: doc.position.startIndex,
-            endIndex: doc.position.endIndex,
-            fullContent: doc.position.fullContent
-          } : undefined
+          position: doc.position
+            ? {
+                startMarker: doc.position.startMarker || '',
+                endMarker: doc.position.endMarker || '',
+                startIndex: doc.position.startIndex,
+                endIndex: doc.position.endIndex,
+                fullContent: doc.position.fullContent,
+              }
+            : undefined,
         }
 
         // 处理层级化分类
@@ -332,7 +371,7 @@ export class ResponseParser {
           ...baseDoc,
           category,
           type: this.parseDocumentType(type),
-          classificationMethod: doc.category && doc.type ? 'llm_provided' : 'enhanced_classifier'
+          classificationMethod: doc.category && doc.type ? 'llm_provided' : 'enhanced_classifier',
         }
       } catch (error) {
         console.error(`解析文档${index}失败:`, error)
@@ -342,7 +381,7 @@ export class ResponseParser {
           title: `文书${index + 1}`,
           content: '解析失败',
           confidence: 0.1,
-          extractedAt: new Date()
+          extractedAt: new Date(),
         }
       }
     })
@@ -365,12 +404,12 @@ export class ResponseParser {
     if (typeof value !== 'string') {
       return undefined
     }
-    
+
     const cleaned = value.trim()
     if (cleaned === '' || cleaned === '未识别' || cleaned === 'null' || cleaned === 'undefined') {
       return undefined
     }
-    
+
     return cleaned
   }
 
@@ -381,7 +420,7 @@ export class ResponseParser {
     if (typeof age === 'number' && age > 0 && age < 150) {
       return Math.floor(age)
     }
-    
+
     if (typeof age === 'string') {
       const match = age.match(/(\d+)/)
       if (match) {
@@ -391,7 +430,7 @@ export class ResponseParser {
         }
       }
     }
-    
+
     return undefined
   }
 
@@ -432,7 +471,7 @@ export class ResponseParser {
         /患者\s*([^\s\n,，。]+)，/,
         /患者姓名[:：]\s*([^\s\n,，。]+)/,
         /"patientName"\s*[:：]\s*"([^"]+)"/,
-        /病人\s*([^\s\n,，。]+)，/
+        /病人\s*([^\s\n,，。]+)，/,
       ]
 
       for (const pattern of patterns) {
@@ -467,7 +506,7 @@ export class ResponseParser {
         /(\d+)岁/,
         /，(\d+)岁，/,
         /"patientAge"\s*[:：]\s*(\d+)/,
-        /患者[^，]*，[^，]*，(\d+)岁/
+        /患者[^，]*，[^，]*，(\d+)岁/,
       ]
 
       for (const pattern of patterns) {
@@ -501,7 +540,7 @@ export class ResponseParser {
         /患者[^，]*，([男女])，/,
         /"patientGender"\s*[:：]\s*"([男女])"/,
         /，([男女])性，/,
-        /，([男女])，\d+岁/
+        /，([男女])，\d+岁/,
       ]
 
       for (const pattern of patterns) {
@@ -532,7 +571,7 @@ export class ResponseParser {
         /入院科室[:：]\s*([^\s\n,，。]+)/,
         /"department"\s*[:：]\s*"([^"]+)"/,
         /([^\s]+科)\s*病程记录/,
-        /([^\s]+科)\s*住院病历/
+        /([^\s]+科)\s*住院病历/,
       ]
 
       for (const pattern of patterns) {
@@ -556,14 +595,14 @@ export class ResponseParser {
   private static parseStringArray(value: any): string[] {
     if (Array.isArray(value)) {
       return value
-        .map(item => this.cleanString(item))
-        .filter(item => item !== undefined) as string[]
+        .map((item) => this.cleanString(item))
+        .filter((item) => item !== undefined) as string[]
     }
-    
+
     if (typeof value === 'string') {
-      return [value].filter(item => this.cleanString(item) !== undefined) as string[]
+      return [value].filter((item) => this.cleanString(item) !== undefined) as string[]
     }
-    
+
     return []
   }
 
@@ -574,14 +613,14 @@ export class ResponseParser {
     if (typeof confidence === 'number') {
       return Math.max(0, Math.min(1, confidence))
     }
-    
+
     if (typeof confidence === 'string') {
       const parsed = parseFloat(confidence)
       if (!isNaN(parsed)) {
         return Math.max(0, Math.min(1, parsed))
       }
     }
-    
+
     return 0.5 // 默认置信度
   }
 
@@ -617,7 +656,7 @@ export class ResponseParser {
             primaryDiagnosis: '解析失败',
             majorSurgery: '无',
             documents: [],
-            confidence: 0.1
+            confidence: 0.1,
           }
         }
       })
@@ -635,17 +674,17 @@ export class ResponseParser {
       if (response.usage) {
         return {
           tokensUsed: response.usage.total_tokens || 0,
-          cost: response.usage.cost
+          cost: response.usage.cost,
         }
       }
-      
+
       // 尝试从其他字段获取
       if (response.token_usage) {
         return {
-          tokensUsed: response.token_usage.total || 0
+          tokensUsed: response.token_usage.total || 0,
         }
       }
-      
+
       return { tokensUsed: 0 }
     } catch (error) {
       console.error('解析使用统计失败:', error)
@@ -696,7 +735,7 @@ export class ResponseParser {
       issues.push('未识别到任何文书')
       score -= 0.1
     } else {
-      const lowConfidenceDocs = data.documents.filter(doc => doc.confidence < 0.5)
+      const lowConfidenceDocs = data.documents.filter((doc) => doc.confidence < 0.5)
       if (lowConfidenceDocs.length > 0) {
         issues.push(`${lowConfidenceDocs.length}个文书置信度较低`)
         score -= 0.05 * lowConfidenceDocs.length
@@ -706,7 +745,7 @@ export class ResponseParser {
     return {
       isValid: issues.length === 0,
       issues,
-      score: Math.max(0, score)
+      score: Math.max(0, score),
     }
   }
 }

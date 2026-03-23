@@ -16,20 +16,13 @@ import {
   TitleComponent,
   TooltipComponent,
   LegendComponent,
-  GridComponent
+  GridComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
 
 // 注册ECharts组件
-use([
-  BarChart,
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent,
-  CanvasRenderer
-])
+use([BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 interface ChartDataItem {
   department: string
@@ -39,26 +32,25 @@ interface ChartDataItem {
   color: string
 }
 
-const props = withDefaults(defineProps<{
-  data?: ChartDataItem[]
-  title?: string
-  height?: string
-  type?: 'recordCount' | 'averageScore' | 'passRate'
-}>(), { data: () => [],
-  title: '部门对比',
-  height: '400px',
-  type: 'recordCount'
-})
+const props = withDefaults(
+  defineProps<{
+    data?: ChartDataItem[]
+    title?: string
+    height?: string
+    type?: 'recordCount' | 'averageScore' | 'passRate'
+  }>(),
+  { data: () => [], title: '部门对比', height: '400px', type: 'recordCount' },
+)
 
 const chartOption = computed(() => {
   // 确保 data 是数组
   const dataArray = Array.isArray(props.data) ? props.data : []
-  
+
   if (dataArray.length === 0) {
     return {
       title: {
         text: props.title,
-        left: 'center'
+        left: 'center',
       },
       graphic: {
         type: 'text',
@@ -67,32 +59,32 @@ const chartOption = computed(() => {
         style: {
           text: '暂无数据',
           fontSize: 16,
-          fill: '#999'
-        }
-      }
+          fill: '#999',
+        },
+      },
     }
   }
-  
-  const departments = dataArray.map(item => item.department)
-  const colors = dataArray.map(item => item.color)
-  
+
+  const departments = dataArray.map((item) => item.department)
+  const colors = dataArray.map((item) => item.color)
+
   let data: number[]
   let unit: string
   let yAxisName: string
-  
+
   switch (props.type) {
     case 'recordCount':
-      data = dataArray.map(item => item.recordCount)
+      data = dataArray.map((item) => item.recordCount)
       unit = '个'
       yAxisName = '病案数量'
       break
     case 'averageScore':
-      data = dataArray.map(item => item.averageScore)
+      data = dataArray.map((item) => item.averageScore)
       unit = '分'
       yAxisName = '平均评分'
       break
     case 'passRate':
-      data = dataArray.map(item => item.passRate)
+      data = dataArray.map((item) => item.passRate)
       unit = '%'
       yAxisName = '通过率'
       break
@@ -104,19 +96,20 @@ const chartOption = computed(() => {
       left: 'center',
       textStyle: {
         fontSize: 16,
-        fontWeight: 'bold'
-      }
+        fontWeight: 'bold',
+      },
     },
     tooltip: {
       trigger: 'axis',
       axisPointer: {
-        type: 'shadow'
+        type: 'shadow',
       },
       formatter: (params: unknown) => {
+        if (!Array.isArray(params) || params.length === 0) return ''
         const param = params[0]
-        const dataItem = props.data.find(item => item.department === param.name)
+        const dataItem = props.data.find((item) => item.department === param.name)
         if (!dataItem) return ''
-        
+
         return `
           <div style="font-weight: bold; margin-bottom: 8px;">${param.name}</div>
           <div style="margin-bottom: 4px;">
@@ -132,14 +125,14 @@ const chartOption = computed(() => {
             通过率: ${dataItem.passRate}%
           </div>
         `
-      }
+      },
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '10%',
       top: '15%',
-      containLabel: true
+      containLabel: true,
     },
     xAxis: {
       type: 'category',
@@ -147,13 +140,13 @@ const chartOption = computed(() => {
       axisLabel: {
         fontSize: 11,
         color: '#666',
-        rotate: departments.some(d => d.length > 4) ? 45 : 0
+        rotate: departments.some((d) => d.length > 4) ? 45 : 0,
       },
       axisLine: {
         lineStyle: {
-          color: '#e8e8e8'
-        }
-      }
+          color: '#e8e8e8',
+        },
+      },
     },
     yAxis: {
       type: 'value',
@@ -161,18 +154,18 @@ const chartOption = computed(() => {
       axisLabel: {
         formatter: `{value}${unit}`,
         fontSize: 11,
-        color: '#666'
+        color: '#666',
       },
       axisLine: {
         lineStyle: {
-          color: '#e8e8e8'
-        }
+          color: '#e8e8e8',
+        },
       },
       splitLine: {
         lineStyle: {
-          color: '#f0f0f0'
-        }
-      }
+          color: '#f0f0f0',
+        },
+      },
     },
     series: [
       {
@@ -181,22 +174,22 @@ const chartOption = computed(() => {
         data: data.map((value, index) => ({
           value,
           itemStyle: {
-            color: colors[index]
-          }
+            color: colors[index],
+          },
         })),
         barWidth: '60%',
         itemStyle: {
-          borderRadius: [4, 4, 0, 0]
+          borderRadius: [4, 4, 0, 0],
         },
         label: {
           show: true,
           position: 'top',
           formatter: `{c}${unit}`,
           fontSize: 11,
-          color: '#666'
-        }
-      }
-    ]
+          color: '#666',
+        },
+      },
+    ],
   }
 })
 </script>
@@ -205,4 +198,4 @@ const chartOption = computed(() => {
 .chart-container {
   @apply w-full h-full;
 }
-</style> 
+</style>

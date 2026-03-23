@@ -18,7 +18,7 @@
 
       <div class="column-list">
         <div
-          v-for="(column, index) in columnList"
+          v-for="column in columnList"
           :key="column.key"
           class="column-item"
           :class="{ 'column-item-disabled': !column.visible }"
@@ -59,14 +59,23 @@
                 style="width: 80px"
                 :disabled="column.key === 'action'"
               >
-                <a-select-option :value="false">不固定</a-select-option>
-                <a-select-option value="left">左固定</a-select-option>
-                <a-select-option value="right">右固定</a-select-option>
+                <a-select-option :value="false">
+                  不固定
+                </a-select-option>
+                <a-select-option value="left">
+                  左固定
+                </a-select-option>
+                <a-select-option value="right">
+                  右固定
+                </a-select-option>
               </a-select>
             </div>
 
             <!-- 排序设置 -->
-            <div class="column-sort-setting" v-if="column.sortable !== false">
+            <div
+              v-if="column.sortable !== false"
+              class="column-sort-setting"
+            >
               <a-checkbox
                 v-model:checked="column.sorter"
                 size="small"
@@ -80,15 +89,26 @@
 
       <!-- 预设方案 -->
       <div class="preset-schemes mt-6 pt-4 border-t border-gray-200">
-        <h4 class="mb-3">预设方案</h4>
+        <h4 class="mb-3">
+          预设方案
+        </h4>
         <div class="scheme-buttons">
-          <a-button size="small" @click="applyScheme('default')">
+          <a-button
+            size="small"
+            @click="applyScheme('default')"
+          >
             默认方案
           </a-button>
-          <a-button size="small" @click="applyScheme('compact')">
+          <a-button
+            size="small"
+            @click="applyScheme('compact')"
+          >
             紧凑方案
           </a-button>
-          <a-button size="small" @click="applyScheme('detailed')">
+          <a-button
+            size="small"
+            @click="applyScheme('detailed')"
+          >
             详细方案
           </a-button>
         </div>
@@ -104,9 +124,9 @@
         <a-button
           type="primary"
           size="small"
-          @click="saveScheme"
           :disabled="!schemeName.trim()"
           class="ml-2"
+          @click="saveScheme"
         >
           保存方案
         </a-button>
@@ -116,11 +136,20 @@
     <template #footer>
       <div class="flex justify-between">
         <div>
-          <a-button @click="handleReset">重置</a-button>
+          <a-button @click="handleReset">
+            重置
+          </a-button>
         </div>
         <div>
-          <a-button @click="handleCancel">取消</a-button>
-          <a-button type="primary" @click="handleConfirm">确定</a-button>
+          <a-button @click="handleCancel">
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            @click="handleConfirm"
+          >
+            确定
+          </a-button>
         </div>
       </div>
     </template>
@@ -155,7 +184,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
-  columns: () => [] as ColumnConfig[]
+  columns: () => [] as ColumnConfig[],
 })
 
 const emit = defineEmits<Emits>()
@@ -165,22 +194,25 @@ const columnList = ref<ColumnConfig[]>([])
 const schemeName = ref('')
 
 // 监听visible变化，初始化列配置
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    initColumnList()
-  }
-})
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal) {
+      initColumnList()
+    }
+  },
+)
 
 // 初始化列配置
 const initColumnList = () => {
-  columnList.value = props.columns.map(col => ({
-    key: col.key || col.dataIndex,
+  columnList.value = props.columns.map((col) => ({
+    key: String(col.key || col.dataIndex || ''),
     title: col.title,
     width: col.width || 120,
     visible: true,
     fixed: col.fixed || false,
     sorter: !!col.sorter,
-    sortable: col.sortable !== false
+    sortable: col.sortable !== false,
   }))
 }
 
@@ -188,29 +220,34 @@ const initColumnList = () => {
 const applyScheme = (scheme: string) => {
   switch (scheme) {
     case 'default':
-      columnList.value.forEach(col => {
+      columnList.value.forEach((col) => {
         col.visible = true
         col.width = getDefaultWidth(col.key)
         col.fixed = col.key === 'action' ? 'right' : false
       })
       break
     case 'compact':
-      columnList.value.forEach(col => {
+      columnList.value.forEach((col) => {
         col.visible = isCompactColumn(col.key)
         col.width = Math.max(80, (col.width || 120) * 0.8)
         col.fixed = col.key === 'action' ? 'right' : false
       })
       break
     case 'detailed':
-      columnList.value.forEach(col => {
+      columnList.value.forEach((col) => {
         col.visible = true
         col.width = Math.min(200, (col.width || 120) * 1.2)
-        col.fixed = ['registrationNo', 'action'].includes(col.key) ? 
-          (col.key === 'registrationNo' ? 'left' : 'right') : false
+        col.fixed = ['registrationNo', 'action'].includes(col.key)
+          ? col.key === 'registrationNo'
+            ? 'left'
+            : 'right'
+          : false
       })
       break
   }
-  message.success(`已应用${scheme === 'default' ? '默认' : scheme === 'compact' ? '紧凑' : '详细'}方案`)
+  message.success(
+    `已应用${scheme === 'default' ? '默认' : scheme === 'compact' ? '紧凑' : '详细'}方案`,
+  )
 }
 
 // 获取默认宽度
@@ -227,7 +264,7 @@ const getDefaultWidth = (key: string) => {
     scoringStandard: 120,
     defectCount: 80,
     createTime: 150,
-    action: 150
+    action: 150,
   }
   return widthMap[key] || 120
 }
@@ -235,8 +272,13 @@ const getDefaultWidth = (key: string) => {
 // 判断是否为紧凑模式显示的列
 const isCompactColumn = (key: string) => {
   const compactColumns = [
-    'registrationNo', 'patientName', 'department', 
-    'auditStatus', 'score', 'defectCount', 'action'
+    'registrationNo',
+    'patientName',
+    'department',
+    'auditStatus',
+    'score',
+    'defectCount',
+    'action',
   ]
   return compactColumns.includes(key)
 }
@@ -247,13 +289,13 @@ const saveScheme = () => {
     message.error('请输入方案名称')
     return
   }
-  
+
   // 这里可以保存到本地存储或发送到服务器
   const scheme = {
     name: schemeName.value,
-    columns: [...columnList.value]
+    columns: [...columnList.value],
   }
-  
+
   // 模拟保存
   localStorage.setItem(`column-scheme-${schemeName.value}`, JSON.stringify(scheme))
   message.success(`方案"${schemeName.value}"保存成功`)

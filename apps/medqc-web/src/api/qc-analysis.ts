@@ -32,7 +32,7 @@ export async function analyzeRecord(request: AnalysisAPIRequest): Promise<Analys
       return {
         success: false,
         error: 'INVALID_INPUT',
-        message: '病历内容不能为空'
+        message: '病历内容不能为空',
       }
     }
 
@@ -40,7 +40,7 @@ export async function analyzeRecord(request: AnalysisAPIRequest): Promise<Analys
       return {
         success: false,
         error: 'CONTENT_TOO_LARGE',
-        message: '病历内容过长，请确保内容小于50000字符'
+        message: '病历内容过长，请确保内容小于50000字符',
       }
     }
 
@@ -48,7 +48,7 @@ export async function analyzeRecord(request: AnalysisAPIRequest): Promise<Analys
     const analysisRequest: QCAnalysisRequest = {
       recordId: request.recordId || `record-${Date.now()}`,
       content: request.content,
-      options: request.options || {}
+      options: request.options || {},
     }
 
     // 执行分析
@@ -57,16 +57,15 @@ export async function analyzeRecord(request: AnalysisAPIRequest): Promise<Analys
     return {
       success: true,
       data: result,
-      message: '分析完成'
+      message: '分析完成',
     }
-
   } catch (error) {
     console.error('API分析失败:', error)
-    
+
     return {
       success: false,
       error: 'ANALYSIS_FAILED',
-      message: error instanceof Error ? error.message : '分析过程中发生未知错误'
+      message: error instanceof Error ? error.message : '分析过程中发生未知错误',
     }
   }
 }
@@ -77,7 +76,7 @@ export async function analyzeRecord(request: AnalysisAPIRequest): Promise<Analys
 export async function batchAnalyzeRecords(requests: AnalysisAPIRequest[]): Promise<{
   success: boolean
   data?: QCAnalysisResult[]
-  errors?: Array<{ index: number, error: string }>
+  errors?: Array<{ index: number; error: string }>
   summary?: {
     total: number
     successful: number
@@ -87,21 +86,21 @@ export async function batchAnalyzeRecords(requests: AnalysisAPIRequest[]): Promi
 }> {
   const startTime = Date.now()
   const results: QCAnalysisResult[] = []
-  const errors: Array<{ index: number, error: string }> = []
+  const errors: Array<{ index: number; error: string }> = []
 
   try {
     // 参数验证
     if (!Array.isArray(requests) || requests.length === 0) {
       return {
         success: false,
-        errors: [{ index: -1, error: '请求列表不能为空' }]
+        errors: [{ index: -1, error: '请求列表不能为空' }],
       }
     }
 
     if (requests.length > 10) {
       return {
         success: false,
-        errors: [{ index: -1, error: '批量处理最多支持10个记录' }]
+        errors: [{ index: -1, error: '批量处理最多支持10个记录' }],
       }
     }
 
@@ -109,19 +108,19 @@ export async function batchAnalyzeRecords(requests: AnalysisAPIRequest[]): Promi
     for (let i = 0; i < requests.length; i++) {
       try {
         const response = await analyzeRecord(requests[i])
-        
+
         if (response.success && response.data) {
           results.push(response.data)
         } else {
           errors.push({
             index: i,
-            error: response.message || '分析失败'
+            error: response.message || '分析失败',
           })
         }
       } catch (error) {
         errors.push({
           index: i,
-          error: error instanceof Error ? error.message : '处理失败'
+          error: error instanceof Error ? error.message : '处理失败',
         })
       }
     }
@@ -136,17 +135,18 @@ export async function batchAnalyzeRecords(requests: AnalysisAPIRequest[]): Promi
         total: requests.length,
         successful: results.length,
         failed: errors.length,
-        processingTime
-      }
+        processingTime,
+      },
     }
-
   } catch (error) {
     return {
       success: false,
-      errors: [{ 
-        index: -1, 
-        error: error instanceof Error ? error.message : '批量处理失败' 
-      }]
+      errors: [
+        {
+          index: -1,
+          error: error instanceof Error ? error.message : '批量处理失败',
+        },
+      ],
     }
   }
 }
@@ -159,19 +159,11 @@ export async function getAnalysisHistory(recordId: string): Promise<{
   data?: unknown[]
   error?: string
 }> {
-  try {
-    // 这里应该从数据库查询分析历史
-    // 暂时返回模拟数据
-    return {
-      success: true,
-      data:  [],
-      // message: '暂未实现历史查询功能'
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : '查询历史失败'
-    }
+  void recordId
+  // 这里应该从数据库查询分析历史，暂时返回模拟数据
+  return {
+    success: true,
+    data: [],
   }
 }
 
@@ -181,8 +173,8 @@ export async function getAnalysisHistory(recordId: string): Promise<{
 export async function getSystemHealth(): Promise<{
   success: boolean
   data?: {
-    aiService: { status: string, message: string }
-    database: { status: string, message: string }
+    aiService: { status: string; message: string }
+    database: { status: string; message: string }
     overall: string
     timestamp: string
   }
@@ -190,18 +182,18 @@ export async function getSystemHealth(): Promise<{
 }> {
   try {
     const health = await qcAnalysisEngine.healthCheck()
-    
+
     return {
       success: true,
       data: {
         ...health,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : '健康检查失败'
+      error: error instanceof Error ? error.message : '健康检查失败',
     }
   }
 }
@@ -214,18 +206,10 @@ export async function getQCRules(category?: string): Promise<{
   data?: unknown[]
   error?: string
 }> {
-  try {
-    // 这里应该从数据库查询质控规则
-    // 暂时返回模拟数据
-    return {
-      success: true,
-      data:  [],
-      // message: '暂未实现规则查询功能'
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : '查询规则失败'
-    }
+  void category
+  // 这里应该从数据库查询质控规则，暂时返回模拟数据
+  return {
+    success: true,
+    data: [],
   }
-} 
+}

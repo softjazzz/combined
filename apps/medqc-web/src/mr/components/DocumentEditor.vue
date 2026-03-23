@@ -4,10 +4,18 @@
     <div class="editor-toolbar">
       <div class="editor-toolbar-left">
         <a-button-group size="small">
-          <a-button @click="undo" :disabled="!canUndo" title="撤销 (Ctrl+Z)">
+          <a-button
+            :disabled="!canUndo"
+            title="撤销 (Ctrl+Z)"
+            @click="undo"
+          >
             <UndoOutlined />
           </a-button>
-          <a-button @click="redo" :disabled="!canRedo" title="重做 (Ctrl+Y)">
+          <a-button
+            :disabled="!canRedo"
+            title="重做 (Ctrl+Y)"
+            @click="redo"
+          >
             <RedoOutlined />
           </a-button>
         </a-button-group>
@@ -15,7 +23,10 @@
         <a-divider type="vertical" />
 
         <a-button-group size="small">
-          <a-button @click="openFindReplace" title="查找替换 (Ctrl+H)">
+          <a-button
+            title="查找替换 (Ctrl+H)"
+            @click="openFindReplace"
+          >
             <SearchOutlined />
             查找替换
           </a-button>
@@ -23,15 +34,13 @@
       </div>
 
       <div class="editor-toolbar-right">
-        <span class="char-count">
-          字符数: {{ characterCount }} / 行数: {{ lineCount }}
-        </span>
-        
-        <a-button 
-          size="small" 
-          @click="toggleAutoSave"
+        <span class="char-count"> 字符数: {{ characterCount }} / 行数: {{ lineCount }} </span>
+
+        <a-button
+          size="small"
           :type="autoSave ? 'primary' : 'default'"
           title="自动保存"
+          @click="toggleAutoSave"
         >
           <CloudSyncOutlined />
           {{ autoSave ? '自动保存' : '手动保存' }}
@@ -40,37 +49,66 @@
     </div>
 
     <!-- 查找替换面板 -->
-    <div v-if="showFindReplace" class="find-replace-panel">
+    <div
+      v-if="showFindReplace"
+      class="find-replace-panel"
+    >
       <div class="find-replace-row">
         <a-input
           v-model:value="findText"
           placeholder="查找..."
           size="small"
           style="width: 200px"
-          @pressEnter="findNext"
+          @press-enter="findNext"
         />
         <a-button-group size="small">
-          <a-button @click="findPrev" :disabled="!findText">上一个</a-button>
-          <a-button @click="findNext" :disabled="!findText">下一个</a-button>
+          <a-button
+            :disabled="!findText"
+            @click="findPrev"
+          >
+            上一个
+          </a-button>
+          <a-button
+            :disabled="!findText"
+            @click="findNext"
+          >
+            下一个
+          </a-button>
         </a-button-group>
-        <span class="find-count" v-if="findMatches > 0">
+        <span
+          v-if="findMatches > 0"
+          class="find-count"
+        >
           {{ currentFindIndex + 1 }}/{{ findMatches }}
         </span>
       </div>
-      
+
       <div class="find-replace-row">
         <a-input
           v-model:value="replaceText"
           placeholder="替换为..."
           size="small"
           style="width: 200px"
-          @pressEnter="replaceNext"
+          @press-enter="replaceNext"
         />
         <a-button-group size="small">
-          <a-button @click="replaceNext" :disabled="!findText">替换</a-button>
-          <a-button @click="replaceAll" :disabled="!findText">全部替换</a-button>
+          <a-button
+            :disabled="!findText"
+            @click="replaceNext"
+          >
+            替换
+          </a-button>
+          <a-button
+            :disabled="!findText"
+            @click="replaceAll"
+          >
+            全部替换
+          </a-button>
         </a-button-group>
-        <a-button size="small" @click="closeFindReplace">
+        <a-button
+          size="small"
+          @click="closeFindReplace"
+        >
           <CloseOutlined />
         </a-button>
       </div>
@@ -92,16 +130,18 @@
     <!-- 状态栏 -->
     <div class="editor-status">
       <div class="status-left">
-        <span v-if="isDirty" class="dirty-indicator">● 未保存</span>
-        <span v-if="lastSaved" class="last-saved">
-          最后保存: {{ formatTime(lastSaved) }}
-        </span>
+        <span
+          v-if="isDirty"
+          class="dirty-indicator"
+        >● 未保存</span>
+        <span
+          v-if="lastSaved"
+          class="last-saved"
+        > 最后保存: {{ formatTime(lastSaved) }} </span>
       </div>
-      
+
       <div class="status-right">
-        <span class="cursor-position">
-          行 {{ cursorLine }}, 列 {{ cursorColumn }}
-        </span>
+        <span class="cursor-position"> 行 {{ cursorLine }}, 列 {{ cursorColumn }} </span>
       </div>
     </div>
   </div>
@@ -115,7 +155,7 @@ import {
   RedoOutlined,
   SearchOutlined,
   CloseOutlined,
-  CloudSyncOutlined
+  CloudSyncOutlined,
 } from '@ant-design/icons-vue'
 
 interface Props {
@@ -127,13 +167,13 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   content: '',
   autoSave: true,
-  saveInterval: 30000 // 30秒
+  saveInterval: 30000, // 30秒
 })
 
 const emit = defineEmits<{
   'update:content': [value: string]
-  'save': [content: string]
-  'change': [content: string]
+  save: [content: string]
+  change: [content: string]
 }>()
 
 interface TextAreaRefLike {
@@ -181,11 +221,11 @@ const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 onMounted(() => {
   editorContent.value = props.content
   addToHistory(props.content)
-  
+
   if (autoSave.value) {
     startAutoSave()
   }
-  
+
   // 监听光标位置变化
   nextTick(() => {
     if (editorRef.value?.resizableTextArea?.textArea) {
@@ -204,13 +244,16 @@ onUnmounted(() => {
 })
 
 // 监听内容变化
-watch(() => props.content, (newContent) => {
-  if (newContent !== editorContent.value) {
-    editorContent.value = newContent
-    addToHistory(newContent)
-    isDirty.value = false
-  }
-})
+watch(
+  () => props.content,
+  (newContent) => {
+    if (newContent !== editorContent.value) {
+      editorContent.value = newContent
+      addToHistory(newContent)
+      isDirty.value = false
+    }
+  },
+)
 
 // 处理输入
 const handleInput = () => {
@@ -223,11 +266,11 @@ const handleInput = () => {
 const addToHistory = (content: string) => {
   // 移除当前位置之后的历史记录
   history.value = history.value.slice(0, historyIndex.value + 1)
-  
+
   // 添加新记录
   history.value.push(content)
   historyIndex.value = history.value.length - 1
-  
+
   // 限制历史记录大小
   if (history.value.length > maxHistorySize) {
     history.value = history.value.slice(-maxHistorySize)
@@ -268,7 +311,7 @@ const startAutoSave = () => {
   if (autoSaveTimer) {
     clearInterval(autoSaveTimer)
   }
-  
+
   autoSaveTimer = setInterval(() => {
     if (isDirty.value) {
       save()
@@ -279,7 +322,7 @@ const startAutoSave = () => {
 
 const toggleAutoSave = () => {
   autoSave.value = !autoSave.value
-  
+
   if (autoSave.value) {
     startAutoSave()
     message.success('已开启自动保存')
@@ -312,17 +355,17 @@ const closeFindReplace = () => {
 const findNext = () => {
   // 简单的查找实现
   if (!findText.value) return
-  
+
   const content = editorContent.value
   const regex = new RegExp(escapeRegExp(findText.value), 'gi')
   const matches = Array.from(content.matchAll(regex))
-  
+
   findMatches.value = matches.length
-  
+
   if (matches.length > 0) {
     currentFindIndex.value = (currentFindIndex.value + 1) % matches.length
     const match = matches[currentFindIndex.value]
-    
+
     // 选中匹配的文本
     if (editorRef.value?.resizableTextArea?.textArea) {
       const textarea = editorRef.value.resizableTextArea.textArea
@@ -336,20 +379,22 @@ const findNext = () => {
 
 const findPrev = () => {
   if (!findText.value || findMatches.value === 0) return
-  
-  currentFindIndex.value = currentFindIndex.value === 0 
-    ? findMatches.value - 1 
-    : currentFindIndex.value - 1
-  
+
+  currentFindIndex.value =
+    currentFindIndex.value === 0 ? findMatches.value - 1 : currentFindIndex.value - 1
+
   findNext()
 }
 
 const replaceNext = () => {
   if (!findText.value) return
-  
+
   const content = editorContent.value
-  const newContent = content.replace(new RegExp(escapeRegExp(findText.value), 'i'), replaceText.value)
-  
+  const newContent = content.replace(
+    new RegExp(escapeRegExp(findText.value), 'i'),
+    replaceText.value,
+  )
+
   if (newContent !== content) {
     editorContent.value = newContent
     handleInput()
@@ -359,11 +404,11 @@ const replaceNext = () => {
 
 const replaceAll = () => {
   if (!findText.value) return
-  
+
   const content = editorContent.value
   const regex = new RegExp(escapeRegExp(findText.value), 'gi')
   const newContent = content.replace(regex, replaceText.value)
-  
+
   if (newContent !== content) {
     const count = (content.match(regex) || []).length
     editorContent.value = newContent
@@ -381,7 +426,7 @@ const updateCursorPosition = () => {
     const cursorPos = textarea.selectionStart
     const textBeforeCursor = editorContent.value.substring(0, cursorPos)
     const lines = textBeforeCursor.split('\n')
-    
+
     cursorLine.value = lines.length
     cursorColumn.value = lines[lines.length - 1].length + 1
   }
@@ -393,7 +438,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'z' && !e.shiftKey) {
       e.preventDefault()
       undo()
-    } else if ((e.key === 'y') || (e.key === 'z' && e.shiftKey)) {
+    } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
       e.preventDefault()
       redo()
     } else if (e.key === 'h') {
@@ -404,7 +449,7 @@ const handleKeydown = (e: KeyboardEvent) => {
       save()
     }
   }
-  
+
   // 记录历史（在某些操作后）
   if (e.key === 'Enter' || e.key === ' ') {
     setTimeout(() => {
@@ -418,7 +463,7 @@ const formatTime = (date: Date) => {
   return date.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
   })
 }
 
@@ -432,7 +477,7 @@ defineExpose({
   save,
   undo,
   redo,
-  focus: () => editorRef.value?.focus()
+  focus: () => editorRef.value?.focus?.(),
 })
 </script>
 
