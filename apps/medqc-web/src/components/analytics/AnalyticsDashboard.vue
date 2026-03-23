@@ -4,29 +4,43 @@
     <div class="dashboard-header mb-6">
       <div class="flex justify-between items-center">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">360度数据分析</h1>
-          <p class="text-gray-600 mt-1">全方位质控数据洞察与智能分析</p>
+          <h1 class="text-2xl font-bold text-gray-900">
+            360度数据分析
+          </h1>
+          <p class="text-gray-600 mt-1">
+            全方位质控数据洞察与智能分析
+          </p>
         </div>
         <div class="flex space-x-3">
           <a-range-picker
             v-model:value="dateRange"
-            @change="onDateRangeChange"
             :ranges="dateRanges"
             class="w-80"
+            @change="onDateRangeChange"
           />
           <a-select
             v-model:value="selectedDepartment"
-            @change="onDepartmentChange"
             placeholder="选择科室"
             class="w-40"
             allow-clear
+            @change="onDepartmentChange"
           >
-            <a-select-option value="">全部科室</a-select-option>
-            <a-select-option v-for="dept in departments" :key="dept" :value="dept">
+            <a-select-option value="">
+              全部科室
+            </a-select-option>
+            <a-select-option
+              v-for="dept in departments"
+              :key="dept"
+              :value="dept"
+            >
               {{ dept }}
             </a-select-option>
           </a-select>
-          <a-button type="primary" @click="refreshData" :loading="loading">
+          <a-button
+            type="primary"
+            :loading="loading"
+            @click="refreshData"
+          >
             <ReloadOutlined />
             刷新数据
           </a-button>
@@ -37,12 +51,27 @@
     <!-- 核心指标卡片 -->
     <div class="metrics-overview mb-6">
       <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="8" :lg="6" v-for="metric in coreMetrics" :key="metric.key">
-          <a-card class="metric-card" :class="getMetricCardClass(metric)">
+        <a-col
+          v-for="metric in coreMetrics"
+          :key="metric.key"
+          :xs="24"
+          :sm="12"
+          :md="8"
+          :lg="6"
+        >
+          <a-card
+            class="metric-card"
+            :class="getMetricCardClass(metric)"
+          >
             <div class="flex items-center justify-between">
               <div class="flex-1">
-                <div class="metric-label text-gray-600 text-sm">{{ metric.label }}</div>
-                <div class="metric-value text-2xl font-bold mt-1" :style="{ color: metric.color }">
+                <div class="metric-label text-gray-600 text-sm">
+                  {{ metric.label }}
+                </div>
+                <div
+                  class="metric-value text-2xl font-bold mt-1"
+                  :style="{ color: metric.color }"
+                >
                   {{ formatMetricValue(metric.value, metric.unit) }}
                 </div>
                 <div class="metric-change flex items-center mt-2">
@@ -51,14 +80,24 @@
                     :class="getTrendClass(metric.trend)"
                     class="text-xs mr-1"
                   />
-                  <span :class="getTrendClass(metric.trend)" class="text-xs">
+                  <span
+                    :class="getTrendClass(metric.trend)"
+                    class="text-xs"
+                  >
                     {{ Math.abs(metric.change || 0).toFixed(1) }}%
                   </span>
                   <span class="text-gray-500 text-xs ml-1">vs 上期</span>
                 </div>
               </div>
-              <div class="metric-icon p-3 rounded-lg" :style="{ backgroundColor: metric.color + '20' }">
-                <component :is="metric.icon" :style="{ color: metric.color }" class="text-xl" />
+              <div
+                class="metric-icon p-3 rounded-lg"
+                :style="{ backgroundColor: metric.color + '20' }"
+              >
+                <component
+                  :is="metric.icon"
+                  :style="{ color: metric.color }"
+                  class="text-xl"
+                />
               </div>
             </div>
           </a-card>
@@ -69,32 +108,62 @@
     <!-- 主要分析区域 -->
     <a-row :gutter="[24, 24]">
       <!-- 左侧：图表分析 -->
-      <a-col :xs="24" :lg="16">
+      <a-col
+        :xs="24"
+        :lg="16"
+      >
         <!-- 质量趋势分析 -->
-        <a-card title="质量趋势分析" class="mb-6" :loading="loading">
+        <a-card
+          title="质量趋势分析"
+          class="mb-6"
+          :loading="loading"
+        >
           <template #extra>
-            <a-radio-group v-model:value="trendGranularity" @change="onTrendGranularityChange">
-              <a-radio-button value="day">日</a-radio-button>
-              <a-radio-button value="week">周</a-radio-button>
-              <a-radio-button value="month">月</a-radio-button>
+            <a-radio-group
+              v-model:value="trendGranularity"
+              @change="onTrendGranularityChange"
+            >
+              <a-radio-button value="day">
+                日
+              </a-radio-button>
+              <a-radio-button value="week">
+                周
+              </a-radio-button>
+              <a-radio-button value="month">
+                月
+              </a-radio-button>
             </a-radio-group>
           </template>
           <div class="h-80">
             <LineChart
               :data="trendChartData"
               :options="trendChartOptions"
-              :height="300"
+              height="300px"
             />
           </div>
         </a-card>
 
         <!-- 科室对比分析 -->
-        <a-card title="科室对比分析" class="mb-6" :loading="loading">
+        <a-card
+          title="科室对比分析"
+          class="mb-6"
+          :loading="loading"
+        >
           <template #extra>
-            <a-select v-model:value="comparisonMetric" @change="onComparisonMetricChange" class="w-32">
-              <a-select-option value="avg_score">平均评分</a-select-option>
-              <a-select-option value="grade_a_rate">优秀率</a-select-option>
-              <a-select-option value="total_records">病案数量</a-select-option>
+            <a-select
+              v-model:value="comparisonMetric"
+              class="w-32"
+              @change="onComparisonMetricChange"
+            >
+              <a-select-option value="avg_score">
+                平均评分
+              </a-select-option>
+              <a-select-option value="grade_a_rate">
+                优秀率
+              </a-select-option>
+              <a-select-option value="total_records">
+                病案数量
+              </a-select-option>
             </a-select>
           </template>
           <div class="h-80">
@@ -107,17 +176,27 @@
         </a-card>
 
         <!-- 绩效雷达图 -->
-        <a-card title="绩效雷达分析" class="mb-6" :loading="loading">
+        <a-card
+          title="绩效雷达分析"
+          class="mb-6"
+          :loading="loading"
+        >
           <template #extra>
             <a-select
               v-model:value="selectedDoctor"
-              @change="onDoctorChange"
               placeholder="选择医生"
               class="w-40"
               allow-clear
+              @change="onDoctorChange"
             >
-              <a-select-option value="">全部医生</a-select-option>
-              <a-select-option v-for="doctor in topDoctors" :key="doctor.id" :value="doctor.id">
+              <a-select-option value="">
+                全部医生
+              </a-select-option>
+              <a-select-option
+                v-for="doctor in topDoctors"
+                :key="doctor.id"
+                :value="doctor.id"
+              >
                 {{ doctor.name }}
               </a-select-option>
             </a-select>
@@ -134,9 +213,16 @@
       </a-col>
 
       <!-- 右侧：洞察和报表 -->
-      <a-col :xs="24" :lg="8">
+      <a-col
+        :xs="24"
+        :lg="8"
+      >
         <!-- 智能洞察 -->
-        <a-card title="智能洞察" class="mb-6" :loading="loading">
+        <a-card
+          title="智能洞察"
+          class="mb-6"
+          :loading="loading"
+        >
           <template #extra>
             <a-tooltip title="AI自动分析生成">
               <BulbOutlined class="text-yellow-500" />
@@ -151,11 +237,18 @@
             >
               <div class="flex items-start">
                 <div class="insight-icon mr-3 mt-1">
-                  <component :is="getInsightIcon(insight.type)" :class="getInsightIconClass(insight.type)" />
+                  <component
+                    :is="getInsightIcon(insight.type)"
+                    :class="getInsightIconClass(insight.type)"
+                  />
                 </div>
                 <div class="flex-1">
-                  <h4 class="font-semibold text-sm mb-1">{{ insight.title }}</h4>
-                  <p class="text-xs text-gray-600 mb-2">{{ insight.description }}</p>
+                  <h4 class="font-semibold text-sm mb-1">
+                    {{ insight.title }}
+                  </h4>
+                  <p class="text-xs text-gray-600 mb-2">
+                    {{ insight.description }}
+                  </p>
                   <div class="recommendation bg-gray-50 p-2 rounded text-xs">
                     <strong>建议：</strong>{{ insight.recommendation }}
                   </div>
@@ -163,16 +256,26 @@
               </div>
             </div>
           </div>
-          <div v-if="insights.length === 0" class="text-center text-gray-500 py-8">
+          <div
+            v-if="insights.length === 0"
+            class="text-center text-gray-500 py-8"
+          >
             <BulbOutlined class="text-2xl mb-2" />
             <p>暂无智能洞察</p>
           </div>
         </a-card>
 
         <!-- 报表生成 -->
-        <a-card title="智能报表" class="mb-6">
+        <a-card
+          title="智能报表"
+          class="mb-6"
+        >
           <template #extra>
-            <a-button type="link" @click="showReportModal = true" size="small">
+            <a-button
+              type="link"
+              size="small"
+              @click="showReportModal = true"
+            >
               <PlusOutlined />
               生成报表
             </a-button>
@@ -186,11 +289,18 @@
             >
               <div class="flex items-center justify-between">
                 <div class="flex-1">
-                  <h4 class="font-medium text-sm">{{ template.template_name }}</h4>
-                  <p class="text-xs text-gray-500 mt-1">{{ template.description }}</p>
+                  <h4 class="font-medium text-sm">
+                    {{ template.template_name }}
+                  </h4>
+                  <p class="text-xs text-gray-500 mt-1">
+                    {{ template.description }}
+                  </p>
                 </div>
                 <div class="flex items-center space-x-2">
-                  <a-tag :color="getReportTypeColor(template.template_type)" size="small">
+                  <a-tag
+                    :color="getReportTypeColor(template.template_type)"
+                    size="small"
+                  >
                     {{ getReportTypeLabel(template.template_type) }}
                   </a-tag>
                   <FileTextOutlined class="text-gray-400" />
@@ -210,26 +320,40 @@
             >
               <div class="flex items-center justify-between">
                 <div class="flex-1">
-                  <h4 class="font-medium text-sm">{{ report.report_name }}</h4>
+                  <h4 class="font-medium text-sm">
+                    {{ report.report_name }}
+                  </h4>
                   <p class="text-xs text-gray-500 mt-1">
                     {{ formatDate(report.created_at) }}
                   </p>
                 </div>
                 <div class="flex items-center space-x-2">
-                  <a-tag :color="getReportStatusColor(report.status)" size="small">
+                  <a-tag
+                    :color="getReportStatusColor(report.status)"
+                    size="small"
+                  >
                     {{ getReportStatusLabel(report.status) }}
                   </a-tag>
                   <a-dropdown>
-                    <a-button type="text" size="small">
+                    <a-button
+                      type="text"
+                      size="small"
+                    >
                       <MoreOutlined />
                     </a-button>
                     <template #overlay>
                       <a-menu>
-                        <a-menu-item @click="downloadReport(report.id)" :disabled="report.status !== 'completed'">
+                        <a-menu-item
+                          :disabled="report.status !== 'completed'"
+                          @click="downloadReport(report.id)"
+                        >
                           <DownloadOutlined />
                           下载
                         </a-menu-item>
-                        <a-menu-item @click="viewReport(report.id)" :disabled="report.status !== 'completed'">
+                        <a-menu-item
+                          :disabled="report.status !== 'completed'"
+                          @click="viewReport(report.id)"
+                        >
                           <EyeOutlined />
                           查看
                         </a-menu-item>
@@ -242,12 +366,21 @@
                   </a-dropdown>
                 </div>
               </div>
-              <div v-if="report.status === 'generating'" class="mt-2">
-                <a-progress :percent="report.progress" size="small" />
+              <div
+                v-if="report.status === 'generating'"
+                class="mt-2"
+              >
+                <a-progress
+                  :percent="report.progress"
+                  size="small"
+                />
               </div>
             </div>
           </div>
-          <div v-if="recentReports.length === 0" class="text-center text-gray-500 py-8">
+          <div
+            v-if="recentReports.length === 0"
+            class="text-center text-gray-500 py-8"
+          >
             <FileTextOutlined class="text-2xl mb-2" />
             <p>暂无报表</p>
           </div>
@@ -260,18 +393,34 @@
       v-model:open="showReportModal"
       title="生成报表"
       width="600px"
-      @ok="handleGenerateReport"
       :confirm-loading="generatingReport"
+      @ok="handleGenerateReport"
     >
-      <a-form :model="reportForm" layout="vertical">
-        <a-form-item label="报表模板" required>
-          <a-select v-model:value="reportForm.template_id" placeholder="选择报表模板">
-            <a-select-option v-for="template in reportTemplates" :key="template.id" :value="template.id">
+      <a-form
+        :model="reportForm"
+        layout="vertical"
+      >
+        <a-form-item
+          label="报表模板"
+          required
+        >
+          <a-select
+            v-model:value="reportForm.template_id"
+            placeholder="选择报表模板"
+          >
+            <a-select-option
+              v-for="template in reportTemplates"
+              :key="template.id"
+              :value="template.id"
+            >
               {{ template.template_name }}
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="时间范围" required>
+        <a-form-item
+          label="时间范围"
+          required
+        >
           <a-range-picker
             v-model:value="reportForm.date_range"
             style="width: 100%"
@@ -284,16 +433,29 @@
             placeholder="选择科室（可选）"
             allow-clear
           >
-            <a-select-option v-for="dept in departments" :key="dept" :value="dept">
+            <a-select-option
+              v-for="dept in departments"
+              :key="dept"
+              :value="dept"
+            >
               {{ dept }}
             </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="输出格式">
-          <a-select v-model:value="reportForm.output_format" placeholder="选择输出格式">
-            <a-select-option value="pdf">PDF</a-select-option>
-            <a-select-option value="excel">Excel</a-select-option>
-            <a-select-option value="word">Word</a-select-option>
+          <a-select
+            v-model:value="reportForm.output_format"
+            placeholder="选择输出格式"
+          >
+            <a-select-option value="pdf">
+              PDF
+            </a-select-option>
+            <a-select-option value="excel">
+              Excel
+            </a-select-option>
+            <a-select-option value="word">
+              Word
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -331,12 +493,37 @@ import { analyticsEngine } from '../../lib/analytics-engine'
 import { reportEngine } from '../../lib/report-engine'
 import type { 
   AnalyticsInsight, 
-  TimeRange, 
-  DepartmentComparison,
-  DoctorPerformance,
-  TrendAnalysis 
+  TimeRange
 } from '../../lib/analytics-engine'
 import type { ReportTemplate, ReportInstance } from '../../lib/report-engine'
+
+interface TrendChartDataItem {
+  period: string
+  recordCount: number
+  averageScore: number
+  passRate: number
+}
+
+interface ComparisonChartDataItem {
+  department: string
+  recordCount: number
+  averageScore: number
+  passRate: number
+  color: string
+}
+
+type MetricTrend = 'up' | 'down' | 'stable'
+
+interface CoreMetric {
+  key: string
+  label: string
+  value: number
+  unit: string
+  change?: number
+  trend: MetricTrend
+  color: string
+  icon: string
+}
 
 // 响应式数据
 const loading = ref(false)
@@ -347,10 +534,10 @@ const comparisonMetric = ref<string>('avg_score')
 const selectedDoctor = ref<string>('')
 
 // 数据状态
-const coreMetrics = ref<any[]>([])
+const coreMetrics = ref<CoreMetric[]>([])
 const insights = ref<AnalyticsInsight[]>([])
-const trendChartData = ref<unknown>([])
-const comparisonChartData = ref<unknown>([])
+const trendChartData = ref<TrendChartDataItem[]>([])
+const comparisonChartData = ref<ComparisonChartDataItem[]>([])
 const radarChartData = ref<unknown>({})
 const departments = ref<string[]>([])
 const topDoctors = ref<any[]>([])
@@ -734,7 +921,7 @@ const getTrendClass = (trend: string): string => {
   return 'text-gray-500'
 }
 
-const getMetricCardClass = (metric): string => {
+const getMetricCardClass = (metric: CoreMetric): string => {
   if (metric.trend === 'up') return 'border-l-4 border-green-500'
   if (metric.trend === 'down') return 'border-l-4 border-red-500'
   return 'border-l-4 border-gray-300'

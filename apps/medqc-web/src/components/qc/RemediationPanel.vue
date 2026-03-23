@@ -3,44 +3,84 @@
     <!-- KPI 卡片 -->
     <div class="grid grid-cols-5 gap-3 mb-4">
       <div class="bg-white rounded-xl p-3 border border-slate-100 text-center">
-        <div class="text-xs text-slate-400 mb-1">总整改</div>
-        <div class="text-lg font-bold text-slate-800 font-mono">{{ stats.total || 0 }}</div>
+        <div class="text-xs text-slate-400 mb-1">
+          总整改
+        </div>
+        <div class="text-lg font-bold text-slate-800 font-mono">
+          {{ stats.total || 0 }}
+        </div>
       </div>
       <div class="bg-white rounded-xl p-3 border border-amber-100 text-center">
-        <div class="text-xs text-amber-500 mb-1">待整改</div>
-        <div class="text-lg font-bold text-amber-600 font-mono">{{ stats.pending || 0 }}</div>
+        <div class="text-xs text-amber-500 mb-1">
+          待整改
+        </div>
+        <div class="text-lg font-bold text-amber-600 font-mono">
+          {{ stats.pending || 0 }}
+        </div>
       </div>
       <div class="bg-white rounded-xl p-3 border border-blue-100 text-center">
-        <div class="text-xs text-blue-500 mb-1">已提交</div>
-        <div class="text-lg font-bold text-blue-600 font-mono">{{ stats.submitted || 0 }}</div>
+        <div class="text-xs text-blue-500 mb-1">
+          已提交
+        </div>
+        <div class="text-lg font-bold text-blue-600 font-mono">
+          {{ stats.submitted || 0 }}
+        </div>
       </div>
       <div class="bg-white rounded-xl p-3 border border-emerald-100 text-center">
-        <div class="text-xs text-emerald-500 mb-1">已通过</div>
-        <div class="text-lg font-bold text-emerald-600 font-mono">{{ stats.approved || 0 }}</div>
+        <div class="text-xs text-emerald-500 mb-1">
+          已通过
+        </div>
+        <div class="text-lg font-bold text-emerald-600 font-mono">
+          {{ stats.approved || 0 }}
+        </div>
       </div>
       <div class="bg-white rounded-xl p-3 border border-rose-100 text-center">
-        <div class="text-xs text-rose-500 mb-1">逾期</div>
-        <div class="text-lg font-bold text-rose-600 font-mono">{{ stats.overdue || 0 }}</div>
+        <div class="text-xs text-rose-500 mb-1">
+          逾期
+        </div>
+        <div class="text-lg font-bold text-rose-600 font-mono">
+          {{ stats.overdue || 0 }}
+        </div>
       </div>
     </div>
 
     <!-- 筛选 + 操作区 -->
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
-        <a-segmented v-model:value="statusFilter" :options="statusOptions" size="small" @change="fetchList" />
+        <a-segmented
+          v-model:value="statusFilter"
+          :options="statusOptions"
+          size="small"
+          @change="fetchList"
+        />
       </div>
-      <a-button size="small" type="text" @click="fetchList">
+      <a-button
+        size="small"
+        type="text"
+        @click="fetchList"
+      >
         <ReloadOutlined :spin="loading" /> 刷新
       </a-button>
     </div>
 
     <!-- 表格 -->
     <a-spin :spinning="loading">
-      <div v-if="list.length === 0" class="text-center py-12 text-slate-400">
-        <InboxOutlined style="font-size: 40px" class="mb-2 block" />
-        <p class="text-sm">暂无整改任务</p>
+      <div
+        v-if="list.length === 0"
+        class="text-center py-12 text-slate-400"
+      >
+        <InboxOutlined
+          style="font-size: 40px"
+          class="mb-2 block"
+        />
+        <p class="text-sm">
+          暂无整改任务
+        </p>
       </div>
-      <div v-else class="space-y-3">
+      <div
+        v-else
+        class="space-y-3"
+      >
         <div
           v-for="item in list"
           :key="item.id"
@@ -48,7 +88,10 @@
         >
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-3">
-              <span class="w-2 h-2 rounded-full" :class="getSeverityDot(item.severity)"></span>
+              <span
+                class="w-2 h-2 rounded-full"
+                :class="getSeverityDot(item.severity)"
+              />
               <span class="text-sm font-medium text-slate-800">{{ item.defect_type }}</span>
               <span class="text-xs text-slate-400">· {{ item.record_id }}</span>
             </div>
@@ -59,7 +102,9 @@
               {{ getStatusText(item.status) }}
             </span>
           </div>
-          <p class="text-xs text-slate-500 mb-2 line-clamp-1">{{ item.defect_description }}</p>
+          <p class="text-xs text-slate-500 mb-2 line-clamp-1">
+            {{ item.defect_description }}
+          </p>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4 text-xs text-slate-400">
               <span v-if="item.assignee_name">
@@ -103,7 +148,10 @@
     </a-spin>
 
     <!-- 分页 -->
-    <div v-if="total > pageSize" class="flex justify-end mt-4">
+    <div
+      v-if="total > pageSize"
+      class="flex justify-end mt-4"
+    >
       <a-pagination
         v-model:current="currentPage"
         :total="total"

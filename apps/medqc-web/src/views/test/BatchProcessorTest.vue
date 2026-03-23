@@ -17,7 +17,10 @@
         />
       </a-card>
 
-      <a-card title="处理日志" class="mt-4">
+      <a-card
+        title="处理日志"
+        class="mt-4"
+      >
         <div class="log-container">
           <div 
             v-for="(log, index) in logs" 
@@ -29,7 +32,12 @@
           </div>
         </div>
         <div class="log-actions mt-2">
-          <a-button size="small" @click="clearLogs">清空日志</a-button>
+          <a-button
+            size="small"
+            @click="clearLogs"
+          >
+            清空日志
+          </a-button>
         </div>
       </a-card>
     </div>

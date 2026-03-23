@@ -1,35 +1,59 @@
 <template>
-  <a-card class="rule-card" hoverable>
+  <a-card
+    class="rule-card"
+    hoverable
+  >
     <template #title>
       <div class="rule-header">
         <span class="rule-code">{{ rule.rule_code }}</span>
-        <a-tag :color="defectLevelColor" class="defect-level-tag">
+        <a-tag
+          :color="defectLevelColor"
+          class="defect-level-tag"
+        >
           {{ defectLevelText }}
         </a-tag>
       </div>
     </template>
 
     <div class="rule-content">
-      <h3 class="rule-name">{{ rule.name }}</h3>
-      <p class="rule-description">{{ rule.description }}</p>
+      <h3 class="rule-name">
+        {{ rule.name }}
+      </h3>
+      <p class="rule-description">
+        {{ rule.description }}
+      </p>
 
       <div class="rule-meta">
         <div class="meta-item">
           <span class="meta-label">规则类别：</span>
           <span class="meta-value">{{ rule.category }}</span>
         </div>
-        <div class="meta-item" v-if="rule.deduction_score">
+        <div
+          v-if="rule.deduction_score"
+          class="meta-item"
+        >
           <span class="meta-label">扣分：</span>
           <span class="meta-value">{{ rule.deduction_score }} 分</span>
         </div>
-        <div class="meta-item" v-if="rule.is_veto_defect">
-          <a-tag color="red">一票否决</a-tag>
+        <div
+          v-if="rule.is_veto_defect"
+          class="meta-item"
+        >
+          <a-tag color="red">
+            一票否决
+          </a-tag>
         </div>
       </div>
 
-      <div class="rule-documents" v-if="rule.applicable_documents?.length">
+      <div
+        v-if="rule.applicable_documents?.length"
+        class="rule-documents"
+      >
         <span class="meta-label">适用文档：</span>
-        <a-space :size="4" wrap>
+        <a-space
+          :size="4"
+          wrap
+        >
           <a-tag
             v-for="(doc, index) in rule.applicable_documents"
             :key="index"
@@ -42,18 +66,30 @@
 
       <div class="rule-footer">
         <a-space>
-          <a-button type="primary" @click="handleEvaluate">
+          <a-button
+            type="primary"
+            @click="handleEvaluate"
+          >
             <PlayCircleOutlined /> 批量质控评估
           </a-button>
-          <a-button v-if="showDetailButton" @click="handleDetail">
+          <a-button
+            v-if="showDetailButton"
+            @click="handleDetail"
+          >
             <FileTextOutlined /> 查看详情
           </a-button>
         </a-space>
         <div class="rule-status">
-          <a-tag v-if="rule.is_enabled" color="success">
+          <a-tag
+            v-if="rule.is_enabled"
+            color="success"
+          >
             <CheckCircleOutlined /> 已启用
           </a-tag>
-          <a-tag v-else color="default">
+          <a-tag
+            v-else
+            color="default"
+          >
             已禁用
           </a-tag>
         </div>
@@ -92,7 +128,8 @@ const defectLevelColor = computed(() => {
     major: 'orange',
     minor: 'blue'
   }
-  return colorMap[props.rule.defect_level] || 'default'
+  const level = props.rule.defect_level as keyof typeof colorMap | undefined
+  return level ? (colorMap[level] || 'default') : 'default'
 })
 
 // 缺陷等级文本映射
@@ -102,7 +139,8 @@ const defectLevelText = computed(() => {
     major: '重要缺陷',
     minor: '一般缺陷'
   }
-  return textMap[props.rule.defect_level] || props.rule.defect_level
+  const level = props.rule.defect_level as keyof typeof textMap | undefined
+  return level ? (textMap[level] || level) : ''
 })
 
 const handleEvaluate = () => {

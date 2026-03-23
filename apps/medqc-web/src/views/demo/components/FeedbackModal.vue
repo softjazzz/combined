@@ -4,13 +4,19 @@
     title="评估结果反馈"
     width="900px"
     :confirm-loading="submitting"
+    :body-style="{ padding: '24px' }"
     @ok="handleSubmit"
     @cancel="handleClose"
-    :body-style="{ padding: '24px' }"
   >
-    <div class="feedback-modal" v-if="evaluationResult">
+    <div
+      v-if="evaluationResult"
+      class="feedback-modal"
+    >
       <!-- 评估结果信息 -->
-      <a-card class="result-info-card" :bordered="false">
+      <a-card
+        class="result-info-card"
+        :bordered="false"
+      >
         <template #title>
           <div class="card-header">
             <FileTextOutlined class="card-icon" />
@@ -23,11 +29,19 @@
           <div class="info-row">
             <div class="info-item">
               <span class="info-label">规则编号</span>
-              <a-tag color="blue" class="info-tag">{{ evaluationResult.rule_code }}</a-tag>
+              <a-tag
+                color="blue"
+                class="info-tag"
+              >
+                {{ evaluationResult.rule_code }}
+              </a-tag>
             </div>
             <div class="info-item">
               <span class="info-label">评估结果</span>
-              <a-tag :color="evaluationResult.compliant ? 'success' : 'error'" class="info-tag result-tag">
+              <a-tag
+                :color="evaluationResult.compliant ? 'success' : 'error'"
+                class="info-tag result-tag"
+              >
                 <CheckCircleOutlined v-if="evaluationResult.compliant" />
                 <CloseCircleOutlined v-else />
                 {{ evaluationResult.compliant ? '合规' : '不合规' }}
@@ -91,7 +105,10 @@
       </a-card>
 
       <!-- 反馈表单 -->
-      <a-card class="feedback-form-card" :bordered="false">
+      <a-card
+        class="feedback-form-card"
+        :bordered="false"
+      >
         <template #title>
           <div class="card-header">
             <CommentOutlined class="card-icon" />
@@ -112,81 +129,98 @@
             name="feedbackType"
             :rules="[{ required: true, message: '请选择反馈类型' }]"
           >
-            <a-radio-group v-model:value="formState.feedbackType" button-style="solid" size="large" class="feedback-type-radio">
-              <a-radio-button value="correct" class="correct-btn">
+            <a-radio-group
+              v-model:value="formState.feedbackType"
+              button-style="solid"
+              size="large"
+              class="feedback-type-radio"
+            >
+              <a-radio-button
+                value="correct"
+                class="correct-btn"
+              >
                 <CheckCircleOutlined class="radio-icon" /> 正确
               </a-radio-button>
-              <a-radio-button value="incorrect" class="incorrect-btn">
+              <a-radio-button
+                value="incorrect"
+                class="incorrect-btn"
+              >
                 <CloseCircleOutlined class="radio-icon" /> 错误
               </a-radio-button>
             </a-radio-group>
           </a-form-item>
 
-        <!-- 错误类别 (仅在选择"错误"时显示) -->
-        <a-form-item
-          v-if="formState.feedbackType === 'incorrect'"
-          label="错误类别"
-          name="errorCategory"
-          :rules="[{ required: true, message: '请选择错误类别' }]"
-        >
-          <a-select
-            v-model:value="formState.errorCategory"
-            placeholder="请选择错误类别"
-            size="large"
+          <!-- 错误类别 (仅在选择"错误"时显示) -->
+          <a-form-item
+            v-if="formState.feedbackType === 'incorrect'"
+            label="错误类别"
+            name="errorCategory"
+            :rules="[{ required: true, message: '请选择错误类别' }]"
           >
-            <a-select-option value="false_positive">
-              <AlertOutlined /> 误报 (False Positive) - 实际合规但判定为不合规
-            </a-select-option>
-            <a-select-option value="false_negative">
-              <WarningOutlined /> 漏报 (False Negative) - 实际不合规但判定为合规
-            </a-select-option>
-            <a-select-option value="wrong_reasoning">
-              <BulbOutlined /> 推理错误 - 结论可能正确但推理过程有误
-            </a-select-option>
-            <a-select-option value="incomplete_check">
-              <FileSearchOutlined /> 检查不完整 - 遗漏了重要检查点
-            </a-select-option>
-            <a-select-option value="rule_ambiguity">
-              <QuestionCircleOutlined /> 规则歧义 - 规则描述不清晰导致误判
-            </a-select-option>
-            <a-select-option value="other">
-              <InfoCircleOutlined /> 其他错误
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+            <a-select
+              v-model:value="formState.errorCategory"
+              placeholder="请选择错误类别"
+              size="large"
+            >
+              <a-select-option value="false_positive">
+                <AlertOutlined /> 误报 (False Positive) - 实际合规但判定为不合规
+              </a-select-option>
+              <a-select-option value="false_negative">
+                <WarningOutlined /> 漏报 (False Negative) - 实际不合规但判定为合规
+              </a-select-option>
+              <a-select-option value="wrong_reasoning">
+                <BulbOutlined /> 推理错误 - 结论可能正确但推理过程有误
+              </a-select-option>
+              <a-select-option value="incomplete_check">
+                <FileSearchOutlined /> 检查不完整 - 遗漏了重要检查点
+              </a-select-option>
+              <a-select-option value="rule_ambiguity">
+                <QuestionCircleOutlined /> 规则歧义 - 规则描述不清晰导致误判
+              </a-select-option>
+              <a-select-option value="other">
+                <InfoCircleOutlined /> 其他错误
+              </a-select-option>
+            </a-select>
+          </a-form-item>
 
-        <!-- 错误详情 (仅在选择"错误"时显示) -->
-        <a-form-item
-          v-if="formState.feedbackType === 'incorrect'"
-          label="错误详情"
-          name="errorDetail"
-          :rules="[
-            { required: true, message: '请输入错误详情' },
-            { min: 10, message: '请至少输入10个字符的详细说明' }
-          ]"
-        >
-          <a-textarea
-            v-model:value="formState.errorDetail"
-            placeholder="请详细描述发现的错误，包括：&#10;1. 具体哪里判断错误&#10;2. 正确的判断应该是什么&#10;3. 错误的原因分析&#10;4. 改进建议"
-            :rows="6"
-            show-count
-            :maxlength="1000"
-          />
-        </a-form-item>
+          <!-- 错误详情 (仅在选择"错误"时显示) -->
+          <a-form-item
+            v-if="formState.feedbackType === 'incorrect'"
+            label="错误详情"
+            name="errorDetail"
+            :rules="[
+              { required: true, message: '请输入错误详情' },
+              { min: 10, message: '请至少输入10个字符的详细说明' }
+            ]"
+          >
+            <a-textarea
+              v-model:value="formState.errorDetail"
+              placeholder="请详细描述发现的错误，包括：&#10;1. 具体哪里判断错误&#10;2. 正确的判断应该是什么&#10;3. 错误的原因分析&#10;4. 改进建议"
+              :rows="6"
+              show-count
+              :maxlength="1000"
+            />
+          </a-form-item>
 
-        <!-- 补充证据 (可选) -->
-        <a-form-item label="补充证据" name="evidence">
-          <a-textarea
-            v-model:value="formState.evidence"
-            placeholder="如有需要，可以补充证据信息或引用文档内容"
-            :rows="4"
-            show-count
-            :maxlength="500"
-          />
-        </a-form-item>
+          <!-- 补充证据 (可选) -->
+          <a-form-item
+            label="补充证据"
+            name="evidence"
+          >
+            <a-textarea
+              v-model:value="formState.evidence"
+              placeholder="如有需要，可以补充证据信息或引用文档内容"
+              :rows="4"
+              show-count
+              :maxlength="500"
+            />
+          </a-form-item>
 
           <!-- 反馈人 (可选) -->
-          <a-form-item label="反馈人" name="feedbackBy">
+          <a-form-item
+            label="反馈人"
+            name="feedbackBy"
+          >
             <a-input
               v-model:value="formState.feedbackBy"
               placeholder="请输入您的姓名或工号(可选)"

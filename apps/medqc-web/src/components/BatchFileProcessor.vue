@@ -14,7 +14,9 @@
         <p class="ant-upload-drag-icon">
           <InboxOutlined />
         </p>
-        <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+        <p class="ant-upload-text">
+          点击或拖拽文件到此区域上传
+        </p>
         <p class="ant-upload-hint">
           支持 PDF、Word、文本文件格式，可批量上传多个文件
         </p>
@@ -22,21 +24,41 @@
     </div>
 
     <!-- 文件列表和统计信息 -->
-    <div v-if="uploadedFiles.length > 0" class="file-management-section">
+    <div
+      v-if="uploadedFiles.length > 0"
+      class="file-management-section"
+    >
       <!-- 统计信息 -->
       <div class="file-stats">
         <a-row :gutter="16">
           <a-col :span="6">
-            <a-statistic title="总文件数" :value="uploadedFiles.length" />
+            <a-statistic
+              title="总文件数"
+              :value="uploadedFiles.length"
+            />
           </a-col>
           <a-col :span="6">
-            <a-statistic title="总大小" :value="totalSize" suffix="MB" :precision="2" />
+            <a-statistic
+              title="总大小"
+              :value="totalSize"
+              suffix="MB"
+              :precision="2"
+            />
           </a-col>
           <a-col :span="6">
-            <a-statistic title="已解析" :value="parsedCount" :suffix="`/ ${uploadedFiles.length}`" />
+            <a-statistic
+              title="已解析"
+              :value="parsedCount"
+              :suffix="`/ ${uploadedFiles.length}`"
+            />
           </a-col>
           <a-col :span="6">
-            <a-statistic title="成功率" :value="successRate" suffix="%" :precision="1" />
+            <a-statistic
+              title="成功率"
+              :value="successRate"
+              suffix="%"
+              :precision="1"
+            />
           </a-col>
         </a-row>
       </div>
@@ -51,37 +73,51 @@
             :disabled="uploadedFiles.length === 0"
             @click="startBatchProcessing"
           >
-            <template #icon><ThunderboltOutlined /></template>
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
             {{ batchProcessing ? '解析中...' : '一键解析所有文件' }}
           </a-button>
           
           <a-button 
             v-if="batchProcessing"
-            @click="pauseProcessing"
             :disabled="!canPause"
+            @click="pauseProcessing"
           >
-            <template #icon><PauseCircleOutlined /></template>
+            <template #icon>
+              <PauseCircleOutlined />
+            </template>
             {{ isPaused ? '继续' : '暂停' }}
           </a-button>
           
           <a-button 
             v-if="batchProcessing"
-            @click="cancelProcessing"
             danger
+            @click="cancelProcessing"
           >
-            <template #icon><StopOutlined /></template>
+            <template #icon>
+              <StopOutlined />
+            </template>
             取消
           </a-button>
           
-          <a-button @click="clearAllFiles" danger>
-            <template #icon><DeleteOutlined /></template>
+          <a-button
+            danger
+            @click="clearAllFiles"
+          >
+            <template #icon>
+              <DeleteOutlined />
+            </template>
             清空所有
           </a-button>
         </a-space>
       </div>
 
       <!-- 整体进度条 -->
-      <div v-if="batchProcessing || completedFiles > 0" class="overall-progress">
+      <div
+        v-if="batchProcessing || completedFiles > 0"
+        class="overall-progress"
+      >
         <div class="progress-header">
           <span class="progress-title">整体进度</span>
           <span class="progress-info">
@@ -112,15 +148,15 @@
                   <a-button 
                     v-if="!item.processing && !item.parsed"
                     size="small" 
-                    @click.stop="processSingleFile(index)"
                     :loading="item.processing"
+                    @click.stop="processSingleFile(index)"
                   >
                     解析
                   </a-button>
                   <a-button 
                     size="small" 
-                    @click.stop="removeFile(index)"
                     danger
+                    @click.stop="removeFile(index)"
                   >
                     删除
                   </a-button>
@@ -130,9 +166,15 @@
               <a-list-item-meta>
                 <template #title>
                   <div class="file-title">
-                    <component :is="getFileIcon(item.type)" class="file-icon" />
+                    <component
+                      :is="getFileIcon(item.type)"
+                      class="file-icon"
+                    />
                     <span class="file-name">{{ item.name }}</span>
-                    <a-tag :color="getStatusColor(item.status)" size="small">
+                    <a-tag
+                      :color="getStatusColor(item.status)"
+                      size="small"
+                    >
                       {{ getStatusText(item.status) }}
                     </a-tag>
                   </div>
@@ -147,7 +189,10 @@
                     <span v-else-if="item.parsed && item.confidence">
                       置信度: {{ Math.round(item.confidence) }}%
                     </span>
-                    <span v-else-if="item.error" class="error-text">
+                    <span
+                      v-else-if="item.error"
+                      class="error-text"
+                    >
                       错误: {{ item.error }}
                     </span>
                   </div>
@@ -155,7 +200,10 @@
               </a-list-item-meta>
               
               <!-- 单个文件进度条 -->
-              <div v-if="item.processing" class="file-progress">
+              <div
+                v-if="item.processing"
+                class="file-progress"
+              >
                 <a-progress 
                   :percent="item.progress || 0" 
                   size="small" 
@@ -169,24 +217,36 @@
       </div>
 
       <!-- 批量操作结果 -->
-      <div v-if="batchResults.length > 0" class="batch-results">
+      <div
+        v-if="batchResults.length > 0"
+        class="batch-results"
+      >
         <a-divider>批量处理结果</a-divider>
         <div class="results-actions">
           <a-space>
             <a-button 
               type="primary" 
-              @click="showBatchResultsModal"
               :disabled="batchResults.length === 0"
+              @click="showBatchResultsModal"
             >
-              <template #icon><EyeOutlined /></template>
+              <template #icon>
+                <EyeOutlined />
+              </template>
               查看所有结果
             </a-button>
             <a-button @click="exportBatchResults">
-              <template #icon><DownloadOutlined /></template>
+              <template #icon>
+                <DownloadOutlined />
+              </template>
               导出结果
             </a-button>
-            <a-button @click="saveBatchToDatabase" :loading="saving">
-              <template #icon><DatabaseOutlined /></template>
+            <a-button
+              :loading="saving"
+              @click="saveBatchToDatabase"
+            >
+              <template #icon>
+                <DatabaseOutlined />
+              </template>
               批量保存到数据库
             </a-button>
           </a-space>
@@ -203,7 +263,7 @@
       class="batch-results-modal"
     >
       <div class="batch-results-content">
-        <a-tabs v-model:activeKey="activeResultTab">
+        <a-tabs v-model:active-key="activeResultTab">
           <a-tab-pane 
             v-for="(result, index) in batchResults" 
             :key="index" 
@@ -246,6 +306,7 @@ import {
   FileTextOutlined
 } from '@ant-design/icons-vue'
 import LLMResultModal from './LLMResultModal.vue'
+import type { ExtractedDocument } from '@/services/llmService'
 
 // 文件状态枚举
 enum FileStatus {
@@ -274,11 +335,16 @@ interface ProcessingFile {
 
 interface LLMParsedResult {
   success: boolean
+  provider?: string
+  model?: string
+  endpoint?: string
+  tokensUsed?: number
+  processingTime?: number
   data?: {
     patientName?: string
     content?: string
     confidence?: number
-    documents?: unknown[]
+    documents?: ExtractedDocument[]
   }
   message?: string
 }
@@ -602,6 +668,7 @@ const callLLMParseAPI = async (file: File): Promise<LLMParsedResult> => {
       if (Math.random() > 0.1) { // 90%成功率
         resolve({
           success: true,
+          processingTime: Math.floor(2000 + Math.random() * 3000),
           data: {
             patientName: '测试患者',
             content: '模拟解析内容...',

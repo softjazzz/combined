@@ -1,7 +1,10 @@
 <template>
   <div class="lx33-demo-view min-h-screen bg-slate-50/80 relative overflow-hidden p-6 lg:p-8">
     <!-- 背景装饰：极淡的点阵 -->
-    <div class="absolute inset-0 pointer-events-none" style="background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 32px 32px; opacity: 0.25;"></div>
+    <div
+      class="absolute inset-0 pointer-events-none"
+      style="background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 32px 32px; opacity: 0.25;"
+    />
     
     <div class="relative z-10">
       <!-- 1. 页面头部 & 全局操作 -->
@@ -13,30 +16,32 @@
             </div>
             泸县33条质控规则测试
           </h1>
-          <p class="text-slate-500 mt-2 text-sm ml-1">基于真实病历数据的 AI 质控规则验证与评估中心</p>
+          <p class="text-slate-500 mt-2 text-sm ml-1">
+            基于真实病历数据的 AI 质控规则验证与评估中心
+          </p>
         </div>
         <div class="flex flex-wrap gap-3">
           <button 
-            @click="ruleDocModalVisible = true"
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+            @click="ruleDocModalVisible = true"
           >
             <FileTextOutlined class="mr-2" /> 规则说明
           </button>
           <button 
-            @click="showFeedbacksPage"
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+            @click="showFeedbacksPage"
           >
             <HistoryOutlined class="mr-2" /> 反馈记录
           </button>
           <button 
-            @click="exportFeedbacks"
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+            @click="exportFeedbacks"
           >
             <ExportOutlined class="mr-2" /> 导出数据
           </button>
           <button
-            @click="showCreateRulePage"
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
+            @click="showCreateRulePage"
           >
             <ThunderboltOutlined class="mr-2" /> AI 创建规则
           </button>
@@ -49,8 +54,12 @@
         <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
           <div class="flex justify-between items-center">
             <div>
-              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">总反馈数</div>
-              <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">{{ stats.total_feedbacks }}</div>
+              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">
+                总反馈数
+              </div>
+              <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">
+                {{ stats.total_feedbacks }}
+              </div>
             </div>
             <div class="w-12 h-12 rounded-2xl bg-slate-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-50 transition-colors">
               <MessageOutlined class="text-xl" />
@@ -62,9 +71,13 @@
         <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
           <div class="flex justify-between items-center">
             <div>
-              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">正确反馈</div>
+              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">
+                正确反馈
+              </div>
               <div class="flex items-baseline gap-3">
-                <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">{{ stats.correct_feedbacks }}</div>
+                <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">
+                  {{ stats.correct_feedbacks }}
+                </div>
                 <div class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
                   {{ (stats.accuracy_rate * 100).toFixed(0) }}% 准确率
                 </div>
@@ -80,9 +93,13 @@
         <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
           <div class="flex justify-between items-center">
             <div>
-              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">错误反馈</div>
+              <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">
+                错误反馈
+              </div>
               <div class="flex items-baseline gap-3">
-                <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">{{ stats.incorrect_feedbacks }}</div>
+                <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">
+                  {{ stats.incorrect_feedbacks }}
+                </div>
                 <div class="text-xs font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">
                   {{ ((1 - stats.accuracy_rate) * 100).toFixed(0) }}% 错误率
                 </div>
@@ -109,7 +126,7 @@
         </div>
         
         <a-table
-          :dataSource="displayRules"
+          :data-source="displayRules"
           :columns="columns"
           :pagination="{
             defaultPageSize: 33,
@@ -117,7 +134,7 @@
             showSizeChanger: true,
             pageSizeOptions: ['10', '20', '33', '50'],
             showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条`
+            showTotal: (total: number) => `共 ${total} 条`
           }"
           class="modern-table"
           :scroll="{ x: 1000 }"
@@ -134,7 +151,10 @@
             <template v-if="column.key === 'name'">
               <div class="flex flex-col">
                 <span class="font-medium text-slate-700 group-hover:text-blue-700 transition-colors">{{ record.name }}</span>
-                <span class="text-xs text-slate-400 truncate max-w-[240px]" :title="record.description">{{ record.description }}</span>
+                <span
+                  class="text-xs text-slate-400 truncate max-w-[240px]"
+                  :title="record.description"
+                >{{ record.description }}</span>
               </div>
             </template>
 
@@ -146,27 +166,36 @@
 
             <template v-if="column.key === 'complexity'">
               <div class="flex items-center gap-1.5">
-                <div class="w-1.5 h-1.5 rounded-full" :class="{
-                  'bg-rose-500': record.complexity === '高复杂度',
-                  'bg-amber-500': record.complexity === '中复杂度',
-                  'bg-emerald-500': record.complexity === '低复杂度'
-                }"></div>
+                <div
+                  class="w-1.5 h-1.5 rounded-full"
+                  :class="{
+                    'bg-rose-500': record.complexity === '高复杂度',
+                    'bg-amber-500': record.complexity === '中复杂度',
+                    'bg-emerald-500': record.complexity === '低复杂度'
+                  }"
+                />
                 <span class="text-xs text-slate-600">{{ record.complexity }}</span>
               </div>
             </template>
 
             <template v-if="column.key === 'defect_level'">
-              <span class="text-xs font-medium px-2 py-0.5 rounded-full" :class="{
-                'bg-rose-50 text-rose-600': record.defect_level === 'critical' || record.defect_level === '严重缺陷',
-                'bg-amber-50 text-amber-600': record.defect_level === 'major' || record.defect_level === '一般缺陷',
-                'bg-slate-100 text-slate-500': record.defect_level === 'minor' || record.defect_level === '轻微缺陷'
-              }">
+              <span
+                class="text-xs font-medium px-2 py-0.5 rounded-full"
+                :class="{
+                  'bg-rose-50 text-rose-600': record.defect_level === 'critical' || record.defect_level === '严重缺陷',
+                  'bg-amber-50 text-amber-600': record.defect_level === 'major' || record.defect_level === '一般缺陷',
+                  'bg-slate-100 text-slate-500': record.defect_level === 'minor' || record.defect_level === '轻微缺陷'
+                }"
+              >
                 {{ getDefectLevelText(record.defect_level) }}
               </span>
             </template>
 
             <template v-if="column.key === 'source'">
-              <span class="text-xs" :class="record.source === 'ai_generated' ? 'text-indigo-600 font-medium' : 'text-slate-400'">
+              <span
+                class="text-xs"
+                :class="record.source === 'ai_generated' ? 'text-indigo-600 font-medium' : 'text-slate-400'"
+              >
                 {{ getSourceText(record.source) }}
               </span>
             </template>
@@ -174,12 +203,18 @@
             <template v-if="column.key === 'actions'">
               <div class="flex gap-2">
                 <a-tooltip title="查看详情">
-                  <button @click="viewRuleDetail(record)" class="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all">
+                  <button
+                    class="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all"
+                    @click="viewRuleDetail(record)"
+                  >
                     <EyeOutlined class="text-sm" />
                   </button>
                 </a-tooltip>
                 <a-tooltip title="开始质控评估">
-                  <button @click="showBatchTestModal = true" class="w-7 h-7 rounded-md flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all">
+                  <button
+                    class="w-7 h-7 rounded-md flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all"
+                    @click="showBatchTestModal = true"
+                  >
                     <PlayCircleOutlined class="text-sm" />
                   </button>
                 </a-tooltip>
@@ -212,38 +247,60 @@
       width="600px"
       class="modern-modal"
     >
-      <div v-if="selectedRule" class="p-2">
-         <div class="flex items-center gap-3 mb-6">
-           <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
-             <FileTextOutlined />
-           </div>
-           <div>
-             <div class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-0.5">{{ selectedRule.rule_id || selectedRule.rule_code }}</div>
-             <h3 class="text-lg font-bold text-slate-800">{{ selectedRule.name }}</h3>
-           </div>
-         </div>
+      <div
+        v-if="selectedRule"
+        class="p-2"
+      >
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+            <FileTextOutlined />
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 uppercase font-bold tracking-wide mb-0.5">
+              {{ selectedRule.rule_id || selectedRule.rule_code }}
+            </div>
+            <h3 class="text-lg font-bold text-slate-800">
+              {{ selectedRule.name }}
+            </h3>
+          </div>
+        </div>
          
-         <div class="space-y-4">
-           <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
-             <div class="text-xs text-slate-400 font-medium mb-2">规则描述</div>
-             <div class="text-slate-700 text-sm leading-relaxed">{{ selectedRule.description }}</div>
-           </div>
+        <div class="space-y-4">
+          <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <div class="text-xs text-slate-400 font-medium mb-2">
+              规则描述
+            </div>
+            <div class="text-slate-700 text-sm leading-relaxed">
+              {{ selectedRule.description }}
+            </div>
+          </div>
            
-           <div class="grid grid-cols-2 gap-4">
-             <div class="p-3 border border-slate-100 rounded-xl">
-               <div class="text-xs text-slate-400 mb-1">文书类别</div>
-               <div class="font-medium text-slate-700">{{ selectedRule.category }}</div>
-             </div>
-             <div class="p-3 border border-slate-100 rounded-xl">
-               <div class="text-xs text-slate-400 mb-1">缺陷级别</div>
-               <div class="font-medium" :class="{
+          <div class="grid grid-cols-2 gap-4">
+            <div class="p-3 border border-slate-100 rounded-xl">
+              <div class="text-xs text-slate-400 mb-1">
+                文书类别
+              </div>
+              <div class="font-medium text-slate-700">
+                {{ selectedRule.category }}
+              </div>
+            </div>
+            <div class="p-3 border border-slate-100 rounded-xl">
+              <div class="text-xs text-slate-400 mb-1">
+                缺陷级别
+              </div>
+              <div
+                class="font-medium"
+                :class="{
                   'text-red-600': selectedRule.defect_level === 'critical',
                   'text-orange-500': selectedRule.defect_level === 'major',
                   'text-green-600': selectedRule.defect_level === 'minor'
-               }">{{ getDefectLevelText(selectedRule.defect_level) }}</div>
-             </div>
-           </div>
-         </div>
+                }"
+              >
+                {{ getDefectLevelText(selectedRule.defect_level) }}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </a-modal>
 
@@ -253,25 +310,28 @@
       title="质控点说明（规则逻辑总览）"
       width="90%"
       :footer="null"
-      wrapClassName="rule-doc-modal"
+      wrap-class-name="rule-doc-modal"
     >
       <a-table
-        :dataSource="ruleDocRows"
+        :data-source="ruleDocRows"
         :columns="ruleDocColumns"
         class="rule-doc-table"
         :pagination="{
           pageSize: 10,
           showSizeChanger: true,
           pageSizeOptions: ['10', '20', '33', '50'],
-          showTotal: (total) => `共 ${total} 条质控点`
+          showTotal: (total: number) => `共 ${total} 条质控点`
         }"
         size="middle"
-        rowKey="rule_id"
+        row-key="rule_id"
         :scroll="{ y: 600 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_id'">
-            <a-tag :color="record.rule_id.includes('LX-') ? 'blue' : 'cyan'" class="font-medium">
+            <a-tag
+              :color="record.rule_id.includes('LX-') ? 'blue' : 'cyan'"
+              class="font-medium"
+            >
               {{ record.rule_id }}
             </a-tag>
           </template>
@@ -290,9 +350,12 @@
             <div class="text-slate-600 leading-relaxed text-sm">
               <template v-if="record.check_points">
                 <!-- 尝试简单解析序号，如果没有序号则直接显示 -->
-                <div v-if="record.check_points.match(/\d+\./)" class="space-y-1">
+                <div
+                  v-if="record.check_points.match(/\d+\./)"
+                  class="space-y-1"
+                >
                   <div 
-                    v-for="(point, idx) in record.check_points.split(/(?=\d+\.)/).filter(p => p.trim())" 
+                    v-for="(point, idx) in record.check_points.split(/(?=\d+\.)/).filter((p: string) => p.trim())" 
                     :key="idx"
                     class="flex gap-2"
                   >
@@ -302,11 +365,17 @@
                     <span>{{ point.replace(/^\d+\./, '').trim() }}</span>
                   </div>
                 </div>
-                <div v-else class="whitespace-pre-wrap">
+                <div
+                  v-else
+                  class="whitespace-pre-wrap"
+                >
                   {{ record.check_points }}
                 </div>
               </template>
-              <span v-else class="text-slate-400 italic">（提示词中未单独标注【检查要点】）</span>
+              <span
+                v-else
+                class="text-slate-400 italic"
+              >（提示词中未单独标注【检查要点】）</span>
             </div>
           </template>
         </template>
@@ -319,9 +388,9 @@
       title="批量质控评估"
       width="95%"
       :footer="null"
-      :destroyOnClose="true"
-      wrapClassName="batch-test-modal"
-      :bodyStyle="{ padding: 0, height: '85vh', overflow: 'hidden' }"
+      :destroy-on-close="true"
+      wrap-class-name="batch-test-modal"
+      :body-style="{ padding: 0, height: '85vh', overflow: 'hidden' as const }"
     >
       <BatchRuleTest
         v-if="showBatchTestModal"
@@ -667,13 +736,13 @@ const getDefectLevelColor = (level: string) => {
   return colorMap[level] || 'default'
 }
 
-const getDefectLevelText = (level: string) => {
+const getDefectLevelText = (level: string | undefined) => {
   const textMap: Record<string, string> = {
     'critical': '严重缺陷',
     'major': '一般缺陷',
     'minor': '轻微缺陷'
   }
-  return textMap[level] || level
+  return (level && textMap[level]) || level || ''
 }
 
 const getSourceColor = (source: string) => {
@@ -685,13 +754,13 @@ const getSourceColor = (source: string) => {
   return map[source] || 'default'
 }
 
-const getSourceText = (source: string) => {
+const getSourceText = (source: string | undefined) => {
   const map: Record<string, string> = {
     'ai_generated': 'AI 生成',
     'baseline': '系统规则',
     'other': '其他'
   }
-  return map[source] || '系统规则'
+  return (source && map[source]) || '系统规则'
 }
 
 // 组件挂载时加载数据

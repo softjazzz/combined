@@ -2,10 +2,15 @@
   <div class="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-900 p-6 overflow-hidden">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-6">
-      <button @click="$emit('back')" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+      <button
+        class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+        @click="$emit('back')"
+      >
         <ArrowLeftOutlined class="text-lg" />
       </button>
-      <h2 class="text-xl font-semibold text-slate-800 dark:text-white">测试病历列表</h2>
+      <h2 class="text-xl font-semibold text-slate-800 dark:text-white">
+        测试病历列表
+      </h2>
       <span class="text-sm text-slate-400">{{ testCases.length }} 个测试病历</span>
     </div>
 
@@ -13,10 +18,12 @@
       <!-- Left: Test Case List -->
       <div class="w-80 flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">病历列表</h3>
+          <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            病历列表
+          </h3>
           <button 
-            @click="showCreateModal = true"
             class="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+            @click="showCreateModal = true"
           >
             <PlusOutlined />
             新建
@@ -27,13 +34,13 @@
           <div
             v-for="(testCase, index) in testCases"
             :key="index"
-            @click="selectedIndex = index"
             :class="[
               'p-4 border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors',
               selectedIndex === index 
                 ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' 
                 : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
             ]"
+            @click="selectedIndex = index"
           >
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
@@ -43,7 +50,10 @@
                 <div class="font-medium text-slate-800 dark:text-white mb-1">
                   {{ testCase.title || testCase.name || `测试病历${index + 1}` }}
                 </div>
-                <div v-if="testCase.description" class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                <div
+                  v-if="testCase.description"
+                  class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2"
+                >
                   {{ testCase.description }}
                 </div>
                 <div class="mt-2 flex items-center gap-2 text-xs text-slate-400">
@@ -55,12 +65,15 @@
           </div>
           
           <!-- Empty state -->
-          <div v-if="testCases.length === 0" class="p-8 text-center text-slate-400">
+          <div
+            v-if="testCases.length === 0"
+            class="p-8 text-center text-slate-400"
+          >
             <FileTextOutlined class="text-4xl mb-3" />
             <p>暂无测试病历</p>
             <button 
-              @click="showCreateModal = true"
               class="mt-3 text-blue-500 hover:text-blue-600 text-sm"
+              @click="showCreateModal = true"
             >
               点击创建第一个
             </button>
@@ -70,42 +83,48 @@
 
       <!-- Right: Case Content -->
       <div class="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
-        <div v-if="selectedCase" class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div
+          v-if="selectedCase"
+          class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between"
+        >
           <div>
             <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
               {{ selectedCase.title || selectedCase.name || `测试病历${selectedIndex + 1}` }}
             </h3>
-            <p v-if="selectedCase?.description" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p
+              v-if="selectedCase?.description"
+              class="text-xs text-slate-500 dark:text-slate-400 mt-1"
+            >
               {{ selectedCase.description }}
             </p>
           </div>
           <div class="flex gap-2">
             <button
-              @click="loadCase"
               class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+              @click="loadCase"
             >
               <UploadOutlined />
               加载到工作台
             </button>
             <button
-              @click="copyContent"
               class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm flex items-center gap-2"
+              @click="copyContent"
             >
               <CopyOutlined />
               复制内容
             </button>
             <button
               v-if="selectedIndex >= 2"
-              @click="openEditModal"
               class="px-4 py-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-colors text-sm flex items-center gap-2"
+              @click="openEditModal"
             >
               <EditOutlined />
               编辑
             </button>
             <button
               v-if="selectedIndex >= 2"
-              @click="confirmDelete"
               class="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm flex items-center gap-2"
+              @click="confirmDelete"
             >
               <DeleteOutlined />
               删除
@@ -113,7 +132,10 @@
           </div>
         </div>
         
-        <div v-if="selectedCase" class="flex-1 overflow-y-auto p-5">
+        <div
+          v-if="selectedCase"
+          class="flex-1 overflow-y-auto p-5"
+        >
           <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">病历原文</span>
@@ -125,7 +147,9 @@
           <!-- Metadata -->
           <div class="mt-4 grid grid-cols-2 gap-4">
             <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-              <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">创建信息</div>
+              <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                创建信息
+              </div>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span class="text-slate-500 dark:text-slate-400">创建时间:</span>
@@ -135,7 +159,9 @@
             </div>
 
             <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-              <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">统计信息</div>
+              <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                统计信息
+              </div>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span class="text-slate-500 dark:text-slate-400">字符数:</span>
@@ -151,7 +177,10 @@
         </div>
         
         <!-- Empty state for right panel -->
-        <div v-else class="flex-1 flex items-center justify-center text-slate-400">
+        <div
+          v-else
+          class="flex-1 flex items-center justify-center text-slate-400"
+        >
           <div class="text-center">
             <FileTextOutlined class="text-5xl mb-3" />
             <p>请选择或创建一个测试病历</p>
@@ -166,7 +195,7 @@
       title="创建测试病历"
       :width="720"
       :footer="null"
-      :destroyOnClose="true"
+      :destroy-on-close="true"
     >
       <div class="space-y-4 py-2">
         <div>
@@ -188,19 +217,23 @@
             v-model:value="newCase.medical_text" 
             placeholder="粘贴或输入完整的病历原文内容..."
             :rows="12"
-            :showCount="true"
+            :show-count="true"
             :maxlength="50000"
           />
         </div>
         
         <div class="flex justify-end gap-3 pt-2">
-          <a-button @click="showCreateModal = false">取消</a-button>
+          <a-button @click="showCreateModal = false">
+            取消
+          </a-button>
           <a-button 
             type="primary" 
-            @click="createCase"
             :disabled="!newCase.title || !newCase.medical_text"
+            @click="createCase"
           >
-            <template #icon><PlusOutlined /></template>
+            <template #icon>
+              <PlusOutlined />
+            </template>
             创建病历
           </a-button>
         </div>
@@ -213,7 +246,7 @@
       title="编辑测试病历"
       :width="720"
       :footer="null"
-      :destroyOnClose="true"
+      :destroy-on-close="true"
     >
       <div class="space-y-4 py-2">
         <div>
@@ -235,19 +268,23 @@
             v-model:value="editCase.medical_text"
             placeholder="粘贴或输入完整的病历原文内容..."
             :rows="12"
-            :showCount="true"
+            :show-count="true"
             :maxlength="50000"
           />
         </div>
 
         <div class="flex justify-end gap-3 pt-2">
-          <a-button @click="showEditModal = false">取消</a-button>
+          <a-button @click="showEditModal = false">
+            取消
+          </a-button>
           <a-button
             type="primary"
-            @click="saveEdit"
             :disabled="!editCase.title || !editCase.medical_text"
+            @click="saveEdit"
           >
-            <template #icon><EditOutlined /></template>
+            <template #icon>
+              <EditOutlined />
+            </template>
             保存修改
           </a-button>
         </div>

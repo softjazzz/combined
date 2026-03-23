@@ -7,13 +7,21 @@
       >
         <template #extra>
           <a-space>
-            <a-button type="default" :disabled="!selectedCount" @click="handleBatchAction('export')">
+            <a-button
+              type="default"
+              :disabled="!selectedCount"
+              @click="handleBatchAction('export')"
+            >
               <template #icon>
                 <ExportOutlined />
               </template>
               导出
             </a-button>
-            <a-button type="default" :disabled="!selectedCount" @click="handleBatchAction('duplicate')">
+            <a-button
+              type="default"
+              :disabled="!selectedCount"
+              @click="handleBatchAction('duplicate')"
+            >
               <template #icon>
                 <CopyOutlined />
               </template>
@@ -30,14 +38,30 @@
       </a-page-header>
     </div>
 
-    <a-card class="filter-card" :bordered="false">
-      <a-form layout="inline" class="filter-form" @submit.prevent>
+    <a-card
+      class="filter-card"
+      :bordered="false"
+    >
+      <a-form
+        layout="inline"
+        class="filter-form"
+        @submit.prevent
+      >
         <a-form-item label="关键字">
           <a-input-group compact>
-            <a-select v-model:value="filterForm.keywordType" style="width: 120px">
-              <a-select-option value="name">病历名称</a-select-option>
-              <a-select-option value="id">病历编号</a-select-option>
-              <a-select-option value="creator">创建人</a-select-option>
+            <a-select
+              v-model:value="filterForm.keywordType"
+              style="width: 120px"
+            >
+              <a-select-option value="name">
+                病历名称
+              </a-select-option>
+              <a-select-option value="id">
+                病历编号
+              </a-select-option>
+              <a-select-option value="creator">
+                创建人
+              </a-select-option>
             </a-select>
             <a-input
               v-model:value="filterForm.keyword"
@@ -56,7 +80,11 @@
             placeholder="选择病历类型"
             style="width: 220px"
           >
-            <a-select-option v-for="item in recordTypeOptions" :key="item.value" :value="item.value">
+            <a-select-option
+              v-for="item in recordTypeOptions"
+              :key="item.value"
+              :value="item.value"
+            >
               {{ item.label }}
             </a-select-option>
           </a-select>
@@ -70,7 +98,11 @@
             placeholder="选择科室"
             style="width: 220px"
           >
-            <a-select-option v-for="item in departmentOptions" :key="item" :value="item">
+            <a-select-option
+              v-for="item in departmentOptions"
+              :key="item"
+              :value="item"
+            >
               {{ item }}
             </a-select-option>
           </a-select>
@@ -84,7 +116,11 @@
             placeholder="选择状态"
             style="width: 200px"
           >
-            <a-select-option v-for="item in statusOptions" :key="item.value" :value="item.value">
+            <a-select-option
+              v-for="item in statusOptions"
+              :key="item.value"
+              :value="item.value"
+            >
               {{ item.label }}
             </a-select-option>
           </a-select>
@@ -92,7 +128,10 @@
 
         <a-form-item>
           <a-space>
-            <a-button type="primary" @click="applyFilter">
+            <a-button
+              type="primary"
+              @click="applyFilter"
+            >
               <template #icon>
                 <SearchOutlined />
               </template>
@@ -128,7 +167,11 @@
       <div class="table-toolbar">
         <div class="left">
           <a-space>
-            <a-button size="small" @click="loadTemplates" :loading="templatesLoading">
+            <a-button
+              size="small"
+              :loading="templatesLoading"
+              @click="loadTemplates"
+            >
               <template #icon>
                 <FolderOpenOutlined />
               </template>
@@ -145,7 +188,10 @@
                     {{ template.name }}
                   </a-menu-item>
                   <a-menu-divider v-if="filterTemplates.length" />
-                  <a-menu-item key="create-template" @click="saveCurrentTemplate">
+                  <a-menu-item
+                    key="create-template"
+                    @click="saveCurrentTemplate"
+                  >
                     保存当前筛选为模板
                   </a-menu-item>
                 </a-menu>
@@ -155,7 +201,12 @@
                 <DownOutlined />
               </a-button>
             </a-dropdown>
-            <a-button size="small" danger v-if="hasActiveFilters" @click="handleReset">
+            <a-button
+              v-if="hasActiveFilters"
+              size="small"
+              danger
+              @click="handleReset"
+            >
               清除筛选
             </a-button>
           </a-space>
@@ -177,9 +228,13 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
             <div class="record-name-cell">
-              <div class="name">{{ record.name }}</div>
+              <div class="name">
+                {{ record.name }}
+              </div>
               <div class="meta">
-                <a-tag color="geekblue">{{ getRecordTypeLabel(record.type) }}</a-tag>
+                <a-tag color="geekblue">
+                  {{ getRecordTypeLabel(record.type) }}
+                </a-tag>
                 <span class="text-muted">编号：{{ record.recordCode }}</span>
               </div>
             </div>
@@ -193,8 +248,8 @@
           </template>
 
           <template v-else-if="column.key === 'complexity'">
-            <a-tag :color="complexityColorMap[record.complexity]">
-              {{ complexityLabelMap[record.complexity] }}
+            <a-tag :color="getComplexityColor(record.complexity)">
+              {{ getComplexityLabel(record.complexity) }}
             </a-tag>
           </template>
 
@@ -205,16 +260,28 @@
               :show-info="false"
               size="small"
             />
-            <div class="text-muted mt-1">{{ (record.passRate * 100).toFixed(1) }}%</div>
+            <div class="text-muted mt-1">
+              {{ (record.passRate * 100).toFixed(1) }}%
+            </div>
           </template>
 
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="statusColorMap[record.status]">{{ statusLabelMap[record.status] }}</a-tag>
+            <a-tag :color="getStatusColor(record.status)">
+              {{ getStatusLabel(record.status) }}
+            </a-tag>
           </template>
 
           <template v-else-if="column.key === 'tags'">
-            <a-space size="small" wrap>
-              <a-tag v-for="tag in record.tags" :key="tag">{{ tag }}</a-tag>
+            <a-space
+              size="small"
+              wrap
+            >
+              <a-tag
+                v-for="tag in record.tags"
+                :key="tag"
+              >
+                {{ tag }}
+              </a-tag>
             </a-space>
           </template>
         </template>
@@ -237,7 +304,14 @@ import {
   ReloadOutlined,
   SearchOutlined
 } from '@ant-design/icons-vue'
-import type { BatchActionPayload, FilterTemplate, QuickFilterTag, TestMedicalRecordSummary } from '@/types/test-medical-records'
+import type {
+  BatchActionPayload,
+  FilterTemplate,
+  QuickFilterTag,
+  RecordSearchConditions,
+  RecordStatus,
+  TestMedicalRecordSummary
+} from '@/types/test-medical-records'
 import { useTestMedicalRecordsStore } from '@/stores/testMedicalRecords'
 
 const store = useTestMedicalRecordsStore()
@@ -255,12 +329,18 @@ const {
 
 const { templatesLoading } = storeToRefs(store)
 
-const filterForm = reactive({
+const filterForm = reactive<{
+  keyword: string
+  keywordType: NonNullable<RecordSearchConditions['keywordType']>
+  recordType: string[]
+  departments: string[]
+  status: RecordStatus[]
+}>({
   keyword: '',
   keywordType: 'name',
   recordType: [] as string[],
   departments: [] as string[],
-  status: [] as string[]
+  status: [] as RecordStatus[]
 })
 
 const recordTypeOptions = [
@@ -305,6 +385,18 @@ const complexityColorMap = {
   complex: 'orange',
   very_complex: 'red'
 } as const
+
+const getComplexityColor = (complexity: string): string =>
+  complexityColorMap[complexity as keyof typeof complexityColorMap] || 'default'
+
+const getComplexityLabel = (complexity: string): string =>
+  complexityLabelMap[complexity as keyof typeof complexityLabelMap] || complexity
+
+const getStatusColor = (status: string): string =>
+  statusColorMap[status as keyof typeof statusColorMap] || 'default'
+
+const getStatusLabel = (status: string): string =>
+  statusLabelMap[status as keyof typeof statusLabelMap] || status
 
 const columns: ColumnsType<TestMedicalRecordSummary> = [
   {
@@ -444,7 +536,6 @@ const applyTemplate = async (template: FilterTemplate) => {
     status: template.conditions.status ?? []
   })
   await store.applyFilters()
-  augmentTable()
   message.success(`已应用模板 ${template.name}`)
 }
 
@@ -456,7 +547,7 @@ const saveCurrentTemplate = async () => {
   const name = `筛选模板-${new Date().toLocaleString()}`
   await store.saveTemplate({
     name,
-    conditions: store.conditions.value
+    conditions: store.conditions
   })
   message.success(`已保存模板：${name}`)
 }

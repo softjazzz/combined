@@ -1,10 +1,20 @@
 <template>
   <div class="llm-api-config">
-    <a-row :gutter="24" class="master-detail-layout">
+    <a-row
+      :gutter="24"
+      class="master-detail-layout"
+    >
       <!-- 左侧：API 服务商列表 (Master) -->
-      <a-col :xs="24" :md="8" :lg="6" class="master-panel">
+      <a-col
+        :xs="24"
+        :md="8"
+        :lg="6"
+        class="master-panel"
+      >
         <div class="provider-list">
-          <h4 class="panel-title">API 服务商</h4>
+          <h4 class="panel-title">
+            API 服务商
+          </h4>
           <div class="provider-items">
             <div
               v-for="config in availableConfigs"
@@ -14,8 +24,12 @@
               @click="handleProviderSelect(config.name)"
             >
               <div class="provider-item__content">
-                <div class="provider-item__name">{{ config.displayName }}</div>
-                <div class="provider-item__desc">{{ config.description }}</div>
+                <div class="provider-item__name">
+                  {{ config.displayName }}
+                </div>
+                <div class="provider-item__desc">
+                  {{ config.description }}
+                </div>
                 <div class="provider-item__features">
                   <a-tag
                     v-for="feature in config.features"
@@ -33,17 +47,29 @@
       </a-col>
 
       <!-- 右侧：配置详情 (Detail) -->
-      <a-col :xs="24" :md="16" :lg="18" class="detail-panel">
-        <div v-if="currentConfig" class="config-detail">
-          <h4 class="panel-title">{{ currentConfig.displayName }} 配置</h4>
+      <a-col
+        :xs="24"
+        :md="16"
+        :lg="18"
+        class="detail-panel"
+      >
+        <div
+          v-if="currentConfig"
+          class="config-detail"
+        >
+          <h4 class="panel-title">
+            {{ currentConfig.displayName }} 配置
+          </h4>
 
           <!-- 模型选择和API配置 -->
-          <div v-if="availableModels.length > 1" class="config-section">
+          <div
+            v-if="availableModels.length > 1"
+            class="config-section"
+          >
             <div class="form-item">
               <label class="form-label">选择模型</label>
               <a-select
                 v-model:value="selectedModel"
-                @change="handleModelChange"
                 style="width: 100%"
                 placeholder="请选择模型"
                 :dropdown-style="{ maxHeight: '500px' }"
@@ -51,6 +77,7 @@
                 size="large"
                 :loading="isLoadingModels"
                 :disabled="isLoadingModels"
+                @change="handleModelChange"
               >
                 <a-select-option
                   v-for="model in availableModels"
@@ -59,7 +86,14 @@
                   :label="model.label"
                 >
                   <span class="model-name">{{ model.label }}</span>
-                  <a-tag v-if="model.value === currentConfig.defaultModel" color="blue" size="small" style="margin-left: 8px;">推荐</a-tag>
+                  <a-tag
+                    v-if="model.value === currentConfig.defaultModel"
+                    color="blue"
+                    size="small"
+                    style="margin-left: 8px;"
+                  >
+                    推荐
+                  </a-tag>
                   <a-tag
                     v-if="model.qcStatus === 'passed'"
                     color="green"
@@ -73,11 +107,26 @@
             </div>
 
             <!-- 简化的模型信息显示 -->
-            <div v-if="currentModelInfo" class="model-summary">
+            <div
+              v-if="currentModelInfo"
+              class="model-summary"
+            >
               <div class="model-summary-content">
                 <span class="model-summary-name">{{ currentModelInfo.label }}</span>
-                <a-tag v-if="currentModelInfo.value === currentConfig.defaultModel" color="blue" size="small">推荐</a-tag>
-                <a-tag v-if="currentModelInfo.qcStatus === 'passed'" color="green" size="small">质控验证</a-tag>
+                <a-tag
+                  v-if="currentModelInfo.value === currentConfig.defaultModel"
+                  color="blue"
+                  size="small"
+                >
+                  推荐
+                </a-tag>
+                <a-tag
+                  v-if="currentModelInfo.qcStatus === 'passed'"
+                  color="green"
+                  size="small"
+                >
+                  质控验证
+                </a-tag>
                 <span class="model-summary-desc">{{ currentModelInfo.description }}</span>
               </div>
             </div>
@@ -90,10 +139,10 @@
               <a-input-password
                 v-model:value="apiKey"
                 placeholder="请输入API密钥"
-                @change="handleApiKeyChange"
                 size="large"
                 style="width: 100%"
                 :visibility-toggle="true"
+                @change="handleApiKeyChange"
               >
                 <template #prefix>
                   <SearchOutlined style="color: #bfbfbf" />
@@ -103,14 +152,17 @@
           </div>
 
           <!-- 自定义端点 -->
-          <div v-if="selectedConfig === 'local'" class="config-section">
+          <div
+            v-if="selectedConfig === 'local'"
+            class="config-section"
+          >
             <div class="form-item">
               <label class="form-label">自定义端点</label>
               <a-input
                 v-model:value="customEndpoint"
                 placeholder="http://localhost:8001/v1/chat/completions"
-                @change="handleEndpointChange"
                 size="large"
+                @change="handleEndpointChange"
               >
                 <template #prefix>
                   <LinkOutlined />
@@ -121,13 +173,26 @@
 
           <!-- 高级参数配置 -->
           <div class="config-section advanced-params-section">
-            <a-collapse v-model:activeKey="advancedParamsExpanded" :bordered="false" class="advanced-params-collapse">
-              <a-collapse-panel key="1" class="advanced-params-panel">
+            <a-collapse
+              v-model:active-key="advancedParamsExpanded"
+              :bordered="false"
+              class="advanced-params-collapse"
+            >
+              <a-collapse-panel
+                key="1"
+                class="advanced-params-panel"
+              >
                 <template #header>
                   <div class="advanced-params-header">
                     <SettingOutlined class="header-icon" />
                     <span class="header-title">高级参数</span>
-                    <a-tag color="blue" size="small" style="margin-left: 8px;">影响质控稳定性</a-tag>
+                    <a-tag
+                      color="blue"
+                      size="small"
+                      style="margin-left: 8px;"
+                    >
+                      影响质控稳定性
+                    </a-tag>
                   </div>
                 </template>
 
@@ -143,8 +208,20 @@
                       </label>
                       <div class="param-value-display">
                         <span class="current-value">{{ advancedParams.temperature }}</span>
-                        <a-tag v-if="advancedParams.temperature >= 0.1 && advancedParams.temperature <= 0.3" color="green" size="small">推荐</a-tag>
-                        <a-tag v-else color="orange" size="small">非推荐</a-tag>
+                        <a-tag
+                          v-if="advancedParams.temperature >= 0.1 && advancedParams.temperature <= 0.3"
+                          color="green"
+                          size="small"
+                        >
+                          推荐
+                        </a-tag>
+                        <a-tag
+                          v-else
+                          color="orange"
+                          size="small"
+                        >
+                          非推荐
+                        </a-tag>
                       </div>
                     </div>
                     <a-slider
@@ -213,8 +290,13 @@
 
                   <!-- 恢复默认值按钮 -->
                   <div class="param-actions">
-                    <a-button @click="resetAdvancedParams" size="small">
-                      <template #icon><ReloadOutlined /></template>
+                    <a-button
+                      size="small"
+                      @click="resetAdvancedParams"
+                    >
+                      <template #icon>
+                        <ReloadOutlined />
+                      </template>
                       恢复默认值
                     </a-button>
                   </div>
@@ -237,20 +319,22 @@
           <div class="config-actions">
             <a-space>
               <a-button
-                @click="testConnection"
                 :loading="testing"
                 :disabled="!configStatus.valid"
                 class="elevated-action"
+                @click="testConnection"
               >
-                <template #icon><ExperimentOutlined /></template>
+                <template #icon>
+                  <ExperimentOutlined />
+                </template>
                 测试连接
               </a-button>
               <a-button
                 :type="saveSuccess ? 'default' : 'primary'"
-                @click="saveConfig"
                 :loading="saving"
                 :disabled="!configStatus.valid || saving"
                 :class="['elevated-action', { 'save-success': saveSuccess }]"
+                @click="saveConfig"
               >
                 <template #icon>
                   <SaveOutlined v-if="!saveSuccess" />
@@ -262,7 +346,10 @@
           </div>
 
           <!-- 测试结果 -->
-          <div v-if="testResult" class="test-result">
+          <div
+            v-if="testResult"
+            class="test-result"
+          >
             <a-alert
               :type="testResult.success ? 'success' : 'error'"
               :message="testResult.message"
@@ -381,9 +468,9 @@ const currentConfig = computed<EnhancedLLMApiConfig | undefined>(() => ENHANCED_
 const availableModels = computed<ModelOption[]>(() => {
   if (dynamicModels.value.length > 0) {
     return dynamicModels.value
-      .map(model => {
-        const value = model.model_code || model.id || model.code || model.name || ''
-        let label = model.model_name || model.name || model.id || value
+      .map((model) => {
+        const value = String(model.model_code || model.id || model.code || model.name || '')
+        let label = String(model.model_name || model.name || model.id || value)
         if (value.includes('30b-a3b') && value.includes('2507') && !label.includes('2507')) {
           label = `${label} (2507)`
         }
@@ -395,7 +482,7 @@ const availableModels = computed<ModelOption[]>(() => {
           qcStatus: QC_SUCCESS_MODELS.has(value) ? 'passed' : undefined
         }
       })
-      .filter((item): item is ModelOption => item !== null)
+      .filter(Boolean) as ModelOption[]
   }
   // 回退到硬编码配置（向后兼容）
   return (currentConfig.value?.availableModels || []).map(model => {
@@ -593,14 +680,18 @@ const testConnection = async () => {
   testResult.value = null
 
   try {
+    const cfg = currentConfig.value
+    if (!cfg) {
+      throw new Error('未选择有效配置')
+    }
     // 显示测试中的提示
     message.loading('正在测试连接...', 0)
 
     // 创建LLM服务实例
     const llmService = new LLMService({
-      apiEndpoint: currentConfig.value.endpoint,
+      apiEndpoint: cfg.endpoint,
       apiKey: apiKey.value,
-      model: selectedModel.value || currentConfig.value.defaultModel
+      model: selectedModel.value || cfg.defaultModel
     })
 
     // 发送测试请求
@@ -842,10 +933,10 @@ const loadConfig = async () => {
       customEndpoint.value = dbConfig.custom_endpoint || ''
 
       // 加载高级参数
-      const customParams = dbConfig.custom_parameters || {}
-      advancedParams.temperature = customParams.temperature ?? 0.2
-      advancedParams.top_p = customParams.top_p ?? 0.9
-      advancedParams.max_tokens = customParams.max_tokens ?? 4000
+      const customParams = (dbConfig.custom_parameters || {}) as Record<string, unknown>
+      advancedParams.temperature = typeof customParams.temperature === 'number' ? customParams.temperature : 0.2
+      advancedParams.top_p = typeof customParams.top_p === 'number' ? customParams.top_p : 0.9
+      advancedParams.max_tokens = typeof customParams.max_tokens === 'number' ? customParams.max_tokens : 4000
 
       // 加载该提供商的模型列表
       await loadModelsForProvider(selectedConfig.value)

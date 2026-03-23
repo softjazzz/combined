@@ -6,9 +6,13 @@
         <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
           <SettingOutlined class="text-white text-lg" />
         </div>
-        <h1 class="text-2xl font-bold text-gray-800">账户设置</h1>
+        <h1 class="text-2xl font-bold text-gray-800">
+          账户设置
+        </h1>
       </div>
-      <p class="text-gray-600">管理您的账户安全和偏好设置</p>
+      <p class="text-gray-600">
+        管理您的账户安全和偏好设置
+      </p>
     </div>
 
     <div class="max-w-4xl mx-auto">
@@ -20,13 +24,16 @@
               <button
                 v-for="tab in tabs"
                 :key="tab.key"
-                @click="activeTab = tab.key"
                 class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200"
                 :class="activeTab === tab.key 
                   ? 'bg-blue-50 text-blue-600 border border-blue-200' 
                   : 'text-gray-600 hover:bg-gray-50'"
+                @click="activeTab = tab.key"
               >
-                <component :is="tab.icon" class="text-lg" />
+                <component
+                  :is="tab.icon"
+                  class="text-lg"
+                />
                 <span>{{ tab.label }}</span>
               </button>
             </nav>
@@ -38,12 +45,19 @@
           <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <!-- 安全设置 -->
             <div v-if="activeTab === 'security'">
-              <h3 class="text-lg font-semibold text-gray-800 mb-6">安全设置</h3>
+              <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                安全设置
+              </h3>
               
               <!-- 修改密码 -->
               <div class="mb-8">
-                <h4 class="text-md font-medium text-gray-700 mb-4">修改密码</h4>
-                <form @submit.prevent="handleChangePassword" class="space-y-4">
+                <h4 class="text-md font-medium text-gray-700 mb-4">
+                  修改密码
+                </h4>
+                <form
+                  class="space-y-4"
+                  @submit.prevent="handleChangePassword"
+                >
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">当前密码</label>
                     <input
@@ -51,7 +65,7 @@
                       type="password"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="请输入当前密码"
-                    />
+                    >
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">新密码</label>
@@ -60,7 +74,7 @@
                       type="password"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="请输入新密码"
-                    />
+                    >
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">确认新密码</label>
@@ -69,14 +83,17 @@
                       type="password"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="请再次输入新密码"
-                    />
+                    >
                   </div>
                   <button
                     type="submit"
                     :disabled="passwordLoading"
                     class="px-6 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                   >
-                    <span v-if="passwordLoading" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span
+                      v-if="passwordLoading"
+                      class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                    />
                     <span>{{ passwordLoading ? '修改中...' : '修改密码' }}</span>
                   </button>
                 </form>
@@ -84,16 +101,22 @@
 
               <!-- 两步验证 -->
               <div class="mb-8 pb-8 border-b border-gray-100">
-                <h4 class="text-md font-medium text-gray-700 mb-4">两步验证</h4>
+                <h4 class="text-md font-medium text-gray-700 mb-4">
+                  两步验证
+                </h4>
                 <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <div class="font-medium text-gray-800">短信验证</div>
-                    <div class="text-sm text-gray-600">通过手机短信接收验证码</div>
+                    <div class="font-medium text-gray-800">
+                      短信验证
+                    </div>
+                    <div class="text-sm text-gray-600">
+                      通过手机短信接收验证码
+                    </div>
                   </div>
                   <button
-                    @click="toggleTwoFactor"
                     class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     :class="twoFactorEnabled ? 'bg-blue-600' : 'bg-gray-200'"
+                    @click="toggleTwoFactor"
                   >
                     <span
                       class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
@@ -106,18 +129,28 @@
 
             <!-- 通知设置 -->
             <div v-if="activeTab === 'notifications'">
-              <h3 class="text-lg font-semibold text-gray-800 mb-6">通知设置</h3>
+              <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                通知设置
+              </h3>
               
               <div class="space-y-6">
-                <div v-for="notification in notificationSettings" :key="notification.key" class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div
+                  v-for="notification in notificationSettings"
+                  :key="notification.key"
+                  class="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                >
                   <div>
-                    <div class="font-medium text-gray-800">{{ notification.title }}</div>
-                    <div class="text-sm text-gray-600">{{ notification.description }}</div>
+                    <div class="font-medium text-gray-800">
+                      {{ notification.title }}
+                    </div>
+                    <div class="text-sm text-gray-600">
+                      {{ notification.description }}
+                    </div>
                   </div>
                   <button
-                    @click="toggleNotification(notification.key)"
                     class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     :class="notification.enabled ? 'bg-blue-600' : 'bg-gray-200'"
+                    @click="toggleNotification(notification.key)"
                   >
                     <span
                       class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
@@ -130,7 +163,9 @@
 
             <!-- 偏好设置 -->
             <div v-if="activeTab === 'preferences'">
-              <h3 class="text-lg font-semibold text-gray-800 mb-6">偏好设置</h3>
+              <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                偏好设置
+              </h3>
               
               <div class="space-y-6">
                 <!-- 语言设置 -->
@@ -140,8 +175,12 @@
                     v-model="preferences.language"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="zh-CN">简体中文</option>
-                    <option value="en-US">English</option>
+                    <option value="zh-CN">
+                      简体中文
+                    </option>
+                    <option value="en-US">
+                      English
+                    </option>
                   </select>
                 </div>
 
@@ -152,8 +191,12 @@
                     v-model="preferences.timezone"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="Asia/Shanghai">北京时间 (UTC+8)</option>
-                    <option value="UTC">协调世界时 (UTC)</option>
+                    <option value="Asia/Shanghai">
+                      北京时间 (UTC+8)
+                    </option>
+                    <option value="UTC">
+                      协调世界时 (UTC)
+                    </option>
                   </select>
                 </div>
 
@@ -164,23 +207,28 @@
                     <button
                       v-for="theme in themes"
                       :key="theme.key"
-                      @click="preferences.theme = theme.key"
                       class="p-3 border rounded-lg text-center transition-all duration-200"
                       :class="preferences.theme === theme.key 
                         ? 'border-blue-500 bg-blue-50 text-blue-600' 
                         : 'border-gray-300 hover:border-gray-400'"
+                      @click="preferences.theme = theme.key"
                     >
-                      <div class="text-sm font-medium">{{ theme.name }}</div>
+                      <div class="text-sm font-medium">
+                        {{ theme.name }}
+                      </div>
                     </button>
                   </div>
                 </div>
 
                 <button
-                  @click="savePreferences"
                   :disabled="preferencesLoading"
                   class="px-6 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  @click="savePreferences"
                 >
-                  <span v-if="preferencesLoading" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span
+                    v-if="preferencesLoading"
+                    class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                  />
                   <span>{{ preferencesLoading ? '保存中...' : '保存设置' }}</span>
                 </button>
               </div>
@@ -188,14 +236,20 @@
 
             <!-- 隐私设置 -->
             <div v-if="activeTab === 'privacy'">
-              <h3 class="text-lg font-semibold text-gray-800 mb-6">隐私设置</h3>
+              <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                隐私设置
+              </h3>
               
               <div class="space-y-6">
                 <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div class="flex items-start space-x-3">
-                    <div class="w-5 h-5 text-yellow-600 mt-0.5">⚠️</div>
+                    <div class="w-5 h-5 text-yellow-600 mt-0.5">
+                      ⚠️
+                    </div>
                     <div>
-                      <div class="font-medium text-yellow-800">数据隐私提醒</div>
+                      <div class="font-medium text-yellow-800">
+                        数据隐私提醒
+                      </div>
                       <div class="text-sm text-yellow-700 mt-1">
                         您的个人信息受到严格保护，仅用于医疗质控系统的正常运行。
                       </div>
@@ -204,15 +258,23 @@
                 </div>
 
                 <div class="space-y-4">
-                  <div v-for="privacy in privacySettings" :key="privacy.key" class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div
+                    v-for="privacy in privacySettings"
+                    :key="privacy.key"
+                    class="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  >
                     <div>
-                      <div class="font-medium text-gray-800">{{ privacy.title }}</div>
-                      <div class="text-sm text-gray-600">{{ privacy.description }}</div>
+                      <div class="font-medium text-gray-800">
+                        {{ privacy.title }}
+                      </div>
+                      <div class="text-sm text-gray-600">
+                        {{ privacy.description }}
+                      </div>
                     </div>
                     <button
-                      @click="togglePrivacy(privacy.key)"
                       class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                       :class="privacy.enabled ? 'bg-blue-600' : 'bg-gray-200'"
+                      @click="togglePrivacy(privacy.key)"
                     >
                       <span
                         class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"

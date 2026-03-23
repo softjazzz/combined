@@ -1,27 +1,58 @@
 <template>
   <div class="medical-record-viewer">
-    <a-tabs v-model:activeKey="activeTab" type="card" size="small">
-      <a-tab-pane key="admission" tab="入院记录">
+    <a-tabs
+      v-model:active-key="activeTab"
+      type="card"
+      size="small"
+    >
+      <a-tab-pane
+        key="admission"
+        tab="入院记录"
+      >
         <div class="record-content">
           <a-spin :spinning="loading">
-            <div v-if="recordData.admission_note" v-html="highlightText(recordData.admission_note)"></div>
-            <a-empty v-else description="暂无入院记录" />
+            <div
+              v-if="recordData.admission_note"
+              v-html="highlightText(recordData.admission_note)"
+            />
+            <a-empty
+              v-else
+              description="暂无入院记录"
+            />
           </a-spin>
         </div>
       </a-tab-pane>
-      <a-tab-pane key="progress" tab="病程记录">
+      <a-tab-pane
+        key="progress"
+        tab="病程记录"
+      >
         <div class="record-content">
           <a-spin :spinning="loading">
-            <div v-if="recordData.progress_note" v-html="highlightText(recordData.progress_note)"></div>
-            <a-empty v-else description="暂无病程记录" />
+            <div
+              v-if="recordData.progress_note"
+              v-html="highlightText(recordData.progress_note)"
+            />
+            <a-empty
+              v-else
+              description="暂无病程记录"
+            />
           </a-spin>
         </div>
       </a-tab-pane>
-      <a-tab-pane key="discharge" tab="出院记录">
+      <a-tab-pane
+        key="discharge"
+        tab="出院记录"
+      >
         <div class="record-content">
           <a-spin :spinning="loading">
-            <div v-if="recordData.discharge_note" v-html="highlightText(recordData.discharge_note)"></div>
-            <a-empty v-else description="暂无出院记录" />
+            <div
+              v-if="recordData.discharge_note"
+              v-html="highlightText(recordData.discharge_note)"
+            />
+            <a-empty
+              v-else
+              description="暂无出院记录"
+            />
           </a-spin>
         </div>
       </a-tab-pane>

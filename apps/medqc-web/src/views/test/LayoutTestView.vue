@@ -1,29 +1,45 @@
 <template>
   <AdminLayout>
     <div class="layout-test">
-      <h1 class="text-2xl font-bold text-gray-900 mb-6">布局测试页面</h1>
+      <h1 class="text-2xl font-bold text-gray-900 mb-6">
+        布局测试页面
+      </h1>
       
       <!-- 测试卡片 -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-2">专业医疗风格</h3>
-          <p class="text-gray-600">采用简洁、专业的医疗行业UI设计风格</p>
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">
+            专业医疗风格
+          </h3>
+          <p class="text-gray-600">
+            采用简洁、专业的医疗行业UI设计风格
+          </p>
         </div>
         
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-2">标准色彩方案</h3>
-          <p class="text-gray-600">使用医疗行业标准色彩，避免花哨效果</p>
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">
+            标准色彩方案
+          </h3>
+          <p class="text-gray-600">
+            使用医疗行业标准色彩，避免花哨效果
+          </p>
         </div>
         
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-2">响应式设计</h3>
-          <p class="text-gray-600">支持不同屏幕尺寸的响应式布局</p>
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">
+            响应式设计
+          </h3>
+          <p class="text-gray-600">
+            支持不同屏幕尺寸的响应式布局
+          </p>
         </div>
       </div>
       
       <!-- 测试表格 -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">数据表格示例</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+          数据表格示例
+        </h3>
         <a-table
           :columns="columns"
           :data-source="data"
@@ -37,8 +53,18 @@
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
-                <a-button type="link" size="small">查看</a-button>
-                <a-button type="link" size="small">编辑</a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                >
+                  查看
+                </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                >
+                  编辑
+                </a-button>
               </a-space>
             </template>
           </template>

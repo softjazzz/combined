@@ -20,10 +20,15 @@
         </div>
         
         <div class="delete-options">
-          <a-radio-group v-model:value="deleteType" class="delete-type-group">
+          <a-radio-group
+            v-model:value="deleteType"
+            class="delete-type-group"
+          >
             <a-radio value="soft">
               <div class="radio-option">
-                <div class="option-title">软删除（推荐）</div>
+                <div class="option-title">
+                  软删除（推荐）
+                </div>
                 <div class="option-description">
                   标记为已删除，可以恢复，保留审计记录
                 </div>
@@ -31,7 +36,9 @@
             </a-radio>
             <a-radio value="hard">
               <div class="radio-option">
-                <div class="option-title">永久删除</div>
+                <div class="option-title">
+                  永久删除
+                </div>
                 <div class="option-description">
                   彻底删除文档，无法恢复，请谨慎操作
                 </div>
@@ -53,7 +60,9 @@
 
     <template #footer>
       <a-space>
-        <a-button @click="handleCancel">取消</a-button>
+        <a-button @click="handleCancel">
+          取消
+        </a-button>
         <a-button 
           type="primary" 
           danger 

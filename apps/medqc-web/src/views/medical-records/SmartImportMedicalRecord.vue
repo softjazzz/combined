@@ -3,7 +3,9 @@
     <!-- 面包屑导航 -->
     <a-breadcrumb class="breadcrumb">
       <a-breadcrumb-item>
-        <router-link to="/dashboard/medical-records">测试病历管理</router-link>
+        <router-link to="/dashboard/medical-records">
+          测试病历管理
+        </router-link>
       </a-breadcrumb-item>
       <a-breadcrumb-item>智能导入病历</a-breadcrumb-item>
     </a-breadcrumb>
@@ -12,14 +14,21 @@
     <div class="page-header">
       <div class="header-content">
         <div class="header-text">
-          <h1 class="page-title">智能病历导入</h1>
+          <h1 class="page-title">
+            智能病历导入
+          </h1>
           <div class="page-description">
             使用AI技术自动解析病历文本，快速生成结构化病历数据
           </div>
         </div>
         <div class="header-actions">
-          <a-button @click="showApiConfig = true" type="text">
-            <template #icon><SettingOutlined /></template>
+          <a-button
+            type="text"
+            @click="showApiConfig = true"
+          >
+            <template #icon>
+              <SettingOutlined />
+            </template>
             API配置
           </a-button>
         </div>
@@ -28,19 +37,44 @@
 
     <!-- 导入步骤指示器 -->
     <a-card class="steps-card">
-      <a-steps :current="currentStep" size="small">
-        <a-step title="输入病历文本" description="粘贴或上传病历内容" />
-        <a-step title="AI智能解析" description="自动抽取结构化信息" />
-        <a-step title="确认和修正" description="检查并修正解析结果" />
-        <a-step title="完成导入" description="保存到病历系统" />
+      <a-steps
+        :current="currentStep"
+        size="small"
+      >
+        <a-step
+          title="输入病历文本"
+          description="粘贴或上传病历内容"
+        />
+        <a-step
+          title="AI智能解析"
+          description="自动抽取结构化信息"
+        />
+        <a-step
+          title="确认和修正"
+          description="检查并修正解析结果"
+        />
+        <a-step
+          title="完成导入"
+          description="保存到病历系统"
+        />
       </a-steps>
     </a-card>
 
     <!-- 步骤1: 输入病历文本 -->
-    <a-card v-if="currentStep === 0" title="步骤1: 输入病历文本" class="step-card">
-      <a-tabs v-model:activeKey="inputMethod" @change="handleInputMethodChange">
+    <a-card
+      v-if="currentStep === 0"
+      title="步骤1: 输入病历文本"
+      class="step-card"
+    >
+      <a-tabs
+        v-model:active-key="inputMethod"
+        @change="handleInputMethodChange"
+      >
         <!-- 文本粘贴 -->
-        <a-tab-pane key="paste" tab="文本粘贴">
+        <a-tab-pane
+          key="paste"
+          tab="文本粘贴"
+        >
           <div class="input-section">
             <div class="textarea-container">
               <a-textarea
@@ -65,21 +99,25 @@
         </a-tab-pane>
 
         <!-- 文件上传 -->
-        <a-tab-pane key="upload" tab="文件上传">
+        <a-tab-pane
+          key="upload"
+          tab="文件上传"
+        >
           <div class="upload-section">
             <a-upload-dragger
-              v-model:fileList="uploadFileList"
+              v-model:file-list="uploadFileList"
               :before-upload="beforeUpload"
-              @change="handleFileUpload"
               accept=".txt,.doc,.docx,.pdf"
               :multiple="false"
               :show-upload-list="false"
-              :file-list="[]"
+              @change="handleFileUpload"
             >
               <p class="ant-upload-drag-icon">
                 <InboxOutlined />
               </p>
-              <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+              <p class="ant-upload-text">
+                点击或拖拽文件到此区域上传
+              </p>
               <p class="ant-upload-hint">
                 支持 .txt, .doc, .docx, .pdf 格式的病历文档
               </p>
@@ -103,7 +141,10 @@
                     class="text-sm"
                   />
                 </div>
-                <a-space direction="vertical" class="w-full">
+                <a-space
+                  direction="vertical"
+                  class="w-full"
+                >
                   <a-space>
                     <input
                       ref="debugFileInput"
@@ -111,29 +152,40 @@
                       accept=".pdf,.txt,.doc,.docx"
                       style="display: none"
                       @change="handleDebugFileSelect"
-                    />
+                    >
                     <a-button
                       type="default"
-                      @click="triggerDebugFileSelect"
                       :loading="isParsingFile"
                       :disabled="isParsingFile"
+                      @click="triggerDebugFileSelect"
                     >
-                      <template #icon><FileTextOutlined /></template>
+                      <template #icon>
+                        <FileTextOutlined />
+                      </template>
                       选择文件
                     </a-button>
                     <a-button
                       v-if="debugSelectedFile"
                       type="primary"
-                      @click="handleDebugParsePDF"
                       :loading="isParsingFile"
                       :disabled="isParsingFile"
+                      @click="handleDebugParsePDF"
                     >
-                      <template #icon><RobotOutlined /></template>
+                      <template #icon>
+                        <RobotOutlined />
+                      </template>
                       解析文件
                     </a-button>
                   </a-space>
-                  <div v-if="debugSelectedFile" class="selected-file-info">
-                    <a-descriptions size="small" :column="1" bordered>
+                  <div
+                    v-if="debugSelectedFile"
+                    class="selected-file-info"
+                  >
+                    <a-descriptions
+                      size="small"
+                      :column="1"
+                      bordered
+                    >
                       <a-descriptions-item label="文件名">
                         {{ debugSelectedFile.name }}
                       </a-descriptions-item>
@@ -149,17 +201,26 @@
               </div>
             </div>
 
-            <div v-if="uploadedContent || isParsingFile" class="uploaded-preview">
+            <div
+              v-if="uploadedContent || isParsingFile"
+              class="uploaded-preview"
+            >
               <h4>文件内容预览：</h4>
               <div class="content-preview-enhanced">
-                <div v-if="isParsingFile" class="parsing-status">
+                <div
+                  v-if="isParsingFile"
+                  class="parsing-status"
+                >
                   <a-spin size="large" />
                   <span>正在解析文件内容，请稍候...</span>
                   <div class="text-sm text-gray-500 mt-2">
                     系统正在提取文档中的文本和医疗信息
                   </div>
                 </div>
-                <div v-else class="parsed-content">
+                <div
+                  v-else
+                  class="parsed-content"
+                >
                   <pre class="whitespace-pre-wrap">{{ uploadedContent }}</pre>
                 </div>
               </div>
@@ -168,31 +229,44 @@
         </a-tab-pane>
 
         <!-- 批量导入 -->
-        <a-tab-pane key="batch" tab="批量导入">
+        <a-tab-pane
+          key="batch"
+          tab="批量导入"
+        >
           <div class="batch-section">
             <a-upload-dragger
-              v-model:fileList="batchFileList"
+              v-model:file-list="batchFileList"
               :before-upload="beforeBatchUpload"
-              @change="handleBatchUpload"
               accept=".zip,.rar"
               :multiple="false"
+              @change="handleBatchUpload"
             >
               <p class="ant-upload-drag-icon">
                 <FolderOpenOutlined />
               </p>
-              <p class="ant-upload-text">上传包含多个病历文件的压缩包</p>
+              <p class="ant-upload-text">
+                上传包含多个病历文件的压缩包
+              </p>
               <p class="ant-upload-hint">
                 支持 .zip, .rar 格式，包内可包含多个病历文档
               </p>
             </a-upload-dragger>
 
-            <div v-if="batchFiles.length > 0" class="batch-preview">
+            <div
+              v-if="batchFiles.length > 0"
+              class="batch-preview"
+            >
               <h4>检测到 {{ batchFiles.length }} 个病历文件：</h4>
-              <a-list size="small" :data-source="batchFiles">
+              <a-list
+                size="small"
+                :data-source="batchFiles"
+              >
                 <template #renderItem="{ item }">
                   <a-list-item>
                     <a-list-item-meta>
-                      <template #title>{{ item.name }}</template>
+                      <template #title>
+                        {{ item.name }}
+                      </template>
                       <template #description>
                         大小: {{ formatFileSize(item.size) }} |
                         类型: {{ item.type }}
@@ -208,14 +282,18 @@
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="handleCancel">取消</a-button>
+          <a-button @click="handleCancel">
+            取消
+          </a-button>
           <a-button
             type="primary"
             :disabled="!canProceedToNext"
             :loading="processing"
             @click="handleStartParsing"
           >
-            <template #icon><RobotOutlined /></template>
+            <template #icon>
+              <RobotOutlined />
+            </template>
             开始AI解析
           </a-button>
         </a-space>
@@ -223,10 +301,17 @@
     </a-card>
 
     <!-- 步骤2: AI智能解析 -->
-    <a-card v-if="currentStep === 1" title="步骤2: AI智能解析" class="step-card">
+    <a-card
+      v-if="currentStep === 1"
+      title="步骤2: AI智能解析"
+      class="step-card"
+    >
       <div class="parsing-section">
         <div class="parsing-progress">
-          <a-spin size="large" :spinning="parsing">
+          <a-spin
+            size="large"
+            :spinning="parsing"
+          >
             <div class="parsing-content">
               <div class="parsing-icon">
                 <RobotOutlined />
@@ -241,22 +326,34 @@
               />
 
               <div class="parsing-steps">
-                <div class="parsing-step" :class="{ active: parsingStep >= 1, completed: parsingStep > 1 }">
+                <div
+                  class="parsing-step"
+                  :class="{ active: parsingStep >= 1, completed: parsingStep > 1 }"
+                >
                   <CheckCircleOutlined v-if="parsingStep > 1" />
                   <LoadingOutlined v-else-if="parsingStep === 1" />
                   <span>文本预处理和清洗</span>
                 </div>
-                <div class="parsing-step" :class="{ active: parsingStep >= 2, completed: parsingStep > 2 }">
+                <div
+                  class="parsing-step"
+                  :class="{ active: parsingStep >= 2, completed: parsingStep > 2 }"
+                >
                   <CheckCircleOutlined v-if="parsingStep > 2" />
                   <LoadingOutlined v-else-if="parsingStep === 2" />
                   <span>识别文书类型和结构</span>
                 </div>
-                <div class="parsing-step" :class="{ active: parsingStep >= 3, completed: parsingStep > 3 }">
+                <div
+                  class="parsing-step"
+                  :class="{ active: parsingStep >= 3, completed: parsingStep > 3 }"
+                >
                   <CheckCircleOutlined v-if="parsingStep > 3" />
                   <LoadingOutlined v-else-if="parsingStep === 3" />
                   <span>抽取关键信息字段</span>
                 </div>
-                <div class="parsing-step" :class="{ active: parsingStep >= 4, completed: parsingStep > 4 }">
+                <div
+                  class="parsing-step"
+                  :class="{ active: parsingStep >= 4, completed: parsingStep > 4 }"
+                >
                   <CheckCircleOutlined v-if="parsingStep > 4" />
                   <LoadingOutlined v-else-if="parsingStep === 4" />
                   <span>生成结构化数据</span>
@@ -269,7 +366,11 @@
     </a-card>
 
     <!-- 步骤3: 确认和修正 -->
-    <a-card v-if="currentStep === 2" title="步骤3: 确认和修正解析结果" class="step-card">
+    <a-card
+      v-if="currentStep === 2"
+      title="步骤3: 确认和修正解析结果"
+      class="step-card"
+    >
       <div class="review-section">
         <a-alert
           message="AI解析完成"
@@ -279,9 +380,12 @@
           class="review-alert"
         />
 
-        <a-tabs v-model:activeKey="reviewTab">
+        <a-tabs v-model:active-key="reviewTab">
           <!-- 基本信息 -->
-          <a-tab-pane key="basic" tab="基本信息">
+          <a-tab-pane
+            key="basic"
+            tab="基本信息"
+          >
             <div class="review-form">
               <a-row :gutter="16">
                 <a-col :span="12">
@@ -299,7 +403,10 @@
                       v-model:value="extractedData.patientName"
                       :class="{ 'ai-extracted': extractedData.patientName }"
                     />
-                    <div v-if="extractedData.patientName" class="ai-confidence">
+                    <div
+                      v-if="extractedData.patientName"
+                      class="ai-confidence"
+                    >
                       <RobotOutlined /> AI识别 (置信度: 95%)
                     </div>
                   </a-form-item>
@@ -313,13 +420,26 @@
                       v-model:value="extractedData.department"
                       :class="{ 'ai-extracted': extractedData.department }"
                     >
-                      <a-select-option value="内科">内科</a-select-option>
-                      <a-select-option value="外科">外科</a-select-option>
-                      <a-select-option value="妇产科">妇产科</a-select-option>
-                      <a-select-option value="儿科">儿科</a-select-option>
-                      <a-select-option value="急诊科">急诊科</a-select-option>
+                      <a-select-option value="内科">
+                        内科
+                      </a-select-option>
+                      <a-select-option value="外科">
+                        外科
+                      </a-select-option>
+                      <a-select-option value="妇产科">
+                        妇产科
+                      </a-select-option>
+                      <a-select-option value="儿科">
+                        儿科
+                      </a-select-option>
+                      <a-select-option value="急诊科">
+                        急诊科
+                      </a-select-option>
                     </a-select>
-                    <div v-if="extractedData.department" class="ai-confidence">
+                    <div
+                      v-if="extractedData.department"
+                      class="ai-confidence"
+                    >
                       <RobotOutlined /> AI识别 (置信度: 88%)
                     </div>
                   </a-form-item>
@@ -330,7 +450,10 @@
                       v-model:value="extractedData.primaryDiagnosis"
                       :class="{ 'ai-extracted': extractedData.primaryDiagnosis }"
                     />
-                    <div v-if="extractedData.primaryDiagnosis" class="ai-confidence">
+                    <div
+                      v-if="extractedData.primaryDiagnosis"
+                      class="ai-confidence"
+                    >
                       <RobotOutlined /> AI识别 (置信度: 92%)
                     </div>
                   </a-form-item>
@@ -343,7 +466,10 @@
                   :rows="3"
                   :class="{ 'ai-extracted': extractedData.majorSurgery }"
                 />
-                <div v-if="extractedData.majorSurgery" class="ai-confidence">
+                <div
+                  v-if="extractedData.majorSurgery"
+                  class="ai-confidence"
+                >
                   <RobotOutlined /> AI识别 (置信度: 85%)
                 </div>
               </a-form-item>
@@ -351,12 +477,21 @@
           </a-tab-pane>
 
           <!-- 文书目录视图 -->
-          <a-tab-pane key="documents" tab="文书目录">
-            <MedicalDocumentTree :documents="extractedData.documents || []" :original-text="originalFullText" />
+          <a-tab-pane
+            key="documents"
+            tab="文书目录"
+          >
+            <MedicalDocumentTree
+              :documents="treeDocuments"
+              :original-text="originalFullText"
+            />
           </a-tab-pane>
 
           <!-- 解析统计 -->
-          <a-tab-pane key="stats" tab="解析统计">
+          <a-tab-pane
+            key="stats"
+            tab="解析统计"
+          >
             <div class="parsing-stats">
               <a-row :gutter="16">
                 <a-col :span="8">
@@ -402,19 +537,31 @@
                 <div class="confidence-items">
                   <div class="confidence-item">
                     <span>患者姓名</span>
-                    <a-progress :percent="95" size="small" />
+                    <a-progress
+                      :percent="95"
+                      size="small"
+                    />
                   </div>
                   <div class="confidence-item">
                     <span>主诊断</span>
-                    <a-progress :percent="92" size="small" />
+                    <a-progress
+                      :percent="92"
+                      size="small"
+                    />
                   </div>
                   <div class="confidence-item">
                     <span>出院科室</span>
-                    <a-progress :percent="88" size="small" />
+                    <a-progress
+                      :percent="88"
+                      size="small"
+                    />
                   </div>
                   <div class="confidence-item">
                     <span>手术信息</span>
-                    <a-progress :percent="85" size="small" />
+                    <a-progress
+                      :percent="85"
+                      size="small"
+                    />
                   </div>
                 </div>
               </div>
@@ -425,9 +572,16 @@
 
       <div class="step-actions">
         <a-space>
-          <a-button @click="handleBackToInput">返回修改</a-button>
-          <a-button @click="handleReparse" :loading="parsing">
-            <template #icon><ReloadOutlined /></template>
+          <a-button @click="handleBackToInput">
+            返回修改
+          </a-button>
+          <a-button
+            :loading="parsing"
+            @click="handleReparse"
+          >
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             重新解析
           </a-button>
           <a-button
@@ -435,7 +589,9 @@
             :loading="importing"
             @click="handleConfirmImport"
           >
-            <template #icon><CheckOutlined /></template>
+            <template #icon>
+              <CheckOutlined />
+            </template>
             确认导入
           </a-button>
         </a-space>
@@ -443,7 +599,11 @@
     </a-card>
 
     <!-- 步骤4: 完成导入 -->
-    <a-card v-if="currentStep === 3" title="导入完成" class="step-card">
+    <a-card
+      v-if="currentStep === 3"
+      title="导入完成"
+      class="step-card"
+    >
       <div class="success-section">
         <a-result
           status="success"
@@ -452,7 +612,10 @@
         >
           <template #extra>
             <a-space>
-              <a-button type="primary" @click="handleViewImported">
+              <a-button
+                type="primary"
+                @click="handleViewImported"
+              >
                 查看导入的病历
               </a-button>
               <a-button @click="handleImportAnother">
@@ -473,7 +636,7 @@
       title="大模型API配置"
       width="1000px"
       :footer="null"
-      :destroyOnClose="true"
+      :destroy-on-close="true"
     >
       <LLMApiConfigDatabase
         @config-updated="handleApiConfigUpdated"
@@ -506,6 +669,12 @@ import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordSe
 import { llmConfigService, type UserLLMConfig } from '@/services/llmConfigService'
 import { DocumentParser } from '@/utils/documentParser'
 import MedicalDocumentTree from '@/components/MedicalDocumentTree.vue'
+import type { ExtractedDocument as TreeExtractedDocument } from '@/services/llmService'
+import type {
+  ExtractedMedicalData as PersistedExtractedMedicalData,
+  ExtractedDocument as PersistedExtractedDocument,
+  DocumentType as PersistedDocumentType
+} from '@/types/medical'
 import {
   getGroupedDocumentTypeOptions,
   getDocumentTypeLabel,
@@ -515,13 +684,22 @@ import {
 
 const router = useRouter()
 
+interface ExtractedDocumentPosition {
+  startMarker?: string
+  endMarker?: string
+  startIndex?: number
+  endIndex?: number
+  fullContent?: string
+}
+
 interface ExtractedDocumentItem {
   id: string
-  type: string
+  type: PersistedDocumentType | string
   title: string
   content: string
   confidence?: number
-  position?: Record<string, unknown>
+  extractedAt?: Date
+  position?: ExtractedDocumentPosition
 }
 
 interface ExtractedMedicalData {
@@ -537,16 +715,28 @@ interface ExtractedMedicalData {
   confidence?: number
 }
 
+interface BatchFileItem {
+  name: string
+  size: number
+  type: string
+}
+
+interface UploadInfoLike {
+  fileList: Array<{
+    originFileObj?: File
+  }>
+}
+
 // 响应式数据
 const currentStep = ref(0)
 const inputMethod = ref('paste')
 const inputText = ref('')
-const uploadFileList = ref([])
-const batchFileList = ref([])
+const uploadFileList = ref<unknown[]>([])
+const batchFileList = ref<unknown[]>([])
 const uploadedContent = ref('')
 const uploadedFile = ref<File | null>(null)
 const isParsingFile = ref(false)
-const batchFiles = ref([])
+const batchFiles = ref<BatchFileItem[]>([])
 const processing = ref(false)
 const parsing = ref(false)
 const importing = ref(false)
@@ -602,6 +792,9 @@ const averageConfidence = computed(() => {
   // 模拟计算平均置信度
   return 89
 })
+const treeDocuments = computed<TreeExtractedDocument[]>(() =>
+  extractedData.documents as unknown as TreeExtractedDocument[]
+)
 
 // 获取分组的文书类型选项
 const documentTypeOptions = computed(() => {
@@ -684,7 +877,7 @@ const beforeBatchUpload = () => {
   return false // 阻止自动上传
 }
 
-const handleFileUpload = async (info) => {
+const handleFileUpload = async (info: UploadInfoLike) => {
   console.log('🔥 handleFileUpload 被调用了！', info)
   const file = (info.fileList[0] && info.fileList[0].originFileObj)
   console.log('📁 提取的文件对象:', file)
@@ -801,7 +994,8 @@ ${getErrorSuggestions(errorMessage)}
   }
 }
 
-const handleBatchUpload = (info) => {
+const handleBatchUpload = (info: unknown) => {
+  void info
   // 模拟批量文件处理
   batchFiles.value = [
     { name: '患者张三病历.txt', size: 15420, type: 'text/plain' },
@@ -1020,7 +1214,7 @@ const parsePDFFile = async (file: File) => {
 `
         Object.entries(medicalInfo).forEach(([key,  value]) => {
           if (value) {
-            const keyMap = {
+            const keyMap: Record<string, string> = {
               'patient_name': '患者姓名',
               'patient_age': '年龄',
               'patient_gender': '性别',
@@ -1058,7 +1252,7 @@ ${content.length > 2000 ? content.substring(0, 2000) + '\n\n...(内容已截断�
 
 // 解析文本文件
 const parseTextFile = async (file: File) => {
-  return new Promise((resolve: unknown,  reject: unknown) => {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
 
     reader.onload = (e) => {
@@ -1239,7 +1433,7 @@ const handleConfirmImport = async () => {
     }
 
     // 构建ExtractedMedicalData对象
-    const extractedMedicalData: ExtractedMedicalData = {
+    const extractedMedicalData: PersistedExtractedMedicalData = {
       recordNumber: extractedData.recordNumber,
       patientName: extractedData.patientName,
       patientAge: extractedData.patientAge,
@@ -1248,14 +1442,20 @@ const handleConfirmImport = async () => {
       primaryDiagnosis: extractedData.primaryDiagnosis,
       secondaryDiagnosis: extractedData.secondaryDiagnosis,
       majorSurgery: extractedData.majorSurgery,
-      documents: (extractedData.documents ? extractedData.documents.map((doc, idx) => ({
+      documents: (extractedData.documents ? extractedData.documents.map((doc): PersistedExtractedDocument => ({
         id: doc.id,
-        type: doc.type as any,
+        type: doc.type as PersistedDocumentType,
         title: doc.title,
         content: doc.content,
-        confidence: doc.confidence,
+        confidence: doc.confidence ?? 0,
         extractedAt: new Date(),
-        position: doc.position
+        position: doc.position ? {
+          startMarker: doc.position.startMarker || '',
+          endMarker: doc.position.endMarker || '',
+          startIndex: doc.position.startIndex,
+          endIndex: doc.position.endIndex,
+          fullContent: doc.position.fullContent
+        } : undefined
       })) : []),
       confidence: averageConfidence.value
     }
@@ -1273,8 +1473,8 @@ const handleConfirmImport = async () => {
     try {
       const { createDocumentsBatch } = await import('@/services/medicalDocumentApi')
       const baseText = originalFullText.value || rawText || ''
-      const batch = (extractedMedicalData.documents || []).map((d: ExtractedDocumentItem, idx: number) => {
-        const pos = d.position || {}
+      const batch = (extractedMedicalData.documents || []).map((d, idx: number) => {
+        const pos: ExtractedDocumentPosition = d.position || {}
         const si = pos.startIndex
         const ei = pos.endIndex
 
@@ -1423,8 +1623,8 @@ const handleCloseApiConfig = () => {
 }
 
 // 处理全局配置更新事件
-const handleGlobalConfigUpdate = async (event) => {
-  const configData = event.detail
+const handleGlobalConfigUpdate = async (event: Event) => {
+  const configData = (event as CustomEvent).detail
   console.log('收到全局配置更新事件:', configData)
 
   try {
@@ -1923,4 +2123,3 @@ const handleCancel = () => {
   font-size: 12px !important;
 }
 </style>
-

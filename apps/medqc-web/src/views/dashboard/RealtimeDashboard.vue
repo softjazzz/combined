@@ -35,7 +35,7 @@ const eventStats = ref({
 
 // 检查连接状态
 const checkConnection = () => {
-  isConnected.value = realtimeService.getConnectionStatus()
+  isConnected.value = realtimeService.isConnected
   connectionStatus.value = isConnected.value ? '已连接' : '未连接'
 }
 
@@ -46,7 +46,7 @@ const handleRealtimeEvent = (event: RealtimeEvent) => {
   // 添加到事件列表
   realtimeEvents.value.unshift({
     ...event,
-    timestamp: new Date().toISOString()
+    timestamp: Date.now()
   })
   
   // 限制事件数量
@@ -56,7 +56,7 @@ const handleRealtimeEvent = (event: RealtimeEvent) => {
   
   // 更新统计
   eventStats.value.total++
-  switch (event.eventType) {
+  switch (event.type) {
     case 'INSERT':
       eventStats.value.inserts++
       break
@@ -196,8 +196,32 @@ const reconnect = async () => {
 }
 
 // 格式化时间
-const formatTime = (timestamp: string) => {
+const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleString()
+}
+
+const getEventPayload = (event: RealtimeEvent): Record<string, unknown> => {
+  if (event.payload && typeof event.payload === 'object') {
+    return event.payload as Record<string, unknown>
+  }
+  return {}
+}
+
+const getEventTable = (event: RealtimeEvent): string => {
+  const payload = getEventPayload(event)
+  return String(payload.table ?? '未知表')
+}
+
+const getEventNew = (event: RealtimeEvent): Record<string, unknown> => {
+  const payload = getEventPayload(event)
+  const data = payload.new
+  return data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+}
+
+const getEventOld = (event: RealtimeEvent): Record<string, unknown> => {
+  const payload = getEventPayload(event)
+  const data = payload.old
+  return data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
 }
 
 // 获取事件类型颜色
@@ -247,8 +271,12 @@ onMounted(() => {
         <div class="flex items-center">
           <ThunderboltOutlined class="text-2xl text-blue-500 mr-3" />
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">实时数据监控</h1>
-            <p class="text-sm text-gray-600">监控数据库实时变化和系统通知</p>
+            <h1 class="text-2xl font-bold text-gray-900">
+              实时数据监控
+            </h1>
+            <p class="text-sm text-gray-600">
+              监控数据库实时变化和系统通知
+            </p>
           </div>
         </div>
         
@@ -258,7 +286,7 @@ onMounted(() => {
             <div 
               class="w-3 h-3 rounded-full"
               :class="isConnected ? 'bg-green-500' : 'bg-red-500'"
-            ></div>
+            />
             <span class="text-sm font-medium">{{ connectionStatus }}</span>
           </div>
           
@@ -278,30 +306,49 @@ onMounted(() => {
     <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
       <a-card class="text-center">
-        <div class="text-2xl font-bold text-blue-600">{{ eventStats.total }}</div>
-        <div class="text-sm text-gray-600">总事件数</div>
+        <div class="text-2xl font-bold text-blue-600">
+          {{ eventStats.total }}
+        </div>
+        <div class="text-sm text-gray-600">
+          总事件数
+        </div>
       </a-card>
       
       <a-card class="text-center">
-        <div class="text-2xl font-bold text-green-600">{{ eventStats.inserts }}</div>
-        <div class="text-sm text-gray-600">新增事件</div>
+        <div class="text-2xl font-bold text-green-600">
+          {{ eventStats.inserts }}
+        </div>
+        <div class="text-sm text-gray-600">
+          新增事件
+        </div>
       </a-card>
       
       <a-card class="text-center">
-        <div class="text-2xl font-bold text-yellow-600">{{ eventStats.updates }}</div>
-        <div class="text-sm text-gray-600">更新事件</div>
+        <div class="text-2xl font-bold text-yellow-600">
+          {{ eventStats.updates }}
+        </div>
+        <div class="text-sm text-gray-600">
+          更新事件
+        </div>
       </a-card>
       
       <a-card class="text-center">
-        <div class="text-2xl font-bold text-red-600">{{ eventStats.deletes }}</div>
-        <div class="text-sm text-gray-600">删除事件</div>
+        <div class="text-2xl font-bold text-red-600">
+          {{ eventStats.deletes }}
+        </div>
+        <div class="text-sm text-gray-600">
+          删除事件
+        </div>
       </a-card>
     </div>
 
     <!-- 操作区域 -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- 测试操作 -->
-      <a-card title="测试操作" class="mb-6">
+      <a-card
+        title="测试操作"
+        class="mb-6"
+      >
         <div class="space-y-4">
           <div class="flex flex-wrap gap-2">
             <a-button 
@@ -335,7 +382,10 @@ onMounted(() => {
       </a-card>
 
       <!-- 事件控制 -->
-      <a-card title="事件控制" class="mb-6">
+      <a-card
+        title="事件控制"
+        class="mb-6"
+      >
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <span class="text-sm">自动滚动</span>
@@ -355,8 +405,8 @@ onMounted(() => {
           
           <a-button 
             block
-            @click="clearEvents"
             :disabled="realtimeEvents.length === 0"
+            @click="clearEvents"
           >
             清空事件日志
           </a-button>
@@ -365,7 +415,10 @@ onMounted(() => {
     </div>
 
     <!-- 实时事件日志 -->
-    <a-card title="实时事件日志" class="mb-6">
+    <a-card
+      title="实时事件日志"
+      class="mb-6"
+    >
       <div 
         class="events-container"
         style="height: 400px; overflow-y: auto;"
@@ -390,8 +443,8 @@ onMounted(() => {
             <div class="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
               <div 
                 class="w-3 h-3 rounded-full mt-1 flex-shrink-0"
-                :style="{ backgroundColor: getEventTypeColor(event.eventType) }"
-              ></div>
+                :style="{ backgroundColor: getEventTypeColor(event.type) }"
+              />
               
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between">
@@ -399,13 +452,13 @@ onMounted(() => {
                     <span 
                       class="text-sm font-medium px-2 py-1 rounded"
                       :style="{ 
-                        color: getEventTypeColor(event.eventType),
-                        backgroundColor: getEventTypeColor(event.eventType) + '20'
+                        color: getEventTypeColor(event.type),
+                        backgroundColor: getEventTypeColor(event.type) + '20'
                       }"
                     >
-                      {{ getEventTypeText(event.eventType) }}
+                      {{ getEventTypeText(event.type) }}
                     </span>
-                    <span class="text-sm text-gray-600">{{ event.table }}</span>
+                    <span class="text-sm text-gray-600">{{ getEventTable(event) }}</span>
                   </div>
                   <span class="text-xs text-gray-400">
                     {{ formatTime(event.timestamp) }}
@@ -413,17 +466,20 @@ onMounted(() => {
                 </div>
                 
                 <div class="mt-2 text-sm text-gray-700">
-                  <div v-if="event.new && event.new.patient_name">
-                    患者: {{ event.new.patient_name }}
-                    <span v-if="event.new.status" class="ml-2">
-                      状态: {{ event.new.status }}
+                  <div v-if="getEventNew(event).patient_name">
+                    患者: {{ getEventNew(event).patient_name }}
+                    <span
+                      v-if="getEventNew(event).status"
+                      class="ml-2"
+                    >
+                      状态: {{ getEventNew(event).status }}
                     </span>
                   </div>
-                  <div v-else-if="event.old && event.old.patient_name">
-                    患者: {{ event.old.patient_name }}
+                  <div v-else-if="getEventOld(event).patient_name">
+                    患者: {{ getEventOld(event).patient_name }}
                   </div>
                   <div v-else>
-                    {{ event.eventType }} 操作
+                    {{ event.type }} 操作
                   </div>
                 </div>
               </div>

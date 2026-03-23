@@ -2,22 +2,33 @@
   <div class="statistics-container p-8 bg-gray-50 min-h-screen">
     <!-- 页面标题 -->
     <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">统计分析</h1>
-      <p class="text-gray-600">医疗质控系统数据统计与分析报告</p>
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">
+        统计分析
+      </h1>
+      <p class="text-gray-600">
+        医疗质控系统数据统计与分析报告
+      </p>
     </div>
 
     <!-- 时间范围选择 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
       <div class="flex items-center justify-between">
-        <h2 class="text-xl font-semibold text-gray-800">数据统计</h2>
+        <h2 class="text-xl font-semibold text-gray-800">
+          数据统计
+        </h2>
         <div class="flex items-center space-x-4">
           <a-range-picker
             v-model:value="dateRange"
             :presets="datePresets"
-            @change="handleDateChange"
             class="rounded-lg"
+            @change="handleDateChange"
           />
-          <a-button type="primary" @click="handleRefresh" :loading="loading" class="rounded-lg">
+          <a-button
+            type="primary"
+            :loading="loading"
+            class="rounded-lg"
+            @click="handleRefresh"
+          >
             <ReloadOutlined />
             刷新数据
           </a-button>
@@ -30,8 +41,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">总病案数</p>
-            <p class="text-3xl font-bold text-gray-800">{{ statistics.totalRecords }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              总病案数
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              {{ statistics.totalRecords }}
+            </p>
             <div class="flex items-center mt-2">
               <ArrowUpOutlined class="text-green-500 text-xs mr-1" />
               <span class="text-green-500 text-sm">+12.5%</span>
@@ -47,8 +62,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">质控通过率</p>
-            <p class="text-3xl font-bold text-gray-800">{{ statistics.passRate }}%</p>
+            <p class="text-gray-600 text-sm mb-1">
+              质控通过率
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              {{ statistics.passRate }}%
+            </p>
             <div class="flex items-center mt-2">
               <ArrowUpOutlined class="text-green-500 text-xs mr-1" />
               <span class="text-green-500 text-sm">+3.2%</span>
@@ -64,8 +83,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">平均处理时间</p>
-            <p class="text-3xl font-bold text-gray-800">{{ statistics.avgProcessTime }}h</p>
+            <p class="text-gray-600 text-sm mb-1">
+              平均处理时间
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              {{ statistics.avgProcessTime }}h
+            </p>
             <div class="flex items-center mt-2">
               <ArrowDownOutlined class="text-red-500 text-xs mr-1" />
               <span class="text-red-500 text-sm">-8.1%</span>
@@ -81,8 +104,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">AI准确率</p>
-            <p class="text-3xl font-bold text-gray-800">{{ statistics.aiAccuracy }}%</p>
+            <p class="text-gray-600 text-sm mb-1">
+              AI准确率
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              {{ statistics.aiAccuracy }}%
+            </p>
             <div class="flex items-center mt-2">
               <ArrowUpOutlined class="text-green-500 text-xs mr-1" />
               <span class="text-green-500 text-sm">+1.8%</span>
@@ -101,7 +128,9 @@
       <!-- 质控趋势图 -->
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-xl font-semibold text-gray-800">质控趋势分析</h3>
+          <h3 class="text-xl font-semibold text-gray-800">
+            质控趋势分析
+          </h3>
           <a-select
             v-model:value="trendPeriod"
             style="width: 120px"
@@ -112,8 +141,12 @@
         <div class="h-80 bg-gray-50 rounded-lg flex items-center justify-center">
           <div class="text-center">
             <BarChartOutlined class="text-4xl text-gray-400 mb-4" />
-            <p class="text-gray-500">质控趋势图表</p>
-            <p class="text-sm text-gray-400">图表组件开发中...</p>
+            <p class="text-gray-500">
+              质控趋势图表
+            </p>
+            <p class="text-sm text-gray-400">
+              图表组件开发中...
+            </p>
           </div>
         </div>
       </div>
@@ -121,8 +154,13 @@
       <!-- 科室分布图 -->
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-xl font-semibold text-gray-800">科室分布统计</h3>
-          <a-button type="text" @click="handleExportChart">
+          <h3 class="text-xl font-semibold text-gray-800">
+            科室分布统计
+          </h3>
+          <a-button
+            type="text"
+            @click="handleExportChart"
+          >
             <DownloadOutlined />
             导出
           </a-button>
@@ -130,8 +168,12 @@
         <div class="h-80 bg-gray-50 rounded-lg flex items-center justify-center">
           <div class="text-center">
             <PieChartOutlined class="text-4xl text-gray-400 mb-4" />
-            <p class="text-gray-500">科室分布饼图</p>
-            <p class="text-sm text-gray-400">图表组件开发中...</p>
+            <p class="text-gray-500">
+              科室分布饼图
+            </p>
+            <p class="text-sm text-gray-400">
+              图表组件开发中...
+            </p>
           </div>
         </div>
       </div>
@@ -140,13 +182,22 @@
     <!-- 详细统计表格 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
       <div class="flex items-center justify-between mb-6">
-        <h3 class="text-xl font-semibold text-gray-800">科室详细统计</h3>
+        <h3 class="text-xl font-semibold text-gray-800">
+          科室详细统计
+        </h3>
         <div class="flex space-x-2">
-          <a-button @click="handleExportTable" class="rounded-lg">
+          <a-button
+            class="rounded-lg"
+            @click="handleExportTable"
+          >
             <DownloadOutlined />
             导出表格
           </a-button>
-          <a-button type="primary" @click="handleGenerateReport" class="rounded-lg">
+          <a-button
+            type="primary"
+            class="rounded-lg"
+            @click="handleGenerateReport"
+          >
             <FileTextOutlined />
             生成报告
           </a-button>
@@ -180,18 +231,29 @@
                 :class="record.trend > 0 ? 'text-green-500' : 'text-red-500'"
                 class="text-xs mr-1"
               />
-              <span :class="record.trend > 0 ? 'text-green-500' : 'text-red-500'" class="text-sm">
+              <span
+                :class="record.trend > 0 ? 'text-green-500' : 'text-red-500'"
+                class="text-sm"
+              >
                 {{ Math.abs(record.trend) }}%
               </span>
             </div>
           </template>
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
-              <a-button type="link" size="small" @click="handleViewDetail(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleViewDetail(record)"
+              >
                 <EyeOutlined />
                 详情
               </a-button>
-              <a-button type="link" size="small" @click="handleDepartmentReport(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleDepartmentReport(record)"
+              >
                 <FileTextOutlined />
                 报告
               </a-button>
@@ -207,6 +269,7 @@
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import type { Dayjs } from 'dayjs'
 import {
   ReloadOutlined,
   ArrowUpOutlined,
@@ -295,9 +358,12 @@ const periodOptions = [
 ]
 
 interface DepartmentStatsRow {
+  department: string
   totalRecords: number
+  passedRecords: number
   passRate: number
   avgTime: number
+  trend: number
 }
 
 // 表格列配置
@@ -357,7 +423,7 @@ const getProgressColor = (percent: number) => {
 }
 
 // 事件处理函数
-const handleDateChange = (dates) => {
+const handleDateChange = (dates: [Dayjs, Dayjs] | null) => {
   if (dates) {
     fetchStatistics()
   }
@@ -384,11 +450,11 @@ const handleGenerateReport = () => {
   message.info('生成统计报告')
 }
 
-const handleViewDetail = (record) => {
+const handleViewDetail = (record: DepartmentStatsRow) => {
   message.info(`查看${record.department}详细统计`)
 }
 
-const handleDepartmentReport = (record) => {
+const handleDepartmentReport = (record: DepartmentStatsRow) => {
   message.info(`生成${record.department}报告`)
 }
 

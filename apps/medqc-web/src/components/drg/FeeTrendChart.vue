@@ -1,6 +1,10 @@
 <template>
   <div class="fee-trend-chart">
-    <VChart :option="chartOption" :autoresize="true" style="height: 320px" />
+    <VChart
+      :option="chartOption"
+      :autoresize="true"
+      style="height: 320px"
+    />
   </div>
 </template>
 

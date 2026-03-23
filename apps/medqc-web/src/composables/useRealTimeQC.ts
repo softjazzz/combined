@@ -17,7 +17,7 @@ export interface RealTimeQCResult {
   id: string
   recordId: string
   content: string
-  analysisResult: Record<string, unknown>
+  analysisResult: CombinedAnalysisResult | Record<string, unknown>
   alertLevel: QCAlertLevel
   issues: QCIssue[]
   suggestions: string[]
@@ -58,6 +58,50 @@ export interface QCRule {
   priority: number
 }
 
+interface WebSocketPayloadLike {
+  table?: string
+  eventType?: string
+  new?: unknown
+  old?: unknown
+}
+
+interface WebSocketMessageLike {
+  type?: string
+  payload?: WebSocketPayloadLike
+}
+
+interface AnalyzableRecord {
+  id: string
+  content: string
+}
+
+interface RuleResultItem {
+  ruleId: string
+  type: string
+  severity: QCAlertLevel
+  message: string
+  issues?: QCIssue[]
+  matches?: string[]
+}
+
+interface AIAnalysisLike {
+  suggestions?: string[]
+  confidence?: number
+}
+
+interface CombinedAnalysisResult {
+  ruleResults: RuleResultItem[]
+  aiAnalysis: AIAnalysisLike
+  timestamp: string
+}
+
+const isAnalyzableRecord = (value: unknown): value is AnalyzableRecord => {
+  return typeof value === 'object'
+    && value !== null
+    && typeof (value as { id?: unknown }).id === 'string'
+    && typeof (value as { content?: unknown }).content === 'string'
+}
+
 export function useRealTimeQC() {
   // 响应式数据
   const isMonitoring = ref(false)
@@ -76,7 +120,7 @@ export function useRealTimeQC() {
   const alertQueue = ref<QCIssue[]>([])
 
   // WebSocket连接
-  let wsConnection = null
+  let wsConnection: unknown | null = null
   let messageUnsubscribe: (() => void) | null = null
 
   // 计算属性
@@ -167,9 +211,10 @@ export function useRealTimeQC() {
       })
 
       // 监听消息
-      messageUnsubscribe = wsManager.onMessage('realtime_qc_monitor', (message) => {
-        if (message.type === 'postgres_changes') {
-          const { payload } = message
+      messageUnsubscribe = wsManager.onMessage('realtime_qc_monitor', (message: unknown) => {
+        const currentMessage = message as WebSocketMessageLike
+        const payload = currentMessage.payload
+        if (currentMessage.type === 'postgres_changes' && payload) {
           if (payload.table === TABLES.MEDICAL_RECORDS) {
             handleRecordChange(payload)
           } else if (payload.table === TABLES.QC_RESULTS) {
@@ -188,11 +233,11 @@ export function useRealTimeQC() {
   /**
    * 处理病案记录变化
    */
-  const handleRecordChange = async (payload) => {
-    const { eventType, new: newRecord, old: oldRecord } = payload
+  const handleRecordChange = async (payload: WebSocketPayloadLike) => {
+    const { eventType, new: newRecord } = payload
 
     try {
-      if (eventType === 'INSERT' || eventType === 'UPDATE') {
+      if ((eventType === 'INSERT' || eventType === 'UPDATE') && isAnalyzableRecord(newRecord)) {
         // 触发实时质控分析
         await performRealTimeAnalysis(newRecord)
       }
@@ -204,7 +249,7 @@ export function useRealTimeQC() {
   /**
    * 处理质控结果变化
    */
-  const handleQCResultChange = (payload) => {
+  const handleQCResultChange = (payload: WebSocketPayloadLike) => {
     const { eventType, new: newResult } = payload
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -216,7 +261,7 @@ export function useRealTimeQC() {
   /**
    * 执行实时质控分析
    */
-  const performRealTimeAnalysis = async (record) => {
+  const performRealTimeAnalysis = async (record: AnalyzableRecord) => {
     const startTime = Date.now()
     const analysisId = `analysis_${record.id}_${startTime}`
 
@@ -227,7 +272,7 @@ export function useRealTimeQC() {
       const analysis: RealTimeQCResult = { id: analysisId,
         recordId: record.id,
         content: record.content,
-        analysisResult: null,
+        analysisResult: {},
         alertLevel: 'info',
         issues: [],
         suggestions:  [],
@@ -292,8 +337,8 @@ export function useRealTimeQC() {
   /**
    * 应用质控规则
    */
-  const applyQCRules = async (content: string) => {
-    const results = []
+  const applyQCRules = async (content: string): Promise<RuleResultItem[]> => {
+    const results: RuleResultItem[] = []
     
     for (const rule of qcRules.value.filter(r => r.isActive)) {
       try {
@@ -312,7 +357,7 @@ export function useRealTimeQC() {
   /**
    * 应用单个质控规则
    */
-  const applyRule = async (rule: QCRule, content: string) => {
+  const applyRule = async (rule: QCRule, content: string): Promise<RuleResultItem | null> => {
     switch (rule.type) {
       case 'content':
         return applyContentRule(rule, content)
@@ -330,7 +375,7 @@ export function useRealTimeQC() {
   /**
    * 应用内容规则
    */
-  const applyContentRule = (rule: QCRule, content: string) => {
+  const applyContentRule = (rule: QCRule, content: string): RuleResultItem | null => {
     if (!rule.pattern) return null
     
     const regex = new RegExp(rule.pattern, 'gi')
@@ -352,9 +397,9 @@ export function useRealTimeQC() {
   /**
    * 应用格式规则
    */
-  const applyFormatRule = (rule: QCRule, content: string) => {
+  const applyFormatRule = (rule: QCRule, content: string): RuleResultItem | null => {
     // 实现格式检查逻辑
-    const issues = []
+    const issues: QCIssue[] = []
     
     // 检查必要的格式要素
     const requiredSections = ['主诉', '现病史', '既往史', '体格检查']
@@ -380,9 +425,9 @@ export function useRealTimeQC() {
   /**
    * 应用逻辑规则
    */
-  const applyLogicRule = (rule: QCRule, content: string) => {
+  const applyLogicRule = (rule: QCRule, content: string): RuleResultItem | null => {
     // 实现逻辑一致性检查
-    const issues = []
+    const issues: QCIssue[] = []
     
     // 检查年龄和疾病的逻辑一致性
     const ageMatch = content.match(/年龄[：:]\s*(\d+)/i)
@@ -410,9 +455,9 @@ export function useRealTimeQC() {
   /**
    * 应用完整性规则
    */
-  const applyCompletenessRule = (rule: QCRule, content: string) => {
+  const applyCompletenessRule = (rule: QCRule, content: string): RuleResultItem | null => {
     // 实现完整性检查
-    const issues = []
+    const issues: QCIssue[] = []
     
     // 检查基本信息完整性
     const requiredInfo = ['姓名', '性别', '年龄', '科室']
@@ -438,10 +483,16 @@ export function useRealTimeQC() {
   /**
    * 合并分析结果
    */
-  const mergeAnalysisResults = (ruleResults: unknown[], aiAnalysis: unknown) => {
+  const mergeAnalysisResults = (ruleResults: RuleResultItem[], aiAnalysis: unknown): CombinedAnalysisResult => {
+    const normalizedAIAnalysis: AIAnalysisLike = (
+      typeof aiAnalysis === 'object' && aiAnalysis !== null
+    )
+      ? (aiAnalysis as AIAnalysisLike)
+      : {}
+
     return {
       ruleResults,
-      aiAnalysis,
+      aiAnalysis: normalizedAIAnalysis,
       timestamp: new Date().toISOString()
     }
   }
@@ -449,19 +500,19 @@ export function useRealTimeQC() {
   /**
    * 确定预警级别
    */
-  const determineAlertLevel = (analysisResult): QCAlertLevel => {
+  const determineAlertLevel = (analysisResult: CombinedAnalysisResult): QCAlertLevel => {
     const { ruleResults } = analysisResult
     
     if (ruleResults.some((r) => r.severity === 'critical')) return 'critical'
-    if (ruleResults.some((r: { severity?: string }) => r.severity === 'error')) return 'error'
-    if (ruleResults.some((r: { severity?: string }) => r.severity === 'warning')) return 'warning'
+    if (ruleResults.some((r) => r.severity === 'error')) return 'error'
+    if (ruleResults.some((r) => r.severity === 'warning')) return 'warning'
     return 'info'
   }
 
   /**
    * 提取问题列表
    */
-  const extractIssues = (analysisResult): QCIssue[] => {
+  const extractIssues = (analysisResult: CombinedAnalysisResult): QCIssue[] => {
     const issues: QCIssue[] = []
     
     // 从规则结果中提取问题
@@ -484,7 +535,7 @@ export function useRealTimeQC() {
   /**
    * 提取建议列表
    */
-  const extractSuggestions = (analysisResult): string[] => {
+  const extractSuggestions = (analysisResult: CombinedAnalysisResult): string[] => {
     const suggestions: string[] = []
     
     // 从AI分析结果中提取建议
@@ -498,7 +549,7 @@ export function useRealTimeQC() {
   /**
    * 计算置信度
    */
-  const calculateConfidence = (analysisResult): number => {
+  const calculateConfidence = (analysisResult: CombinedAnalysisResult): number => {
     // 基于规则匹配和AI分析结果计算置信度
     const ruleCount = analysisResult.ruleResults.length
     const aiConfidence = analysisResult.aiAnalysis?.confidence || 0.5
@@ -625,7 +676,8 @@ export function useRealTimeQC() {
   /**
    * 更新监控状态
    */
-  const updateMonitorStatus = (result) => {
+  const updateMonitorStatus = (result: unknown) => {
+    void result
     // 更新连接用户数等状态信息
     // 这里可以根据实际需求实现
   }

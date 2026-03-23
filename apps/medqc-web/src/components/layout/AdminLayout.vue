@@ -7,8 +7,8 @@
           <!-- 左侧：Logo和系统名称 -->
           <div class="flex items-center">
             <button
-              @click="toggleSidebar"
               class="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 mr-3"
+              @click="toggleSidebar"
             >
               <MenuOutlined class="text-lg" />
             </button>
@@ -18,8 +18,12 @@
                 <MedicineBoxOutlined class="text-white text-sm" />
               </div>
               <div>
-                <h1 class="text-lg font-semibold text-gray-900">医疗质控系统</h1>
-                <p class="text-xs text-gray-500 hidden sm:block">Medical Quality Control System</p>
+                <h1 class="text-lg font-semibold text-gray-900">
+                  医疗质控系统
+                </h1>
+                <p class="text-xs text-gray-500 hidden sm:block">
+                  Medical Quality Control System
+                </p>
               </div>
             </div>
           </div>
@@ -27,7 +31,10 @@
           <!-- 右侧：用户信息和操作 -->
           <div class="flex items-center space-x-4">
             <!-- 通知 -->
-            <a-badge :count="notificationCount" :offset="[10, 0]">
+            <a-badge
+              :count="notificationCount"
+              :offset="[10, 0]"
+            >
               <button class="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
                 <BellOutlined class="text-lg" />
               </button>
@@ -36,28 +43,46 @@
             <!-- 用户菜单 -->
             <a-dropdown placement="bottomRight">
               <button class="flex items-center space-x-2 p-2 text-gray-700 hover:bg-gray-100 rounded-lg">
-                <a-avatar :size="32" :src="currentUser?.avatar">
-                  <template #icon><UserOutlined /></template>
+                <a-avatar
+                  :size="32"
+                  :src="currentUser?.avatar"
+                >
+                  <template #icon>
+                    <UserOutlined />
+                  </template>
                 </a-avatar>
                 <div class="hidden sm:block text-left">
-                  <div class="text-sm font-medium">{{ currentUser?.name || '用户' }}</div>
-                  <div class="text-xs text-gray-500">{{ currentUser?.role || '医务人员' }}</div>
+                  <div class="text-sm font-medium">
+                    {{ currentUser?.display_name || '用户' }}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {{ currentUser?.role || '医务人员' }}
+                  </div>
                 </div>
                 <DownOutlined class="text-xs text-gray-400" />
               </button>
               
               <template #overlay>
                 <a-menu>
-                  <a-menu-item key="profile" @click="goToProfile">
+                  <a-menu-item
+                    key="profile"
+                    @click="goToProfile"
+                  >
                     <UserOutlined class="mr-2" />
                     个人资料
                   </a-menu-item>
-                  <a-menu-item key="settings" @click="goToSettings">
+                  <a-menu-item
+                    key="settings"
+                    @click="goToSettings"
+                  >
                     <SettingOutlined class="mr-2" />
                     系统设置
                   </a-menu-item>
                   <a-menu-divider />
-                  <a-menu-item key="logout" @click="handleLogout">
+                  <a-menu-item
+                    key="logout"
+                    @click="handleLogout"
+                  >
                     <LogoutOutlined class="mr-2" />
                     退出登录
                   </a-menu-item>
@@ -81,14 +106,17 @@
         <nav class="h-full overflow-y-auto py-6">
           <div class="px-4">
             <a-menu
-              v-model:selectedKeys="selectedKeys"
-              v-model:openKeys="openKeys"
+              v-model:selected-keys="selectedKeys"
+              v-model:open-keys="openKeys"
               mode="inline"
               :inline-collapsed="false"
               class="border-none"
             >
               <!-- 仪表板 -->
-              <a-menu-item key="dashboard" @click="navigateTo('/dashboard')">
+              <a-menu-item
+                key="dashboard"
+                @click="navigateTo('/dashboard')"
+              >
                 <template #icon>
                   <DashboardOutlined class="text-gray-600" />
                 </template>
@@ -104,13 +132,22 @@
                   <span class="text-gray-700">质控管理</span>
                 </template>
                 
-                <a-menu-item key="audit-tasks" @click="navigateTo('/audit-tasks')">
+                <a-menu-item
+                  key="audit-tasks"
+                  @click="navigateTo('/audit-tasks')"
+                >
                   <span class="text-gray-600">审核任务</span>
                 </a-menu-item>
-                <a-menu-item key="ai-assistance" @click="navigateTo('/ai-assistance')">
+                <a-menu-item
+                  key="ai-assistance"
+                  @click="navigateTo('/ai-assistance')"
+                >
                   <span class="text-gray-600">AI辅助审核</span>
                 </a-menu-item>
-                <a-menu-item key="batch-audit" @click="navigateTo('/batch-audit')">
+                <a-menu-item
+                  key="batch-audit"
+                  @click="navigateTo('/batch-audit')"
+                >
                   <span class="text-gray-600">批量审核</span>
                 </a-menu-item>
               </a-sub-menu>
@@ -124,13 +161,22 @@
                   <span class="text-gray-700">规则配置</span>
                 </template>
                 
-                <a-menu-item key="work-rules" @click="navigateTo('/rules/work-rules')">
+                <a-menu-item
+                  key="work-rules"
+                  @click="navigateTo('/rules/work-rules')"
+                >
                   <span class="text-gray-600">工作制度</span>
                 </a-menu-item>
-                <a-menu-item key="enhanced-rules" @click="navigateTo('/rules/enhanced-rules')">
+                <a-menu-item
+                  key="enhanced-rules"
+                  @click="navigateTo('/rules/enhanced-rules')"
+                >
                   <span class="text-gray-600">增强规则</span>
                 </a-menu-item>
-                <a-menu-item key="department-config" @click="navigateTo('/department-config')">
+                <a-menu-item
+                  key="department-config"
+                  @click="navigateTo('/department-config')"
+                >
                   <span class="text-gray-600">专科配置</span>
                 </a-menu-item>
               </a-sub-menu>
@@ -144,16 +190,25 @@
                   <span class="text-gray-700">数据分析</span>
                 </template>
                 
-                <a-menu-item key="qc-reports" @click="navigateTo('/reports/qc-reports')">
+                <a-menu-item
+                  key="qc-reports"
+                  @click="navigateTo('/reports/qc-reports')"
+                >
                   <span class="text-gray-600">质控报告</span>
                 </a-menu-item>
-                <a-menu-item key="statistics" @click="navigateTo('/statistics')">
+                <a-menu-item
+                  key="statistics"
+                  @click="navigateTo('/statistics')"
+                >
                   <span class="text-gray-600">统计分析</span>
                 </a-menu-item>
               </a-sub-menu>
               
               <!-- 系统管理 -->
-              <a-sub-menu key="system" v-if="isAdmin">
+              <a-sub-menu
+                v-if="isAdmin"
+                key="system"
+              >
                 <template #icon>
                   <ControlOutlined class="text-gray-600" />
                 </template>
@@ -161,13 +216,22 @@
                   <span class="text-gray-700">系统管理</span>
                 </template>
                 
-                <a-menu-item key="user-management" @click="navigateTo('/admin/users')">
+                <a-menu-item
+                  key="user-management"
+                  @click="navigateTo('/admin/users')"
+                >
                   <span class="text-gray-600">用户管理</span>
                 </a-menu-item>
-                <a-menu-item key="system-settings" @click="navigateTo('/admin/settings')">
+                <a-menu-item
+                  key="system-settings"
+                  @click="navigateTo('/admin/settings')"
+                >
                   <span class="text-gray-600">系统设置</span>
                 </a-menu-item>
-                <a-menu-item key="logs" @click="navigateTo('/admin/logs')">
+                <a-menu-item
+                  key="logs"
+                  @click="navigateTo('/admin/logs')"
+                >
                   <span class="text-gray-600">系统日志</span>
                 </a-menu-item>
               </a-sub-menu>
@@ -179,9 +243,9 @@
       <!-- 遮罩层 (移动端) -->
       <div
         v-if="sidebarOpen"
-        @click="closeSidebar"
         class="fixed inset-0 z-30 bg-black bg-opacity-50 lg:hidden"
-      ></div>
+        @click="closeSidebar"
+      />
       
       <!-- 主内容区域 -->
       <main class="flex-1 lg: ml-0">

@@ -7,12 +7,21 @@
       <a-row :gutter="16">
         <a-col :span="12">
           <a-form-item label="规则编号">
-            <a-input :value="editableRule.rule_code" disabled />
+            <a-input
+              :value="editableRule.rule_code"
+              disabled
+            />
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item label="规则名称" required>
-            <a-input v-model:value="editableRule.name" placeholder="请输入规则名称" />
+          <a-form-item
+            label="规则名称"
+            required
+          >
+            <a-input
+              v-model:value="editableRule.name"
+              placeholder="请输入规则名称"
+            />
           </a-form-item>
         </a-col>
       </a-row>
@@ -35,7 +44,10 @@
         </a-col>
       </a-row>
 
-      <a-form-item label="规则描述" required>
+      <a-form-item
+        label="规则描述"
+        required
+      >
         <a-textarea
           v-model:value="editableRule.description"
           :rows="4"
@@ -43,7 +55,11 @@
         />
       </a-form-item>
 
-      <a-collapse v-model:activeKey="activePanels" :bordered="false" class="rule-collapse">
+      <a-collapse
+        v-model:active-key="activePanels"
+        :bordered="false"
+        class="rule-collapse"
+      >
         <a-collapse-panel key="ruleDetail">
           <template #header>
             <span class="collapse-header">
@@ -57,7 +73,11 @@
         </a-collapse-panel>
       </a-collapse>
 
-      <a-tabs v-model:activeKey="exampleTab" type="card" class="example-tabs">
+      <a-tabs
+        v-model:active-key="exampleTab"
+        type="card"
+        class="example-tabs"
+      >
         <a-tab-pane key="positive">
           <template #tab>
             <span><CheckCircleOutlined style="color: #52c41a;" /> 合规示例</span>
@@ -117,12 +137,30 @@
 
       <div class="actions">
         <a-space>
-          <a-button type="primary" @click="emitSave">保存规则</a-button>
+          <a-button
+            type="primary"
+            @click="emitSave"
+          >
+            保存规则
+          </a-button>
           <a-tooltip title="请先保存规则后返回规则列表进行质控测试">
-            <a-button disabled>测试规则</a-button>
+            <a-button disabled>
+              测试规则
+            </a-button>
           </a-tooltip>
-          <a-button danger ghost @click="emitRegenerate">重新生成</a-button>
-          <a-button type="link" @click="restoreOriginal">恢复AI版本</a-button>
+          <a-button
+            danger
+            ghost
+            @click="emitRegenerate"
+          >
+            重新生成
+          </a-button>
+          <a-button
+            type="link"
+            @click="restoreOriginal"
+          >
+            恢复AI版本
+          </a-button>
         </a-space>
       </div>
     </a-form>

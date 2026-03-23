@@ -3,7 +3,11 @@
   展示总体评估、合规率、等级等核心指标
 -->
 <template>
-  <a-card title="质控结果总结" :bordered="false" class="qc-result-summary">
+  <a-card
+    title="质控结果总结"
+    :bordered="false"
+    class="qc-result-summary"
+  >
     <!-- 总体等级 -->
     <div class="grade-section">
       <a-badge
@@ -21,7 +25,10 @@
     <!-- 核心指标 -->
     <a-row :gutter="16">
       <!-- 合规率 -->
-      <a-col :xs="24" :sm="12">
+      <a-col
+        :xs="24"
+        :sm="12"
+      >
         <a-statistic
           title="合规率"
           :value="result.evaluation_summary.compliance_rate"
@@ -46,7 +53,10 @@
       </a-col>
 
       <!-- 严重违规数 -->
-      <a-col :xs="24" :sm="12">
+      <a-col
+        :xs="24"
+        :sm="12"
+      >
         <a-statistic
           title="严重违规"
           :value="result.evaluation_summary.critical_violations"
@@ -60,13 +70,22 @@
         
         <!-- 违规数提示 -->
         <div class="violations-hint">
-          <a-tag v-if="result.evaluation_summary.critical_violations === 0" color="success">
+          <a-tag
+            v-if="result.evaluation_summary.critical_violations === 0"
+            color="success"
+          >
             无严重违规
           </a-tag>
-          <a-tag v-else-if="result.evaluation_summary.critical_violations <= 3" color="warning">
+          <a-tag
+            v-else-if="result.evaluation_summary.critical_violations <= 3"
+            color="warning"
+          >
             需要改进
           </a-tag>
-          <a-tag v-else color="error">
+          <a-tag
+            v-else
+            color="error"
+          >
             严重不合规
           </a-tag>
         </div>
@@ -77,7 +96,10 @@
 
     <!-- 规则统计 -->
     <a-row :gutter="16">
-      <a-col :xs="24" :sm="8">
+      <a-col
+        :xs="24"
+        :sm="8"
+      >
         <a-statistic
           title="总规则数"
           :value="result.evaluation_summary.total_rules"
@@ -89,7 +111,10 @@
         </a-statistic>
       </a-col>
 
-      <a-col :xs="24" :sm="8">
+      <a-col
+        :xs="24"
+        :sm="8"
+      >
         <a-statistic
           title="合规规则"
           :value="result.evaluation_summary.compliant_rules"
@@ -102,7 +127,10 @@
         </a-statistic>
       </a-col>
 
-      <a-col :xs="24" :sm="8">
+      <a-col
+        :xs="24"
+        :sm="8"
+      >
         <a-statistic
           title="不合规规则"
           :value="nonCompliantRules"
@@ -119,25 +147,40 @@
     <a-divider />
 
     <!-- 性能指标 -->
-    <a-descriptions title="性能指标" :column="2" size="small" bordered>
+    <a-descriptions
+      title="性能指标"
+      :column="2"
+      size="small"
+      bordered
+    >
       <a-descriptions-item label="处理时间">
-        <a-tag color="blue">{{ processingTimeFormatted }}</a-tag>
+        <a-tag color="blue">
+          {{ processingTimeFormatted }}
+        </a-tag>
       </a-descriptions-item>
       <a-descriptions-item label="Token 使用">
-        <a-tag color="purple">{{ tokenUsageFormatted }}</a-tag>
+        <a-tag color="purple">
+          {{ tokenUsageFormatted }}
+        </a-tag>
       </a-descriptions-item>
       <a-descriptions-item label="预估成本">
-        <a-tag color="green">{{ estimatedCostFormatted }}</a-tag>
+        <a-tag color="green">
+          {{ estimatedCostFormatted }}
+        </a-tag>
       </a-descriptions-item>
       <a-descriptions-item label="Token 节省率">
-        <a-tag color="orange">{{ tokenSavingsRateFormatted }}</a-tag>
+        <a-tag color="orange">
+          {{ tokenSavingsRateFormatted }}
+        </a-tag>
       </a-descriptions-item>
     </a-descriptions>
 
     <!-- 评估模式和时间戳 -->
     <div class="meta-info">
       <a-space>
-        <a-tag color="cyan">{{ result.mode === 'single_prompt' ? '单次Prompt模式' : '多次调用模式' }}</a-tag>
+        <a-tag color="cyan">
+          {{ result.mode === 'single_prompt' ? '单次Prompt模式' : '多次调用模式' }}
+        </a-tag>
         <a-tag>{{ timestampFormatted }}</a-tag>
       </a-space>
     </div>

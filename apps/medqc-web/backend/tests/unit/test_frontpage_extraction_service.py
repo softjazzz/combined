@@ -283,6 +283,319 @@ class TestFrontPageExtractionService:
         assert isinstance(other_icds, list)
         assert len(other_icds) == len(others)
 
+    def test_build_diagnosis_evidence_marks_system_recommendation_when_differs(self):
+        """医生主诊断与系统推荐不一致时，应输出差异标注与推荐理由。"""
+        service = FrontPageExtractionService()
+        medical_text = """
+出院诊断：
+1. 冠状动脉粥样硬化性心脏病
+2. 高血压病3级（极高危组）
+
+病程记录：
+患者因胸痛入院，完善冠脉造影提示前降支重度狭窄，行经皮冠状动脉支架植入术。
+术后继续双联抗血小板治疗及心电监护。
+"""
+        diagnoses = {
+            "discharge_main_diagnosis_text": "冠状动脉粥样硬化性心脏病",
+            "discharge_other_diagnoses_texts": ["高血压病3级（极高危组）"],
+        }
+        procedures = {
+            "main_procedure_text": "经皮冠状动脉支架植入术",
+        }
+        evidence = service._build_diagnosis_evidence(
+            medical_text=medical_text,
+            diagnoses=diagnoses,
+            procedures=procedures,
+            clinician_main_diagnosis="高血压病3级（极高危组）",
+        )
+
+        main_ev = next((x for x in evidence if x.get("diagnosis_type") == "main"), None)
+        assert isinstance(main_ev, dict)
+        assert main_ev.get("clinician_main_diagnosis") == "高血压病3级（极高危组）"
+        assert "冠状动脉" in str(main_ev.get("system_recommended_main_diagnosis") or "")
+        assert main_ev.get("recommendation_differs_from_clinician") is True
+        assert main_ev.get("recommendation_label") == "更适合作为主要诊断"
+        reasons = main_ev.get("recommendation_reasons") or []
+        assert isinstance(reasons, list) and reasons
+        reason_text = " ".join(str(item.get("reason") or "") for item in reasons if isinstance(item, dict))
+        assert ("手术" in reason_text) or ("资源消耗" in reason_text)
+
+    def test_build_diagnosis_evidence_no_diff_when_recommendation_matches_clinician(self):
+        """医生主诊断与系统推荐一致时，不应触发差异标注。"""
+        service = FrontPageExtractionService()
+        medical_text = """
+出院诊断：
+1. 急性阑尾炎
+2. 高血压病
+
+病程记录：
+患者因右下腹痛入院，急诊行腹腔镜阑尾切除术，术后恢复可。
+"""
+        diagnoses = {
+            "discharge_main_diagnosis_text": "急性阑尾炎",
+            "discharge_other_diagnoses_texts": ["高血压病"],
+        }
+        procedures = {
+            "main_procedure_text": "腹腔镜阑尾切除术",
+        }
+        evidence = service._build_diagnosis_evidence(
+            medical_text=medical_text,
+            diagnoses=diagnoses,
+            procedures=procedures,
+            clinician_main_diagnosis="急性阑尾炎",
+        )
+
+        main_ev = next((x for x in evidence if x.get("diagnosis_type") == "main"), None)
+        assert isinstance(main_ev, dict)
+        assert main_ev.get("recommendation_differs_from_clinician") is False
+
+    def test_select_context_text_strategy_full_and_retrieval(self):
+        """context_strategy=full/retrieval 应构建不同上下文且可控。"""
+        service = FrontPageExtractionService()
+        long_text = (
+            ("无关内容" * 1200)
+            + "\n出院诊断：\n1. 冠状动脉粥样硬化性心脏病\n"
+            + ("病程记录：胸痛，行冠脉造影及支架植入。\n" * 200)
+        )
+
+        full_ctx = service._select_context_text(
+            long_text,
+            "full",
+            max_chars=4200,
+            default_mode="full",
+        )
+        retrieval_ctx = service._select_context_text(
+            long_text,
+            "retrieval",
+            max_chars=4200,
+            default_mode="full",
+        )
+        fallback_ctx = service._select_context_text(
+            long_text,
+            "unknown_mode",
+            max_chars=4200,
+            default_mode="retrieval",
+        )
+
+        assert full_ctx == long_text
+        assert len(retrieval_ctx) <= 4200
+        assert "出院诊断" in retrieval_ctx
+        assert len(fallback_ctx) <= 4200
+
+    @pytest.mark.asyncio
+    async def test_build_main_diagnosis_llm_evidence_success(self):
+        """主诊断 LLM 解释应按约定字段返回。"""
+        service = FrontPageExtractionService()
+        service._use_llm = True
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "主诊断推荐解释" in prompt:
+                return {
+                    "clinician_main_diagnosis": "高血压病3级（极高危组）",
+                    "llm_recommended_main_diagnosis": "冠状动脉粥样硬化性心脏病",
+                    "is_consistent_with_clinician": False,
+                    "confidence": 0.84,
+                    "conclusion": "LLM 推荐冠状动脉粥样硬化性心脏病作为主诊断。",
+                    "key_evidence": [
+                        {
+                            "quote": "患者胸痛入院，行经皮冠状动脉支架植入术。",
+                            "source": "病程记录 第3天",
+                            "why_it_supports": "主要治疗行为直接指向冠脉疾病。",
+                        }
+                    ],
+                    "reasoning_summary": "本次住院核心资源消耗集中在冠脉介入治疗。",
+                }
+            return {}
+
+        service._extract_json = _fake_extract_json
+        result = await service._build_main_diagnosis_llm_evidence(
+            medical_text="病程记录：患者胸痛入院，行经皮冠状动脉支架植入术。",
+            diagnoses={
+                "discharge_main_diagnosis_text": "高血压病3级（极高危组）",
+                "discharge_other_diagnoses_texts": ["冠状动脉粥样硬化性心脏病"],
+            },
+            procedures={"main_procedure_text": "经皮冠状动脉支架植入术"},
+            clinician_main_diagnosis="高血压病3级（极高危组）",
+        )
+
+        assert isinstance(result, dict)
+        assert result.get("llm_recommended_main_diagnosis") == "冠状动脉粥样硬化性心脏病"
+        assert result.get("is_consistent_with_clinician") is False
+        assert isinstance(result.get("key_evidence"), list)
+        assert result.get("reasoning_summary")
+
+    @pytest.mark.asyncio
+    async def test_build_main_diagnosis_llm_evidence_consistent(self):
+        """主诊断一致场景应输出 is_consistent_with_clinician=true。"""
+        service = FrontPageExtractionService()
+        service._use_llm = True
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "主诊断推荐解释" in prompt:
+                return {
+                    "clinician_main_diagnosis": "急性阑尾炎",
+                    "llm_recommended_main_diagnosis": "急性阑尾炎",
+                    "confidence": 0.91,
+                    "conclusion": "医生填写与LLM推荐一致。",
+                    "key_evidence": [
+                        {
+                            "quote": "急诊行腹腔镜阑尾切除术，术后恢复可。",
+                            "source": "手术记录 第1条",
+                            "why_it_supports": "本次住院主要治疗行为为阑尾切除。",
+                        }
+                    ],
+                    "reasoning_summary": "诊断与主要手术一致，且住院资源消耗集中在阑尾炎处理。",
+                }
+            return {}
+
+        service._extract_json = _fake_extract_json
+        result = await service._build_main_diagnosis_llm_evidence(
+            medical_text="患者因右下腹痛入院，急诊行腹腔镜阑尾切除术。",
+            diagnoses={
+                "discharge_main_diagnosis_text": "急性阑尾炎",
+                "discharge_other_diagnoses_texts": ["高血压病"],
+            },
+            procedures={"main_procedure_text": "腹腔镜阑尾切除术"},
+            clinician_main_diagnosis="急性阑尾炎",
+        )
+
+        assert isinstance(result, dict)
+        assert result.get("llm_recommended_main_diagnosis") == "急性阑尾炎"
+        assert result.get("is_consistent_with_clinician") is True
+
+    @pytest.mark.asyncio
+    async def test_build_main_and_audit_llm_evidence_single_call_payload(self):
+        """单次 LLM 审核应同时返回 main_diagnosis_llm 与 coding_audit_llm。"""
+        service = FrontPageExtractionService()
+        service._use_llm = True
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "一次完成“主诊断推荐解释 + 编码审核风险识别”" in prompt:
+                return {
+                    "main_diagnosis_llm": {
+                        "clinician_main_diagnosis": "高血压病3级（极高危组）",
+                        "llm_recommended_main_diagnosis": "冠状动脉粥样硬化性心脏病",
+                        "is_consistent_with_clinician": False,
+                        "confidence": 0.87,
+                        "conclusion": "建议以冠状动脉粥样硬化性心脏病作为主诊断。",
+                        "key_evidence": [
+                            {
+                                "quote": "行经皮冠状动脉支架植入术。",
+                                "source": "病程记录 第2天",
+                                "why_it_supports": "主要治疗行为指向冠脉疾病。",
+                            }
+                        ],
+                        "reasoning_summary": "本次住院资源消耗集中于冠脉介入治疗。",
+                    },
+                    "coding_audit_llm": {
+                        "version": "v1",
+                        "summary": "识别到主诊断不当和漏写诊断风险。",
+                        "confidence": 0.81,
+                        "counts": {
+                            "diagnosis_missing": 1,
+                            "procedure_missing": 0,
+                            "diagnosis_inappropriate": 1,
+                            "diagnosis_insufficient_evidence": 0,
+                        },
+                        "findings": [
+                            {
+                                "type": "diagnosis_missing",
+                                "severity": "high",
+                                "clinician_text": "",
+                                "llm_recommendation": "混合型高脂血症",
+                                "reason": "病历明确记录高脂血症。",
+                                "evidence": [
+                                    {
+                                        "quote": "血脂：TG 2.8mmol/L↑。",
+                                        "source": "化验结果",
+                                        "why_it_supports": "支持补充高脂血症诊断。",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            return {}
+
+        service._extract_json = _fake_extract_json
+        merged = await service._build_main_and_audit_llm_evidence(
+            medical_text="病程记录：患者胸痛入院，行经皮冠状动脉支架植入术。",
+            diagnoses={
+                "discharge_main_diagnosis_text": "高血压病3级（极高危组）",
+                "discharge_other_diagnoses_texts": ["冠状动脉粥样硬化性心脏病"],
+            },
+            procedures={"main_procedure_text": "经皮冠状动脉支架植入术"},
+            clinician_main_diagnosis="高血压病3级（极高危组）",
+        )
+
+        assert isinstance(merged, dict)
+        assert isinstance(merged.get("main_diagnosis_llm"), dict)
+        assert isinstance(merged.get("coding_audit_llm"), dict)
+        assert merged["main_diagnosis_llm"]["llm_recommended_main_diagnosis"] == "冠状动脉粥样硬化性心脏病"
+        assert merged["coding_audit_llm"]["counts"]["diagnosis_missing"] == 1
+
+    @pytest.mark.asyncio
+    async def test_build_main_and_audit_llm_evidence_filters_dedup_and_limits(self):
+        """审核 findings 应去重、类型/等级合法化并限制数量。"""
+        service = FrontPageExtractionService()
+        service._use_llm = True
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "一次完成“主诊断推荐解释 + 编码审核风险识别”" in prompt:
+                return {
+                    "main_diagnosis_llm": {
+                        "clinician_main_diagnosis": "A",
+                        "llm_recommended_main_diagnosis": "B",
+                        "confidence": 1.5,
+                    },
+                    "coding_audit_llm": {
+                        "counts": {
+                            "diagnosis_missing": -2,
+                            "procedure_missing": 0,
+                            "diagnosis_inappropriate": 1,
+                            "diagnosis_insufficient_evidence": 0,
+                        },
+                        "findings": [
+                            {
+                                "type": "diagnosis_missing",
+                                "severity": "critical",
+                                "clinician_text": "A",
+                                "llm_recommendation": "B",
+                                "reason": "r1",
+                                "evidence": [{"quote": "q1"}, {"quote": "q2"}, {"quote": "q3"}],
+                            },
+                            {
+                                "type": "diagnosis_missing",
+                                "severity": "high",
+                                "clinician_text": "A",
+                                "llm_recommendation": "B",
+                                "reason": "r1-dup",
+                                "evidence": [{"quote": "q-dup"}],
+                            },
+                            {"type": "unknown", "severity": "high", "llm_recommendation": "X"},
+                        ],
+                    },
+                }
+            return {}
+
+        service._extract_json = _fake_extract_json
+        merged = await service._build_main_and_audit_llm_evidence(
+            medical_text="病历",
+            diagnoses={
+                "discharge_main_diagnosis_text": "A",
+                "discharge_other_diagnoses_texts": ["B"],
+            },
+            procedures={"main_procedure_text": "P"},
+            clinician_main_diagnosis="A",
+        )
+
+        audit = merged.get("coding_audit_llm")
+        assert isinstance(audit, dict)
+        assert audit["counts"]["diagnosis_missing"] == 0
+        assert len(audit["findings"]) == 1
+        assert audit["findings"][0]["severity"] == "medium"
+        assert len(audit["findings"][0]["evidence"]) == 2
+
     @pytest.mark.asyncio
     async def test_infer_admission_conditions(
         self,
@@ -389,6 +702,214 @@ class TestFrontPageExtractionIntegration:
         assert isinstance(draft, FrontPageDraft)
         assert draft.basic_info.patient_name == "张三"
         assert draft.diagnoses.discharge_main_diagnosis_text == "急性前壁心肌梗死"
+
+    @pytest.mark.asyncio
+    async def test_stream_and_nonstream_both_include_guideline_trace_and_clinician_main(
+        self,
+        monkeypatch,
+    ):
+        """流式与非流式路径都应返回规则轨迹与医生主诊断基线。"""
+
+        class _FakeCodingService:
+            async def extract_coding(self, medical_text, patient_context):
+                return {"coding_data": {}}
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "discharge_main_diagnosis_text" in prompt:
+                return {
+                    "discharge_main_diagnosis_text": "高血压病3级（极高危组）",
+                    "discharge_other_diagnoses_texts": ["冠状动脉粥样硬化性心脏病"],
+                }
+            if "main_procedure_text" in prompt:
+                return {
+                    "main_procedure_text": "经皮冠状动脉支架植入术",
+                }
+            if "主诊断推荐解释" in prompt:
+                return {
+                    "main_diagnosis_llm": {
+                        "clinician_main_diagnosis": "高血压病3级（极高危组）",
+                        "llm_recommended_main_diagnosis": "冠状动脉粥样硬化性心脏病",
+                        "is_consistent_with_clinician": False,
+                        "confidence": 0.88,
+                        "conclusion": "LLM 推荐冠状动脉粥样硬化性心脏病作为主诊断。",
+                        "key_evidence": [
+                            {
+                                "quote": "病程记录：患者胸痛入院，行经皮冠状动脉支架植入术治疗。",
+                                "source": "病程记录 第1条",
+                                "why_it_supports": "主要治疗行为与冠脉疾病高度一致。",
+                            }
+                        ],
+                        "reasoning_summary": "综合治疗路径与资源消耗，冠脉疾病应作为主诊断。",
+                    },
+                    "coding_audit_llm": {
+                        "version": "v1",
+                        "summary": "识别到主诊断不当风险，建议人工复核。",
+                        "confidence": 0.83,
+                        "counts": {
+                            "diagnosis_missing": 0,
+                            "procedure_missing": 0,
+                            "diagnosis_inappropriate": 1,
+                            "diagnosis_insufficient_evidence": 0,
+                        },
+                        "findings": [
+                            {
+                                "type": "diagnosis_inappropriate",
+                                "severity": "high",
+                                "clinician_text": "高血压病3级（极高危组）",
+                                "llm_recommendation": "冠状动脉粥样硬化性心脏病",
+                                "reason": "主要治疗行为是冠脉支架植入。",
+                                "evidence": [
+                                    {
+                                        "quote": "病程记录：患者胸痛入院，行经皮冠状动脉支架植入术治疗。",
+                                        "source": "病程记录 第1条",
+                                        "why_it_supports": "治疗行为与冠脉疾病一致。",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            return {}
+
+        async def _fake_infer_admission_conditions(medical_text, diagnoses):
+            return diagnoses
+
+        monkeypatch.setattr(
+            "app.services.external_coding_service.get_external_coding_service",
+            lambda: _FakeCodingService(),
+        )
+        monkeypatch.setattr(
+            "app.services.local_icd_service.resolve_diagnosis_codes",
+            lambda diagnoses: diagnoses,
+        )
+        monkeypatch.setattr(
+            "app.services.local_icd_service.resolve_procedure_codes",
+            lambda procedures: procedures,
+        )
+
+        service = FrontPageExtractionService()
+        service._use_llm = True
+        service._extract_json = _fake_extract_json
+        service._infer_admission_conditions = _fake_infer_admission_conditions
+
+        medical_text = """
+出院诊断：
+1. 高血压病3级（极高危组）
+2. 冠状动脉粥样硬化性心脏病
+病程记录：患者胸痛入院，行经皮冠状动脉支架植入术治疗。
+"""
+        draft = await service.extract_from_text(medical_text)
+        assert isinstance(draft.evidence.get("guideline_rule_trace"), list)
+        assert draft.evidence.get("clinician_main_diagnosis") == "高血压病3级（极高危组）"
+        llm_evidence = draft.evidence.get("main_diagnosis_llm")
+        assert isinstance(llm_evidence, dict)
+        assert llm_evidence.get("llm_recommended_main_diagnosis") == "冠状动脉粥样硬化性心脏病"
+        assert isinstance(draft.evidence.get("coding_audit_llm"), dict)
+
+        done_payload = None
+        async for event_name, payload in service.extract_from_text_stream(medical_text):
+            if event_name == "done":
+                done_payload = payload
+
+        assert isinstance(done_payload, dict)
+        frontpage = done_payload.get("frontpage") or {}
+        evidence = frontpage.get("evidence") or {}
+        assert isinstance(evidence.get("guideline_rule_trace"), list)
+        assert evidence.get("clinician_main_diagnosis") == "高血压病3级（极高危组）"
+        assert isinstance(evidence.get("main_diagnosis_llm"), dict)
+        assert evidence["main_diagnosis_llm"].get("llm_recommended_main_diagnosis") == "冠状动脉粥样硬化性心脏病"
+        assert isinstance(evidence.get("coding_audit_llm"), dict)
+
+    @pytest.mark.asyncio
+    async def test_stream_and_nonstream_call_merged_evidence_once(
+        self,
+        monkeypatch,
+    ):
+        """流式与非流式都应仅调用一次合并证据构建。"""
+
+        class _FakeCodingService:
+            async def extract_coding(self, medical_text, patient_context):
+                return {"coding_data": {}}
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "仅输出 JSON" in prompt and '"diagnoses"' in prompt and '"procedures"' in prompt:
+                return {
+                    "diagnoses": {
+                        "discharge_main_diagnosis_text": "高血压病3级（极高危组）",
+                        "discharge_other_diagnoses_texts": ["冠状动脉粥样硬化性心脏病"],
+                    },
+                    "procedures": {
+                        "main_procedure_text": "经皮冠状动脉支架植入术",
+                    },
+                }
+            if "discharge_main_diagnosis_text" in prompt:
+                return {
+                    "discharge_main_diagnosis_text": "高血压病3级（极高危组）",
+                    "discharge_other_diagnoses_texts": ["冠状动脉粥样硬化性心脏病"],
+                }
+            if "main_procedure_text" in prompt:
+                return {"main_procedure_text": "经皮冠状动脉支架植入术"}
+            return {}
+
+        async def _fake_infer_admission_conditions(medical_text, diagnoses):
+            return diagnoses
+
+        monkeypatch.setattr(
+            "app.services.external_coding_service.get_external_coding_service",
+            lambda: _FakeCodingService(),
+        )
+        monkeypatch.setattr(
+            "app.services.local_icd_service.resolve_diagnosis_codes",
+            lambda diagnoses: diagnoses,
+        )
+        monkeypatch.setattr(
+            "app.services.local_icd_service.resolve_procedure_codes",
+            lambda procedures: procedures,
+        )
+
+        service = FrontPageExtractionService()
+        service._use_llm = True
+        service._extract_json = _fake_extract_json
+        service._infer_admission_conditions = _fake_infer_admission_conditions
+        service._build_main_and_audit_llm_evidence = AsyncMock(
+            return_value={
+                "main_diagnosis_llm": {
+                    "clinician_main_diagnosis": "高血压病3级（极高危组）",
+                    "llm_recommended_main_diagnosis": "冠状动脉粥样硬化性心脏病",
+                    "is_consistent_with_clinician": False,
+                    "confidence": 0.8,
+                    "conclusion": "建议复核主诊断。",
+                    "key_evidence": [],
+                    "reasoning_summary": "摘要",
+                },
+                "coding_audit_llm": {
+                    "version": "v1",
+                    "summary": "识别到1项风险。",
+                    "confidence": 0.7,
+                    "counts": {
+                        "diagnosis_missing": 0,
+                        "procedure_missing": 0,
+                        "diagnosis_inappropriate": 1,
+                        "diagnosis_insufficient_evidence": 0,
+                    },
+                    "findings": [],
+                },
+            }
+        )
+
+        medical_text = """
+出院诊断：
+1. 高血压病3级（极高危组）
+2. 冠状动脉粥样硬化性心脏病
+病程记录：患者胸痛入院，行经皮冠状动脉支架植入术治疗。
+"""
+        await service.extract_from_text(medical_text)
+        assert service._build_main_and_audit_llm_evidence.await_count == 1
+
+        service._build_main_and_audit_llm_evidence.reset_mock()
+        async for _event_name, _payload in service.extract_from_text_stream(medical_text):
+            pass
+        assert service._build_main_and_audit_llm_evidence.await_count == 1
 
 
 # ============================================================================

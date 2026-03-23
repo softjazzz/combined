@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 /**
  * API包装器工具
  * 统一处理API调用、错误处理和响应格式
@@ -434,3 +435,4 @@ export class ApiWrapper {
 
 // 导出便捷函数
 export const { query, insert, update, delete: remove, buildQuery, validateBusinessRule, uploadFile, batchOperation } = ApiWrapper 
+

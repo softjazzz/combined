@@ -4,10 +4,16 @@
     <p>记录ID: {{ recordId }}</p>
     
     <div v-if="loading">
-      <a-spin size="large" tip="加载中..." />
+      <a-spin
+        size="large"
+        tip="加载中..."
+      />
     </div>
     
-    <div v-else-if="error" style="color: red;">
+    <div
+      v-else-if="error"
+      style="color: red;"
+    >
       错误: {{ error }}
     </div>
     
@@ -23,10 +29,16 @@
       <h2>文档列表</h2>
       <div v-if="documentsResponse">
         <p>总文档数: {{ documentsResponse.total_documents }}</p>
-        <div v-for="category in documentsResponse.categories" :key="category.category_code">
+        <div
+          v-for="category in documentsResponse.categories"
+          :key="category.category_code"
+        >
           <h3>{{ category.category_name }} ({{ category.document_count }})</h3>
           <ul>
-            <li v-for="doc in category.documents" :key="doc.id">
+            <li
+              v-for="doc in category.documents"
+              :key="doc.id"
+            >
               {{ doc.title || doc.type_info?.type_name || '未命名文档' }}
             </li>
           </ul>
@@ -35,8 +47,15 @@
     </div>
     
     <div style="margin-top: 20px;">
-      <a-button @click="testAPI">测试API</a-button>
-      <a-button @click="testComponents" style="margin-left: 10px;">测试组件</a-button>
+      <a-button @click="testAPI">
+        测试API
+      </a-button>
+      <a-button
+        style="margin-left: 10px;"
+        @click="testComponents"
+      >
+        测试组件
+      </a-button>
     </div>
   </div>
 </template>

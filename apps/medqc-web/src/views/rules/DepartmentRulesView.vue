@@ -8,7 +8,9 @@
             <div class="p-1 bg-blue-100 rounded-md">
               <ApartmentOutlined class="text-base text-blue-600" />
             </div>
-            <h1 class="text-lg lg:text-xl font-bold text-gray-900">科室级质控规则管理</h1>
+            <h1 class="text-lg lg:text-xl font-bold text-gray-900">
+              科室级质控规则管理
+            </h1>
           </div>
           <p class="text-gray-600 text-xs">
             管理科室级质控规则，支持覆盖全局规则或创建科室特有规则
@@ -44,7 +46,11 @@
     <!-- 筛选区域 -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-2">
       <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-select
             v-model:value="filters.department_id"
             placeholder="选择科室"
@@ -55,12 +61,20 @@
             size="small"
             @change="handleFilterChange"
           >
-            <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
+            <a-select-option
+              v-for="dept in departments"
+              :key="dept.id"
+              :value="dept.id"
+            >
               {{ dept.name }}
             </a-select-option>
           </a-select>
         </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-select
             v-model:value="filters.status_filter"
             placeholder="规则状态"
@@ -69,12 +83,22 @@
             size="small"
             @change="handleFilterChange"
           >
-            <a-select-option value="draft"> 草稿 </a-select-option>
-            <a-select-option value="published"> 已发布 </a-select-option>
-            <a-select-option value="archived"> 已归档 </a-select-option>
+            <a-select-option value="draft">
+              草稿
+            </a-select-option>
+            <a-select-option value="published">
+              已发布
+            </a-select-option>
+            <a-select-option value="archived">
+              已归档
+            </a-select-option>
           </a-select>
         </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-select
             v-model:value="filters.override_action"
             placeholder="覆盖行为"
@@ -83,11 +107,19 @@
             size="small"
             @change="handleFilterChange"
           >
-            <a-select-option value="override"> 覆盖配置 </a-select-option>
-            <a-select-option value="disable"> 禁用规则 </a-select-option>
+            <a-select-option value="override">
+              覆盖配置
+            </a-select-option>
+            <a-select-option value="disable">
+              禁用规则
+            </a-select-option>
           </a-select>
         </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-input-search
             v-model:value="filters.keyword"
             placeholder="搜索规则编号、名称"
@@ -115,10 +147,19 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_code'">
             <div class="flex items-center space-x-2">
-              <a-tag color="blue" class="text-xs">
+              <a-tag
+                color="blue"
+                class="text-xs"
+              >
                 {{ record.rule_code }}
               </a-tag>
-              <a-tag v-if="record.parent_rule_id" color="orange" class="text-xs"> 覆盖 </a-tag>
+              <a-tag
+                v-if="record.parent_rule_id"
+                color="orange"
+                class="text-xs"
+              >
+                覆盖
+              </a-tag>
             </div>
           </template>
 
@@ -128,7 +169,10 @@
               <div class="font-medium text-gray-900">
                 {{ record.name }}
               </div>
-              <div v-if="record.description" class="text-xs text-gray-500 mt-0.5">
+              <div
+                v-if="record.description"
+                class="text-xs text-gray-500 mt-0.5"
+              >
                 {{ record.description }}
               </div>
             </div>
@@ -136,37 +180,59 @@
 
           <!-- 科室 -->
           <template v-else-if="column.key === 'department'">
-            <a-tag color="green" class="text-xs">
+            <a-tag
+              color="green"
+              class="text-xs"
+            >
               {{ getDepartmentName(record.department_id) }}
             </a-tag>
           </template>
 
           <!-- 状态 -->
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)" class="text-xs">
+            <a-tag
+              :color="getStatusColor(record.status)"
+              class="text-xs"
+            >
               {{ getStatusText(record.status) }}
             </a-tag>
           </template>
 
           <!-- 覆盖行为 -->
           <template v-else-if="column.key === 'override_action'">
-            <a-tag :color="record.override_action === 'override' ? 'blue' : 'red'" class="text-xs">
+            <a-tag
+              :color="record.override_action === 'override' ? 'blue' : 'red'"
+              class="text-xs"
+            >
               {{ record.override_action === 'override' ? '覆盖配置' : '禁用规则' }}
             </a-tag>
           </template>
 
           <!-- 优先级 -->
           <template v-else-if="column.key === 'priority'">
-            <a-badge :count="record.priority" :number-style="{ backgroundColor: '#52c41a' }" />
+            <a-badge
+              :count="record.priority"
+              :number-style="{ backgroundColor: '#52c41a' }"
+            />
           </template>
 
           <!-- 操作 -->
           <template v-else-if="column.key === 'actions'">
             <a-space :size="4">
-              <a-button type="link" size="small" class="p-0" @click="viewRule(record)">
+              <a-button
+                type="link"
+                size="small"
+                class="p-0"
+                @click="viewRule(record)"
+              >
                 查看
               </a-button>
-              <a-button type="link" size="small" class="p-0" @click="editRule(record)">
+              <a-button
+                type="link"
+                size="small"
+                class="p-0"
+                @click="editRule(record)"
+              >
                 编辑
               </a-button>
               <a-button
@@ -178,7 +244,12 @@
               >
                 发布
               </a-button>
-              <a-button type="link" size="small" class="p-0" @click="viewHistory(record)">
+              <a-button
+                type="link"
+                size="small"
+                class="p-0"
+                @click="viewHistory(record)"
+              >
                 历史
               </a-button>
               <a-popconfirm
@@ -187,7 +258,14 @@
                 cancel-text="取消"
                 @confirm="deleteRule(record)"
               >
-                <a-button type="link" danger size="small" class="p-0"> 删除 </a-button>
+                <a-button
+                  type="link"
+                  danger
+                  size="small"
+                  class="p-0"
+                >
+                  删除
+                </a-button>
               </a-popconfirm>
             </a-space>
           </template>
@@ -212,10 +290,20 @@
         :wrapper-col="{ span: 18 }"
       >
         <!-- 创建模式选择 -->
-        <a-form-item v-if="isCreateMode" label="创建模式">
-          <a-radio-group v-model:value="createMode" @change="handleCreateModeChange">
-            <a-radio value="override"> 基于全局规则创建 </a-radio>
-            <a-radio value="new"> 全新创建 </a-radio>
+        <a-form-item
+          v-if="isCreateMode"
+          label="创建模式"
+        >
+          <a-radio-group
+            v-model:value="createMode"
+            @change="handleCreateModeChange"
+          >
+            <a-radio value="override">
+              基于全局规则创建
+            </a-radio>
+            <a-radio value="new">
+              全新创建
+            </a-radio>
           </a-radio-group>
         </a-form-item>
 
@@ -232,28 +320,44 @@
             :filter-option="filterRuleOption"
             @change="handleBaseRuleChange"
           >
-            <a-select-option v-for="rule in globalRules" :key="rule.id" :value="rule.id">
+            <a-select-option
+              v-for="rule in globalRules"
+              :key="rule.id"
+              :value="rule.id"
+            >
               {{ rule.rule_code }} - {{ rule.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 科室选择 -->
-        <a-form-item label="科室" name="department_id" required>
+        <a-form-item
+          label="科室"
+          name="department_id"
+          required
+        >
           <a-select
             v-model:value="formData.department_id"
             placeholder="选择科室"
             show-search
             :filter-option="filterDepartmentOption"
           >
-            <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
+            <a-select-option
+              v-for="dept in departments"
+              :key="dept.id"
+              :value="dept.id"
+            >
               {{ dept.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 规则编号 -->
-        <a-form-item label="规则编号" name="rule_code" required>
+        <a-form-item
+          label="规则编号"
+          name="rule_code"
+          required
+        >
           <a-input
             v-model:value="formData.rule_code"
             placeholder="例如：COMP_001"
@@ -262,45 +366,99 @@
         </a-form-item>
 
         <!-- 规则名称 -->
-        <a-form-item label="规则名称" name="name" required>
-          <a-input v-model:value="formData.name" placeholder="输入规则名称" />
+        <a-form-item
+          label="规则名称"
+          name="name"
+          required
+        >
+          <a-input
+            v-model:value="formData.name"
+            placeholder="输入规则名称"
+          />
         </a-form-item>
 
         <!-- 规则描述 -->
-        <a-form-item label="规则描述" name="description">
-          <a-textarea v-model:value="formData.description" placeholder="输入规则描述" :rows="3" />
+        <a-form-item
+          label="规则描述"
+          name="description"
+        >
+          <a-textarea
+            v-model:value="formData.description"
+            placeholder="输入规则描述"
+            :rows="3"
+          />
         </a-form-item>
 
         <!-- 规则分类 -->
-        <a-form-item label="规则分类" name="category" required>
-          <a-select v-model:value="formData.category" placeholder="选择规则分类">
-            <a-select-option value="completeness"> 完整性 </a-select-option>
-            <a-select-option value="accuracy"> 准确性 </a-select-option>
-            <a-select-option value="timeliness"> 及时性 </a-select-option>
-            <a-select-option value="consistency"> 一致性 </a-select-option>
-            <a-select-option value="rationality"> 合理性 </a-select-option>
+        <a-form-item
+          label="规则分类"
+          name="category"
+          required
+        >
+          <a-select
+            v-model:value="formData.category"
+            placeholder="选择规则分类"
+          >
+            <a-select-option value="completeness">
+              完整性
+            </a-select-option>
+            <a-select-option value="accuracy">
+              准确性
+            </a-select-option>
+            <a-select-option value="timeliness">
+              及时性
+            </a-select-option>
+            <a-select-option value="consistency">
+              一致性
+            </a-select-option>
+            <a-select-option value="rationality">
+              合理性
+            </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 严重程度 -->
-        <a-form-item label="严重程度" name="severity" required>
-          <a-select v-model:value="formData.severity" placeholder="选择严重程度">
-            <a-select-option value="critical"> 严重 </a-select-option>
-            <a-select-option value="major"> 重要 </a-select-option>
-            <a-select-option value="minor"> 一般 </a-select-option>
+        <a-form-item
+          label="严重程度"
+          name="severity"
+          required
+        >
+          <a-select
+            v-model:value="formData.severity"
+            placeholder="选择严重程度"
+          >
+            <a-select-option value="critical">
+              严重
+            </a-select-option>
+            <a-select-option value="major">
+              重要
+            </a-select-option>
+            <a-select-option value="minor">
+              一般
+            </a-select-option>
           </a-select>
         </a-form-item>
 
         <!-- 覆盖行为 -->
-        <a-form-item label="覆盖行为" name="override_action">
+        <a-form-item
+          label="覆盖行为"
+          name="override_action"
+        >
           <a-radio-group v-model:value="formData.override_action">
-            <a-radio value="override"> 覆盖配置 </a-radio>
-            <a-radio value="disable"> 禁用规则 </a-radio>
+            <a-radio value="override">
+              覆盖配置
+            </a-radio>
+            <a-radio value="disable">
+              禁用规则
+            </a-radio>
           </a-radio-group>
         </a-form-item>
 
         <!-- 优先级 -->
-        <a-form-item label="优先级" name="priority">
+        <a-form-item
+          label="优先级"
+          name="priority"
+        >
           <a-input-number
             v-model:value="formData.priority"
             :min="0"
@@ -323,7 +481,12 @@
     </a-modal>
 
     <!-- 变更历史对话框 -->
-    <a-modal v-model:open="historyModalVisible" title="变更历史" width="900px" :footer="null">
+    <a-modal
+      v-model:open="historyModalVisible"
+      title="变更历史"
+      width="900px"
+      :footer="null"
+    >
       <a-timeline mode="left">
         <a-timeline-item
           v-for="log in changeLogs"
@@ -342,9 +505,17 @@
             </div>
             <div class="text-sm text-gray-600 mt-1">
               操作人：{{ log.actor_name || log.actor_id }}
-              <span v-if="log.actor_role" class="ml-2"> ({{ log.actor_role }}) </span>
+              <span
+                v-if="log.actor_role"
+                class="ml-2"
+              > ({{ log.actor_role }}) </span>
             </div>
-            <div v-if="log.reason" class="text-sm text-gray-500 mt-1">原因：{{ log.reason }}</div>
+            <div
+              v-if="log.reason"
+              class="text-sm text-gray-500 mt-1"
+            >
+              原因：{{ log.reason }}
+            </div>
           </div>
         </a-timeline-item>
       </a-timeline>

@@ -3,11 +3,22 @@
     <!-- 顶部导航 -->
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-4">
-        <a-button :icon="h(ArrowLeftOutlined)" @click="goBack">
+        <a-button
+          :icon="h(ArrowLeftOutlined)"
+          @click="goBack"
+        >
           返回
         </a-button>
-        <h1 class="text-2xl font-bold text-gray-900">病案详情</h1>
-        <a-tag v-if="recordId" color="blue" class="text-xs">{{ recordId }}</a-tag>
+        <h1 class="text-2xl font-bold text-gray-900">
+          病案详情
+        </h1>
+        <a-tag
+          v-if="recordId"
+          color="blue"
+          class="text-xs"
+        >
+          {{ recordId }}
+        </a-tag>
       </div>
 
       <div class="flex items-center gap-3">
@@ -15,7 +26,10 @@
           <ExclamationCircleOutlined />
           {{ showQCPanel ? '隐藏质控' : '查看质控' }}
         </a-button>
-        <a-button type="primary" :icon="h(PlayCircleOutlined)">
+        <a-button
+          type="primary"
+          :icon="h(PlayCircleOutlined)"
+        >
           开始质控
         </a-button>
       </div>
@@ -24,7 +38,10 @@
     <!-- 主体内容：左侧 EMR + 右侧质控面板 -->
     <div class="flex gap-6">
       <!-- 左侧：EMR 文书渲染 -->
-      <div :class="showQCPanel ? 'flex-1' : 'w-full'" class="transition-all">
+      <div
+        :class="showQCPanel ? 'flex-1' : 'w-full'"
+        class="transition-all"
+      >
         <EMRViewer
           v-if="recordId"
           ref="emrViewerRef"
@@ -45,17 +62,29 @@
             <ExclamationCircleOutlined class="mr-1 text-orange-500" />
             质控结果
           </h3>
-          <a-tag :color="qcIssues.length > 0 ? 'red' : 'green'" size="small">
+          <a-tag
+            :color="qcIssues.length > 0 ? 'red' : 'green'"
+            size="small"
+          >
             {{ qcIssues.length }} 个问题
           </a-tag>
         </div>
 
-        <div v-if="qcIssues.length === 0" class="p-8 text-center text-gray-400">
+        <div
+          v-if="qcIssues.length === 0"
+          class="p-8 text-center text-gray-400"
+        >
           <CheckCircleOutlined class="text-3xl text-green-400 mb-2" />
-          <p class="text-sm">暂无质控问题</p>
+          <p class="text-sm">
+            暂无质控问题
+          </p>
         </div>
 
-        <div v-else class="overflow-y-auto" style="max-height: 650px">
+        <div
+          v-else
+          class="overflow-y-auto"
+          style="max-height: 650px"
+        >
           <div
             v-for="(issue, index) in qcIssues"
             :key="issue.defect_id"
@@ -86,8 +115,13 @@
                 {{ severityText(issue.severity) }}
               </a-tag>
             </div>
-            <p class="text-xs text-gray-500 line-clamp-2 ml-7">{{ issue.description }}</p>
-            <p v-if="issue.suggestion" class="text-xs text-blue-500 ml-7 mt-1 line-clamp-1">
+            <p class="text-xs text-gray-500 line-clamp-2 ml-7">
+              {{ issue.description }}
+            </p>
+            <p
+              v-if="issue.suggestion"
+              class="text-xs text-blue-500 ml-7 mt-1 line-clamp-1"
+            >
               💡 {{ issue.suggestion }}
             </p>
           </div>

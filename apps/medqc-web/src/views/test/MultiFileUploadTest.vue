@@ -14,13 +14,15 @@
           accept=".pdf,.doc,.docx,.txt"
           :multiple="true"
           :show-upload-list="false"
-          @change="handleUploadChange"
           class="upload-area"
+          @change="handleUploadChange"
         >
           <p class="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
-          <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p class="ant-upload-text">
+            点击或拖拽文件到此区域上传
+          </p>
           <p class="ant-upload-hint">
             支持 PDF、Word、文本文件格式，可批量上传
           </p>
@@ -30,22 +32,39 @@
         <div class="debug-info mt-4">
           <h3>调试信息</h3>
           <p>已选择文件数量: {{ uploadedFiles.length }}</p>
-          <div v-if="debugLog.length > 0" class="debug-log">
+          <div
+            v-if="debugLog.length > 0"
+            class="debug-log"
+          >
             <h4>调试日志:</h4>
-            <div v-for="(log, index) in debugLog" :key="index" class="log-item">
+            <div
+              v-for="(log, index) in debugLog"
+              :key="index"
+              class="log-item"
+            >
               {{ log }}
             </div>
           </div>
         </div>
 
         <!-- 文件列表 -->
-        <div v-if="uploadedFiles.length > 0" class="file-list mt-4">
+        <div
+          v-if="uploadedFiles.length > 0"
+          class="file-list mt-4"
+        >
           <h3>已上传文件 ({{ uploadedFiles.length }})</h3>
-          <a-list :data-source="uploadedFiles" size="small">
+          <a-list
+            :data-source="uploadedFiles"
+            size="small"
+          >
             <template #renderItem="{ item, index }">
               <a-list-item>
                 <template #actions>
-                  <a-button size="small" @click="removeFile(index)" danger>
+                  <a-button
+                    size="small"
+                    danger
+                    @click="removeFile(index)"
+                  >
                     删除
                   </a-button>
                 </template>
@@ -70,12 +89,21 @@
         </div>
 
         <!-- 操作按钮 -->
-        <div v-if="uploadedFiles.length > 0" class="actions mt-4">
+        <div
+          v-if="uploadedFiles.length > 0"
+          class="actions mt-4"
+        >
           <a-space>
-            <a-button type="primary" @click="processFiles">
+            <a-button
+              type="primary"
+              @click="processFiles"
+            >
               处理所有文件
             </a-button>
-            <a-button @click="clearAllFiles" danger>
+            <a-button
+              danger
+              @click="clearAllFiles"
+            >
               清空所有文件
             </a-button>
           </a-space>

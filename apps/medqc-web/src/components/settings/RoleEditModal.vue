@@ -3,11 +3,14 @@
     :open="visible"
     title="角色权限配置"
     :width="800"
+    :confirm-loading="loading"
     @ok="handleSubmit"
     @cancel="handleCancel"
-    :confirm-loading="loading"
   >
-    <div v-if="role" class="role-edit-content">
+    <div
+      v-if="role"
+      class="role-edit-content"
+    >
       <!-- 角色基本信息 -->
       <div class="mb-6">
         <div class="flex items-center space-x-4 mb-4">
@@ -16,27 +19,45 @@
             :class="['text-4xl', role.color]"
           />
           <div>
-            <h3 class="text-xl font-semibold">{{ role.name }}</h3>
-            <p class="text-gray-600">{{ role.description }}</p>
+            <h3 class="text-xl font-semibold">
+              {{ role.name }}
+            </h3>
+            <p class="text-gray-600">
+              {{ role.description }}
+            </p>
           </div>
         </div>
         
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-statistic title="当前用户数" :value="role.userCount" suffix="人" />
+            <a-statistic
+              title="当前用户数"
+              :value="role.userCount"
+              suffix="人"
+            />
           </a-col>
           <a-col :span="12">
-            <a-statistic title="权限数量" :value="role.permissionCount" suffix="项" />
+            <a-statistic
+              title="权限数量"
+              :value="role.permissionCount"
+              suffix="项"
+            />
           </a-col>
         </a-row>
       </div>
 
       <!-- 权限配置 -->
       <div class="permissions-config">
-        <h4 class="text-lg font-semibold mb-4">权限配置</h4>
+        <h4 class="text-lg font-semibold mb-4">
+          权限配置
+        </h4>
         
         <div class="space-y-4">
-          <div v-for="resource in resources" :key="resource.key" class="permission-group">
+          <div
+            v-for="resource in resources"
+            :key="resource.key"
+            class="permission-group"
+          >
             <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div class="flex items-center space-x-3">
                 <component 
@@ -44,8 +65,12 @@
                   :class="['text-xl', resource.color]"
                 />
                 <div>
-                  <h5 class="font-medium">{{ resource.name }}</h5>
-                  <p class="text-sm text-gray-600">{{ resource.description }}</p>
+                  <h5 class="font-medium">
+                    {{ resource.name }}
+                  </h5>
+                  <p class="text-sm text-gray-600">
+                    {{ resource.description }}
+                  </p>
                 </div>
               </div>
               
@@ -56,8 +81,15 @@
             </div>
             
             <!-- 详细权限 -->
-            <div v-if="resource.enabled" class="ml-8 mt-3 space-y-2">
-              <div v-for="action in resource.actions" :key="action.key" class="flex items-center justify-between">
+            <div
+              v-if="resource.enabled"
+              class="ml-8 mt-3 space-y-2"
+            >
+              <div
+                v-for="action in resource.actions"
+                :key="action.key"
+                class="flex items-center justify-between"
+              >
                 <div class="flex items-center space-x-2">
                   <component 
                     :is="action.icon" 
@@ -81,17 +113,30 @@
 
       <!-- 用户列表 -->
       <div class="mt-6">
-        <h4 class="text-lg font-semibold mb-4">拥有此角色的用户</h4>
+        <h4 class="text-lg font-semibold mb-4">
+          拥有此角色的用户
+        </h4>
         
         <div class="space-y-2 max-h-40 overflow-y-auto">
-          <div v-for="user in roleUsers" :key="user.id" class="flex items-center justify-between p-2 bg-gray-50 rounded">
+          <div
+            v-for="user in roleUsers"
+            :key="user.id"
+            class="flex items-center justify-between p-2 bg-gray-50 rounded"
+          >
             <div class="flex items-center space-x-3">
-              <a-avatar :size="32" :style="{ backgroundColor: getUserAvatarColor(user.email) }">
+              <a-avatar
+                :size="32"
+                :style="{ backgroundColor: getUserAvatarColor(user.email) }"
+              >
                 {{ user.display_name?.charAt(0) || user.email?.charAt(0) }}
               </a-avatar>
               <div>
-                <div class="font-medium text-sm">{{ user.display_name || user.email }}</div>
-                <div class="text-xs text-gray-500">{{ user.department || '-' }}</div>
+                <div class="font-medium text-sm">
+                  {{ user.display_name || user.email }}
+                </div>
+                <div class="text-xs text-gray-500">
+                  {{ user.department || '-' }}
+                </div>
               </div>
             </div>
             
@@ -101,7 +146,10 @@
             />
           </div>
           
-          <div v-if="roleUsers.length === 0" class="text-center py-4 text-gray-500">
+          <div
+            v-if="roleUsers.length === 0"
+            class="text-center py-4 text-gray-500"
+          >
             暂无用户拥有此角色
           </div>
         </div>
@@ -142,8 +190,7 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  visible: false,
-  role: null
+  visible: false
 })
 
 const emit = defineEmits<Emits>()
@@ -272,7 +319,7 @@ watch(
 // 方法
 const updatePermissionsByRole = (roleKey: string) => {
   // 根据角色设置默认权限
-  const rolePermissions = {
+  const rolePermissions: Record<string, Record<string, { enabled: boolean; actions: string[] }>> = {
     admin: {
       medical_records: { enabled: true, actions: ['create', 'read', 'update', 'delete', 'export'] },
       qc_results: { enabled: true, actions: ['read', 'update', 'review', 'export'] },

@@ -1,34 +1,146 @@
 /**
  * Mock 数据服务
  * 用于前端开发阶段，模拟后端 API 响应
- * Agent A 可以使用这些 Mock 数据进行界面开发
  */
 
-import type { 
-  LoginRequest, 
-  LoginResponse, 
-  UserProfile,
-  MedicalRecord,
-  QCResult,
-  SearchResult 
-} from '@/types'
+import type { LoginRequest } from '@/types'
 
-type MockRecord = MedicalRecord & {
-  record_number: string
-  diagnosis_primary: string
-  diagnosis_secondary: string[]
-  doctor_name: string
+interface MockUser {
+  id: string
+  email: string
+  password: string
+  full_name: string
+  role: string
+  department_id: string
+  department_name: string
+  avatar_url: string
+  phone: string
+  created_at: string
+  last_login: string
 }
 
-const isRecordObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+interface MockLoginResponse {
+  user: {
+    id: string
+    email: string
+    full_name: string
+    role: string
+    department_id: string
+    avatar_url: string
+  }
+  tokens: {
+    access_token: string
+    refresh_token: string
+    expires_in: number
+  }
+}
 
-const isString = (value: unknown): value is string => typeof value === 'string'
-// 模拟延迟
+interface MockUserProfile {
+  id: string
+  email: string
+  full_name: string
+  role: string
+  department_id: string
+  department_name: string
+  avatar_url: string
+  phone: string
+  created_at: string
+  last_login: string
+}
+
+interface MockMedicalRecord {
+  id: string
+  record_number: string
+  patient_name: string
+  patient_id: string
+  admission_date: string
+  discharge_date: string | null
+  department_id: string
+  department_name: string
+  doctor_id: string
+  doctor_name: string
+  diagnosis_primary: string
+  diagnosis_secondary: string[]
+  status: 'draft' | 'completed' | 'archived' | 'pending'
+  qc_status: string | null
+  qc_score: number | null
+  qc_grade: 'A' | 'B' | 'C' | null
+  created_at: string
+  updated_at: string
+}
+
+interface MockQCIssue {
+  id: string
+  rule_id: string
+  rule_name: string
+  severity: 'minor' | 'major' | 'critical'
+  category: string
+  description: string
+  location: string
+  suggestion: string
+}
+
+interface MockQCSuggestion {
+  id: string
+  category: string
+  title: string
+  description: string
+  priority: 'low' | 'medium' | 'high'
+}
+
+interface MockQCRuleResult {
+  rule_id: string
+  rule_name: string
+  passed: boolean
+  score: number
+  details: string
+}
+
+interface MockQCResult {
+  id: string
+  record_id: string
+  overall_score: number
+  overall_grade: 'A' | 'B' | 'C' | 'D'
+  analysis_date: string
+  issues: MockQCIssue[]
+  suggestions: MockQCSuggestion[]
+  rule_results: MockQCRuleResult[]
+}
+
+interface MockSearchResult {
+  record_id: string
+  record_number: string
+  patient_name: string
+  diagnosis_primary: string
+  content_snippet: string
+  similarity_score: number
+  highlight: string[]
+}
+
+interface MockDashboardData {
+  summary: {
+    total_records: number
+    completed_records: number
+    avg_qc_score: number
+    grade_distribution: Record<string, number>
+  }
+  trends: Array<{
+    date: string
+    records_count: number
+    avg_score: number
+  }>
+  department_stats: Array<{
+    department_id: string
+    department_name: string
+    records_count: number
+    avg_score: number
+    grade_a_rate: number
+  }>
+}
+
 const delay = (ms: number = 500) => new Promise(resolve => setTimeout(resolve, ms))
 
-// Mock 用户数据
-const mockUsers = [
+const mockUsers: MockUser[] = [
   {
     id: '1',
     email: 'admin@medqc.com',
@@ -70,8 +182,7 @@ const mockUsers = [
   }
 ]
 
-// Mock 医疗记录数据
-const mockRecords: MockRecord[] = [
+const mockRecords: MockMedicalRecord[] = [
   {
     id: '1',
     record_number: 'MR20241225001',
@@ -112,7 +223,8 @@ const mockRecords: MockRecord[] = [
     created_at: '2024-12-22T09:00:00Z',
     updated_at: '2024-12-25T14:00:00Z'
   },
-  { id: '3',
+  {
+    id: '3',
     record_number: 'MR20241225003',
     patient_name: '赵小刚',
     patient_id: 'P003',
@@ -123,7 +235,7 @@ const mockRecords: MockRecord[] = [
     doctor_id: '2',
     doctor_name: '张医生',
     diagnosis_primary: '肺炎',
-    diagnosis_secondary:  [],
+    diagnosis_secondary: [],
     status: 'draft',
     qc_status: null,
     qc_score: null,
@@ -133,8 +245,7 @@ const mockRecords: MockRecord[] = [
   }
 ]
 
-// Mock 质控结果数据
-const mockQCResults: QCResult[] = [
+const mockQCResults: MockQCResult[] = [
   {
     id: '1',
     record_id: '1',
@@ -199,22 +310,19 @@ const mockQCResults: QCResult[] = [
 ]
 
 export class MockService {
-  /**
-   * 模拟用户登录
-   */
-  static async login(request: LoginRequest): Promise<LoginResponse> {
-    await delay(800) // 模拟网络延迟
-    
-    const user = mockUsers.find(u => 
-      u.email === request.email && 
+  static async login(request: LoginRequest): Promise<MockLoginResponse> {
+    await delay(800)
+
+    const user = mockUsers.find(u =>
+      u.email === request.email &&
       u.password === request.password &&
       u.role === request.role
     )
-    
+
     if (!user) {
       throw new Error('邮箱、密码或角色不正确')
     }
-    
+
     return {
       user: {
         id: user.id,
@@ -231,18 +339,15 @@ export class MockService {
       }
     }
   }
-  
-  /**
-   * 模拟获取用户资料
-   */
-  static async getProfile(userId: string): Promise<UserProfile> {
+
+  static async getProfile(userId: string): Promise<MockUserProfile> {
     await delay(300)
-    
+
     const user = mockUsers.find(u => u.id === userId)
     if (!user) {
       throw new Error('用户不存在')
     }
-    
+
     return {
       id: user.id,
       email: user.email,
@@ -256,12 +361,9 @@ export class MockService {
       last_login: user.last_login
     }
   }
-  
-  /**
-   * 模拟获取医疗记录列表
-   */
+
   static async getRecords(params: unknown = {}): Promise<{
-    records: MedicalRecord[]
+    records: MockMedicalRecord[]
     pagination: {
       total: number
       page: number
@@ -270,16 +372,15 @@ export class MockService {
     }
   }> {
     await delay(600)
-    
-    const query = isRecordObject(params) ? params : {}
+
+    const query = typeof params === 'object' && params !== null ? params as Record<string, unknown> : {}
     const page = typeof query.page === 'number' ? query.page : 1
     const limit = typeof query.limit === 'number' ? query.limit : 10
-    const search = isString(query.search) ? query.search : ''
-    const status = isString(query.status) ? query.status : ''
-    
-    let filteredRecords = mockRecords
-    
-    // 搜索过滤
+    const search = typeof query.search === 'string' ? query.search : ''
+    const status = typeof query.status === 'string' ? query.status : ''
+
+    let filteredRecords = [...mockRecords]
+
     if (search) {
       filteredRecords = filteredRecords.filter(record =>
         record.patient_name.includes(search) ||
@@ -287,17 +388,16 @@ export class MockService {
         record.diagnosis_primary.includes(search)
       )
     }
-    
-    // 状态过滤
+
     if (status) {
       filteredRecords = filteredRecords.filter(record => record.status === status)
     }
-    
+
     const total = filteredRecords.length
     const pages = Math.ceil(total / limit)
     const start = (page - 1) * limit
     const end = start + limit
-    
+
     return {
       records: filteredRecords.slice(start, end),
       pagination: {
@@ -308,33 +408,43 @@ export class MockService {
       }
     }
   }
-  
-  /**
-   * 模拟获取医疗记录详情
-   */
-  static async getRecordDetail(recordId: string): Promise<MedicalRecord & {
+
+  static async getRecordDetail(recordId: string): Promise<MockMedicalRecord & {
     content: string
-    attachments: unknown[]
-    qc_results?: QCResult[]
-    history: unknown[]
+    attachments: Array<{
+      id: string
+      filename: string
+      file_type: string
+      file_size: number
+      url: string
+      uploaded_at: string
+    }>
+    qc_results?: MockQCResult[]
+    history: Array<{
+      id: string
+      action: string
+      user_name: string
+      timestamp: string
+      details: string
+    }>
   }> {
     await delay(400)
-    
+
     const record = mockRecords.find(r => r.id === recordId)
     if (!record) {
       throw new Error('记录不存在')
     }
-    
+
     return {
       ...record,
-      content: `患者${record.patient_name}，${record.diagnosis_primary}。
-      
+      content: `患者${record.patient_name}，诊断为${record.diagnosis_primary}。
+
 入院情况：患者因${record.diagnosis_primary}入院治疗。
 现病史：患者近期出现相关症状，经检查确诊。
 既往史：无特殊病史。
 体格检查：生命体征平稳。
 辅助检查：相关检查结果支持诊断。
-诊断：${record.diagnosis_primary}${record.diagnosis_secondary?.length ? '，' + record.diagnosis_secondary.join('，') : ''}
+诊断：${record.diagnosis_primary}${record.diagnosis_secondary.length ? '，' + record.diagnosis_secondary.join('，') : ''}
 治疗方案：给予对症治疗。
 出院情况：患者病情好转出院。`,
       attachments: [
@@ -366,46 +476,36 @@ export class MockService {
       ]
     }
   }
-  
-  /**
-   * 模拟质控分析
-   */
+
   static async analyzeRecord(recordId: string): Promise<{
     task_id: string
     status: string
     estimated_time?: number
   }> {
     await delay(1000)
-    
+
     return {
       task_id: `task_${recordId}_${Date.now()}`,
       status: 'processing',
       estimated_time: 30
     }
   }
-  
-  /**
-   * 模拟获取质控结果
-   */
-  static async getQCResults(recordId: string): Promise<QCResult> {
+
+  static async getQCResults(recordId: string): Promise<MockQCResult> {
     await delay(800)
-    
+
     const result = mockQCResults.find(r => r.record_id === recordId)
     if (!result) {
       throw new Error('质控结果不存在')
     }
-    
+
     return result
   }
-  
-  /**
-   * 模拟语义搜索
-   */
-  static async semanticSearch(query: string): Promise<SearchResult[]> {
+
+  static async semanticSearch(query: string): Promise<MockSearchResult[]> {
     await delay(1200)
-    
-    // 简单的模拟搜索结果
-    const results: SearchResult[] = [
+
+    const results: MockSearchResult[] = [
       {
         record_id: '1',
         record_number: 'MR20241225001',
@@ -425,29 +525,26 @@ export class MockService {
         highlight: ['高血压', '血压控制']
       }
     ]
-    
-    return results.filter(r => 
-      r.diagnosis_primary.includes(query) || 
+
+    return results.filter(r =>
+      r.diagnosis_primary.includes(query) ||
       r.content_snippet.includes(query)
     )
   }
-  
-  /**
-   * 模拟获取仪表板数据
-   */
-  static async getDashboardData(): Promise<unknown> {
+
+  static async getDashboardData(): Promise<MockDashboardData> {
     await delay(1000)
-    
+
     return {
       summary: {
         total_records: 156,
         completed_records: 142,
         avg_qc_score: 87.5,
         grade_distribution: {
-          'A': 45,
-          'B': 67,
-          'C': 25,
-          'D': 5
+          A: 45,
+          B: 67,
+          C: 25,
+          D: 5
         }
       },
       trends: [

@@ -4,12 +4,15 @@
       ref="formRef"
       :model="registerForm"
       :rules="registerRules"
-      @finish="handleRegister"
       layout="vertical"
       size="large"
+      @finish="handleRegister"
     >
       <!-- 姓名输入 -->
-      <a-form-item name="display_name" class="mb-4">
+      <a-form-item
+        name="display_name"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">姓名</label>
         <div class="relative">
           <a-input
@@ -24,7 +27,10 @@
       </a-form-item>
 
       <!-- 邮箱输入 -->
-      <a-form-item name="email" class="mb-4">
+      <a-form-item
+        name="email"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">邮箱</label>
         <div class="relative">
           <a-input
@@ -39,7 +45,10 @@
       </a-form-item>
 
       <!-- 科室选择 -->
-      <a-form-item name="department" class="mb-4">
+      <a-form-item
+        name="department"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">科室</label>
         <a-select
           v-model:value="registerForm.department"
@@ -60,7 +69,10 @@
       </a-form-item>
 
       <!-- 角色申请 -->
-      <a-form-item name="role" class="mb-4">
+      <a-form-item
+        name="role"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">申请角色</label>
         <a-select
           v-model:value="registerForm.role"
@@ -70,19 +82,25 @@
         >
           <a-select-option value="doctor">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold">D</div>
+              <div class="w-6 h-6 rounded bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold">
+                D
+              </div>
               医生 - 可查看和编辑病案
             </div>
           </a-select-option>
           <a-select-option value="qc_staff">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">Q</div>
+              <div class="w-6 h-6 rounded bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                Q
+              </div>
               质控员 - 可执行质控分析
             </div>
           </a-select-option>
           <a-select-option value="viewer">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white text-xs font-bold">V</div>
+              <div class="w-6 h-6 rounded bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
+                V
+              </div>
               查看者 - 仅可查看数据
             </div>
           </a-select-option>
@@ -90,7 +108,10 @@
       </a-form-item>
 
       <!-- 密码输入 -->
-      <a-form-item name="password" class="mb-4">
+      <a-form-item
+        name="password"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">密码</label>
         <div class="relative">
           <a-input-password
@@ -105,7 +126,10 @@
       </a-form-item>
 
       <!-- 确认密码 -->
-      <a-form-item name="confirmPassword" class="mb-4">
+      <a-form-item
+        name="confirmPassword"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">确认密码</label>
         <div class="relative">
           <a-input-password
@@ -127,7 +151,10 @@
       />
 
       <!-- 手机号输入（可选） -->
-      <a-form-item name="phone" class="mb-4">
+      <a-form-item
+        name="phone"
+        class="mb-4"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">手机号（可选）</label>
         <div class="relative">
           <a-input
@@ -142,12 +169,24 @@
       </a-form-item>
 
       <!-- 服务条款同意 -->
-      <a-form-item name="agreeTerms" class="mb-6">
-        <a-checkbox v-model:checked="registerForm.agreeTerms" class="text-xs text-slate-300">
+      <a-form-item
+        name="agreeTerms"
+        class="mb-6"
+      >
+        <a-checkbox
+          v-model:checked="registerForm.agreeTerms"
+          class="text-xs text-slate-300"
+        >
           我已阅读并同意
-          <a class="text-cyan-300 hover:text-cyan-200 mx-1" @click="showTerms">《服务条款》</a>
+          <a
+            class="text-cyan-300 hover:text-cyan-200 mx-1"
+            @click="showTerms"
+          >《服务条款》</a>
           和
-          <a class="text-cyan-300 hover:text-cyan-200 mx-1" @click="showPrivacy">《隐私政策》</a>
+          <a
+            class="text-cyan-300 hover:text-cyan-200 mx-1"
+            @click="showPrivacy"
+          >《隐私政策》</a>
         </a-checkbox>
       </a-form-item>
 
@@ -160,7 +199,10 @@
         size="large"
         class="h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 border-none font-semibold shadow-lg hover:shadow-xl"
       >
-        <UserAddOutlined v-if="!loading" class="mr-2" />
+        <UserAddOutlined
+          v-if="!loading"
+          class="mr-2"
+        />
         提交注册申请
       </a-button>
     </a-form>
@@ -170,7 +212,9 @@
       <div class="flex items-start gap-3">
         <InfoCircleOutlined class="text-blue-400 text-sm mt-0.5" />
         <div class="text-xs text-blue-200">
-          <div class="font-medium mb-1">注册说明：</div>
+          <div class="font-medium mb-1">
+            注册说明：
+          </div>
           <ul class="space-y-1 text-blue-200/80">
             <li>• 注册申请需要管理员审核，通常在1-2个工作日内完成</li>
             <li>• 请使用真实的工作邮箱，审核结果将发送至该邮箱</li>

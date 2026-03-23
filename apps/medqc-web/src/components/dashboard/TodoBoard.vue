@@ -5,7 +5,11 @@
         <ThunderboltOutlined class="title-icon" />
         我的待办
       </h3>
-      <a-segmented v-model:value="activeScene" :options="sceneOptions" size="small" />
+      <a-segmented
+        v-model:value="activeScene"
+        :options="sceneOptions"
+        size="small"
+      />
     </div>
 
     <div class="board-grid">
@@ -16,17 +20,26 @@
           <span>任务</span>
         </div>
         <div class="card-body">
-          <div class="stat-item clickable" @click="navigate('/dashboard/tasks/my', { status: 'in_progress' })">
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/tasks/my', { status: 'in_progress' })"
+          >
             <span class="stat-number text-blue-600">{{ todoData.task_stats?.in_progress || 0 }}</span>
             <span class="stat-label">进行中</span>
           </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item clickable" @click="navigate('/dashboard/tasks/my', { status: 'not_started' })">
+          <div class="stat-divider" />
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/tasks/my', { status: 'not_started' })"
+          >
             <span class="stat-number text-orange-500">{{ todoData.task_stats?.not_started || 0 }}</span>
             <span class="stat-label">未开始</span>
           </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item clickable" @click="navigate('/dashboard/tasks/my', { countdown: true })">
+          <div class="stat-divider" />
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/tasks/my', { countdown: true })"
+          >
             <span class="stat-number text-red-500">{{ todoData.task_stats?.countdown || 0 }}</span>
             <span class="stat-label">即将超时</span>
           </div>
@@ -40,12 +53,18 @@
           <span>缺陷</span>
         </div>
         <div class="card-body">
-          <div class="stat-item clickable" @click="navigate('/dashboard/qc/appeals')">
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/qc/appeals')"
+          >
             <span class="stat-number text-purple-600">{{ todoData.defect_stats?.clinical_appeals || 0 }}</span>
             <span class="stat-label">临床申诉</span>
           </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item clickable" @click="navigate('/dashboard/records/final', { status: 'pending_review' })">
+          <div class="stat-divider" />
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/records/final', { status: 'pending_review' })"
+          >
             <span class="stat-number text-orange-500">{{ todoData.defect_stats?.pending_review || 0 }}</span>
             <span class="stat-label">待审核</span>
           </div>
@@ -59,12 +78,18 @@
           <span>病历</span>
         </div>
         <div class="card-body">
-          <div class="stat-item clickable" @click="navigate('/dashboard/records/final', { status: 'pending' })">
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/records/final', { status: 'pending' })"
+          >
             <span class="stat-number text-blue-600">{{ todoData.record_stats?.pending_review || 0 }}</span>
             <span class="stat-label">待审核</span>
           </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item clickable" @click="navigate('/dashboard/records/final', { status: 'recheck' })">
+          <div class="stat-divider" />
+          <div
+            class="stat-item clickable"
+            @click="navigate('/dashboard/records/final', { status: 'recheck' })"
+          >
             <span class="stat-number text-cyan-600">{{ todoData.record_stats?.pending_recheck || 0 }}</span>
             <span class="stat-label">待复审</span>
           </div>

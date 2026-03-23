@@ -22,7 +22,10 @@ const goBack = () => {
     >
       <template #extra>
         <div class="flex justify-center space-x-4">
-          <a-button type="primary" @click="goHome">
+          <a-button
+            type="primary"
+            @click="goHome"
+          >
             <HomeOutlined />
             返回首页
           </a-button>
@@ -36,7 +39,10 @@ const goBack = () => {
 
     <!-- 额外信息 -->
     <div class="error-info">
-      <a-card class="max-w-md mx-auto" title="可能的原因">
+      <a-card
+        class="max-w-md mx-auto"
+        title="可能的原因"
+      >
         <ul class="list-disc list-inside space-y-2 text-gray-600">
           <li>您输入的网址有误</li>
           <li>页面已被删除或移动</li>
@@ -58,7 +64,9 @@ const goBack = () => {
         >
           <div class="text-center">
             <DashboardOutlined class="text-2xl text-blue-500 mb-2" />
-            <p class="text-sm">仪表板</p>
+            <p class="text-sm">
+              仪表板
+            </p>
           </div>
         </a-card>
         
@@ -68,7 +76,9 @@ const goBack = () => {
         >
           <div class="text-center">
             <FileTextOutlined class="text-2xl text-green-500 mb-2" />
-            <p class="text-sm">病案管理</p>
+            <p class="text-sm">
+              病案管理
+            </p>
           </div>
         </a-card>
         
@@ -78,7 +88,9 @@ const goBack = () => {
         >
           <div class="text-center">
             <CheckCircleOutlined class="text-2xl text-purple-500 mb-2" />
-            <p class="text-sm">质控分析</p>
+            <p class="text-sm">
+              质控分析
+            </p>
           </div>
         </a-card>
         
@@ -88,7 +100,9 @@ const goBack = () => {
         >
           <div class="text-center">
             <SettingOutlined class="text-2xl text-orange-500 mb-2" />
-            <p class="text-sm">系统设置</p>
+            <p class="text-sm">
+              系统设置
+            </p>
           </div>
         </a-card>
       </div>

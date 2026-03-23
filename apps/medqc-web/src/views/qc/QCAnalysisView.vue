@@ -2,17 +2,25 @@
   <div class="page-container">
     <div class="page-header">
       <div class="flex items-center gap-4">
-        <a-button :icon="h(ArrowLeftOutlined)" @click="goBack">
+        <a-button
+          :icon="h(ArrowLeftOutlined)"
+          @click="goBack"
+        >
           返回
         </a-button>
-        <h1 class="page-title">AI质控分析</h1>
+        <h1 class="page-title">
+          AI质控分析
+        </h1>
       </div>
     </div>
     
     <div class="grid grid-cols-12 gap-6">
       <!-- 病历内容 -->
       <div class="col-span-5">
-        <a-card title="病历内容" class="h-full">
+        <a-card
+          title="病历内容"
+          class="h-full"
+        >
           <a-textarea
             v-model:value="recordContent"
             placeholder="请输入或粘贴病历内容..."

@@ -4,8 +4,12 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">总病历数</div>
-          <div class="text-2xl font-bold text-blue-600 font-mono">{{ overviewStats.total_records.toLocaleString() }}</div>
+          <div class="text-slate-500 text-xs font-medium mb-1">
+            总病历数
+          </div>
+          <div class="text-2xl font-bold text-blue-600 font-mono">
+            {{ overviewStats.total_records.toLocaleString() }}
+          </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <FileTextOutlined class="text-lg" />
@@ -14,8 +18,12 @@
       
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">已归档</div>
-          <div class="text-2xl font-bold text-emerald-600 font-mono">{{ overviewStats.archived_count.toLocaleString() }}</div>
+          <div class="text-slate-500 text-xs font-medium mb-1">
+            已归档
+          </div>
+          <div class="text-2xl font-bold text-emerald-600 font-mono">
+            {{ overviewStats.archived_count.toLocaleString() }}
+          </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <CheckCircleOutlined class="text-lg" />
@@ -24,8 +32,12 @@
       
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">待处理</div>
-          <div class="text-2xl font-bold text-amber-600 font-mono">{{ overviewStats.pending_count.toLocaleString() }}</div>
+          <div class="text-slate-500 text-xs font-medium mb-1">
+            待处理
+          </div>
+          <div class="text-2xl font-bold text-amber-600 font-mono">
+            {{ overviewStats.pending_count.toLocaleString() }}
+          </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <ClockCircleOutlined class="text-lg" />
@@ -34,8 +46,12 @@
       
       <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">质控通过率</div>
-          <div class="text-2xl font-bold text-purple-600 font-mono">{{ overviewStats.pass_rate.toFixed(1) }}%</div>
+          <div class="text-slate-500 text-xs font-medium mb-1">
+            质控通过率
+          </div>
+          <div class="text-2xl font-bold text-purple-600 font-mono">
+            {{ overviewStats.pass_rate.toFixed(1) }}%
+          </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
           <TrophyOutlined class="text-lg" />
@@ -45,19 +61,17 @@
 
     <!-- 2. 主内容区：工具栏 + 表格 -->
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]">
-      
       <!-- 工具栏 Header -->
       <div class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <!-- 左侧：搜索与筛选 -->
         <div class="flex items-center gap-3 flex-1">
           <div class="relative">
-             <a-input
+            <a-input
               v-model:value="searchKeyword"
               placeholder="搜索病历号/姓名..."
               class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
               @press-enter="handleSearch"
-            >
-            </a-input>
+            />
             <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
           
@@ -66,9 +80,15 @@
             class="w-32 custom-select"
             placeholder="选择科室"
             :bordered="false"
-            allowClear
+            allow-clear
           >
-             <a-select-option v-for="dept in departmentOptions" :key="dept.value" :value="dept.value">{{ dept.label }}</a-select-option>
+            <a-select-option
+              v-for="dept in departmentOptions"
+              :key="dept.value"
+              :value="dept.value"
+            >
+              {{ dept.label }}
+            </a-select-option>
           </a-select>
 
           <a-select
@@ -76,12 +96,18 @@
             class="w-32 custom-select"
             placeholder="质控状态"
             :bordered="false"
-            allowClear
+            allow-clear
           >
-             <a-select-option v-for="status in qcStatusOptions" :key="status.value" :value="status.value">{{ status.label }}</a-select-option>
+            <a-select-option
+              v-for="status in qcStatusOptions"
+              :key="status.value"
+              :value="status.value"
+            >
+              {{ status.label }}
+            </a-select-option>
           </a-select>
           
-          <div class="h-6 w-px bg-slate-200 mx-1"></div>
+          <div class="h-6 w-px bg-slate-200 mx-1" />
 
           <a-range-picker
             v-model:value="dateRange"
@@ -92,20 +118,37 @@
 
         <!-- 右侧：操作按钮 -->
         <div class="flex items-center gap-3">
-           <a-button type="primary" class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9" @click="handleBatchArchive">
-             <FolderOutlined /> 批量归档
-           </a-button>
+          <a-button
+            type="primary"
+            class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
+            @click="handleBatchArchive"
+          >
+            <FolderOutlined /> 批量归档
+          </a-button>
            
-           <a-button class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1" @click="handleExport">
-             <DownloadOutlined /> 导出
-           </a-button>
+          <a-button
+            class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1"
+            @click="handleExport"
+          >
+            <DownloadOutlined /> 导出
+          </a-button>
 
-           <a-tooltip title="刷新数据">
-             <a-button class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center" @click="handleRefresh">
-               <ReloadOutlined :spin="loading" />
-             </a-button>
-           </a-tooltip>
+          <a-tooltip title="刷新数据">
+            <a-button
+              class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
+              @click="handleRefresh"
+            >
+              <ReloadOutlined :spin="loading" />
+            </a-button>
+          </a-tooltip>
         </div>
+      </div>
+
+      <div
+        v-if="stageHint"
+        class="px-6 py-2 text-xs text-blue-700 bg-blue-50/70 border-b border-blue-100"
+      >
+        {{ stageHint }}
       </div>
 
       <!-- 表格区域 -->
@@ -116,25 +159,30 @@
           :loading="loading"
           :pagination="pagination"
           :row-selection="rowSelection"
-          @change="handleTableChange"
           row-key="id"
           class="modern-table h-full"
           :scroll="{ y: 'calc(100vh - 320px)' }"
+          @change="handleTableChange"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
-              <div class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer" @click="handleView(record)">
+              <div
+                class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer"
+                @click="handleView(record)"
+              >
                 {{ record.record_id }}
               </div>
             </template>
             
             <template v-if="column.key === 'patientInfo'">
-               <div class="flex items-center gap-2">
-                 <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
-                   {{ (record.patient_name || '').charAt(0) }}
-                 </div>
-                 <div class="text-sm font-medium text-slate-700">{{ record.patient_name }}</div>
-               </div>
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
+                  {{ (record.patient_name || '').charAt(0) }}
+                </div>
+                <div class="text-sm font-medium text-slate-700">
+                  {{ record.patient_name }}
+                </div>
+              </div>
             </template>
 
             <template v-if="column.key === 'qcStatus'">
@@ -146,11 +194,14 @@
                   'bg-amber-50 text-amber-600 border-amber-100': record.status === 'pending'
                 }"
               >
-                <span class="w-1.5 h-1.5 rounded-full" :class="{
-                  'bg-emerald-500': record.status === 'completed' || record.status === 'passed',
-                  'bg-rose-500': record.status === 'failed',
-                  'bg-amber-500': record.status === 'pending'
-                }"></span>
+                <span
+                  class="w-1.5 h-1.5 rounded-full"
+                  :class="{
+                    'bg-emerald-500': record.status === 'completed' || record.status === 'passed',
+                    'bg-rose-500': record.status === 'failed',
+                    'bg-amber-500': record.status === 'pending'
+                  }"
+                />
                 {{ getQCStatusText(record.status) }}
               </span>
             </template>
@@ -169,33 +220,82 @@
             </template>
             
             <template v-if="column.key === 'qcScore'">
-               <div class="flex items-center gap-2">
-                 <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
-                 <a-progress 
-                   v-if="record.score"
-                   :percent="record.score" 
-                   :show-info="false" 
-                   :stroke-color="getScoreColor(record.score)" 
-                   size="small" 
-                   class="w-16"
-                 />
-               </div>
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
+                <a-progress 
+                  v-if="record.score"
+                  :percent="record.score" 
+                  :show-info="false" 
+                  :stroke-color="getScoreColor(record.score)" 
+                  size="small" 
+                  class="w-16"
+                />
+              </div>
+            </template>
+
+            <template v-if="column.key === 'stageActions'">
+              <div class="flex flex-wrap gap-1.5">
+                <a-button
+                  size="small"
+                  class="!h-7 !rounded-full !border-slate-200/90 !px-2.5 !text-xs"
+                  :disabled="!getRecordIdForJump(record)"
+                  @click="jumpToWorkstation(record, 'open_record')"
+                >
+                  进入工作台
+                </a-button>
+                <a-button
+                  size="small"
+                  class="!h-7 !rounded-full !border-blue-200/90 !text-blue-700 !px-2.5 !text-xs"
+                  :disabled="!getRecordIdForJump(record)"
+                  @click="jumpToWorkstation(record, 'generate_frontpage')"
+                >
+                  生成首页
+                </a-button>
+                <a-button
+                  size="small"
+                  class="!h-7 !rounded-full !border-emerald-200/90 !text-emerald-700 !px-2.5 !text-xs"
+                  :disabled="!getRecordIdForJump(record)"
+                  @click="jumpToWorkstation(record, 'qc_frontpage')"
+                >
+                  首页质控
+                </a-button>
+                <a-button
+                  size="small"
+                  class="!h-7 !rounded-full !border-violet-200/90 !text-violet-700 !px-2.5 !text-xs"
+                  :disabled="!getRecordIdForJump(record)"
+                  @click="jumpToWorkstation(record, 'qc_settlement')"
+                >
+                  结算质控
+                </a-button>
+              </div>
             </template>
 
             <template v-if="column.key === 'action'">
               <div class="flex items-center gap-1">
                 <a-tooltip title="查看详情">
-                  <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-all" @click="handleView(record)">
+                  <button
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-all"
+                    @click="handleView(record)"
+                  >
                     <EyeOutlined />
                   </button>
                 </a-tooltip>
                 <a-tooltip title="质控报告">
-                  <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all" @click="handleQCReport(record)">
+                  <button
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                    @click="handleQCReport(record)"
+                  >
                     <FileSearchOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip title="归档" v-if="record.status === 'pending'">
-                  <button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all" @click="handleArchive(record)">
+                <a-tooltip
+                  v-if="record.status === 'pending'"
+                  title="归档"
+                >
+                  <button
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+                    @click="handleArchive(record)"
+                  >
                     <FolderOutlined />
                   </button>
                 </a-tooltip>
@@ -207,17 +307,26 @@
       
       <!-- 底部批量操作栏 (有选中时显示) -->
       <transition name="slide-up">
-        <div v-if="selectedRowKeys.length > 0" class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50">
-           <span class="text-sm font-medium">已选择 <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
-           <div class="h-4 w-px bg-slate-600"></div>
-           <div class="flex items-center gap-2">
-             <button class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2" @click="handleBatchArchive">
-               <FolderOutlined /> 批量归档
-             </button>
-             <button class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2" @click="selectedRowKeys = []">
-               <CloseOutlined />
-             </button>
-           </div>
+        <div
+          v-if="selectedRowKeys.length > 0"
+          class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50"
+        >
+          <span class="text-sm font-medium">已选择 <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
+          <div class="h-4 w-px bg-slate-600" />
+          <div class="flex items-center gap-2">
+            <button
+              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2"
+              @click="handleBatchArchive"
+            >
+              <FolderOutlined /> 批量归档
+            </button>
+            <button
+              class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2"
+              @click="selectedRowKeys = []"
+            >
+              <CloseOutlined />
+            </button>
+          </div>
         </div>
       </transition>
     </div>
@@ -235,7 +344,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
+import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -260,12 +372,15 @@ import {
 } from '@/api/qcAdmin'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 
+const route = useRoute()
+const router = useRouter()
+
 // ============= 响应式数据 =============
 const loading = ref(false)
 const searchKeyword = ref('')
-const selectedDepartment = ref(undefined)
-const selectedQCStatus = ref(undefined)
-const dateRange = ref([])
+const selectedDepartment = ref<string | undefined>(undefined)
+const selectedQCStatus = ref<string | undefined>(undefined)
+const dateRange = ref<[Dayjs, Dayjs] | []>([])
 const records = ref<AdminRecordItem[]>([])
 const selectedRowKeys = ref<string[]>([])
 const drawerVisible = ref(false)
@@ -353,6 +468,11 @@ const columns = [
     key: 'qcScore',
     width: 150,
     sorter: true,
+  },
+  {
+    title: '阶段动作',
+    key: 'stageActions',
+    width: 300,
   },
   {
     title: '操作',
@@ -475,6 +595,39 @@ const handleView = (record: AdminRecordItem) => {
   drawerVisible.value = true
 }
 
+const getRecordIdForJump = (record: any): string => {
+  return String(record?.record_id || record?.visit_id || record?.visitId || record?.id || '').trim()
+}
+
+const resolveStageByAction = (action: WorkstationLaunchAction): WorkflowStageKey => {
+  if (action === 'generate_frontpage') return 'frontpage_generate'
+  if (action === 'qc_frontpage') return 'frontpage_qc'
+  if (action === 'qc_settlement') return 'settlement_qc'
+  const stageFromQuery = String(route.query.stage || '').trim()
+  if (stageFromQuery === 'frontpage_generate' || stageFromQuery === 'frontpage_qc' || stageFromQuery === 'settlement_qc') {
+    return stageFromQuery
+  }
+  return 'settlement_qc'
+}
+
+const jumpToWorkstation = (record: any, action: WorkstationLaunchAction) => {
+  const recordId = getRecordIdForJump(record)
+  if (!recordId) {
+    message.warning('当前记录缺少病历标识，无法联动工作台')
+    return
+  }
+  const taskId = String(record?.task_id || '').trim()
+  const fromStage = resolveStageByAction(action)
+  const query: Record<string, string> = {
+    record_id: recordId,
+    action,
+    source: 'dashboard',
+    from_stage: fromStage,
+  }
+  if (taskId) query.task_id = taskId
+  router.push({ path: '/workstation-v4', query })
+}
+
 const handleQCReport = (record: AdminRecordItem) => {
   // TODO: 导航到质控报告页
   message.info(`查看质控报告: ${record.record_id}`)
@@ -491,12 +644,42 @@ const handleTableChange = (pag: any) => {
   fetchRecords()
 }
 
+const stageHint = computed(() => {
+  const stage = String(route.query.stage || '').trim()
+  if (stage === 'frontpage_generate') return '当前队列：待生成首页（结算视图）'
+  if (stage === 'frontpage_qc') return '当前队列：待首页质控（结算视图）'
+  if (stage === 'settlement_qc') return '当前队列：待结算清单质控'
+  return ''
+})
+
+const applyStagePreset = (stage: string) => {
+  if (stage === 'frontpage_generate') {
+    selectedQCStatus.value = 'pending'
+    return
+  }
+  if (stage === 'frontpage_qc') {
+    selectedQCStatus.value = 'failed'
+    return
+  }
+  if (stage === 'settlement_qc') {
+    selectedQCStatus.value = 'pending'
+  }
+}
+
 // 筛选条件变化时自动刷新
 watch([selectedDepartment, selectedQCStatus, dateRange], () => {
   pagination.value.current = 1
   fetchRecords()
   loadOverview()
 })
+
+watch(
+  () => route.query.stage,
+  (value) => {
+    applyStagePreset(String(value || '').trim())
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   loadDepartments()

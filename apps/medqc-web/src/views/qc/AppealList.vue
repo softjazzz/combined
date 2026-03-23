@@ -1,29 +1,69 @@
 <template>
   <div class="appeal-list">
-    <a-page-header title="质控申诉" sub-title="申诉记录管理" class="bg-white mb-4 shadow-sm" />
+    <a-page-header
+      title="质控申诉"
+      sub-title="申诉记录管理"
+      class="bg-white mb-4 shadow-sm"
+    />
 
     <div class="px-6 pb-6">
-      <a-card :bordered="false" class="shadow-sm">
+      <a-card
+        :bordered="false"
+        class="shadow-sm"
+      >
         <!-- 筛选区域 -->
-        <a-form layout="inline" class="mb-4">
-           <a-form-item label="状态">
-             <a-select v-model:value="filters.status" placeholder="全部状态" allowClear style="width: 120px" @change="handleSearch">
-                <a-select-option v-for="opt in APPEAL_STATUS_OPTIONS" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </a-select-option>
-              </a-select>
-           </a-form-item>
-            <a-form-item label="申诉类型">
-             <a-select v-model:value="filters.appealType" placeholder="全部类型" allowClear style="width: 140px" @change="handleSearch">
-                <a-select-option v-for="opt in APPEAL_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </a-select-option>
-              </a-select>
-           </a-form-item>
-           <a-form-item>
-             <a-button type="primary" @click="handleSearch">查询</a-button>
-             <a-button class="ml-2" @click="resetFilters">重置</a-button>
-           </a-form-item>
+        <a-form
+          layout="inline"
+          class="mb-4"
+        >
+          <a-form-item label="状态">
+            <a-select
+              v-model:value="filters.status"
+              placeholder="全部状态"
+              allow-clear
+              style="width: 120px"
+              @change="handleSearch"
+            >
+              <a-select-option
+                v-for="opt in APPEAL_STATUS_OPTIONS"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item label="申诉类型">
+            <a-select
+              v-model:value="filters.appealType"
+              placeholder="全部类型"
+              allow-clear
+              style="width: 140px"
+              @change="handleSearch"
+            >
+              <a-select-option
+                v-for="opt in APPEAL_TYPE_OPTIONS"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item>
+            <a-button
+              type="primary"
+              @click="handleSearch"
+            >
+              查询
+            </a-button>
+            <a-button
+              class="ml-2"
+              @click="resetFilters"
+            >
+              重置
+            </a-button>
+          </a-form-item>
         </a-form>
 
         <!-- 列表 -->
@@ -32,8 +72,8 @@
           :data-source="appeals"
           :loading="loading"
           :pagination="pagination"
-          @change="handleTableChange"
           row-key="id"
+          @change="handleTableChange"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'status'">
@@ -42,37 +82,50 @@
               </a-tag>
             </template>
             <template v-if="column.key === 'appealType'">
-               {{ getAppealTypeLabel(record.appealType) }}
+              {{ getAppealTypeLabel(record.appealType) }}
             </template>
             <template v-if="column.key === 'createdAt'">
-                {{ formatDate(record.createdAt) }}
+              {{ formatDate(record.createdAt) }}
             </template>
-             <template v-if="column.key === 'reviewer'">
-                <div v-if="record.reviewerName" class="text-xs">
-                    <div>{{ record.reviewerName }}</div>
-                    <div>{{ formatDate(record.reviewedAt) }}</div>
-                </div>
-                <span v-else>-</span>
+            <template v-if="column.key === 'reviewer'">
+              <div
+                v-if="record.reviewerName"
+                class="text-xs"
+              >
+                <div>{{ record.reviewerName }}</div>
+                <div>{{ formatDate(record.reviewedAt) }}</div>
+              </div>
+              <span v-else>-</span>
             </template>
             <template v-if="column.key === 'action'">
               <a-space>
-                 <a-button size="small" @click="viewDetail(record)">详情</a-button>
-                 <a-button 
-                    v-if="canReview(record)" 
-                    type="primary" 
-                    ghost 
-                    size="small" 
-                    @click="openReviewModal(record)"
+                <a-button
+                  size="small"
+                  @click="viewDetail(record)"
+                >
+                  详情
+                </a-button>
+                <a-button 
+                  v-if="canReview(record)" 
+                  type="primary" 
+                  ghost 
+                  size="small" 
+                  @click="openReviewModal(record)"
                 >
                   审核
                 </a-button>
-                 <a-popconfirm
-                    v-if="canWithdraw(record)"
-                    title="确定撤销此申诉吗？"
-                    @confirm="handleWithdraw(record)"
+                <a-popconfirm
+                  v-if="canWithdraw(record)"
+                  title="确定撤销此申诉吗？"
+                  @confirm="handleWithdraw(record)"
+                >
+                  <a-button
+                    size="small"
+                    danger
                   >
-                    <a-button size="small" danger>撤销</a-button>
-                 </a-popconfirm>
+                    撤销
+                  </a-button>
+                </a-popconfirm>
               </a-space>
             </template>
           </template>
@@ -82,9 +135,9 @@
 
     <!-- Modals -->
     <AppealReviewModal
-        v-model:visible="showReviewModal"
-        :appeal="currentAppeal"
-        @success="refresh"
+      v-model:visible="showReviewModal"
+      :appeal="currentAppeal"
+      @success="refresh"
     />
   </div>
 </template>

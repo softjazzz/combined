@@ -3,21 +3,35 @@
   支持预置示例和自定义输入两种模式
 -->
 <template>
-  <a-card title="病历选择" :bordered="false">
+  <a-card
+    title="病历选择"
+    :bordered="false"
+  >
     <!-- 模式选择 -->
-    <a-radio-group v-model:value="selectedMode" button-style="solid" class="mb-4">
+    <a-radio-group
+      v-model:value="selectedMode"
+      button-style="solid"
+      class="mb-4"
+    >
       <a-radio-button value="preset">
-        <template #icon><FileTextOutlined /></template>
+        <template #icon>
+          <FileTextOutlined />
+        </template>
         预置示例
       </a-radio-button>
       <a-radio-button value="custom">
-        <template #icon><EditOutlined /></template>
+        <template #icon>
+          <EditOutlined />
+        </template>
         自定义输入
       </a-radio-button>
     </a-radio-group>
 
     <!-- 预置示例模式 -->
-    <div v-if="selectedMode === 'preset'" class="preset-mode">
+    <div
+      v-if="selectedMode === 'preset'"
+      class="preset-mode"
+    >
       <a-alert
         message="预置示例：首次病程记录"
         description="李明，58岁男性，急性冠脉综合征（ACS），包含完整的病历结构和质控缺陷示例"
@@ -26,39 +40,89 @@
         class="mb-4"
       />
       
-      <a-descriptions :column="2" bordered size="small" class="mb-4">
-        <a-descriptions-item label="文档类型">首次病程记录</a-descriptions-item>
-        <a-descriptions-item label="患者姓名">李明</a-descriptions-item>
-        <a-descriptions-item label="年龄/性别">58岁/男</a-descriptions-item>
-        <a-descriptions-item label="科室">心内科</a-descriptions-item>
-        <a-descriptions-item label="住院号">2025001234</a-descriptions-item>
-        <a-descriptions-item label="床号">15床</a-descriptions-item>
-        <a-descriptions-item label="入院时间">2025年10月11日 09:30</a-descriptions-item>
-        <a-descriptions-item label="记录时间">2025年10月11日 15:00</a-descriptions-item>
-        <a-descriptions-item label="初步诊断" :span="2">
+      <a-descriptions
+        :column="2"
+        bordered
+        size="small"
+        class="mb-4"
+      >
+        <a-descriptions-item label="文档类型">
+          首次病程记录
+        </a-descriptions-item>
+        <a-descriptions-item label="患者姓名">
+          李明
+        </a-descriptions-item>
+        <a-descriptions-item label="年龄/性别">
+          58岁/男
+        </a-descriptions-item>
+        <a-descriptions-item label="科室">
+          心内科
+        </a-descriptions-item>
+        <a-descriptions-item label="住院号">
+          2025001234
+        </a-descriptions-item>
+        <a-descriptions-item label="床号">
+          15床
+        </a-descriptions-item>
+        <a-descriptions-item label="入院时间">
+          2025年10月11日 09:30
+        </a-descriptions-item>
+        <a-descriptions-item label="记录时间">
+          2025年10月11日 15:00
+        </a-descriptions-item>
+        <a-descriptions-item
+          label="初步诊断"
+          :span="2"
+        >
           急性冠脉综合征（ACS）、高血压病3级、2型糖尿病、血脂异常
         </a-descriptions-item>
       </a-descriptions>
 
-      <a-button type="primary" block size="large" @click="handleLoadPreset">
-        <template #icon><ThunderboltOutlined /></template>
+      <a-button
+        type="primary"
+        block
+        size="large"
+        @click="handleLoadPreset"
+      >
+        <template #icon>
+          <ThunderboltOutlined />
+        </template>
         加载预置示例
       </a-button>
     </div>
 
     <!-- 自定义输入模式 -->
-    <div v-else class="custom-mode">
-      <a-tabs v-model:activeKey="customInputTab">
+    <div
+      v-else
+      class="custom-mode"
+    >
+      <a-tabs v-model:active-key="customInputTab">
         <!-- 文本输入 -->
-        <a-tab-pane key="text" tab="文本输入">
+        <a-tab-pane
+          key="text"
+          tab="文本输入"
+        >
           <a-form layout="vertical">
             <a-form-item label="文档类型">
-              <a-select v-model:value="customDocumentType" placeholder="请选择文档类型">
-                <a-select-option value="首次病程记录">首次病程记录</a-select-option>
-                <a-select-option value="入院记录">入院记录</a-select-option>
-                <a-select-option value="出院记录">出院记录</a-select-option>
-                <a-select-option value="手术记录">手术记录</a-select-option>
-                <a-select-option value="病程记录">病程记录</a-select-option>
+              <a-select
+                v-model:value="customDocumentType"
+                placeholder="请选择文档类型"
+              >
+                <a-select-option value="首次病程记录">
+                  首次病程记录
+                </a-select-option>
+                <a-select-option value="入院记录">
+                  入院记录
+                </a-select-option>
+                <a-select-option value="出院记录">
+                  出院记录
+                </a-select-option>
+                <a-select-option value="手术记录">
+                  手术记录
+                </a-select-option>
+                <a-select-option value="病程记录">
+                  病程记录
+                </a-select-option>
               </a-select>
             </a-form-item>
 
@@ -79,14 +143,19 @@
               :disabled="!customContent.trim()"
               @click="handleSetCustom"
             >
-              <template #icon><CheckOutlined /></template>
+              <template #icon>
+                <CheckOutlined />
+              </template>
               使用此病历
             </a-button>
           </a-form>
         </a-tab-pane>
 
         <!-- 文件上传 -->
-        <a-tab-pane key="upload" tab="文件上传">
+        <a-tab-pane
+          key="upload"
+          tab="文件上传"
+        >
           <a-upload-dragger
             v-model:file-list="fileList"
             name="file"
@@ -99,7 +168,9 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+            <p class="ant-upload-text">
+              点击或拖拽文件到此区域上传
+            </p>
             <p class="ant-upload-hint">
               支持 .txt、.doc、.docx 格式，单个文件不超过 10MB
             </p>
@@ -123,7 +194,9 @@
             class="mt-4"
             @click="handleUseUploadedContent"
           >
-            <template #icon><CheckOutlined /></template>
+            <template #icon>
+              <CheckOutlined />
+            </template>
             使用上传的病历
           </a-button>
         </a-tab-pane>
@@ -131,8 +204,14 @@
     </div>
 
     <!-- 病历内容预览（可折叠） -->
-    <a-collapse v-if="previewContent" class="mt-4">
-      <a-collapse-panel key="preview" header="病历内容预览">
+    <a-collapse
+      v-if="previewContent"
+      class="mt-4"
+    >
+      <a-collapse-panel
+        key="preview"
+        header="病历内容预览"
+      >
         <div class="preview-content">
           {{ previewContent }}
         </div>

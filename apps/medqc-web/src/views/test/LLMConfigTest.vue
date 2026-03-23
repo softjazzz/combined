@@ -1,25 +1,44 @@
 <template>
   <div class="llm-config-test">
     <a-card title="LLM配置系统测试">
-      <a-space direction="vertical" style="width: 100%">
+      <a-space
+        direction="vertical"
+        style="width: 100%"
+      >
         <!-- 测试按钮 -->
         <a-space>
-          <a-button @click="initDatabase" :loading="loading" type="primary">
+          <a-button
+            :loading="loading"
+            type="primary"
+            @click="initDatabase"
+          >
             初始化数据库
           </a-button>
-          <a-button @click="testLoadProviders" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="testLoadProviders"
+          >
             测试加载提供商
           </a-button>
-          <a-button @click="testLoadConfigs" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="testLoadConfigs"
+          >
             测试加载配置
           </a-button>
-          <a-button @click="testCreateConfig" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="testCreateConfig"
+          >
             测试创建配置
           </a-button>
         </a-space>
 
         <!-- 结果显示 -->
-        <a-card size="small" title="测试结果">
+        <a-card
+          size="small"
+          title="测试结果"
+        >
           <pre>{{ testResult }}</pre>
         </a-card>
 

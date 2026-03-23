@@ -1,12 +1,31 @@
 <template>
   <div class="doc-tree glass-card">
-    <a-typography-title :level="5" class="mb-3">医疗文书目录</a-typography-title>
+    <a-typography-title
+      :level="5"
+      class="mb-3"
+    >
+      医疗文书目录
+    </a-typography-title>
 
-    <a-empty v-if="!groupedDocs.size" description="暂无文书" />
+    <a-empty
+      v-if="!groupedDocs.size"
+      description="暂无文书"
+    />
 
-    <a-collapse v-else ghost :bordered="false">
-      <a-collapse-panel v-for="([cat, items]) in groupedArray" :key="cat" :header="categoryLabel(cat)">
-        <a-collapse ghost :bordered="false">
+    <a-collapse
+      v-else
+      ghost
+      :bordered="false"
+    >
+      <a-collapse-panel
+        v-for="([cat, items]) in groupedArray"
+        :key="cat"
+        :header="categoryLabel(cat)"
+      >
+        <a-collapse
+          ghost
+          :bordered="false"
+        >
           <a-collapse-panel
             v-for="doc in items"
             :key="doc.id"
@@ -15,24 +34,43 @@
               <div class="doc-item-header">
                 <div class="doc-main-info">
                   <span class="doc-title">{{ doc.title || getDocumentTypeLabel(doc.type) }}</span>
-                  <span v-if="getDocumentTimestamp(doc)" class="doc-timestamp">
-                    <a-icon type="clock-circle" class="mr-1" />
+                  <span
+                    v-if="getDocumentTimestamp(doc)"
+                    class="doc-timestamp"
+                  >
+                    <a-icon
+                      type="clock-circle"
+                      class="mr-1"
+                    />
                     {{ formatTimestamp(getDocumentTimestamp(doc)) }}
                   </span>
                 </div>
                 <div class="doc-meta-info">
-                  <a-tag :color="getDocumentTypeColor(doc.type)" class="doc-type-tag">
+                  <a-tag
+                    :color="getDocumentTypeColor(doc.type)"
+                    class="doc-type-tag"
+                  >
                     {{ getDocumentTypeLabel(doc.type) }}
                   </a-tag>
-                  <span v-if="doc.confidence != null" class="doc-confidence">
+                  <span
+                    v-if="doc.confidence != null"
+                    class="doc-confidence"
+                  >
                     置信度 {{ Math.round(doc.confidence) }}%
                   </span>
                 </div>
-                <div class="doc-summary">{{ doc.content }}</div>
+                <div class="doc-summary">
+                  {{ doc.content }}
+                </div>
               </div>
             </template>
             <div class="doc-full">
-              <a-typography-text type="secondary" class="block mb-2">完整内容</a-typography-text>
+              <a-typography-text
+                type="secondary"
+                class="block mb-2"
+              >
+                完整内容
+              </a-typography-text>
               <pre class="whitespace-pre-wrap leading-6">{{ getFullContent(doc) }}</pre>
             </div>
           </a-collapse-panel>

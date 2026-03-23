@@ -1,20 +1,41 @@
 <template>
   <div class="high-value-materials-list">
-    <a-empty v-if="materials.length === 0" description="暂无高值耗材" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+    <a-empty
+      v-if="materials.length === 0"
+      description="暂无高值耗材"
+      :image="Empty.PRESENTED_IMAGE_SIMPLE"
+    />
     
-    <div v-else class="materials-grid">
-      <div v-for="item in materials" :key="item.id" class="material-card">
+    <div
+      v-else
+      class="materials-grid"
+    >
+      <div
+        v-for="item in materials"
+        :key="item.id"
+        class="material-card"
+      >
         <div class="card-header">
           <div class="icon-wrapper">
-             <MedicineBoxOutlined v-if="item.category.includes('器械') || item.category === '骨科植入物'" />
-             <HeartOutlined v-else-if="item.category.includes('心脏')" />
-             <ExperimentOutlined v-else />
+            <MedicineBoxOutlined v-if="item.category.includes('器械') || item.category === '骨科植入物'" />
+            <HeartOutlined v-else-if="item.category.includes('心脏')" />
+            <ExperimentOutlined v-else />
           </div>
           <div class="header-info">
-            <div class="material-name" :title="item.name">{{ item.name }}</div>
-            <div class="material-category">{{ item.category }}</div>
+            <div
+              class="material-name"
+              :title="item.name"
+            >
+              {{ item.name }}
+            </div>
+            <div class="material-category">
+              {{ item.category }}
+            </div>
           </div>
-          <a-tag :color="item.inCatalog ? 'success' : 'warning'" class="status-tag">
+          <a-tag
+            :color="item.inCatalog ? 'success' : 'warning'"
+            class="status-tag"
+          >
             {{ item.inCatalog ? '医保' : '自费' }}
           </a-tag>
         </div>
@@ -28,7 +49,7 @@
             <span class="label">单价 × 数量</span>
             <span class="value">¥{{ item.unitPrice.toLocaleString() }} × {{ item.quantity }}</span>
           </div>
-          <div class="divider"></div>
+          <div class="divider" />
           <div class="total-row">
             <span class="label">小计</span>
             <span class="total-value">¥{{ item.totalPrice.toLocaleString() }}</span>
@@ -37,7 +58,10 @@
       </div>
     </div>
     
-    <div v-if="materials.length > 0" class="materials-summary">
+    <div
+      v-if="materials.length > 0"
+      class="materials-summary"
+    >
       <div class="summary-card">
         <span class="summary-label">高值耗材总计</span>
         <span class="summary-value">¥{{ totalPrice.toLocaleString() }}</span>

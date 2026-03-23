@@ -6,29 +6,45 @@
   <div class="document-navigator">
     <!-- 头部标题 -->
     <div class="navigator-header">
-      <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      <svg
+        class="icon"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        />
       </svg>
       <span>住院文书</span>
     </div>
 
     <!-- 菜单 -->
     <a-menu
-      v-model:selectedKeys="selectedKeys"
-      v-model:openKeys="openKeys"
+      v-model:selected-keys="selectedKeys"
+      v-model:open-keys="openKeys"
       mode="inline"
       class="document-menu"
       @select="handleMenuSelect"
     >
       <!-- 病案首页 -->
-      <a-menu-item key="frontpage" @click="handleFrontpageClick">
+      <a-menu-item
+        key="frontpage"
+        @click="handleFrontpageClick"
+      >
         <template #icon>
           <FileTextOutlined />
         </template>
         病案首页
       </a-menu-item>
 
-      <a-menu-item key="frontpage-medical" disabled>
+      <a-menu-item
+        key="frontpage-medical"
+        disabled
+      >
         <template #icon>
           <FileOutlined />
         </template>
@@ -36,7 +52,10 @@
       </a-menu-item>
 
       <!-- 病历文书分组 -->
-      <a-sub-menu key="documents" title="病历文书">
+      <a-sub-menu
+        key="documents"
+        title="病历文书"
+      >
         <template #icon>
           <FolderOpenOutlined />
         </template>
@@ -56,7 +75,11 @@
         </a-menu-item>
 
         <!-- 无文书提示 -->
-        <a-menu-item v-if="sortedDocuments.length === 0" key="no-docs" disabled>
+        <a-menu-item
+          v-if="sortedDocuments.length === 0"
+          key="no-docs"
+          disabled
+        >
           <template #icon>
             <FileUnknownOutlined />
           </template>
@@ -65,7 +88,10 @@
       </a-sub-menu>
 
       <!-- 书写病历（未来功能） -->
-      <a-menu-item key="write-record" disabled>
+      <a-menu-item
+        key="write-record"
+        disabled
+      >
         <template #icon>
           <EditOutlined />
         </template>
@@ -74,8 +100,13 @@
     </a-menu>
 
     <!-- 底部信息：当前病例 -->
-    <div v-if="store.currentCase" class="case-info-footer">
-      <div class="info-title">当前病例</div>
+    <div
+      v-if="store.currentCase"
+      class="case-info-footer"
+    >
+      <div class="info-title">
+        当前病例
+      </div>
       <div class="info-content">
         <div class="info-row">
           <span class="label">患者：</span>

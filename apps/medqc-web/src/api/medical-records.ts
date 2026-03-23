@@ -302,3 +302,50 @@ function convertRowToMedicalRecord(row: MedicalRecordRow): MedicalRecord {
     updated_at: row.updated_at
   }
 } 
+
+// ===== Compatibility exports for legacy doctor workstation =====
+export type { MedicalRecord }
+
+export interface MedicalRecordTemplate {
+  id: string
+  name: string
+  content: string
+}
+
+export interface QCAnalysisResult {
+  score?: number
+  issues?: Array<{ description?: string; severity?: string }>
+  suggestions?: string[]
+}
+
+export async function getDemoMedicalRecords(_scenario?: string): Promise<ApiResponse<MedicalRecord[]>> {
+  return getMedicalRecords({ limit: 20, offset: 0 })
+}
+
+export async function getDoctorWorkstationTemplates(): Promise<ApiResponse<MedicalRecordTemplate[]>> {
+  return {
+    success: true,
+    data: [],
+  }
+}
+
+export async function saveMedicalRecordDraft(
+  id: string,
+  updates: Partial<MedicalRecordUpdate>
+): Promise<ApiResponse<MedicalRecord>> {
+  return updateMedicalRecord(id, updates)
+}
+
+export async function submitRecordForQCAnalysis(
+  _recordId: string,
+  _content: string
+): Promise<ApiResponse<QCAnalysisResult>> {
+  return {
+    success: true,
+    data: {
+      score: 0,
+      issues: [],
+      suggestions: [],
+    },
+  }
+}

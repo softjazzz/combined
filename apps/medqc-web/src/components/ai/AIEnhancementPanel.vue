@@ -1,14 +1,25 @@
 <template>
   <div class="ai-enhancement-panel">
-    <a-card title="AI增强功能管理" class="mb-6">
+    <a-card
+      title="AI增强功能管理"
+      class="mb-6"
+    >
       <template #extra>
         <a-space>
-          <a-button type="primary" @click="refreshData" :loading="loading">
-            <template #icon><ReloadOutlined /></template>
+          <a-button
+            type="primary"
+            :loading="loading"
+            @click="refreshData"
+          >
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             刷新数据
           </a-button>
           <a-button @click="showSettings = true">
-            <template #icon><SettingOutlined /></template>
+            <template #icon>
+              <SettingOutlined />
+            </template>
             设置
           </a-button>
         </a-space>
@@ -16,7 +27,10 @@
 
       <!-- 功能概览 -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <a-card size="small" class="stat-card">
+        <a-card
+          size="small"
+          class="stat-card"
+        >
           <a-statistic
             title="学习记录"
             :value="stats.totalRecords"
@@ -24,11 +38,17 @@
             :value-style="{ color: '#1890ff' }"
           />
           <div class="mt-2">
-            <a-progress :percent="stats.learningProgress" size="small" />
+            <a-progress
+              :percent="stats.learningProgress"
+              size="small"
+            />
           </div>
         </a-card>
 
-        <a-card size="small" class="stat-card">
+        <a-card
+          size="small"
+          class="stat-card"
+        >
           <a-statistic
             title="知识库条目"
             :value="stats.knowledgeBaseSize"
@@ -36,11 +56,16 @@
             :value-style="{ color: '#52c41a' }"
           />
           <div class="mt-2">
-            <a-tag color="green">活跃模式: {{ stats.activePatterns }}</a-tag>
+            <a-tag color="green">
+              活跃模式: {{ stats.activePatterns }}
+            </a-tag>
           </div>
         </a-card>
 
-        <a-card size="small" class="stat-card">
+        <a-card
+          size="small"
+          class="stat-card"
+        >
           <a-statistic
             title="性能评分"
             :value="stats.performanceScore"
@@ -55,7 +80,10 @@
           </div>
         </a-card>
 
-        <a-card size="small" class="stat-card">
+        <a-card
+          size="small"
+          class="stat-card"
+        >
           <a-statistic
             title="学习任务"
             :value="stats.pendingTasks"
@@ -64,22 +92,39 @@
           />
           <div class="mt-2">
             <a-space>
-              <a-tag color="processing">进行中: {{ stats.runningTasks }}</a-tag>
-              <a-tag color="success">已完成: {{ stats.completedTasks }}</a-tag>
+              <a-tag color="processing">
+                进行中: {{ stats.runningTasks }}
+              </a-tag>
+              <a-tag color="success">
+                已完成: {{ stats.completedTasks }}
+              </a-tag>
             </a-space>
           </div>
         </a-card>
       </div>
 
       <!-- 功能标签页 -->
-      <a-tabs v-model:activeKey="activeTab" type="card">
+      <a-tabs
+        v-model:active-key="activeTab"
+        type="card"
+      >
         <!-- 智能学习 -->
-        <a-tab-pane key="learning" tab="智能学习">
+        <a-tab-pane
+          key="learning"
+          tab="智能学习"
+        >
           <div class="learning-panel">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold">学习记录管理</h3>
-              <a-button type="primary" @click="showLearningDialog = true">
-                <template #icon><PlusOutlined /></template>
+              <h3 class="text-lg font-semibold">
+                学习记录管理
+              </h3>
+              <a-button
+                type="primary"
+                @click="showLearningDialog = true"
+              >
+                <template #icon>
+                  <PlusOutlined />
+                </template>
                 添加学习记录
               </a-button>
             </div>
@@ -102,10 +147,18 @@
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" size="small" @click="viewLearningDetail(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="viewLearningDetail(record)"
+                    >
                       详情
                     </a-button>
-                    <a-button type="link" size="small" @click="analyzeLearningPattern(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="analyzeLearningPattern(record)"
+                    >
                       分析
                     </a-button>
                   </a-space>
@@ -116,10 +169,15 @@
         </a-tab-pane>
 
         <!-- 知识库管理 -->
-        <a-tab-pane key="knowledge" tab="知识库">
+        <a-tab-pane
+          key="knowledge"
+          tab="知识库"
+        >
           <div class="knowledge-panel">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold">知识库管理</h3>
+              <h3 class="text-lg font-semibold">
+                知识库管理
+              </h3>
               <a-space>
                 <a-select
                   v-model:value="selectedCategory"
@@ -127,15 +185,32 @@
                   style="width: 150px"
                   @change="filterKnowledgeBase"
                 >
-                  <a-select-option value="">全部</a-select-option>
-                  <a-select-option value="completeness">完整性</a-select-option>
-                  <a-select-option value="consistency">一致性</a-select-option>
-                  <a-select-option value="rationality">合理性</a-select-option>
-                  <a-select-option value="timeliness">时效性</a-select-option>
-                  <a-select-option value="compliance">合规性</a-select-option>
+                  <a-select-option value="">
+                    全部
+                  </a-select-option>
+                  <a-select-option value="completeness">
+                    完整性
+                  </a-select-option>
+                  <a-select-option value="consistency">
+                    一致性
+                  </a-select-option>
+                  <a-select-option value="rationality">
+                    合理性
+                  </a-select-option>
+                  <a-select-option value="timeliness">
+                    时效性
+                  </a-select-option>
+                  <a-select-option value="compliance">
+                    合规性
+                  </a-select-option>
                 </a-select>
-                <a-button type="primary" @click="showKnowledgeDialog = true">
-                  <template #icon><PlusOutlined /></template>
+                <a-button
+                  type="primary"
+                  @click="showKnowledgeDialog = true"
+                >
+                  <template #icon>
+                    <PlusOutlined />
+                  </template>
                   添加知识条目
                 </a-button>
               </a-space>
@@ -159,23 +234,39 @@
                 </template>
                 <template v-else-if="column.key === 'usage'">
                   <a-space>
-                    <a-tag color="blue">{{ record.usageCount }}次</a-tag>
-                    <a-tag color="green">{{ Math.round(record.successRate * 100) }}%</a-tag>
+                    <a-tag color="blue">
+                      {{ record.usageCount }}次
+                    </a-tag>
+                    <a-tag color="green">
+                      {{ Math.round(record.successRate * 100) }}%
+                    </a-tag>
                   </a-space>
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" size="small" @click="editKnowledgeEntry(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="editKnowledgeEntry(record)"
+                    >
                       编辑
                     </a-button>
-                    <a-button type="link" size="small" @click="testKnowledgeEntry(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="testKnowledgeEntry(record)"
+                    >
                       测试
                     </a-button>
                     <a-popconfirm
                       title="确定删除此知识条目吗？"
                       @confirm="deleteKnowledgeEntry(record)"
                     >
-                      <a-button type="link" size="small" danger>
+                      <a-button
+                        type="link"
+                        size="small"
+                        danger
+                      >
                         删除
                       </a-button>
                     </a-popconfirm>
@@ -187,32 +278,63 @@
         </a-tab-pane>
 
         <!-- 性能监控 -->
-        <a-tab-pane key="performance" tab="性能监控">
+        <a-tab-pane
+          key="performance"
+          tab="性能监控"
+        >
           <div class="performance-panel">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <!-- 性能趋势图 -->
-              <a-card title="性能趋势" size="small">
-                <div ref="performanceChart" class="h-64"></div>
+              <a-card
+                title="性能趋势"
+                size="small"
+              >
+                <div
+                  ref="performanceChart"
+                  class="h-64"
+                />
               </a-card>
 
               <!-- 准确率分析 -->
-              <a-card title="准确率分析" size="small">
-                <div ref="accuracyChart" class="h-64"></div>
+              <a-card
+                title="准确率分析"
+                size="small"
+              >
+                <div
+                  ref="accuracyChart"
+                  class="h-64"
+                />
               </a-card>
 
               <!-- 处理时间分析 -->
-              <a-card title="处理时间分析" size="small">
-                <div ref="timingChart" class="h-64"></div>
+              <a-card
+                title="处理时间分析"
+                size="small"
+              >
+                <div
+                  ref="timingChart"
+                  class="h-64"
+                />
               </a-card>
 
               <!-- 用户满意度 -->
-              <a-card title="用户满意度" size="small">
-                <div ref="satisfactionChart" class="h-64"></div>
+              <a-card
+                title="用户满意度"
+                size="small"
+              >
+                <div
+                  ref="satisfactionChart"
+                  class="h-64"
+                />
               </a-card>
             </div>
 
             <!-- 性能指标详情 -->
-            <a-card title="详细指标" size="small" class="mt-6">
+            <a-card
+              title="详细指标"
+              size="small"
+              class="mt-6"
+            >
               <a-table
                 :columns="metricsColumns"
                 :data-source="performanceMetrics"
@@ -241,10 +363,15 @@
         </a-tab-pane>
 
         <!-- 学习任务 -->
-        <a-tab-pane key="tasks" tab="学习任务">
+        <a-tab-pane
+          key="tasks"
+          tab="学习任务"
+        >
           <div class="tasks-panel">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold">学习任务管理</h3>
+              <h3 class="text-lg font-semibold">
+                学习任务管理
+              </h3>
               <a-space>
                 <a-select
                   v-model:value="selectedTaskType"
@@ -252,13 +379,26 @@
                   style="width: 150px"
                   @change="filterTasks"
                 >
-                  <a-select-option value="">全部</a-select-option>
-                  <a-select-option value="feedback_learning">反馈学习</a-select-option>
-                  <a-select-option value="pattern_recognition">模式识别</a-select-option>
-                  <a-select-option value="performance_optimization">性能优化</a-select-option>
+                  <a-select-option value="">
+                    全部
+                  </a-select-option>
+                  <a-select-option value="feedback_learning">
+                    反馈学习
+                  </a-select-option>
+                  <a-select-option value="pattern_recognition">
+                    模式识别
+                  </a-select-option>
+                  <a-select-option value="performance_optimization">
+                    性能优化
+                  </a-select-option>
                 </a-select>
-                <a-button type="primary" @click="createLearningTask">
-                  <template #icon><PlusOutlined /></template>
+                <a-button
+                  type="primary"
+                  @click="createLearningTask"
+                >
+                  <template #icon>
+                    <PlusOutlined />
+                  </template>
                   创建任务
                 </a-button>
               </a-space>
@@ -286,14 +426,18 @@
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" size="small" @click="viewTaskDetail(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="viewTaskDetail(record)"
+                    >
                       详情
                     </a-button>
                     <a-button 
                       type="link" 
                       size="small" 
-                      @click="executeTask(record)"
                       :disabled="record.status !== 'pending'"
+                      @click="executeTask(record)"
                     >
                       执行
                     </a-button>
@@ -326,11 +470,23 @@
       @ok="submitLearningRecord"
       @cancel="resetLearningForm"
     >
-      <a-form :model="learningForm" layout="vertical">
-        <a-form-item label="病案记录ID" required>
-          <a-input v-model:value="learningForm.recordId" placeholder="请输入病案记录ID" />
+      <a-form
+        :model="learningForm"
+        layout="vertical"
+      >
+        <a-form-item
+          label="病案记录ID"
+          required
+        >
+          <a-input
+            v-model:value="learningForm.recordId"
+            placeholder="请输入病案记录ID"
+          />
         </a-form-item>
-        <a-form-item label="原始评分" required>
+        <a-form-item
+          label="原始评分"
+          required
+        >
           <a-input-number 
             v-model:value="learningForm.originalScore" 
             :min="0" 
@@ -338,7 +494,10 @@
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="修正评分" required>
+        <a-form-item
+          label="修正评分"
+          required
+        >
           <a-input-number 
             v-model:value="learningForm.reviewedScore" 
             :min="0" 
@@ -360,9 +519,15 @@
             placeholder="选择或输入纠正项目"
             style="width: 100%"
           >
-            <a-select-option value="评分调整">评分调整</a-select-option>
-            <a-select-option value="问题识别">问题识别</a-select-option>
-            <a-select-option value="建议优化">建议优化</a-select-option>
+            <a-select-option value="评分调整">
+              评分调整
+            </a-select-option>
+            <a-select-option value="问题识别">
+              问题识别
+            </a-select-option>
+            <a-select-option value="建议优化">
+              建议优化
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -375,24 +540,49 @@
       @ok="submitKnowledgeEntry"
       @cancel="resetKnowledgeForm"
     >
-      <a-form :model="knowledgeForm" layout="vertical">
-        <a-form-item label="类别" required>
-          <a-select v-model:value="knowledgeForm.category" placeholder="选择类别">
-            <a-select-option value="completeness">完整性</a-select-option>
-            <a-select-option value="consistency">一致性</a-select-option>
-            <a-select-option value="rationality">合理性</a-select-option>
-            <a-select-option value="timeliness">时效性</a-select-option>
-            <a-select-option value="compliance">合规性</a-select-option>
+      <a-form
+        :model="knowledgeForm"
+        layout="vertical"
+      >
+        <a-form-item
+          label="类别"
+          required
+        >
+          <a-select
+            v-model:value="knowledgeForm.category"
+            placeholder="选择类别"
+          >
+            <a-select-option value="completeness">
+              完整性
+            </a-select-option>
+            <a-select-option value="consistency">
+              一致性
+            </a-select-option>
+            <a-select-option value="rationality">
+              合理性
+            </a-select-option>
+            <a-select-option value="timeliness">
+              时效性
+            </a-select-option>
+            <a-select-option value="compliance">
+              合规性
+            </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="模式描述" required>
+        <a-form-item
+          label="模式描述"
+          required
+        >
           <a-textarea 
             v-model:value="knowledgeForm.pattern" 
             placeholder="请输入模式描述"
             :rows="4"
           />
         </a-form-item>
-        <a-form-item label="置信度" required>
+        <a-form-item
+          label="置信度"
+          required
+        >
           <a-slider 
             v-model:value="knowledgeForm.confidence" 
             :min="0" 
@@ -418,7 +608,10 @@
       @ok="saveSettings"
       @cancel="resetSettings"
     >
-      <a-form :model="settingsForm" layout="vertical">
+      <a-form
+        :model="settingsForm"
+        layout="vertical"
+      >
         <a-form-item label="反馈学习">
           <a-switch v-model:checked="settingsForm.enableFeedbackLearning" />
           <span class="ml-2">启用基于用户反馈的学习</span>
@@ -441,10 +634,18 @@
         </a-form-item>
         <a-form-item label="学习频率">
           <a-select v-model:value="settingsForm.learningFrequency">
-            <a-select-option value="realtime">实时</a-select-option>
-            <a-select-option value="hourly">每小时</a-select-option>
-            <a-select-option value="daily">每天</a-select-option>
-            <a-select-option value="weekly">每周</a-select-option>
+            <a-select-option value="realtime">
+              实时
+            </a-select-option>
+            <a-select-option value="hourly">
+              每小时
+            </a-select-option>
+            <a-select-option value="daily">
+              每天
+            </a-select-option>
+            <a-select-option value="weekly">
+              每周
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -763,11 +964,11 @@ const resetLearningForm = () => {
   })
 }
 
-const viewLearningDetail = (record) => {
+const viewLearningDetail = (record: Record<string, unknown>) => {
   console.log('查看学习详情:', record)
 }
 
-const analyzeLearningPattern = (record) => {
+const analyzeLearningPattern = (record: Record<string, unknown>) => {
   console.log('分析学习模式:', record)
 }
 
@@ -797,15 +998,15 @@ const filterKnowledgeBase = () => {
   // 过滤知识库已通过计算属性实现
 }
 
-const editKnowledgeEntry = (record) => {
+const editKnowledgeEntry = (record: Record<string, unknown>) => {
   console.log('编辑知识条目:', record)
 }
 
-const testKnowledgeEntry = (record) => {
+const testKnowledgeEntry = (record: Record<string, unknown>) => {
   console.log('测试知识条目:', record)
 }
 
-const deleteKnowledgeEntry = async (record) => {
+const deleteKnowledgeEntry = async (record: Record<string, unknown>) => {
   try {
     // 模拟删除知识条目
     console.log('删除知识条目:', record)
@@ -824,11 +1025,11 @@ const createLearningTask = () => {
   console.log('创建学习任务')
 }
 
-const viewTaskDetail = (record) => {
+const viewTaskDetail = (record: Record<string, unknown>) => {
   console.log('查看任务详情:', record)
 }
 
-const executeTask = async (record) => {
+const executeTask = async (record: Record<string, unknown>) => {
   try {
     // 模拟执行任务
     console.log('执行任务:', record)
@@ -838,7 +1039,7 @@ const executeTask = async (record) => {
   }
 }
 
-const cancelTask = async (record) => {
+const cancelTask = async (record: Record<string, unknown>) => {
   try {
     // 模拟取消任务
     console.log('取消任务:', record)

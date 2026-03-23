@@ -20,6 +20,7 @@ export interface TestQCRuleData {
   rule_id: string
   rule_name?: string
   is_compliant: boolean
+  execution_time?: number
   status?: QCStatus
   issues?: QCIssue[]
   findings?: string

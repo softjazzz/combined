@@ -9,12 +9,18 @@
       width="260"
     >
       <!-- Logo区域 -->
-      <div class="logo-container relative px-4 py-5 flex items-center justify-center transition-all duration-300 border-b border-slate-800" :class="collapsed ? 'px-2' : 'px-6'">
+      <div
+        class="logo-container relative px-4 py-5 flex items-center justify-center transition-all duration-300 border-b border-slate-800"
+        :class="collapsed ? 'px-2' : 'px-6'"
+      >
         <div class="flex items-center gap-3 overflow-hidden whitespace-nowrap">
           <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 transition-all duration-300">
-             <MedicineBoxOutlined class="text-white text-xl" />
+            <MedicineBoxOutlined class="text-white text-xl" />
           </div>
-          <div v-if="!collapsed" class="flex flex-col transition-all duration-300 opacity-100">
+          <div
+            v-if="!collapsed"
+            class="flex flex-col transition-all duration-300 opacity-100"
+          >
             <span class="text-white font-bold text-lg leading-tight tracking-tight">病案质控系统</span>
             <span class="text-slate-400 text-xs font-medium tracking-wide">AI-Powered QC Platform</span>
           </div>
@@ -24,151 +30,203 @@
       <!-- 导航菜单 -->
       <div class="flex-1 overflow-y-auto py-4 custom-scrollbar">
         <a-menu
-          v-model:selectedKeys="selectedKeys"
+          v-model:selected-keys="selectedKeys"
           mode="inline"
           theme="dark"
           class="border-none px-3 space-y-1 bg-slate-900"
+          :open-keys="['/dashboard/records', '/dashboard/drg', '/dashboard/rules']"
           @select="handleMenuSelect"
-          :openKeys="['/dashboard/records', '/dashboard/drg', '/dashboard/rules']"
         >
-        <!-- 仪表板 -->
-        <a-menu-item key="/dashboard" class="menu-item-base">
-          <template #icon>
-            <DashboardOutlined />
-          </template>
-          <span class="font-medium">仪表板</span>
-        </a-menu-item>
-
-        <!-- 智能质控工作站 -->
-        <a-menu-item key="/dashboard/workstation" class="menu-item-base">
-          <template #icon>
-            <DesktopOutlined />
-          </template>
-          <span class="font-medium">智能质控工作站</span>
-        </a-menu-item>
-
-        <!-- 病案质控 -->
-        <a-sub-menu key="/dashboard/records" class="menu-item-base">
-          <template #icon>
-            <FileTextOutlined />
-          </template>
-          <template #title>
-            <span class="font-medium">病案质控</span>
-          </template>
-          <a-menu-item key="/dashboard/records/running">
-            <template #icon><PlayCircleOutlined /></template>
-            <span>运行病历</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/records/final">
-             <template #icon><CheckCircleOutlined /></template>
-            <span>终末病历</span>
-          </a-menu-item>
-
-        </a-sub-menu>
-
-        <!-- 质控规则管理（改为子菜单，与V4工作站保持一致） -->
-        <a-sub-menu
-          key="/dashboard/rules"
-          class="menu-item-base"
-          v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
-        >
-          <template #icon>
-            <SafetyCertificateOutlined />
-          </template>
-          <template #title>
-            <span class="font-medium">质控规则</span>
-          </template>
-          <a-menu-item key="/dashboard/rules?tab=coding">
-            <template #icon><MedicineBoxOutlined /></template>
-            <span>编码质控规则</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/rules?tab=frontpage">
-            <template #icon><FileTextOutlined /></template>
-            <span>首页质控规则</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/rules?tab=settlement">
-            <template #icon><DollarOutlined /></template>
-            <span>医保结算清单规则</span>
-          </a-menu-item>
-        </a-sub-menu>
-
-        <!-- 任务管理 -->
-        <a-sub-menu key="/dashboard/tasks" class="menu-item-base">
-          <template #icon>
-             <ProjectOutlined />
-          </template>
-          <template #title>
-            <span class="font-medium">任务管理</span>
-          </template>
-          <a-menu-item key="/dashboard/tasks/my">
-             <template #icon><UserOutlined /></template>
-            <span>我的任务</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/tasks/all" v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')">
-             <template #icon><TeamOutlined /></template>
-            <span>全部任务</span>
-          </a-menu-item>
-        </a-sub-menu>
-
-        <!-- 统计分析 -->
-        <a-menu-item key="/dashboard/statistics" class="menu-item-base">
-          <template #icon>
-            <BarChartOutlined />
-          </template>
-          <span class="font-medium">统计分析</span>
-        </a-menu-item>
-
-        <!-- DRG/DIP -->
-        <a-sub-menu key="/dashboard/drg" class="menu-item-base">
-          <template #icon>
-            <MedicineBoxOutlined />
-          </template>
-          <template #title>
-            <span class="font-medium">DRG/DIP</span>
-          </template>
-          <a-menu-item key="/dashboard/drg/index">
-             <template #icon><HomeOutlined /></template>
-            <span>DRG 首页</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/drg/coding">
-             <template #icon><FileTextOutlined /></template>
-            <span>编码辅助</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/drg/grouping">
-             <template #icon><BranchesOutlined /></template>
-            <span>分组预测</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/drg/monitor">
-             <template #icon><RadarChartOutlined /></template>
-            <span>事中监控</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/drg/fee-monitoring">
-             <template #icon><DollarOutlined /></template>
-            <span>付费监测</span>
-          </a-menu-item>
-          <a-menu-item key="/dashboard/drg/analysis">
-             <template #icon><BarChartOutlined /></template>
-            <span>事后分析</span>
-          </a-menu-item>
-        </a-sub-menu>
-
-        <!-- 系统管理（与 DRG/DIP 平级） -->
-        <a-sub-menu key="/dashboard/system" class="menu-item-base">
-          <template #icon>
-            <ToolOutlined />
-          </template>
-          <template #title>
-            <span class="font-medium">系统管理</span>
-          </template>
-
-          <!-- 系统设置 -->
-          <a-menu-item key="/dashboard/settings" v-if="authStore.hasRole('admin')">
+          <!-- 仪表板 -->
+          <a-menu-item
+            key="/dashboard"
+            class="menu-item-base"
+          >
             <template #icon>
-              <SettingOutlined />
+              <DashboardOutlined />
             </template>
-            <span>系统设置</span>
+            <span class="font-medium">仪表板</span>
           </a-menu-item>
-        </a-sub-menu>
+
+          <!-- 智能质控工作站 -->
+          <a-menu-item
+            key="/dashboard/workstation"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <DesktopOutlined />
+            </template>
+            <span class="font-medium">智能质控工作站</span>
+          </a-menu-item>
+
+          <!-- 病案质控 -->
+          <a-sub-menu
+            key="/dashboard/records"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <FileTextOutlined />
+            </template>
+            <template #title>
+              <span class="font-medium">病案质控</span>
+            </template>
+            <a-menu-item key="/dashboard/records/running">
+              <template #icon>
+                <PlayCircleOutlined />
+              </template>
+              <span>运行病历</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/records/final">
+              <template #icon>
+                <CheckCircleOutlined />
+              </template>
+              <span>终末病历</span>
+            </a-menu-item>
+          </a-sub-menu>
+
+          <!-- 质控规则管理（改为子菜单，与V4工作站保持一致） -->
+          <a-sub-menu
+            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+            key="/dashboard/rules"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <SafetyCertificateOutlined />
+            </template>
+            <template #title>
+              <span class="font-medium">质控规则</span>
+            </template>
+            <a-menu-item key="/dashboard/rules?tab=coding">
+              <template #icon>
+                <MedicineBoxOutlined />
+              </template>
+              <span>编码质控规则</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/rules?tab=frontpage">
+              <template #icon>
+                <FileTextOutlined />
+              </template>
+              <span>首页质控规则</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/rules?tab=settlement">
+              <template #icon>
+                <DollarOutlined />
+              </template>
+              <span>医保结算清单规则</span>
+            </a-menu-item>
+          </a-sub-menu>
+
+          <!-- 任务管理 -->
+          <a-sub-menu
+            key="/dashboard/tasks"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <ProjectOutlined />
+            </template>
+            <template #title>
+              <span class="font-medium">任务管理</span>
+            </template>
+            <a-menu-item key="/dashboard/tasks/my">
+              <template #icon>
+                <UserOutlined />
+              </template>
+              <span>我的任务</span>
+            </a-menu-item>
+            <a-menu-item
+              v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+              key="/dashboard/tasks/all"
+            >
+              <template #icon>
+                <TeamOutlined />
+              </template>
+              <span>全部任务</span>
+            </a-menu-item>
+          </a-sub-menu>
+
+          <!-- 统计分析 -->
+          <a-menu-item
+            key="/dashboard/statistics"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <BarChartOutlined />
+            </template>
+            <span class="font-medium">统计分析</span>
+          </a-menu-item>
+
+          <!-- DRG/DIP -->
+          <a-sub-menu
+            key="/dashboard/drg"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <MedicineBoxOutlined />
+            </template>
+            <template #title>
+              <span class="font-medium">DRG/DIP</span>
+            </template>
+            <a-menu-item key="/dashboard/drg/index">
+              <template #icon>
+                <HomeOutlined />
+              </template>
+              <span>DRG 首页</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/drg/coding">
+              <template #icon>
+                <FileTextOutlined />
+              </template>
+              <span>编码辅助</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/drg/grouping">
+              <template #icon>
+                <BranchesOutlined />
+              </template>
+              <span>分组预测</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/drg/monitor">
+              <template #icon>
+                <RadarChartOutlined />
+              </template>
+              <span>事中监控</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/drg/fee-monitoring">
+              <template #icon>
+                <DollarOutlined />
+              </template>
+              <span>付费监测</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/drg/analysis">
+              <template #icon>
+                <BarChartOutlined />
+              </template>
+              <span>事后分析</span>
+            </a-menu-item>
+          </a-sub-menu>
+
+          <!-- 系统管理（与 DRG/DIP 平级） -->
+          <a-sub-menu
+            key="/dashboard/system"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <ToolOutlined />
+            </template>
+            <template #title>
+              <span class="font-medium">系统管理</span>
+            </template>
+
+            <!-- 系统设置 -->
+            <a-menu-item
+              v-if="authStore.hasRole('admin')"
+              key="/dashboard/settings"
+            >
+              <template #icon>
+                <SettingOutlined />
+              </template>
+              <span>系统设置</span>
+            </a-menu-item>
+          </a-sub-menu>
         </a-menu>
       </div>
     </a-layout-sider>
@@ -180,25 +238,44 @@
         <div class="flex items-center">
           <a-button
             type="text"
-            @click="collapsed = !collapsed"
             class="trigger hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-0 mr-4 rounded-lg w-9 h-9 flex items-center justify-center transition-colors"
+            @click="collapsed = !collapsed"
           >
-            <MenuUnfoldOutlined v-if="collapsed" class="text-lg" />
-            <MenuFoldOutlined v-else class="text-lg" />
+            <MenuUnfoldOutlined
+              v-if="collapsed"
+              class="text-lg"
+            />
+            <MenuFoldOutlined
+              v-else
+              class="text-lg"
+            />
           </a-button>
 
           <!-- 面包屑 (胶囊风格) -->
           <a-breadcrumb class="hidden md:flex items-center">
             <a-breadcrumb-item>
-              <router-link to="/dashboard" class="flex items-center text-slate-400 hover:text-blue-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-50">
+              <router-link
+                to="/dashboard"
+                class="flex items-center text-slate-400 hover:text-blue-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
+              >
                 <HomeOutlined class="text-base" />
               </router-link>
             </a-breadcrumb-item>
-            <a-breadcrumb-item v-for="item in breadcrumbItems" :key="item.path">
-              <router-link v-if="item.path" :to="item.path" class="text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium px-2 py-1 rounded-md hover:bg-slate-50">
+            <a-breadcrumb-item
+              v-for="item in breadcrumbItems"
+              :key="item.path"
+            >
+              <router-link
+                v-if="item.path"
+                :to="item.path"
+                class="text-slate-500 hover:text-blue-600 transition-colors text-sm font-medium px-2 py-1 rounded-md hover:bg-slate-50"
+              >
                 {{ item.title }}
               </router-link>
-              <span v-else class="text-slate-800 font-semibold text-sm px-2 py-1">{{ item.title }}</span>
+              <span
+                v-else
+                class="text-slate-800 font-semibold text-sm px-2 py-1"
+              >{{ item.title }}</span>
             </a-breadcrumb-item>
           </a-breadcrumb>
         </div>
@@ -206,7 +283,10 @@
         <!-- 右侧用户信息 -->
         <div class="flex items-center space-x-3">
           <!-- 通知 -->
-          <a-popover placement="bottomRight" trigger="click">
+          <a-popover
+            placement="bottomRight"
+            trigger="click"
+          >
             <template #content>
               <div class="w-72 p-2">
                 <div class="flex justify-between items-center mb-2 px-2">
@@ -215,29 +295,42 @@
                 </div>
                 <div class="space-y-1">
                   <div class="p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors flex gap-3 items-start">
-                    <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
+                    <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div>
-                      <div class="text-sm text-slate-700 font-medium">系统升级通知</div>
-                      <div class="text-xs text-slate-400 mt-0.5">系统将于今晚进行维护升级...</div>
+                      <div class="text-sm text-slate-700 font-medium">
+                        系统升级通知
+                      </div>
+                      <div class="text-xs text-slate-400 mt-0.5">
+                        系统将于今晚进行维护升级...
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </template>
-            <a-badge count="5" :numberStyle="{ backgroundColor: '#ef4444', boxShadow: '0 0 0 1px #fff' }" class="cursor-pointer">
+            <a-badge
+              count="5"
+              :number-style="{ backgroundColor: '#ef4444', boxShadow: '0 0 0 1px #fff' }"
+              class="cursor-pointer"
+            >
               <div class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
                 <BellOutlined class="text-xl" />
               </div>
             </a-badge>
           </a-popover>
 
-          <div class="w-px h-6 bg-slate-200 mx-2"></div>
+          <div class="w-px h-6 bg-slate-200 mx-2" />
 
           <!-- 用户头像和菜单 -->
           <a-dropdown :trigger="['click']">
             <div class="flex items-center cursor-pointer hover:bg-slate-100 p-1.5 pr-3 rounded-full transition-all duration-200 group select-none">
-              <a-avatar :size="36" class="mr-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white">
-                <template #icon><UserOutlined /></template>
+              <a-avatar
+                :size="36"
+                class="mr-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
+              >
+                <template #icon>
+                  <UserOutlined />
+                </template>
               </a-avatar>
               <div class="flex flex-col mr-1 hidden sm:flex">
                 <span class="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors">{{ authStore.userName }}</span>
@@ -248,22 +341,34 @@
             <template #overlay>
               <a-menu class="min-w-[180px] p-2 rounded-2xl border border-slate-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]">
                 <div class="px-3 py-2 mb-1">
-                  <div class="text-xs text-slate-400">Signed in as</div>
+                  <div class="text-xs text-slate-400">
+                    Signed in as
+                  </div>
                   <div class="font-bold text-slate-700 truncate">
                     {{ authStore.user?.email || 'user@example.com' }}
                   </div>
                 </div>
-                <div class="h-px bg-slate-100 my-1"></div>
-                <a-menu-item key="profile" class="rounded-lg mb-1 !py-2">
+                <div class="h-px bg-slate-100 my-1" />
+                <a-menu-item
+                  key="profile"
+                  class="rounded-lg mb-1 !py-2"
+                >
                   <UserOutlined />
                   <span class="ml-2 font-medium">个人中心</span>
                 </a-menu-item>
-                <a-menu-item key="settings" class="rounded-lg mb-1 !py-2">
+                <a-menu-item
+                  key="settings"
+                  class="rounded-lg mb-1 !py-2"
+                >
                   <SettingOutlined />
                   <span class="ml-2 font-medium">账户设置</span>
                 </a-menu-item>
-                <div class="h-px bg-slate-100 my-1"></div>
-                <a-menu-item key="logout" @click="handleLogout" class="rounded-lg !text-red-500 hover:!bg-red-50 hover:!text-red-600 !py-2">
+                <div class="h-px bg-slate-100 my-1" />
+                <a-menu-item
+                  key="logout"
+                  class="rounded-lg !text-red-500 hover:!bg-red-50 hover:!text-red-600 !py-2"
+                  @click="handleLogout"
+                >
                   <LogoutOutlined />
                   <span class="ml-2 font-medium">退出登录</span>
                 </a-menu-item>
@@ -276,7 +381,10 @@
       <!-- 内容区域 (移除原有内层卡片，由页面自行控制布局) -->
       <a-layout-content class="bg-slate-100 overflow-x-hidden">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
+          <transition
+            name="fade"
+            mode="out-in"
+          >
             <component :is="Component" />
           </transition>
         </router-view>
@@ -432,7 +540,7 @@ const handleLogout = async () => {
 // 监听路由变化更新选中的菜单
 watch(
   () => route.fullPath,
-  (newPath) => {
+  () => {
     // 保持 query 参数以匹配子菜单项
     const base = route.path
     const tab = route.query.tab as string | undefined

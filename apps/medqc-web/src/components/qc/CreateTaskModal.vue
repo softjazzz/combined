@@ -4,9 +4,9 @@
     title="新建质控任务"
     width="560px"
     :confirm-loading="submitting"
+    :mask-closable="false"
     @ok="handleSubmit"
     @cancel="handleCancel"
-    :maskClosable="false"
   >
     <div class="py-2 space-y-5">
       <!-- 任务名称 -->
@@ -50,12 +50,30 @@
       <!-- 抽样方式 -->
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1.5">抽样方式</label>
-        <a-radio-group v-model:value="form.sampling_method" class="w-full">
-          <a-radio-button value="all" class="!rounded-l-lg">全部</a-radio-button>
-          <a-radio-button value="count">按数量</a-radio-button>
-          <a-radio-button value="percentage" class="!rounded-r-lg">按比例</a-radio-button>
+        <a-radio-group
+          v-model:value="form.sampling_method"
+          class="w-full"
+        >
+          <a-radio-button
+            value="all"
+            class="!rounded-l-lg"
+          >
+            全部
+          </a-radio-button>
+          <a-radio-button value="count">
+            按数量
+          </a-radio-button>
+          <a-radio-button
+            value="percentage"
+            class="!rounded-r-lg"
+          >
+            按比例
+          </a-radio-button>
         </a-radio-group>
-        <div v-if="form.sampling_method === 'count'" class="mt-2">
+        <div
+          v-if="form.sampling_method === 'count'"
+          class="mt-2"
+        >
           <a-input-number
             v-model:value="form.sampling_count"
             :min="1"
@@ -64,8 +82,16 @@
             class="w-full"
           />
         </div>
-        <div v-if="form.sampling_method === 'percentage'" class="mt-2">
-          <a-slider v-model:value="form.sampling_pct" :min="1" :max="100" :tip-formatter="(v: number) => `${v}%`" />
+        <div
+          v-if="form.sampling_method === 'percentage'"
+          class="mt-2"
+        >
+          <a-slider
+            v-model:value="form.sampling_pct"
+            :min="1"
+            :max="100"
+            :tip-formatter="(v: number) => `${v}%`"
+          />
         </div>
       </div>
 

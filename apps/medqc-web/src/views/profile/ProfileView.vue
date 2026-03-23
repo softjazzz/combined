@@ -6,9 +6,13 @@
         <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
           <UserOutlined class="text-white text-lg" />
         </div>
-        <h1 class="text-2xl font-bold text-gray-800">个人资料</h1>
+        <h1 class="text-2xl font-bold text-gray-800">
+          个人资料
+        </h1>
       </div>
-      <p class="text-gray-600">管理您的个人信息和账户详情</p>
+      <p class="text-gray-600">
+        管理您的个人信息和账户详情
+      </p>
     </div>
 
     <div class="max-w-4xl mx-auto">
@@ -23,19 +27,26 @@
                   <UserOutlined class="text-white text-3xl" />
                 </div>
                 <!-- 在线状态指示器 -->
-                <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-4 border-white"></div>
+                <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-4 border-white" />
               </div>
               
-              <h3 class="text-xl font-semibold text-gray-800 mb-1">{{ authStore.userName }}</h3>
-              <p class="text-gray-600 mb-2">{{ getRoleLabel(authStore.userRoles?.[0]) }}</p>
+              <h3 class="text-xl font-semibold text-gray-800 mb-1">
+                {{ authStore.userName }}
+              </h3>
+              <p class="text-gray-600 mb-2">
+                {{ getRoleLabel(authStore.userRoles?.[0]) }}
+              </p>
               
               <!-- 角色标签 -->
-              <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium" :class="{
-                'bg-orange-100 text-orange-800': authStore.hasRole('admin'),
-                'bg-green-100 text-green-800': authStore.hasRole('qc_manager'),
-                'bg-blue-100 text-blue-800': authStore.hasRole('doctor'),
-                'bg-purple-100 text-purple-800': authStore.hasRole('nurse')
-              }">
+              <div
+                class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
+                :class="{
+                  'bg-orange-100 text-orange-800': authStore.hasRole('admin'),
+                  'bg-green-100 text-green-800': authStore.hasRole('qc_manager'),
+                  'bg-blue-100 text-blue-800': authStore.hasRole('doctor'),
+                  'bg-purple-100 text-purple-800': authStore.hasRole('nurse')
+                }"
+              >
                 {{ getRoleLabel(authStore.userRoles?.[0]) }}
               </div>
             </div>
@@ -44,12 +55,20 @@
             <div class="mt-6 pt-6 border-t border-gray-100">
               <div class="grid grid-cols-2 gap-4 text-center">
                 <div>
-                  <div class="text-2xl font-bold text-blue-600">{{ stats.loginCount }}</div>
-                  <div class="text-xs text-gray-500">登录次数</div>
+                  <div class="text-2xl font-bold text-blue-600">
+                    {{ stats.loginCount }}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    登录次数
+                  </div>
                 </div>
                 <div>
-                  <div class="text-2xl font-bold text-green-600">{{ stats.activeDays }}</div>
-                  <div class="text-xs text-gray-500">活跃天数</div>
+                  <div class="text-2xl font-bold text-green-600">
+                    {{ stats.activeDays }}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    活跃天数
+                  </div>
                 </div>
               </div>
             </div>
@@ -60,17 +79,22 @@
         <div class="lg:col-span-2">
           <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div class="flex items-center justify-between mb-6">
-              <h3 class="text-lg font-semibold text-gray-800">基本信息</h3>
+              <h3 class="text-lg font-semibold text-gray-800">
+                基本信息
+              </h3>
               <button 
-                @click="toggleEdit"
                 class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200"
                 :class="isEditing ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-blue-500 text-white hover:bg-blue-600'"
+                @click="toggleEdit"
               >
                 {{ isEditing ? '取消编辑' : '编辑资料' }}
               </button>
             </div>
 
-            <form @submit.prevent="handleSave" class="space-y-6">
+            <form
+              class="space-y-6"
+              @submit.prevent="handleSave"
+            >
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- 姓名 -->
                 <div>
@@ -81,7 +105,7 @@
                     type="text"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="请输入姓名"
-                  />
+                  >
                 </div>
 
                 <!-- 工号 -->
@@ -93,7 +117,7 @@
                     type="text"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="请输入工号"
-                  />
+                  >
                 </div>
 
                 <!-- 邮箱 -->
@@ -105,7 +129,7 @@
                     type="email"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="请输入邮箱"
-                  />
+                  >
                 </div>
 
                 <!-- 手机号 -->
@@ -117,7 +141,7 @@
                     type="tel"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="请输入手机号"
-                  />
+                  >
                 </div>
 
                 <!-- 科室 -->
@@ -128,14 +152,30 @@
                     :disabled="!isEditing"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                   >
-                    <option value="">请选择科室</option>
-                    <option value="internal">内科</option>
-                    <option value="surgery">外科</option>
-                    <option value="pediatrics">儿科</option>
-                    <option value="obstetrics">妇产科</option>
-                    <option value="emergency">急诊科</option>
-                    <option value="icu">重症医学科</option>
-                    <option value="qc">质控科</option>
+                    <option value="">
+                      请选择科室
+                    </option>
+                    <option value="internal">
+                      内科
+                    </option>
+                    <option value="surgery">
+                      外科
+                    </option>
+                    <option value="pediatrics">
+                      儿科
+                    </option>
+                    <option value="obstetrics">
+                      妇产科
+                    </option>
+                    <option value="emergency">
+                      急诊科
+                    </option>
+                    <option value="icu">
+                      重症医学科
+                    </option>
+                    <option value="qc">
+                      质控科
+                    </option>
                   </select>
                 </div>
 
@@ -148,16 +188,19 @@
                     type="text"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="请输入职位"
-                  />
+                  >
                 </div>
               </div>
 
               <!-- 保存按钮 -->
-              <div v-if="isEditing" class="flex justify-end space-x-3 pt-6 border-t border-gray-100">
+              <div
+                v-if="isEditing"
+                class="flex justify-end space-x-3 pt-6 border-t border-gray-100"
+              >
                 <button
                   type="button"
-                  @click="toggleEdit"
                   class="px-6 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200"
+                  @click="toggleEdit"
                 >
                   取消
                 </button>
@@ -166,7 +209,10 @@
                   :disabled="loading"
                   class="px-6 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
-                  <span v-if="loading" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span
+                    v-if="loading"
+                    class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                  />
                   <span>{{ loading ? '保存中...' : '保存更改' }}</span>
                 </button>
               </div>
@@ -213,7 +259,7 @@ const getRoleLabel = (role: string) => {
     'qc_manager': '质控管理员',
     'doctor': '医生',
     'nurse': '护士',
-    'doctor': '医务人员'
+    'medical_staff': '医务人员'
   }
   return roleMap[role] || role
 }

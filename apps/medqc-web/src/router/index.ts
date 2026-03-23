@@ -1009,7 +1009,7 @@ const routes: RouteRecordRaw[] = [
         path: 'system-config',
         name: 'WorkstationV4SystemConfig',
         component: () => import('@/views/workstation-v2/DataSyncConfigPage.vue'),
-        meta: { title: '数据同步配置', permission: ['admin'] },
+        meta: { title: '系统配置', permission: ['admin', 'qc_manager'] },
       },
     ],
   },

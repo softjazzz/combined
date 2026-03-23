@@ -1,14 +1,23 @@
 <template>
-  <div class="template-selector-overlay" @click="handleOverlayClick">
-    <div class="template-selector-modal" @click.stop>
+  <div
+    class="template-selector-overlay"
+    @click="handleOverlayClick"
+  >
+    <div
+      class="template-selector-modal"
+      @click.stop
+    >
       <!-- 模态框头部 -->
       <div class="modal-header">
         <h3 class="modal-title">
-          <i class="fas fa-file-medical"></i>
+          <i class="fas fa-file-medical" />
           选择病历模板
         </h3>
-        <button class="close-btn" @click="$emit('close')">
-          <i class="fas fa-times"></i>
+        <button
+          class="close-btn"
+          @click="$emit('close')"
+        >
+          <i class="fas fa-times" />
         </button>
       </div>
 
@@ -21,7 +30,7 @@
           :class="{ active: selectedCategory === category.key }"
           @click="selectedCategory = category.key"
         >
-          <i :class="category.icon"></i>
+          <i :class="category.icon" />
           {{ category.name }}
         </button>
       </div>
@@ -36,7 +45,9 @@
         >
           <div class="template-header">
             <div class="template-info">
-              <h4 class="template-name">{{ template.template_name }}</h4>
+              <h4 class="template-name">
+                {{ template.template_name }}
+              </h4>
               <div class="template-meta">
                 <span class="template-category">{{ getCategoryName(template.category) }}</span>
                 <span class="template-date">{{ formatDate(template.updated_at) }}</span>
@@ -45,24 +56,27 @@
             <div class="template-actions">
               <button
                 class="preview-btn"
-                @click.stop="previewTemplate(template)"
                 title="预览模板"
+                @click.stop="previewTemplate(template)"
               >
-                <i class="fas fa-eye"></i>
+                <i class="fas fa-eye" />
               </button>
             </div>
           </div>
 
           <!-- 模板预览 -->
-          <div v-if="previewingTemplate?.id === template.id" class="template-preview">
+          <div
+            v-if="previewingTemplate?.id === template.id"
+            class="template-preview"
+          >
             <div class="preview-header">
               <span class="preview-title">模板预览：</span>
               <button
                 class="close-preview-btn"
-                @click="previewingTemplate = null"
                 title="关闭预览"
+                @click="previewingTemplate = null"
               >
-                <i class="fas fa-times"></i>
+                <i class="fas fa-times" />
               </button>
             </div>
             <div class="preview-content">
@@ -73,7 +87,7 @@
                 class="btn btn-primary"
                 @click="selectTemplate(template)"
               >
-                <i class="fas fa-check"></i>
+                <i class="fas fa-check" />
                 使用此模板
               </button>
             </div>
@@ -82,25 +96,31 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="filteredTemplates.length === 0" class="empty-state">
+      <div
+        v-if="filteredTemplates.length === 0"
+        class="empty-state"
+      >
         <div class="empty-icon">
-          <i class="fas fa-file-medical"></i>
+          <i class="fas fa-file-medical" />
         </div>
         <p>该分类下暂无可用模板</p>
       </div>
 
       <!-- 模态框底部 -->
       <div class="modal-footer">
-        <button class="btn btn-secondary" @click="$emit('close')">
-          <i class="fas fa-times"></i>
+        <button
+          class="btn btn-secondary"
+          @click="$emit('close')"
+        >
+          <i class="fas fa-times" />
           取消
         </button>
         <button
           class="btn btn-success"
-          @click="createCustomTemplate"
           title="创建自定义模板"
+          @click="createCustomTemplate"
         >
-          <i class="fas fa-plus"></i>
+          <i class="fas fa-plus" />
           创建模板
         </button>
       </div>
@@ -141,11 +161,21 @@ const categories = [
 ]
 
 // 计算属性
+const normalizedTemplates = computed(() => {
+  return props.templates.map((template) => ({
+    ...template,
+    template_name: template.name,
+    template_content: template.content,
+    category: inferTemplateCategory(template.name),
+    updated_at: new Date().toISOString()
+  }))
+})
+
 const filteredTemplates = computed(() => {
   if (selectedCategory.value === 'all') {
-    return props.templates
+    return normalizedTemplates.value
   }
-  return props.templates.filter(template => template.category === selectedCategory.value)
+  return normalizedTemplates.value.filter(template => template.category === selectedCategory.value)
 })
 
 // 方法
@@ -159,6 +189,17 @@ const getCategoryName = (category: string): string => {
     examination: '检查记录'
   }
   return categoryMap[category] || category
+}
+
+const inferTemplateCategory = (name: string): string => {
+  const lowerName = String(name).toLowerCase()
+  if (lowerName.includes('入院')) return 'admission'
+  if (lowerName.includes('出院')) return 'discharge'
+  if (lowerName.includes('病程')) return 'progress'
+  if (lowerName.includes('会诊')) return 'consultation'
+  if (lowerName.includes('手术')) return 'operation'
+  if (lowerName.includes('检查')) return 'examination'
+  return 'all'
 }
 
 const formatDate = (dateString: string): string => {

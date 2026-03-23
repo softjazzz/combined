@@ -55,15 +55,25 @@
           </div>
         </template>
         <div class="route-buttons">
-          <a-button type="primary" @click="openNewLayout" size="large">
+          <a-button
+            type="primary"
+            size="large"
+            @click="openNewLayout"
+          >
             <RocketOutlined />
             新三栏布局
           </a-button>
-          <a-button @click="openLegacy" size="large">
+          <a-button
+            size="large"
+            @click="openLegacy"
+          >
             <HistoryOutlined />
             经典版本
           </a-button>
-          <a-button @click="openSimple" size="large">
+          <a-button
+            size="large"
+            @click="openSimple"
+          >
             <ExperimentOutlined />
             简化版本
           </a-button>
@@ -79,10 +89,16 @@
           </div>
         </template>
         <div class="api-status">
-          <a-button @click="checkAPI" :loading="apiLoading">
+          <a-button
+            :loading="apiLoading"
+            @click="checkAPI"
+          >
             检查 API 状态
           </a-button>
-          <div v-if="apiStatus" class="status-result">
+          <div
+            v-if="apiStatus"
+            class="status-result"
+          >
             <div class="status-item">
               <span class="status-label">后端健康状态:</span>
               <a-tag :color="apiStatus.backend ? 'green' : 'red'">

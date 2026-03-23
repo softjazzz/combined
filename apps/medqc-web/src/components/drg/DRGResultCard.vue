@@ -1,6 +1,9 @@
 <template>
   <div class="drg-result-card">
-    <a-card :bordered="false" class="result-card">
+    <a-card
+      :bordered="false"
+      class="result-card"
+    >
       <template #title>
         <span class="card-title">
           <ThunderboltOutlined style="color: #1890ff; margin-right: 8px" />
@@ -8,63 +11,122 @@
         </span>
       </template>
       <template #extra>
-        <a-tag v-if="riskLevel" :color="getRiskColor(riskLevel)">
+        <a-tag
+          v-if="riskLevel"
+          :color="getRiskColor(riskLevel)"
+        >
           {{ getRiskText(riskLevel) }}风险
         </a-tag>
       </template>
 
-      <div class="main-info" v-if="isDIP">
+      <div
+        v-if="isDIP"
+        class="main-info"
+      >
         <div class="code-box drg-box">
-          <div class="label">DIP病种</div>
-          <div class="code">{{ dipResult.dip_code }}</div>
-          <div class="name">{{ dipResult.dip_name }}</div>
+          <div class="label">
+            DIP病种
+          </div>
+          <div class="code">
+            {{ dipResult.dip_code }}
+          </div>
+          <div class="name">
+            {{ dipResult.dip_name }}
+          </div>
         </div>
         <div class="divider">
           <ArrowRightOutlined />
         </div>
         <div class="code-box adrg-box">
-          <div class="label">病种类型</div>
-          <div class="code" style="font-size: 18px">{{ dipResult.dip_type }}</div>
-          <div class="name">分值点数: -</div>
+          <div class="label">
+            病种类型
+          </div>
+          <div
+            class="code"
+            style="font-size: 18px"
+          >
+            {{ dipResult.dip_type }}
+          </div>
+          <div class="name">
+            分值点数: -
+          </div>
         </div>
       </div>
 
-      <div class="main-info" v-else>
+      <div
+        v-else
+        class="main-info"
+      >
         <div class="code-box drg-box">
-          <div class="label">DRG组</div>
-          <div class="code">{{ drgResult.drg_code }}</div>
-          <div class="name">{{ drgResult.drg_name }}</div>
+          <div class="label">
+            DRG组
+          </div>
+          <div class="code">
+            {{ drgResult.drg_code }}
+          </div>
+          <div class="name">
+            {{ drgResult.drg_name }}
+          </div>
         </div>
         <div class="divider">
           <ArrowRightOutlined />
         </div>
         <div class="code-box adrg-box">
-          <div class="label">ADRG组</div>
-          <div class="code">{{ drgResult.adrg_code }}</div>
-          <div class="name">{{ drgResult.adrg_name }}</div>
+          <div class="label">
+            ADRG组
+          </div>
+          <div class="code">
+            {{ drgResult.adrg_code }}
+          </div>
+          <div class="name">
+            {{ drgResult.adrg_name }}
+          </div>
         </div>
       </div>
 
       <a-divider style="margin: 16px 0" />
 
-      <a-descriptions :column="2" size="small">
+      <a-descriptions
+        :column="2"
+        size="small"
+      >
         <a-descriptions-item label="相对权重 (RW)">
           <span class="statistic-value">{{ displayWeight.toFixed(4) }}</span>
         </a-descriptions-item>
         <a-descriptions-item label="基准支付">
-          <span class="statistic-value" style="color: #cf1322">¥{{ displayPayment.toLocaleString() }}</span>
+          <span
+            class="statistic-value"
+            style="color: #cf1322"
+          >¥{{ displayPayment.toLocaleString() }}</span>
         </a-descriptions-item>
-        <a-descriptions-item label="预期住院日" v-if="expectedLos">
+        <a-descriptions-item
+          v-if="expectedLos"
+          label="预期住院日"
+        >
           {{ expectedLos.min }} - {{ expectedLos.max }} 天
         </a-descriptions-item>
-        <a-descriptions-item label="置信度" v-if="confidence">
-          <a-progress :percent="Math.round(confidence * 100)" size="small" style="width: 100px" />
+        <a-descriptions-item
+          v-if="confidence"
+          label="置信度"
+        >
+          <a-progress
+            :percent="Math.round(confidence * 100)"
+            size="small"
+            style="width: 100px"
+          />
         </a-descriptions-item>
       </a-descriptions>
       
-      <div v-if="groupingLogic" class="logic-section">
-        <div class="section-title">入组逻辑</div>
-        <div class="logic-content">{{ groupingLogic }}</div>
+      <div
+        v-if="groupingLogic"
+        class="logic-section"
+      >
+        <div class="section-title">
+          入组逻辑
+        </div>
+        <div class="logic-content">
+          {{ groupingLogic }}
+        </div>
       </div>
     </a-card>
   </div>

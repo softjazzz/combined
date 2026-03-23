@@ -7,15 +7,23 @@
       </div>
       <div class="header-right">
         <a-button @click="showLLMConfig = true">
-          <template #icon><SettingOutlined /></template>
+          <template #icon>
+            <SettingOutlined />
+          </template>
           配置 LLM
         </a-button>
       </div>
     </div>
 
-    <a-tabs v-model:activeKey="activeTab" class="import-tabs">
+    <a-tabs
+      v-model:active-key="activeTab"
+      class="import-tabs"
+    >
       <!-- 文本输入 -->
-      <a-tab-pane key="text" tab="文本输入">
+      <a-tab-pane
+        key="text"
+        tab="文本输入"
+      >
         <div class="text-input-section">
           <a-textarea
             v-model:value="inputText"
@@ -24,18 +32,28 @@
             class="mb-3"
           />
           <div class="action-buttons">
-            <a-button type="primary" @click="parseText" :loading="parsing">
-              <template #icon><ThunderboltOutlined /></template>
+            <a-button
+              type="primary"
+              :loading="parsing"
+              @click="parseText"
+            >
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
               解析文本
             </a-button>
-            <a-button @click="clearText">清空文本</a-button>
-
+            <a-button @click="clearText">
+              清空文本
+            </a-button>
           </div>
         </div>
       </a-tab-pane>
 
       <!-- 文件上传 -->
-      <a-tab-pane key="upload" tab="文件上传">
+      <a-tab-pane
+        key="upload"
+        tab="文件上传"
+      >
         <div class="upload-section">
           <a-upload-dragger
             :file-list="[]"
@@ -48,32 +66,58 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
-            <p class="ant-upload-hint">支持 PDF、Word、文本文件</p>
+            <p class="ant-upload-text">
+              点击或拖拽文件到此区域上传
+            </p>
+            <p class="ant-upload-hint">
+              支持 PDF、Word、文本文件
+            </p>
           </a-upload-dragger>
 
-          <div v-if="uploadedFiles.length > 0" class="file-list">
+          <div
+            v-if="uploadedFiles.length > 0"
+            class="file-list"
+          >
             <div class="file-list-header">
               <h4>已上传文件 ({{ uploadedFiles.length }})</h4>
               <a-space>
-                <a-button type="primary" @click="parseAllFiles" :loading="batchParsing">
+                <a-button
+                  type="primary"
+                  :loading="batchParsing"
+                  @click="parseAllFiles"
+                >
                   一键解析所有文件
                 </a-button>
-                <a-button @click="clearAllFiles" danger>
+                <a-button
+                  danger
+                  @click="clearAllFiles"
+                >
                   清空所有文件
                 </a-button>
               </a-space>
             </div>
 
-            <a-list :data-source="uploadedFiles" size="small">
+            <a-list
+              :data-source="uploadedFiles"
+              size="small"
+            >
               <template #renderItem="{ item, index }">
                 <a-list-item>
                   <template #actions>
                     <a-space>
-                      <a-button size="small" @click="parseFile(index)" :loading="item.parsing" :disabled="item.parsed">
+                      <a-button
+                        size="small"
+                        :loading="item.parsing"
+                        :disabled="item.parsed"
+                        @click="parseFile(index)"
+                      >
                         {{ item.parsed ? '已解析' : '解析' }}
                       </a-button>
-                      <a-button size="small" @click="removeFile(index)" danger>
+                      <a-button
+                        size="small"
+                        danger
+                        @click="removeFile(index)"
+                      >
                         删除
                       </a-button>
                     </a-space>
@@ -84,9 +128,27 @@
                       <div class="file-title">
                         <FileOutlined class="file-icon" />
                         <span>{{ item.name }}</span>
-                        <a-tag v-if="item.parsed" color="success" size="small">已解析</a-tag>
-                        <a-tag v-else-if="item.parsing" color="processing" size="small">解析中</a-tag>
-                        <a-tag v-else color="default" size="small">待解析</a-tag>
+                        <a-tag
+                          v-if="item.parsed"
+                          color="success"
+                          size="small"
+                        >
+                          已解析
+                        </a-tag>
+                        <a-tag
+                          v-else-if="item.parsing"
+                          color="processing"
+                          size="small"
+                        >
+                          解析中
+                        </a-tag>
+                        <a-tag
+                          v-else
+                          color="default"
+                          size="small"
+                        >
+                          待解析
+                        </a-tag>
                       </div>
                     </template>
                     <template #description>
@@ -105,10 +167,20 @@
       </a-tab-pane>
 
       <!-- 解析结果 -->
-      <a-tab-pane key="result" tab="解析结果" :disabled="!parseResult">
-        <div v-if="parseResult && parseResult.success" class="result-section">
+      <a-tab-pane
+        key="result"
+        tab="解析结果"
+        :disabled="!parseResult"
+      >
+        <div
+          v-if="parseResult && parseResult.success"
+          class="result-section"
+        >
           <!-- 基本信息 -->
-          <a-descriptions title="解析结果概览" bordered>
+          <a-descriptions
+            title="解析结果概览"
+            bordered
+          >
             <a-descriptions-item label="患者姓名">
               {{ displayPatientName }}
             </a-descriptions-item>
@@ -124,29 +196,50 @@
             <a-descriptions-item label="页数">
               {{ (parseResult.data && parseResult.data.pages) || 1 }}
             </a-descriptions-item>
-            <a-descriptions-item v-if="parseResult.isMerged" label="文档数量">
+            <a-descriptions-item
+              v-if="parseResult.isMerged"
+              label="文档数量"
+            >
               {{ parseResult.data.totalFiles }} 个文件
             </a-descriptions-item>
-            <a-descriptions-item v-if="parseResult.isMerged" label="合并时间">
+            <a-descriptions-item
+              v-if="parseResult.isMerged"
+              label="合并时间"
+            >
               {{ parseResult.mergeTime }}
             </a-descriptions-item>
           </a-descriptions>
 
           <!-- 多文档分类展示 -->
-          <div v-if="parseResult.isMerged && parseResult.data.documentsByType" class="documents-by-type" style="margin-top: 24px;">
+          <div
+            v-if="parseResult.isMerged && parseResult.data.documentsByType"
+            class="documents-by-type"
+            style="margin-top: 24px;"
+          >
             <h4>文档分类视图</h4>
-            <a-collapse v-model:activeKey="activeDocumentTypes" ghost>
+            <a-collapse
+              v-model:active-key="activeDocumentTypes"
+              ghost
+            >
               <a-collapse-panel
                 v-for="(docs, type) in parseResult.data.documentsByType"
                 :key="type"
                 :header="`${type} (${docs.length}个文档)`"
               >
-                <div v-for="doc in docs" :key="doc.id" class="document-item">
+                <div
+                  v-for="doc in docs"
+                  :key="doc.id"
+                  class="document-item"
+                >
                   <div class="document-header">
                     <h5>{{ doc.title }}</h5>
                     <a-space>
-                      <a-tag color="blue">{{ doc.type }}</a-tag>
-                      <a-tag color="green">置信度: {{ Math.round(doc.confidence * 100) }}%</a-tag>
+                      <a-tag color="blue">
+                        {{ doc.type }}
+                      </a-tag>
+                      <a-tag color="green">
+                        置信度: {{ Math.round(doc.confidence * 100) }}%
+                      </a-tag>
                       <span class="parse-time">{{ doc.parseTime }}</span>
                     </a-space>
                   </div>
@@ -163,10 +256,16 @@
           </div>
 
           <!-- 合并内容预览 -->
-          <div class="content-preview" style="margin-top: 24px;">
+          <div
+            class="content-preview"
+            style="margin-top: 24px;"
+          >
             <h4>
               {{ parseResult.isMerged ? '合并内容预览' : '内容预览' }}
-              <a-tooltip v-if="parseResult.isMerged" title="显示所有文档的合并内容">
+              <a-tooltip
+                v-if="parseResult.isMerged"
+                title="显示所有文档的合并内容"
+              >
                 <InfoCircleOutlined style="margin-left: 8px; color: #1890ff;" />
               </a-tooltip>
             </h4>
@@ -179,26 +278,49 @@
           </div>
 
           <!-- 源文件信息 -->
-          <div v-if="parseResult.isMerged && parseResult.data.sourceFiles" class="source-files" style="margin-top: 16px;">
+          <div
+            v-if="parseResult.isMerged && parseResult.data.sourceFiles"
+            class="source-files"
+            style="margin-top: 16px;"
+          >
             <h5>源文件列表:</h5>
             <a-space wrap>
-              <a-tag v-for="(file, index) in parseResult.data.sourceFiles" :key="index" color="processing">
+              <a-tag
+                v-for="(file, index) in parseResult.data.sourceFiles"
+                :key="index"
+                color="processing"
+              >
                 {{ file }}
               </a-tag>
             </a-space>
           </div>
 
-          <div class="result-actions" style="margin-top: 24px;">
-            <a-button type="primary" @click="importToDatabase" :loading="importing">
+          <div
+            class="result-actions"
+            style="margin-top: 24px;"
+          >
+            <a-button
+              type="primary"
+              :loading="importing"
+              @click="importToDatabase"
+            >
               {{ parseResult.isMerged ? '批量导入数据库' : '导入数据库' }}
             </a-button>
-            <a-button @click="preciseLLMParse" :loading="llmParsing" type="dashed">
+            <a-button
+              :loading="llmParsing"
+              type="dashed"
+              @click="preciseLLMParse"
+            >
               LLM精准解析
             </a-button>
             <a-button @click="exportResult">
               {{ parseResult.isMerged ? '导出合并结果' : '导出结果' }}
             </a-button>
-            <a-button v-if="parseResult.isMerged" @click="showIndividualResults" type="default">
+            <a-button
+              v-if="parseResult.isMerged"
+              type="default"
+              @click="showIndividualResults"
+            >
               查看单个文档结果
             </a-button>
           </div>
@@ -206,7 +328,11 @@
       </a-tab-pane>
     </a-tabs>
     <!-- LLM 配置抽屉（全局位置，便于任何Tab使用） -->
-    <a-drawer v-model:open="showLLMConfig" title="LLM 配置" width="720px">
+    <a-drawer
+      v-model:open="showLLMConfig"
+      title="LLM 配置"
+      width="720px"
+    >
       <LLMApiConfig
         @config-updated="() => { operationLog += '\nLLM 配置已更新' }"
         @close-drawer="() => { showLLMConfig = false }"
@@ -241,6 +367,94 @@ import {
 } from '@ant-design/icons-vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 
+interface ParseResultData {
+  patientName?: string
+  patient_name?: string
+  department?: string
+  primaryDiagnosis?: string
+  diagnosis_primary?: string
+  content?: string
+  method?: string
+  pages?: number
+  confidence?: number
+  documents?: Array<{ confidence?: number }>
+  documentsByType?: Record<string, MergedDocumentInfo[]>
+  sourceFiles?: string[]
+  totalFiles?: number
+  medical_info?: {
+    patientName?: string
+    department?: string
+    primaryDiagnosis?: string
+    diagnosis?: string[]
+  }
+}
+
+interface ParseResponse {
+  success: boolean
+  data: ParseResultData
+  error?: string
+  id?: string
+  isMerged?: boolean
+  mergeTime?: string
+  tokensUsed?: number
+  processingTime?: number
+}
+
+interface UploadFileLike {
+  name: string
+  size: number
+  type: string
+  file: File
+  parsing: boolean
+  parsed: boolean
+  uploadTime?: string
+  parseTime?: string
+  result?: ParseResponse | null
+}
+
+interface UploadChangeFileItem {
+  name: string
+  size: number
+  type?: string
+  originFileObj?: File
+}
+
+interface UploadChangeInfo {
+  fileList: UploadChangeFileItem[]
+}
+
+interface SourceResultItem extends ParseResponse {
+  sourceFile: string
+  sourceIndex: number
+  documentType: string
+  parseTime: string
+}
+
+interface MergedDocumentInfo {
+  id: string
+  type: string
+  title: string
+  parseTime: string
+  content: string
+  confidence: number
+  extractedAt: string
+  position: {
+    startIndex: number
+    endIndex: number
+    fullContent: string
+  }
+  metadata: {
+    sourceFile: string
+    parseTime: string
+    method: string
+    pages: number
+  }
+}
+
+const getErrorMessage = (error: unknown): string => {
+  return error instanceof Error ? error.message : String(error)
+}
+
 const router = useRouter()
 const showLLMConfig = ref(false)
 
@@ -264,12 +478,12 @@ const activeTab = ref('text')
 const inputText = ref('')
 const parsing = ref(false)
 const importing = ref(false)
-const parseResult = ref<any>(null)
+const parseResult = ref<ParseResponse | null>(null)
 const operationLog = ref('系统已就绪')
-const uploadedFiles = ref<any[]>([])
+const uploadedFiles = ref<UploadFileLike[]>([])
 const llmParsing = ref(false)
 const batchParsing = ref(false)
-const mergedResults = ref<any>(null) // 存储合并后的多文档结果
+const mergedResults = ref<ParseResponse | null>(null) // 存储合并后的多文档结果
 const activeDocumentTypes = ref<string[]>([]) // 控制文档分类折叠面板
 
 // 结果显示的兼容性处理
@@ -328,8 +542,9 @@ const parseText = async () => {
       throw new Error(result.error || '解析失败')
     }
   } catch (error) {
-    operationLog.value += '\n解析失败: ' + error.message
-    message.error('解析失败: ' + error.message)
+    const errorMessage = getErrorMessage(error)
+    operationLog.value += '\n解析失败: ' + errorMessage
+    message.error('解析失败: ' + errorMessage)
   } finally {
     parsing.value = false
   }
@@ -355,7 +570,7 @@ const removeFile = (index: number) => {
 }
 
 // 文件上传前检查
-const beforeUpload = (file) => {
+const beforeUpload = (file: File) => {
   console.log(`[${new Date().toLocaleTimeString()}] beforeUpload 被调用: ${file.name}`)
 
   const isValidType = [
@@ -382,11 +597,11 @@ const beforeUpload = (file) => {
 }
 
 // 处理文件上传变化
-const handleUploadChange = (info) => {
+const handleUploadChange = (info: UploadChangeInfo) => {
   console.log(`[${new Date().toLocaleTimeString()}] handleUploadChange 被调用, 文件数量: ${info.fileList.length}`)
 
   // 过滤出新添加的文件
-  const newFiles = info.fileList.filter(fileItem => {
+  const newFiles = info.fileList.filter((fileItem: UploadChangeFileItem) => {
     const exists = uploadedFiles.value.some(existing =>
       existing.name === fileItem.name && existing.size === fileItem.size
     )
@@ -394,12 +609,13 @@ const handleUploadChange = (info) => {
   })
 
   // 添加新文件到列表
-  newFiles.forEach(fileItem => {
+  newFiles.forEach((fileItem: UploadChangeFileItem) => {
+    const rawFile = fileItem.originFileObj ?? (fileItem as unknown as File)
     const fileObj = {
       name: fileItem.name,
       size: fileItem.size,
       type: fileItem.type || 'application/pdf',
-      file: fileItem.originFileObj || fileItem,
+      file: rawFile,
       parsing: false,
       parsed: false,
       uploadTime: new Date().toLocaleString()
@@ -413,7 +629,7 @@ const handleUploadChange = (info) => {
 }
 
 // 格式化文件大小
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: number) => {
   if (bytes === 0) return '0 Bytes'
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
@@ -431,7 +647,7 @@ const parseAllFiles = async () => {
   batchParsing.value = true
   operationLog.value += `\n开始批量解析 ${uploadedFiles.value.length} 个文件...`
 
-  const allResults = []
+  const allResults: SourceResultItem[] = []
   let successCount = 0
   let failCount = 0
 
@@ -463,7 +679,7 @@ const parseAllFiles = async () => {
           }
         } catch (error) {
           failCount++
-          operationLog.value += `\n✗ ${fileObj.name} 解析失败: ${error.message}`
+          operationLog.value += `\n✗ ${fileObj.name} 解析失败: ${getErrorMessage(error)}`
         }
 
         // 添加延迟避免请求过快
@@ -498,7 +714,7 @@ const parseAllFiles = async () => {
 
   } catch (error) {
     message.error('批量解析过程中出现错误')
-    operationLog.value += `\n批量解析错误: ${error.message}`
+    operationLog.value += `\n批量解析错误: ${getErrorMessage(error)}`
   } finally {
     batchParsing.value = false
   }
@@ -514,7 +730,7 @@ const clearAllFiles = () => {
 }
 
 // 文档类型分类
-const classifyDocument = (fileName) => {
+const classifyDocument = (fileName: string) => {
   const name = fileName.toLowerCase()
   if (name.includes('病程') || name.includes('病历')) return '病程记录'
   if (name.includes('手术') || name.includes('术后')) return '手术记录'
@@ -527,7 +743,7 @@ const classifyDocument = (fileName) => {
 }
 
 // 静默解析文件（不切换到结果页）
-const parseFileSilent = async (index) => {
+const parseFileSilent = async (index: number) => {
   const fileObj = uploadedFiles.value[index]
   if (!fileObj) return
 
@@ -547,7 +763,7 @@ const parseFileSilent = async (index) => {
       throw new Error('文件解析请求失败')
     }
 
-    const result = await response.json()
+    const result = (await response.json()) as ParseResponse
 
     if (result.success) {
       fileObj.parsed = true
@@ -563,7 +779,7 @@ const parseFileSilent = async (index) => {
 }
 
 // 合并多个解析结果
-const mergeMultipleResults = (results) => {
+const mergeMultipleResults = (results: SourceResultItem[]): ParseResponse | null => {
   if (results.length === 0) return null
   if (results.length === 1) return results[0]
 
@@ -573,10 +789,10 @@ const mergeMultipleResults = (results) => {
   const allDiagnoses = results.map(r => r.data?.primaryDiagnosis).filter(Boolean)
 
   // 按文档类型分组
-  const documentsByType = {}
-  const allDocuments = []
+  const documentsByType: Record<string, MergedDocumentInfo[]> = {}
+  const allDocuments: MergedDocumentInfo[] = []
 
-  results.forEach((result, index) => {
+  results.forEach((result: SourceResultItem, index: number) => {
     const docType = result.documentType
     const sourceFile = result.sourceFile
 
@@ -589,6 +805,7 @@ const mergeMultipleResults = (results) => {
       id: `doc_${index}`,
       type: mapDocumentType(docType), // 映射到标准文档类型
       title: `${sourceFile} - ${docType}`,
+      parseTime: result.parseTime,
       content: result.data?.content || '',
       confidence: result.data?.confidence || 0.8,
       extractedAt: new Date().toISOString(),
@@ -610,7 +827,7 @@ const mergeMultipleResults = (results) => {
   })
 
   // 合并内容
-  const mergedContent = results.map(r => {
+  const mergedContent = results.map((r: SourceResultItem) => {
     const content = r.data?.content || ''
     return `=== ${r.sourceFile} (${r.documentType}) ===\n${content}\n`
   }).join('\n')
@@ -623,12 +840,12 @@ const mergeMultipleResults = (results) => {
       primaryDiagnosis: allDiagnoses[0] || '未识别',
       content: mergedContent,
       method: '批量文件解析',
-      pages: results.reduce((sum, r) => sum + (r.data?.pages || 1), 0),
+      pages: results.reduce((sum: number, r: SourceResultItem) => sum + (r.data?.pages || 1), 0),
       documents: allDocuments, // 符合 ExtractedDocument[] 格式
       documentsByType: documentsByType,
-      sourceFiles: results.map(r => r.sourceFile),
+      sourceFiles: results.map((r: SourceResultItem) => r.sourceFile),
       totalFiles: results.length,
-      confidence: results.reduce((sum, r) => sum + (r.data?.confidence || 0.8), 0) / results.length
+      confidence: results.reduce((sum: number, r: SourceResultItem) => sum + (r.data?.confidence || 0.8), 0) / results.length
     },
     isMerged: true,
     mergeTime: new Date().toLocaleString()
@@ -636,8 +853,8 @@ const mergeMultipleResults = (results) => {
 }
 
 // 映射文档类型到标准类型
-const mapDocumentType = (docType) => {
-  const typeMapping = {
+const mapDocumentType = (docType: string) => {
+  const typeMapping: Record<string, string> = {
     '手术记录': 'operation_record',
     '入院记录': 'admission_record',
     '病程记录': 'progress_note',
@@ -663,7 +880,7 @@ const showIndividualResults = () => {
 }
 
 // 处理文件上传
-const handleFileUpload = async (options) => {
+const handleFileUpload = async (options: { file: File }) => {
   const { file } = options
 
   const fileObj = {
@@ -682,7 +899,7 @@ const handleFileUpload = async (options) => {
 }
 
 // 解析文件
-const parseFile = async (index) => {
+const parseFile = async (index: number) => {
   const fileObj = uploadedFiles.value[index]
   if (!fileObj) return
 
@@ -703,7 +920,7 @@ const parseFile = async (index) => {
       throw new Error('文件解析请求失败')
     }
 
-    const result = await response.json()
+    const result = (await response.json()) as ParseResponse
 
     if (result.success) {
       fileObj.parsed = true
@@ -716,8 +933,9 @@ const parseFile = async (index) => {
       throw new Error(result.error || '解析失败')
     }
   } catch (error) {
-    operationLog.value += '\n文件解析失败: ' + error.message
-    message.error('解析失败: ' + error.message)
+    const errorMessage = getErrorMessage(error)
+    operationLog.value += '\n文件解析失败: ' + errorMessage
+    message.error('解析失败: ' + errorMessage)
   } finally {
     fileObj.parsing = false
   }
@@ -754,8 +972,9 @@ const importToDatabase = async () => {
     operationLog.value += '\n导入成功，记录ID: ' + result.id
     message.success('导入数据库成功')
   } catch (error) {
-    operationLog.value += '\n导入失败: ' + error.message
-    message.error('导入失败: ' + error.message)
+    const errorMessage = getErrorMessage(error)
+    operationLog.value += '\n导入失败: ' + errorMessage
+    message.error('导入失败: ' + errorMessage)
   } finally {
     importing.value = false
   }
@@ -772,7 +991,8 @@ const exportResult = () => {
   const dataBlob = new Blob([dataStr], { type: 'application/json' })
 
 // 接收LLM配置更新（可用于更新 llmService 的运行时配置）
-const onLLMConfigUpdated = (configData: any) => {
+const onLLMConfigUpdated = (configData: unknown) => {
+  void configData
   operationLog.value += '\nLLM 配置已更新'
 }
 

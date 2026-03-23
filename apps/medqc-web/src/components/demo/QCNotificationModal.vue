@@ -4,15 +4,21 @@
     :title="modalTitle"
     width="1000px"
     :footer="null"
-    @cancel="handleCancel"
     :body-style="{ padding: '24px' }"
+    @cancel="handleCancel"
   >
-    <div v-if="notification" class="notification-modal-content">
+    <div
+      v-if="notification"
+      class="notification-modal-content"
+    >
       <!-- 通知头部信息 -->
       <div class="notification-header">
         <div class="header-left">
           <div class="notification-type-info">
-            <a-tag :color="getNotificationColor(notification.type)" size="large">
+            <a-tag
+              :color="getNotificationColor(notification.type)"
+              size="large"
+            >
               <component :is="getNotificationIcon(notification.type)" />
               {{ getNotificationTypeText(notification.type) }}
             </a-tag>
@@ -23,11 +29,16 @@
             >
               {{ getSeverityText(notification.severity) }}
             </a-tag>
-            <a-tag v-if="!notification.isRead" color="red">
+            <a-tag
+              v-if="!notification.isRead"
+              color="red"
+            >
               未读
             </a-tag>
           </div>
-          <h2 class="notification-title">{{ notification.title }}</h2>
+          <h2 class="notification-title">
+            {{ notification.title }}
+          </h2>
         </div>
         <div class="header-right">
           <div class="notification-time">
@@ -39,10 +50,10 @@
             <a-space>
               <a-tooltip title="标记已读">
                 <a-button
+                  v-if="!notification.isRead"
                   type="text"
                   :icon="h(CheckOutlined)"
                   @click="handleMarkAsRead"
-                  v-if="!notification.isRead"
                 />
               </a-tooltip>
               <a-tooltip title="分享">
@@ -59,12 +70,23 @@
 
       <!-- 通知内容 -->
       <div class="notification-content">
-        <p class="notification-message">{{ notification.message }}</p>
+        <p class="notification-message">
+          {{ notification.message }}
+        </p>
 
         <!-- 病历信息卡片 -->
-        <div v-if="notification.recordInfo" class="record-info-card">
-          <a-card size="small" title="相关病历信息">
-            <a-descriptions :column="3" size="small">
+        <div
+          v-if="notification.recordInfo"
+          class="record-info-card"
+        >
+          <a-card
+            size="small"
+            title="相关病历信息"
+          >
+            <a-descriptions
+              :column="3"
+              size="small"
+            >
               <a-descriptions-item label="患者姓名">
                 {{ notification.recordInfo.patientName }}
               </a-descriptions-item>
@@ -81,7 +103,9 @@
                 {{ notification.recordInfo.admissionDate }}
               </a-descriptions-item>
               <a-descriptions-item label="病历状态">
-                <a-tag color="blue">{{ notification.recordInfo.status }}</a-tag>
+                <a-tag color="blue">
+                  {{ notification.recordInfo.status }}
+                </a-tag>
               </a-descriptions-item>
             </a-descriptions>
           </a-card>
@@ -89,7 +113,10 @@
       </div>
 
       <!-- 质控结果详情 -->
-      <div class="qc-result-details" v-if="notification.qcResult">
+      <div
+        v-if="notification.qcResult"
+        class="qc-result-details"
+      >
         <a-divider>
           <span style="font-size: 16px; font-weight: 600;">质控分析结果</span>
         </a-divider>
@@ -107,7 +134,7 @@
                     color: getScoreColor(notification.qcResult.overallScore),
                     fontSize: '32px',
                     fontWeight: 'bold'
-                }"
+                  }"
                 />
                 <div class="score-indicator">
                   <a-progress
@@ -165,9 +192,18 @@
 
         <!-- 详细分析标签页 -->
         <div class="analysis-tabs">
-          <a-tabs v-model:activeKey="activeTab" type="card">
-            <a-tab-pane key="issues" tab="问题详情">
-              <div v-if="notification.qcResult.issues && notification.qcResult.issues.length > 0" class="issues-section">
+          <a-tabs
+            v-model:active-key="activeTab"
+            type="card"
+          >
+            <a-tab-pane
+              key="issues"
+              tab="问题详情"
+            >
+              <div
+                v-if="notification.qcResult.issues && notification.qcResult.issues.length > 0"
+                class="issues-section"
+              >
                 <a-list
                   :data-source="notification.qcResult.issues"
                   :pagination="{ pageSize: 3, size: 'small' }"
@@ -194,13 +230,22 @@
                         <template #description>
                           <div class="issue-description">
                             <p>{{ item.description }}</p>
-                            <div v-if="item.location" class="issue-location">
-                              <a-tag color="blue" size="small">
+                            <div
+                              v-if="item.location"
+                              class="issue-location"
+                            >
+                              <a-tag
+                                color="blue"
+                                size="small"
+                              >
                                 <EnvironmentOutlined />
                                 {{ item.location }}
                               </a-tag>
                             </div>
-                            <div v-if="item.suggestion" class="issue-suggestion">
+                            <div
+                              v-if="item.suggestion"
+                              class="issue-suggestion"
+                            >
                               <a-alert
                                 :message="item.suggestion"
                                 type="info"
@@ -214,9 +259,16 @@
                       <template #actions>
                         <a-space>
                           <a-tooltip title="查看详情">
-                            <a-button size="small" type="text" :icon="h(EyeOutlined)" />
+                            <a-button
+                              size="small"
+                              type="text"
+                              :icon="h(EyeOutlined)"
+                            />
                           </a-tooltip>
-                          <a-tooltip title="申诉此问题" v-if="item.canAppeal">
+                          <a-tooltip
+                            v-if="item.canAppeal"
+                            title="申诉此问题"
+                          >
                             <a-button
                               size="small"
                               type="text"
@@ -230,7 +282,10 @@
                   </template>
                 </a-list>
               </div>
-              <div v-else class="no-issues">
+              <div
+                v-else
+                class="no-issues"
+              >
                 <a-empty description="未发现质控问题">
                   <template #image>
                     <CheckCircleOutlined style="font-size: 48px; color: #52c41a;" />
@@ -239,8 +294,14 @@
               </div>
             </a-tab-pane>
 
-            <a-tab-pane key="suggestions" tab="改进建议">
-              <div v-if="structuredSuggestions.length > 0" class="suggestions-section">
+            <a-tab-pane
+              key="suggestions"
+              tab="改进建议"
+            >
+              <div
+                v-if="structuredSuggestions.length > 0"
+                class="suggestions-section"
+              >
                 <a-list
                   :data-source="structuredSuggestions"
                   :pagination="{ pageSize: 5, size: 'small' }"
@@ -261,15 +322,26 @@
                         <template #description>
                           <div class="suggestion-content">
                             <ol class="list-decimal list-inside space-y-1 text-sm text-gray-700">
-                              <li v-for="(step, stepIndex) in item.steps" :key="stepIndex">
+                              <li
+                                v-for="(step, stepIndex) in item.steps"
+                                :key="stepIndex"
+                              >
                                 {{ step }}
                               </li>
                             </ol>
-                            <div class="suggestion-priority" v-if="item.priority || item.category">
+                            <div
+                              v-if="item.priority || item.category"
+                              class="suggestion-priority"
+                            >
                               <a-tag :color="getPriorityColor(item.priority)">
                                 {{ getPriorityText(item.priority) }}
                               </a-tag>
-                              <a-tag v-if="item.category" color="blue">{{ item.category }}</a-tag>
+                              <a-tag
+                                v-if="item.category"
+                                color="blue"
+                              >
+                                {{ item.category }}
+                              </a-tag>
                             </div>
                           </div>
                         </template>
@@ -278,12 +350,18 @@
                   </template>
                 </a-list>
               </div>
-              <div v-else class="no-suggestions">
+              <div
+                v-else
+                class="no-suggestions"
+              >
                 <a-empty description="暂无改进建议" />
               </div>
             </a-tab-pane>
 
-            <a-tab-pane key="timeline" tab="分析时间线">
+            <a-tab-pane
+              key="timeline"
+              tab="分析时间线"
+            >
               <div class="timeline-section">
                 <a-timeline>
                   <a-timeline-item color="blue">
@@ -325,7 +403,10 @@
         <a-divider />
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-space direction="vertical" style="width: 100%;">
+            <a-space
+              direction="vertical"
+              style="width: 100%;"
+            >
               <h4>通知操作</h4>
               <a-space wrap>
                 <a-button
@@ -351,7 +432,10 @@
             </a-space>
           </a-col>
           <a-col :span="12">
-            <a-space direction="vertical" style="width: 100%;">
+            <a-space
+              direction="vertical"
+              style="width: 100%;"
+            >
               <h4>质控申诉</h4>
               <a-space wrap>
                 <a-button
@@ -383,7 +467,10 @@
     </div>
 
     <!-- 空状态 -->
-    <div v-else class="empty-notification">
+    <div
+      v-else
+      class="empty-notification"
+    >
       <a-empty description="未选择通知" />
     </div>
   </a-modal>
@@ -421,7 +508,7 @@ const props = defineProps<{
 // Emits
 const emit = defineEmits<{
   'update:visible': [visible: boolean]
-  action: [action: string, notification: QCNotification]
+  action: [action: string, notification: QCNotification & { selectedIssue?: unknown }]
 }>()
 
 // 响应式数据
@@ -538,7 +625,7 @@ const getPriorityText = (priority: string) => {
   return texts[priority as keyof typeof texts] || priority
 }
 
-const formatRelativeTime = (timestamp: Date) => {
+const formatRelativeTime = (timestamp: Date | string) => {
   const now = new Date()
   const diff = now.getTime() - new Date(timestamp).getTime()
   const minutes = Math.floor(diff / 60000)
@@ -551,7 +638,7 @@ const formatRelativeTime = (timestamp: Date) => {
   return '刚刚'
 }
 
-const formatFullTime = (timestamp: Date) => {
+const formatFullTime = (timestamp: Date | string) => {
   return new Date(timestamp).toLocaleString('zh-CN')
 }
 

@@ -1,20 +1,30 @@
 <template>
   <a-drawer
     :open="open"
-    @close="emit('update:open', false)"
     width="720"
     title="规则评估测试"
-    destroyOnClose
+    destroy-on-close
     class="rule-test-drawer"
+    @close="emit('update:open', false)"
   >
-    <div v-if="rule" class="space-y-6">
+    <div
+      v-if="rule"
+      class="space-y-6"
+    >
       <!-- 规则信息卡片 -->
       <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
         <div class="flex items-center gap-2 mb-2">
-          <a-tag color="blue" class="text-xs font-mono">{{ rule.rule_code }}</a-tag>
+          <a-tag
+            color="blue"
+            class="text-xs font-mono"
+          >
+            {{ rule.rule_code }}
+          </a-tag>
           <span class="text-sm font-semibold text-slate-800">{{ rule.name }}</span>
         </div>
-        <p class="text-xs text-slate-500 m-0 leading-relaxed">{{ rule.description }}</p>
+        <p class="text-xs text-slate-500 m-0 leading-relaxed">
+          {{ rule.description }}
+        </p>
       </div>
 
       <!-- 病历文本输入 -->
@@ -25,15 +35,27 @@
             病历文本
           </label>
           <a-dropdown :trigger="['click']">
-            <a-button size="small" type="text" class="text-slate-400">
-              <template #icon><AppstoreOutlined /></template>
+            <a-button
+              size="small"
+              type="text"
+              class="text-slate-400"
+            >
+              <template #icon>
+                <AppstoreOutlined />
+              </template>
               示例文本
             </a-button>
             <template #overlay>
               <a-menu @click="handleSampleSelect">
-                <a-menu-item key="admission">入院记录示例</a-menu-item>
-                <a-menu-item key="progress">病程记录示例</a-menu-item>
-                <a-menu-item key="discharge">出院记录示例</a-menu-item>
+                <a-menu-item key="admission">
+                  入院记录示例
+                </a-menu-item>
+                <a-menu-item key="progress">
+                  病程记录示例
+                </a-menu-item>
+                <a-menu-item key="discharge">
+                  出院记录示例
+                </a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
@@ -43,7 +65,7 @@
           placeholder="请粘贴或输入需要评估的病历文本..."
           :rows="10"
           :maxlength="5000"
-          showCount
+          show-count
           :disabled="testing"
         />
       </div>
@@ -54,17 +76,22 @@
           type="primary"
           :loading="testing"
           :disabled="!medicalText.trim()"
-          @click="executeTest"
           block
           size="large"
+          @click="executeTest"
         >
-          <template #icon><ThunderboltOutlined /></template>
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
           {{ testing ? '评估中...' : '开始评估' }}
         </a-button>
       </div>
 
       <!-- 评估结果 -->
-      <div v-if="result" class="mt-4">
+      <div
+        v-if="result"
+        class="mt-4"
+      >
         <h3 class="text-sm font-semibold text-slate-700 mb-3 flex items-center">
           <ExperimentOutlined class="mr-2" />
           评估结果
@@ -74,8 +101,14 @@
         <div :class="['result-card', result.compliant ? 'result-pass' : 'result-fail']">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
-              <CheckCircleOutlined v-if="result.compliant" class="text-green-500 text-lg" />
-              <CloseCircleOutlined v-else class="text-red-500 text-lg" />
+              <CheckCircleOutlined
+                v-if="result.compliant"
+                class="text-green-500 text-lg"
+              />
+              <CloseCircleOutlined
+                v-else
+                class="text-red-500 text-lg"
+              />
               <span class="font-bold text-base">
                 {{ result.compliant ? '合规' : '不合规' }}
               </span>
@@ -87,8 +120,13 @@
           </div>
 
           <!-- 推理过程 -->
-          <div v-if="result.reasoning" class="mb-3">
-            <div class="text-xs font-semibold text-slate-500 mb-1">推理过程</div>
+          <div
+            v-if="result.reasoning"
+            class="mb-3"
+          >
+            <div class="text-xs font-semibold text-slate-500 mb-1">
+              推理过程
+            </div>
             <div class="text-sm text-slate-700 bg-white/60 rounded p-3 leading-relaxed">
               {{ result.reasoning }}
             </div>
@@ -96,15 +134,22 @@
 
           <!-- 证据 -->
           <div v-if="result.evidence">
-            <div class="text-xs font-semibold text-slate-500 mb-1">相关证据</div>
+            <div class="text-xs font-semibold text-slate-500 mb-1">
+              相关证据
+            </div>
             <div class="text-sm text-slate-600 bg-white/60 rounded p-3 italic">
               "{{ result.evidence }}"
             </div>
           </div>
 
           <!-- 缺陷详情 -->
-          <div v-if="result.defect_details && Object.keys(result.defect_details).length > 0" class="mt-3">
-            <div class="text-xs font-semibold text-slate-500 mb-1">缺陷详情</div>
+          <div
+            v-if="result.defect_details && Object.keys(result.defect_details).length > 0"
+            class="mt-3"
+          >
+            <div class="text-xs font-semibold text-slate-500 mb-1">
+              缺陷详情
+            </div>
             <div class="bg-white/60 rounded p-3">
               <pre class="text-xs m-0 whitespace-pre-wrap">{{ JSON.stringify(result.defect_details, null, 2) }}</pre>
             </div>
@@ -112,7 +157,10 @@
         </div>
 
         <!-- Token 使用 -->
-        <div v-if="result.token_usage" class="text-xs text-slate-400 mt-2 text-right">
+        <div
+          v-if="result.token_usage"
+          class="text-xs text-slate-400 mt-2 text-right"
+        >
           Token: {{ result.token_usage.total || 0 }}
         </div>
       </div>
@@ -124,8 +172,8 @@
         :message="errorMsg"
         show-icon
         closable
-        @close="errorMsg = ''"
         class="mt-4"
+        @close="errorMsg = ''"
       />
     </div>
   </a-drawer>

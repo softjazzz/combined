@@ -1,10 +1,21 @@
 <template>
   <div class="statistics-cards">
     <!-- 演示模式 -->
-    <a-row v-if="mode === 'demo'" :gutter="[16, 16]">
+    <a-row
+      v-if="mode === 'demo'"
+      :gutter="[16, 16]"
+    >
       <!-- 规则统计 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="已选规则"
             :value="selectedRulesCount"
@@ -22,8 +33,16 @@
       </a-col>
 
       <!-- 分析统计 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="分析完成"
             :value="analysisCompletedCount"
@@ -41,8 +60,16 @@
       </a-col>
 
       <!-- 通知统计 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="未读通知"
             :value="unreadNotificationsCount"
@@ -55,17 +82,34 @@
           <div class="stat-footer">
             <span class="stat-label">未读率</span>
             <span class="stat-value">{{ unreadNotificationsRate }}%</span>
-            <span v-if="notificationsTrend !== 0" class="trend">
-              <ArrowUpOutlined v-if="notificationsTrend > 0" class="trend-up" />
-              <ArrowDownOutlined v-else class="trend-down" />
+            <span
+              v-if="notificationsTrend !== 0"
+              class="trend"
+            >
+              <ArrowUpOutlined
+                v-if="notificationsTrend > 0"
+                class="trend-up"
+              />
+              <ArrowDownOutlined
+                v-else
+                class="trend-down"
+              />
             </span>
           </div>
         </a-card>
       </a-col>
 
       <!-- 申诉统计 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="待处理申诉"
             :value="pendingAppealsCount"
@@ -83,8 +127,16 @@
       </a-col>
 
       <!-- 质控得分 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="平均质控得分"
             :value="averageQCScore"
@@ -97,18 +149,38 @@
           </a-statistic>
           <div class="stat-footer">
             <span class="stat-label">评级</span>
-            <span class="stat-value" :class="scoreRatingClass">{{ scoreRating }}</span>
-            <span v-if="scoreTrend !== 0" class="trend">
-              <ArrowUpOutlined v-if="scoreTrend > 0" class="trend-up" />
-              <ArrowDownOutlined v-else class="trend-down" />
+            <span
+              class="stat-value"
+              :class="scoreRatingClass"
+            >{{ scoreRating }}</span>
+            <span
+              v-if="scoreTrend !== 0"
+              class="trend"
+            >
+              <ArrowUpOutlined
+                v-if="scoreTrend > 0"
+                class="trend-up"
+              />
+              <ArrowDownOutlined
+                v-else
+                class="trend-down"
+              />
             </span>
           </div>
         </a-card>
       </a-col>
 
       <!-- 运行时长 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="演示运行时长"
             :value="demoRuntime"
@@ -119,17 +191,31 @@
           </a-statistic>
           <div class="stat-footer">
             <span class="stat-label">状态</span>
-            <span class="stat-value" :class="runtimeStatusClass">{{ runtimeStatus }}</span>
+            <span
+              class="stat-value"
+              :class="runtimeStatusClass"
+            >{{ runtimeStatus }}</span>
           </div>
         </a-card>
       </a-col>
     </a-row>
 
     <!-- 四川质控模式 -->
-    <a-row v-else-if="mode === 'sichuan'" :gutter="[16, 16]">
+    <a-row
+      v-else-if="mode === 'sichuan'"
+      :gutter="[16, 16]"
+    >
       <!-- 总规则数 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="4">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="4"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="总规则数"
             :value="totalRulesCount"
@@ -143,8 +229,16 @@
       </a-col>
 
       <!-- 合规率 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="4">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="4"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="合规率"
             :value="complianceRate"
@@ -160,8 +254,16 @@
       </a-col>
 
       <!-- 严重违规 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="4">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="4"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="严重违规"
             :value="criticalViolations"
@@ -176,8 +278,16 @@
       </a-col>
 
       <!-- 处理时间 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="4">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="4"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="处理时间"
             :value="processingTime"
@@ -192,8 +302,16 @@
       </a-col>
 
       <!-- Token 使用 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="4">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="4"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="Token 使用"
             :value="tokenUsage"
@@ -206,8 +324,16 @@
       </a-col>
 
       <!-- 成本节省 -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="4">
-        <a-card class="stat-card" :bordered="false">
+      <a-col
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="4"
+      >
+        <a-card
+          class="stat-card"
+          :bordered="false"
+        >
           <a-statistic
             title="成本节省"
             :value="tokenSavingsRate * 100"

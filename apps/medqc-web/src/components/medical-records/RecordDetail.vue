@@ -22,8 +22,12 @@
                   {{ record.patient_name.charAt(0) }}
                 </div>
                 <div>
-                  <div class="font-semibold text-slate-100 text-lg">{{ record.patient_name }}</div>
-                  <div class="text-sm text-slate-400">患者姓名</div>
+                  <div class="font-semibold text-slate-100 text-lg">
+                    {{ record.patient_name }}
+                  </div>
+                  <div class="text-sm text-slate-400">
+                    患者姓名
+                  </div>
                 </div>
               </div>
 
@@ -32,8 +36,12 @@
                   <CalendarOutlined class="text-slate-400" />
                 </div>
                 <div>
-                  <div class="font-medium text-slate-200">{{ record.patient_age }} 岁</div>
-                  <div class="text-sm text-slate-400">年龄</div>
+                  <div class="font-medium text-slate-200">
+                    {{ record.patient_age }} 岁
+                  </div>
+                  <div class="text-sm text-slate-400">
+                    年龄
+                  </div>
                 </div>
               </div>
 
@@ -42,8 +50,12 @@
                   <TeamOutlined class="text-slate-400" />
                 </div>
                 <div>
-                  <div class="font-medium text-slate-200">{{ getGenderLabel(record.patient_gender) }}</div>
-                  <div class="text-sm text-slate-400">性别</div>
+                  <div class="font-medium text-slate-200">
+                    {{ getGenderLabel(record.patient_gender) }}
+                  </div>
+                  <div class="text-sm text-slate-400">
+                    性别
+                  </div>
                 </div>
               </div>
             </div>
@@ -54,8 +66,12 @@
                   <BankOutlined class="text-slate-400" />
                 </div>
                 <div>
-                  <div class="font-medium text-slate-200">{{ record.department }}</div>
-                  <div class="text-sm text-slate-400">科室</div>
+                  <div class="font-medium text-slate-200">
+                    {{ record.department }}
+                  </div>
+                  <div class="text-sm text-slate-400">
+                    科室
+                  </div>
                 </div>
               </div>
 
@@ -65,9 +81,11 @@
                 </div>
                 <div>
                   <div class="font-medium text-slate-200">
-                    {{ formatDate(record.admission_date) }}
+                    {{ formatDate(record.admission_date || '') }}
                   </div>
-                  <div class="text-sm text-slate-400">入院时间</div>
+                  <div class="text-sm text-slate-400">
+                    入院时间
+                  </div>
                 </div>
               </div>
 
@@ -76,11 +94,15 @@
                   <div 
                     class="w-3 h-3 rounded-full"
                     :class="getStatusDotClass(record.status)"
-                  ></div>
+                  />
                 </div>
                 <div>
-                  <div class="font-medium text-slate-200">{{ getStatusLabel(record.status) }}</div>
-                  <div class="text-sm text-slate-400">记录状态</div>
+                  <div class="font-medium text-slate-200">
+                    {{ getStatusLabel(record.status) }}
+                  </div>
+                  <div class="text-sm text-slate-400">
+                    记录状态
+                  </div>
                 </div>
               </div>
             </div>
@@ -97,16 +119,16 @@
             <div class="flex items-center gap-2">
               <a-button 
                 size="small"
-                @click="copyContent"
                 class="bg-slate-700/50 border-slate-600/50 text-slate-300"
+                @click="copyContent"
               >
                 <CopyOutlined />
                 复制
               </a-button>
               <a-button 
                 size="small"
-                @click="toggleFullscreen"
                 class="bg-slate-700/50 border-slate-600/50 text-slate-300"
+                @click="toggleFullscreen"
               >
                 <ExpandOutlined v-if="!isFullscreen" />
                 <CompressOutlined v-else />
@@ -125,8 +147,8 @@
             >
               <a-button 
                 size="large"
-                @click="toggleFullscreen"
                 class="bg-slate-800/80 border-slate-600/50 text-slate-300"
+                @click="toggleFullscreen"
               >
                 <CompressOutlined />
                 退出全屏
@@ -158,7 +180,9 @@
                 <FileOutlined class="text-blue-400" />
               </div>
               <div>
-                <div class="font-medium text-slate-200">{{ record.file_name || '病案文件' }}</div>
+                <div class="font-medium text-slate-200">
+                  {{ record.file_name || '病案文件' }}
+                </div>
                 <div class="text-sm text-slate-400">
                   {{ formatFileSize(record.file_size) }} · 
                   {{ formatDate(record.created_at) }}
@@ -168,16 +192,16 @@
             <div class="flex items-center gap-2">
               <a-button 
                 size="small"
-                @click="previewFile"
                 class="bg-blue-500/20 border-blue-400/30 text-blue-300"
+                @click="previewFile"
               >
                 <EyeOutlined />
                 预览
               </a-button>
               <a-button 
                 size="small"
-                @click="downloadFile"
                 class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300"
+                @click="downloadFile"
               >
                 <DownloadOutlined />
                 下载
@@ -196,10 +220,16 @@
             质控评分
           </h3>
 
-          <div v-if="record.qc_score !== null" class="text-center">
+          <div
+            v-if="record.qc_score !== null"
+            class="text-center"
+          >
             <!-- 评分圆环 -->
             <div class="relative inline-flex items-center justify-center w-24 h-24 mb-4">
-              <svg class="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+              <svg
+                class="w-24 h-24 transform -rotate-90"
+                viewBox="0 0 100 100"
+              >
                 <circle
                   cx="50"
                   cy="50"
@@ -217,7 +247,7 @@
                   stroke-width="8"
                   fill="none"
                   :stroke-dasharray="`${(record.qc_score / 100) * 251.2} 251.2`"
-                  :class="getScoreCircleColor(record.qc_score)"
+                  :class="getScoreCircleColor(record.qc_score ?? 0)"
                   class="transition-all duration-1000 ease-out"
                 />
               </svg>
@@ -225,11 +255,13 @@
                 <div class="text-center">
                   <div 
                     class="text-2xl font-bold"
-                    :class="getScoreColor(record.qc_score)"
+                    :class="getScoreColor(record.qc_score ?? 0)"
                   >
                     {{ record.qc_score }}
                   </div>
-                  <div class="text-xs text-slate-400">分</div>
+                  <div class="text-xs text-slate-400">
+                    分
+                  </div>
                 </div>
               </div>
             </div>
@@ -237,7 +269,7 @@
             <!-- 等级标签 -->
             <div class="mb-4">
               <a-tag 
-                :color="getGradeColor(record.qc_grade)" 
+                :color="getGradeColor(record.qc_grade ?? '')" 
                 size="large"
                 class="px-4 py-1 text-sm font-semibold"
               >
@@ -249,21 +281,26 @@
             <div class="text-sm text-slate-400 space-y-1">
               <div>{{ getScoreDescription(record.qc_score) }}</div>
               <div class="text-xs">
-                评分时间：{{ formatDate(record.updated_at) }}
+                评分时间：{{ formatDate(record.updated_at || '') }}
               </div>
             </div>
           </div>
 
-          <div v-else class="text-center py-8">
+          <div
+            v-else
+            class="text-center py-8"
+          >
             <div class="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center mx-auto mb-3">
               <QuestionCircleOutlined class="text-slate-400 text-2xl" />
             </div>
-            <div class="text-slate-400 mb-4">暂未进行质控评分</div>
+            <div class="text-slate-400 mb-4">
+              暂未进行质控评分
+            </div>
             <a-button 
               type="primary"
-              @click="$emit('analyze-record', record)"
               :loading="analyzing"
               class="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 border-none"
+              @click="$emit('analyze-record', record)"
             >
               <ThunderboltOutlined />
               开始分析
@@ -282,8 +319,8 @@
             <a-button
               block
               size="large"
-              @click="$emit('edit-record', record)"
               class="bg-blue-500/20 border-blue-400/30 text-blue-300 hover:bg-blue-500/30"
+              @click="$emit('edit-record', record)"
             >
               <EditOutlined />
               查看详情
@@ -292,8 +329,8 @@
             <a-button 
               block 
               size="large"
-              @click="$emit('duplicate-record', record)"
               class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30"
+              @click="$emit('duplicate-record', record)"
             >
               <CopyOutlined />
               复制记录
@@ -302,8 +339,8 @@
             <a-button 
               block 
               size="large"
-              @click="exportRecord"
               class="bg-purple-500/20 border-purple-400/30 text-purple-300 hover:bg-purple-500/30"
+              @click="exportRecord"
             >
               <ExportOutlined />
               导出记录
@@ -315,8 +352,8 @@
               block 
               size="large"
               danger
-              @click="$emit('delete-record', record)"
               class="bg-red-500/20 border-red-400/30 text-red-300 hover:bg-red-500/30"
+              @click="$emit('delete-record', record)"
             >
               <DeleteOutlined />
               删除记录
@@ -333,26 +370,44 @@
 
           <div class="space-y-3">
             <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/30">
-              <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+              <div class="w-2 h-2 rounded-full bg-emerald-400" />
               <div class="flex-1">
-                <div class="text-sm text-slate-200">记录创建</div>
-                <div class="text-xs text-slate-400">{{ formatDate(record.created_at) }}</div>
+                <div class="text-sm text-slate-200">
+                  记录创建
+                </div>
+                <div class="text-xs text-slate-400">
+                  {{ formatDate(record.created_at) }}
+                </div>
               </div>
             </div>
 
-            <div v-if="record.updated_at !== record.created_at" class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/30">
-              <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+            <div
+              v-if="record.updated_at !== record.created_at"
+              class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/30"
+            >
+              <div class="w-2 h-2 rounded-full bg-blue-400" />
               <div class="flex-1">
-                <div class="text-sm text-slate-200">记录更新</div>
-                <div class="text-xs text-slate-400">{{ formatDate(record.updated_at) }}</div>
+                <div class="text-sm text-slate-200">
+                  记录更新
+                </div>
+                <div class="text-xs text-slate-400">
+                  {{ formatDate(record.updated_at) }}
+                </div>
               </div>
             </div>
 
-            <div v-if="record.qc_score" class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/30">
-              <div class="w-2 h-2 rounded-full bg-amber-400"></div>
+            <div
+              v-if="record.qc_score"
+              class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/30"
+            >
+              <div class="w-2 h-2 rounded-full bg-amber-400" />
               <div class="flex-1">
-                <div class="text-sm text-slate-200">质控分析完成</div>
-                <div class="text-xs text-slate-400">评分：{{ record.qc_score }}分</div>
+                <div class="text-sm text-slate-200">
+                  质控分析完成
+                </div>
+                <div class="text-xs text-slate-400">
+                  评分：{{ record.qc_score }}分
+                </div>
               </div>
             </div>
           </div>
@@ -392,6 +447,7 @@ import type { MedicalRecord } from '@/types'
 
 type RecordDetailModel = MedicalRecord & {
   record_type?: string
+  patient_age?: number
   patient_gender?: string
   admission_date?: string
   file_url?: string
@@ -559,7 +615,7 @@ const formatDate = (dateString: string) => {
 }
 
 // 格式化文件大小
-const formatFileSize = (bytes?: number) => {
+const formatFileSize = (bytes?: number | null) => {
   if (!bytes) return '未知大小'
   
   const sizes = ['B', 'KB', 'MB', 'GB']

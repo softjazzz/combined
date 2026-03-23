@@ -7,8 +7,18 @@
     <!-- 头部：标题和新建按钮 -->
     <div class="selector-header">
       <div class="header-title">
-        <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        <svg
+          class="icon"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+          />
         </svg>
         <span>病例选择</span>
       </div>
@@ -17,14 +27,23 @@
         size="small"
         @click="handleNewCase"
       >
-        <template #icon><PlusOutlined /></template>
+        <template #icon>
+          <PlusOutlined />
+        </template>
         新建
       </a-button>
     </div>
 
     <!-- Tab切换：预置/自定义 -->
-    <a-tabs v-model:activeKey="activeTab" size="small" class="case-tabs">
-      <a-tab-pane key="preset" tab="预置病例">
+    <a-tabs
+      v-model:active-key="activeTab"
+      size="small"
+      class="case-tabs"
+    >
+      <a-tab-pane
+        key="preset"
+        tab="预置病例"
+      >
         <!-- 筛选条件 -->
         <div class="filter-section">
           <a-select
@@ -34,12 +53,24 @@
             style="width: 100%"
             @change="handleFilterChange"
           >
-            <a-select-option value="全部">全部科室</a-select-option>
-            <a-select-option value="心内科">心内科</a-select-option>
-            <a-select-option value="普外科">普外科</a-select-option>
-            <a-select-option value="呼吸内科">呼吸内科</a-select-option>
-            <a-select-option value="ICU">ICU</a-select-option>
-            <a-select-option value="神经内科">神经内科</a-select-option>
+            <a-select-option value="全部">
+              全部科室
+            </a-select-option>
+            <a-select-option value="心内科">
+              心内科
+            </a-select-option>
+            <a-select-option value="普外科">
+              普外科
+            </a-select-option>
+            <a-select-option value="呼吸内科">
+              呼吸内科
+            </a-select-option>
+            <a-select-option value="ICU">
+              ICU
+            </a-select-option>
+            <a-select-option value="神经内科">
+              神经内科
+            </a-select-option>
           </a-select>
 
           <a-select
@@ -49,10 +80,18 @@
             style="width: 100%; margin-top: 8px"
             @change="handleFilterChange"
           >
-            <a-select-option :value="undefined">全部复杂度</a-select-option>
-            <a-select-option value="low">简单</a-select-option>
-            <a-select-option value="medium">中等</a-select-option>
-            <a-select-option value="high">复杂</a-select-option>
+            <a-select-option :value="undefined">
+              全部复杂度
+            </a-select-option>
+            <a-select-option value="low">
+              简单
+            </a-select-option>
+            <a-select-option value="medium">
+              中等
+            </a-select-option>
+            <a-select-option value="high">
+              复杂
+            </a-select-option>
           </a-select>
 
           <a-input
@@ -62,7 +101,9 @@
             style="margin-top: 8px"
             @input="handleFilterChange"
           >
-            <template #prefix><SearchOutlined /></template>
+            <template #prefix>
+              <SearchOutlined />
+            </template>
           </a-input>
         </div>
 
@@ -76,7 +117,9 @@
             @click="handleSelectCase(caseItem.caseId)"
           >
             <div class="case-header">
-              <div class="case-name">{{ caseItem.caseName }}</div>
+              <div class="case-name">
+                {{ caseItem.caseName }}
+              </div>
               <a-tag
                 :color="getComplexityColor(caseItem.diagnosisInfo.complexity)"
                 size="small"
@@ -112,7 +155,10 @@
         </div>
       </a-tab-pane>
 
-      <a-tab-pane key="custom" tab="自定义病例">
+      <a-tab-pane
+        key="custom"
+        tab="自定义病例"
+      >
         <div class="cases-list">
           <div
             v-for="caseItem in store.customCases"
@@ -122,14 +168,18 @@
             @click="handleSelectCase(caseItem.caseId)"
           >
             <div class="case-header">
-              <div class="case-name">{{ caseItem.caseName }}</div>
+              <div class="case-name">
+                {{ caseItem.caseName }}
+              </div>
               <a-button
                 type="text"
                 size="small"
                 danger
                 @click.stop="handleDeleteCase(caseItem.caseId)"
               >
-                <template #icon><DeleteOutlined /></template>
+                <template #icon>
+                  <DeleteOutlined />
+                </template>
               </a-button>
             </div>
             <div class="case-info">
@@ -153,22 +203,32 @@
             :image="Empty.PRESENTED_IMAGE_SIMPLE"
             description="暂无自定义病例"
           >
-            <a-button type="primary" @click="handleNewCase">
-              <template #icon><PlusOutlined /></template>
+            <a-button
+              type="primary"
+              @click="handleNewCase"
+            >
+              <template #icon>
+                <PlusOutlined />
+              </template>
               新建病例
             </a-button>
           </a-empty>
         </div>
 
         <!-- 清空按钮 -->
-        <div v-if="store.customCases.length > 0" class="custom-actions">
+        <div
+          v-if="store.customCases.length > 0"
+          class="custom-actions"
+        >
           <a-button
             size="small"
             danger
             block
             @click="handleClearAll"
           >
-            <template #icon><DeleteOutlined /></template>
+            <template #icon>
+              <DeleteOutlined />
+            </template>
             清空所有自定义病例
           </a-button>
         </div>

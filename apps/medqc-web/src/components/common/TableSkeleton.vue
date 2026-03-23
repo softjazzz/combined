@@ -2,15 +2,38 @@
   <div class="table-skeleton">
     <div class="skeleton-header">
       <a-row :gutter="16">
-        <a-col v-for="col in columns" :key="col" :span="24 / columns">
-          <a-skeleton-button active size="small" style="width: 80%" />
+        <a-col
+          v-for="col in columns"
+          :key="col"
+          :span="24 / columns"
+        >
+          <a-skeleton-button
+            active
+            size="small"
+            style="width: 80%"
+          />
         </a-col>
       </a-row>
     </div>
-    <div v-for="i in rows" :key="i" class="skeleton-row">
-      <a-row :gutter="16" align="middle">
-        <a-col v-for="col in columns" :key="col" :span="24 / columns">
-          <a-skeleton active :title="false" :paragraph="{ rows: 1, width: '90%' }" />
+    <div
+      v-for="i in rows"
+      :key="i"
+      class="skeleton-row"
+    >
+      <a-row
+        :gutter="16"
+        align="middle"
+      >
+        <a-col
+          v-for="col in columns"
+          :key="col"
+          :span="24 / columns"
+        >
+          <a-skeleton
+            active
+            :title="false"
+            :paragraph="{ rows: 1, width: '90%' }"
+          />
         </a-col>
       </a-row>
     </div>

@@ -4,19 +4,21 @@
       <div class="rounded-[28px] border border-white/80 bg-white/88 p-6 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 class="text-[30px] font-black text-slate-900 tracking-[-0.03em]">{{ activeTabTitle }}</h1>
+            <h1 class="text-[30px] font-black text-slate-900 tracking-[-0.03em]">
+              {{ activeTabTitle }}
+            </h1>
           </div>
           <div class="flex rounded-[20px] border border-slate-200/80 bg-slate-50/90 p-1.5 shrink-0 overflow-x-auto shadow-sm">
             <button
               v-for="tab in tabs"
               :key="tab.key"
-              @click="switchTab(tab.key)"
               :class="[
                 activeTab === tab.key
                   ? 'bg-white text-sky-700 font-bold shadow-sm border border-sky-100'
                   : 'text-slate-500 hover:text-slate-800 font-medium transition-colors border border-transparent',
                 'px-4 md:px-5 py-2 text-[13px] rounded-[14px] outline-none whitespace-nowrap'
               ]"
+              @click="switchTab(tab.key)"
             >
               {{ tab.label }}
             </button>

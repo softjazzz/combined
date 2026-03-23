@@ -18,10 +18,10 @@
         :tree-data="filteredTreeData"
         :selected-keys="selectedKeys"
         :expanded-keys="expandedKeys"
-        @select="handleSelect"
-        @expand="handleExpand"
         show-icon
         block-node
+        @select="handleSelect"
+        @expand="handleExpand"
       >
         <template #icon="{ dataRef }">
           <FolderOutlined v-if="!dataRef.isLeaf" />
@@ -30,13 +30,19 @@
 
         <template #title="{ dataRef }">
           <div class="tree-node-title">
-            <span class="node-text" v-html="highlightText(getDisplayTitle(dataRef))"></span>
+            <span
+              class="node-text"
+              v-html="highlightText(getDisplayTitle(dataRef))"
+            />
           </div>
         </template>
       </a-tree>
 
       <!-- 空状态 -->
-      <div v-else class="tree-empty">
+      <div
+        v-else
+        class="tree-empty"
+      >
         <a-empty
           :description="searchKeyword ? '未找到匹配的文档' : '暂无文档'"
           :image="Empty.PRESENTED_IMAGE_SIMPLE"
@@ -171,7 +177,7 @@ const handleSearch = () => {
 }
 
 // 处理节点选择
-const handleSelect = (keys: string[], { node }: unknown) => {
+const handleSelect = (keys: string[]) => {
   if (keys.length === 0) return
 
   const selectedKey = keys[0]

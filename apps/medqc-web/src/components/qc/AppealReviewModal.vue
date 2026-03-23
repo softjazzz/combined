@@ -2,21 +2,44 @@
   <a-modal
     title="审核申诉"
     :open="visible"
+    :confirm-loading="submitting"
+    width="600px"
     @ok="handleSubmit"
     @cancel="handleCancel"
-    :confirmLoading="submitting"
-    width="600px"
   >
-    <a-descriptions bordered column="1" size="small" class="mb-4">
-      <a-descriptions-item label="申诉人">{{ appeal?.appellantName || '未知' }}</a-descriptions-item>
-      <a-descriptions-item label="申诉类型">{{ getAppealTypeLabelStr(appeal?.appealType) }}</a-descriptions-item>
-      <a-descriptions-item label="申诉时间">{{ formatDate(appeal?.createdAt) }}</a-descriptions-item>
-      <a-descriptions-item label="申诉理由">
-        <div class="whitespace-pre-wrap">{{ appeal?.appealReason }}</div>
+    <a-descriptions
+      bordered
+      column="1"
+      size="small"
+      class="mb-4"
+    >
+      <a-descriptions-item label="申诉人">
+        {{ appeal?.appellantName || '未知' }}
       </a-descriptions-item>
-       <a-descriptions-item label="证据文件" v-if="appeal?.evidenceUrls?.length">
-        <div v-for="(url, idx) in appeal.evidenceUrls" :key="idx">
-          <a :href="url" target="_blank" class="text-blue-500">附件 {{ idx + 1 }}</a>
+      <a-descriptions-item label="申诉类型">
+        {{ getAppealTypeLabelStr(appeal?.appealType) }}
+      </a-descriptions-item>
+      <a-descriptions-item label="申诉时间">
+        {{ formatDate(appeal?.createdAt) }}
+      </a-descriptions-item>
+      <a-descriptions-item label="申诉理由">
+        <div class="whitespace-pre-wrap">
+          {{ appeal?.appealReason }}
+        </div>
+      </a-descriptions-item>
+      <a-descriptions-item
+        v-if="appeal?.evidenceUrls?.length"
+        label="证据文件"
+      >
+        <div
+          v-for="(url, idx) in appeal.evidenceUrls"
+          :key="idx"
+        >
+          <a
+            :href="url"
+            target="_blank"
+            class="text-blue-500"
+          >附件 {{ idx + 1 }}</a>
         </div>
       </a-descriptions-item>
     </a-descriptions>
@@ -29,24 +52,46 @@
       :rules="rules"
       layout="vertical"
     >
-      <a-form-item label="审核结果" name="decision">
+      <a-form-item
+        label="审核结果"
+        name="decision"
+      >
         <a-radio-group v-model:value="formState.decision">
-          <a-radio value="approve" class="text-green-600">
-            <template #default>通过</template>
+          <a-radio
+            value="approve"
+            class="text-green-600"
+          >
+            <template #default>
+              通过
+            </template>
           </a-radio>
-          <a-radio value="reject" class="text-red-600">
-            <template #default>驳回</template>
+          <a-radio
+            value="reject"
+            class="text-red-600"
+          >
+            <template #default>
+              驳回
+            </template>
           </a-radio>
         </a-radio-group>
-        <div class="text-gray-400 text-xs mt-1" v-if="formState.decision === 'approve'">
+        <div
+          v-if="formState.decision === 'approve'"
+          class="text-gray-400 text-xs mt-1"
+        >
           通过后该质控问题将被标记为已解决。
         </div>
-        <div class="text-gray-400 text-xs mt-1" v-if="formState.decision === 'reject'">
+        <div
+          v-if="formState.decision === 'reject'"
+          class="text-gray-400 text-xs mt-1"
+        >
           驳回后将自动创建整改任务并分配给申诉人。
         </div>
       </a-form-item>
 
-      <a-form-item label="审核意见" name="comment">
+      <a-form-item
+        label="审核意见"
+        name="comment"
+      >
         <a-textarea
           v-model:value="formState.comment"
           :rows="3"

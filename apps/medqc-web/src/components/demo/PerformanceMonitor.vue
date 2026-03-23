@@ -1,13 +1,23 @@
 <template>
   <div class="performance-monitor">
-    <a-card title="性能监控" :bordered="false">
+    <a-card
+      title="性能监控"
+      :bordered="false"
+    >
       <template #extra>
         <a-space>
-          <a-button size="small" @click="handleExport">
+          <a-button
+            size="small"
+            @click="handleExport"
+          >
             <DownloadOutlined />
             导出数据
           </a-button>
-          <a-button size="small" @click="handleReset" danger>
+          <a-button
+            size="small"
+            danger
+            @click="handleReset"
+          >
             <ReloadOutlined />
             重置
           </a-button>
@@ -25,7 +35,11 @@
             <TrophyOutlined :style="{ color: scoreColor }" />
           </template>
         </a-statistic>
-        <a-tag :color="scoreColor" size="large" class="score-tag">
+        <a-tag
+          :color="scoreColor"
+          size="large"
+          class="score-tag"
+        >
           {{ scoreRating }}
         </a-tag>
       </div>
@@ -86,7 +100,10 @@
       <a-divider />
 
       <!-- 内存使用情况（如果可获取） -->
-      <div class="memory-usage" v-if="memoryInfo">
+      <div
+        v-if="memoryInfo"
+        class="memory-usage"
+      >
         <h4>内存使用情况</h4>
         <a-row :gutter="16">
           <a-col :span="8">

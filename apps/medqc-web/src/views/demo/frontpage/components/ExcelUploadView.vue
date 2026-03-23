@@ -1,16 +1,26 @@
 <template>
   <div class="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
     <!-- Step 1: 上传 -->
-    <div v-if="currentStep === 'upload'" class="flex-1 flex flex-col p-6 overflow-hidden">
+    <div
+      v-if="currentStep === 'upload'"
+      class="flex-1 flex flex-col p-6 overflow-hidden"
+    >
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
-          <button @click="$emit('back')" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+          <button
+            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            @click="$emit('back')"
+          >
             <ArrowLeftOutlined class="text-lg" />
           </button>
           <div>
-            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">DRG/DIP 数据分析</h2>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">上传任意格式的 Excel 文件，AI 自动识别字段并生成分析报表</p>
+            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">
+              DRG/DIP 数据分析
+            </h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              上传任意格式的 Excel 文件，AI 自动识别字段并生成分析报表
+            </p>
           </div>
         </div>
       </div>
@@ -20,15 +30,15 @@
         <div class="flex-1 flex flex-col">
           <!-- Drag & Drop Zone -->
           <div
-            @dragover.prevent="isDragging = true"
-            @dragleave="isDragging = false"
-            @drop.prevent="handleDrop"
             :class="[
               'flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer',
               isDragging 
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
                 : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             ]"
+            @dragover.prevent="isDragging = true"
+            @dragleave="isDragging = false"
+            @drop.prevent="handleDrop"
             @click="triggerFileInput"
           >
             <input
@@ -37,9 +47,12 @@
               accept=".xlsx,.xls,.csv,.zip"
               class="hidden"
               @change="handleFileSelect"
-            />
+            >
             
-            <div v-if="!selectedFile && !uploading" class="text-center p-8">
+            <div
+              v-if="!selectedFile && !uploading"
+              class="text-center p-8"
+            >
               <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                 <CloudUploadOutlined class="text-4xl text-blue-500" />
               </div>
@@ -55,7 +68,10 @@
             </div>
             
             <!-- Selected File Preview -->
-            <div v-else-if="selectedFile && !uploading" class="text-center p-8">
+            <div
+              v-else-if="selectedFile && !uploading"
+              class="text-center p-8"
+            >
               <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                 <FileExcelOutlined class="text-4xl text-green-500" />
               </div>
@@ -67,14 +83,14 @@
               </p>
               <div class="flex gap-3 justify-center">
                 <button
-                  @click.stop="clearFile"
                   class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm"
+                  @click.stop="clearFile"
                 >
                   重新选择
                 </button>
                 <button
-                  @click.stop="smartUploadFile"
                   class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
+                  @click.stop="smartUploadFile"
                 >
                   <UploadOutlined />
                   开始上传分析
@@ -83,7 +99,10 @@
             </div>
             
             <!-- Uploading State -->
-            <div v-else class="text-center p-8">
+            <div
+              v-else
+              class="text-center p-8"
+            >
               <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
                 <LoadingOutlined class="text-4xl text-blue-500 animate-spin" />
               </div>
@@ -100,27 +119,35 @@
         <!-- Batch History -->
         <div class="w-80 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
           <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">历史批次</h3>
-            <button @click="loadBatches" class="text-blue-500 hover:text-blue-600">
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              历史批次
+            </h3>
+            <button
+              class="text-blue-500 hover:text-blue-600"
+              @click="() => loadBatches()"
+            >
               <SyncOutlined :class="{ 'animate-spin': loadingBatches }" />
             </button>
           </div>
           
           <div class="flex-1 overflow-y-auto">
-            <div v-if="batches.length === 0" class="p-8 text-center text-slate-400">
+            <div
+              v-if="batches.length === 0"
+              class="p-8 text-center text-slate-400"
+            >
               暂无上传记录
             </div>
             <div
-              v-else
               v-for="batch in batches"
+              v-else
               :key="batch.batch_id"
-              @click="selectBatch(batch)"
               :class="[
                 'p-4 border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors',
                 selectedBatchId === batch.batch_id 
                   ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' 
                   : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
               ]"
+              @click="selectBatch(batch)"
             >
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-slate-700 dark:text-white">{{ batch.batch_id.substring(6, 21) }}</span>
@@ -151,17 +178,28 @@
     />
 
     <!-- Step 3: 报表生成完成 → 跳转事后分析 -->
-    <div v-else-if="currentStep === 'complete'" class="flex-1 flex flex-col items-center justify-center p-8">
+    <div
+      v-else-if="currentStep === 'complete'"
+      class="flex-1 flex flex-col items-center justify-center p-8"
+    >
       <div class="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center mb-6">
         <CheckCircleOutlined class="text-5xl text-green-500" />
       </div>
-      <h2 class="text-2xl font-semibold text-slate-800 mb-2">分析完成！</h2>
+      <h2 class="text-2xl font-semibold text-slate-800 mb-2">
+        分析完成！
+      </h2>
       <p class="text-slate-500 mb-6">
         已处理 {{ analysisResult?.row_count || 0 }} 条病例数据，生成 {{ chartCount }} 个分析图表
       </p>
       <div class="flex gap-4">
-        <a-button @click="currentStep = 'upload'">继续上传</a-button>
-        <a-button type="primary" size="large" @click="goToAnalysis">
+        <a-button @click="currentStep = 'upload'">
+          继续上传
+        </a-button>
+        <a-button
+          type="primary"
+          size="large"
+          @click="goToAnalysis"
+        >
           查看分析报表 →
         </a-button>
       </div>

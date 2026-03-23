@@ -347,8 +347,11 @@ export class ClassificationTester {
     console.log('类型准确率:', report.typeAccuracy)
     console.log('方法性能:', report.methodPerformance)
     
-    if (Array.isArray(report.failedCases) && report.failedCases.length > 0) {
-      console.log('失败案例:', report.failedCases)
+    const failedCases = Array.isArray((report as { failedCases?: unknown }).failedCases)
+      ? (report as { failedCases: unknown[] }).failedCases
+      : []
+    if (failedCases.length > 0) {
+      console.log('失败案例:', failedCases)
     }
     
     return report

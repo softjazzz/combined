@@ -4,9 +4,9 @@
     title="病历联审详情"
     placement="right"
     :width="1100"
-    @close="handleClose"
     class="qc-review-drawer"
-    :destroyOnClose="true"
+    :destroy-on-close="true"
+    @close="handleClose"
   >
     <!-- 顶部：病历基本信息 -->
     <div class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100">
@@ -16,54 +16,91 @@
             {{ (record?.patient_name || '').charAt(0) }}
           </div>
           <div>
-            <div class="text-base font-bold text-slate-800">{{ record?.patient_name || '-' }}</div>
-            <div class="text-xs text-slate-400">病案号：{{ record?.record_id || '-' }}</div>
+            <div class="text-base font-bold text-slate-800">
+              {{ record?.patient_name || '-' }}
+            </div>
+            <div class="text-xs text-slate-400">
+              病案号：{{ record?.record_id || '-' }}
+            </div>
           </div>
         </div>
         <span 
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
           :class="statusClass"
         >
-          <span class="w-1.5 h-1.5 rounded-full" :class="statusDotClass"></span>
+          <span
+            class="w-1.5 h-1.5 rounded-full"
+            :class="statusDotClass"
+          />
           {{ statusText }}
         </span>
       </div>
       <div class="grid grid-cols-4 gap-4 text-sm">
         <div>
           <span class="text-slate-400">科室</span>
-          <div class="font-medium text-slate-700 mt-0.5">{{ record?.department || '-' }}</div>
+          <div class="font-medium text-slate-700 mt-0.5">
+            {{ record?.department || '-' }}
+          </div>
         </div>
         <div>
           <span class="text-slate-400">出院日期</span>
-          <div class="font-medium text-slate-700 mt-0.5">{{ record?.discharge_date || '-' }}</div>
+          <div class="font-medium text-slate-700 mt-0.5">
+            {{ record?.discharge_date || '-' }}
+          </div>
         </div>
         <div>
           <span class="text-slate-400">质控得分</span>
-          <div class="font-medium font-mono mt-0.5" :style="{ color: getScoreColor(record?.score) }">
+          <div
+            class="font-medium font-mono mt-0.5"
+            :style="{ color: getScoreColor(record?.score) }"
+          >
             {{ record?.score ?? '-' }}
           </div>
         </div>
         <div>
           <span class="text-slate-400">缺陷数</span>
-          <div class="font-medium text-slate-700 mt-0.5">{{ record?.defect_count || 0 }}</div>
+          <div class="font-medium text-slate-700 mt-0.5">
+            {{ record?.defect_count || 0 }}
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 双栏布局：左侧文书 + 右侧缺陷 -->
-    <div class="flex gap-4" style="height: calc(100vh - 300px)">
+    <div
+      class="flex gap-4"
+      style="height: calc(100vh - 300px)"
+    >
       <!-- 左侧：病历文书内容 -->
       <div class="flex-1 bg-white rounded-xl border border-slate-100 overflow-hidden flex flex-col">
         <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-          <a-segmented v-model:value="activeDocTab" :options="docTabs" size="small" />
+          <a-segmented
+            v-model:value="activeDocTab"
+            :options="docTabs"
+            size="small"
+          />
         </div>
         <div class="flex-1 overflow-y-auto p-5">
           <a-spin :spinning="docLoading">
-            <div v-if="currentDocContent" class="doc-content text-sm leading-relaxed text-slate-700" v-html="sanitizeHtml(currentDocContent)" />
-            <div v-else class="text-center py-12 text-slate-400">
-              <FileTextOutlined style="font-size: 36px" class="mb-3 block" />
-              <p class="text-sm">{{ docLoading ? '加载中...' : '暂无文书内容' }}</p>
-              <p class="text-xs mt-1 text-slate-300">文书数据需从后端病历库获取</p>
+            <div
+              v-if="currentDocContent"
+              class="doc-content text-sm leading-relaxed text-slate-700"
+              v-html="sanitizeHtml(currentDocContent)"
+            />
+            <div
+              v-else
+              class="text-center py-12 text-slate-400"
+            >
+              <FileTextOutlined
+                style="font-size: 36px"
+                class="mb-3 block"
+              />
+              <p class="text-sm">
+                {{ docLoading ? '加载中...' : '暂无文书内容' }}
+              </p>
+              <p class="text-xs mt-1 text-slate-300">
+                文书数据需从后端病历库获取
+              </p>
             </div>
           </a-spin>
         </div>
@@ -76,16 +113,31 @@
             质控问题
             <span class="text-xs text-slate-400 font-normal ml-2">共 {{ defectList.length }} 项</span>
           </h3>
-          <a-button size="small" type="text" class="text-slate-500" @click="loadDefects">
+          <a-button
+            size="small"
+            type="text"
+            class="text-slate-500"
+            @click="loadDefects"
+          >
             <ReloadOutlined :spin="defectLoading" />
           </a-button>
         </div>
 
-        <a-spin :spinning="defectLoading" class="flex-1 overflow-hidden">
-          <div v-if="defectList.length === 0" class="text-center py-8 text-slate-400 text-sm">
+        <a-spin
+          :spinning="defectLoading"
+          class="flex-1 overflow-hidden"
+        >
+          <div
+            v-if="defectList.length === 0"
+            class="text-center py-8 text-slate-400 text-sm"
+          >
             暂无质控问题
           </div>
-          <div v-else class="space-y-3 overflow-y-auto pr-1" style="max-height: calc(100vh - 380px)">
+          <div
+            v-else
+            class="space-y-3 overflow-y-auto pr-1"
+            style="max-height: calc(100vh - 380px)"
+          >
             <div 
               v-for="defect in defectList" 
               :key="defect.id"
@@ -102,7 +154,7 @@
                       'bg-amber-500': defect.severity === 'warning',
                       'bg-blue-500': defect.severity === 'info',
                     }"
-                  ></span>
+                  />
                   <span class="text-sm font-medium text-slate-800">{{ defect.rule_name }}</span>
                 </div>
                 <span 
@@ -118,7 +170,9 @@
                   {{ getDefectStatusText(defect.status) }}
                 </span>
               </div>
-              <p class="text-xs text-slate-500 mb-2 line-clamp-2">{{ defect.description }}</p>
+              <p class="text-xs text-slate-500 mb-2 line-clamp-2">
+                {{ defect.description }}
+              </p>
               <div class="flex items-center gap-4 text-xs text-slate-400">
                 <span>分类：{{ defect.category }}</span>
                 <span>位置：{{ defect.location }}</span>

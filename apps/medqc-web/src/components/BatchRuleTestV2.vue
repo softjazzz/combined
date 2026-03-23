@@ -4,12 +4,18 @@
     <div class="page-header">
       <div class="header-content">
         <div class="header-left">
-          <h1 class="header-title">批量质控评估</h1>
-          <p class="header-subtitle">三栏卡片式布局：选择规则 → 输入病历 → 查看结果</p>
+          <h1 class="header-title">
+            批量质控评估
+          </h1>
+          <p class="header-subtitle">
+            三栏卡片式布局：选择规则 → 输入病历 → 查看结果
+          </p>
         </div>
         <div class="header-right">
           <a-button @click="goBack">
-            <template #icon><ArrowLeftOutlined /></template>
+            <template #icon>
+              <ArrowLeftOutlined />
+            </template>
             返回列表
           </a-button>
         </div>
@@ -20,12 +26,19 @@
     <div class="three-column-container">
       <!-- 左栏：规则选择区 (25%) -->
       <div class="left-column">
-        <a-card :bordered="false" class="rules-card">
+        <a-card
+          :bordered="false"
+          class="rules-card"
+        >
           <template #title>
             <div class="card-title-wrapper">
               <AppstoreOutlined class="title-icon" />
               <span>规则选择</span>
-              <a-tag v-if="selectedRuleIds.length > 0" color="blue" style="margin-left: 8px">
+              <a-tag
+                v-if="selectedRuleIds.length > 0"
+                color="blue"
+                style="margin-left: 8px"
+              >
                 已选 {{ selectedRuleIds.length }}
               </a-tag>
             </div>
@@ -44,7 +57,10 @@
                 :key="config.key"
                 :value="config.key"
               >
-                <component :is="iconComponents[config.icon]" style="margin-right: 4px" />
+                <component
+                  :is="iconComponents[config.icon]"
+                  style="margin-right: 4px"
+                />
                 {{ config.label }}
               </a-select-option>
             </a-select>
@@ -55,7 +71,7 @@
             <a-input
               v-model:value="searchText"
               placeholder="搜索规则..."
-              allowClear
+              allow-clear
               :disabled="isTesting"
             >
               <template #prefix>
@@ -63,29 +79,45 @@
               </template>
             </a-input>
 
-            <a-space direction="vertical" style="width: 100%; margin-top: 8px" :size="8">
+            <a-space
+              direction="vertical"
+              style="width: 100%; margin-top: 8px"
+              :size="8"
+            >
               <a-select
                 v-model:value="filterDefectLevel"
                 placeholder="缺陷等级"
-                allowClear
+                allow-clear
                 style="width: 100%"
                 :disabled="isTesting"
               >
-                <a-select-option value="严重缺陷">🔴 严重</a-select-option>
-                <a-select-option value="一般缺陷">🟡 一般</a-select-option>
-                <a-select-option value="轻微缺陷">🟢 轻微</a-select-option>
+                <a-select-option value="严重缺陷">
+                  🔴 严重
+                </a-select-option>
+                <a-select-option value="一般缺陷">
+                  🟡 一般
+                </a-select-option>
+                <a-select-option value="轻微缺陷">
+                  🟢 轻微
+                </a-select-option>
               </a-select>
 
               <a-select
                 v-model:value="filterComplexity"
                 placeholder="复杂度"
-                allowClear
+                allow-clear
                 style="width: 100%"
                 :disabled="isTesting"
               >
-                <a-select-option value="高复杂度">🟠 高</a-select-option>
-                <a-select-option value="中复杂度">🟢 中</a-select-option>
-                <a-select-option value="低复杂度">🔵 低</a-select-option>
+                <a-select-option value="高复杂度">
+                  🟠 高
+                </a-select-option>
+                <a-select-option value="中复杂度">
+                  🟢 中
+                </a-select-option>
+                <a-select-option value="低复杂度">
+                  🔵 低
+                </a-select-option>
               </a-select>
             </a-space>
           </div>
@@ -95,8 +127,8 @@
             <a-checkbox
               :checked="isAllSelected"
               :indeterminate="isIndeterminate"
-              @change="toggleSelectAll"
               :disabled="isTesting || filteredRules.length === 0"
+              @change="toggleSelectAll"
             >
               全选
             </a-checkbox>
@@ -123,10 +155,20 @@
                 @change="() => toggleRuleSelection(rule.rule_id)"
               />
               <div class="rule-info">
-                <div class="rule-id">{{ rule.rule_id }}</div>
-                <div class="rule-name" :title="rule.name">{{ rule.name }}</div>
+                <div class="rule-id">
+                  {{ rule.rule_id }}
+                </div>
+                <div
+                  class="rule-name"
+                  :title="rule.name"
+                >
+                  {{ rule.name }}
+                </div>
                 <div class="rule-tags">
-                  <a-tag :color="getDefectLevelColor(rule.defect_level)" size="small">
+                  <a-tag
+                    :color="getDefectLevelColor(rule.defect_level)"
+                    size="small"
+                  >
                     {{ normalizeDefectLevel(rule.defect_level) }}
                   </a-tag>
                 </div>
@@ -138,18 +180,28 @@
 
       <!-- 中栏：病历编辑区 (40%) -->
       <div class="middle-column">
-        <a-card :bordered="false" class="medical-text-card">
+        <a-card
+          :bordered="false"
+          class="medical-text-card"
+        >
           <template #title>
             <div class="card-title-wrapper">
               <FileTextOutlined class="title-icon" />
               <span>病历文本</span>
-              <a-tag :color="currentConfig.tagColor" style="margin-left: 8px">
+              <a-tag
+                :color="currentConfig.tagColor"
+                style="margin-left: 8px"
+              >
                 {{ currentConfig.label }}
               </a-tag>
             </div>
           </template>
           <template #extra>
-            <a-button size="small" @click="resetMedicalText" :disabled="isTesting">
+            <a-button
+              size="small"
+              :disabled="isTesting"
+              @click="resetMedicalText"
+            >
               重置
             </a-button>
           </template>
@@ -161,7 +213,7 @@
               :placeholder="`请输入或编辑${currentConfig.label}...`"
               :auto-size="{ minRows: 20, maxRows: 30 }"
               class="medical-textarea"
-              showCount
+              show-count
               :maxlength="5000"
             />
           </div>
@@ -176,7 +228,9 @@
               :disabled="selectedRuleIds.length === 0 || !medicalText.trim()"
               @click="startBatchTest"
             >
-              <template #icon><ThunderboltOutlined /></template>
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
               {{ isTesting ? `评估中 ${testProgress.completed}/${testProgress.total}` : '🚀 开始批量评估' }}
             </a-button>
 
@@ -185,10 +239,12 @@
               block
               :loading="isProductionTesting"
               :disabled="selectedRuleIds.length === 0 || !medicalText.trim() || isTesting"
-              @click="startProductionBatchQC"
               style="margin-top: 12px"
+              @click="startProductionBatchQC"
             >
-              <template #icon><ThunderboltOutlined /></template>
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
               {{ isProductionTesting ? '生产质控中...' : '⚡ 生产批量质控' }}
             </a-button>
           </div>
@@ -197,7 +253,10 @@
 
       <!-- 右栏：评估结果区 (35%) -->
       <div class="right-column">
-        <a-card :bordered="false" class="results-card">
+        <a-card
+          :bordered="false"
+          class="results-card"
+        >
           <template #title>
             <div class="card-title-wrapper">
               <BarChartOutlined class="title-icon" />
@@ -206,28 +265,48 @@
           </template>
 
           <!-- 空状态 -->
-          <div v-if="!productionResult && testResults.length === 0" class="empty-state">
-            <div class="empty-icon">📊</div>
-            <div class="empty-text">尚无评估结果</div>
-            <div class="empty-hint">选择规则并点击评估按钮开始</div>
+          <div
+            v-if="!productionResult && testResults.length === 0"
+            class="empty-state"
+          >
+            <div class="empty-icon">
+              📊
+            </div>
+            <div class="empty-text">
+              尚无评估结果
+            </div>
+            <div class="empty-hint">
+              选择规则并点击评估按钮开始
+            </div>
           </div>
 
           <!-- 评估中状态 -->
-          <div v-else-if="isTesting || isProductionTesting" class="evaluating-state">
+          <div
+            v-else-if="isTesting || isProductionTesting"
+            class="evaluating-state"
+          >
             <a-spin size="large" />
-            <div class="evaluating-text">AI 正在评估中...</div>
+            <div class="evaluating-text">
+              AI 正在评估中...
+            </div>
             <div class="evaluating-hint">
               {{ isTesting ? `${testProgress.completed}/${testProgress.total} 条规则` : '使用优化提示词批量评估' }}
             </div>
           </div>
 
           <!-- 生产质控结果 -->
-          <div v-else-if="productionResult && productionResult.data" class="production-results">
+          <div
+            v-else-if="productionResult && productionResult.data"
+            class="production-results"
+          >
             <!-- 合规率卡片 -->
             <div class="compliance-card">
               <div class="compliance-chart">
                 <div class="chart-circle">
-                  <svg viewBox="0 0 100 100" class="circular-chart">
+                  <svg
+                    viewBox="0 0 100 100"
+                    class="circular-chart"
+                  >
                     <circle
                       class="circle-bg"
                       cx="50"
@@ -243,8 +322,12 @@
                     />
                   </svg>
                   <div class="chart-text">
-                    <div class="chart-value">{{ productionResult.data.evaluation_summary.compliance_rate?.toFixed(1) || '0.0' }}%</div>
-                    <div class="chart-label">合规率</div>
+                    <div class="chart-value">
+                      {{ productionResult.data.evaluation_summary.compliance_rate?.toFixed(1) || '0.0' }}%
+                    </div>
+                    <div class="chart-label">
+                      合规率
+                    </div>
                   </div>
                 </div>
               </div>
@@ -252,7 +335,9 @@
 
             <!-- 问题汇总 -->
             <div class="issues-summary">
-              <div class="summary-title">📋 问题汇总</div>
+              <div class="summary-title">
+                📋 问题汇总
+              </div>
               <div class="summary-items">
                 <div class="summary-row">
                   <span class="summary-label">发现问题：</span>
@@ -276,12 +361,22 @@
             </div>
 
             <!-- 详细结果列表 -->
-            <div v-if="productionResult.data.evaluation_results && productionResult.data.evaluation_results.length > 0" class="results-list">
+            <div
+              v-if="productionResult.data.evaluation_results && productionResult.data.evaluation_results.length > 0"
+              class="results-list"
+            >
               <div class="results-header">
                 <span class="results-title">详细结果</span>
-                <a-radio-group v-model:value="resultFilter" size="small">
-                  <a-radio-button value="all">全部</a-radio-button>
-                  <a-radio-button value="issues">仅问题</a-radio-button>
+                <a-radio-group
+                  v-model:value="resultFilter"
+                  size="small"
+                >
+                  <a-radio-button value="all">
+                    全部
+                  </a-radio-button>
+                  <a-radio-button value="issues">
+                    仅问题
+                  </a-radio-button>
                 </a-radio-group>
               </div>
 
@@ -297,22 +392,43 @@
                       <CloseCircleOutlined v-else />
                     </div>
                     <div class="result-info">
-                      <div class="result-rule-id">{{ result.rule_id }}</div>
-                      <div class="result-rule-name">{{ result.rule_name }}</div>
+                      <div class="result-rule-id">
+                        {{ result.rule_id }}
+                      </div>
+                      <div class="result-rule-name">
+                        {{ result.rule_name }}
+                      </div>
                     </div>
-                    <a-tag :color="result.is_compliant ? 'success' : 'error'" size="small">
+                    <a-tag
+                      :color="result.is_compliant ? 'success' : 'error'"
+                      size="small"
+                    >
                       {{ result.is_compliant ? '合规' : '不合规' }}
                     </a-tag>
                   </div>
 
-                  <div v-if="!result.is_compliant && result.findings" class="result-findings">
-                    <div class="findings-label">问题：</div>
-                    <div class="findings-text">{{ result.findings }}</div>
+                  <div
+                    v-if="!result.is_compliant && result.findings"
+                    class="result-findings"
+                  >
+                    <div class="findings-label">
+                      问题：
+                    </div>
+                    <div class="findings-text">
+                      {{ result.findings }}
+                    </div>
                   </div>
 
-                  <div v-if="!result.is_compliant && result.evidence" class="result-evidence">
-                    <div class="evidence-label">证据：</div>
-                    <div class="evidence-text">{{ result.evidence }}</div>
+                  <div
+                    v-if="!result.is_compliant && result.evidence"
+                    class="result-evidence"
+                  >
+                    <div class="evidence-label">
+                      证据：
+                    </div>
+                    <div class="evidence-text">
+                      {{ result.evidence }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -320,38 +436,59 @@
           </div>
 
           <!-- 传统批量测试结果 -->
-          <div v-else-if="testResults.length > 0" class="test-results">
+          <div
+            v-else-if="testResults.length > 0"
+            class="test-results"
+          >
             <div class="results-stats">
               <div class="stat-item">
-                <div class="stat-value">{{ testResults.filter(r => r.compliant).length }}</div>
-                <div class="stat-label">合规</div>
+                <div class="stat-value">
+                  {{ testResults.filter(r => r.isCompliant).length }}
+                </div>
+                <div class="stat-label">
+                  合规
+                </div>
               </div>
               <div class="stat-item">
-                <div class="stat-value error">{{ testResults.filter(r => !r.compliant).length }}</div>
-                <div class="stat-label">不合规</div>
+                <div class="stat-value error">
+                  {{ testResults.filter(r => !r.isCompliant).length }}
+                </div>
+                <div class="stat-label">
+                  不合规
+                </div>
               </div>
             </div>
 
             <div class="results-list">
               <div
                 v-for="result in testResults"
-                :key="result.rule_id"
-                :class="['result-item', result.compliant ? 'compliant' : 'non-compliant']"
+                :key="result.ruleId"
+                :class="['result-item', result.isCompliant ? 'compliant' : 'non-compliant']"
               >
                 <div class="result-header">
                   <div class="result-icon">
-                    <CheckCircleOutlined v-if="result.compliant" />
+                    <CheckCircleOutlined v-if="result.isCompliant" />
                     <CloseCircleOutlined v-else />
                   </div>
                   <div class="result-info">
-                    <div class="result-rule-id">{{ result.rule_id }}</div>
-                    <div class="result-rule-name">{{ result.rule_name }}</div>
+                    <div class="result-rule-id">
+                      {{ result.ruleId }}
+                    </div>
+                    <div class="result-rule-name">
+                      {{ result.ruleName }}
+                    </div>
                   </div>
-                  <a-tag :color="result.compliant ? 'success' : 'error'" size="small">
-                    {{ result.compliant ? '合规' : '不合规' }}
+                  <a-tag
+                    :color="result.isCompliant ? 'success' : 'error'"
+                    size="small"
+                  >
+                    {{ result.isCompliant ? '合规' : '不合规' }}
                   </a-tag>
                 </div>
-                <div v-if="!result.compliant && result.evidence" class="result-evidence">
+                <div
+                  v-if="!result.isCompliant && result.evidence"
+                  class="result-evidence"
+                >
                   {{ result.evidence }}
                 </div>
               </div>
@@ -552,17 +689,22 @@ const startBatchTest = async () => {
 
         if (response.success && response.data) {
           testResults.value.push({
-            rule_id: ruleId,
-            rule_name: rule.name,
-            rule_code: ruleId,
-            document_name: currentConfig.value.label,
-            compliant: response.data.is_compliant,
-            confidence: response.data.confidence,
+            ruleId,
+            ruleName: rule.name,
+            isCompliant: response.data.is_compliant,
+            status: response.data.status,
+            findings: response.data.findings,
+            applicability: response.data.applicability,
+            notApplicable: response.data.not_applicable,
+            notApplicableReason: response.data.not_applicable_reason,
+            evidenceVerified: response.data.evidence_verified,
+            confidence: response.data.confidence ?? 0,
             evidence: response.data.findings || response.data.evidence,
-            reasoning: response.data.evidence,
             suggestion: response.data.suggestion,
-            execution_time: response.data.execution_time || 0,
-            issues: []
+            issues: response.data.issues || [],
+            llmRawOutput: response.data.llm_raw_output,
+            metadata: response.data.metadata,
+            error: response.success ? undefined : (response.message || '评估失败')
           })
         }
       } catch (error) {
@@ -597,7 +739,6 @@ const startProductionBatchQC = async () => {
       document_content: medicalText.value,
       document_type: currentConfig.value.label,
       rule_ids: selectedRuleIds.value,
-      use_multi_document_mode: false,
       persist: false
     })
 

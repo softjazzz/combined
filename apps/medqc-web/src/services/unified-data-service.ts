@@ -92,10 +92,10 @@ class SecurityUtils {
     
     // 非管理员用户脱敏处理
     if (userRole !== 'admin') {
-      if (sanitized.patient_name) {
+      if (typeof sanitized.patient_name === 'string') {
         sanitized.patient_name = this.maskName(sanitized.patient_name)
       }
-      if (sanitized.patient_id) {
+      if (typeof sanitized.patient_id === 'string') {
         sanitized.patient_id = this.maskId(sanitized.patient_id)
       }
     }
@@ -189,7 +189,7 @@ export class UnifiedDataService {
           error: {
             message: '获取医疗记录失败',
             code: error.code,
-            details: error.details
+            details: error.details ? { message: error.details } : undefined
           }
         }
       }
@@ -197,9 +197,9 @@ export class UnifiedDataService {
       // 数据脱敏
       const user = await supabase.auth.getUser()
       const userRole = 'doctor' // TODO: 从用户信息中获取实际角色
-      const sanitizedData = data?.map(record => 
+      const sanitizedData = (data?.map(record => 
         SecurityUtils.sanitizePatientData(record, userRole)
-      ) || []
+      ) || []) as MedicalRecord[]
       
       // 缓存结果
       this.cache.set(cacheKey, { data: sanitizedData, count })
@@ -246,7 +246,7 @@ export class UnifiedDataService {
       
       // 数据脱敏
       const userRole = 'doctor' // TODO: 获取实际用户角色
-      const sanitizedData = SecurityUtils.sanitizePatientData(data, userRole)
+      const sanitizedData = SecurityUtils.sanitizePatientData(data, userRole) as MedicalRecord
       
       await AuditLogger.log('get_medical_record_by_id', { record_id: id })
       
@@ -271,7 +271,12 @@ export class UnifiedDataService {
   async createMedicalRecord(request: CreateMedicalRecordRequest): Promise<UnifiedApiResponse<MedicalRecord>> {
     try {
       // 数据验证
-      if (!request.patient_name || !request.content) {
+      const payload = request as Record<string, any>
+      const patientInfo = (payload.patient_info || {}) as Record<string, any>
+      const patientName = payload.patient_name ?? patientInfo.name ?? payload.record_name
+      const content = payload.content ?? payload.raw_text ?? payload.primary_diagnosis
+
+      if (!patientName || !content) {
         return {
           success: false,
           error: {
@@ -281,16 +286,18 @@ export class UnifiedDataService {
       }
       
       // 构建插入数据
-      const insertData: MedicalRecordInsert = {
-        record_number: `REC-${Date.now()}`,
-        patient_name: request.patient_name,
-        patient_age: request.patient_age,
-        patient_gender: request.patient_gender,
-        content: request.content,
-        status: 'pending',
+      const insertData = {
+        patient_name: patientName,
+        patient_age: payload.patient_age ?? patientInfo.age ?? 0,
+        patient_gender: payload.patient_gender ?? patientInfo.gender ?? 'U',
+        department: payload.department ?? '',
+        admission_date: payload.admission_date ?? new Date().toISOString().split('T')[0],
+        record_type: payload.record_type ?? 'inpatient',
+        content,
+        status: payload.status ?? 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }
+      } as any
       
       const { data, error } = await supabase
         .from('medical_records')
@@ -335,10 +342,10 @@ export class UnifiedDataService {
    */
   async updateMedicalRecord(id: string, request: UpdateMedicalRecordRequest): Promise<UnifiedApiResponse<MedicalRecord>> {
     try {
-      const updateData: MedicalRecordUpdate = {
-        ...request,
+      const updateData = {
+        ...(request as Record<string, unknown>),
         updated_at: new Date().toISOString()
-      }
+      } as any
       
       const { data, error } = await supabase
         .from('medical_records')

@@ -84,7 +84,7 @@ class IntelligentMessageGenerator {
 关联数据：${JSON.stringify(relatedData, null, 2)}
 `
 
-    const typeSpecificPrompts = {
+    const typeSpecificPrompts: Partial<Record<MessageType, string>> = {
       'rectification_required': `
 这是一条整改要求通知，需要包含：
 1. 明确的问题描述
@@ -173,7 +173,11 @@ class IntelligentMessageGenerator {
     relatedData: NotificationRelatedData
   ): Partial<QCNotification> {
     
-    const templates = {
+    const templates: Partial<Record<MessageType, {
+      title: string
+      content: string
+      priority: MessagePriority
+    }>> = {
       'rectification_required': {
         title: '病历整改通知',
         content: '您的病历存在质控问题，请及时整改。',
@@ -534,7 +538,7 @@ export class NotificationService {
       return undefined
     }
 
-    const expiryHours = {
+    const expiryHours: Partial<Record<MessageType, number>> = {
       'deadline_reminder': 24,
       'system_announcement': 72
     }

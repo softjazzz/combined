@@ -4,8 +4,14 @@
     <slot v-if="!hasError" />
     
     <!-- 错误状态 -->
-    <div v-else class="error-content">
-      <div class="error-container" :class="`error-${errorSeverity}`">
+    <div
+      v-else
+      class="error-content"
+    >
+      <div
+        class="error-container"
+        :class="`error-${errorSeverity}`"
+      >
         <!-- 错误图标 -->
         <div class="error-icon">
           <component :is="errorIcon" />
@@ -13,13 +19,23 @@
         
         <!-- 错误信息 -->
         <div class="error-info">
-          <h3 class="error-title">{{ errorTitle }}</h3>
-          <p class="error-message">{{ errorMessage }}</p>
+          <h3 class="error-title">
+            {{ errorTitle }}
+          </h3>
+          <p class="error-message">
+            {{ errorMessage }}
+          </p>
           
           <!-- 错误详情（开发模式） -->
-          <div v-if="showDetails && errorDetails" class="error-details">
+          <div
+            v-if="showDetails && errorDetails"
+            class="error-details"
+          >
             <a-collapse ghost>
-              <a-collapse-panel key="details" header="错误详情">
+              <a-collapse-panel
+                key="details"
+                header="错误详情"
+              >
                 <pre class="error-stack">{{ errorDetails }}</pre>
               </a-collapse-panel>
             </a-collapse>
@@ -28,13 +44,18 @@
         
         <!-- 操作按钮 -->
         <div class="error-actions">
-          <a-space :direction="isMobile ? 'vertical' : 'horizontal'" :size="12">
+          <a-space
+            :direction="isMobile ? 'vertical' : 'horizontal'"
+            :size="12"
+          >
             <a-button 
               type="primary" 
-              @click="handleRetry"
               :loading="retrying"
+              @click="handleRetry"
             >
-              <template #icon><ReloadOutlined /></template>
+              <template #icon>
+                <ReloadOutlined />
+              </template>
               重试
             </a-button>
             
@@ -42,7 +63,9 @@
               v-if="canGoBack"
               @click="handleGoBack"
             >
-              <template #icon><ArrowLeftOutlined /></template>
+              <template #icon>
+                <ArrowLeftOutlined />
+              </template>
               返回
             </a-button>
             
@@ -50,7 +73,9 @@
               v-if="showReportButton"
               @click="handleReport"
             >
-              <template #icon><BugOutlined /></template>
+              <template #icon>
+                <BugOutlined />
+              </template>
               报告问题
             </a-button>
             
@@ -58,24 +83,35 @@
               v-if="showRefreshButton"
               @click="handleRefresh"
             >
-              <template #icon><SyncOutlined /></template>
+              <template #icon>
+                <SyncOutlined />
+              </template>
               刷新页面
             </a-button>
           </a-space>
         </div>
         
         <!-- 建议操作 -->
-        <div v-if="suggestions.length > 0" class="error-suggestions">
+        <div
+          v-if="suggestions.length > 0"
+          class="error-suggestions"
+        >
           <h4>建议操作：</h4>
           <ul>
-            <li v-for="(suggestion, index) in suggestions" :key="index">
+            <li
+              v-for="(suggestion, index) in suggestions"
+              :key="index"
+            >
               {{ suggestion }}
             </li>
           </ul>
         </div>
         
         <!-- 联系信息 -->
-        <div v-if="showContactInfo" class="error-contact">
+        <div
+          v-if="showContactInfo"
+          class="error-contact"
+        >
           <a-divider />
           <p class="contact-text">
             如果问题持续存在，请联系技术支持：
@@ -89,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onErrorCaptured, watch } from 'vue'
+import { ref, computed, onErrorCaptured } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   ReloadOutlined, 
@@ -167,12 +203,12 @@ const errorTitle = computed(() => {
   
   const titleMap: Record<ErrorType, string> = {
     [ErrorType.NETWORK]: '网络连接错误',
-    [ErrorType.API]: '服务请求失败',
     [ErrorType.VALIDATION]: '数据验证错误',
-    [ErrorType.PERMISSION]: '权限不足',
     [ErrorType.BUSINESS]: '业务逻辑错误',
-    [ErrorType.SYSTEM]: '系统错误',
-    [ErrorType.TIMEOUT]: '请求超时',
+    [ErrorType.DATABASE]: '服务请求失败',
+    [ErrorType.AUTHENTICATION]: '身份认证错误',
+    [ErrorType.AUTHORIZATION]: '权限不足',
+    [ErrorType.FILE_UPLOAD]: '文件处理错误',
     [ErrorType.UNKNOWN]: '未知错误'
   }
   
@@ -185,12 +221,12 @@ const errorMessage = computed(() => {
   // 用户友好的错误消息
   const messageMap: Record<ErrorType, string> = {
     [ErrorType.NETWORK]: '网络连接异常，请检查网络设置后重试',
-    [ErrorType.API]: '服务暂时不可用，请稍后重试',
     [ErrorType.VALIDATION]: '输入的数据格式不正确，请检查后重新提交',
-    [ErrorType.PERMISSION]: '您没有执行此操作的权限，请联系管理员',
     [ErrorType.BUSINESS]: '操作无法完成，请检查输入信息',
-    [ErrorType.SYSTEM]: '系统内部错误，我们正在处理这个问题',
-    [ErrorType.TIMEOUT]: '操作超时，请重试或检查网络连接',
+    [ErrorType.DATABASE]: '服务暂时不可用，请稍后重试',
+    [ErrorType.AUTHENTICATION]: '登录状态异常，请重新登录后重试',
+    [ErrorType.AUTHORIZATION]: '您没有执行此操作的权限，请联系管理员',
+    [ErrorType.FILE_UPLOAD]: '文件上传或解析失败，请检查文件后重试',
     [ErrorType.UNKNOWN]: '系统遇到了未知问题，请重试或联系技术支持'
   }
   
@@ -218,7 +254,7 @@ const suggestions = computed(() => {
       '尝试刷新页面',
       '如果使用VPN，请尝试断开后重试'
     ],
-    [ErrorType.API]: [
+    [ErrorType.DATABASE]: [
       '稍后重试',
       '检查输入的数据是否正确',
       '如果问题持续，请联系技术支持'
@@ -228,25 +264,25 @@ const suggestions = computed(() => {
       '确保必填字段已填写',
       '参考提示信息修正输入'
     ],
-    [ErrorType.PERMISSION]: [
-      '联系管理员获取相应权限',
-      '确认您的账户状态正常',
-      '尝试重新登录'
-    ],
     [ErrorType.BUSINESS]: [
       '检查操作步骤是否正确',
       '确认数据状态符合要求',
       '参考帮助文档'
     ],
-    [ErrorType.SYSTEM]: [
-      '稍后重试',
-      '刷新页面',
-      '联系技术支持'
+    [ErrorType.AUTHENTICATION]: [
+      '请重新登录后重试',
+      '确认账号和密码是否正确',
+      '如仍失败请联系管理员'
     ],
-    [ErrorType.TIMEOUT]: [
-      '检查网络连接速度',
-      '重试操作',
-      '如果文件较大，请耐心等待'
+    [ErrorType.AUTHORIZATION]: [
+      '联系管理员获取相应权限',
+      '确认您的账户状态正常',
+      '尝试重新登录'
+    ],
+    [ErrorType.FILE_UPLOAD]: [
+      '检查文件格式和大小是否符合要求',
+      '重新选择文件并重试',
+      '如为扫描件，请确保文件内容清晰'
     ],
     [ErrorType.UNKNOWN]: [
       '刷新页面重试',
@@ -289,20 +325,23 @@ const analyzeError = (error: Error) => {
   const message = error.message?.toLowerCase() || ''
   
   // 分析错误类型
-  if (message.includes('network') || message.includes('fetch')) {
+  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
     errorType.value = ErrorType.NETWORK
     errorSeverity.value = ErrorSeverity.HIGH
-  } else if (message.includes('timeout')) {
-    errorType.value = ErrorType.TIMEOUT
+  } else if (message.includes('permission') || message.includes('unauthorized') || message.includes('forbidden')) {
+    errorType.value = ErrorType.AUTHORIZATION
     errorSeverity.value = ErrorSeverity.MEDIUM
-  } else if (message.includes('permission') || message.includes('unauthorized')) {
-    errorType.value = ErrorType.PERMISSION
+  } else if (message.includes('auth') || message.includes('token') || message.includes('login')) {
+    errorType.value = ErrorType.AUTHENTICATION
     errorSeverity.value = ErrorSeverity.MEDIUM
   } else if (message.includes('validation') || message.includes('invalid')) {
     errorType.value = ErrorType.VALIDATION
     errorSeverity.value = ErrorSeverity.LOW
-  } else if (message.includes('api') || message.includes('server')) {
-    errorType.value = ErrorType.API
+  } else if (message.includes('upload') || message.includes('file')) {
+    errorType.value = ErrorType.FILE_UPLOAD
+    errorSeverity.value = ErrorSeverity.MEDIUM
+  } else if (message.includes('api') || message.includes('server') || message.includes('database')) {
+    errorType.value = ErrorType.DATABASE
     errorSeverity.value = ErrorSeverity.HIGH
   } else {
     errorType.value = ErrorType.UNKNOWN
@@ -385,7 +424,8 @@ window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => 
 
 // 暴露方法给父组件
 defineExpose({
-  handleError: unknown, reset: () => {
+  handleError,
+  reset: () => {
     hasError.value = false
     currentError.value = null
     retryCount.value = 0

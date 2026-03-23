@@ -2,10 +2,20 @@
   <div class="appeal-manager">
     <!-- 顶部操作栏 -->
     <div class="manager-header">
-      <a-space direction="vertical" :size="12" style="width: 100%">
+      <a-space
+        direction="vertical"
+        :size="12"
+        style="width: 100%"
+      >
         <!-- 状态筛选 -->
-        <a-radio-group v-model:value="statusFilter" button-style="solid" size="small">
-          <a-radio-button value="">全部 ({{ demoStore.appeals.length }})</a-radio-button>
+        <a-radio-group
+          v-model:value="statusFilter"
+          button-style="solid"
+          size="small"
+        >
+          <a-radio-button value="">
+            全部 ({{ demoStore.appeals.length }})
+          </a-radio-button>
           <a-radio-button value="pending">
             待审核 ({{ getCountByStatus('pending') }})
           </a-radio-button>
@@ -41,7 +51,10 @@
 
         <!-- 状态 -->
         <template v-if="column.key === 'status'">
-          <a-badge :status="getStatusBadge(record.status)" :text="getStatusLabel(record.status)" />
+          <a-badge
+            :status="getStatusBadge(record.status)"
+            :text="getStatusLabel(record.status)"
+          />
 
           <!-- 审核进度条（仅审核中状态） -->
           <a-progress
@@ -97,14 +110,21 @@
 
       <!-- 展开行：显示申诉详情 -->
       <template #expandedRowRender="{ record }">
-        <a-descriptions :column="2" size="small" bordered>
+        <a-descriptions
+          :column="2"
+          size="small"
+          bordered
+        >
           <a-descriptions-item label="申诉ID">
             {{ record.id }}
           </a-descriptions-item>
           <a-descriptions-item label="关联通知ID">
             {{ record.notificationId || '无' }}
           </a-descriptions-item>
-          <a-descriptions-item label="申诉描述" :span="2">
+          <a-descriptions-item
+            label="申诉描述"
+            :span="2"
+          >
             {{ record.description }}
           </a-descriptions-item>
           <a-descriptions-item label="提交人">
@@ -113,13 +133,23 @@
           <a-descriptions-item label="提交时间">
             {{ formatTime(record.submittedAt) }}
           </a-descriptions-item>
-          <a-descriptions-item v-if="record.reviewedAt" label="审核时间">
+          <a-descriptions-item
+            v-if="record.reviewedAt"
+            label="审核时间"
+          >
             {{ formatTime(record.reviewedAt) }}
           </a-descriptions-item>
-          <a-descriptions-item v-if="record.reviewedBy" label="审核人">
+          <a-descriptions-item
+            v-if="record.reviewedBy"
+            label="审核人"
+          >
             {{ record.reviewedBy }}
           </a-descriptions-item>
-          <a-descriptions-item v-if="record.reviewerComment" label="审核意见" :span="2">
+          <a-descriptions-item
+            v-if="record.reviewerComment"
+            label="审核意见"
+            :span="2"
+          >
             {{ record.reviewerComment }}
           </a-descriptions-item>
         </a-descriptions>

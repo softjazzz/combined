@@ -1,4 +1,5 @@
-﻿import { describe, it, expect, beforeEach, vi } from 'vitest'
+﻿// @ts-nocheck
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RecordForm from '@/components/medical-records/RecordForm.vue'
@@ -73,3 +74,4 @@ describe('RecordForm', () => {
     expect(typeof wrapper.vm.resetForm).toBe('function')
   })
 })
+

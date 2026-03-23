@@ -1,27 +1,49 @@
 <template>
   <a-drawer
     :open="open"
-    @close="emit('update:open', false)"
     width="720"
     :title="null"
-    :headerStyle="{ display: 'none' }"
+    :header-style="{ display: 'none' }"
     class="rule-detail-drawer"
-    destroyOnClose
+    destroy-on-close
+    @close="emit('update:open', false)"
   >
-    <div v-if="rule" class="pb-8">
+    <div
+      v-if="rule"
+      class="pb-8"
+    >
       <!-- 头部 -->
       <div class="flex items-start justify-between mb-6">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 mb-2 flex-wrap">
-            <a-tag color="blue" class="text-xs font-mono">{{ rule.rule_code }}</a-tag>
-            <a-tag :color="severityColor">{{ severityLabel }}</a-tag>
-            <a-tag :color="categoryColor">{{ categoryLabel }}</a-tag>
-            <a-tag :color="typeColor">{{ typeLabel }}</a-tag>
+            <a-tag
+              color="blue"
+              class="text-xs font-mono"
+            >
+              {{ rule.rule_code }}
+            </a-tag>
+            <a-tag :color="severityColor">
+              {{ severityLabel }}
+            </a-tag>
+            <a-tag :color="categoryColor">
+              {{ categoryLabel }}
+            </a-tag>
+            <a-tag :color="typeColor">
+              {{ typeLabel }}
+            </a-tag>
           </div>
-          <h2 class="text-lg font-bold text-slate-800 leading-tight">{{ rule.name }}</h2>
+          <h2 class="text-lg font-bold text-slate-800 leading-tight">
+            {{ rule.name }}
+          </h2>
         </div>
-        <a-button type="text" @click="emit('update:open', false)" class="text-slate-400 hover:text-slate-600 ml-2 shrink-0">
-          <template #icon><CloseOutlined /></template>
+        <a-button
+          type="text"
+          class="text-slate-400 hover:text-slate-600 ml-2 shrink-0"
+          @click="emit('update:open', false)"
+        >
+          <template #icon>
+            <CloseOutlined />
+          </template>
         </a-button>
       </div>
 
@@ -42,7 +64,11 @@
           <div class="info-item">
             <span class="info-label">扣分</span>
             <span>
-              <a-tag v-if="rule.max_score === 0" color="red" size="small">单项否决</a-tag>
+              <a-tag
+                v-if="rule.max_score === 0"
+                color="red"
+                size="small"
+              >单项否决</a-tag>
               <span v-else>{{ rule.max_score }} 分</span>
             </span>
           </div>
@@ -54,9 +80,14 @@
             <span class="info-label">版本</span>
             <span>{{ rule.version || '1.0' }}</span>
           </div>
-          <div class="info-item" v-if="documentCategoryLabel">
+          <div
+            v-if="documentCategoryLabel"
+            class="info-item"
+          >
             <span class="info-label">文书类型</span>
-            <a-tag :color="documentCategoryColor">{{ documentCategoryLabel }}</a-tag>
+            <a-tag :color="documentCategoryColor">
+              {{ documentCategoryLabel }}
+            </a-tag>
           </div>
           <div class="info-item">
             <span class="info-label">创建时间</span>
@@ -81,7 +112,10 @@
       </section>
 
       <!-- 检查逻辑 -->
-      <section v-if="hasCheckLogic" class="mb-6">
+      <section
+        v-if="hasCheckLogic"
+        class="mb-6"
+      >
         <h3 class="section-title">
           <CodeOutlined class="mr-2" />
           检查逻辑
@@ -92,7 +126,10 @@
       </section>
 
       <!-- Prompt 模板 -->
-      <section v-if="rule.prompt_template" class="mb-6">
+      <section
+        v-if="rule.prompt_template"
+        class="mb-6"
+      >
         <h3 class="section-title">
           <ThunderboltOutlined class="mr-2" />
           Prompt 模板
@@ -102,7 +139,9 @@
             class="ml-auto text-slate-400 hover:text-blue-500"
             @click="copyToClipboard(rule.prompt_template!)"
           >
-            <template #icon><CopyOutlined /></template>
+            <template #icon>
+              <CopyOutlined />
+            </template>
             复制
           </a-button>
         </h3>
@@ -112,8 +151,8 @@
             v-if="isPromptTruncated"
             type="link"
             size="small"
-            @click="showFullPrompt = !showFullPrompt"
             class="mt-2"
+            @click="showFullPrompt = !showFullPrompt"
           >
             {{ showFullPrompt ? '收起' : '展开全部' }}（{{ rule.prompt_template!.length }} 字符）
           </a-button>
@@ -121,13 +160,22 @@
       </section>
 
       <!-- 正例 / 反例 -->
-      <section v-if="positiveExample || negativeExample" class="mb-6">
+      <section
+        v-if="positiveExample || negativeExample"
+        class="mb-6"
+      >
         <h3 class="section-title">
           <ExperimentOutlined class="mr-2" />
           正反示例
         </h3>
-        <a-tabs size="small" type="card">
-          <a-tab-pane key="positive" v-if="positiveExample">
+        <a-tabs
+          size="small"
+          type="card"
+        >
+          <a-tab-pane
+            v-if="positiveExample"
+            key="positive"
+          >
             <template #tab>
               <CheckCircleOutlined class="text-green-500 mr-1" />
               合规示例
@@ -136,7 +184,10 @@
               <pre class="text-xs leading-relaxed whitespace-pre-wrap">{{ positiveExample }}</pre>
             </div>
           </a-tab-pane>
-          <a-tab-pane key="negative" v-if="negativeExample">
+          <a-tab-pane
+            v-if="negativeExample"
+            key="negative"
+          >
             <template #tab>
               <CloseCircleOutlined class="text-red-500 mr-1" />
               违规示例
@@ -151,18 +202,28 @@
       <!-- 底部操作 -->
       <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
         <a-button @click="emit('edit', rule)">
-          <template #icon><EditOutlined /></template>
+          <template #icon>
+            <EditOutlined />
+          </template>
           编辑规则
         </a-button>
-        <a-button type="primary" @click="emit('test', rule)">
-          <template #icon><PlayCircleOutlined /></template>
+        <a-button
+          type="primary"
+          @click="emit('test', rule)"
+        >
+          <template #icon>
+            <PlayCircleOutlined />
+          </template>
           测试规则
         </a-button>
       </div>
     </div>
 
     <!-- 空状态 -->
-    <div v-else class="flex items-center justify-center h-64">
+    <div
+      v-else
+      class="flex items-center justify-center h-64"
+    >
       <a-empty description="请选择一条规则查看详情" />
     </div>
   </a-drawer>

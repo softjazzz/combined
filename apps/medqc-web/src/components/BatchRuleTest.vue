@@ -1,14 +1,19 @@
 <template>
   <div :class="['batch-rule-test', isDemoMode ? 'demo-mode' : 'page-container min-h-screen bg-gray-50 p-2 lg:p-3']">
     <!-- 页面头部 + Tab 导航 (仅在非演示模式下显示) -->
-    <div v-if="!isDemoMode" class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 lg:p-4 mb-3">
+    <div
+      v-if="!isDemoMode"
+      class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 lg:p-4 mb-3"
+    >
       <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div class="flex flex-1 items-start gap-3">
           <div class="p-2 bg-blue-100 rounded-md">
             <SettingOutlined class="text-lg text-blue-600" />
           </div>
           <div class="space-y-1">
-            <h1 class="text-xl font-bold text-gray-900">质控规则管理</h1>
+            <h1 class="text-xl font-bold text-gray-900">
+              质控规则管理
+            </h1>
             <p class="text-sm text-gray-600 leading-relaxed">
               {{ batchDescription }}
             </p>
@@ -18,24 +23,29 @@
         <div class="flex flex-wrap gap-1.5">
           <!-- LLM 设置按钮 -->
           <a-button
-            @click="showLLMSettings"
             size="large"
             class="llm-settings-button"
+            @click="showLLMSettings"
           >
-            <template #icon><ApiOutlined /></template>
+            <template #icon>
+              <ApiOutlined />
+            </template>
             <span>LLM 设置</span>
           </a-button>
         </div>
       </div>
 
       <a-tabs
-        v-model:activeKey="activeTab"
+        v-model:active-key="activeTab"
         type="card"
         class="rules-tabs compact-tabs mt-3"
-        @change="handleTabChange"
         size="small"
+        @change="handleTabChange"
       >
-        <a-tab-pane key="semantic" tab="四川省质控规则">
+        <a-tab-pane
+          key="semantic"
+          tab="四川省质控规则"
+        >
           <template #tab>
             <span class="qc-tab-title">
               <BranchesOutlined />
@@ -43,7 +53,10 @@
             </span>
           </template>
         </a-tab-pane>
-        <a-tab-pane key="custom" tab="泸县33条规则">
+        <a-tab-pane
+          key="custom"
+          tab="泸县33条规则"
+        >
           <template #tab>
             <span class="qc-tab-title">
               <AppstoreOutlined />
@@ -51,7 +64,10 @@
             </span>
           </template>
         </a-tab-pane>
-        <a-tab-pane key="lx_legacy" tab="泸县存量质控规则">
+        <a-tab-pane
+          key="lx_legacy"
+          tab="泸县存量质控规则"
+        >
           <template #tab>
             <span class="qc-tab-title">
               <AppstoreOutlined />
@@ -59,7 +75,10 @@
             </span>
           </template>
         </a-tab-pane>
-        <a-tab-pane key="department" tab="科室规则管理">
+        <a-tab-pane
+          key="department"
+          tab="科室规则管理"
+        >
           <template #tab>
             <span class="qc-tab-title">
               <ApartmentOutlined />
@@ -67,7 +86,10 @@
             </span>
           </template>
         </a-tab-pane>
-        <a-tab-pane key="traditional" tab="传统质控规则">
+        <a-tab-pane
+          key="traditional"
+          tab="传统质控规则"
+        >
           <template #tab>
             <span class="qc-tab-title">
               <SettingOutlined />
@@ -80,1311 +102,1738 @@
 
     <!-- 批量质控评估内容区域 -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 lg:p-4">
-      <div v-if="!isDemoMode" class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">批量质控评估</h2>
+      <div
+        v-if="!isDemoMode"
+        class="flex justify-between items-center mb-4"
+      >
+        <h2 class="text-lg font-semibold text-gray-900">
+          批量质控评估
+        </h2>
         <a-button @click="goBack">
-          <template #icon><ArrowLeftOutlined /></template>
+          <template #icon>
+            <ArrowLeftOutlined />
+          </template>
           返回列表
         </a-button>
       </div>
-      <div v-else class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">批量质控评估</h2>
+      <div
+        v-else
+        class="flex justify-between items-center mb-4"
+      >
+        <h2 class="text-lg font-semibold text-gray-900">
+          批量质控评估
+        </h2>
       </div>
 
       <!-- 主体内容区域 -->
       <div class="batch-test-content">
-      <!-- 文书类型选择器 - 紧凑标签页样式 -->
-      <div class="document-type-selector-compact">
-        <div class="selector-header">
-          <h3 class="selector-title">文书类型</h3>
-          <span class="selector-hint">选择要测试的病历类型</span>
-        </div>
-        <div class="document-type-tabs">
-          <div
-            v-for="config in documentTypeConfigsWithCount"
-            :key="config.key"
-            :class="['document-tab', {
-              active: currentDocumentType === config.key,
-              disabled: isTesting
-            }]"
-            @click="handleCardClick(config.key)"
-          >
-            <component :is="iconComponents[config.icon]" class="tab-icon" />
-            <div class="tab-content">
-              <div class="tab-label">{{ config.label }}</div>
-              <div class="tab-count">{{ config.ruleCount }} 条</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 左右分栏内容 -->
-      <div class="content-main">
-        <!-- 左侧：病历摘要 -->
-        <div class="left-panel">
-          <!-- 标题和操作按钮（左对齐，同一行） -->
-          <div class="panel-header">
-            <h3>{{ currentConfig.label }}</h3>
-            <a-button size="small" @click="showMedicalTextModal = true" type="link">
-              <template #icon><FileTextOutlined /></template>
-              查看完整病历
-            </a-button>
-          </div>
-
-          <!-- 病历摘要卡片 -->
-          <div class="medical-summary-cards" v-if="medicalSummary">
-            <div class="summary-card-grid">
-              <div class="summary-card">
-                <div class="card-label">患者信息</div>
-                <div class="card-value">{{ medicalSummary.patientInfo }}</div>
-              </div>
-              <div class="summary-card">
-                <div class="card-label">年龄/性别</div>
-                <div class="card-value">{{ medicalSummary.age }} / {{ medicalSummary.gender }}</div>
-              </div>
-              <div class="summary-card">
-                <div class="card-label">入院科室</div>
-                <div class="card-value">{{ medicalSummary.department }}</div>
-              </div>
-              <div class="summary-card">
-                <div class="card-label">主诉</div>
-                <div class="card-value">{{ medicalSummary.chiefComplaint }}</div>
-              </div>
-              <div class="summary-card full-width">
-                <div class="card-label">入院诊断</div>
-                <div class="card-value">{{ medicalSummary.diagnosis }}</div>
-              </div>
-            </div>
-          </div>
-      </div>
-
-      <!-- 右侧：质控点选择与结果 -->
-      <div class="right-panel">
-        <!-- 质控点选择区域 -->
-        <div class="rule-selection-section">
-          <div class="section-header">
-            <h3>
-              <span>选择质控点</span>
-              <a-tag :color="currentConfig.tagColor" class="document-tag" style="margin-left: 8px">
-                <component :is="iconComponents[currentConfig.icon]" class="document-tag__icon" :style="{ color: '#fff' }" />
-                {{ currentConfig.label }}
-              </a-tag>
+        <!-- 文书类型选择器 - 紧凑标签页样式 -->
+        <div class="document-type-selector-compact">
+          <div class="selector-header">
+            <h3 class="selector-title">
+              文书类型
             </h3>
+            <span class="selector-hint">选择要测试的病历类型</span>
           </div>
-
-          <!-- 搜索和筛选工具栏 -->
-          <div class="filter-toolbar">
-            <a-input-search
-              v-model:value="searchText"
-              placeholder="搜索规则ID或名称..."
-              :disabled="isTesting"
-              allowClear
+          <div class="document-type-tabs">
+            <div
+              v-for="config in documentTypeConfigsWithCount"
+              :key="config.key"
+              :class="['document-tab', {
+                active: currentDocumentType === config.key,
+                disabled: isTesting
+              }]"
+              @click="handleCardClick(config.key)"
             >
-              <template #prefix>
-                <SearchOutlined />
-              </template>
-            </a-input-search>
-            <a-select
-              v-model:value="filterDefectLevel"
-              placeholder="缺陷等级"
-              :disabled="isTesting"
-              allowClear
-              style="width: 120px"
-            >
-              <a-select-option value="严重缺陷">🔴 严重</a-select-option>
-              <a-select-option value="一般缺陷">🟡 一般</a-select-option>
-              <a-select-option value="轻微缺陷">🟢 轻微</a-select-option>
-            </a-select>
-            <a-select
-              v-model:value="filterComplexity"
-              placeholder="复杂度"
-              :disabled="isTesting"
-              allowClear
-              style="width: 110px"
-            >
-              <a-select-option value="高复杂度">🟠 高</a-select-option>
-              <a-select-option value="中复杂度">🟢 中</a-select-option>
-              <a-select-option value="低复杂度">🔵 低</a-select-option>
-            </a-select>
-          </div>
-
-          <!-- 选择摘要 -->
-          <div class="selection-summary">
-            <a-checkbox
-              :checked="isAllSelected"
-              :indeterminate="isIndeterminate"
-              @change="toggleSelectAll"
-              :disabled="isTesting || filteredRules.length === 0"
-            >
-              全选
-            </a-checkbox>
-            <span class="summary-text">
-              已选 {{ selectedRuleIds.length }}/{{ filteredRules.length }} 条
-              <span v-if="searchText || filterDefectLevel || filterComplexity" class="filter-hint">
-                (已过滤)
-              </span>
-            </span>
-          </div>
-
-          <!-- 分类折叠面板 -->
-          <div class="rules-categorized-list">
-            <a-collapse v-model:activeKey="expandedCategories" ghost>
-              <a-collapse-panel
-                v-for="[categoryKey, categoryRules] in categorizedRulesArray"
-                :key="categoryKey"
-                :header="getCategoryHeaderText(categoryKey, categoryRules.length)"
-              >
-                <template #extra>
-                  <span class="category-icon">{{ getCategoryIcon(categoryKey) }}</span>
-                </template>
-                <div class="category-rules-table">
-                  <div class="rules-table-header">
-                    <div class="col-checkbox"></div>
-                    <div class="col-id">规则ID</div>
-                    <div class="col-name">规则名称</div>
-                    <div class="col-level">缺陷等级</div>
-                  </div>
-                  <div class="rules-table-body">
-                    <div
-                      v-for="rule in categoryRules"
-                      :key="rule.rule_id"
-                      :class="['rule-row', {
-                        selected: selectedRuleIds.includes(rule.rule_id),
-                        disabled: isTesting
-                      }]"
-                      @click="toggleRuleSelection(rule.rule_id)"
-                    >
-                      <div class="col-checkbox">
-                        <a-checkbox
-                          :checked="selectedRuleIds.includes(rule.rule_id)"
-                          :disabled="isTesting"
-                          @click.stop
-                          @change="() => toggleRuleSelection(rule.rule_id)"
-                        />
-                      </div>
-                      <div class="col-id">{{ rule.rule_id }}</div>
-                      <div class="col-name" :title="rule.name">{{ rule.name }}</div>
-                      <div class="col-level">
-                        <span class="status-tag" :class="getDefectLevelClass(rule.defect_level)">
-                          {{ normalizeDefectLevel(rule.defect_level) }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+              <component
+                :is="iconComponents[config.icon]"
+                class="tab-icon"
+              />
+              <div class="tab-content">
+                <div class="tab-label">
+                  {{ config.label }}
                 </div>
-              </a-collapse-panel>
-            </a-collapse>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- 主操作按钮区域（页面底部中间，水平并排） -->
-    <div class="main-actions-section-bottom">
-      <div class="actions-row">
-        <!-- 开始批量测试按钮 -->
-        <a-button
-          type="primary"
-          size="large"
-          :loading="isTesting"
-          :disabled="selectedRuleIds.length === 0 || !medicalText.trim()"
-          @click="startBatchTest"
-          class="primary-action-button"
-        >
-          <template #icon><ThunderboltOutlined /></template>
-          {{ isTesting ? `正在测试 ${testProgress.completed}/${testProgress.total}` : '开始批量测试' }}
-        </a-button>
-
-        <!-- 启动快速质控评估按钮 -->
-        <a-button
-          type="primary"
-          size="large"
-          :loading="isProductionTesting"
-          :disabled="selectedRuleIds.length === 0 || !medicalText.trim() || isTesting"
-          @click="startProductionBatchQC"
-          class="primary-action-btn"
-        >
-          <template #icon><ThunderboltOutlined /></template>
-          {{ isProductionTesting ? '正在快速质控...' : '启动快速质控评估' }}
-        </a-button>
-
-        <!-- 查看质控结果按钮 -->
-        <a-button
-          type="default"
-          size="large"
-          @click="handleViewResults"
-          class="secondary-action-btn"
-        >
-          <template #icon><HistoryOutlined /></template>
-          查看质控结果
-          <span v-if="testResults.length > 0 || productionResult" style="margin-left: 4px; opacity: 0.7;">
-            ({{ getResultsCountText }})
-          </span>
-        </a-button>
-      </div>
-
-      <!-- 高级选项（折叠） -->
-      <a-collapse ghost class="advanced-options-collapse">
-        <a-collapse-panel key="1">
-          <template #header>
-            <span class="advanced-options-header">
-              <SettingOutlined /> 高级选项
-              <a-tag :color="promptModeConfig[selectedPromptMode].color" size="small" style="margin-left: 8px">
-                {{ promptModeConfig[selectedPromptMode].tag }}
-              </a-tag>
-            </span>
-          </template>
-          <div class="advanced-options-content">
-            <div class="option-item">
-              <label class="option-label">提示词优化方案</label>
-              <a-select v-model:value="selectedPromptMode" style="width: 100%">
-                <a-select-option value="plan_a">
-                  <span class="option-name">{{ promptModeConfig.plan_a.tag }}</span>
-                </a-select-option>
-                <a-select-option value="plan_b">
-                  <span class="option-name">{{ promptModeConfig.plan_b.tag }}</span>
-                </a-select-option>
-                <a-select-option value="plan_c">
-                  <span class="option-name">{{ promptModeConfig.plan_c.tag }}</span>
-                </a-select-option>
-              </a-select>
-              <div class="mode-description">
-                {{ promptModeConfig[selectedPromptMode].description }}
+                <div class="tab-count">
+                  {{ config.ruleCount }} 条
+                </div>
               </div>
             </div>
           </div>
-        </a-collapse-panel>
-      </a-collapse>
-      </div>
-      <!-- 结束 batch-test-content -->
-    </div>
-    <!-- 结束批量质控评估内容区域 -->
-  </div>
-  <!-- 结束 page-container -->
-
-  <!-- 质控结果详情弹窗 -->
-  <a-modal
-    v-model:open="showResultsModal"
-    width="900px"
-    :footer="null"
-    centered
-    :class="{ 'qc-loading-modal': isProductionTesting }"
-  >
-    <template #title>
-      <div style="display: flex; align-items: center; justify-content: space-between; width: calc(100% - 50px); padding-right: 10px;">
-        <span>质控结果详情</span>
-        <a-button
-          v-if="isProductionTesting"
-          danger
-          size="small"
-          @click="stopProductionQC"
-        >
-          <template #icon><StopOutlined /></template>
-          停止分析
-        </a-button>
-      </div>
-    </template>
-
-    <!-- 科技感边框进度指示器 -->
-    <div v-if="isProductionTesting" class="border-progress-indicator">
-      <div class="progress-line progress-top"></div>
-      <div class="progress-line progress-right"></div>
-      <div class="progress-line progress-bottom"></div>
-      <div class="progress-line progress-left"></div>
-      <div class="progress-glow"></div>
-    </div>
-
-    <!-- 分析中提示 -->
-    <div v-if="isProductionTesting" class="analyzing-overlay">
-      <div class="analyzing-content">
-        <a-spin size="large">
-          <template #indicator>
-            <LoadingOutlined style="font-size: 48px; color: #1890ff;" spin />
-          </template>
-        </a-spin>
-        <div class="analyzing-text">正在进行质控分析...</div>
-        <div class="analyzing-tip">AI 正在深度分析病历内容，请稍候</div>
-        <a-button
-          danger
-          size="large"
-          @click="stopProductionQC"
-          style="margin-top: 24px;"
-        >
-          <template #icon><StopOutlined /></template>
-          停止分析
-        </a-button>
-      </div>
-    </div>
-
-    <div class="results-modal-content">
-      <!-- 统计摘要 -->
-      <div class="modal-summary">
-        <a-statistic
-          title="合规率"
-          :value="productionResult?.data?.evaluation_summary?.compliance_rate"
-          suffix="%"
-          :value-style="{ color: '#16a34a' }"
-        />
-        <a-statistic
-          title="符合要求"
-          :value="productionEvaluationStats.passed"
-          suffix="条"
-          :value-style="{ color: '#16a34a' }"
-        />
-        <a-statistic
-          title="不适用"
-          :value="productionEvaluationStats.notApplicable"
-          suffix="条"
-          :value-style="{ color: '#0ea5e9' }"
-        />
-        <a-statistic
-          title="发现问题"
-          :value="productionEvaluationStats.issues"
-          suffix="条"
-          :value-style="{ color: '#ea580c' }"
-        />
-        <a-statistic
-          title="评估规则"
-          :value="productionEvaluationStats.total"
-          suffix="条"
-        />
-      </div>
-
-      <!-- 性能指标卡片（生产/快速评估结果） -->
-      <div v-if="productionResult?.data" class="summary-metrics compact">
-        <div class="metric-item">
-          <div class="metric-label">累计耗时</div>
-          <div class="metric-value">{{ formatSeconds(productionPerformanceMetrics.totalTime) }}</div>
         </div>
-        <div class="metric-item">
-          <div class="metric-label">平均耗时</div>
-          <div class="metric-value">{{ formatSeconds(productionAverageTime) }}</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">Token 消耗</div>
-          <div class="metric-value">{{ formatTokens(productionPerformanceMetrics.totalTokens) }}</div>
-        </div>
-      </div>
 
-      <!-- 模型和提示词方案信息 -->
-      <div v-if="productionResult?.data" class="modal-info-tags">
-        <a-space>
-          <a-tag
-            v-if="productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model"
-            color="purple"
-            class="model-tag"
-          >
-            <template #icon><RobotOutlined /></template>
-            {{ productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model }}
-          </a-tag>
-          <a-tag
-            :color="getPromptModeColor(productionResult.data.prompt_mode)"
-            class="prompt-mode-tag"
-          >
-            {{ getPromptModeLabel(productionResult.data.prompt_mode) }}
-          </a-tag>
-        </a-space>
-      </div>
-
-      <!-- 结果列表 -->
-      <div class="modal-results-list">
-        <div
-          v-for="result in productionResult?.data?.evaluation_results"
-          :key="result.rule_id"
-          :class="[
-            'modal-result-item',
-            getResultStatusValue(result as any) === 'error' ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
-          ]"
-        >
-          <div class="result-item-header">
-            <span :class="['result-icon', getStatusPillClass(result as any)]">
-              <CheckCircleOutlined v-if="isResultCompliant(result) && !isResultNotApplicable(result)" />
-              <CloseCircleOutlined v-else-if="isResultNonCompliant(result)" />
-              <ExclamationCircleOutlined v-else />
-            </span>
-            <span class="result-rule-id">{{ result.rule_id }}</span>
-            <span class="result-rule-name">{{ result.rule_name }}</span>
-            <a-tag
-              :color="getStatusPillClass(result as any) === 'danger' ? 'error' : (getStatusPillClass(result as any) === 'success' ? 'success' : 'default')"
-              size="small"
-            >
-              {{ getResultStatusText(result as any) }}
-            </a-tag>
-          </div>
-          <div v-if="isResultNotApplicable(result)" class="not-applicable-banner">
-            {{ getApplicabilityReason(result as any) || '该规则不适用于当前病历。' }}
-          </div>
-          <div v-if="hasEvidenceWarning(result as any)" class="evidence-warning inline-warning">
-            <WarningOutlined /> 证据未在病历原文中匹配，建议复核。
-          </div>
-          <div v-else-if="!isResultCompliant(result) && result.findings" class="result-findings">
-            <div class="findings-label">发现问题:</div>
-            <div class="findings-content">{{ result.findings }}</div>
-          </div>
-          <div v-if="result.evidence" class="result-evidence">
-            <span class="evidence-label">证据:</span>
-            <span class="evidence-content">{{ result.evidence }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </a-modal>
-
-  <!-- 完整病历文本弹窗 -->
-  <a-modal
-    v-model:open="showMedicalTextModal"
-    title="完整病历文本"
-    width="900px"
-    centered
-    :body-style="{ maxHeight: '70vh', overflowY: 'auto', padding: '24px' }"
-  >
-    <template #footer>
-      <a-space>
-        <a-button @click="resetMedicalText" :disabled="isTesting">
-          <template #icon><ReloadOutlined /></template>
-          重置文本
-        </a-button>
-        <a-button type="primary" @click="showMedicalTextModal = false">
-          确定
-        </a-button>
-      </a-space>
-    </template>
-
-    <div class="medical-text-modal-content">
-      <!-- 导入提示和操作区域 -->
-      <div class="import-section">
-        <div class="import-hint">
-          <span class="hint-icon">💡</span>
-          <span class="hint-text">提示：可直接粘贴病历文本，或使用下方按钮导入</span>
-        </div>
-        <div class="import-actions">
-          <a-space>
-            <!-- 从文件导入按钮 -->
-            <a-upload
-              :before-upload="handleFileUpload"
-              :show-upload-list="false"
-              accept=".txt"
-            >
-              <a-button :disabled="isTesting">
-                <template #icon><FileTextOutlined /></template>
-                从文件导入
+        <!-- 左右分栏内容 -->
+        <div class="content-main">
+          <!-- 左侧：病历摘要 -->
+          <div class="left-panel">
+            <!-- 标题和操作按钮（左对齐，同一行） -->
+            <div class="panel-header">
+              <h3>{{ currentConfig.label }}</h3>
+              <a-button
+                size="small"
+                type="link"
+                @click="showMedicalTextModal = true"
+              >
+                <template #icon>
+                  <FileTextOutlined />
+                </template>
+                查看完整病历
               </a-button>
-            </a-upload>
+            </div>
 
-            <!-- 选择示例病历下拉菜单 -->
-            <a-select
-              v-model:value="selectedSampleRecord"
-              placeholder="选择示例病历"
-              style="width: 240px"
-              :disabled="isTesting"
-              @change="handleSampleRecordChange"
-              allow-clear
+            <!-- 病历摘要卡片 -->
+            <div
+              v-if="medicalSummary"
+              class="medical-summary-cards"
             >
-              <a-select-option
-                v-for="sample in availableSampleRecords"
-                :key="sample.id"
-                :value="sample.id"
-              >
-                {{ sample.name }}
-              </a-select-option>
-            </a-select>
-          </a-space>
-        </div>
-      </div>
-
-      <!-- 病历文本编辑区域 -->
-      <a-textarea
-        v-model:value="medicalText"
-        :disabled="isTesting"
-        :placeholder="`请输入或编辑${currentConfig.label}...`"
-        :auto-size="{ minRows: 20, maxRows: 40 }"
-        class="medical-textarea"
-      />
-    </div>
-  </a-modal>
-
-  <!-- 批量测试结果悬浮窗 -->
-  <a-modal
-    v-model:open="showTestResultsDrawer"
-    title="批量测试结果"
-    width="900px"
-    :footer="null"
-    centered
-    :body-style="{ maxHeight: '70vh', overflowY: 'auto', padding: '24px' }"
-  >
-    <!-- 统计摘要 -->
-    <div v-if="testResults.length > 0" class="modal-test-summary">
-      <div class="production-summary-tag">
-        {{ batchEvaluationStats.total }} 个质控点，
-        {{ batchEvaluationStats.passed }} 个符合，
-        {{ batchEvaluationStats.notApplicable }} 个不适用，
-        {{ batchEvaluationStats.issues }} 个发现问题
-      </div>
-      <div class="summary-overview">
-        <div class="summary-item">
-          <span class="summary-label">合规率</span>
-          <span class="summary-value success">{{ batchComplianceRate }}</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">符合要求</span>
-          <span class="summary-value success">{{ batchEvaluationStats.passed }} 条</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">不适用</span>
-          <span class="summary-value neutral">{{ batchEvaluationStats.notApplicable }} 条</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">发现问题</span>
-          <span class="summary-value warning">{{ batchEvaluationStats.issues }} 条</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">评估规则</span>
-          <span class="summary-value">{{ batchEvaluationStats.total }} 条</span>
-        </div>
-      </div>
-      <div class="summary-metrics compact">
-        <div class="metric-item">
-          <div class="metric-label">累计耗时</div>
-          <div class="metric-value">{{ formatSeconds(batchPerformanceMetrics.totalTime) }}</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">平均耗时</div>
-          <div class="metric-value">{{ formatSeconds(batchPerformanceMetrics.avgTime) }}</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">Token 消耗</div>
-          <div class="metric-value">{{ formatTokens(batchPerformanceMetrics.totalTokens) }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-results-controls">
-      <a-segmented v-model:value="resultFilter" :options="resultFilterOptions" size="middle" />
-      <span class="results-count">共 {{ visibleTestResults.length }} 条结果</span>
-    </div>
-
-    <!-- 测试中状态 -->
-    <div v-if="isTesting" class="testing-indicator">
-      <a-spin size="large" />
-      <p class="testing-text">
-        正在测试 {{ testProgress.currentRuleName || '...' }}
-        ({{ testProgress.completed }}/{{ testProgress.total }})
-      </p>
-    </div>
-
-    <!-- 测试结果列表 -->
-    <div class="modal-test-results-list">
-      <a-empty v-if="!isTesting && visibleTestResults.length === 0" description="暂无结果" />
-      <a-collapse
-        v-else
-        ghost
-        :bordered="false"
-        :activeKey="expandedResultKeys"
-        expand-icon-position="end"
-        class="results-collapse"
-        @update:activeKey="handleCollapseChange"
-      >
-        <a-collapse-panel
-          v-for="result in visibleTestResults"
-          :key="result.ruleId"
-          :class="[
-            'result-panel',
-            result.error ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
-          ]"
-        >
-          <template #header>
-            <div class="result-panel-header">
-              <div class="header-left">
-                <span class="result-icon">
-                  <CheckCircleOutlined v-if="isResultCompliant(result) && !isResultNotApplicable(result) && !result.error" />
-                  <CloseCircleOutlined v-else-if="isResultNonCompliant(result) && !result.error" />
-                  <ExclamationCircleOutlined v-else />
-                </span>
-                <div class="result-info">
-                  <div class="result-rule-id">{{ result.ruleId }}</div>
-                  <div class="result-rule-name">{{ result.ruleName }}</div>
-                </div>
-              </div>
-              <div class="header-right">
-                <span :class="['status-pill', getStatusPillClass(result as any)]">
-                  {{ getResultStatusText(result) }}
-                </span>
-                <span v-if="!result.error" class="confidence-chip">
-                  置信度 {{ formatConfidence(result) }}
-                </span>
-                <a-tag v-else color="warning">测试失败</a-tag>
-              </div>
-            </div>
-          </template>
-
-          <div class="result-panel-body">
-            <div v-if="isResultNotApplicable(result)" class="not-applicable-banner">
-              {{ getApplicabilityReason(result) || '本规则不适用于该病历。' }}
-            </div>
-            <div v-if="hasEvidenceWarning(result)" class="evidence-warning">
-              <WarningOutlined /> 证据未在病历原文中匹配，建议人工复核。
-            </div>
-
-            <div v-if="result.error" class="result-error">
-              <a-alert type="error" :message="result.error" show-icon />
-            </div>
-
-            <template v-else>
-              <div class="result-issues">
-                <div class="issues-title">{{ getIssuesTitle(result) }}</div>
-                <template v-if="result.issues && result.issues.length > 0">
-                  <div v-for="(issue, idx) in result.issues" :key="idx" class="issue-item">
-                    <div class="issue-description">
-                      <span class="issue-number">{{ idx + 1 }}.</span>
-                      {{ issue.description }}
-                    </div>
-                    <div v-if="issue.evidence" class="issue-evidence">
-                      <span class="evidence-label">证据:</span>
-                      {{ issue.evidence }}
-                    </div>
+              <div class="summary-card-grid">
+                <div class="summary-card">
+                  <div class="card-label">
+                    患者信息
                   </div>
-                </template>
-                <div v-else class="issues-empty">
-                  {{ getIssuesEmptyText(result) }}
+                  <div class="card-value">
+                    {{ medicalSummary.patientInfo }}
+                  </div>
+                </div>
+                <div class="summary-card">
+                  <div class="card-label">
+                    年龄/性别
+                  </div>
+                  <div class="card-value">
+                    {{ medicalSummary.age }} / {{ medicalSummary.gender }}
+                  </div>
+                </div>
+                <div class="summary-card">
+                  <div class="card-label">
+                    入院科室
+                  </div>
+                  <div class="card-value">
+                    {{ medicalSummary.department }}
+                  </div>
+                </div>
+                <div class="summary-card">
+                  <div class="card-label">
+                    主诉
+                  </div>
+                  <div class="card-value">
+                    {{ medicalSummary.chiefComplaint }}
+                  </div>
+                </div>
+                <div class="summary-card full-width">
+                  <div class="card-label">
+                    入院诊断
+                  </div>
+                  <div class="card-value">
+                    {{ medicalSummary.diagnosis }}
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div v-if="result.llmRawOutput" class="llm-output-section">
-                <a-collapse ghost>
-                  <a-collapse-panel key="1" header="查看LLM原始输出">
-                    <pre class="llm-output">{{ result.llmRawOutput }}</pre>
+          <!-- 右侧：质控点选择与结果 -->
+          <div class="right-panel">
+            <!-- 质控点选择区域 -->
+            <div class="rule-selection-section">
+              <div class="section-header">
+                <h3>
+                  <span>选择质控点</span>
+                  <a-tag
+                    :color="currentConfig.tagColor"
+                    class="document-tag"
+                    style="margin-left: 8px"
+                  >
+                    <component
+                      :is="iconComponents[currentConfig.icon]"
+                      class="document-tag__icon"
+                      :style="{ color: '#fff' }"
+                    />
+                    {{ currentConfig.label }}
+                  </a-tag>
+                </h3>
+              </div>
+
+              <!-- 搜索和筛选工具栏 -->
+              <div class="filter-toolbar">
+                <a-input-search
+                  v-model:value="searchText"
+                  placeholder="搜索规则ID或名称..."
+                  :disabled="isTesting"
+                  allow-clear
+                >
+                  <template #prefix>
+                    <SearchOutlined />
+                  </template>
+                </a-input-search>
+                <a-select
+                  v-model:value="filterDefectLevel"
+                  placeholder="缺陷等级"
+                  :disabled="isTesting"
+                  allow-clear
+                  style="width: 120px"
+                >
+                  <a-select-option value="严重缺陷">
+                    🔴 严重
+                  </a-select-option>
+                  <a-select-option value="一般缺陷">
+                    🟡 一般
+                  </a-select-option>
+                  <a-select-option value="轻微缺陷">
+                    🟢 轻微
+                  </a-select-option>
+                </a-select>
+                <a-select
+                  v-model:value="filterComplexity"
+                  placeholder="复杂度"
+                  :disabled="isTesting"
+                  allow-clear
+                  style="width: 110px"
+                >
+                  <a-select-option value="高复杂度">
+                    🟠 高
+                  </a-select-option>
+                  <a-select-option value="中复杂度">
+                    🟢 中
+                  </a-select-option>
+                  <a-select-option value="低复杂度">
+                    🔵 低
+                  </a-select-option>
+                </a-select>
+              </div>
+
+              <!-- 选择摘要 -->
+              <div class="selection-summary">
+                <a-checkbox
+                  :checked="isAllSelected"
+                  :indeterminate="isIndeterminate"
+                  :disabled="isTesting || filteredRules.length === 0"
+                  @change="toggleSelectAll"
+                >
+                  全选
+                </a-checkbox>
+                <span class="summary-text">
+                  已选 {{ selectedRuleIds.length }}/{{ filteredRules.length }} 条
+                  <span
+                    v-if="searchText || filterDefectLevel || filterComplexity"
+                    class="filter-hint"
+                  >
+                    (已过滤)
+                  </span>
+                </span>
+              </div>
+
+              <!-- 分类折叠面板 -->
+              <div class="rules-categorized-list">
+                <a-collapse
+                  v-model:active-key="expandedCategories"
+                  ghost
+                >
+                  <a-collapse-panel
+                    v-for="[categoryKey, categoryRules] in categorizedRulesArray"
+                    :key="categoryKey"
+                    :header="getCategoryHeaderText(categoryKey, categoryRules.length)"
+                  >
+                    <template #extra>
+                      <span class="category-icon">{{ getCategoryIcon(categoryKey) }}</span>
+                    </template>
+                    <div class="category-rules-table">
+                      <div class="rules-table-header">
+                        <div class="col-checkbox" />
+                        <div class="col-id">
+                          规则ID
+                        </div>
+                        <div class="col-name">
+                          规则名称
+                        </div>
+                        <div class="col-level">
+                          缺陷等级
+                        </div>
+                      </div>
+                      <div class="rules-table-body">
+                        <div
+                          v-for="rule in categoryRules"
+                          :key="rule.rule_id"
+                          :class="['rule-row', {
+                            selected: selectedRuleIds.includes(rule.rule_id),
+                            disabled: isTesting
+                          }]"
+                          @click="toggleRuleSelection(rule.rule_id)"
+                        >
+                          <div class="col-checkbox">
+                            <a-checkbox
+                              :checked="selectedRuleIds.includes(rule.rule_id)"
+                              :disabled="isTesting"
+                              @click.stop
+                              @change="() => toggleRuleSelection(rule.rule_id)"
+                            />
+                          </div>
+                          <div class="col-id">
+                            {{ rule.rule_id }}
+                          </div>
+                          <div
+                            class="col-name"
+                            :title="rule.name"
+                          >
+                            {{ rule.name }}
+                          </div>
+                          <div class="col-level">
+                            <span
+                              class="status-tag"
+                              :class="getDefectLevelClass(rule.defect_level)"
+                            >
+                              {{ normalizeDefectLevel(rule.defect_level) }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </a-collapse-panel>
                 </a-collapse>
               </div>
-            </template>
+            </div>
           </div>
-        </a-collapse-panel>
-      </a-collapse>
-    </div>
-  </a-modal>
+        </div>
 
-  <!-- 质控结果历史弹窗 -->
-  <a-modal
-    v-model:open="showHistoryModal"
-    title="质控结果"
-    width="1200px"
-    :footer="null"
-    centered
-    class="history-modal"
-  >
-    <a-tabs v-model:activeKey="currentTab" class="history-tabs">
-      <!-- 本次质控结果 Tab -->
-      <a-tab-pane key="current" tab="本次质控结果">
-        <!-- 加载中状态 -->
-        <div v-if="isProductionTesting" class="current-result-loading">
-          <!-- 实时统计摘要（批量测试时显示） -->
-          <div v-if="isTesting && testProgress.total > 0" class="modal-summary" style="margin-bottom: 24px;">
-            <a-statistic
-              title="合规率"
-              :value="realtimeBatchStats.complianceRate"
-              suffix="%"
-              :value-style="{ color: realtimeBatchStats.complianceRate >= 70 ? '#16a34a' : '#dc2626' }"
-            />
-            <a-statistic
-              title="符合要求"
-              :value="realtimeBatchStats.passed"
-              suffix="条"
-              :value-style="{ color: '#16a34a' }"
-            />
-            <a-statistic
-              title="不适用"
-              :value="realtimeBatchStats.notApplicable"
-              suffix="条"
-              :value-style="{ color: '#0ea5e9' }"
-            />
-            <a-statistic
-              title="发现问题"
-              :value="realtimeBatchStats.issues"
-              suffix="条"
-              :value-style="{ color: '#ea580c' }"
-            />
-            <a-statistic
-              title="评估规则"
-              :value="`${realtimeBatchStats.completed}/${testProgress.total}`"
-              :value-style="{ color: '#666' }"
-            />
-          </div>
-
-          <a-spin size="large">
-            <template #indicator>
-              <LoadingOutlined style="font-size: 48px; color: #1890ff;" spin />
-            </template>
-          </a-spin>
-          <div class="loading-text">
-            {{ isTesting ? '正在批量测试质控点...' : '正在进行质控分析...' }}
-          </div>
-          <div class="loading-tip">
-            <template v-if="isTesting && testProgress.total > 0">
-              已完成 {{ testProgress.completed }}/{{ testProgress.total }} 条
-              <span v-if="testProgress.currentRuleName" style="margin-left: 8px; opacity: 0.7;">
-                ({{ testProgress.currentRuleName }})
-              </span>
-            </template>
-            <template v-else>
-              AI 正在深度分析病历内容，请稍候
-            </template>
-          </div>
-
-          <!-- 实时问题流（在批量测试过程中逐条展示已发现的问题） -->
-          <div v-if="realtimeIssueResults.length > 0" class="current-result-stream">
-            <h3 class="stream-title">已发现的问题</h3>
-            <a-collapse
-              ghost
-              :bordered="false"
-              class="stream-results-collapse"
+        <!-- 主操作按钮区域（页面底部中间，水平并排） -->
+        <div class="main-actions-section-bottom">
+          <div class="actions-row">
+            <!-- 开始批量测试按钮 -->
+            <a-button
+              type="primary"
+              size="large"
+              :loading="isTesting"
+              :disabled="selectedRuleIds.length === 0 || !medicalText.trim()"
+              class="primary-action-button"
+              @click="startBatchTest"
             >
-              <a-collapse-panel
-                v-for="result in realtimeIssueResults"
-                :key="result.ruleId"
-                :header="`${result.ruleId} · ${result.ruleName}`"
-                class="stream-result-panel"
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
+              {{ isTesting ? `正在测试 ${testProgress.completed}/${testProgress.total}` : '开始批量测试' }}
+            </a-button>
+
+            <!-- 启动快速质控评估按钮 -->
+            <a-button
+              type="primary"
+              size="large"
+              :loading="isProductionTesting"
+              :disabled="selectedRuleIds.length === 0 || !medicalText.trim() || isTesting"
+              class="primary-action-btn"
+              @click="startProductionBatchQC"
+            >
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
+              {{ isProductionTesting ? '正在快速质控...' : '启动快速质控评估' }}
+            </a-button>
+
+            <!-- 查看质控结果按钮 -->
+            <a-button
+              type="default"
+              size="large"
+              class="secondary-action-btn"
+              @click="handleViewResults"
+            >
+              <template #icon>
+                <HistoryOutlined />
+              </template>
+              查看质控结果
+              <span
+                v-if="testResults.length > 0 || productionResult"
+                style="margin-left: 4px; opacity: 0.7;"
               >
-                <div class="stream-result-body">
-                  <p class="stream-result-findings">
-                    {{ result.findings || '发现问题，但模型未提供详细说明。' }}
-                  </p>
-                  <p v-if="result.evidence" class="stream-result-evidence">
-                    <span class="label">证据：</span>
-                    <span>{{ result.evidence }}</span>
-                  </p>
-                </div>
-              </a-collapse-panel>
-            </a-collapse>
+                ({{ getResultsCountText }})
+              </span>
+            </a-button>
           </div>
 
-          <a-button
-            danger
-            size="large"
-            @click="isTesting ? stopBatchTest() : stopProductionQC()"
-            style="margin-top: 24px;"
+          <!-- 高级选项（折叠） -->
+          <a-collapse
+            ghost
+            class="advanced-options-collapse"
           >
-            <template #icon><StopOutlined /></template>
+            <a-collapse-panel key="1">
+              <template #header>
+                <span class="advanced-options-header">
+                  <SettingOutlined /> 高级选项
+                  <a-tag
+                    :color="promptModeConfig[selectedPromptMode].color"
+                    size="small"
+                    style="margin-left: 8px"
+                  >
+                    {{ promptModeConfig[selectedPromptMode].tag }}
+                  </a-tag>
+                </span>
+              </template>
+              <div class="advanced-options-content">
+                <div class="option-item">
+                  <label class="option-label">提示词优化方案</label>
+                  <a-select
+                    v-model:value="selectedPromptMode"
+                    style="width: 100%"
+                  >
+                    <a-select-option value="plan_a">
+                      <span class="option-name">{{ promptModeConfig.plan_a.tag }}</span>
+                    </a-select-option>
+                    <a-select-option value="plan_b">
+                      <span class="option-name">{{ promptModeConfig.plan_b.tag }}</span>
+                    </a-select-option>
+                    <a-select-option value="plan_c">
+                      <span class="option-name">{{ promptModeConfig.plan_c.tag }}</span>
+                    </a-select-option>
+                  </a-select>
+                  <div class="mode-description">
+                    {{ promptModeConfig[selectedPromptMode].description }}
+                  </div>
+                </div>
+              </div>
+            </a-collapse-panel>
+          </a-collapse>
+        </div>
+      <!-- 结束 batch-test-content -->
+      </div>
+    <!-- 结束批量质控评估内容区域 -->
+    </div>
+    <!-- 结束 page-container -->
+
+    <!-- 质控结果详情弹窗 -->
+    <a-modal
+      v-model:open="showResultsModal"
+      width="900px"
+      :footer="null"
+      centered
+      :class="{ 'qc-loading-modal': isProductionTesting }"
+    >
+      <template #title>
+        <div style="display: flex; align-items: center; justify-content: space-between; width: calc(100% - 50px); padding-right: 10px;">
+          <span>质控结果详情</span>
+          <a-button
+            v-if="isProductionTesting"
+            danger
+            size="small"
+            @click="stopProductionQC"
+          >
+            <template #icon>
+              <StopOutlined />
+            </template>
             停止分析
           </a-button>
         </div>
+      </template>
 
-        <!-- 结果内容 -->
-        <div v-else-if="productionResult && productionResult.data" class="current-result-content">
-          <!-- 统计摘要 -->
-          <div class="modal-summary">
-            <a-statistic
-              title="合规率"
-              :value="productionResult.data.evaluation_summary?.compliance_rate || 0"
-              suffix="%"
-              :value-style="{ color: (productionResult.data.evaluation_summary?.compliance_rate || 0) >= 70 ? '#16a34a' : '#dc2626' }"
-            />
-            <a-statistic
-              title="符合要求"
-              :value="productionEvaluationStats.passed"
-              suffix="条"
-              :value-style="{ color: '#16a34a' }"
-            />
-            <a-statistic
-              title="不适用"
-              :value="productionEvaluationStats.notApplicable"
-              suffix="条"
-              :value-style="{ color: '#0ea5e9' }"
-            />
-            <a-statistic
-              title="发现问题"
-              :value="productionEvaluationStats.issues"
-              suffix="条"
-              :value-style="{ color: '#ea580c' }"
-            />
-            <a-statistic
-              title="评估规则"
-              :value="productionEvaluationStats.total"
-              suffix="条"
-            />
-          </div>
+      <!-- 科技感边框进度指示器 -->
+      <div
+        v-if="isProductionTesting"
+        class="border-progress-indicator"
+      >
+        <div class="progress-line progress-top" />
+        <div class="progress-line progress-right" />
+        <div class="progress-line progress-bottom" />
+        <div class="progress-line progress-left" />
+        <div class="progress-glow" />
+      </div>
 
-          <!-- 性能指标卡片 -->
-          <div v-if="productionPerformanceMetrics.totalTime > 0 || productionPerformanceMetrics.totalTokens > 0" class="summary-metrics compact">
-            <div class="metric-item">
-              <div class="metric-label">累计耗时</div>
-              <div class="metric-value">{{ formatSeconds(productionPerformanceMetrics.totalTime) }}</div>
-            </div>
-            <div class="metric-item">
-              <div class="metric-label">平均耗时</div>
-              <div class="metric-value">{{ formatSeconds(productionAverageTime) }}</div>
-            </div>
-            <div class="metric-item">
-              <div class="metric-label">Token 消耗</div>
-              <div class="metric-value">{{ formatTokens(productionPerformanceMetrics.totalTokens) }}</div>
-            </div>
-          </div>
-
-          <!-- 模型和提示词方案信息 -->
-          <div class="modal-info-tags">
-            <a-space>
-              <!-- 模式标签 -->
-              <a-tag
-                v-if="productionResult.data.prompt_mode"
-                :color="getModeTagColor(productionResult.data.prompt_mode === 'sequential_batch' ? 'sequential_batch' : 'optimized_batch')"
-                style="font-weight: 600;"
-              >
-                <template #icon>
-                  <ThunderboltOutlined v-if="productionResult.data.prompt_mode !== 'sequential_batch'" />
-                  <AppstoreOutlined v-else />
-                </template>
-                {{ productionResult.data.prompt_mode === 'sequential_batch' ? '批量测试' : '快速质控' }}
-              </a-tag>
-
-              <a-tag
-                v-if="productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model"
-                color="purple"
-                class="model-tag"
-              >
-                <template #icon><RobotOutlined /></template>
-                {{ productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model }}
-              </a-tag>
-              <a-tag
-                v-if="productionResult.data.prompt_mode && productionResult.data.prompt_mode !== 'sequential_batch'"
-                :color="getPromptModeColor(productionResult.data.prompt_mode)"
-                class="prompt-mode-tag"
-              >
-                {{ getPromptModeLabel(productionResult.data.prompt_mode) }}
-              </a-tag>
-            </a-space>
-          </div>
-
-          <!-- 筛选控件 -->
-          <div class="modal-filter-controls">
-            <a-select v-model:value="currentResultFilter" style="width: 150px">
-              <a-select-option value="all">全部</a-select-option>
-              <a-select-option value="issues">仅异常</a-select-option>
-              <a-select-option value="compliant">仅合规</a-select-option>
-            </a-select>
-          </div>
-
-          <!-- 质控结果列表（使用折叠面板） -->
-          <div class="detail-results">
-            <h3 class="results-title">质控结果详情</h3>
-            <a-collapse class="results-collapse">
-              <a-collapse-panel
-                v-for="result in filteredProductionResults"
-                :key="result.rule_id"
-                :header="getRuleHeader(result)"
-              >
-                <div class="result-detail">
-                  <!-- 不适用提示 -->
-                  <div v-if="isResultNotApplicable(result)" class="not-applicable-banner">
-                    {{ getApplicabilityReason(result as any) || '该规则不适用于当前病历。' }}
-                  </div>
-
-                  <!-- 证据警告 -->
-                  <div v-if="hasEvidenceWarning(result as any)" class="evidence-warning inline-warning">
-                    <WarningOutlined /> 证据未在病历原文中匹配，建议复核。
-                  </div>
-
-                  <!-- 检查发现 -->
-                  <div class="result-section">
-                    <h4 class="section-title">
-                      <ExclamationCircleOutlined />
-                      检查发现
-                    </h4>
-                    <p class="section-content">{{ result.findings || '无' }}</p>
-                  </div>
-
-                  <!-- 证据引用 -->
-                  <div v-if="result.evidence" class="result-section">
-                    <h4 class="section-title">
-                      <FileTextOutlined />
-                      证据引用
-                    </h4>
-                    <p class="section-content evidence-text">{{ result.evidence }}</p>
-                  </div>
-
-                  <!-- 改进建议 -->
-                  <div v-if="result.suggestion" class="result-section">
-                    <h4 class="section-title">
-                      <CheckCircleOutlined />
-                      改进建议
-                    </h4>
-                    <p class="section-content">{{ result.suggestion }}</p>
-                  </div>
-
-                  <!-- 元数据 -->
-                  <div class="result-meta">
-                    <a-space>
-                      <a-tag v-if="result.confidence !== undefined && result.confidence !== null">
-                        置信度: {{ formatConfidence(result as any) }}
-                      </a-tag>
-                      <a-tag v-if="result.metadata?.tokens_used || result.metadata?.token_usage">
-                        Token: {{ result.metadata.tokens_used || result.metadata.token_usage }}
-                      </a-tag>
-                      <a-tag v-if="result.metadata?.api_time || result.metadata?.duration">
-                        耗时: {{ (result.metadata.api_time || result.metadata.duration).toFixed(2) }}s
-                      </a-tag>
-                    </a-space>
-                  </div>
-                </div>
-              </a-collapse-panel>
-            </a-collapse>
-          </div>
-        </div>
-        <a-empty v-else description="暂无质控结果" />
-      </a-tab-pane>
-
-      <!-- 历史质控结果 Tab -->
-      <a-tab-pane key="history" tab="历史质控结果">
-        <div class="history-content">
-          <!-- 筛选控件 -->
-          <div class="history-filters">
-            <a-space wrap>
-              <a-select
-                v-model:value="historyFilters.documentType"
-                placeholder="文书类型"
-                style="width: 150px"
-                allowClear
-              >
-                <a-select-option value="入院记录">入院记录</a-select-option>
-                <a-select-option value="病程记录">病程记录</a-select-option>
-                <a-select-option value="手术记录">手术记录</a-select-option>
-                <a-select-option value="出院记录">出院记录</a-select-option>
-              </a-select>
-
-              <a-select
-                v-model:value="historyFilters.mode"
-                placeholder="质控模式"
-                style="width: 150px"
-                allowClear
-              >
-                <a-select-option value="sequential_batch">
-                  <AppstoreOutlined style="margin-right: 4px;" />
-                  批量测试
-                </a-select-option>
-                <a-select-option value="optimized_batch">
-                  <ThunderboltOutlined style="margin-right: 4px;" />
-                  快速质控
-                </a-select-option>
-              </a-select>
-
-              <a-select
-                v-model:value="historyFilters.hasIssues"
-                placeholder="合规状态"
-                style="width: 150px"
-                allowClear
-              >
-                <a-select-option :value="false">全部合规</a-select-option>
-                <a-select-option :value="true">存在异常</a-select-option>
-              </a-select>
-
-              <a-button type="primary" @click="loadHistoryRecords">
-                <template #icon><SearchOutlined /></template>
-                查询
-              </a-button>
-
-              <a-button @click="resetHistoryFilters">
-                <template #icon><ReloadOutlined /></template>
-                重置
-              </a-button>
-            </a-space>
-          </div>
-
-          <!-- 历史记录列表 -->
-          <a-list
-            :loading="historyLoading"
-            :data-source="historyRecords"
-            :pagination="{
-              current: historyPagination.current,
-              pageSize: historyPagination.pageSize,
-              total: historyPagination.total,
-              showSizeChanger: true,
-              showTotal: (total: number) => `共 ${total} 条记录`,
-              onChange: handleHistoryPageChange,
-              onShowSizeChange: handleHistoryPageChange
-            }"
-            class="history-list"
-          >
-            <template #renderItem="{ item }">
-              <a-list-item class="history-list-item" @click="viewHistoryDetail(item)">
-                <div class="history-item-content">
-                  <div class="history-item-header">
-                    <div class="history-item-time">
-                      <ClockCircleOutlined />
-                      <span>{{ formatDateTime(item.created_at) }}</span>
-                    </div>
-                    <a-space :size="8">
-                      <!-- 批量/快速标识 -->
-                      <a-tag
-                        :color="getModeTagColor(item.mode)"
-                        style="margin: 0; font-weight: 600;"
-                      >
-                        <template #icon>
-                          <ThunderboltOutlined v-if="item.mode === 'optimized_batch'" />
-                          <AppstoreOutlined v-else />
-                        </template>
-                        {{ getModeTagText(item.mode) }}
-                      </a-tag>
-                      <a-tag color="blue">{{ item.document_type }}</a-tag>
-                    </a-space>
-                  </div>
-
-                  <div class="history-item-stats">
-                    <div class="stat-item">
-                      <span class="stat-label">合规率:</span>
-                      <span :class="['stat-value', item.compliance_rate >= 70 ? 'success' : 'error']">
-                        {{ item.compliance_rate }}%
-                      </span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">异常数量:</span>
-                      <span :class="['stat-value', item.issues_count > 0 ? 'error' : 'success']">
-                        {{ item.issues_count }}条
-                      </span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">质控规则:</span>
-                      <span class="stat-value">{{ item.total_rules }}条</span>
-                    </div>
-                    <div v-if="item.model" class="stat-item">
-                      <a-tag color="purple" size="small">
-                        <template #icon><RobotOutlined /></template>
-                        {{ item.model }}
-                      </a-tag>
-                    </div>
-                    <div v-if="item.prompt_mode" class="stat-item">
-                      <a-tag :color="promptModeConfig[item.prompt_mode]?.color || 'default'" size="small">
-                        {{ promptModeConfig[item.prompt_mode]?.tag || item.prompt_mode }}
-                      </a-tag>
-                    </div>
-                  </div>
-                </div>
-              </a-list-item>
+      <!-- 分析中提示 -->
+      <div
+        v-if="isProductionTesting"
+        class="analyzing-overlay"
+      >
+        <div class="analyzing-content">
+          <a-spin size="large">
+            <template #indicator>
+              <LoadingOutlined
+                style="font-size: 48px; color: #1890ff;"
+                spin
+              />
             </template>
-          </a-list>
-        </div>
-      </a-tab-pane>
-    </a-tabs>
-  </a-modal>
-
-  <!-- 历史记录详情弹窗 -->
-  <a-modal
-    v-model:open="showHistoryDetail"
-    title="质控结果详情"
-    width="1200px"
-    :footer="null"
-    centered
-    class="history-detail-modal"
-  >
-    <div v-if="selectedHistoryRecord" class="history-detail-content">
-      <!-- 基本信息 -->
-      <div class="detail-header">
-        <div class="header-content">
-          <div class="header-left">
-            <div class="detail-info-item">
-              <ClockCircleOutlined class="info-icon" />
-              <span class="info-label">质控时间：</span>
-              <span class="info-value">
-                {{ formatDateTime(selectedHistoryRecord.created_at || selectedHistoryRecord.saved_at) }}
-              </span>
-            </div>
-            <div class="detail-info-item">
-              <FileTextOutlined class="info-icon" />
-              <span class="info-label">文书类型：</span>
-              <span class="info-value">{{ selectedHistoryRecord.document_type }}</span>
-            </div>
-            <div class="detail-info-item">
-              <template v-if="selectedHistoryRecord.mode">
-                <a-tag
-                  :color="getModeTagColor(selectedHistoryRecord.mode)"
-                  style="font-weight: 600; margin-right: 8px;"
-                >
-                  <template #icon>
-                    <ThunderboltOutlined v-if="selectedHistoryRecord.mode === 'optimized_batch'" />
-                    <AppstoreOutlined v-else />
-                  </template>
-                  {{ getModeTagText(selectedHistoryRecord.mode) }}
-                </a-tag>
-              </template>
-              <template v-if="selectedHistoryRecord.model">
-                <a-tag color="purple" class="model-tag" style="margin-right: 8px;">
-                  <template #icon><RobotOutlined /></template>
-                  {{ selectedHistoryRecord.model }}
-                </a-tag>
-              </template>
-              <template v-if="selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode">
-                <a-tag
-                  :color="getPromptModeColor(selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode)"
-                  class="prompt-mode-tag"
-                >
-                  {{ getPromptModeLabel(selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode) }}
-                </a-tag>
-              </template>
-            </div>
+          </a-spin>
+          <div class="analyzing-text">
+            正在进行质控分析...
           </div>
-          <div class="header-right">
-            <a-button
-              type="primary"
-              @click="showOriginalMedicalText"
-              class="view-original-btn"
-            >
-              <template #icon><FileTextOutlined /></template>
-              查看原始病历
-            </a-button>
-            <a-button size="small" type="link" @click="showDebugInfo = !showDebugInfo">
-              {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
-            </a-button>
+          <div class="analyzing-tip">
+            AI 正在深度分析病历内容，请稍候
           </div>
-      <!-- 调试信息面板（历史记录详情） -->
-      <div v-if="showDebugInfo" class="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 mb-4">
-        <div class="text-sky-300 font-medium mb-2">📊 性能指标（历史记录）</div>
-        <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify(historyPerformance, null, 2) }}</pre>
-        <div class="text-sky-300 font-medium mt-3 mb-2">🔍 后端 performance_metrics</div>
-        <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify(selectedHistoryRecord.payload?.performance_metrics || selectedHistoryRecord.performance || '无', null, 2) }}</pre>
-        <div class="text-sky-300 font-medium mt-3 mb-2">📝 第一条规则 metadata</div>
-        <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify((selectedHistoryRecord.payload?.evaluation_results || [])[0]?.metadata || '无', null, 2) }}</pre>
-      </div>
-
-      <!-- 性能指标卡片（历史记录详情） -->
-      <div v-if="historyPerformance" class="summary-metrics compact">
-        <div class="metric-item">
-          <div class="metric-label">累计耗时</div>
-          <div class="metric-value">{{ formatSeconds(historyPerformance.totalTime) }}</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">平均耗时</div>
-          <div class="metric-value">{{ formatSeconds(historyPerformance.averageTime) }}</div>
-        </div>
-        <div class="metric-item">
-          <div class="metric-label">Token 消耗</div>
-          <div class="metric-value">{{ formatTokens(historyPerformance.totalTokens) }}</div>
-        </div>
-      </div>
-
-        </div>
-      </div>
-
-      <!-- 统计摘要 -->
-      <div class="detail-summary">
-        <a-row :gutter="16">
-          <a-col :span="6">
-            <a-statistic
-              title="合规率"
-              :value="(selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || selectedHistoryRecord.stats?.compliance_rate || 0)"
-              suffix="%"
-              :value-style="{ color: (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 80 ? '#52c41a' : (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 60 ? '#faad14' : '#f5222d' }"
-            />
-          </a-col>
-          <a-col :span="6">
-            <a-statistic
-              title="异常数量"
-              :value="selectedHistoryRecord.payload?.evaluation_summary?.issues_found || selectedHistoryRecord.stats?.issues || 0"
-              suffix="条"
-              :value-style="{ color: '#f5222d' }"
-            />
-          </a-col>
-          <a-col :span="6">
-            <a-statistic
-              title="质控规则"
-              :value="selectedHistoryRecord.payload?.evaluation_summary?.total_rules || selectedHistoryRecord.stats?.total || 0"
-              suffix="条"
-            />
-          </a-col>
-          <a-col :span="6">
-            <a-statistic
-              title="处理耗时"
-              :value="(selectedHistoryRecord.performance?.totalTime || selectedHistoryRecord.performance?.processing_time || 0).toFixed(2)"
-              suffix="秒"
-            />
-          </a-col>
-        </a-row>
-      </div>
-
-      <!-- 质控结果列表 -->
-      <div class="detail-results">
-        <h3 class="results-title">质控结果详情</h3>
-        <a-collapse v-if="selectedHistoryRecord.payload?.evaluation_results" class="results-collapse">
-          <a-collapse-panel
-            v-for="result in selectedHistoryRecord.payload.evaluation_results"
-            :key="result.rule_id"
-            :header="getRuleHeader(result)"
+          <a-button
+            danger
+            size="large"
+            style="margin-top: 24px;"
+            @click="stopProductionQC"
           >
-            <div class="result-detail">
-              <div class="result-section">
-                <h4 class="section-title">
-                  <ExclamationCircleOutlined />
-                  检查发现
-                </h4>
-                <p class="section-content">{{ result.findings || '无' }}</p>
+            <template #icon>
+              <StopOutlined />
+            </template>
+            停止分析
+          </a-button>
+        </div>
+      </div>
+
+      <div class="results-modal-content">
+        <!-- 统计摘要 -->
+        <div class="modal-summary">
+          <a-statistic
+            title="合规率"
+            :value="productionResult?.data?.evaluation_summary?.compliance_rate"
+            suffix="%"
+            :value-style="{ color: '#16a34a' }"
+          />
+          <a-statistic
+            title="符合要求"
+            :value="productionEvaluationStats.passed"
+            suffix="条"
+            :value-style="{ color: '#16a34a' }"
+          />
+          <a-statistic
+            title="不适用"
+            :value="productionEvaluationStats.notApplicable"
+            suffix="条"
+            :value-style="{ color: '#0ea5e9' }"
+          />
+          <a-statistic
+            title="发现问题"
+            :value="productionEvaluationStats.issues"
+            suffix="条"
+            :value-style="{ color: '#ea580c' }"
+          />
+          <a-statistic
+            title="评估规则"
+            :value="productionEvaluationStats.total"
+            suffix="条"
+          />
+        </div>
+
+        <!-- 性能指标卡片（生产/快速评估结果） -->
+        <div
+          v-if="productionResult?.data"
+          class="summary-metrics compact"
+        >
+          <div class="metric-item">
+            <div class="metric-label">
+              累计耗时
+            </div>
+            <div class="metric-value">
+              {{ formatSeconds(productionPerformanceMetrics.totalTime) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">
+              平均耗时
+            </div>
+            <div class="metric-value">
+              {{ formatSeconds(productionAverageTime) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">
+              Token 消耗
+            </div>
+            <div class="metric-value">
+              {{ formatTokens(productionPerformanceMetrics.totalTokens) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 模型和提示词方案信息 -->
+        <div
+          v-if="productionResult?.data"
+          class="modal-info-tags"
+        >
+          <a-space>
+            <a-tag
+              v-if="productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model"
+              color="purple"
+              class="model-tag"
+            >
+              <template #icon>
+                <RobotOutlined />
+              </template>
+              {{ productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model }}
+            </a-tag>
+            <a-tag
+              :color="getPromptModeColor(productionResult.data.prompt_mode)"
+              class="prompt-mode-tag"
+            >
+              {{ getPromptModeLabel(productionResult.data.prompt_mode) }}
+            </a-tag>
+          </a-space>
+        </div>
+
+        <!-- 结果列表 -->
+        <div class="modal-results-list">
+          <div
+            v-for="result in productionResult?.data?.evaluation_results"
+            :key="result.rule_id"
+            :class="[
+              'modal-result-item',
+              getResultStatusValue(result as any) === 'error' ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
+            ]"
+          >
+            <div class="result-item-header">
+              <span :class="['result-icon', getStatusPillClass(result as any)]">
+                <CheckCircleOutlined v-if="isResultCompliant(result) && !isResultNotApplicable(result)" />
+                <CloseCircleOutlined v-else-if="isResultNonCompliant(result)" />
+                <ExclamationCircleOutlined v-else />
+              </span>
+              <span class="result-rule-id">{{ result.rule_id }}</span>
+              <span class="result-rule-name">{{ result.rule_name }}</span>
+              <a-tag
+                :color="getStatusPillClass(result as any) === 'danger' ? 'error' : (getStatusPillClass(result as any) === 'success' ? 'success' : 'default')"
+                size="small"
+              >
+                {{ getResultStatusText(result as any) }}
+              </a-tag>
+            </div>
+            <div
+              v-if="isResultNotApplicable(result)"
+              class="not-applicable-banner"
+            >
+              {{ getApplicabilityReason(result as any) || '该规则不适用于当前病历。' }}
+            </div>
+            <div
+              v-if="hasEvidenceWarning(result as any)"
+              class="evidence-warning inline-warning"
+            >
+              <WarningOutlined /> 证据未在病历原文中匹配，建议复核。
+            </div>
+            <div
+              v-else-if="!isResultCompliant(result) && result.findings"
+              class="result-findings"
+            >
+              <div class="findings-label">
+                发现问题:
+              </div>
+              <div class="findings-content">
+                {{ result.findings }}
+              </div>
+            </div>
+            <div
+              v-if="result.evidence"
+              class="result-evidence"
+            >
+              <span class="evidence-label">证据:</span>
+              <span class="evidence-content">{{ result.evidence }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </a-modal>
+
+    <!-- 完整病历文本弹窗 -->
+    <a-modal
+      v-model:open="showMedicalTextModal"
+      title="完整病历文本"
+      width="900px"
+      centered
+      :body-style="{ maxHeight: '70vh', overflowY: 'auto', padding: '24px' }"
+    >
+      <template #footer>
+        <a-space>
+          <a-button
+            :disabled="isTesting"
+            @click="resetMedicalText"
+          >
+            <template #icon>
+              <ReloadOutlined />
+            </template>
+            重置文本
+          </a-button>
+          <a-button
+            type="primary"
+            @click="showMedicalTextModal = false"
+          >
+            确定
+          </a-button>
+        </a-space>
+      </template>
+
+      <div class="medical-text-modal-content">
+        <!-- 导入提示和操作区域 -->
+        <div class="import-section">
+          <div class="import-hint">
+            <span class="hint-icon">💡</span>
+            <span class="hint-text">提示：可直接粘贴病历文本，或使用下方按钮导入</span>
+          </div>
+          <div class="import-actions">
+            <a-space>
+              <!-- 从文件导入按钮 -->
+              <a-upload
+                :before-upload="handleFileUpload"
+                :show-upload-list="false"
+                accept=".txt"
+              >
+                <a-button :disabled="isTesting">
+                  <template #icon>
+                    <FileTextOutlined />
+                  </template>
+                  从文件导入
+                </a-button>
+              </a-upload>
+
+              <!-- 选择示例病历下拉菜单 -->
+              <a-select
+                v-model:value="selectedSampleRecord"
+                placeholder="选择示例病历"
+                style="width: 240px"
+                :disabled="isTesting"
+                allow-clear
+                @change="handleSampleRecordChange"
+              >
+                <a-select-option
+                  v-for="sample in availableSampleRecords"
+                  :key="sample.id"
+                  :value="sample.id"
+                >
+                  {{ sample.name }}
+                </a-select-option>
+              </a-select>
+            </a-space>
+          </div>
+        </div>
+
+        <!-- 病历文本编辑区域 -->
+        <a-textarea
+          v-model:value="medicalText"
+          :disabled="isTesting"
+          :placeholder="`请输入或编辑${currentConfig.label}...`"
+          :auto-size="{ minRows: 20, maxRows: 40 }"
+          class="medical-textarea"
+        />
+      </div>
+    </a-modal>
+
+    <!-- 批量测试结果悬浮窗 -->
+    <a-modal
+      v-model:open="showTestResultsDrawer"
+      title="批量测试结果"
+      width="900px"
+      :footer="null"
+      centered
+      :body-style="{ maxHeight: '70vh', overflowY: 'auto', padding: '24px' }"
+    >
+      <!-- 统计摘要 -->
+      <div
+        v-if="testResults.length > 0"
+        class="modal-test-summary"
+      >
+        <div class="production-summary-tag">
+          {{ batchEvaluationStats.total }} 个质控点，
+          {{ batchEvaluationStats.passed }} 个符合，
+          {{ batchEvaluationStats.notApplicable }} 个不适用，
+          {{ batchEvaluationStats.issues }} 个发现问题
+        </div>
+        <div class="summary-overview">
+          <div class="summary-item">
+            <span class="summary-label">合规率</span>
+            <span class="summary-value success">{{ batchComplianceRate }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">符合要求</span>
+            <span class="summary-value success">{{ batchEvaluationStats.passed }} 条</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">不适用</span>
+            <span class="summary-value neutral">{{ batchEvaluationStats.notApplicable }} 条</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">发现问题</span>
+            <span class="summary-value warning">{{ batchEvaluationStats.issues }} 条</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">评估规则</span>
+            <span class="summary-value">{{ batchEvaluationStats.total }} 条</span>
+          </div>
+        </div>
+        <div class="summary-metrics compact">
+          <div class="metric-item">
+            <div class="metric-label">
+              累计耗时
+            </div>
+            <div class="metric-value">
+              {{ formatSeconds(batchPerformanceMetrics.totalTime) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">
+              平均耗时
+            </div>
+            <div class="metric-value">
+              {{ formatSeconds(batchPerformanceMetrics.avgTime) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">
+              Token 消耗
+            </div>
+            <div class="metric-value">
+              {{ formatTokens(batchPerformanceMetrics.totalTokens) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-results-controls">
+        <a-segmented
+          v-model:value="resultFilter"
+          :options="resultFilterOptions"
+          size="middle"
+        />
+        <span class="results-count">共 {{ visibleTestResults.length }} 条结果</span>
+      </div>
+
+      <!-- 测试中状态 -->
+      <div
+        v-if="isTesting"
+        class="testing-indicator"
+      >
+        <a-spin size="large" />
+        <p class="testing-text">
+          正在测试 {{ testProgress.currentRuleName || '...' }}
+          ({{ testProgress.completed }}/{{ testProgress.total }})
+        </p>
+      </div>
+
+      <!-- 测试结果列表 -->
+      <div class="modal-test-results-list">
+        <a-empty
+          v-if="!isTesting && visibleTestResults.length === 0"
+          description="暂无结果"
+        />
+        <a-collapse
+          v-else
+          ghost
+          :bordered="false"
+          :active-key="expandedResultKeys"
+          expand-icon-position="end"
+          class="results-collapse"
+          @update:active-key="handleCollapseChange"
+        >
+          <a-collapse-panel
+            v-for="result in visibleTestResults"
+            :key="result.ruleId"
+            :class="[
+              'result-panel',
+              result.error ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
+            ]"
+          >
+            <template #header>
+              <div class="result-panel-header">
+                <div class="header-left">
+                  <span class="result-icon">
+                    <CheckCircleOutlined v-if="isResultCompliant(result) && !isResultNotApplicable(result) && !result.error" />
+                    <CloseCircleOutlined v-else-if="isResultNonCompliant(result) && !result.error" />
+                    <ExclamationCircleOutlined v-else />
+                  </span>
+                  <div class="result-info">
+                    <div class="result-rule-id">
+                      {{ result.ruleId }}
+                    </div>
+                    <div class="result-rule-name">
+                      {{ result.ruleName }}
+                    </div>
+                  </div>
+                </div>
+                <div class="header-right">
+                  <span :class="['status-pill', getStatusPillClass(result as any)]">
+                    {{ getResultStatusText(result) }}
+                  </span>
+                  <span
+                    v-if="!result.error"
+                    class="confidence-chip"
+                  >
+                    置信度 {{ formatConfidence(result) }}
+                  </span>
+                  <a-tag
+                    v-else
+                    color="warning"
+                  >
+                    测试失败
+                  </a-tag>
+                </div>
+              </div>
+            </template>
+
+            <div class="result-panel-body">
+              <div
+                v-if="isResultNotApplicable(result)"
+                class="not-applicable-banner"
+              >
+                {{ getApplicabilityReason(result) || '本规则不适用于该病历。' }}
+              </div>
+              <div
+                v-if="hasEvidenceWarning(result)"
+                class="evidence-warning"
+              >
+                <WarningOutlined /> 证据未在病历原文中匹配，建议人工复核。
               </div>
 
-              <div v-if="result.evidence" class="result-section">
-                <h4 class="section-title">
-                  <FileTextOutlined />
-                  证据引用
-                </h4>
-                <p class="section-content evidence-text">{{ result.evidence }}</p>
+              <div
+                v-if="result.error"
+                class="result-error"
+              >
+                <a-alert
+                  type="error"
+                  :message="result.error"
+                  show-icon
+                />
               </div>
 
-              <div v-if="result.suggestion" class="result-section">
-                <h4 class="section-title">
-                  <CheckCircleOutlined />
-                  改进建议
-                </h4>
-                <p class="section-content">{{ result.suggestion }}</p>
-              </div>
+              <template v-else>
+                <div class="result-issues">
+                  <div class="issues-title">
+                    {{ getIssuesTitle(result) }}
+                  </div>
+                  <template v-if="result.issues && result.issues.length > 0">
+                    <div
+                      v-for="(issue, idx) in result.issues"
+                      :key="idx"
+                      class="issue-item"
+                    >
+                      <div class="issue-description">
+                        <span class="issue-number">{{ idx + 1 }}.</span>
+                        {{ issue.description }}
+                      </div>
+                      <div
+                        v-if="issue.evidence"
+                        class="issue-evidence"
+                      >
+                        <span class="evidence-label">证据:</span>
+                        {{ issue.evidence }}
+                      </div>
+                    </div>
+                  </template>
+                  <div
+                    v-else
+                    class="issues-empty"
+                  >
+                    {{ getIssuesEmptyText(result) }}
+                  </div>
+                </div>
 
-              <div class="result-meta">
-                <a-space>
-                  <a-tag>置信度: {{ (result.confidence * 100).toFixed(0) }}%</a-tag>
-                  <a-tag v-if="result.metadata?.tokens_used">Token: {{ result.metadata.tokens_used }}</a-tag>
-                  <a-tag v-if="result.metadata?.api_time">耗时: {{ result.metadata.api_time.toFixed(2) }}s</a-tag>
-                </a-space>
-              </div>
+                <div
+                  v-if="result.llmRawOutput"
+                  class="llm-output-section"
+                >
+                  <a-collapse ghost>
+                    <a-collapse-panel
+                      key="1"
+                      header="查看LLM原始输出"
+                    >
+                      <pre class="llm-output">{{ result.llmRawOutput }}</pre>
+                    </a-collapse-panel>
+                  </a-collapse>
+                </div>
+              </template>
             </div>
           </a-collapse-panel>
         </a-collapse>
-        <a-empty v-else description="暂无详细结果数据" />
       </div>
-    </div>
-  </a-modal>
+    </a-modal>
 
-  <!-- 原始病历文本弹窗 -->
-  <a-modal
-    v-model:open="showOriginalText"
-    title="原始病历原文"
-    width="800px"
-    :footer="null"
-    centered
-    class="original-text-modal"
-  >
-    <div class="original-text-content">
-      <a-textarea
-        v-model:value="originalMedicalTextContent"
-        :rows="20"
-        readonly
-        class="original-text-area"
-      />
-      <div class="text-info">
-        <span>字数：{{ originalMedicalTextContent.length }} 字</span>
+    <!-- 质控结果历史弹窗 -->
+    <a-modal
+      v-model:open="showHistoryModal"
+      title="质控结果"
+      width="1200px"
+      :footer="null"
+      centered
+      class="history-modal"
+    >
+      <a-tabs
+        v-model:active-key="currentTab"
+        class="history-tabs"
+      >
+        <!-- 本次质控结果 Tab -->
+        <a-tab-pane
+          key="current"
+          tab="本次质控结果"
+        >
+          <!-- 加载中状态 -->
+          <div
+            v-if="isProductionTesting"
+            class="current-result-loading"
+          >
+            <!-- 实时统计摘要（批量测试时显示） -->
+            <div
+              v-if="isTesting && testProgress.total > 0"
+              class="modal-summary"
+              style="margin-bottom: 24px;"
+            >
+              <a-statistic
+                title="合规率"
+                :value="realtimeBatchStats.complianceRate"
+                suffix="%"
+                :value-style="{ color: realtimeBatchStats.complianceRate >= 70 ? '#16a34a' : '#dc2626' }"
+              />
+              <a-statistic
+                title="符合要求"
+                :value="realtimeBatchStats.passed"
+                suffix="条"
+                :value-style="{ color: '#16a34a' }"
+              />
+              <a-statistic
+                title="不适用"
+                :value="realtimeBatchStats.notApplicable"
+                suffix="条"
+                :value-style="{ color: '#0ea5e9' }"
+              />
+              <a-statistic
+                title="发现问题"
+                :value="realtimeBatchStats.issues"
+                suffix="条"
+                :value-style="{ color: '#ea580c' }"
+              />
+              <a-statistic
+                title="评估规则"
+                :value="`${realtimeBatchStats.completed}/${testProgress.total}`"
+                :value-style="{ color: '#666' }"
+              />
+            </div>
+
+            <a-spin size="large">
+              <template #indicator>
+                <LoadingOutlined
+                  style="font-size: 48px; color: #1890ff;"
+                  spin
+                />
+              </template>
+            </a-spin>
+            <div class="loading-text">
+              {{ isTesting ? '正在批量测试质控点...' : '正在进行质控分析...' }}
+            </div>
+            <div class="loading-tip">
+              <template v-if="isTesting && testProgress.total > 0">
+                已完成 {{ testProgress.completed }}/{{ testProgress.total }} 条
+                <span
+                  v-if="testProgress.currentRuleName"
+                  style="margin-left: 8px; opacity: 0.7;"
+                >
+                  ({{ testProgress.currentRuleName }})
+                </span>
+              </template>
+              <template v-else>
+                AI 正在深度分析病历内容，请稍候
+              </template>
+            </div>
+
+            <!-- 实时问题流（在批量测试过程中逐条展示已发现的问题） -->
+            <div
+              v-if="realtimeIssueResults.length > 0"
+              class="current-result-stream"
+            >
+              <h3 class="stream-title">
+                已发现的问题
+              </h3>
+              <a-collapse
+                ghost
+                :bordered="false"
+                class="stream-results-collapse"
+              >
+                <a-collapse-panel
+                  v-for="result in realtimeIssueResults"
+                  :key="result.ruleId"
+                  :header="`${result.ruleId} · ${result.ruleName}`"
+                  class="stream-result-panel"
+                >
+                  <div class="stream-result-body">
+                    <p class="stream-result-findings">
+                      {{ result.findings || '发现问题，但模型未提供详细说明。' }}
+                    </p>
+                    <p
+                      v-if="result.evidence"
+                      class="stream-result-evidence"
+                    >
+                      <span class="label">证据：</span>
+                      <span>{{ result.evidence }}</span>
+                    </p>
+                  </div>
+                </a-collapse-panel>
+              </a-collapse>
+            </div>
+
+            <a-button
+              danger
+              size="large"
+              style="margin-top: 24px;"
+              @click="isTesting ? stopBatchTest() : stopProductionQC()"
+            >
+              <template #icon>
+                <StopOutlined />
+              </template>
+              停止分析
+            </a-button>
+          </div>
+
+          <!-- 结果内容 -->
+          <div
+            v-else-if="productionResult && productionResult.data"
+            class="current-result-content"
+          >
+            <!-- 统计摘要 -->
+            <div class="modal-summary">
+              <a-statistic
+                title="合规率"
+                :value="productionResult.data.evaluation_summary?.compliance_rate || 0"
+                suffix="%"
+                :value-style="{ color: (productionResult.data.evaluation_summary?.compliance_rate || 0) >= 70 ? '#16a34a' : '#dc2626' }"
+              />
+              <a-statistic
+                title="符合要求"
+                :value="productionEvaluationStats.passed"
+                suffix="条"
+                :value-style="{ color: '#16a34a' }"
+              />
+              <a-statistic
+                title="不适用"
+                :value="productionEvaluationStats.notApplicable"
+                suffix="条"
+                :value-style="{ color: '#0ea5e9' }"
+              />
+              <a-statistic
+                title="发现问题"
+                :value="productionEvaluationStats.issues"
+                suffix="条"
+                :value-style="{ color: '#ea580c' }"
+              />
+              <a-statistic
+                title="评估规则"
+                :value="productionEvaluationStats.total"
+                suffix="条"
+              />
+            </div>
+
+            <!-- 性能指标卡片 -->
+            <div
+              v-if="productionPerformanceMetrics.totalTime > 0 || productionPerformanceMetrics.totalTokens > 0"
+              class="summary-metrics compact"
+            >
+              <div class="metric-item">
+                <div class="metric-label">
+                  累计耗时
+                </div>
+                <div class="metric-value">
+                  {{ formatSeconds(productionPerformanceMetrics.totalTime) }}
+                </div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">
+                  平均耗时
+                </div>
+                <div class="metric-value">
+                  {{ formatSeconds(productionAverageTime) }}
+                </div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">
+                  Token 消耗
+                </div>
+                <div class="metric-value">
+                  {{ formatTokens(productionPerformanceMetrics.totalTokens) }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 模型和提示词方案信息 -->
+            <div class="modal-info-tags">
+              <a-space>
+                <!-- 模式标签 -->
+                <a-tag
+                  v-if="productionResult.data.prompt_mode"
+                  :color="getModeTagColor(productionResult.data.prompt_mode === 'sequential_batch' ? 'sequential_batch' : 'optimized_batch')"
+                  style="font-weight: 600;"
+                >
+                  <template #icon>
+                    <ThunderboltOutlined v-if="productionResult.data.prompt_mode !== 'sequential_batch'" />
+                    <AppstoreOutlined v-else />
+                  </template>
+                  {{ productionResult.data.prompt_mode === 'sequential_batch' ? '批量测试' : '快速质控' }}
+                </a-tag>
+
+                <a-tag
+                  v-if="productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model"
+                  color="purple"
+                  class="model-tag"
+                >
+                  <template #icon>
+                    <RobotOutlined />
+                  </template>
+                  {{ productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model }}
+                </a-tag>
+                <a-tag
+                  v-if="productionResult.data.prompt_mode && productionResult.data.prompt_mode !== 'sequential_batch'"
+                  :color="getPromptModeColor(productionResult.data.prompt_mode)"
+                  class="prompt-mode-tag"
+                >
+                  {{ getPromptModeLabel(productionResult.data.prompt_mode) }}
+                </a-tag>
+              </a-space>
+            </div>
+
+            <!-- 筛选控件 -->
+            <div class="modal-filter-controls">
+              <a-select
+                v-model:value="currentResultFilter"
+                style="width: 150px"
+              >
+                <a-select-option value="all">
+                  全部
+                </a-select-option>
+                <a-select-option value="issues">
+                  仅异常
+                </a-select-option>
+                <a-select-option value="compliant">
+                  仅合规
+                </a-select-option>
+              </a-select>
+            </div>
+
+            <!-- 质控结果列表（使用折叠面板） -->
+            <div class="detail-results">
+              <h3 class="results-title">
+                质控结果详情
+              </h3>
+              <a-collapse class="results-collapse">
+                <a-collapse-panel
+                  v-for="result in filteredProductionResults"
+                  :key="result.rule_id"
+                  :header="getRuleHeader(result)"
+                >
+                  <div class="result-detail">
+                    <!-- 不适用提示 -->
+                    <div
+                      v-if="isResultNotApplicable(result)"
+                      class="not-applicable-banner"
+                    >
+                      {{ getApplicabilityReason(result as any) || '该规则不适用于当前病历。' }}
+                    </div>
+
+                    <!-- 证据警告 -->
+                    <div
+                      v-if="hasEvidenceWarning(result as any)"
+                      class="evidence-warning inline-warning"
+                    >
+                      <WarningOutlined /> 证据未在病历原文中匹配，建议复核。
+                    </div>
+
+                    <!-- 检查发现 -->
+                    <div class="result-section">
+                      <h4 class="section-title">
+                        <ExclamationCircleOutlined />
+                        检查发现
+                      </h4>
+                      <p class="section-content">
+                        {{ result.findings || '无' }}
+                      </p>
+                    </div>
+
+                    <!-- 证据引用 -->
+                    <div
+                      v-if="result.evidence"
+                      class="result-section"
+                    >
+                      <h4 class="section-title">
+                        <FileTextOutlined />
+                        证据引用
+                      </h4>
+                      <p class="section-content evidence-text">
+                        {{ result.evidence }}
+                      </p>
+                    </div>
+
+                    <!-- 改进建议 -->
+                    <div
+                      v-if="result.suggestion"
+                      class="result-section"
+                    >
+                      <h4 class="section-title">
+                        <CheckCircleOutlined />
+                        改进建议
+                      </h4>
+                      <p class="section-content">
+                        {{ result.suggestion }}
+                      </p>
+                    </div>
+
+                    <!-- 元数据 -->
+                    <div class="result-meta">
+                      <a-space>
+                        <a-tag v-if="result.confidence !== undefined && result.confidence !== null">
+                          置信度: {{ formatConfidence(result as any) }}
+                        </a-tag>
+                        <a-tag v-if="result.metadata?.tokens_used || result.metadata?.token_usage">
+                          Token: {{ result.metadata.tokens_used || result.metadata.token_usage }}
+                        </a-tag>
+                        <a-tag v-if="result.metadata?.api_time || result.metadata?.duration">
+                          耗时: {{ (result.metadata.api_time || result.metadata.duration).toFixed(2) }}s
+                        </a-tag>
+                      </a-space>
+                    </div>
+                  </div>
+                </a-collapse-panel>
+              </a-collapse>
+            </div>
+          </div>
+          <a-empty
+            v-else
+            description="暂无质控结果"
+          />
+        </a-tab-pane>
+
+        <!-- 历史质控结果 Tab -->
+        <a-tab-pane
+          key="history"
+          tab="历史质控结果"
+        >
+          <div class="history-content">
+            <!-- 筛选控件 -->
+            <div class="history-filters">
+              <a-space wrap>
+                <a-select
+                  v-model:value="historyFilters.documentType"
+                  placeholder="文书类型"
+                  style="width: 150px"
+                  allow-clear
+                >
+                  <a-select-option value="入院记录">
+                    入院记录
+                  </a-select-option>
+                  <a-select-option value="病程记录">
+                    病程记录
+                  </a-select-option>
+                  <a-select-option value="手术记录">
+                    手术记录
+                  </a-select-option>
+                  <a-select-option value="出院记录">
+                    出院记录
+                  </a-select-option>
+                </a-select>
+
+                <a-select
+                  v-model:value="historyFilters.mode"
+                  placeholder="质控模式"
+                  style="width: 150px"
+                  allow-clear
+                >
+                  <a-select-option value="sequential_batch">
+                    <AppstoreOutlined style="margin-right: 4px;" />
+                    批量测试
+                  </a-select-option>
+                  <a-select-option value="optimized_batch">
+                    <ThunderboltOutlined style="margin-right: 4px;" />
+                    快速质控
+                  </a-select-option>
+                </a-select>
+
+                <a-select
+                  v-model:value="historyFilters.hasIssues"
+                  placeholder="合规状态"
+                  style="width: 150px"
+                  allow-clear
+                >
+                  <a-select-option :value="false">
+                    全部合规
+                  </a-select-option>
+                  <a-select-option :value="true">
+                    存在异常
+                  </a-select-option>
+                </a-select>
+
+                <a-button
+                  type="primary"
+                  @click="loadHistoryRecords"
+                >
+                  <template #icon>
+                    <SearchOutlined />
+                  </template>
+                  查询
+                </a-button>
+
+                <a-button @click="resetHistoryFilters">
+                  <template #icon>
+                    <ReloadOutlined />
+                  </template>
+                  重置
+                </a-button>
+              </a-space>
+            </div>
+
+            <!-- 历史记录列表 -->
+            <a-list
+              :loading="historyLoading"
+              :data-source="historyRecords"
+              :pagination="{
+                current: historyPagination.current,
+                pageSize: historyPagination.pageSize,
+                total: historyPagination.total,
+                showSizeChanger: true,
+                showTotal: (total: number) => `共 ${total} 条记录`,
+                onChange: handleHistoryPageChange,
+                onShowSizeChange: handleHistoryPageChange
+              }"
+              class="history-list"
+            >
+              <template #renderItem="{ item }">
+                <a-list-item
+                  class="history-list-item"
+                  @click="viewHistoryDetail(item)"
+                >
+                  <div class="history-item-content">
+                    <div class="history-item-header">
+                      <div class="history-item-time">
+                        <ClockCircleOutlined />
+                        <span>{{ formatDateTime(item.created_at) }}</span>
+                      </div>
+                      <a-space :size="8">
+                        <!-- 批量/快速标识 -->
+                        <a-tag
+                          :color="getModeTagColor(item.mode)"
+                          style="margin: 0; font-weight: 600;"
+                        >
+                          <template #icon>
+                            <ThunderboltOutlined v-if="item.mode === 'optimized_batch'" />
+                            <AppstoreOutlined v-else />
+                          </template>
+                          {{ getModeTagText(item.mode) }}
+                        </a-tag>
+                        <a-tag color="blue">
+                          {{ item.document_type }}
+                        </a-tag>
+                      </a-space>
+                    </div>
+
+                    <div class="history-item-stats">
+                      <div class="stat-item">
+                        <span class="stat-label">合规率:</span>
+                        <span :class="['stat-value', item.compliance_rate >= 70 ? 'success' : 'error']">
+                          {{ item.compliance_rate }}%
+                        </span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-label">异常数量:</span>
+                        <span :class="['stat-value', item.issues_count > 0 ? 'error' : 'success']">
+                          {{ item.issues_count }}条
+                        </span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-label">质控规则:</span>
+                        <span class="stat-value">{{ item.total_rules }}条</span>
+                      </div>
+                      <div
+                        v-if="item.model"
+                        class="stat-item"
+                      >
+                        <a-tag
+                          color="purple"
+                          size="small"
+                        >
+                          <template #icon>
+                            <RobotOutlined />
+                          </template>
+                          {{ item.model }}
+                        </a-tag>
+                      </div>
+                      <div
+                        v-if="item.prompt_mode"
+                        class="stat-item"
+                      >
+                        <a-tag
+                          :color="promptModeConfig[item.prompt_mode]?.color || 'default'"
+                          size="small"
+                        >
+                          {{ promptModeConfig[item.prompt_mode]?.tag || item.prompt_mode }}
+                        </a-tag>
+                      </div>
+                    </div>
+                  </div>
+                </a-list-item>
+              </template>
+            </a-list>
+          </div>
+        </a-tab-pane>
+      </a-tabs>
+    </a-modal>
+
+    <!-- 历史记录详情弹窗 -->
+    <a-modal
+      v-model:open="showHistoryDetail"
+      title="质控结果详情"
+      width="1200px"
+      :footer="null"
+      centered
+      class="history-detail-modal"
+    >
+      <div
+        v-if="selectedHistoryRecord"
+        class="history-detail-content"
+      >
+        <!-- 基本信息 -->
+        <div class="detail-header">
+          <div class="header-content">
+            <div class="header-left">
+              <div class="detail-info-item">
+                <ClockCircleOutlined class="info-icon" />
+                <span class="info-label">质控时间：</span>
+                <span class="info-value">
+                  {{ formatDateTime(selectedHistoryRecord.created_at || selectedHistoryRecord.saved_at) }}
+                </span>
+              </div>
+              <div class="detail-info-item">
+                <FileTextOutlined class="info-icon" />
+                <span class="info-label">文书类型：</span>
+                <span class="info-value">{{ selectedHistoryRecord.document_type }}</span>
+              </div>
+              <div class="detail-info-item">
+                <template v-if="selectedHistoryRecord.mode">
+                  <a-tag
+                    :color="getModeTagColor(selectedHistoryRecord.mode)"
+                    style="font-weight: 600; margin-right: 8px;"
+                  >
+                    <template #icon>
+                      <ThunderboltOutlined v-if="selectedHistoryRecord.mode === 'optimized_batch'" />
+                      <AppstoreOutlined v-else />
+                    </template>
+                    {{ getModeTagText(selectedHistoryRecord.mode) }}
+                  </a-tag>
+                </template>
+                <template v-if="selectedHistoryRecord.model">
+                  <a-tag
+                    color="purple"
+                    class="model-tag"
+                    style="margin-right: 8px;"
+                  >
+                    <template #icon>
+                      <RobotOutlined />
+                    </template>
+                    {{ selectedHistoryRecord.model }}
+                  </a-tag>
+                </template>
+                <template v-if="selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode">
+                  <a-tag
+                    :color="getPromptModeColor(selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode)"
+                    class="prompt-mode-tag"
+                  >
+                    {{ getPromptModeLabel(selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode) }}
+                  </a-tag>
+                </template>
+              </div>
+            </div>
+            <div class="header-right">
+              <a-button
+                type="primary"
+                class="view-original-btn"
+                @click="showOriginalMedicalText"
+              >
+                <template #icon>
+                  <FileTextOutlined />
+                </template>
+                查看原始病历
+              </a-button>
+              <a-button
+                size="small"
+                type="link"
+                @click="showDebugInfo = !showDebugInfo"
+              >
+                {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
+              </a-button>
+            </div>
+            <!-- 调试信息面板（历史记录详情） -->
+            <div
+              v-if="showDebugInfo"
+              class="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 mb-4"
+            >
+              <div class="text-sky-300 font-medium mb-2">
+                📊 性能指标（历史记录）
+              </div>
+              <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify(historyPerformance, null, 2) }}</pre>
+              <div class="text-sky-300 font-medium mt-3 mb-2">
+                🔍 后端 performance_metrics
+              </div>
+              <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify(selectedHistoryRecord.payload?.performance_metrics || selectedHistoryRecord.performance || '无', null, 2) }}</pre>
+              <div class="text-sky-300 font-medium mt-3 mb-2">
+                📝 第一条规则 metadata
+              </div>
+              <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify((selectedHistoryRecord.payload?.evaluation_results || [])[0]?.metadata || '无', null, 2) }}</pre>
+            </div>
+
+            <!-- 性能指标卡片（历史记录详情） -->
+            <div
+              v-if="historyPerformance"
+              class="summary-metrics compact"
+            >
+              <div class="metric-item">
+                <div class="metric-label">
+                  累计耗时
+                </div>
+                <div class="metric-value">
+                  {{ formatSeconds(historyPerformance.totalTime) }}
+                </div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">
+                  平均耗时
+                </div>
+                <div class="metric-value">
+                  {{ formatSeconds(historyPerformance.averageTime) }}
+                </div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">
+                  Token 消耗
+                </div>
+                <div class="metric-value">
+                  {{ formatTokens(historyPerformance.totalTokens) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 统计摘要 -->
+        <div class="detail-summary">
+          <a-row :gutter="16">
+            <a-col :span="6">
+              <a-statistic
+                title="合规率"
+                :value="(selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || selectedHistoryRecord.stats?.compliance_rate || 0)"
+                suffix="%"
+                :value-style="{ color: (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 80 ? '#52c41a' : (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 60 ? '#faad14' : '#f5222d' }"
+              />
+            </a-col>
+            <a-col :span="6">
+              <a-statistic
+                title="异常数量"
+                :value="selectedHistoryRecord.payload?.evaluation_summary?.issues_found || selectedHistoryRecord.stats?.issues || 0"
+                suffix="条"
+                :value-style="{ color: '#f5222d' }"
+              />
+            </a-col>
+            <a-col :span="6">
+              <a-statistic
+                title="质控规则"
+                :value="selectedHistoryRecord.payload?.evaluation_summary?.total_rules || selectedHistoryRecord.stats?.total || 0"
+                suffix="条"
+              />
+            </a-col>
+            <a-col :span="6">
+              <a-statistic
+                title="处理耗时"
+                :value="(selectedHistoryRecord.performance?.totalTime || selectedHistoryRecord.performance?.processing_time || 0).toFixed(2)"
+                suffix="秒"
+              />
+            </a-col>
+          </a-row>
+        </div>
+
+        <!-- 质控结果列表 -->
+        <div class="detail-results">
+          <h3 class="results-title">
+            质控结果详情
+          </h3>
+          <a-collapse
+            v-if="selectedHistoryRecord.payload?.evaluation_results"
+            class="results-collapse"
+          >
+            <a-collapse-panel
+              v-for="result in selectedHistoryRecord.payload.evaluation_results"
+              :key="result.rule_id"
+              :header="getRuleHeader(result)"
+            >
+              <div class="result-detail">
+                <div class="result-section">
+                  <h4 class="section-title">
+                    <ExclamationCircleOutlined />
+                    检查发现
+                  </h4>
+                  <p class="section-content">
+                    {{ result.findings || '无' }}
+                  </p>
+                </div>
+
+                <div
+                  v-if="result.evidence"
+                  class="result-section"
+                >
+                  <h4 class="section-title">
+                    <FileTextOutlined />
+                    证据引用
+                  </h4>
+                  <p class="section-content evidence-text">
+                    {{ result.evidence }}
+                  </p>
+                </div>
+
+                <div
+                  v-if="result.suggestion"
+                  class="result-section"
+                >
+                  <h4 class="section-title">
+                    <CheckCircleOutlined />
+                    改进建议
+                  </h4>
+                  <p class="section-content">
+                    {{ result.suggestion }}
+                  </p>
+                </div>
+
+                <div class="result-meta">
+                  <a-space>
+                    <a-tag>置信度: {{ (result.confidence * 100).toFixed(0) }}%</a-tag>
+                    <a-tag v-if="result.metadata?.tokens_used">
+                      Token: {{ result.metadata.tokens_used }}
+                    </a-tag>
+                    <a-tag v-if="result.metadata?.api_time">
+                      耗时: {{ result.metadata.api_time.toFixed(2) }}s
+                    </a-tag>
+                  </a-space>
+                </div>
+              </div>
+            </a-collapse-panel>
+          </a-collapse>
+          <a-empty
+            v-else
+            description="暂无详细结果数据"
+          />
+        </div>
       </div>
-    </div>
-  </a-modal>
+    </a-modal>
 
-  <!-- LLM 设置抽屉 -->
-  <a-drawer
-    v-model:open="llmSettingsVisible"
-    title="LLM 配置"
-    width="80%"
-    placement="right"
-    :destroyOnClose="true"
-  >
-    <template #extra>
-      <a-space>
-        <a-button @click="llmSettingsVisible = false">关闭</a-button>
-      </a-space>
-    </template>
-    <LLMApiConfig />
-  </a-drawer>
-</div>
+    <!-- 原始病历文本弹窗 -->
+    <a-modal
+      v-model:open="showOriginalText"
+      title="原始病历原文"
+      width="800px"
+      :footer="null"
+      centered
+      class="original-text-modal"
+    >
+      <div class="original-text-content">
+        <a-textarea
+          v-model:value="originalMedicalTextContent"
+          :rows="20"
+          readonly
+          class="original-text-area"
+        />
+        <div class="text-info">
+          <span>字数：{{ originalMedicalTextContent.length }} 字</span>
+        </div>
+      </div>
+    </a-modal>
+
+    <!-- LLM 设置抽屉 -->
+    <a-drawer
+      v-model:open="llmSettingsVisible"
+      title="LLM 配置"
+      width="80%"
+      placement="right"
+      :destroy-on-close="true"
+    >
+      <template #extra>
+        <a-space>
+          <a-button @click="llmSettingsVisible = false">
+            关闭
+          </a-button>
+        </a-space>
+      </template>
+      <LLMApiConfig />
+    </a-drawer>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -2354,7 +2803,7 @@ const getRuleHeader = (result: any) => {
 }
 
 type ResultLike = {
-  status?: 'compliant' | 'non_compliant' | 'not_applicable' | 'uncertain'
+  status?: 'compliant' | 'non_compliant' | 'not_applicable' | 'uncertain' | 'error'
   isCompliant?: boolean
   is_compliant?: boolean
   notApplicable?: boolean

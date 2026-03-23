@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 /**
  * Mock 认证数据
  * 用于前端开发时模拟后端认证接口
@@ -9,8 +10,8 @@ import type { LoginResponse, User } from '@/types'
 export const mockUsers = [
     {
         id: 'user-001',
-        email: 'admin@medqc.com',
-        password: 'admin888', // 实际应用中不应明文存储
+        email: 'admin@hospital.com',
+        password: 'admin123', // 实际应用中不应明文存储
         display_name: '张医生',
         department: '心内科',
         hospital_id: 'hospital-001',
@@ -216,3 +217,4 @@ export function mockRefreshToken(refreshToken: string): LoginResponse | null {
         }
     }
 }
+

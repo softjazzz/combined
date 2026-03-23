@@ -63,24 +63,49 @@ const showPlaceholder = computed(() => {
 </script>
 
 <template>
-  <div v-if="shouldShow || showPlaceholder" class="permission-guard">
+  <div
+    v-if="shouldShow || showPlaceholder"
+    class="permission-guard"
+  >
     <!-- 有权限时显示正常内容 -->
-    <div v-if="shouldShow" :class="{ 'permission-disabled': isDisabled }">
+    <div
+      v-if="shouldShow"
+      :class="{ 'permission-disabled': isDisabled }"
+    >
       <slot />
     </div>
     
     <!-- 无权限时显示占位符 -->
-    <div v-else-if="showPlaceholder" class="permission-placeholder">
+    <div
+      v-else-if="showPlaceholder"
+      class="permission-placeholder"
+    >
       <div class="permission-placeholder-content">
         <div class="permission-placeholder-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 15v2"/>
-            <path d="M12 7v2"/>
-            <circle cx="12" cy="12" r="10"/>
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 15v2" />
+            <path d="M12 7v2" />
+            <circle
+              cx="12"
+              cy="12"
+              r="10"
+            />
           </svg>
         </div>
-        <p class="permission-placeholder-text">{{ placeholder }}</p>
-        <p v-if="permissionResult.reason" class="permission-placeholder-reason">
+        <p class="permission-placeholder-text">
+          {{ placeholder }}
+        </p>
+        <p
+          v-if="permissionResult.reason"
+          class="permission-placeholder-reason"
+        >
           {{ permissionResult.reason }}
         </p>
       </div>

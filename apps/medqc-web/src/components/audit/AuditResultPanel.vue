@@ -10,10 +10,16 @@
             {{ getStatusText(auditResult?.status) }}
           </a-tag>
         </h3>
-        <div class="reviewer-info" v-if="reviewerInfo">
+        <div
+          v-if="reviewerInfo"
+          class="reviewer-info"
+        >
           <UserOutlined />
           <span>审核员：{{ reviewerInfo }}</span>
-          <span v-if="auditResult?.review_duration" class="duration">
+          <span
+            v-if="auditResult?.review_duration"
+            class="duration"
+          >
             耗时：{{ auditResult.review_duration }}分钟
           </span>
         </div>
@@ -23,9 +29,9 @@
         <a-space>
           <a-button 
             v-if="canModifyLowerLevel && lowerLevelResults?.length"
-            @click="showModifyLowerModal"
             type="dashed"
             size="small"
+            @click="showModifyLowerModal"
           >
             <EditOutlined />
             修改下级结果
@@ -33,9 +39,9 @@
           
           <a-button 
             v-if="editable && auditResult?.status === 'draft'"
-            @click="handleSave"
             type="primary"
             :loading="saving"
+            @click="handleSave"
           >
             <SaveOutlined />
             保存
@@ -43,9 +49,9 @@
           
           <a-button 
             v-if="editable && auditResult?.status === 'draft'"
-            @click="handleSubmit"
             type="primary"
             :loading="submitting"
+            @click="handleSubmit"
           >
             <CheckOutlined />
             提交
@@ -59,7 +65,10 @@
       <a-row :gutter="24">
         <!-- 左侧：审核表单 -->
         <a-col :span="16">
-          <a-card title="审核评分" class="audit-form-card">
+          <a-card
+            title="审核评分"
+            class="audit-form-card"
+          >
             <a-form
               ref="auditFormRef"
               :model="formData"
@@ -68,7 +77,10 @@
               @finish="handleFormSubmit"
             >
               <!-- 总体评分 -->
-              <a-form-item label="总体评分" name="audit_score">
+              <a-form-item
+                label="总体评分"
+                name="audit_score"
+              >
                 <a-slider
                   v-model:value="formData.audit_score"
                   :min="0"
@@ -84,7 +96,10 @@
               </a-form-item>
 
               <!-- 审核结论 -->
-              <a-form-item label="审核结论" name="audit_conclusion">
+              <a-form-item
+                label="审核结论"
+                name="audit_conclusion"
+              >
                 <a-textarea
                   v-model:value="formData.audit_conclusion"
                   :rows="4"
@@ -100,19 +115,19 @@
                     <span>发现的缺陷</span>
                     <a-space>
                       <a-button 
-                        @click="triggerAIAssistance"
                         :loading="aiAnalyzing"
                         size="small"
                         type="dashed"
+                        @click="triggerAIAssistance"
                       >
                         <RobotOutlined />
                         AI辅助识别
                       </a-button>
                       <a-button 
-                        @click="addManualDefect"
                         size="small"
                         type="primary"
                         ghost
+                        @click="addManualDefect"
                       >
                         <PlusOutlined />
                         手动添加
@@ -122,7 +137,10 @@
 
                   <!-- 缺陷列表 -->
                   <div class="defects-list">
-                    <a-empty v-if="formData.defects.length === 0" description="暂无发现缺陷" />
+                    <a-empty
+                      v-if="formData.defects.length === 0"
+                      description="暂无发现缺陷"
+                    />
                     
                     <div 
                       v-for="(defect, index) in formData.defects" 
@@ -146,7 +164,11 @@
         <!-- 右侧：统计信息和历史 -->
         <a-col :span="8">
           <!-- 统计卡片 -->
-          <a-card title="审核统计" class="stats-card" size="small">
+          <a-card
+            title="审核统计"
+            class="stats-card"
+            size="small"
+          >
             <a-statistic-group>
               <a-statistic
                 title="缺陷数量"
@@ -189,9 +211,9 @@
               </div>
               <a-button 
                 v-if="canModifyLowerLevel"
-                @click="modifyLowerResult(lowerResult)"
                 size="small"
                 type="link"
+                @click="modifyLowerResult(lowerResult)"
               >
                 修改
               </a-button>
@@ -342,7 +364,8 @@ const getStatusColor = (status?: string): string => {
     rejected: 'error',
     modified: 'warning'
   }
-  return colors[status || 'draft'] || 'default'
+  const key = (status && status in colors ? status : 'draft') as keyof typeof colors
+  return colors[key]
 }
 
 const getStatusText = (status?: string): string => {
@@ -353,7 +376,8 @@ const getStatusText = (status?: string): string => {
     rejected: '已拒绝',
     modified: '已修改'
   }
-  return texts[status || 'draft'] || '未知'
+  const key = (status && status in texts ? status : 'draft') as keyof typeof texts
+  return texts[key]
 }
 
 const getScoreLevel = (score: number): string => {
@@ -501,7 +525,7 @@ const handleAISelectionChange = (selected: AIDefectSuggestion[]) => {
   selectedSuggestions.value = selected
 }
 
-const handleNewDefectChange = (data) => {
+const handleNewDefectChange = (data: unknown) => {
   // 处理新缺陷数据变化
 }
 

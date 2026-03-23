@@ -7,7 +7,9 @@
           <div class="logo-icon">
             <MedicineBoxOutlined />
           </div>
-          <h1 class="title">泸县人民医院病案智能工作站</h1>
+          <h1 class="title">
+            泸县人民医院病案智能工作站
+          </h1>
         </div>
       </div>
     </header>
@@ -20,7 +22,9 @@
     </main>
 
     <!-- 水印 -->
-    <div class="watermark">演示环境</div>
+    <div class="watermark">
+      演示环境
+    </div>
   </div>
 </template>
 

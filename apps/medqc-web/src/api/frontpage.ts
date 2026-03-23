@@ -6,6 +6,59 @@
 
 import { http } from '@/utils/http'
 
+export type AuditFindingType =
+  | 'diagnosis_missing'
+  | 'procedure_missing'
+  | 'diagnosis_inappropriate'
+  | 'diagnosis_insufficient_evidence'
+
+export type AuditFindingSeverity = 'high' | 'medium' | 'low'
+
+export interface MainDiagnosisKeyEvidence {
+    quote?: string
+    source?: string
+    why_it_supports?: string
+}
+
+export interface MainDiagnosisLLMEvidence {
+    clinician_main_diagnosis?: string
+    llm_recommended_main_diagnosis?: string
+    is_consistent_with_clinician?: boolean
+    confidence?: number
+    conclusion?: string
+    key_evidence?: MainDiagnosisKeyEvidence[]
+    reasoning_summary?: string
+}
+
+export interface CodingAuditEvidenceLine {
+    quote?: string
+    source?: string
+    why_it_supports?: string
+}
+
+export interface CodingAuditFinding {
+    type?: AuditFindingType
+    severity?: AuditFindingSeverity
+    clinician_text?: string
+    llm_recommendation?: string
+    reason?: string
+    evidence?: CodingAuditEvidenceLine[]
+}
+
+export interface CodingAuditLLMEvidence {
+    version?: string
+    summary?: string
+    confidence?: number
+    counts?: Partial<Record<AuditFindingType, number>>
+    findings?: CodingAuditFinding[]
+}
+
+export interface FrontPageEvidence {
+    main_diagnosis_llm?: MainDiagnosisLLMEvidence | null
+    coding_audit_llm?: CodingAuditLLMEvidence | null
+    [key: string]: any
+}
+
 export interface FrontPageDraft {
     basic_info: any
     hospitalization: any
@@ -14,7 +67,7 @@ export interface FrontPageDraft {
     other_medical_info: any
     staff: any
     costs: any
-    evidence: any
+    evidence: FrontPageEvidence
     confidence: any
 }
 
@@ -75,6 +128,33 @@ export interface AutoGenerateResponse {
     error?: string
 }
 
+export interface FrontpageExtractionSettings {
+    sql_prefill_enabled: boolean
+    llm_backfill_enabled: boolean
+    allow_force_llm_regenerate: boolean
+    include_demo_records: boolean
+    auto_hide_demo_when_real_data: boolean
+    demo_hide_threshold: number
+    stream_progress_enabled: boolean
+    default_preview_tab: 'fields' | 'preview'
+}
+
+export interface FrontpageExtractionSettingsResponse {
+    settings: FrontpageExtractionSettings
+    source: 'default' | 'file' | string
+}
+
+export interface FrontpageExtractionSettingsUpdate {
+    sql_prefill_enabled?: boolean
+    llm_backfill_enabled?: boolean
+    allow_force_llm_regenerate?: boolean
+    include_demo_records?: boolean
+    auto_hide_demo_when_real_data?: boolean
+    demo_hide_threshold?: number
+    stream_progress_enabled?: boolean
+    default_preview_tab?: 'fields' | 'preview'
+}
+
 export const frontpageApi = {
     /**
      * 自动生成病案首页草稿
@@ -90,7 +170,31 @@ export const frontpageApi = {
     async analyzeProfile(request: ProfileAnalyzeRequest): Promise<ProfileAnalyzeResponse> {
         const response = await http.post('/api/v1/frontpage/profile/analyze', request)
         return response.data
-    }
+    },
+
+    /**
+     * 读取首页抽取设置
+     */
+    async getExtractionSettings(): Promise<FrontpageExtractionSettingsResponse> {
+        const response = await http.get('/api/v1/frontpage/settings')
+        return response.data
+    },
+
+    /**
+     * 更新首页抽取设置（部分更新）
+     */
+    async updateExtractionSettings(update: FrontpageExtractionSettingsUpdate): Promise<FrontpageExtractionSettingsResponse> {
+        const response = await http.put('/api/v1/frontpage/settings', update)
+        return response.data
+    },
+
+    /**
+     * 重置首页抽取设置
+     */
+    async resetExtractionSettings(): Promise<FrontpageExtractionSettingsResponse> {
+        const response = await http.post('/api/v1/frontpage/settings/reset')
+        return response.data
+    },
 }
 
 export default frontpageApi

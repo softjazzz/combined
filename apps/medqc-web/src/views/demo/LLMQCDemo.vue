@@ -8,44 +8,56 @@
     </div>
 
     <!-- 标签页导航 -->
-    <a-tabs v-model:activeKey="activeTab" class="demo-tabs">
-      <a-tab-pane key="demo" tab="质控演示">
+    <a-tabs
+      v-model:active-key="activeTab"
+      class="demo-tabs"
+    >
+      <a-tab-pane
+        key="demo"
+        tab="质控演示"
+      >
         <a-row :gutter="24">
           <!-- 控制面板 -->
           <a-col :span="8">
-            <a-card title="控制面板" class="control-panel">
-              <a-space direction="vertical" style="width: 100%">
+            <a-card
+              title="控制面板"
+              class="control-panel"
+            >
+              <a-space
+                direction="vertical"
+                style="width: 100%"
+              >
                 <a-button
                   type="primary"
                   block
-                  @click="initializeDemo"
                   :loading="initializing"
+                  @click="initializeDemo"
                 >
                   初始化演示环境
                 </a-button>
 
                 <a-button
                   block
-                  @click="runQCDemo"
                   :loading="analyzing"
                   :disabled="!initialized"
+                  @click="runQCDemo"
                 >
                   执行质控分析
                 </a-button>
 
                 <a-button
                   block
-                  @click="demonstrateRuleManagement"
                   :loading="managingRules"
                   :disabled="!initialized"
+                  @click="demonstrateRuleManagement"
                 >
                   规则管理演示
                 </a-button>
 
                 <a-button
                   block
-                  @click="runFullDemo"
                   :loading="runningFullDemo"
+                  @click="runFullDemo"
                 >
                   完整功能演示
                 </a-button>
@@ -54,155 +66,207 @@
 
                 <a-button
                   block
-                  @click="clearLogs"
                   type="dashed"
+                  @click="clearLogs"
                 >
                   清空日志
                 </a-button>
               </a-space>
             </a-card>
 
-        <!-- 系统状态 -->
-        <a-card title="系统状态" class="status-panel" style="margin-top: 16px">
-          <a-descriptions :column="1" size="small">
-            <a-descriptions-item label="初始化状态">
-              <a-tag :color="initialized ? 'green' : 'orange'">
-                {{ initialized ? '已初始化' : '未初始化' }}
-              </a-tag>
-            </a-descriptions-item>
-            <a-descriptions-item label="缓存命中率">
-              {{ cacheStats.hitRate ? (cacheStats.hitRate * 100).toFixed(1) + '%' : 'N/A' }}
-            </a-descriptions-item>
-            <a-descriptions-item label="执行次数">
-              {{ executionMetrics.totalExecutions || 0 }}
-            </a-descriptions-item>
-            <a-descriptions-item label="成功率">
-              {{ executionMetrics.totalExecutions ? 
-                ((executionMetrics.successfulExecutions / executionMetrics.totalExecutions) * 100).toFixed(1) + '%' : 'N/A' }}
-            </a-descriptions-item>
-          </a-descriptions>
-        </a-card>
-      </a-col>
+            <!-- 系统状态 -->
+            <a-card
+              title="系统状态"
+              class="status-panel"
+              style="margin-top: 16px"
+            >
+              <a-descriptions
+                :column="1"
+                size="small"
+              >
+                <a-descriptions-item label="初始化状态">
+                  <a-tag :color="initialized ? 'green' : 'orange'">
+                    {{ initialized ? '已初始化' : '未初始化' }}
+                  </a-tag>
+                </a-descriptions-item>
+                <a-descriptions-item label="缓存命中率">
+                  {{ cacheStats.hitRate ? (cacheStats.hitRate * 100).toFixed(1) + '%' : 'N/A' }}
+                </a-descriptions-item>
+                <a-descriptions-item label="执行次数">
+                  {{ executionMetrics.totalExecutions || 0 }}
+                </a-descriptions-item>
+                <a-descriptions-item label="成功率">
+                  {{ executionMetrics.totalExecutions ? 
+                    ((executionMetrics.successfulExecutions / executionMetrics.totalExecutions) * 100).toFixed(1) + '%' : 'N/A' }}
+                </a-descriptions-item>
+              </a-descriptions>
+            </a-card>
+          </a-col>
 
-      <!-- 结果展示 -->
-      <a-col :span="16">
-        <a-card title="执行结果" class="results-panel">
-          <div v-if="qcResult" class="qc-results">
-            <a-alert
-              :message="`质控分析完成 - 总分: ${qcResult.overallScore}/100`"
-              :description="qcResult.summary"
-              :type="qcResult.riskLevel === 'low' ? 'success' : 
+          <!-- 结果展示 -->
+          <a-col :span="16">
+            <a-card
+              title="执行结果"
+              class="results-panel"
+            >
+              <div
+                v-if="qcResult"
+                class="qc-results"
+              >
+                <a-alert
+                  :message="`质控分析完成 - 总分: ${qcResult.overallScore}/100`"
+                  :description="qcResult.summary"
+                  :type="qcResult.riskLevel === 'low' ? 'success' : 
                     qcResult.riskLevel === 'medium' ? 'warning' : 'error'"
-              show-icon
-              style="margin-bottom: 16px"
-            />
+                  show-icon
+                  style="margin-bottom: 16px"
+                />
 
-            <a-tabs>
-              <a-tab-pane key="rules" tab="规则结果">
-                <div class="rule-results">
-                  <a-list
-                    :data-source="qcResult.ruleResults"
-                    item-layout="vertical"
+                <a-tabs>
+                  <a-tab-pane
+                    key="rules"
+                    tab="规则结果"
                   >
-                    <template #renderItem="{ item }">
-                      <a-list-item>
-                        <a-list-item-meta>
-                          <template #title>
-                            <span>{{ item.ruleName }} ({{ item.ruleCode }})</span>
-                            <a-tag 
-                              :color="item.isCompliant ? 'green' : 'red'"
-                              style="margin-left: 8px"
-                            >
-                              {{ item.isCompliant ? '合规' : '不合规' }}
-                            </a-tag>
-                          </template>
-                          <template #description>
-                            <div>
-                              <p>评分: {{ item.score }}/100 | 置信度: {{ item.confidence }}% | 执行时间: {{ item.executionTime }}ms</p>
-                              <div v-if="item.findings.length > 0">
-                                <strong>发现问题:</strong>
-                                <ul>
-                                  <li v-for="finding in item.findings" :key="finding.description">
-                                    <a-tag :color="finding.severity === 'critical' ? 'red' : 
-                                                  finding.severity === 'major' ? 'orange' : 'blue'">
-                                      {{ finding.severity }}
-                                    </a-tag>
-                                    {{ finding.description }}
-                                    <div v-if="finding.recommendation" style="margin-top: 4px; color: #666;">
-                                      💡 {{ finding.recommendation }}
-                                    </div>
-                                  </li>
-                                </ul>
-                              </div>
-                              <div v-if="item.medicalReasoning" style="margin-top: 8px;">
-                                <strong>医学推理:</strong> {{ item.medicalReasoning }}
-                              </div>
-                            </div>
-                          </template>
-                        </a-list-item-meta>
-                      </a-list-item>
-                    </template>
-                  </a-list>
-                </div>
-              </a-tab-pane>
+                    <div class="rule-results">
+                      <a-list
+                        :data-source="qcResult.ruleResults"
+                        item-layout="vertical"
+                      >
+                        <template #renderItem="{ item }">
+                          <a-list-item>
+                            <a-list-item-meta>
+                              <template #title>
+                                <span>{{ item.ruleName }} ({{ item.ruleCode }})</span>
+                                <a-tag 
+                                  :color="item.isCompliant ? 'green' : 'red'"
+                                  style="margin-left: 8px"
+                                >
+                                  {{ item.isCompliant ? '合规' : '不合规' }}
+                                </a-tag>
+                              </template>
+                              <template #description>
+                                <div>
+                                  <p>评分: {{ item.score }}/100 | 置信度: {{ item.confidence }}% | 执行时间: {{ item.executionTime }}ms</p>
+                                  <div v-if="item.findings.length > 0">
+                                    <strong>发现问题:</strong>
+                                    <ul>
+                                      <li
+                                        v-for="finding in item.findings"
+                                        :key="finding.description"
+                                      >
+                                        <a-tag
+                                          :color="finding.severity === 'critical' ? 'red' : 
+                                            finding.severity === 'major' ? 'orange' : 'blue'"
+                                        >
+                                          {{ finding.severity }}
+                                        </a-tag>
+                                        {{ finding.description }}
+                                        <div
+                                          v-if="finding.recommendation"
+                                          style="margin-top: 4px; color: #666;"
+                                        >
+                                          💡 {{ finding.recommendation }}
+                                        </div>
+                                      </li>
+                                    </ul>
+                                  </div>
+                                  <div
+                                    v-if="item.medicalReasoning"
+                                    style="margin-top: 8px;"
+                                  >
+                                    <strong>医学推理:</strong> {{ item.medicalReasoning }}
+                                  </div>
+                                </div>
+                              </template>
+                            </a-list-item-meta>
+                          </a-list-item>
+                        </template>
+                      </a-list>
+                    </div>
+                  </a-tab-pane>
 
-              <a-tab-pane key="analysis" tab="交叉分析">
-                <div v-if="qcResult.crossRuleAnalysis" class="cross-analysis">
-                  <a-descriptions :column="1">
-                    <a-descriptions-item label="关联问题">
-                      {{ qcResult.crossRuleAnalysis.correlatedIssues }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="系统性问题">
-                      {{ qcResult.crossRuleAnalysis.systemicProblems }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="优先建议">
-                      {{ qcResult.crossRuleAnalysis.priorityRecommendations }}
-                    </a-descriptions-item>
-                  </a-descriptions>
-                </div>
-              </a-tab-pane>
+                  <a-tab-pane
+                    key="analysis"
+                    tab="交叉分析"
+                  >
+                    <div
+                      v-if="qcResult.crossRuleAnalysis"
+                      class="cross-analysis"
+                    >
+                      <a-descriptions :column="1">
+                        <a-descriptions-item label="关联问题">
+                          {{ qcResult.crossRuleAnalysis.correlatedIssues }}
+                        </a-descriptions-item>
+                        <a-descriptions-item label="系统性问题">
+                          {{ qcResult.crossRuleAnalysis.systemicProblems }}
+                        </a-descriptions-item>
+                        <a-descriptions-item label="优先建议">
+                          {{ qcResult.crossRuleAnalysis.priorityRecommendations }}
+                        </a-descriptions-item>
+                      </a-descriptions>
+                    </div>
+                  </a-tab-pane>
 
-              <a-tab-pane key="metrics" tab="性能指标">
-                <a-row :gutter="16">
-                  <a-col :span="12">
-                    <a-statistic
-                      title="总执行时间"
-                      :value="qcResult.executionTime"
-                      suffix="ms"
-                    />
-                  </a-col>
-                  <a-col :span="12">
-                    <a-statistic
-                      title="检查规则数"
-                      :value="qcResult.ruleResults.length"
-                    />
-                  </a-col>
-                </a-row>
-              </a-tab-pane>
-            </a-tabs>
-          </div>
+                  <a-tab-pane
+                    key="metrics"
+                    tab="性能指标"
+                  >
+                    <a-row :gutter="16">
+                      <a-col :span="12">
+                        <a-statistic
+                          title="总执行时间"
+                          :value="qcResult.executionTime"
+                          suffix="ms"
+                        />
+                      </a-col>
+                      <a-col :span="12">
+                        <a-statistic
+                          title="检查规则数"
+                          :value="qcResult.ruleResults.length"
+                        />
+                      </a-col>
+                    </a-row>
+                  </a-tab-pane>
+                </a-tabs>
+              </div>
 
-          <div v-else class="no-results">
-            <a-empty description="暂无执行结果，请点击上方按钮开始演示" />
+              <div
+                v-else
+                class="no-results"
+              >
+                <a-empty description="暂无执行结果，请点击上方按钮开始演示" />
+              </div>
+            </a-card>
+          </a-col>
+        </a-row>
+
+        <!-- 日志面板 -->
+        <a-card
+          title="执行日志"
+          class="logs-panel"
+          style="margin-top: 24px"
+        >
+          <div class="logs-container">
+            <pre
+              v-if="logs.length > 0"
+              class="logs-content"
+            >{{ logs.join('\n') }}</pre>
+            <a-empty
+              v-else
+              description="暂无日志"
+            />
           </div>
         </a-card>
-      </a-col>
-    </a-row>
+      </a-tab-pane>
 
-    <!-- 日志面板 -->
-    <a-card title="执行日志" class="logs-panel" style="margin-top: 24px">
-      <div class="logs-container">
-        <pre v-if="logs.length > 0" class="logs-content">{{ logs.join('\n') }}</pre>
-        <a-empty v-else description="暂无日志" />
-      </div>
-    </a-card>
-  </a-tab-pane>
-
-  <!-- LLM配置标签页 -->
-  <a-tab-pane key="config" tab="LLM配置">
-    <QCLLMConfig />
-  </a-tab-pane>
-</a-tabs>
+      <!-- LLM配置标签页 -->
+      <a-tab-pane
+        key="config"
+        tab="LLM配置"
+      >
+        <QCLLMConfig />
+      </a-tab-pane>
+    </a-tabs>
   </div>
 </template>
 
@@ -252,6 +316,9 @@ const addLog = (message: string) => {
   }
 }
 
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
+
 // ❌ 移除全局 console.log 重写，避免影响全站调试
 // 改为在需要记录日志的地方显式调用 addLog()
 
@@ -271,7 +338,7 @@ const initializeDemo = async () => {
     message.success('演示环境初始化成功')
     
   } catch (error) {
-    addLog(`❌ 初始化失败: ${error.message}`)
+    addLog(`❌ 初始化失败: ${getErrorMessage(error)}`)
     message.error('初始化失败')
   } finally {
     initializing.value = false
@@ -293,7 +360,7 @@ const runQCDemo = async () => {
     message.success('质控分析完成')
     
   } catch (error) {
-    addLog(`❌ 质控分析失败: ${error.message}`)
+    addLog(`❌ 质控分析失败: ${getErrorMessage(error)}`)
     message.error('质控分析失败')
   } finally {
     analyzing.value = false
@@ -314,7 +381,7 @@ const demonstrateRuleManagement = async () => {
     message.success('规则管理演示完成')
     
   } catch (error) {
-    addLog(`❌ 规则管理演示失败: ${error.message}`)
+    addLog(`❌ 规则管理演示失败: ${getErrorMessage(error)}`)
     message.error('规则管理演示失败')
   } finally {
     managingRules.value = false
@@ -337,7 +404,7 @@ const runFullDemo = async () => {
     message.success('完整功能演示完成')
     
   } catch (error) {
-    addLog(`❌ 完整功能演示失败: ${error.message}`)
+    addLog(`❌ 完整功能演示失败: ${getErrorMessage(error)}`)
     message.error('完整功能演示失败')
   } finally {
     runningFullDemo.value = false

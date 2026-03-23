@@ -5,17 +5,32 @@
     :placeholder="placeholder"
     :filter-option="false"
     :not-found-content="fetching ? undefined : null"
+    style="width: 100%"
     @search="handleSearch"
     @change="handleChange"
-    style="width: 100%"
   >
     <template #notFoundContent>
-      <a-spin v-if="fetching" size="small" />
-      <a-empty v-else :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+      <a-spin
+        v-if="fetching"
+        size="small"
+      />
+      <a-empty
+        v-else
+        :image="Empty.PRESENTED_IMAGE_SIMPLE"
+      />
     </template>
-    <a-select-option v-for="item in searchResults" :key="item.code" :value="item.code">
+    <a-select-option
+      v-for="item in searchResults"
+      :key="item.code"
+      :value="item.code"
+    >
       <div>
-        <a-tag color="blue" size="small">{{ item.code }}</a-tag>
+        <a-tag
+          color="blue"
+          size="small"
+        >
+          {{ item.code }}
+        </a-tag>
         <span>{{ item.name }}</span>
       </div>
     </a-select-option>

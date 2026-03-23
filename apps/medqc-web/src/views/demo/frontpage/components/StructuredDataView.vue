@@ -1526,7 +1526,7 @@ const dischargeOtherDiagnoses = computed(() => {
     return normalizeDiagnosisName(name)
       .toLowerCase()
       .replace(/[（(].*$/u, '')
-      .replace(/[\s-·•,，;；:：()[\]【】]+/gu, '')
+      .replace(/[\s·•,，;；:：()[\]【】-]+/gu, '')
   }
 
   const hasRealCode = (code: string): boolean => {

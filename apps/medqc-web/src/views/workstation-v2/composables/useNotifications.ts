@@ -1,7 +1,20 @@
-import { ref, computed, type Ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { ApiService } from '@/services/apiService'
-import type { PatientRecord } from '../types'
+import { normalizeNotification } from '../normalize'
+import type { NotificationVM, PatientRecord } from '../types'
+
+interface NotificationListResponse {
+  data?: {
+    items?: unknown[]
+    unread_count?: number
+  }
+}
+
+function isAuthError(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  return status === 401 || status === 403
+}
 
 export function useNotifications(
   allRecords: Ref<PatientRecord[]>,
@@ -10,7 +23,7 @@ export function useNotifications(
   assistTab: Ref<string>,
   frontpageTab: Ref<string>,
 ) {
-  const assistNotifications = ref<any[]>([])
+  const assistNotifications = ref<NotificationVM[]>([])
   const notificationUnreadCount = ref(0)
   const notificationLoading = ref(false)
   const notificationReadFilter = ref<'all' | 'unread' | 'read'>('unread')
@@ -18,13 +31,8 @@ export function useNotifications(
   const filteredAssistNotifications = computed(() => {
     if (notificationReadFilter.value === 'all') return assistNotifications.value
     const expectRead = notificationReadFilter.value === 'read'
-    return assistNotifications.value.filter(item => !!item.is_read === expectRead)
+    return assistNotifications.value.filter((item) => item.is_read === expectRead)
   })
-
-  function isAuthError(err: any) {
-    const status = err?.response?.status
-    return status === 401 || status === 403
-  }
 
   async function fetchAssistNotifications() {
     if (!ApiService.isAuthenticated()) {
@@ -35,7 +43,7 @@ export function useNotifications(
 
     notificationLoading.value = true
     try {
-      const res = await ApiService.get('/api/v1/notifications', {
+      const res = await ApiService.get<NotificationListResponse>('/api/v1/notifications', {
         page_size: 30,
       })
       if (!res.success) {
@@ -43,9 +51,11 @@ export function useNotifications(
         notificationUnreadCount.value = 0
         return
       }
-      const data = res.data?.data || {}
-      assistNotifications.value = Array.isArray(data.items) ? data.items : []
-      notificationUnreadCount.value = Number(data.unread_count || 0)
+
+      const payload = res.data?.data
+      const items = Array.isArray(payload?.items) ? payload.items : []
+      assistNotifications.value = items.map((item, index) => normalizeNotification(item, index))
+      notificationUnreadCount.value = Number(payload?.unread_count || 0)
     } catch (err) {
       if (!isAuthError(err)) {
         console.error('加载消息概览失败:', err)
@@ -57,9 +67,8 @@ export function useNotifications(
     }
   }
 
-  async function markAssistNotificationRead(notif: any) {
-    if (!notif?.id || notif.is_read) return
-    if (!ApiService.isAuthenticated()) return
+  async function markAssistNotificationRead(notif: NotificationVM) {
+    if (!notif.id || notif.is_read || !ApiService.isAuthenticated()) return
 
     try {
       const res = await ApiService.put(`/api/v1/notifications/${notif.id}/read`)
@@ -90,9 +99,9 @@ export function useNotifications(
     }
   }
 
-  async function handleAssistNotificationClick(notif: any) {
+  async function handleAssistNotificationClick(notif: NotificationVM) {
     await markAssistNotificationRead(notif)
-    const targetRecordId = notif?.record_id
+    const targetRecordId = notif.record_id
     if (!targetRecordId) {
       assistTab.value = 'form'
       frontpageTab.value = 'fields'
@@ -100,7 +109,7 @@ export function useNotifications(
       return
     }
 
-    const record = allRecords.value.find(item => item.id === targetRecordId)
+    const record = allRecords.value.find((item) => item.id === targetRecordId || item.visitId === targetRecordId)
     if (!record) {
       message.warning(`未找到病历：${targetRecordId}`)
       return
@@ -115,6 +124,7 @@ export function useNotifications(
   function formatRelativeTime(iso: string) {
     if (!iso) return ''
     const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
     const now = new Date()
     const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
     if (diff < 60) return '刚刚'

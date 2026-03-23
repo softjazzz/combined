@@ -3,12 +3,18 @@
     <a-page-header
       title="编码辅助"
       sub-title="ICD 编码推荐和校验"
-      @back="() => $router.back()"
       class="page-header"
+      @back="() => $router.back()"
     >
       <template #extra>
-        <a-button type="primary" @click="refreshList" class="refresh-btn">
-          <template #icon><ReloadOutlined /></template>
+        <a-button
+          type="primary"
+          class="refresh-btn"
+          @click="refreshList"
+        >
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新
         </a-button>
       </template>
@@ -17,19 +23,30 @@
     <div class="content-wrapper">
       <!-- 筛选条件 -->
       <div class="filter-bar">
-        <a-form layout="inline" class="filter-form">
+        <a-form
+          layout="inline"
+          class="filter-form"
+        >
           <a-form-item label="编码状态">
             <a-select
               v-model:value="filters.codingStatus"
               style="width: 140px"
               placeholder="全部"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             >
-              <a-select-option value="">全部</a-select-option>
-              <a-select-option value="draft">草稿</a-select-option>
-              <a-select-option value="completed">已完成</a-select-option>
-              <a-select-option value="reviewed">已审核</a-select-option>
+              <a-select-option value="">
+                全部
+              </a-select-option>
+              <a-select-option value="draft">
+                草稿
+              </a-select-option>
+              <a-select-option value="completed">
+                已完成
+              </a-select-option>
+              <a-select-option value="reviewed">
+                已审核
+              </a-select-option>
             </a-select>
           </a-form-item>
 
@@ -38,13 +55,21 @@
               v-model:value="filters.reviewStatus"
               style="width: 140px"
               placeholder="全部"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             >
-              <a-select-option value="">全部</a-select-option>
-              <a-select-option value="pending">待审核</a-select-option>
-              <a-select-option value="approved">已通过</a-select-option>
-              <a-select-option value="rejected">已拒绝</a-select-option>
+              <a-select-option value="">
+                全部
+              </a-select-option>
+              <a-select-option value="pending">
+                待审核
+              </a-select-option>
+              <a-select-option value="approved">
+                已通过
+              </a-select-option>
+              <a-select-option value="rejected">
+                已拒绝
+              </a-select-option>
             </a-select>
           </a-form-item>
 
@@ -53,7 +78,7 @@
               v-model:value="filters.patientName"
               placeholder="输入患者姓名"
               style="width: 140px"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             />
           </a-form-item>
@@ -63,7 +88,7 @@
               v-model:value="filters.admissionId"
               placeholder="输入住院号"
               style="width: 160px"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             />
           </a-form-item>
@@ -72,22 +97,28 @@
 
       <!-- 病案列表 -->
       <div class="table-card">
-        <TableSkeleton v-if="loading" :rows="10" :columns="8" />
+        <TableSkeleton
+          v-if="loading"
+          :rows="10"
+          :columns="8"
+        />
         <a-table
           v-else
           :columns="columns"
           :data-source="dataSource"
           :pagination="pagination"
           :scroll="{ x: 1200 }"
-          @change="handleTableChange"
           row-key="front_page_id"
           class="premium-table"
+          @change="handleTableChange"
         >
           <template #bodyCell="{ column, record }">
             <!-- 患者信息 -->
             <template v-if="column.dataIndex === 'patient'">
               <div class="patient-cell">
-                <div class="patient-name">{{ record.patient_name }}</div>
+                <div class="patient-name">
+                  {{ record.patient_name }}
+                </div>
                 <div class="patient-meta">
                   {{ getGenderText(record.patient_gender) }} / {{ record.patient_age }}岁
                 </div>
@@ -97,8 +128,15 @@
             <!-- 主诊断 -->
             <template v-else-if="column.dataIndex === 'diagnosis'">
               <div class="diagnosis-cell">
-                <a-tag color="blue" class="code-tag">{{ record.primary_diagnosis_code }}</a-tag>
-                <div class="diagnosis-name">{{ record.primary_diagnosis_name }}</div>
+                <a-tag
+                  color="blue"
+                  class="code-tag"
+                >
+                  {{ record.primary_diagnosis_code }}
+                </a-tag>
+                <div class="diagnosis-name">
+                  {{ record.primary_diagnosis_name }}
+                </div>
               </div>
             </template>
 
@@ -109,12 +147,18 @@
 
             <!-- 编码状态 -->
             <template v-else-if="column.dataIndex === 'coding_status'">
-              <StatusTag type="coding" :value="record.coding_status" />
+              <StatusTag
+                type="coding"
+                :value="record.coding_status"
+              />
             </template>
 
             <!-- 审核状态 -->
             <template v-else-if="column.dataIndex === 'review_status'">
-              <StatusTag type="review" :value="record.review_status" />
+              <StatusTag
+                type="review"
+                :value="record.review_status"
+              />
             </template>
 
             <!-- 编码员 -->
@@ -125,10 +169,20 @@
             <!-- 操作 -->
             <template v-else-if="column.key === 'action'">
               <a-space size="small">
-                <a-button type="link" size="small" class="action-link" @click="goToDetail(record.admission_id)">
+                <a-button
+                  type="link"
+                  size="small"
+                  class="action-link"
+                  @click="goToDetail(record.admission_id)"
+                >
                   <EditOutlined /> 编码
                 </a-button>
-                <a-button type="link" size="small" class="action-link review-link" v-if="record.coding_status === 'completed'">
+                <a-button
+                  v-if="record.coding_status === 'completed'"
+                  type="link"
+                  size="small"
+                  class="action-link review-link"
+                >
                   <CheckCircleOutlined /> 审核
                 </a-button>
               </a-space>

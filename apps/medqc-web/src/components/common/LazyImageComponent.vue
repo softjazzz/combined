@@ -10,11 +10,20 @@
       v-if="isLoading && !hasError" 
       class="lazy-image-placeholder"
     >
-      <div class="lazy-image-skeleton" v-if="showSkeleton">
-        <div class="skeleton-content"></div>
+      <div
+        v-if="showSkeleton"
+        class="lazy-image-skeleton"
+      >
+        <div class="skeleton-content" />
       </div>
-      <a-spin v-else size="small" />
-      <span v-if="loadingText" class="lazy-image-text">{{ loadingText }}</span>
+      <a-spin
+        v-else
+        size="small"
+      />
+      <span
+        v-if="loadingText"
+        class="lazy-image-text"
+      >{{ loadingText }}</span>
     </div>
     
     <!-- 错误状态 -->
@@ -24,8 +33,13 @@
       @click="retry"
     >
       <div class="error-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
         </svg>
       </div>
       <span class="error-text">{{ errorText || '加载失败，点击重试' }}</span>
@@ -42,7 +56,7 @@
       @load="handleLoad"
       @error="handleError"
       @click="handleClick"
-    />
+    >
     
     <!-- 遮罩层 -->
     <div 
@@ -51,7 +65,9 @@
       :class="overlayClass"
     >
       <slot name="overlay">
-        <div class="overlay-content">{{ overlay }}</div>
+        <div class="overlay-content">
+          {{ overlay }}
+        </div>
       </slot>
     </div>
   </div>

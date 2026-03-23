@@ -3,7 +3,10 @@
     <a-row :gutter="24">
       <!-- 左侧：在院病人列表 -->
       <a-col :span="16">
-        <a-card title="在院病人运行质控" class="mb-4">
+        <a-card
+          title="在院病人运行质控"
+          class="mb-4"
+        >
           <template #extra>
             <a-space>
               <a-select
@@ -12,13 +15,22 @@
                 style="width: 150px"
                 @change="filterPatients"
               >
-                <a-select-option value="">全部科室</a-select-option>
-                <a-select-option v-for="dept in departments" :key="dept" :value="dept">
+                <a-select-option value="">
+                  全部科室
+                </a-select-option>
+                <a-select-option
+                  v-for="dept in departments"
+                  :key="dept"
+                  :value="dept"
+                >
                   {{ dept }}
                 </a-select-option>
               </a-select>
               
-              <a-button type="primary" @click="refreshPatients">
+              <a-button
+                type="primary"
+                @click="refreshPatients"
+              >
                 <template #icon>
                   <ReloadOutlined />
                 </template>
@@ -60,8 +72,8 @@
                   <a-button 
                     type="primary" 
                     size="small" 
-                    @click="analyzePatient(record)"
                     :loading="analyzingPatients.includes(record.id)"
+                    @click="analyzePatient(record)"
                   >
                     质控分析
                   </a-button>
@@ -80,7 +92,10 @@
       
       <!-- 右侧：实时统计 -->
       <a-col :span="8">
-        <a-card title="实时统计" class="mb-4">
+        <a-card
+          title="实时统计"
+          class="mb-4"
+        >
           <a-row :gutter="16">
             <a-col :span="12">
               <a-statistic
@@ -103,17 +118,32 @@
         </a-card>
         
         <!-- 风险分布 -->
-        <a-card title="风险分布" class="mb-4">
-          <div ref="riskChartRef" style="height: 200px;"></div>
+        <a-card
+          title="风险分布"
+          class="mb-4"
+        >
+          <div
+            ref="riskChartRef"
+            style="height: 200px;"
+          />
         </a-card>
         
         <!-- 科室分布 -->
-        <a-card title="科室分布" class="mb-4">
-          <div ref="departmentChartRef" style="height: 200px;"></div>
+        <a-card
+          title="科室分布"
+          class="mb-4"
+        >
+          <div
+            ref="departmentChartRef"
+            style="height: 200px;"
+          />
         </a-card>
         
         <!-- 近期提醒 -->
-        <a-card title="近期提醒" class="mb-4">
+        <a-card
+          title="近期提醒"
+          class="mb-4"
+        >
           <a-list
             :data-source="recentAlerts"
             size="small"
@@ -386,10 +416,11 @@ const analyzePatient = async (patient: InpatientRecord) => {
     // 更新患者状态
     const patientIndex = patients.value.findIndex(p => p.id === patient.id)
     if (patientIndex !== -1) {
-      patients.value[patientIndex].riskLevel = result.summary.riskLevel
-      patients.value[patientIndex].grade = result.summary.grade
-      patients.value[patientIndex].lastQCTime = result.analysisTime
-      patients.value[patientIndex].nextCheckTime = result.nextCheckTime
+      const score = result.score ?? 0
+      patients.value[patientIndex].riskLevel = score >= 90 ? 'low' : score >= 75 ? 'medium' : score >= 60 ? 'high' : 'critical'
+      patients.value[patientIndex].grade = score >= 90 ? '甲级' : score >= 75 ? '乙级' : '丙级'
+      patients.value[patientIndex].lastQCTime = new Date().toISOString()
+      patients.value[patientIndex].nextCheckTime = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
     }
     
     message.success('质控分析完成')

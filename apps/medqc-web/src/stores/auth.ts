@@ -77,30 +77,25 @@ export const useAuthStore = defineStore('auth', () => {
         } else {
           // Token无效，清除本地状态
           user.value = null
+          localStorage.removeItem('auth_user')
           localStorage.removeItem('medqc_user')
           localStorage.removeItem('medqc_authenticated')
         }
       } else {
-        // 没有有效token，检查本地存储的用户信息
-        const savedUser = localStorage.getItem('medqc_user')
-        const savedAuth = localStorage.getItem('medqc_authenticated')
-
-        if (savedUser && savedAuth === 'true') {
-          try {
-            user.value = JSON.parse(savedUser)
-            console.warn('从本地存储恢复用户:', user.value.display_name)
-          } catch (error) {
-            console.error('解析用户数据失败:', error)
-            localStorage.removeItem('medqc_user')
-            localStorage.removeItem('medqc_authenticated')
-          }
-        }
+        // 没有有效 access token，不恢复用户态，避免出现“前端已登录/接口 403”的假登录状态
+        user.value = null
+        localStorage.removeItem('auth_user')
+        localStorage.removeItem('medqc_user')
+        localStorage.removeItem('medqc_authenticated')
       }
 
       initialized.value = true
     } catch (error) {
       console.error('初始化认证状态失败:', error)
       user.value = null
+      localStorage.removeItem('auth_user')
+      localStorage.removeItem('medqc_user')
+      localStorage.removeItem('medqc_authenticated')
     } finally {
       loading.value = false
     }
@@ -128,6 +123,7 @@ export const useAuthStore = defineStore('auth', () => {
         if (me.success && me.data) {
           user.value = me.data
           // 保存正确的用户数据到localStorage
+          localStorage.setItem('auth_user', JSON.stringify(me.data))
           localStorage.setItem('medqc_user', JSON.stringify(me.data))
           localStorage.setItem('medqc_authenticated', 'true')
           console.warn('✅ 登录成功:', me.data.display_name || me.data.email)
@@ -145,6 +141,7 @@ export const useAuthStore = defineStore('auth', () => {
             is_active: true,
           }
           user.value = fallbackUser
+          localStorage.setItem('auth_user', JSON.stringify(fallbackUser))
           localStorage.setItem('medqc_user', JSON.stringify(fallbackUser))
           localStorage.setItem('medqc_authenticated', 'true')
           console.warn('⚠️ 未能获取用户详情，使用兜底用户信息')
@@ -209,6 +206,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       // 清除本地状态
       user.value = null
+      localStorage.removeItem('auth_user')
       localStorage.removeItem('medqc_user')
       localStorage.removeItem('medqc_authenticated')
 
@@ -217,6 +215,7 @@ export const useAuthStore = defineStore('auth', () => {
       console.error('登出失败:', error)
       // 即使API调用失败，也要清除本地状态
       user.value = null
+      localStorage.removeItem('auth_user')
       localStorage.removeItem('medqc_user')
       localStorage.removeItem('medqc_authenticated')
       return { success: true }

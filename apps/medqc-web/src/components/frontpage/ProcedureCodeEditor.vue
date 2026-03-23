@@ -1,11 +1,19 @@
 <template>
   <div class="procedure-code-editor">
-    <div class="procedure-item" v-if="procedureName">
+    <div
+      v-if="procedureName"
+      class="procedure-item"
+    >
       <div class="procedure-row">
         <div class="procedure-info">
-          <a-tag color="purple">主手术</a-tag>
+          <a-tag color="purple">
+            主手术
+          </a-tag>
           <span class="procedure-name">{{ procedureName }}</span>
-          <span v-if="procedureDate" class="procedure-date">{{ procedureDate }}</span>
+          <span
+            v-if="procedureDate"
+            class="procedure-date"
+          >{{ procedureDate }}</span>
         </div>
         
         <!-- ICD-9-CM-3 编码选择 -->
@@ -23,7 +31,12 @@
                 :value="suggestion.code"
               >
                 <div class="suggestion-option">
-                  <a-tag color="purple" size="small">{{ suggestion.code }}</a-tag>
+                  <a-tag
+                    color="purple"
+                    size="small"
+                  >
+                    {{ suggestion.code }}
+                  </a-tag>
                   <span class="suggestion-name">{{ suggestion.name }}</span>
                   <a-tag 
                     v-if="suggestion.confidence" 
@@ -49,13 +62,20 @@
       </div>
       
       <!-- 显示当前选中的编码 -->
-      <div v-if="selectedCode" class="selected-code">
+      <div
+        v-if="selectedCode"
+        class="selected-code"
+      >
         <CheckCircleOutlined class="text-green-500" />
         <span>已选编码: <a-tag color="purple">{{ selectedCode }}</a-tag></span>
       </div>
     </div>
     
-    <a-empty v-else description="暂无手术记录" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+    <a-empty
+      v-else
+      description="暂无手术记录"
+      :image="Empty.PRESENTED_IMAGE_SIMPLE"
+    />
   </div>
 </template>
 

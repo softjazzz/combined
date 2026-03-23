@@ -6,20 +6,35 @@
     :footer="null"
     @cancel="handleCancel"
   >
-    <a-list :data-source="examples" item-layout="vertical" :split="false">
+    <a-list
+      :data-source="examples"
+      item-layout="vertical"
+      :split="false"
+    >
       <template #renderItem="{ item }">
         <a-list-item class="example-item">
           <a-list-item-meta :title="item.title" />
           <div class="example-content">
-            <p class="example-text">{{ item.content }}</p>
+            <p class="example-text">
+              {{ item.content }}
+            </p>
             <a-space>
-              <a-tag color="blue">文书：{{ item.params.documentType }}</a-tag>
-              <a-tag color="purple">复杂度：{{ item.params.complexity }}</a-tag>
-              <a-tag color="red">缺陷级别：{{ item.params.defectLevel }}</a-tag>
+              <a-tag color="blue">
+                文书：{{ item.params.documentType }}
+              </a-tag>
+              <a-tag color="purple">
+                复杂度：{{ item.params.complexity }}
+              </a-tag>
+              <a-tag color="red">
+                缺陷级别：{{ item.params.defectLevel }}
+              </a-tag>
             </a-space>
           </div>
           <div class="example-actions">
-            <a-button type="primary" @click="() => handleUseExample(item)">
+            <a-button
+              type="primary"
+              @click="() => handleUseExample(item)"
+            >
               使用此示例
             </a-button>
           </div>

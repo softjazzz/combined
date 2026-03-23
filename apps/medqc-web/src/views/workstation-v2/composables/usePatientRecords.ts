@@ -1,6 +1,34 @@
 import { computed, ref } from 'vue'
 import axios from 'axios'
 import type { DeptInfo, PatientRecord } from '../types'
+import { normalizeRecord } from '../normalize'
+
+function normalizeDepartment(raw: unknown): DeptInfo {
+  const source = (raw || {}) as Record<string, unknown>
+  const name = String(source.name ?? source.department ?? source.dept_name ?? '未分科室').trim()
+  const total = Number(source.total ?? source.count ?? 0)
+  const warningCount = Number(source.warningCount ?? source.warning_count ?? 0)
+  return {
+    name: name || '未分科室',
+    total: Number.isFinite(total) ? total : 0,
+    warningCount: Number.isFinite(warningCount) ? warningCount : 0,
+  }
+}
+
+function buildDepartments(records: PatientRecord[]): DeptInfo[] {
+  const map = new Map<string, DeptInfo>()
+  for (const record of records) {
+    const name = record.department || '未分科室'
+    const current = map.get(name) || { name, total: 0, warningCount: 0 }
+    current.total += 1
+    if (record.status === 'warning' || record.status === 'has_defects') {
+      current.warningCount += 1
+    }
+    map.set(name, current)
+  }
+  const values = [...map.values()].sort((a, b) => b.total - a.total)
+  return [{ name: '全部科室', total: records.length, warningCount: values.reduce((sum, item) => sum + item.warningCount, 0) }, ...values]
+}
 
 export function usePatientRecords() {
   const allRecords = ref<PatientRecord[]>([])
@@ -54,8 +82,13 @@ export function usePatientRecords() {
         params: { page, page_size: 50 },
       })
 
-      allRecords.value = data.records || []
-      departments.value = data.departments || []
+      const normalizedRecords = Array.isArray(data.records)
+        ? data.records.map((record: unknown) => normalizeRecord(record))
+        : []
+      allRecords.value = normalizedRecords
+      departments.value = Array.isArray(data.departments) && data.departments.length > 0
+        ? data.departments.map((dept: unknown) => normalizeDepartment(dept))
+        : buildDepartments(normalizedRecords)
 
       const total = Number(data.total ?? data.total_count ?? 0)
       const pageSize = Number(data.page_size ?? data.pageSize ?? 50)

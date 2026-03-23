@@ -4,7 +4,7 @@
     <div class="demo-header">
       <div class="demo-title">
         <h1>
-          <i class="fas fa-stethoscope"></i>
+          <i class="fas fa-stethoscope" />
           医疗质控系统 - 医生工作站演示
         </h1>
         <p class="demo-subtitle">
@@ -13,29 +13,38 @@
       </div>
       
       <div class="demo-actions">
-        <button class="demo-btn primary" @click="startDemo">
-          <i class="fas fa-play"></i>
+        <button
+          class="demo-btn primary"
+          @click="startDemo"
+        >
+          <i class="fas fa-play" />
           开始演示
         </button>
-        <button class="demo-btn secondary" @click="showFeatures = !showFeatures">
-          <i class="fas fa-info-circle"></i>
+        <button
+          class="demo-btn secondary"
+          @click="showFeatures = !showFeatures"
+        >
+          <i class="fas fa-info-circle" />
           功能介绍
         </button>
       </div>
     </div>
 
     <!-- 功能介绍面板 -->
-    <div v-if="showFeatures" class="features-panel">
+    <div
+      v-if="showFeatures"
+      class="features-panel"
+    >
       <div class="features-container">
         <h2>
-          <i class="fas fa-star"></i>
+          <i class="fas fa-star" />
           核心功能特性
         </h2>
         
         <div class="features-grid">
           <div class="feature-card">
             <div class="feature-icon">
-              <i class="fas fa-edit"></i>
+              <i class="fas fa-edit" />
             </div>
             <h3>智能病历编辑</h3>
             <p>支持富文本编辑、模板快速插入、自动保存草稿等功能，提升医生录入效率</p>
@@ -49,7 +58,7 @@
 
           <div class="feature-card">
             <div class="feature-icon">
-              <i class="fas fa-shield-alt"></i>
+              <i class="fas fa-shield-alt" />
             </div>
             <h3>实时质控分析</h3>
             <p>基于AI算法的实时质控分析，在医生编辑过程中提供即时反馈和改进建议</p>
@@ -63,7 +72,7 @@
 
           <div class="feature-card">
             <div class="feature-icon">
-              <i class="fas fa-chart-line"></i>
+              <i class="fas fa-chart-line" />
             </div>
             <h3>质控结果可视化</h3>
             <p>直观的质控结果展示，包括评分仪表盘、问题分类统计、改进趋势分析</p>
@@ -77,7 +86,7 @@
 
           <div class="feature-card">
             <div class="feature-icon">
-              <i class="fas fa-cogs"></i>
+              <i class="fas fa-cogs" />
             </div>
             <h3>多场景演示</h3>
             <p>提供多种病历场景演示，展示不同质控问题的识别和处理效果</p>
@@ -93,10 +102,13 @@
     </div>
 
     <!-- 演示场景选择 -->
-    <div v-if="!demoStarted" class="scenario-selection">
+    <div
+      v-if="!demoStarted"
+      class="scenario-selection"
+    >
       <div class="scenario-container">
         <h2>
-          <i class="fas fa-play-circle"></i>
+          <i class="fas fa-play-circle" />
           选择演示场景
         </h2>
         
@@ -107,8 +119,11 @@
             class="scenario-card"
             @click="selectScenario(scenario.key)"
           >
-            <div class="scenario-icon" :class="scenario.iconClass">
-              <i :class="scenario.icon"></i>
+            <div
+              class="scenario-icon"
+              :class="scenario.iconClass"
+            >
+              <i :class="scenario.icon" />
             </div>
             <h3>{{ scenario.name }}</h3>
             <p>{{ scenario.description }}</p>
@@ -127,27 +142,42 @@
     </div>
 
     <!-- 医生工作站演示 -->
-    <div v-if="demoStarted" class="workstation-demo">
+    <div
+      v-if="demoStarted"
+      class="workstation-demo"
+    >
       <div class="demo-controls">
-        <button class="control-btn" @click="resetDemo">
-          <i class="fas fa-undo"></i>
+        <button
+          class="control-btn"
+          @click="resetDemo"
+        >
+          <i class="fas fa-undo" />
           重新开始
         </button>
-        <button class="control-btn" @click="switchScenario">
-          <i class="fas fa-exchange-alt"></i>
+        <button
+          class="control-btn"
+          @click="switchScenario"
+        >
+          <i class="fas fa-exchange-alt" />
           切换场景
         </button>
-        <button class="control-btn" @click="showHelp = !showHelp">
-          <i class="fas fa-question-circle"></i>
+        <button
+          class="control-btn"
+          @click="showHelp = !showHelp"
+        >
+          <i class="fas fa-question-circle" />
           操作帮助
         </button>
       </div>
 
       <!-- 操作帮助提示 -->
-      <div v-if="showHelp" class="help-panel">
+      <div
+        v-if="showHelp"
+        class="help-panel"
+      >
         <div class="help-content">
           <h3>
-            <i class="fas fa-lightbulb"></i>
+            <i class="fas fa-lightbulb" />
             操作提示
           </h3>
           <div class="help-steps">

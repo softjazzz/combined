@@ -3,18 +3,30 @@
     <!-- 背景装饰 -->
     <div class="pointer-events-none absolute inset-0">
       <!-- 远景星云与光晕 -->
-      <div class="absolute -top-40 -left-40 w-[36rem] h-[36rem] rounded-full bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 blur-3xl"></div>
-      <div class="absolute -bottom-56 -right-56 w-[40rem] h-[40rem] rounded-full bg-gradient-to-tr from-purple-500/10 via-pink-500/10 to-rose-500/10 blur-3xl"></div>
+      <div class="absolute -top-40 -left-40 w-[36rem] h-[36rem] rounded-full bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 blur-3xl" />
+      <div class="absolute -bottom-56 -right-56 w-[40rem] h-[40rem] rounded-full bg-gradient-to-tr from-purple-500/10 via-pink-500/10 to-rose-500/10 blur-3xl" />
 
       <!-- 线路网格 -->
-      <div class="absolute inset-0 opacity-[0.06]" style="background-image: linear-gradient(rgba(255,255,255,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.12) 1px, transparent 1px); background-size: 40px 40px;"></div>
+      <div
+        class="absolute inset-0 opacity-[0.06]"
+        style="background-image: linear-gradient(rgba(255,255,255,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.12) 1px, transparent 1px); background-size: 40px 40px;"
+      />
 
       <!-- 粒子群组 -->
       <div class="absolute inset-0">
-        <span class="ai-particle absolute left-1/5 top-1/3 w-1.5 h-1.5 bg-amber-400/80 rounded-full"></span>
-        <span class="ai-particle absolute left-2/3 top-1/4 w-1 h-1 bg-orange-400/80 rounded-full" style="animation-delay:.3s"></span>
-        <span class="ai-particle absolute left-1/3 top-2/3 w-1 h-1 bg-red-400/80 rounded-full" style="animation-delay:.6s"></span>
-        <span class="ai-particle absolute left-3/4 top-1/2 w-1.5 h-1.5 bg-pink-400/80 rounded-full" style="animation-delay:.9s"></span>
+        <span class="ai-particle absolute left-1/5 top-1/3 w-1.5 h-1.5 bg-amber-400/80 rounded-full" />
+        <span
+          class="ai-particle absolute left-2/3 top-1/4 w-1 h-1 bg-orange-400/80 rounded-full"
+          style="animation-delay:.3s"
+        />
+        <span
+          class="ai-particle absolute left-1/3 top-2/3 w-1 h-1 bg-red-400/80 rounded-full"
+          style="animation-delay:.6s"
+        />
+        <span
+          class="ai-particle absolute left-3/4 top-1/2 w-1.5 h-1.5 bg-pink-400/80 rounded-full"
+          style="animation-delay:.9s"
+        />
       </div>
     </div>
 
@@ -23,11 +35,19 @@
       <div class="mx-auto max-w-7xl px-6 py-6 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-orange-600 to-red-700 flex items-center justify-center shadow-lg ai-logo">
-            <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <svg
+              class="w-6 h-6 text-white"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            ><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
           </div>
           <div>
-            <div class="text-lg font-semibold tracking-wide">大模型病案质控系统</div>
-            <div class="text-xs text-amber-200/80 tracking-wider">密码重置 · Password Reset</div>
+            <div class="text-lg font-semibold tracking-wide">
+              大模型病案质控系统
+            </div>
+            <div class="text-xs text-amber-200/80 tracking-wider">
+              密码重置 · Password Reset
+            </div>
           </div>
         </div>
         <div class="flex items-center gap-4">
@@ -51,15 +71,16 @@
           <h1 class="text-3xl font-extrabold leading-tight tracking-tight">
             <span class="bg-gradient-to-r from-white via-amber-200 to-amber-400 bg-clip-text text-transparent">忘记密码？</span>
           </h1>
-          <p class="mt-4 text-slate-300/90">输入您的邮箱地址，我们将发送重置密码的链接给您。</p>
+          <p class="mt-4 text-slate-300/90">
+            输入您的邮箱地址，我们将发送重置密码的链接给您。
+          </p>
         </div>
 
         <!-- 重置表单容器 -->
         <div class="relative">
           <!-- 背板光效 -->
-          <div class="absolute -inset-1 rounded-[1.75rem] bg-gradient-to-r from-amber-500/30 via-orange-500/30 to-red-500/30 blur-xl"></div>
+          <div class="absolute -inset-1 rounded-[1.75rem] bg-gradient-to-r from-amber-500/30 via-orange-500/30 to-red-500/30 blur-xl" />
           <div class="relative rounded-[1.5rem] bg-slate-900/60 backdrop-blur-xl ring-1 ring-white/10 p-8 tech-border">
-            
             <!-- 步骤指示器 -->
             <div class="flex items-center justify-center mb-8">
               <div class="flex items-center gap-4">
@@ -73,7 +94,7 @@
                   <div 
                     class="absolute inset-0 bg-amber-500 transition-all duration-500"
                     :style="{ width: currentStep >= 2 ? '100%' : '0%' }"
-                  ></div>
+                  />
                 </div>
                 <div 
                   class="flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-300"
@@ -85,16 +106,22 @@
             </div>
 
             <!-- 步骤1：输入邮箱 -->
-            <div v-if="currentStep === 1" class="step-content">
+            <div
+              v-if="currentStep === 1"
+              class="step-content"
+            >
               <a-form
                 ref="emailFormRef"
                 :model="emailForm"
                 :rules="emailRules"
-                @finish="handleSendResetEmail"
                 layout="vertical"
                 size="large"
+                @finish="handleSendResetEmail"
               >
-                <a-form-item name="email" class="mb-6">
+                <a-form-item
+                  name="email"
+                  class="mb-6"
+                >
                   <label class="block text-xs font-medium text-slate-300 mb-2">邮箱地址</label>
                   <div class="relative">
                     <a-input
@@ -116,19 +143,27 @@
                   size="large"
                   class="h-12 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 border-none font-semibold shadow-lg hover:shadow-xl"
                 >
-                  <SendOutlined v-if="!sendingEmail" class="mr-2" />
+                  <SendOutlined
+                    v-if="!sendingEmail"
+                    class="mr-2"
+                  />
                   发送重置邮件
                 </a-button>
               </a-form>
             </div>
 
             <!-- 步骤2：邮件发送成功 -->
-            <div v-else-if="currentStep === 2" class="step-content text-center">
+            <div
+              v-else-if="currentStep === 2"
+              class="step-content text-center"
+            >
               <div class="mb-6">
                 <div class="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircleOutlined class="text-emerald-400 text-2xl" />
                 </div>
-                <h3 class="text-lg font-semibold text-slate-100 mb-2">邮件已发送</h3>
+                <h3 class="text-lg font-semibold text-slate-100 mb-2">
+                  邮件已发送
+                </h3>
                 <p class="text-slate-400 text-sm">
                   重置密码的邮件已发送至 
                   <span class="text-amber-300 font-medium">{{ emailForm.email }}</span>
@@ -140,7 +175,9 @@
                   <div class="flex items-start gap-3">
                     <InfoCircleOutlined class="text-blue-400 text-sm mt-0.5" />
                     <div class="text-xs text-blue-200">
-                      <div class="font-medium mb-1">请注意：</div>
+                      <div class="font-medium mb-1">
+                        请注意：
+                      </div>
                       <ul class="space-y-1 text-blue-200/80">
                         <li>• 请检查您的邮箱收件箱和垃圾邮件文件夹</li>
                         <li>• 重置链接将在24小时后失效</li>
@@ -155,9 +192,9 @@
                 <a-button
                   block
                   size="large"
-                  @click="handleResendEmail"
                   :loading="sendingEmail"
                   class="h-12 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20"
+                  @click="handleResendEmail"
                 >
                   <ReloadOutlined class="mr-2" />
                   重新发送
@@ -167,8 +204,8 @@
                   type="primary"
                   block
                   size="large"
-                  @click="$router.push('/auth/login')"
                   class="h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 border-none font-semibold shadow-lg hover:shadow-xl"
+                  @click="$router.push('/auth/login')"
                 >
                   <LoginOutlined class="mr-2" />
                   返回登录
@@ -177,7 +214,10 @@
             </div>
 
             <!-- 倒计时提示 -->
-            <div v-if="currentStep === 2 && countdown > 0" class="mt-4 text-center">
+            <div
+              v-if="currentStep === 2 && countdown > 0"
+              class="mt-4 text-center"
+            >
               <p class="text-xs text-slate-400">
                 {{ countdown }} 秒后可重新发送邮件
               </p>
@@ -187,7 +227,9 @@
 
         <!-- 帮助信息 -->
         <div class="mt-8 text-center">
-          <p class="text-slate-400 text-sm mb-2">还是无法找回密码？</p>
+          <p class="text-slate-400 text-sm mb-2">
+            还是无法找回密码？
+          </p>
           <a 
             href="mailto:support@medqc.com" 
             class="text-amber-300 hover:text-amber-200 text-sm font-medium"

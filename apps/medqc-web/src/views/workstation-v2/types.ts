@@ -13,6 +13,11 @@ export interface PatientRecord {
   dischargeDate: string
   days: number
   cdmFrontpageEmpty?: boolean
+  hasAdmission?: boolean
+  hasFrontpageDraft?: boolean
+  frontpageDraftUpdatedAt?: string
+  hasFrontpageOfficial?: boolean
+  hasSettlementOfficial?: boolean
   diagnosis: string
   diagnosisCode: string
   doctor: string
@@ -38,9 +43,27 @@ export type FrontpageFocusTarget = 'basic' | 'admission' | 'diagnosis' | 'proced
 export type IcdApplyTarget = 'mainDiagnosis' | 'otherDiagnosis' | 'mainProcedure' | 'otherProcedure'
 
 export interface QCIssueLike {
+  id?: string
+  record_id?: string
   category?: 'form' | 'coding' | 'cost' | string
   group?: string
+  status?: string
+  severity?: string
+  rule_name?: string
   description?: string
   suggestion?: string
   evidence?: string
+  dismissed?: boolean
+}
+
+export interface NotificationVM {
+  id: string
+  record_id: string
+  title: string
+  content: string
+  message: string
+  created_at: string
+  is_read: boolean
+  level?: string
+  type?: string
 }

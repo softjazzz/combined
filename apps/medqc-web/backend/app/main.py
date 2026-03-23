@@ -36,6 +36,7 @@ from .routers import remediation as remediation_router
 from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
 from .routers import frontpage as frontpage_router
+from .routers import frontpage_settings as frontpage_settings_router
 from .routers import drg as drg_router
 from .routers import smart_upload as smart_upload_router
 from .routers import dip as dip_router
@@ -61,6 +62,11 @@ try:
     from ..main_api import app as legacy_app  # type: ignore
 except Exception:  # pragma: no cover
     legacy_app = None
+
+
+class UTF8JSONResponse(JSONResponse):
+    """JSON response with explicit charset=utf-8 for Windows CJK compatibility."""
+    media_type = "application/json; charset=utf-8"
 
 
 def create_app() -> FastAPI:
@@ -240,6 +246,8 @@ def create_app() -> FastAPI:
     app.include_router(demo_router.router)
     # Front page auto-generation (demo + future real extraction)
     app.include_router(frontpage_router.router)
+    # Front page extraction settings
+    app.include_router(frontpage_settings_router.router)
     # DRG/DIP demo APIs (to support DRG pages in web)
     app.include_router(case_front_page_router.router)
     app.include_router(drg_router.router)

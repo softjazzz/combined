@@ -3,42 +3,81 @@
     <a-row :gutter="16">
       <!-- 左侧：首页预览 -->
       <a-col :span="14">
-        <a-card size="small" title="病案首页预览">
+        <a-card
+          size="small"
+          title="病案首页预览"
+        >
           <template #extra>
             <a-space>
-              <a-button size="small" type="primary" @click="handleAnalyze" :loading="analyzing">
-                <template #icon><ScanOutlined /></template>
+              <a-button
+                size="small"
+                type="primary"
+                :loading="analyzing"
+                @click="handleAnalyze"
+              >
+                <template #icon>
+                  <ScanOutlined />
+                </template>
                 画像分析
               </a-button>
-              <a-button size="small" @click="handlePrint" :disabled="!draft">
-                <template #icon><PrinterOutlined /></template>
+              <a-button
+                size="small"
+                :disabled="!draft"
+                @click="handlePrint"
+              >
+                <template #icon>
+                  <PrinterOutlined />
+                </template>
                 打印
               </a-button>
             </a-space>
           </template>
           
-          <HmFrontpagePreview ref="previewRef" :draft="draft" />
+          <HmFrontpagePreview
+            ref="previewRef"
+            :draft="draft"
+          />
         </a-card>
       </a-col>
       
       <!-- 右侧：画像分析 -->
       <a-col :span="10">
-        <a-card size="small" title="诊断/手术画像">
+        <a-card
+          size="small"
+          title="诊断/手术画像"
+        >
           <template #extra>
-            <a-tag v-if="profile" color="green">已分析</a-tag>
-            <a-tag v-else color="default">待分析</a-tag>
+            <a-tag
+              v-if="profile"
+              color="green"
+            >
+              已分析
+            </a-tag>
+            <a-tag
+              v-else
+              color="default"
+            >
+              待分析
+            </a-tag>
           </template>
           
           <DiagnosisSurgeryTimeline
             v-if="profile"
-            :diagnosisTimeline="profile.diagnosis_timeline || []"
-            :surgeryVerification="profile.surgery_verification || []"
+            :diagnosis-timeline="profile.diagnosis_timeline || []"
+            :surgery-verification="profile.surgery_verification || []"
             :discrepancies="profile.discrepancies || []"
             :loading="analyzing"
           />
           
-          <a-empty v-else description="点击'画像分析'按钮生成诊断/手术画像">
-            <a-button type="primary" @click="handleAnalyze" :loading="analyzing">
+          <a-empty
+            v-else
+            description="点击'画像分析'按钮生成诊断/手术画像"
+          >
+            <a-button
+              type="primary"
+              :loading="analyzing"
+              @click="handleAnalyze"
+            >
               开始分析
             </a-button>
           </a-empty>

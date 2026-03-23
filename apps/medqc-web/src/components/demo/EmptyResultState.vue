@@ -10,7 +10,9 @@
     >
       <template #description>
         <div class="empty-description">
-          <h3 class="empty-title">尚未产出质控结果</h3>
+          <h3 class="empty-title">
+            尚未产出质控结果
+          </h3>
           <p class="empty-text">
             点击"开始分析"执行质控分析，或返回前一步补充测试对象和规则配置
           </p>
@@ -18,7 +20,10 @@
       </template>
       
       <template #default>
-        <a-space :size="12" class="empty-actions">
+        <a-space
+          :size="12"
+          class="empty-actions"
+        >
           <a-button 
             type="primary" 
             size="large"

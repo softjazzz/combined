@@ -1,17 +1,16 @@
 ﻿import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import QCResultDisplay from '@/components/qc/QCResultDisplay.vue'
-import type { QCResult } from '@/types/supabase'
-import type { QCIssue, QCSuggestion, QCRuleResult } from '@/types/quality-control'
+import type { QCRuleResult } from '@/types/quality-control'
 
 describe('QCResultDisplay', () => {
-  const mockIssues: QCIssue[] = [
+  const mockIssues = [
     {
       id: '1',
       ruleName: '主诉完整性检查',
       ruleId: 'rule-001',
       description: '主诉描述不完整',
-      severity: 'major',
+      severity: 'high',
       category: '内容完整性',
       location: '主诉',
       suggestion: '请补充完整的主诉信息',
@@ -30,7 +29,7 @@ describe('QCResultDisplay', () => {
     }
   ]
 
-  const mockSuggestions: QCSuggestion[] = [
+  const mockSuggestions = [
     {
       id: '1',
       category: '内容改进',
@@ -72,14 +71,7 @@ describe('QCResultDisplay', () => {
     }
   ]
 
-  type QCResultDisplayMock = QCResult & {
-    overall_score: number
-    overall_grade: 'A' | 'B' | 'C'
-    analysis_date: string
-    rule_results: QCRuleResult[]
-  }
-
-  const mockResult: QCResultDisplayMock = {
+  const mockResult: any = {
     id: 'qc-001',
     record_id: 'record-001',
     score: 82,

@@ -9,25 +9,29 @@
               <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-400 to-indigo-600 flex items-center justify-center">
                 <ThunderboltOutlined class="text-white text-sm" />
               </div>
-              <h1 class="text-2xl font-bold text-slate-100">质控分析中心</h1>
+              <h1 class="text-2xl font-bold text-slate-100">
+                质控分析中心
+              </h1>
             </div>
-            <p class="text-slate-400 text-sm">AI驱动的医疗质控分析，提供专业的质量评估和改进建议</p>
+            <p class="text-slate-400 text-sm">
+              AI驱动的医疗质控分析，提供专业的质量评估和改进建议
+            </p>
           </div>
 
           <!-- 快速操作 -->
           <div class="flex items-center gap-3">
             <a-button 
-              @click="showRuleConfig = true"
               class="bg-purple-500/20 border-purple-400/30 text-purple-300 hover:bg-purple-500/30"
+              @click="showRuleConfig = true"
             >
               <SettingOutlined />
               规则配置
             </a-button>
             <a-button 
               type="primary"
-              @click="startNewAnalysis"
               :loading="isAnalyzing"
               class="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 border-none"
+              @click="startNewAnalysis"
             >
               <ThunderboltOutlined />
               开始分析
@@ -39,7 +43,10 @@
       <!-- 主要内容区域 -->
       <div class="space-y-8">
         <!-- 分析进度（当有分析任务时显示） -->
-        <div v-if="currentAnalysis" class="analysis-section">
+        <div
+          v-if="currentAnalysis"
+          class="analysis-section"
+        >
           <AnalysisProgress
             ref="analysisProgressRef"
             :record-id="currentAnalysis.recordId"
@@ -52,13 +59,18 @@
         </div>
 
         <!-- 分析结果展示 -->
-        <div v-if="analysisResult" class="results-section">
+        <div
+          v-if="analysisResult"
+          class="results-section"
+        >
           <div class="mb-6">
             <h2 class="text-xl font-semibold text-slate-100 flex items-center gap-2 mb-2">
               <TrophyOutlined class="text-cyan-400" />
               分析结果
             </h2>
-            <p class="text-sm text-slate-400">详细的质控分析结果和改进建议</p>
+            <p class="text-sm text-slate-400">
+              详细的质控分析结果和改进建议
+            </p>
           </div>
 
           <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -98,7 +110,9 @@
               <HistoryOutlined class="text-emerald-400" />
               历史分析记录
             </h2>
-            <p class="text-sm text-slate-400">查看之前的质控分析结果</p>
+            <p class="text-sm text-slate-400">
+              查看之前的质控分析结果
+            </p>
           </div>
 
           <div class="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6">
@@ -115,7 +129,9 @@
                       {{ record.patient_name.charAt(0) }}
                     </div>
                     <div>
-                      <h4 class="font-medium text-slate-100">{{ record.patient_name }}</h4>
+                      <h4 class="font-medium text-slate-100">
+                        {{ record.patient_name }}
+                      </h4>
                       <div class="flex items-center gap-3 text-sm text-slate-400">
                         <span>{{ record.department }}</span>
                         <span>•</span>
@@ -131,11 +147,17 @@
                       >
                         {{ record.overall_score }}
                       </div>
-                      <div class="text-xs text-slate-400">评分</div>
+                      <div class="text-xs text-slate-400">
+                        评分
+                      </div>
                     </div>
                     <div class="text-center">
-                      <div class="text-lg font-bold text-red-400">{{ record.issue_count }}</div>
-                      <div class="text-xs text-slate-400">问题</div>
+                      <div class="text-lg font-bold text-red-400">
+                        {{ record.issue_count }}
+                      </div>
+                      <div class="text-xs text-slate-400">
+                        问题
+                      </div>
                     </div>
                     <a-tag 
                       :color="getGradeColor(record.overall_grade)" 
@@ -148,11 +170,16 @@
               </div>
             </div>
 
-            <div v-if="historyRecords.length === 0" class="text-center py-8">
+            <div
+              v-if="historyRecords.length === 0"
+              class="text-center py-8"
+            >
               <div class="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center mx-auto mb-3">
                 <HistoryOutlined class="text-slate-400 text-2xl" />
               </div>
-              <div class="text-slate-400">暂无历史分析记录</div>
+              <div class="text-slate-400">
+                暂无历史分析记录
+              </div>
             </div>
           </div>
         </div>
@@ -197,8 +224,12 @@
                   {{ record.patient_name.charAt(0) }}
                 </div>
                 <div>
-                  <div class="font-medium text-slate-100">{{ record.patient_name }}</div>
-                  <div class="text-sm text-slate-400">{{ record.department }} • {{ record.record_type }}</div>
+                  <div class="font-medium text-slate-100">
+                    {{ record.patient_name }}
+                  </div>
+                  <div class="text-sm text-slate-400">
+                    {{ record.department }} • {{ (record as any).record_type || '病历' }}
+                  </div>
                 </div>
               </div>
               <div class="flex items-center gap-2">
@@ -235,7 +266,7 @@ import AnalysisProgress from '@/components/qc/AnalysisProgress.vue'
 import { ApiService } from '@/services/apiService'
 
 // 组件引用
-const analysisProgressRef = ref()
+const analysisProgressRef = ref<{ startAnalysis: () => void } | null>(null)
 
 // 状态
 const isAnalyzing = ref(false)
@@ -256,7 +287,7 @@ const analysisResult = ref<QCResult | null>(null)
 const recordContent = ref('')
 
 // 质控规则
-const qcRules = ref<QCRule[]>([])
+const qcRules = ref<any[]>([])
 
 // 历史记录
 const historyRecords = ref<any[]>([])
@@ -329,7 +360,8 @@ const selectRecord = async (record: MedicalRecord) => {
 }
 
 // 处理分析完成
-const handleAnalysisCompleted = async (result) => {
+const handleAnalysisCompleted = async (result: unknown) => {
+  void result
   try {
     // 获取分析结果
     const response = await ApiService.getQCResult(currentAnalysis.value!.recordId)
@@ -371,8 +403,8 @@ const handleAnalysisStopped = () => {
 }
 
 // 处理问题高亮
-const handleHighlightIssue = (issue: QCIssue) => {
-  activeIssue.value = issue
+const handleHighlightIssue = (issue: unknown) => {
+  activeIssue.value = issue as QCIssue
 }
 
 // 处理问题点击
@@ -394,7 +426,7 @@ const handleSuggestionSaved = (suggestionId: string) => {
 }
 
 // 处理规则更新
-const handleRuleUpdated = (rule: QCRule) => {
+const handleRuleUpdated = (rule: any) => {
   const index = qcRules.value.findIndex(r => r.id === rule.id)
   if (index > -1) {
     qcRules.value[index] = rule
@@ -402,7 +434,7 @@ const handleRuleUpdated = (rule: QCRule) => {
 }
 
 // 处理规则创建
-const handleRuleCreated = (rule: QCRule) => {
+const handleRuleCreated = (rule: any) => {
   qcRules.value.unshift(rule)
 }
 
@@ -415,7 +447,7 @@ const handleRuleDeleted = (ruleId: string) => {
 }
 
 // 加载历史记录
-const loadHistoryRecord = async (record) => {
+const loadHistoryRecord = async (record: { id: string; content?: string; patient_name: string }) => {
   try {
     const response = await ApiService.getQCResult(record.id)
     if (response.success && response.data) {

@@ -6,7 +6,10 @@
     </div>
 
     <!-- 快速添加区域 -->
-    <Card class="quick-add-card" title="快速添加文档">
+    <Card
+      class="quick-add-card"
+      title="快速添加文档"
+    >
       <div class="quick-add-form">
         <div class="form-row">
           <Input
@@ -19,15 +22,35 @@
             placeholder="选择分类"
             style="width: 150px; margin-right: 12px"
           >
-            <SelectOption value="心血管内科"> 心血管内科 </SelectOption>
-            <SelectOption value="呼吸内科"> 呼吸内科 </SelectOption>
-            <SelectOption value="消化内科"> 消化内科 </SelectOption>
-            <SelectOption value="神经内科"> 神经内科 </SelectOption>
-            <SelectOption value="妇产科"> 妇产科 </SelectOption>
-            <SelectOption value="外科"> 外科 </SelectOption>
-            <SelectOption value="其他"> 其他 </SelectOption>
+            <SelectOption value="心血管内科">
+              心血管内科
+            </SelectOption>
+            <SelectOption value="呼吸内科">
+              呼吸内科
+            </SelectOption>
+            <SelectOption value="消化内科">
+              消化内科
+            </SelectOption>
+            <SelectOption value="神经内科">
+              神经内科
+            </SelectOption>
+            <SelectOption value="妇产科">
+              妇产科
+            </SelectOption>
+            <SelectOption value="外科">
+              外科
+            </SelectOption>
+            <SelectOption value="其他">
+              其他
+            </SelectOption>
           </Select>
-          <Button type="primary" :loading="saving" @click="saveDocument"> 保存文档 </Button>
+          <Button
+            type="primary"
+            :loading="saving"
+            @click="saveDocument"
+          >
+            保存文档
+          </Button>
         </div>
         <div class="form-row">
           <TextArea
@@ -41,7 +64,10 @@
     </Card>
 
     <!-- 文档列表 -->
-    <Card class="documents-list-card" title="文档列表">
+    <Card
+      class="documents-list-card"
+      title="文档列表"
+    >
       <template #extra>
         <Space>
           <Input.Search
@@ -57,12 +83,23 @@
             allow-clear
             @change="loadDocuments"
           >
-            <SelectOption value="pending"> 待处理 </SelectOption>
-            <SelectOption value="processing"> 处理中 </SelectOption>
-            <SelectOption value="completed"> 已完成 </SelectOption>
-            <SelectOption value="failed"> 失败 </SelectOption>
+            <SelectOption value="pending">
+              待处理
+            </SelectOption>
+            <SelectOption value="processing">
+              处理中
+            </SelectOption>
+            <SelectOption value="completed">
+              已完成
+            </SelectOption>
+            <SelectOption value="failed">
+              失败
+            </SelectOption>
           </Select>
-          <Button :loading="loading" @click="loadDocuments">
+          <Button
+            :loading="loading"
+            @click="loadDocuments"
+          >
             <template #icon>
               <ReloadOutlined />
             </template>
@@ -110,9 +147,23 @@
 
           <template v-if="column.key === 'actions'">
             <Space>
-              <Button size="small" @click="viewDocument(asDocument(record))"> 查看 </Button>
-              <Button size="small" @click="editDocument(asDocument(record))"> 编辑 </Button>
-              <Button size="small" danger @click="deleteDocument(asDocument(record))">
+              <Button
+                size="small"
+                @click="viewDocument(asDocument(record))"
+              >
+                查看
+              </Button>
+              <Button
+                size="small"
+                @click="editDocument(asDocument(record))"
+              >
+                编辑
+              </Button>
+              <Button
+                size="small"
+                danger
+                @click="deleteDocument(asDocument(record))"
+              >
                 删除
               </Button>
             </Space>
@@ -128,8 +179,14 @@
       width="80%"
       :footer="null"
     >
-      <div v-if="currentDocument" class="document-detail">
-        <Descriptions :column="2" bordered>
+      <div
+        v-if="currentDocument"
+        class="document-detail"
+      >
+        <Descriptions
+          :column="2"
+          bordered
+        >
           <DescriptionsItem label="文档类型">
             <Tag :color="getDocumentTypeColor(currentDocument.document_type)">
               {{ getDocumentTypeText(currentDocument.document_type) }}

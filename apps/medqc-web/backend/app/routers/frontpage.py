@@ -17,6 +17,7 @@ from ..services.frontpage_extraction_service import (
     FrontPageExtractionService,
     default_frontpage_service,
 )
+from ..services.frontpage_settings import load_frontpage_settings, resolve_force_llm
 
 router = APIRouter(prefix="/api/v1/frontpage", tags=["frontpage"])
 logger = logging.getLogger(__name__)
@@ -238,8 +239,18 @@ async def auto_generate_frontpage_draft_stream(
         print(f"\n[DEBUG] SSE 接口收到请求: visit_id={payload.visit_id}, medical_text_len={len(payload.medical_text or '')}, force_llm={payload.force_llm}")
         medical_text = payload.medical_text or ""
         visit_id = payload.visit_id or ""
-        force_llm = payload.force_llm
-        
+        settings, _ = load_frontpage_settings()
+        force_llm = resolve_force_llm(payload.force_llm, settings)
+        stream_progress_enabled = settings.stream_progress_enabled
+
+        if payload.force_llm and not force_llm:
+            logger.info(
+                "frontpage stream force_llm 被配置拒绝: visit_id=%s allow_force=%s llm_backfill=%s",
+                visit_id,
+                settings.allow_force_llm_regenerate,
+                settings.llm_backfill_enabled,
+            )
+
         # 如果没有直接传入文本且有 visit_id，走三层架构（visit_id 透传给 stream 方法）
         # 三层架构会内部处理：SQL 直读 → 码表映射 → LLM 补缺
         if not medical_text and visit_id:
@@ -276,6 +287,9 @@ async def auto_generate_frontpage_draft_stream(
 
                 if event_name == "__done__":
                     break
+
+                if not stream_progress_enabled and event_name == "update":
+                    continue
 
                 if not isinstance(data, dict):
                     data = {}

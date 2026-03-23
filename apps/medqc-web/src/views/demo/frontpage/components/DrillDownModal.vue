@@ -3,22 +3,25 @@
     :open="open"
     :title="title"
     width="1000px"
-    @cancel="handleCancel"
     :footer="null"
+    @cancel="handleCancel"
   >
     <div class="p-4">
       <!-- Summary Info -->
-      <div v-if="loading" class="flex justify-center py-10">
+      <div
+        v-if="loading"
+        class="flex justify-center py-10"
+      >
         <a-spin tip="加载数据中..." />
       </div>
       
       <div v-else>
         <!-- Data Table -->
         <a-table 
-          :dataSource="cases" 
+          :data-source="cases" 
           :columns="columns" 
           :pagination="{ pageSize: 10 }"
-          rowKey="record_id"
+          row-key="record_id"
           size="middle"
         >
           <template #bodyCell="{ column, record }">
@@ -28,9 +31,9 @@
               </span>
             </template>
             <template v-else-if="column.key === 'status'">
-               <a-tag :color="record.drg_code ? 'blue' : 'orange'">
-                 {{ record.drg_code ? '入组成功' : '未入组' }}
-               </a-tag>
+              <a-tag :color="record.drg_code ? 'blue' : 'orange'">
+                {{ record.drg_code ? '入组成功' : '未入组' }}
+              </a-tag>
             </template>
           </template>
         </a-table>
@@ -52,20 +55,32 @@
 	  title: string
 	}>()
 
-	const emit = defineEmits(['update:open'])
+const emit = defineEmits(['update:open'])
+
+interface DrillDownCase {
+  record_id: string
+  patient_gender: string
+  patient_age: number
+  dept_name: string
+  primary_diagnosis: string
+  drg_code?: string
+  drg_name?: string
+  total_cost?: number
+  profit_margin: number
+}
 
 const loading = ref(false)
-const cases = ref([])
+const cases = ref<DrillDownCase[]>([])
 
 const columns = [
   { title: '病案号', dataIndex: 'record_id', key: 'record_id' },
-  { title: '患者', dataIndex: 'patient_gender', key: 'patient_gender', customRender: ({ text, record }) => `${text === '1' ? '男' : '女'} / ${record.patient_age}岁` },
+  { title: '患者', dataIndex: 'patient_gender', key: 'patient_gender', customRender: ({ text, record }: { text: string; record: DrillDownCase }) => `${text === '1' ? '男' : '女'} / ${record.patient_age}岁` },
   { title: '科室', dataIndex: 'dept_name', key: 'dept_name' },
   { title: '主诊断', dataIndex: 'primary_diagnosis', key: 'primary_diagnosis' },
   { title: 'DRG编码', dataIndex: 'drg_code', key: 'drg_code' },
   { title: 'DRG名称', dataIndex: 'drg_name', key: 'drg_name', ellipsis: true },
   { title: '总费用', dataIndex: 'total_cost', key: 'total_cost' },
-  { title: '盈亏', dataIndex: 'profit_margin', key: 'profit', sorter: (a, b) => a.profit_margin - b.profit_margin },
+  { title: '盈亏', dataIndex: 'profit_margin', key: 'profit', sorter: (a: DrillDownCase, b: DrillDownCase) => a.profit_margin - b.profit_margin },
   { title: '状态', key: 'status' }
 ]
 

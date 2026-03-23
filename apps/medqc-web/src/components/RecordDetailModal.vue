@@ -7,11 +7,20 @@
     @cancel="handleCancel"
   >
     <div class="record-detail-content">
-      <a-tabs v-model:activeKey="activeTab" type="card">
+      <a-tabs
+        v-model:active-key="activeTab"
+        type="card"
+      >
         <!-- 基本信息 -->
-        <a-tab-pane key="basic" tab="基本信息">
+        <a-tab-pane
+          key="basic"
+          tab="基本信息"
+        >
           <div class="basic-info">
-            <a-descriptions :column="2" bordered>
+            <a-descriptions
+              :column="2"
+              bordered
+            >
               <a-descriptions-item label="登记号">
                 {{ record?.registrationNo }}
               </a-descriptions-item>
@@ -42,7 +51,10 @@
                 {{ record?.scoringStandard }}
               </a-descriptions-item>
               <a-descriptions-item label="缺陷数量">
-                <a-badge :count="record?.defectCount" :number-style="{ backgroundColor: '#f50' }" />
+                <a-badge
+                  :count="record?.defectCount"
+                  :number-style="{ backgroundColor: '#f50' }"
+                />
               </a-descriptions-item>
               <a-descriptions-item label="创建时间">
                 {{ record?.createTime }}
@@ -55,7 +67,10 @@
         </a-tab-pane>
 
         <!-- 缺陷列表 -->
-        <a-tab-pane key="defects" tab="缺陷列表">
+        <a-tab-pane
+          key="defects"
+          tab="缺陷列表"
+        >
           <div class="defects-list">
             <a-table
               :columns="defectColumns"
@@ -66,7 +81,9 @@
             >
               <template #bodyCell="{ column, record: defect }">
                 <template v-if="column.key === 'defectType'">
-                  <a-tag color="blue">{{ defect.defectType }}</a-tag>
+                  <a-tag color="blue">
+                    {{ defect.defectType }}
+                  </a-tag>
                 </template>
                 <template v-if="column.key === 'priority'">
                   <a-tag :color="getPriorityColor(defect.priority)">
@@ -79,7 +96,11 @@
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'action'">
-                  <a-button type="link" size="small" @click="handleDefectDetail(defect)">
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click="handleDefectDetail(defect)"
+                  >
                     查看详情
                   </a-button>
                 </template>
@@ -89,11 +110,17 @@
         </a-tab-pane>
 
         <!-- 电子病历 -->
-        <a-tab-pane key="document" tab="电子病历">
+        <a-tab-pane
+          key="document"
+          tab="电子病历"
+        >
           <div class="document-viewer">
             <div class="document-toolbar mb-4">
               <a-space>
-                <a-button type="primary" @click="handleViewFullDocument">
+                <a-button
+                  type="primary"
+                  @click="handleViewFullDocument"
+                >
                   <FileTextOutlined />
                   查看完整病历
                 </a-button>
@@ -109,18 +136,29 @@
             </div>
 
             <div class="document-sections">
-              <a-collapse v-model:activeKey="activeSections" ghost>
+              <a-collapse
+                v-model:active-key="activeSections"
+                ghost
+              >
                 <a-collapse-panel
                   v-for="section in documentSections"
                   :key="section.id"
                   :header="section.name"
                 >
                   <div class="section-content">
-                    <div class="section-text" v-html="section.content"></div>
+                    <div
+                      class="section-text"
+                      v-html="section.content"
+                    />
                     
                     <!-- 该章节的缺陷 -->
-                    <div v-if="section.defects && section.defects.length > 0" class="section-defects mt-4">
-                      <h5 class="text-red-600 mb-2">本章节缺陷:</h5>
+                    <div
+                      v-if="section.defects && section.defects.length > 0"
+                      class="section-defects mt-4"
+                    >
+                      <h5 class="text-red-600 mb-2">
+                        本章节缺陷:
+                      </h5>
                       <div class="defect-items">
                         <div
                           v-for="defect in section.defects"
@@ -147,7 +185,10 @@
         </a-tab-pane>
 
         <!-- 操作历史 -->
-        <a-tab-pane key="history" tab="操作历史">
+        <a-tab-pane
+          key="history"
+          tab="操作历史"
+        >
           <div class="operation-history">
             <a-timeline>
               <a-timeline-item
@@ -170,7 +211,10 @@
                   <div class="operation-description text-sm mt-1">
                     {{ operation.description }}
                   </div>
-                  <div v-if="operation.result" class="operation-result text-sm text-green-600 mt-1">
+                  <div
+                    v-if="operation.result"
+                    class="operation-result text-sm text-green-600 mt-1"
+                  >
                     结果: {{ operation.result }}
                   </div>
                 </div>
@@ -185,10 +229,17 @@
     <template #footer>
       <div class="flex justify-between">
         <div>
-          <a-button v-if="viewType === 'records'" type="primary" @click="handleAudit">
+          <a-button
+            v-if="viewType === 'records'"
+            type="primary"
+            @click="handleAudit"
+          >
             审核
           </a-button>
-          <a-button v-if="viewType === 'records'" @click="handleUrge">
+          <a-button
+            v-if="viewType === 'records'"
+            @click="handleUrge"
+          >
             催办
           </a-button>
           <a-button @click="handleExportDetail">
@@ -196,7 +247,9 @@
           </a-button>
         </div>
         <div>
-          <a-button @click="handleCancel">关闭</a-button>
+          <a-button @click="handleCancel">
+            关闭
+          </a-button>
         </div>
       </div>
     </template>
@@ -214,7 +267,20 @@ import {
 
 interface Props {
   visible: boolean
-  record?: Record<string, unknown>
+  record?: {
+    registrationNo?: string
+    serialNo?: string
+    caseNo?: string
+    patientName?: string
+    department?: string
+    doctor?: string
+    auditStatus?: string
+    score?: number
+    scoringStandard?: string
+    defectCount?: number
+    createTime?: string
+    updateTime?: string
+  }
   viewType: 'records' | 'defects'
 }
 
@@ -305,24 +371,24 @@ const operationHistory = ref([
 ])
 
 // 状态颜色和文本映射
-const getAuditStatusColor = (status: string) => {
+const getAuditStatusColor = (status?: string) => {
   const colorMap: Record<string, string> = {
     pending: 'orange',
     reviewing: 'blue',
     passed: 'green',
     questioned: 'red'
   }
-  return colorMap[status] || 'default'
+  return status ? (colorMap[status] || 'default') : 'default'
 }
 
-const getAuditStatusText = (status: string) => {
+const getAuditStatusText = (status?: string) => {
   const textMap: Record<string, string> = {
     pending: '待审核',
     reviewing: '审核中',
     passed: '已通过',
     questioned: '存疑'
   }
-  return textMap[status] || status
+  return status ? (textMap[status] || status) : '未知'
 }
 
 const getPriorityColor = (priority: string) => {
@@ -388,7 +454,7 @@ const handleCancel = () => {
   emit('update:visible', false)
 }
 
-const handleDefectDetail = (defect) => {
+const handleDefectDetail = (defect: { defectType?: string }) => {
   message.info(`查看缺陷详情: ${defect.defectType}`)
 }
 

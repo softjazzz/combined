@@ -148,7 +148,7 @@ export function useBreakpoints() {
   // 模态框配置
   const getModalConfig = () => {
     return {
-      width: getResponsiveValue({
+      width: getResponsiveValue<string | number>({
         xs: '95%',
         sm: '90%',
         md: '80%',
@@ -164,7 +164,7 @@ export function useBreakpoints() {
   // 抽屉配置
   const getDrawerConfig = () => {
     return {
-      width: getResponsiveValue({
+      width: getResponsiveValue<string | number>({
         xs: '100%',
         sm: '90%',
         md: '70%',

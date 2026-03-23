@@ -3,9 +3,9 @@
     :open="visible"
     :title="isEdit ? '编辑用户' : '新增用户'"
     :width="600"
+    :confirm-loading="loading"
     @ok="handleSubmit"
     @cancel="handleCancel"
-    :confirm-loading="loading"
   >
     <a-form
       ref="formRef"
@@ -16,7 +16,10 @@
     >
       <a-row :gutter="16">
         <a-col :span="12">
-          <a-form-item label="邮箱地址" name="email">
+          <a-form-item
+            label="邮箱地址"
+            name="email"
+          >
             <a-input
               v-model:value="formData.email"
               placeholder="请输入邮箱地址"
@@ -29,7 +32,10 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item label="显示名称" name="display_name">
+          <a-form-item
+            label="显示名称"
+            name="display_name"
+          >
             <a-input
               v-model:value="formData.display_name"
               placeholder="请输入显示名称"
@@ -42,9 +48,15 @@
         </a-col>
       </a-row>
 
-      <a-row :gutter="16" v-if="!isEdit">
+      <a-row
+        v-if="!isEdit"
+        :gutter="16"
+      >
         <a-col :span="12">
-          <a-form-item label="登录密码" name="password">
+          <a-form-item
+            label="登录密码"
+            name="password"
+          >
             <a-input-password
               v-model:value="formData.password"
               placeholder="请输入登录密码"
@@ -56,7 +68,10 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item label="确认密码" name="confirmPassword">
+          <a-form-item
+            label="确认密码"
+            name="confirmPassword"
+          >
             <a-input-password
               v-model:value="formData.confirmPassword"
               placeholder="请再次输入密码"
@@ -71,26 +86,50 @@
 
       <a-row :gutter="16">
         <a-col :span="12">
-          <a-form-item label="部门" name="department">
+          <a-form-item
+            label="部门"
+            name="department"
+          >
             <a-select
               v-model:value="formData.department"
               placeholder="请选择部门"
               allow-clear
             >
-              <a-select-option value="信息科">信息科</a-select-option>
-              <a-select-option value="质控科">质控科</a-select-option>
-              <a-select-option value="内科">内科</a-select-option>
-              <a-select-option value="外科">外科</a-select-option>
-              <a-select-option value="妇产科">妇产科</a-select-option>
-              <a-select-option value="儿科">儿科</a-select-option>
-              <a-select-option value="急诊科">急诊科</a-select-option>
-              <a-select-option value="影像科">影像科</a-select-option>
-              <a-select-option value="检验科">检验科</a-select-option>
+              <a-select-option value="信息科">
+                信息科
+              </a-select-option>
+              <a-select-option value="质控科">
+                质控科
+              </a-select-option>
+              <a-select-option value="内科">
+                内科
+              </a-select-option>
+              <a-select-option value="外科">
+                外科
+              </a-select-option>
+              <a-select-option value="妇产科">
+                妇产科
+              </a-select-option>
+              <a-select-option value="儿科">
+                儿科
+              </a-select-option>
+              <a-select-option value="急诊科">
+                急诊科
+              </a-select-option>
+              <a-select-option value="影像科">
+                影像科
+              </a-select-option>
+              <a-select-option value="检验科">
+                检验科
+              </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item label="医院" name="hospital_name">
+          <a-form-item
+            label="医院"
+            name="hospital_name"
+          >
             <a-input
               v-model:value="formData.hospital_name"
               placeholder="请输入医院名称"
@@ -103,7 +142,10 @@
         </a-col>
       </a-row>
 
-      <a-form-item label="用户角色" name="roles">
+      <a-form-item
+        label="用户角色"
+        name="roles"
+      >
         <a-checkbox-group v-model:value="formData.roles">
           <a-row>
             <a-col :span="12">
@@ -134,18 +176,30 @@
         </a-checkbox-group>
       </a-form-item>
 
-      <a-form-item label="用户状态" name="is_active">
+      <a-form-item
+        label="用户状态"
+        name="is_active"
+      >
         <a-radio-group v-model:value="formData.is_active">
           <a-radio :value="true">
-            <a-badge status="success" text="激活" />
+            <a-badge
+              status="success"
+              text="激活"
+            />
           </a-radio>
           <a-radio :value="false">
-            <a-badge status="default" text="停用" />
+            <a-badge
+              status="default"
+              text="停用"
+            />
           </a-radio>
         </a-radio-group>
       </a-form-item>
 
-      <a-form-item label="备注" name="notes">
+      <a-form-item
+        label="备注"
+        name="notes"
+      >
         <a-textarea
           v-model:value="formData.notes"
           placeholder="请输入备注信息"
@@ -183,8 +237,7 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  visible: false,
-  user: null
+  visible: false
 })
 
 const emit = defineEmits<Emits>()
@@ -296,8 +349,9 @@ const handleSubmit = async () => {
     
     // 如果是编辑模式且没有输入密码，则不更新密码
     if (isEdit.value && !submitData.password) {
-      delete submitData.password
-      delete submitData.confirmPassword
+      const { password: _password, confirmPassword: _confirmPassword, ...rest } = submitData
+      emit('submit', rest)
+      return
     }
     
     emit('submit', submitData)

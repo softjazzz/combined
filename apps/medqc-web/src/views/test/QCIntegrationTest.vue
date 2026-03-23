@@ -1,6 +1,9 @@
 <template>
   <div class="qc-integration-test">
-    <a-card title="质控集成功能测试" class="test-card">
+    <a-card
+      title="质控集成功能测试"
+      class="test-card"
+    >
       <div class="test-section">
         <h3>1. 文档质控状态显示测试</h3>
         <div class="document-cards">
@@ -12,7 +15,12 @@
             <div class="document-header">
               <span class="document-title">{{ doc.title }}</span>
               <div class="document-tags">
-                <a-tag color="green" size="small">AI分类</a-tag>
+                <a-tag
+                  color="green"
+                  size="small"
+                >
+                  AI分类
+                </a-tag>
                 <a-tag
                   v-if="doc.qc_status"
                   :color="getQCStatusColor(doc.qc_status)"
@@ -31,10 +39,16 @@
             </div>
             <div class="document-meta">
               <span class="document-type">{{ doc.type_name }}</span>
-              <span v-if="doc.qc_score !== null" class="qc-score">
+              <span
+                v-if="doc.qc_score !== null"
+                class="qc-score"
+              >
                 质控: {{ doc.qc_score }}分
               </span>
-              <span v-if="doc.qc_last_analyzed" class="qc-time">
+              <span
+                v-if="doc.qc_last_analyzed"
+                class="qc-time"
+              >
                 {{ formatRelativeTime(doc.qc_last_analyzed) }}
               </span>
             </div>
@@ -70,15 +84,23 @@
                 >
                   手动分析
                 </a-button>
-                <a-button @click="clearResults">清除结果</a-button>
+                <a-button @click="clearResults">
+                  清除结果
+                </a-button>
               </a-space>
             </a-form-item>
           </a-form>
         </div>
 
         <!-- 质控结果展示 -->
-        <div v-if="qcResult" class="qc-result-display">
-          <a-card title="质控分析结果" size="small">
+        <div
+          v-if="qcResult"
+          class="qc-result-display"
+        >
+          <a-card
+            title="质控分析结果"
+            size="small"
+          >
             <div class="qc-summary">
               <a-statistic
                 title="质控评分"
@@ -98,7 +120,10 @@
               </a-tag>
             </div>
 
-            <div v-if="qcResult.results && qcResult.results.length > 0" class="qc-issues">
+            <div
+              v-if="qcResult.results && qcResult.results.length > 0"
+              class="qc-issues"
+            >
               <h4>检测到的问题：</h4>
               <div
                 v-for="(issue, index) in qcResult.results.filter(r => !r.compliant)"
@@ -115,7 +140,10 @@
               </div>
             </div>
 
-            <div v-if="qcResult.suggestions && qcResult.suggestions.length > 0" class="qc-suggestions">
+            <div
+              v-if="qcResult.suggestions && qcResult.suggestions.length > 0"
+              class="qc-suggestions"
+            >
               <h4>改进建议：</h4>
               <ul>
                 <li
@@ -130,7 +158,10 @@
         </div>
 
         <!-- 分析中状态 -->
-        <div v-else-if="analyzing" class="analyzing-status">
+        <div
+          v-else-if="analyzing"
+          class="analyzing-status"
+        >
           <a-spin>
             <div class="analyzing-text">
               <LoadingOutlined />
@@ -153,10 +184,15 @@
             >
               测试批量质控
             </a-button>
-            <a-button @click="generateTestData">生成测试数据</a-button>
+            <a-button @click="generateTestData">
+              生成测试数据
+            </a-button>
           </a-space>
           
-          <div v-if="batchResult" class="batch-result">
+          <div
+            v-if="batchResult"
+            class="batch-result"
+          >
             <a-alert
               :message="`批量质控已启动: ${batchResult.message}`"
               :description="`总文档数: ${batchResult.total_documents}, 队列任务: ${batchResult.queued_tasks}`"

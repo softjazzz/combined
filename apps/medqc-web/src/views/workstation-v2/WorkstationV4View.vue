@@ -4,194 +4,362 @@
     <template v-if="viewMode === 'list'">
       <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         <div class="sticky top-0 z-10 border-b border-slate-200/60 bg-white/72 px-4 py-3 backdrop-blur-xl xl:px-5">
-          <div class="rounded-[26px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,252,0.94))] px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div class="min-w-0">
-                <div class="flex items-center gap-3">
-                  <h2 class="truncate text-[34px] font-black leading-none tracking-[-0.05em] text-slate-900">&#30149;&#26696;&#24037;&#20316;&#21488;</h2>
-                  <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-semibold text-slate-500">
-                    {{ filteredRecords.length }} &#20363;
-                  </span>
+          <div class="mx-auto w-full max-w-[1440px]">
+            <div class="rounded-[26px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,252,0.94))] px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
+              <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-3">
+                    <h2 class="truncate text-[34px] font-black leading-none tracking-[-0.05em] text-slate-900">
+                      {{ stageMeta.pageTitle }}
+                    </h2>
+                    <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-semibold text-slate-500">
+                      {{ listRecords.length }} &#20363;
+                    </span>
+                  </div>
+                  <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
+                    <span class="font-semibold text-slate-700">{{ activeDept }}</span>
+                    <span class="h-1 w-1 rounded-full bg-slate-300" />
+                    <span>{{ stageMeta.pageDesc }}</span>
+                  </div>
                 </div>
-                <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-                  <span class="font-semibold text-slate-700">{{ activeDept }}</span>
-                  <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                  <span>&#20808;&#31579;&#39640;&#20248;&#20808;&#30149;&#21382;&#65292;&#20877;&#36827;&#20837;&#21333;&#26696;&#35814;&#24773;</span>
-                </div>
-              </div>
 
-              <div class="flex flex-wrap items-center gap-2.5">
-                <a-input-search
-                  v-model:value="searchText"
-                  placeholder="&#25628;&#32034;&#30149;&#26696;&#21495; / &#22995;&#21517;"
-                  style="width: 240px"
-                  size="large"
-                  allow-clear
-                />
-                <a-select v-model:value="hospFilter" style="width: 128px" size="large" :options="hospOptions" />
-                <button
-                  type="button"
-                  @click="refreshData"
-                  class="flex h-11 w-11 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_10px_18px_rgba(37,99,235,0.08)]"
-                  title="&#21047;&#26032;"
-                >
-                  <SyncOutlined :spin="loading" />
-                </button>
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <a-input-search
+                    v-model:value="searchText"
+                    placeholder="&#25628;&#32034;&#30149;&#26696;&#21495; / &#22995;&#21517;"
+                    style="width: 240px"
+                    size="large"
+                    allow-clear
+                  />
+                  <a-select
+                    v-model:value="hospFilter"
+                    style="width: 128px"
+                    size="large"
+                    :options="hospOptions"
+                  />
+                  <button
+                    type="button"
+                    class="flex h-11 w-11 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_10px_18px_rgba(37,99,235,0.08)]"
+                    title="&#21047;&#26032;"
+                    @click="refreshData"
+                  >
+                    <SyncOutlined :spin="loading" />
+                  </button>
+                </div>
               </div>
             </div>
 
-          </div>
-
-          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <div class="mt-3 flex items-center gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <button
                 v-for="dept in visibleDepartments"
                 :key="dept.name"
                 type="button"
-                @click="selectDept(dept.name)"
                 :class="[
-                  'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[13px] font-semibold transition-all duration-200',
+                  'inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200 cursor-pointer',
                   activeDept === dept.name
-                    ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-[0_8px_16px_rgba(37,99,235,0.08)]'
-                    : 'border-slate-200 bg-white/90 text-slate-500 hover:border-slate-300 hover:text-slate-800',
+                    ? 'bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.2)]'
+                    : 'bg-white/80 border border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                 ]"
+                @click="selectDept(dept.name)"
               >
                 <span>{{ dept.name }}</span>
-                <span :class="[activeDept === dept.name ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500', 'inline-flex min-w-[24px] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-bold']">
+                <span :class="[activeDept === dept.name ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500', 'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold']">
                   {{ dept.total }}
                 </span>
               </button>
 
-              <a-dropdown v-if="overflowDepartments.length > 0" trigger="click">
+              <a-dropdown
+                v-if="overflowDepartments.length > 0"
+                trigger="click"
+                placement="bottomRight"
+              >
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-[13px] font-semibold text-slate-600 transition-all duration-200 hover:border-slate-300 hover:text-slate-800"
+                  class="inline-flex shrink-0 items-center gap-2 rounded-full border border-transparent bg-white/80 px-3.5 py-1.5 text-[13px] font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
                 >
                   <span>更多科室</span>
-                  <span class="inline-flex min-w-[24px] items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                  <span class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500">
                     {{ overflowDepartments.length }}
                   </span>
+                  <DownOutlined class="text-[10px] ml-0.5" />
                 </button>
                 <template #overlay>
-                  <a-menu class="max-h-[320px] w-[220px] overflow-y-auto">
+                  <a-menu class="max-h-[320px] w-[220px] overflow-y-auto rounded-xl p-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]">
                     <a-menu-item
                       v-for="dept in overflowDepartments"
                       :key="`overflow-${dept.name}`"
+                      class="rounded-lg py-2"
                       @click="selectDept(dept.name)"
                     >
                       <div class="flex items-center justify-between gap-3">
-                        <span class="truncate">{{ dept.name }}</span>
-                        <span class="text-xs text-slate-400">{{ dept.total }}</span>
+                        <span class="truncate font-medium text-slate-700">{{ dept.name }}</span>
+                        <span class="text-[11px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded">{{ dept.total }}</span>
                       </div>
                     </a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
+            </div>
           </div>
         </div>
 
         <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
-          <section v-if="priorityRecords.length > 0" class="mb-5">
-            <div class="mb-3 flex items-center justify-between">
-              <div>
-                <div class="text-[12px] font-semibold tracking-[0.08em] text-slate-400">&#39640;&#20248;&#20808;&#30149;&#21382;</div>
-                <h3 class="mt-1 text-[22px] font-black tracking-[-0.04em] text-slate-900">&#20808;&#30475;&#36825;&#19968;&#25209;</h3>
-              </div>
-              <div class="text-[12px] text-slate-400">&#26368;&#22810;&#23637;&#31034; 4 &#24352;</div>
-            </div>
-
-            <div class="grid grid-cols-1 gap-3 xl:grid-cols-4">
-              <article
-                v-for="record in priorityRecords"
-                :key="record.id"
-                @click="openRecord(record)"
-                :class="[
-                  'cursor-pointer rounded-[20px] border px-3.5 py-3 transition-all duration-200',
-                  priorityCardClass(record),
-                ]"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="min-w-0">
-                    <div class="truncate text-[19px] font-black leading-none tracking-[-0.03em] text-slate-900">{{ record.name || '\u672a\u77e5\u60a3\u8005' }}</div>
-                    <div class="mt-1 truncate text-[13px] font-semibold text-slate-500">{{ record.id }}</div>
+          <div class="mx-auto w-full max-w-[1440px]">
+            <section
+              v-if="priorityRecords.length > 0"
+              class="mb-6"
+            >
+              <div class="mb-4 flex items-end justify-between">
+                <div>
+                  <h3 class="flex items-center gap-2.5 text-[20px] font-black tracking-[-0.03em] text-slate-900">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                    </span>
+                    高优预警
+                    <span class="rounded-full bg-red-50 px-2.5 py-0.5 text-[12px] font-bold text-red-600 border border-red-100/50">
+                      {{ priorityRecords.length }}
+                    </span>
+                  </h3>
+                  <div class="mt-1 text-[13px] text-slate-500 font-medium">
+                    建议优先处理这批临近超期病案
                   </div>
                 </div>
-                <div class="mt-3 flex items-center gap-2 text-[12px] text-slate-600">
-                  <span class="truncate font-semibold">{{ record.department || '\u672a\u5206\u79d1\u5ba4' }}</span>
-                  <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                  <span :class="stayTextTone(record.days)" class="font-semibold">{{ stayText(record.days) }}</span>
-                </div>
-                <div class="mt-2 text-[11px] font-medium text-slate-400">&#20303;&#38498;&#21306;&#38388;</div>
-                <div class="mt-0.5 text-[16px] font-bold tracking-[-0.01em] text-slate-700">{{ dateRange(record) }}</div>
-                <div class="mt-2 truncate text-[12px] font-medium text-slate-500">
-                  <span class="mr-1 text-slate-400">&#39118;&#38505;&#65306;</span>{{ priorityReason(record) }}
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="rounded-[24px] border border-slate-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
-            <div class="flex items-center justify-between border-b border-slate-200/70 px-5 py-4">
-              <div>
-                <div class="text-[12px] font-semibold tracking-[0.08em] text-slate-400">&#20840;&#37096;&#30149;&#21382;</div>
-                <h3 class="mt-1 text-[22px] font-black tracking-[-0.04em] text-slate-900">&#25209;&#37327;&#25195;&#35835;</h3>
               </div>
-              <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-semibold text-slate-500">
-                {{ filteredRecords.length }} &#26465;
-              </span>
-            </div>
 
-            <div v-if="filteredRecords.length === 0" class="flex min-h-[260px] flex-col items-center justify-center px-5 py-10 text-center">
-              <InboxOutlined class="mb-3 text-4xl text-slate-300" />
-              <div class="text-sm font-medium text-slate-500">&#24403;&#21069;&#31579;&#36873;&#26465;&#20214;&#19979;&#26242;&#26080;&#30149;&#21382;</div>
-            </div>
+              <div class="grid grid-cols-1 gap-4 xl:grid-cols-4">
+                <article
+                  v-for="record in priorityRecords"
+                  :key="record.id"
+                  class="group relative flex flex-col justify-between cursor-pointer rounded-2xl border border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(252,253,255,1)_100%)] shadow-[0_6px_24px_-8px_rgba(15,23,42,0.06)] transition-all duration-300 hover:border-blue-300/60 hover:shadow-[0_14px_30px_-8px_rgba(37,99,235,0.15)] hover:-translate-y-1 overflow-hidden"
+                  @click="openRecord(record)"
+                >
+                  <!-- Main Body -->
+                  <div class="px-5 pt-5 pb-4">
+                    <!-- Patient & ID Row -->
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <h4 class="truncate text-[19px] font-black tracking-tight text-slate-900 leading-none">
+                          {{ record.name || '\u672a\u77e5\u60a3\u8005' }}
+                        </h4>
+                        <span class="shrink-0 rounded-md bg-slate-100/80 px-1.5 py-[3px] text-[11px] font-mono font-bold tracking-tight text-slate-500">
+                          {{ record.id }}
+                        </span>
+                      </div>
+                    
+                      <!-- Urgency Duration -->
+                      <div class="shrink-0">
+                        <span class="inline-flex items-center rounded-lg bg-[linear-gradient(180deg,rgba(254,242,242,1),rgba(254,226,226,0.6))] px-2.5 py-0.5 text-[11.5px] font-black tracking-wider text-red-600 ring-1 ring-inset ring-red-200/80 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.15)]">
+                          {{ stayText(record.days) }}
+                        </span>
+                      </div>
+                    </div>
 
-            <div v-else class="overflow-x-auto">
-              <table class="min-w-full border-collapse">
-                <thead class="bg-slate-50/85">
-                  <tr>
-                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#22995;&#21517;</th>
-                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#30149;&#26696;&#21495;</th>
-                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#31185;&#23460;</th>
-                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#20303;&#38498;&#22825;&#25968;</th>
-                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#20303;&#38498;&#21306;&#38388;</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="record in filteredRecords"
-                    :key="record.id"
-                    @click="openRecord(record)"
-                    :class="[
-                      'cursor-pointer border-t border-slate-100 transition-colors hover:bg-slate-50/70',
-                      isPriorityRecord(record.id) ? 'bg-blue-50/35' : '',
-                    ]"
+                    <!-- Metadata Row -->
+                    <div class="mt-3.5 flex items-center gap-2 text-[12.5px] font-medium text-slate-500">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <svg
+                          class="w-3.5 h-3.5 shrink-0 text-slate-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        ><path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                        /></svg>
+                        <span class="truncate">{{ record.department || '\u672a\u5206\u79d1\u5ba4' }}</span>
+                      </div>
+                      <div class="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                      <div class="font-mono text-[11.5px] text-slate-400 opacity-90 shrink-0">
+                        {{ dateRange(record) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Footer Block -->
+                  <div class="bg-slate-50/80 border-t border-slate-100 px-5 py-3">
+                    <div class="flex items-start gap-2.5">
+                      <div class="mt-[1px] flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full bg-orange-100/80 text-orange-500">
+                        <svg
+                          class="w-3 h-3"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        ><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
+                      </div>
+                      <span class="text-[12.5px] font-bold leading-snug tracking-[-0.01em] text-slate-700">
+                        {{ priorityReason(record) }}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="rounded-[16px] border border-slate-200/60 bg-white shadow-[0_6px_20px_-4px_rgba(15,23,42,0.03)] overflow-hidden">
+              <!-- Table Header Bar -->
+              <div class="flex items-center justify-between border-b border-slate-100 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-50/80 px-5 py-3.5">
+                <div class="flex items-center gap-3">
+                  <h3 class="flex items-center gap-2.5 text-[17px] font-bold tracking-tight text-slate-800">
+                    {{ stageMeta.tableTitle }}
+                    <span class="rounded bg-slate-200/60 px-2.5 py-0.5 text-[11.5px] font-mono font-bold text-slate-600 shadow-sm">
+                      {{ listRecords.length }}
+                    </span>
+                  </h3>
+                  <div class="h-4 w-px bg-slate-200" />
+                  <div class="text-[12.5px] font-medium text-slate-500">
+                    {{ stageMeta.tableDesc }}
+                  </div>
+                </div>
+                <div
+                  v-if="isStageQueueMode"
+                  class="flex items-center gap-2"
+                >
+                  <a-button
+                    size="small"
+                    class="!rounded-md !h-7 !px-3.5 !text-[12.5px] !font-medium"
+                    @click="handleStageBatchAction"
                   >
-                    <td class="px-5 py-4">
-                      <div class="text-[16px] font-bold tracking-[-0.02em] text-slate-900">{{ record.name || '\u672a\u77e5\u60a3\u8005' }}</div>
-                    </td>
-                    <td class="px-5 py-4 text-[13px] font-semibold text-slate-500">{{ record.id }}</td>
-                    <td class="px-5 py-4 text-[14px] font-semibold text-slate-700">{{ record.department || '\u672a\u5206\u79d1\u5ba4' }}</td>
-                    <td class="px-5 py-4">
-                      <span :class="stayTextTone(record.days)" class="text-[14px] font-semibold">{{ stayText(record.days) }}</span>
-                    </td>
-                    <td class="px-5 py-4 text-[14px] font-semibold text-slate-700">{{ dateRange(record) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                    {{ stageMeta.batchActionText }}
+                  </a-button>
+                  <a-button
+                    size="small"
+                    type="primary"
+                    class="!rounded-md !h-7 !px-4 !text-[12.5px] !font-bold !shadow-sm"
+                    :disabled="listRecords.length === 0"
+                    @click="handleStageContinueAction"
+                  >
+                    继续处理
+                  </a-button>
+                </div>
+              </div>
 
-            <div v-if="serverTotalPages > 1" class="flex justify-center border-t border-slate-200/70 px-5 py-4">
-              <a-pagination
-                :current="currentPage"
-                :total="serverTotal"
-                :page-size="50"
-                size="small"
-                show-quick-jumper
-                :show-total="(value: number) => `\u5171 ${value} \u4f8b`"
-                @change="handlePageChange"
-              />
-            </div>
-          </section>
+              <!-- Empty State -->
+              <div
+                v-if="listRecords.length === 0"
+                class="flex min-h-[300px] flex-col items-center justify-center px-5 py-10 text-center"
+              >
+                <InboxOutlined class="mb-4 text-[42px] text-slate-200" />
+                <div class="text-[13px] font-medium text-slate-400">
+                  {{ stageEmptyText }}
+                </div>
+              </div>
+
+              <!-- Data Table -->
+              <div
+                v-else
+                class="overflow-x-auto"
+              >
+                <table class="min-w-full border-collapse">
+                  <thead class="bg-slate-50/50 border-b border-slate-100/80">
+                    <tr>
+                      <th class="px-6 py-3.5 text-left text-[13.5px] font-bold tracking-wide text-slate-500 w-[35%]">
+                        患者信息
+                      </th>
+                      <th class="py-3.5 text-center text-[13.5px] font-bold tracking-wide text-slate-500 w-[25%]">
+                        科室
+                      </th>
+                      <th class="py-3.5 text-center text-[13.5px] font-bold tracking-wide text-slate-500 w-[25%]">
+                        阶段状态
+                      </th>
+                      <th class="py-3.5 text-center text-[13.5px] font-bold tracking-wide text-slate-500 w-[15%]">
+                        操作
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100/60">
+                    <tr
+                      v-for="record in listRecords"
+                      :key="record.id"
+                      :class="[
+                        'group cursor-pointer transition-all duration-200 hover:bg-slate-50/80',
+                        isPriorityRecord(record.id) ? 'bg-orange-50/10' : '',
+                      ]"
+                      @click="openRecord(record)"
+                    >
+                      <!-- Column 1: Patient Anchor -->
+                      <td class="px-6 py-3.5">
+                        <div class="flex flex-col gap-1">
+                          <div class="text-[15px] font-bold text-slate-800 tracking-tight">
+                            {{ record.name || '\u672a\u77e5\u60a3\u8005' }}
+                          </div>
+                          <div class="text-[12.5px] font-mono font-medium text-slate-400">
+                            {{ record.id }}
+                          </div>
+                        </div>
+                      </td>
+                    
+                      <!-- Column 2: Department -->
+                      <td class="px-6 py-3.5 text-center">
+                        <div class="inline-flex items-center justify-center gap-1.5 rounded-md text-[13.5px] font-medium text-slate-600 bg-slate-50 px-2.5 py-1.5">
+                          <svg
+                            class="w-4 h-4 text-slate-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            stroke-width="2"
+                          ><path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          /></svg>
+                          {{ record.department || '\u672a\u5206\u79d1\u5ba4' }}
+                        </div>
+                      </td>
+                    
+                      <!-- Column 3: Status Dot -->
+                      <td class="px-6 py-3.5 text-center">
+                        <div class="inline-flex items-center justify-center gap-2">
+                          <span 
+                            class="h-2 w-2 rounded-full"
+                            :class="[
+                              stageStatusClass.includes('sky') ? 'bg-sky-400' : 
+                              stageStatusClass.includes('emerald') ? 'bg-emerald-400' : 
+                              stageStatusClass.includes('amber') ? 'bg-amber-400' : 
+                              'bg-slate-300'
+                            ]"
+                          />
+                          <span class="text-[13.5px] font-medium text-slate-600">
+                            {{ stageStatusText }}
+                          </span>
+                        </div>
+                      </td>
+                    
+                      <!-- Column 4: Hover Action -->
+                      <td class="py-3.5 text-center">
+                        <div class="flex items-center justify-center">
+                          <a-button
+                            size="small"
+                            type="link"
+                            class="!px-0 !h-auto !text-[13.5px] !font-bold text-blue-500 opacity-80 group-hover:opacity-100 transition-opacity duration-200"
+                            @click.stop="handleStageRecordAction(record)"
+                          >
+                            {{ stageMeta.singleActionText }} →
+                          </a-button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div
+                v-if="serverTotalPages > 1"
+                class="flex justify-center border-t border-slate-200/70 px-5 py-4"
+              >
+                <a-pagination
+                  :current="currentPage"
+                  :total="serverTotal"
+                  :page-size="50"
+                  size="small"
+                  show-quick-jumper
+                  :show-total="(value: number) => `\u5171 ${value} \u4f8b`"
+                  @change="handlePageChange"
+                />
+              </div>
+            </section>
+          </div>
         </div>
       </main>
     </template>
@@ -231,8 +399,8 @@
             :title="docDrawerTitle"
             placement="right"
             :width="560"
-            :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
-            :bodyStyle="{ padding: '16px', background: 'linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%)' }"
+            :header-style="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+            :body-style="{ padding: '16px', background: 'linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%)' }"
           >
             <div class="rounded-[20px] border border-slate-200/70 bg-white/92 p-4 shadow-[0_8px_18px_rgba(15,23,42,0.045)]">
               <pre class="m-0 whitespace-pre-wrap font-sans text-[13px] leading-7 text-slate-700">{{ docDrawerContent }}</pre>
@@ -245,29 +413,47 @@
             <!-- 自定义 Tab 栏 -->
             <div class="sticky top-0 z-10 border-b border-slate-200/55 bg-white/40 px-3 pb-1 pt-1 backdrop-blur-xl lg:px-4">
               <div class="inline-flex items-center gap-1 rounded-full border border-slate-200/65 bg-white/66 p-1">
-              <button @click="detailMainTab = 'records'" :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'records' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']">
-                <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
-              </button>
-              <button @click="detailMainTab = 'frontpage'" :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'frontpage' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']">
-                <span class="flex items-center gap-1.5"><FileSearchOutlined />病案首页</span>
-              </button>
-              <button @click="detailMainTab = 'settlement'" :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'settlement' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']">
-                <span class="flex items-center gap-1.5">
-                  <span style="font-size:14px">💰</span>结算清单
-                  <span v-if="settlementQcFailed > 0" class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold px-1">{{ settlementQcFailed }}</span>
-                </span>
-              </button>
+                <button
+                  :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'records' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']"
+                  @click="detailMainTab = 'records'"
+                >
+                  <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
+                </button>
+                <button
+                  :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'frontpage' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']"
+                  @click="detailMainTab = 'frontpage'"
+                >
+                  <span class="flex items-center gap-1.5"><FileSearchOutlined />病案首页</span>
+                </button>
+                <button
+                  :class="['rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer', detailMainTab === 'settlement' ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]' : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800']"
+                  @click="detailMainTab = 'settlement'"
+                >
+                  <span class="flex items-center gap-1.5">
+                    <span style="font-size:14px">💰</span>结算清单
+                    <span
+                      v-if="settlementQcFailed > 0"
+                      class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold px-1"
+                    >{{ settlementQcFailed }}</span>
+                  </span>
+                </button>
               </div>
             </div>
 
             <!-- Tab 内容区 -->
             <div class="flex-1 overflow-y-auto custom-scrollbar">
               <!-- ====== Tab 1: 病历详情 ====== -->
-              <div v-if="detailMainTab === 'records'" class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+              <div
+                v-if="detailMainTab === 'records'"
+                class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5"
+              >
                 <div class="relative mx-auto w-full max-w-[1200px] rounded-[16px] border border-slate-200/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(252,253,255,0.98))] px-1 py-1.5 shadow-[0_6px_16px_rgba(15,23,42,0.02)] lg:px-1.5 lg:py-2">
                   <!-- AI 预审状态小标签 -->
-                  <div v-if="selectedRecord" class="absolute right-4 top-0 flex items-center gap-1 rounded-b-md border-x border-b px-2 py-0.5 text-[10px] font-bold opacity-75"
-                    :class="selectedRecord.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100/50' : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning' ? 'bg-slate-50 text-slate-500 border-slate-200/70' : 'bg-blue-50 text-blue-600 border-blue-100/50'">
+                  <div
+                    v-if="selectedRecord"
+                    class="absolute right-4 top-0 flex items-center gap-1 rounded-b-md border-x border-b px-2 py-0.5 text-[10px] font-bold opacity-75"
+                    :class="selectedRecord.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100/50' : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning' ? 'bg-slate-50 text-slate-500 border-slate-200/70' : 'bg-blue-50 text-blue-600 border-blue-100/50'"
+                  >
                     <CheckCircleOutlined v-if="selectedRecord.status === 'completed'" />
                     <WarningOutlined v-else-if="selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning'" />
                     <ThunderboltOutlined v-else />
@@ -289,36 +475,60 @@
                   />
 
                   <template v-else>
-                    <div v-if="concatLoading" class="flex flex-col items-center py-20">
+                    <div
+                      v-if="concatLoading"
+                      class="flex flex-col items-center py-20"
+                    >
                       <a-spin size="large" />
-                      <div class="text-sm text-slate-400 mt-4">加载病历文书中...</div>
+                      <div class="text-sm text-slate-400 mt-4">
+                        加载病历文书中...
+                      </div>
                     </div>
-                    <div v-else-if="concatText" class="medical-record-document mx-auto max-w-[124ch] px-3 py-0.5">
+                    <div
+                      v-else-if="concatText"
+                      class="medical-record-document mx-auto max-w-[124ch] px-3 py-0.5"
+                    >
                       <div class="mb-4 flex items-center gap-2 rounded-[10px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-xs text-blue-700">
                         <WarningOutlined />
                         <span>EMR 高亮视图暂不可用，已自动切换到原始文书预览。</span>
                       </div>
-                      <div v-for="(section, idx) in concatSections" :key="idx" class="mb-7">
+                      <div
+                        v-for="(section, idx) in concatSections"
+                        :key="idx"
+                        class="mb-7"
+                      >
                         <div class="mb-3 flex items-center gap-2 pb-1">
                           <FileTextOutlined class="text-blue-400" />
-                          <h3 class="m-0 text-[16px] font-bold text-slate-800 dark:text-white">{{ section.title }}</h3>
+                          <h3 class="m-0 text-[16px] font-bold text-slate-800 dark:text-white">
+                            {{ section.title }}
+                          </h3>
                         </div>
                         <pre class="m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.15] text-slate-700 dark:text-slate-300">{{ section.content }}</pre>
                       </div>
                     </div>
-                    <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                    <div
+                      v-else
+                      class="flex flex-col items-center justify-center py-20 text-slate-300"
+                    >
                       <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
                         <FileTextOutlined class="text-3xl" />
                       </div>
-                      <div class="text-sm font-medium mb-1">暂无病历文书</div>
-                      <div class="text-xs text-slate-400">该患者当前暂无可展示的病历文书内容。</div>
+                      <div class="text-sm font-medium mb-1">
+                        暂无病历文书
+                      </div>
+                      <div class="text-xs text-slate-400">
+                        该患者当前暂无可展示的病历文书内容。
+                      </div>
                     </div>
                   </template>
                 </div>
               </div>
 
               <!-- ====== Tab 2: 病案首页 ====== -->
-              <div v-if="detailMainTab === 'frontpage'" class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+              <div
+                v-if="detailMainTab === 'frontpage'"
+                class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5"
+              >
                 <div class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
                   <FrontpageWorkspacePanel
                     :generating="frontpageGenerating"
@@ -337,21 +547,41 @@
                 </div>
               </div>
               <!-- ====== Tab 3: 结算清单 ====== -->
-              <div v-if="detailMainTab === 'settlement'" class="min-h-[400px] px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+              <div
+                v-if="detailMainTab === 'settlement'"
+                class="min-h-[400px] px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5"
+              >
                 <div class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
-                  <div v-if="settlementLoading" class="flex flex-col items-center py-20">
+                  <div
+                    v-if="settlementLoading"
+                    class="flex flex-col items-center py-20"
+                  >
                     <a-spin size="large" />
-                    <div class="text-sm text-slate-400 mt-4">加载结算清单...</div>
+                    <div class="text-sm text-slate-400 mt-4">
+                      加载结算清单...
+                    </div>
                   </div>
                   <div v-else-if="settlementData">
                     <!-- AI 草稿横幅 -->
-                    <div v-if="settlementData?.data_source === 'generated_from_frontpage'" class="mx-1 mb-3 flex items-center gap-3 rounded-[14px] border border-blue-100/80 bg-[linear-gradient(180deg,rgba(244,248,255,0.94),rgba(255,255,255,0.98))] px-4 py-3">
+                    <div
+                      v-if="settlementData?.data_source === 'generated_from_frontpage'"
+                      class="mx-1 mb-3 flex items-center gap-3 rounded-[14px] border border-blue-100/80 bg-[linear-gradient(180deg,rgba(244,248,255,0.94),rgba(255,255,255,0.98))] px-4 py-3"
+                    >
                       <span class="text-base text-blue-500">☑</span>
                       <div class="min-w-0">
-                        <div class="text-sm font-semibold text-blue-700">AI 生成草稿</div>
-                        <div class="text-xs text-slate-500">本清单由病案首页 AI 抽取结果和 CDM 数据自动组装，需人工审核后方可上传医保系统。</div>
+                        <div class="text-sm font-semibold text-blue-700">
+                          AI 生成草稿
+                        </div>
+                        <div class="text-xs text-slate-500">
+                          本清单由病案首页 AI 抽取结果和 CDM 数据自动组装，需人工审核后方可上传医保系统。
+                        </div>
                       </div>
-                      <a-tag color="blue" class="ml-auto flex-shrink-0 !rounded-full">Draft</a-tag>
+                      <a-tag
+                        color="blue"
+                        class="ml-auto flex-shrink-0 !rounded-full"
+                      >
+                        Draft
+                      </a-tag>
                     </div>
                     <!-- 操作栏 -->
                     <div class="mb-4 flex items-center justify-between rounded-[14px] border border-slate-200/80 bg-white/72 px-4 py-3">
@@ -359,8 +589,15 @@
                         清单流水号: <span class="font-mono font-bold text-slate-700">{{ settlementData.medinsur_serial_no || '-' }}</span>
                       </div>
                       <div class="flex items-center gap-2">
-                        <a-button size="small" class="!rounded-full !border-slate-200/80 !shadow-none" @click="runSettlementQc" :loading="settlementQcLoading">
-                          <template #icon><CheckOutlined /></template>
+                        <a-button
+                          size="small"
+                          class="!rounded-full !border-slate-200/80 !shadow-none"
+                          :loading="settlementQcLoading"
+                          @click="runSettlementQc"
+                        >
+                          <template #icon>
+                            <CheckOutlined />
+                          </template>
                           执行质控
                         </a-button>
                       </div>
@@ -369,37 +606,67 @@
                     <SettlementSheet :data="settlementData" />
 
                     <!-- 质控结果摘要 -->
-                    <div v-if="settlementQcReport" class="mb-6">
+                    <div
+                      v-if="settlementQcReport"
+                      class="mb-6"
+                    >
                       <h4 class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
                         <CheckCircleOutlined class="text-blue-500" /> 质控结果
                       </h4>
                       <div class="mb-4 grid grid-cols-4 gap-2.5">
                         <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/70 p-3 text-center">
-                          <div class="text-2xl font-black text-blue-600">{{ settlementQcReport.summary.total }}</div>
-                          <div class="text-[10px] text-slate-400 mt-1">总规则数</div>
+                          <div class="text-2xl font-black text-blue-600">
+                            {{ settlementQcReport.summary.total }}
+                          </div>
+                          <div class="text-[10px] text-slate-400 mt-1">
+                            总规则数
+                          </div>
                         </div>
                         <div class="rounded-[14px] border border-slate-200/80 bg-slate-50/88 p-3 text-center">
-                          <div class="text-2xl font-black text-slate-700">{{ settlementQcReport.summary.passed }}</div>
-                          <div class="text-[10px] text-slate-400 mt-1">通过</div>
+                          <div class="text-2xl font-black text-slate-700">
+                            {{ settlementQcReport.summary.passed }}
+                          </div>
+                          <div class="text-[10px] text-slate-400 mt-1">
+                            通过
+                          </div>
                         </div>
                         <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/50 p-3 text-center">
-                          <div class="text-2xl font-black text-blue-700">{{ settlementQcReport.summary.failed }}</div>
-                          <div class="text-[10px] text-slate-400 mt-1">未通过</div>
+                          <div class="text-2xl font-black text-blue-700">
+                            {{ settlementQcReport.summary.failed }}
+                          </div>
+                          <div class="text-[10px] text-slate-400 mt-1">
+                            未通过
+                          </div>
                         </div>
                         <div class="rounded-[14px] border border-slate-200/80 bg-white/88 p-3 text-center">
-                          <div class="text-2xl font-black text-slate-700">{{ settlementQcReport.summary.pass_rate }}</div>
-                          <div class="text-[10px] text-slate-400 mt-1">通过率</div>
+                          <div class="text-2xl font-black text-slate-700">
+                            {{ settlementQcReport.summary.pass_rate }}
+                          </div>
+                          <div class="text-[10px] text-slate-400 mt-1">
+                            通过率
+                          </div>
                         </div>
                       </div>
                       <div class="space-y-2">
-                        <div v-for="r in settlementQcReport.results.filter((x: any) => !x.passed)" :key="r.rule_id"
+                        <div
+                          v-for="r in settlementQcReport.results.filter((x: any) => !x.passed)"
+                          :key="r.rule_id"
                           class="flex items-start gap-3 rounded-[14px] border bg-white/88 px-4 py-3 dark:bg-slate-800"
                           :class="r.severity === 'error' ? 'border-blue-200 bg-blue-50/35' : 'border-slate-200/80'"
                         >
-                          <a-tag color="blue" class="mt-0.5 flex-shrink-0">{{ r.rule_id }}</a-tag>
+                          <a-tag
+                            color="blue"
+                            class="mt-0.5 flex-shrink-0"
+                          >
+                            {{ r.rule_id }}
+                          </a-tag>
                           <div class="min-w-0">
-                            <div class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ r.field_name }}</div>
-                            <div class="text-xs text-slate-500 mt-0.5">{{ r.message }}</div>
+                            <div class="text-sm font-medium text-slate-800 dark:text-slate-200">
+                              {{ r.field_name }}
+                            </div>
+                            <div class="text-xs text-slate-500 mt-0.5">
+                              {{ r.message }}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -454,28 +721,56 @@
           <template #profile>
             <div class="space-y-3 p-3">
               <div class="rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,252,0.98))] p-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
-                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">当前分析</div>
+                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">
+                  当前分析
+                </div>
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
-                    <div class="text-[15px] font-black text-slate-900">AI 深度画像</div>
-                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">对病历全文进行深度阅读，生成时间轴、风险线索与结构化患者画像。</div>
+                    <div class="text-[15px] font-black text-slate-900">
+                      AI 深度画像
+                    </div>
+                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">
+                      对病历全文进行深度阅读，生成时间轴、风险线索与结构化患者画像。
+                    </div>
                   </div>
-                  <div v-if="profileAnalyzed" class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right">
-                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">状态</div>
-                    <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
+                  <div
+                    v-if="profileAnalyzed"
+                    class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right"
+                  >
+                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
+                      状态
+                    </div>
+                    <div class="mt-1 text-[13px] font-black text-blue-700">
+                      已生成
+                    </div>
                   </div>
                 </div>
               </div>
 
               <!-- 未分析状态 -->
-              <div v-if="!profileAnalyzed && !profileAnalyzing" class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]">
+              <div
+                v-if="!profileAnalyzed && !profileAnalyzing"
+                class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]"
+              >
                 <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_10px_20px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.72)]">
                   <ScanOutlined class="text-[24px] text-blue-600" />
                 </div>
-                <div class="mb-1 text-[15px] font-black text-slate-800">AI 深度画像</div>
-                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">对病历全文进行深度阅读，构建诊断时间轴与患者风险画像。</div>
-                <a-button type="primary" size="small" @click="aiProfileModalVisible = true; profileAnalyzed = true" :disabled="!combinedMedicalText" class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]">
-                  <template #icon><ThunderboltOutlined /></template>
+                <div class="mb-1 text-[15px] font-black text-slate-800">
+                  AI 深度画像
+                </div>
+                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">
+                  对病历全文进行深度阅读，构建诊断时间轴与患者风险画像。
+                </div>
+                <a-button
+                  type="primary"
+                  size="small"
+                  :disabled="!combinedMedicalText"
+                  class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]"
+                  @click="aiProfileModalVisible = true; profileAnalyzed = true"
+                >
+                  <template #icon>
+                    <ThunderboltOutlined />
+                  </template>
                   开始分析
                 </a-button>
               </div>
@@ -489,18 +784,27 @@
                     <span class="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">已生成</span>
                   </div>
                   <div class="space-y-1.5 text-xs text-slate-600">
-                    <div v-if="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text" class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2">
-                      <span class="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
+                    <div
+                      v-if="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text"
+                      class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
                       <span class="truncate">{{ frontpageDraft.diagnoses.discharge_main_diagnosis_text }}</span>
                     </div>
                     <div class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2">
-                      <span class="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"></span>
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                       <span>诊断时间轴 + 人体透视 + 器官画像</span>
                     </div>
                   </div>
                 </div>
-                <a-button block @click="aiProfileModalVisible = true" class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700">
-                  <template #icon><EyeOutlined /></template>
+                <a-button
+                  block
+                  class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700"
+                  @click="aiProfileModalVisible = true"
+                >
+                  <template #icon>
+                    <EyeOutlined />
+                  </template>
                   查看完整 AI 画像
                 </a-button>
               </template>
@@ -512,9 +816,9 @@
               title="AI 深度画像分析"
               :width="1100"
               :footer="null"
-              :bodyStyle="{ padding: '12px', height: '78vh', overflow: 'hidden', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
+              :body-style="{ padding: '12px', height: '78vh', overflow: 'hidden', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
               centered
-              destroyOnClose
+              destroy-on-close
             >
               <div class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]">
                 <AIProfileDashboard
@@ -528,36 +832,69 @@
           <template #drg>
             <div class="space-y-3 p-3">
               <div class="rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,252,0.98))] p-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
-                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">当前分析</div>
+                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">
+                  当前分析
+                </div>
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
-                    <div class="text-[15px] font-black text-slate-900">DRG 分组分析</div>
-                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">基于首页诊断与手术编码，生成分组结果、权重与支付风险判断。</div>
+                    <div class="text-[15px] font-black text-slate-900">
+                      DRG 分组分析
+                    </div>
+                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">
+                      基于首页诊断与手术编码，生成分组结果、权重与支付风险判断。
+                    </div>
                   </div>
-                  <div v-if="drgResult" class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right">
-                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">状态</div>
-                    <div class="mt-1 text-[13px] font-black text-blue-700">已生成</div>
+                  <div
+                    v-if="drgResult"
+                    class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right"
+                  >
+                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
+                      状态
+                    </div>
+                    <div class="mt-1 text-[13px] font-black text-blue-700">
+                      已生成
+                    </div>
                   </div>
                 </div>
               </div>
 
               <!-- DRG 未分组状态 -->
-              <div v-if="!drgResult && !drgLoading" class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]">
+              <div
+                v-if="!drgResult && !drgLoading"
+                class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]"
+              >
                 <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_10px_20px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.72)]">
                   <NodeIndexOutlined class="text-[24px] text-blue-600" />
                 </div>
-                <div class="mb-1 text-[15px] font-black text-slate-800">DRG 分组分析</div>
-                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">基于诊断与手术编码进行 DRG 分组，输出分组结果与盈亏风险判断。</div>
-                <a-button type="primary" size="small" @click="performDRGGrouping" :disabled="!frontpageDraft" class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]">
-                  <template #icon><ThunderboltOutlined /></template>
+                <div class="mb-1 text-[15px] font-black text-slate-800">
+                  DRG 分组分析
+                </div>
+                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">
+                  基于诊断与手术编码进行 DRG 分组，输出分组结果与盈亏风险判断。
+                </div>
+                <a-button
+                  type="primary"
+                  size="small"
+                  :disabled="!frontpageDraft"
+                  class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]"
+                  @click="performDRGGrouping"
+                >
+                  <template #icon>
+                    <ThunderboltOutlined />
+                  </template>
                   开始分析
                 </a-button>
               </div>
 
               <!-- DRG 加载中 -->
-              <div v-else-if="drgLoading" class="flex flex-col items-center py-8">
+              <div
+                v-else-if="drgLoading"
+                class="flex flex-col items-center py-8"
+              >
                 <a-spin />
-                <div class="text-xs text-slate-400 mt-3">DRG 分组计算中...</div>
+                <div class="text-xs text-slate-400 mt-3">
+                  DRG 分组计算中...
+                </div>
               </div>
 
               <!-- DRG 已分组 / 摘要卡 -->
@@ -576,17 +913,32 @@
                       <span class="text-slate-500">权重</span>
                       <span class="font-bold text-blue-600">{{ drgResult.weight || '-' }}</span>
                     </div>
-                    <div v-if="drgResult.payment" class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
+                    <div
+                      v-if="drgResult.payment"
+                      class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs"
+                    >
                       <span class="text-slate-500">支付标准</span>
                       <span class="font-bold text-blue-600">¥{{ drgResult.payment }}</span>
                     </div>
                   </div>
                 </div>
-                <a-button block @click="drgDetailModalVisible = true" class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700">
-                  <template #icon><EyeOutlined /></template>
+                <a-button
+                  block
+                  class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700"
+                  @click="drgDetailModalVisible = true"
+                >
+                  <template #icon>
+                    <EyeOutlined />
+                  </template>
                   查看 DRG 详情
                 </a-button>
-                <a-button block type="link" size="small" @click="performDRGGrouping" class="!h-8 !rounded-full !text-xs !font-semibold">
+                <a-button
+                  block
+                  type="link"
+                  size="small"
+                  class="!h-8 !rounded-full !text-xs !font-semibold"
+                  @click="performDRGGrouping"
+                >
                   <SyncOutlined /> 重新分组
                 </a-button>
               </template>
@@ -598,9 +950,9 @@
               title="DRG 分组详情"
               :width="960"
               :footer="null"
-              :bodyStyle="{ padding: '12px', maxHeight: '78vh', overflowY: 'auto', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
+              :body-style="{ padding: '12px', maxHeight: '78vh', overflowY: 'auto', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
               centered
-              destroyOnClose
+              destroy-on-close
             >
               <div class="rounded-[18px] border border-white/85 bg-white/88 p-1 shadow-[0_10px_22px_rgba(15,23,42,0.05)]">
                 <DRGGroupingTab
@@ -629,14 +981,26 @@
                     { label: '已读', value: 'read' },
                   ]"
                 />
-                <a-button type="link" size="small" :disabled="notificationUnreadCount === 0" @click="markAllAssistNotificationsRead" class="!h-7 !rounded-full !px-2 !text-xs">
+                <a-button
+                  type="link"
+                  size="small"
+                  :disabled="notificationUnreadCount === 0"
+                  class="!h-7 !rounded-full !px-2 !text-xs"
+                  @click="markAllAssistNotificationsRead"
+                >
                   <CheckOutlined /> 全部已读
                 </a-button>
               </div>
-              <div v-if="notificationLoading" class="py-8 text-center">
+              <div
+                v-if="notificationLoading"
+                class="py-8 text-center"
+              >
                 <a-spin />
               </div>
-              <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+              <div
+                v-else
+                class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1"
+              >
                 <div
                   v-for="notif in filteredAssistNotifications"
                   :key="notif.id"
@@ -656,14 +1020,36 @@
                         {{ formatRelativeTime(notif.created_at) }}
                       </div>
                     </div>
-                    <a-tag v-if="!notif.is_read" color="blue">未读</a-tag>
+                    <a-tag
+                      v-if="!notif.is_read"
+                      color="blue"
+                    >
+                      未读
+                    </a-tag>
                   </div>
                   <div class="mt-2 flex items-center justify-end gap-2">
-                    <a-button size="small" class="!h-8 !rounded-full !border-slate-200/90 !shadow-none" @click="handleAssistNotificationClick(notif)">去处理</a-button>
-                    <a-button v-if="!notif.is_read" type="link" size="small" class="!h-8 !rounded-full !text-xs" @click="markAssistNotificationRead(notif)">标记已读</a-button>
+                    <a-button
+                      size="small"
+                      class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
+                      @click="handleAssistNotificationClick(notif)"
+                    >
+                      去处理
+                    </a-button>
+                    <a-button
+                      v-if="!notif.is_read"
+                      type="link"
+                      size="small"
+                      class="!h-8 !rounded-full !text-xs"
+                      @click="markAssistNotificationRead(notif)"
+                    >
+                      标记已读
+                    </a-button>
                   </div>
                 </div>
-                <div v-if="filteredAssistNotifications.length === 0" class="rounded-[18px] border border-dashed border-slate-200 bg-white/70 py-8">
+                <div
+                  v-if="filteredAssistNotifications.length === 0"
+                  class="rounded-[18px] border border-dashed border-slate-200 bg-white/70 py-8"
+                >
                   <a-empty description="暂无消息" />
                 </div>
               </div>
@@ -676,8 +1062,8 @@
           title="DRG 优化建议"
           placement="right"
           :width="560"
-          :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
-          :bodyStyle="{ padding: '16px', background: 'linear-gradient(180deg,#f8fafc 0%,#f3f6fa 100%)' }"
+          :header-style="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+          :body-style="{ padding: '16px', background: 'linear-gradient(180deg,#f8fafc 0%,#f3f6fa 100%)' }"
         >
           <div class="space-y-3">
             <div
@@ -696,7 +1082,10 @@
               <div class="text-sm text-slate-700 leading-6">
                 {{ item.message }}
               </div>
-              <div v-if="item.evidence" class="mt-2 rounded-[12px] bg-slate-50/88 px-3 py-2 text-xs text-slate-500">
+              <div
+                v-if="item.evidence"
+                class="mt-2 rounded-[12px] bg-slate-50/88 px-3 py-2 text-xs text-slate-500"
+              >
                 依据：{{ item.evidence }}
               </div>
               <div class="mt-3 flex justify-end gap-2">
@@ -722,7 +1111,10 @@
               v-if="!suggestionsLoading && suggestions.length === 0"
               description="暂无待处理优化建议"
             />
-            <div v-if="suggestionsLoading" class="flex items-center justify-center py-10">
+            <div
+              v-if="suggestionsLoading"
+              class="flex items-center justify-center py-10"
+            >
               <a-spin />
             </div>
           </div>
@@ -733,19 +1125,24 @@
           title="ICD 编码查询"
           placement="right"
           :width="920"
-          :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
-          :bodyStyle="{ padding: '0', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
+          :header-style="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+          :body-style="{ padding: '0', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
         >
           <div class="border-b border-slate-200/70 bg-white/82 px-4 py-3">
             <div class="rounded-[16px] border border-slate-200/80 bg-slate-50/78 px-3 py-3">
-              <div class="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">回填目标</div>
+              <div class="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                回填目标
+              </div>
               <div class="flex flex-wrap items-center gap-3">
                 <a-segmented
                   v-model:value="icdApplyTarget"
                   :options="icdTargetOptions"
                   size="small"
                 />
-                <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
+                <div
+                  v-if="isOtherTarget"
+                  class="flex items-center gap-2 text-xs text-slate-500"
+                >
                   <span>第</span>
                   <a-input-number
                     v-model:value="icdApplyIndex"
@@ -781,7 +1178,9 @@
               <MedicineBoxOutlined class="text-blue-600 text-lg" />
             </div>
             <div>
-              <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Rules Console</div>
+              <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Rules Console
+              </div>
               <span class="font-black text-slate-900 text-[16px] tracking-tight">病案工作台</span>
             </div>
           </div>
@@ -790,11 +1189,11 @@
           <div
             v-for="dept in departments"
             :key="dept.name"
-            @click="viewMode = 'list'; selectDept(dept.name)"
             :class="[
               'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
               'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
             ]"
+            @click="viewMode = 'list'; selectDept(dept.name)"
           >
             <span class="truncate">{{ dept.name }}</span>
             <div class="flex items-center gap-1.5">
@@ -802,8 +1201,7 @@
                 v-if="dept.warningCount > 0"
                 class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-500 text-white text-[10px] font-bold px-1"
               >{{ dept.warningCount }}</span>
-              <span class="min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-              >{{ dept.total }}</span>
+              <span class="min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400">{{ dept.total }}</span>
             </div>
           </div>
         </div>
@@ -812,7 +1210,9 @@
             <SafetyCertificateOutlined class="text-base" />
             <div>
               <div>质控规则</div>
-              <div class="text-[11px] font-medium text-blue-600/80">统一规则总览</div>
+              <div class="text-[11px] font-medium text-blue-600/80">
+                统一规则总览
+              </div>
             </div>
           </div>
         </div>
@@ -826,30 +1226,30 @@
               </h2>
             </div>
             <div class="flex flex-col items-end gap-3">
-            <nav class="inline-flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/78 p-1">
-            <a
-              v-for="tab in rulesSubTabs"
-              :key="tab.key"
-              href="#"
-              @click.prevent="rulesSubTab = tab.key"
-              :class="[
-                rulesSubTab === tab.key
-                  ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]'
-                  : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-800',
-                'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-all'
-              ]"
-            >
-              <component :is="tab.icon" />
-              {{ tab.label }}
-            </a>
-            </nav>
-            <button
-              @click="viewMode = 'list'"
-              class="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-500 transition-all hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_8px_18px_rgba(37,99,235,0.08)]"
-            >
-              <LeftOutlined />
-              返回病历列表
-            </button>
+              <nav class="inline-flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/78 p-1">
+                <a
+                  v-for="tab in rulesSubTabs"
+                  :key="tab.key"
+                  href="#"
+                  :class="[
+                    rulesSubTab === tab.key
+                      ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]'
+                      : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-800',
+                    'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-all'
+                  ]"
+                  @click.prevent="rulesSubTab = tab.key"
+                >
+                  <component :is="tab.icon" />
+                  {{ tab.label }}
+                </a>
+              </nav>
+              <button
+                class="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-500 transition-all hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_8px_18px_rgba(37,99,235,0.08)]"
+                @click="viewMode = 'list'"
+              >
+                <LeftOutlined />
+                返回病历列表
+              </button>
             </div>
           </div>
         </header>
@@ -865,6 +1265,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -914,6 +1315,7 @@ import type {
   FrontpageFocusTarget,
   QCIssueLike,
 } from './types'
+import type { WorkstationLaunchAction, WorkstationLaunchContext, WorkflowStageKey } from '@/types/workflow'
 
 const {
   viewMode,
@@ -929,6 +1331,9 @@ const {
   goBackToList: backToList,
   resetPerRecordTransient,
 } = useWorkstationSession()
+
+const route = useRoute()
+const router = useRouter()
 
 const {
   allRecords,
@@ -947,9 +1352,7 @@ const {
   refreshData,
   selectDept,
 } = usePatientRecords()
-
-const PINNED_DEPARTMENT_SLOTS = 19
-
+const PINNED_DEPARTMENT_SLOTS = 8
 const visibleDepartments = computed(() => {
   const all = departments.value
   if (all.length <= PINNED_DEPARTMENT_SLOTS) return all
@@ -968,8 +1371,154 @@ const overflowDepartments = computed(() => {
   return departments.value.filter((dept) => !visibleNames.has(dept.name))
 })
 
+const stageQueues = computed(() => {
+  const records = filteredRecords.value
+  const generateQueue = records.filter((record) => hasAdmissionRecord(record))
+  const frontpageQcQueue = records.filter((record) => hasFrontpageOfficialRecord(record))
+  const settlementQcQueue = records.filter((record) => hasSettlementOfficialRecord(record))
+
+  return {
+    frontpage_generate: generateQueue,
+    frontpage_qc: frontpageQcQueue,
+    settlement_qc: settlementQcQueue,
+  }
+})
+
+const currentStageFilter = computed<WorkflowStageKey | ''>(() => {
+  const stage = String(route.query.stage || '').trim()
+  return validStages.includes(stage as WorkflowStageKey) ? (stage as WorkflowStageKey) : ''
+})
+
+const isStageQueueMode = computed(() => Boolean(currentStageFilter.value))
+
+const stageMeta = computed(() => {
+  if (currentStageFilter.value === 'frontpage_generate') {
+    return {
+      pageTitle: '参考首页生成队列',
+      pageDesc: '面向医生与病案科的参考草稿，不写入正式首页数据表。',
+      tableTitle: '待生成首页（参考草稿）',
+      tableDesc: '口径：有住院记录即可进入；与正式首页数据表无关。',
+      batchActionText: '批量生成参考首页',
+      singleActionText: '生成草稿',
+      action: 'generate_frontpage' as WorkstationLaunchAction,
+    }
+  }
+  if (currentStageFilter.value === 'frontpage_qc') {
+    return {
+      pageTitle: '正式首页质控队列',
+      pageDesc: '仅针对正式首页数据表执行质控，与草稿生成结果解耦。',
+      tableTitle: '待首页质控（正式数据）',
+      tableDesc: '口径：正式首页数据表存在即可进入。',
+      batchActionText: '批量首页质控',
+      singleActionText: '执行首页质控',
+      action: 'qc_frontpage' as WorkstationLaunchAction,
+    }
+  }
+  if (currentStageFilter.value === 'settlement_qc') {
+    return {
+      pageTitle: '正式结算清单质控队列',
+      pageDesc: '仅针对正式结算清单数据执行质控，与首页草稿无关。',
+      tableTitle: '待结算清单质控（正式数据）',
+      tableDesc: '口径：正式结算清单数据表存在即可进入。',
+      batchActionText: '批量结算质控',
+      singleActionText: '执行结算质控',
+      action: 'qc_settlement' as WorkstationLaunchAction,
+    }
+  }
+  return {
+    pageTitle: '病案工作台',
+    pageDesc: '先筛高优先病历，再进入单案详情。',
+    tableTitle: '批量扫读',
+    tableDesc: '按当前筛选条件展示病历列表。',
+    batchActionText: '批量处理',
+    singleActionText: '查看详情',
+    action: 'open_record' as WorkstationLaunchAction,
+  }
+})
+
+const stageStatusText = computed(() => {
+  if (currentStageFilter.value === 'frontpage_generate') return '待生成'
+  if (currentStageFilter.value === 'frontpage_qc') return '待首页质控'
+  if (currentStageFilter.value === 'settlement_qc') return '待结算质控'
+  return '待处理'
+})
+
+const stageStatusClass = computed(() => {
+  if (currentStageFilter.value === 'frontpage_generate') {
+    return 'border-sky-200 bg-sky-50 text-sky-700'
+  }
+  if (currentStageFilter.value === 'frontpage_qc') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  }
+  if (currentStageFilter.value === 'settlement_qc') {
+    return 'border-amber-200 bg-amber-50 text-amber-700'
+  }
+  return 'border-slate-200 bg-slate-50 text-slate-600'
+})
+
+const stageEmptyText = computed(() => {
+  if (currentStageFilter.value === 'frontpage_generate') return '当前筛选条件下暂无待生成首页病历'
+  if (currentStageFilter.value === 'frontpage_qc') return '当前筛选条件下暂无待首页质控病历'
+  if (currentStageFilter.value === 'settlement_qc') return '当前筛选条件下暂无待结算清单质控病历'
+  return '当前筛选条件下暂无病历数据'
+})
+
+const listRecords = computed(() => {
+  if (!currentStageFilter.value) return filteredRecords.value
+  return stageQueues.value[currentStageFilter.value] || []
+})
+
+function hasAdmissionRecord(record: PatientRecord): boolean {
+  return Boolean(record.hasAdmission)
+    || Boolean(record.admissionDate && record.admissionDate.trim() !== '')
+    || Boolean(record.visitId || record.id)
+}
+
+function hasFrontpageOfficialRecord(record: PatientRecord): boolean {
+  if (typeof record.hasFrontpageOfficial === 'boolean') return record.hasFrontpageOfficial
+  if (typeof record.cdmFrontpageEmpty === 'boolean') return !record.cdmFrontpageEmpty
+  return false
+}
+
+function hasSettlementOfficialRecord(record: PatientRecord): boolean {
+  if (typeof record.hasSettlementOfficial === 'boolean') return record.hasSettlementOfficial
+  return false
+}
+
+async function handleStageRecordAction(record: PatientRecord) {
+  const action = stageMeta.value.action
+  if (action === 'open_record') {
+    openRecord(record)
+    return
+  }
+  const ctx: WorkstationLaunchContext = {
+    record_id: record.id,
+    action,
+    source: 'dashboard',
+    from_stage: currentStageFilter.value || undefined,
+  }
+  await executeLaunchAction(ctx, record)
+}
+
+async function handleStageContinueAction() {
+  const first = listRecords.value[0]
+  if (!first) {
+    message.warning('当前队列暂无可处理病历')
+    return
+  }
+  await handleStageRecordAction(first)
+}
+
+function handleStageBatchAction() {
+  if (!listRecords.value.length) {
+    message.warning('当前队列暂无可批量处理病历')
+    return
+  }
+  message.info('批量任务接口尚未接入，当前版本先支持按队列逐条处理。')
+}
+
 const priorityRecords = computed(() => {
-  return [...filteredRecords.value]
+  return [...listRecords.value]
     .sort((a, b) => priorityScore(b) - priorityScore(a))
     .slice(0, 4)
 })
@@ -1383,8 +1932,10 @@ const {
   frontpageModule,
   frontpageFocusTarget,
   frontpageFields,
+  defaultPreviewTab,
   completedModules,
   setDraftEmpty,
+  ensureExtractionSettingsLoaded,
   generateFrontpage,
   handleExportFrontpage,
   handleSaveFrontpage,
@@ -1428,15 +1979,21 @@ watch(frontpageGenerating, (generating, wasGenerating) => {
   if (wasGenerating && !generating && frontpageDraft.value) {
     // 延迟一帧确保 DOM 已更新
     nextTick(() => {
-      frontpageTab.value = 'preview'
+      frontpageTab.value = defaultPreviewTab.value
     })
   }
 })
+
+const launchHandling = ref(false)
+const handledLaunchKey = ref('')
+const validLaunchActions: WorkstationLaunchAction[] = ['open_record', 'generate_frontpage', 'qc_frontpage', 'qc_settlement']
+const validStages: WorkflowStageKey[] = ['frontpage_generate', 'frontpage_qc', 'settlement_qc']
 
 
 
 
 onMounted(() => {
+  void ensureExtractionSettingsLoaded()
   fetchData()
   fetchAssistNotifications()
 })
@@ -1467,6 +2024,33 @@ watch(selectedId, (newId) => {
     frontpageSheetData.value = null
   }
 })
+
+watch(
+  [() => route.query.record_id, () => route.query.action, () => route.query.source, () => allRecords.value.length],
+  () => {
+    void handleWorkstationLaunch()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => route.query.stage,
+  (stageRaw) => {
+    const stage = String(stageRaw || '').trim()
+    const stageKeys = ['frontpage_generate', 'frontpage_qc', 'settlement_qc']
+    if (!stageKeys.includes(stage)) return
+    activeDept.value = '全部科室'
+    searchText.value = ''
+    hospFilter.value = 'all'
+    if (viewMode.value !== 'list') {
+      backToList()
+      assistPanelVisible.value = false
+      icdDrawerVisible.value = false
+      suggestionDrawerVisible.value = false
+    }
+  },
+  { immediate: true },
+)
 
 // ========== 计算 ==========
 
@@ -1518,6 +2102,11 @@ function openRecord(record: PatientRecord) {
   openSessionRecord(record.id)
   assistPanelVisible.value = false
   icdDrawerVisible.value = false
+  if (route.path === '/workstation-v4' && route.query.stage) {
+    const nextQuery = { ...route.query } as Record<string, any>
+    delete nextQuery.stage
+    router.replace({ path: route.path, query: nextQuery })
+  }
 }
 
 // 快捷翻页
@@ -1546,6 +2135,131 @@ function goBackToList() {
   icdDrawerVisible.value = false
   suggestionDrawerVisible.value = false
   // 不清空 selectedId，方便返回后仍能看到高亮
+}
+
+function parseLaunchContext(): WorkstationLaunchContext | null {
+  const source = String(route.query.source || '').trim()
+  const recordId = String(route.query.record_id || '').trim()
+  const actionRaw = String(route.query.action || '').trim()
+  if (!recordId || source !== 'dashboard') return null
+  if (!validLaunchActions.includes(actionRaw as WorkstationLaunchAction)) return null
+  const ctx: WorkstationLaunchContext = {
+    record_id: recordId,
+    action: actionRaw as WorkstationLaunchAction,
+    source: 'dashboard',
+  }
+  const taskId = String(route.query.task_id || '').trim()
+  if (taskId) ctx.task_id = taskId
+  const stage = String(route.query.from_stage || '').trim()
+  if (validStages.includes(stage as WorkflowStageKey)) {
+    ctx.from_stage = stage as WorkflowStageKey
+  }
+  return ctx
+}
+
+function launchKeyOf(ctx: WorkstationLaunchContext): string {
+  return [ctx.record_id, ctx.action, ctx.task_id || '', ctx.from_stage || ''].join('|')
+}
+
+function findRecordForLaunch(recordId: string): PatientRecord | null {
+  const target = recordId.trim().toLowerCase()
+  if (!target) return null
+  const matched = allRecords.value.find((record: PatientRecord) => {
+    const candidateIds = [
+      String(record.id || '').trim().toLowerCase(),
+      String(record.visitId || '').trim().toLowerCase(),
+      String((record as any).record_id || '').trim().toLowerCase(),
+      String((record as any).task_id || '').trim().toLowerCase(),
+    ]
+    return candidateIds.includes(target)
+  })
+  return matched || null
+}
+
+async function waitForSettlementReady(timeoutMs = 6000): Promise<void> {
+  if (!settlementLoading.value) return
+  const started = Date.now()
+  while (settlementLoading.value && Date.now() - started < timeoutMs) {
+    await new Promise((resolve) => window.setTimeout(resolve, 120))
+  }
+}
+
+function clearLaunchQueryParams() {
+  const nextQuery = { ...route.query } as Record<string, any>
+  delete nextQuery.record_id
+  delete nextQuery.task_id
+  delete nextQuery.action
+  delete nextQuery.source
+  delete nextQuery.from_stage
+  router.replace({ path: route.path, query: nextQuery })
+}
+
+async function executeLaunchAction(ctx: WorkstationLaunchContext, record: PatientRecord) {
+  openRecord(record)
+  await nextTick()
+
+  if (ctx.action === 'open_record') {
+    detailMainTab.value = 'records'
+    return
+  }
+
+  if (ctx.action === 'generate_frontpage') {
+    detailMainTab.value = 'frontpage'
+    await nextTick()
+    handleGenerateFrontpage()
+    return
+  }
+
+  if (ctx.action === 'qc_frontpage') {
+    detailMainTab.value = 'frontpage'
+    assistPanelVisible.value = true
+    assistTab.value = 'form'
+    await nextTick()
+    qcResultTabRef.value?.runFormQC()
+    return
+  }
+
+  if (ctx.action === 'qc_settlement') {
+    detailMainTab.value = 'settlement'
+    await nextTick()
+    if (!isDischarged.value) {
+      message.warning('当前病历未出院，暂不可执行结算质控')
+      return
+    }
+    await waitForSettlementReady()
+    await runSettlementQc()
+    assistPanelVisible.value = true
+    assistTab.value = 'cost'
+  }
+}
+
+async function handleWorkstationLaunch() {
+  const ctx = parseLaunchContext()
+  if (!ctx) {
+    handledLaunchKey.value = ''
+    return
+  }
+  if (!allRecords.value.length || launchHandling.value) return
+
+  const key = launchKeyOf(ctx)
+  if (handledLaunchKey.value === key) return
+
+  const targetRecord = findRecordForLaunch(ctx.record_id)
+  if (!targetRecord) {
+    message.warning('未找到目标病历，已取消自动联动')
+    handledLaunchKey.value = key
+    clearLaunchQueryParams()
+    return
+  }
+
+  launchHandling.value = true
+  try {
+    await executeLaunchAction(ctx, targetRecord)
+    handledLaunchKey.value = key
+    clearLaunchQueryParams()
+  } finally {
+    launchHandling.value = false
+  }
 }
 
 
@@ -1605,8 +2319,8 @@ function handleEmrDefectClick(defectId: string) {
   }
 }
 
-function handleAssistTabChange(tab: 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message') {
-  assistTab.value = tab
+function handleAssistTabChange(tab: unknown) {
+  assistTab.value = tab as typeof assistTab.value
   if (tab === 'message') {
     fetchAssistNotifications()
   }
@@ -1641,6 +2355,7 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   }
   handleSuggestion(suggestionId, action, selectedId.value)
 }
+
 </script>
 
 <style scoped>

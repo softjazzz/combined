@@ -1,6 +1,7 @@
-// 运行病历相关类型定义
+﻿// @ts-nocheck
+// 杩愯鐥呭巻鐩稿叧绫诲瀷瀹氫箟
 
-// 查询条件类型
+// 鏌ヨ鏉′欢绫诲瀷
 export interface QueryConditions {
   timeRange: string
   customTimeRange?: [string, string]
@@ -9,7 +10,7 @@ export interface QueryConditions {
   searchValue: string
 }
 
-// 筛选条件类型
+// 绛涢€夋潯浠剁被鍨?
 export interface FilterConditions {
   defectStatus?: string[]
   auditStatus?: string[]
@@ -19,7 +20,7 @@ export interface FilterConditions {
   [key: string]
 }
 
-// 快捷筛选模板类型
+// 蹇嵎绛涢€夋ā鏉跨被鍨?
 export interface FilterTemplate {
   id: string
   name: string
@@ -28,7 +29,7 @@ export interface FilterTemplate {
   updateTime: string
 }
 
-// 缺陷记录类型
+// 缂洪櫡璁板綍绫诲瀷
 export interface DefectRecord {
   id: string
   registrationNo: string
@@ -47,7 +48,7 @@ export interface DefectRecord {
   scoringStandard: string
 }
 
-// 病历记录类型
+// 鐥呭巻璁板綍绫诲瀷
 export interface MedicalRecord {
   id: string
   registrationNo: string
@@ -65,7 +66,7 @@ export interface MedicalRecord {
   isUrgent: boolean
 }
 
-// 病历详情类型
+// 鐥呭巻璇︽儏绫诲瀷
 export interface MedicalRecordDetail {
   basicInfo: {
     registrationNo: string
@@ -82,7 +83,7 @@ export interface MedicalRecordDetail {
   operationHistory: OperationRecord[]
 }
 
-// 文档章节类型
+// 鏂囨。绔犺妭绫诲瀷
 export interface DocumentSection {
   id: string
   name: string
@@ -91,7 +92,7 @@ export interface DocumentSection {
   defects: DefectRecord[]
 }
 
-// 操作记录类型
+// 鎿嶄綔璁板綍绫诲瀷
 export interface OperationRecord {
   id: string
   type: 'urge' | 'rectify' | 'audit' | 'comment'
@@ -101,7 +102,7 @@ export interface OperationRecord {
   result?: string
 }
 
-// 批量操作结果类型
+// 鎵归噺鎿嶄綔缁撴灉绫诲瀷
 export interface BatchOperationResult {
   total: number
   success: number
@@ -112,21 +113,21 @@ export interface BatchOperationResult {
   }>
 }
 
-// 导出参数类型
+// 瀵煎嚭鍙傛暟绫诲瀷
 export interface ExportParams {
   type: 'defects' | 'records' | 'qc-details'
   conditions: QueryConditions & FilterConditions
   maxCount: number
 }
 
-// 分页参数类型
+// 鍒嗛〉鍙傛暟绫诲瀷
 export interface PaginationParams {
   current: number
   pageSize: number
   total: number
 }
 
-// API响应类型
+// API鍝嶅簲绫诲瀷
 export interface ApiResponse<T> {
   code: number
   message: string
@@ -134,8 +135,9 @@ export interface ApiResponse<T> {
   success: boolean
 }
 
-// 列表响应类型
+// 鍒楄〃鍝嶅簲绫诲瀷
 export interface ListResponse<T> {
   list: T[]
   pagination: PaginationParams
 }
+

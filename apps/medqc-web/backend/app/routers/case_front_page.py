@@ -325,9 +325,32 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
         evidence = _to_plain_dict(result.get("evidence"))
         if not isinstance(evidence, dict):
             evidence = {}
+        has_main_llm = isinstance(evidence.get("main_diagnosis_llm"), dict)
+        has_audit_llm = isinstance(evidence.get("coding_audit_llm"), dict)
+        if not (has_main_llm and has_audit_llm):
+            try:
+                merged = await service._build_main_and_audit_llm_evidence(
+                    medical_text=payload.medical_text,
+                    diagnoses=diagnoses,
+                    procedures=procedures,
+                    clinician_main_diagnosis=evidence.get("clinician_main_diagnosis"),
+                    main_diagnosis_llm=evidence.get("main_diagnosis_llm")
+                    if has_main_llm
+                    else None,
+                )
+                if not has_main_llm and isinstance(merged.get("main_diagnosis_llm"), dict):
+                    evidence["main_diagnosis_llm"] = merged.get("main_diagnosis_llm")
+                if not has_audit_llm and isinstance(merged.get("coding_audit_llm"), dict):
+                    evidence["coding_audit_llm"] = merged.get("coding_audit_llm")
+            except Exception:
+                logger.exception("extract: build merged llm evidence failed")
         try:
             evidence["diagnoses"] = service._build_diagnosis_evidence(
-                payload.medical_text, diagnoses, procedures
+                payload.medical_text,
+                diagnoses,
+                procedures,
+                guideline_rule_trace=evidence.get("guideline_rule_trace"),
+                clinician_main_diagnosis=evidence.get("clinician_main_diagnosis"),
             )
         except Exception:
             logger.exception("extract: build diagnosis evidence failed")

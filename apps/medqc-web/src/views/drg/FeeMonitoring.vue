@@ -1,30 +1,53 @@
 <template>
   <div class="fee-monitoring">
-    <a-page-header title="付费监测" sub-title="按DRG付费标准实时监测与修正建议" @back="() => $router.back()" />
+    <a-page-header
+      title="付费监测"
+      sub-title="按DRG付费标准实时监测与修正建议"
+      @back="() => $router.back()"
+    />
 
     <div class="content-wrapper">
-      <a-card :bordered="false" style="margin-bottom: 16px">
+      <a-card
+        :bordered="false"
+        style="margin-bottom: 16px"
+      >
         <a-space wrap>
-          <a-segmented v-model:value="activeListTab" :options="listTabOptions" />
+          <a-segmented
+            v-model:value="activeListTab"
+            :options="listTabOptions"
+          />
           <a-input
             v-model:value="keyword"
             allow-clear
             style="width: 260px"
             placeholder="搜索住院号/姓名/诊断"
           />
-          <a-button @click="loadData" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="loadData"
+          >
             <ReloadOutlined />
             刷新
           </a-button>
-          <a-button @click="handleExport" :loading="exporting">
+          <a-button
+            :loading="exporting"
+            @click="handleExport"
+          >
             <DownloadOutlined />
             导出清单
           </a-button>
         </a-space>
       </a-card>
 
-      <a-card title="病例清单" :bordered="false">
-        <TableSkeleton v-if="loading" :rows="10" :columns="12" />
+      <a-card
+        title="病例清单"
+        :bordered="false"
+      >
+        <TableSkeleton
+          v-if="loading"
+          :rows="10"
+          :columns="12"
+        />
         <a-table
           v-else
           :columns="columns"
@@ -32,11 +55,21 @@
           :pagination="{ pageSize: 10 }"
           :scroll="{ x: 2600 }"
           row-key="admission_id"
-          :customRow="customRow"
+          :custom-row="customRow"
         >
           <template #groupingStatus="{ record }">
-            <a-tag v-if="record.groupingStatus === 'grouped'" color="success">入组成功</a-tag>
-            <a-tag v-else color="error">未入组</a-tag>
+            <a-tag
+              v-if="record.groupingStatus === 'grouped'"
+              color="success"
+            >
+              入组成功
+            </a-tag>
+            <a-tag
+              v-else
+              color="error"
+            >
+              未入组
+            </a-tag>
           </template>
 
           <template #drg="{ record }">
@@ -66,7 +99,10 @@
           </template>
 
           <template #profit="{ record }">
-            <span v-if="typeof record.profitMargin === 'number'" :style="{ color: record.profitMargin >= 0 ? '#3f8600' : '#cf1322' }">
+            <span
+              v-if="typeof record.profitMargin === 'number'"
+              :style="{ color: record.profitMargin >= 0 ? '#3f8600' : '#cf1322' }"
+            >
               {{ formatCurrency(record.profitMargin) }}
             </span>
             <span v-else>-</span>
@@ -74,21 +110,51 @@
 
           <template #ungroupedReason="{ record }">
             <div class="cell-wrap">
-              <div class="cell-ellipsis">{{ record.ungroupedReason || '-' }}</div>
-              <a-button v-if="record.ungroupedReason" type="link" size="small" @click.stop="openDrawer(record, 'fix')">详情</a-button>
+              <div class="cell-ellipsis">
+                {{ record.ungroupedReason || '-' }}
+              </div>
+              <a-button
+                v-if="record.ungroupedReason"
+                type="link"
+                size="small"
+                @click.stop="openDrawer(record, 'fix')"
+              >
+                详情
+              </a-button>
             </div>
           </template>
 
           <template #fixSuggestion="{ record }">
             <div class="cell-wrap">
-              <div class="cell-ellipsis">{{ record.fixSuggestion || '-' }}</div>
-              <a-button v-if="record.fixSuggestion" type="link" size="small" @click.stop="openDrawer(record, 'fix')">详情</a-button>
+              <div class="cell-ellipsis">
+                {{ record.fixSuggestion || '-' }}
+              </div>
+              <a-button
+                v-if="record.fixSuggestion"
+                type="link"
+                size="small"
+                @click.stop="openDrawer(record, 'fix')"
+              >
+                详情
+              </a-button>
             </div>
           </template>
 
           <template #action="{ record }">
-            <a-button type="link" size="small" @click.stop="openDrawer(record)">详情</a-button>
-            <a-button type="link" size="small" @click.stop="goFix(record.admission_id)">去修正</a-button>
+            <a-button
+              type="link"
+              size="small"
+              @click.stop="openDrawer(record)"
+            >
+              详情
+            </a-button>
+            <a-button
+              type="link"
+              size="small"
+              @click.stop="goFix(record.admission_id)"
+            >
+              去修正
+            </a-button>
           </template>
         </a-table>
       </a-card>
@@ -103,13 +169,48 @@
         <template v-if="selectedRow">
           <div style="margin-bottom: 12px">
             <a-space>
-              <a-tag v-if="selectedRow.groupingStatus === 'grouped'" color="success">入组成功</a-tag>
-              <a-tag v-else color="error">未入组</a-tag>
-              <a-tag v-if="activeListTab === 'loss'" color="error">亏损</a-tag>
-              <a-tag v-else-if="activeListTab === 'highRate'" color="warning">高倍率</a-tag>
-              <a-tag v-else-if="activeListTab === 'base'" color="processing">基础组</a-tag>
-              <a-tag v-else-if="activeListTab === 'ungrouped'" color="default">未入组</a-tag>
-              <a-tag v-else color="default">更优推荐</a-tag>
+              <a-tag
+                v-if="selectedRow.groupingStatus === 'grouped'"
+                color="success"
+              >
+                入组成功
+              </a-tag>
+              <a-tag
+                v-else
+                color="error"
+              >
+                未入组
+              </a-tag>
+              <a-tag
+                v-if="activeListTab === 'loss'"
+                color="error"
+              >
+                亏损
+              </a-tag>
+              <a-tag
+                v-else-if="activeListTab === 'highRate'"
+                color="warning"
+              >
+                高倍率
+              </a-tag>
+              <a-tag
+                v-else-if="activeListTab === 'base'"
+                color="processing"
+              >
+                基础组
+              </a-tag>
+              <a-tag
+                v-else-if="activeListTab === 'ungrouped'"
+                color="default"
+              >
+                未入组
+              </a-tag>
+              <a-tag
+                v-else
+                color="default"
+              >
+                更优推荐
+              </a-tag>
             </a-space>
           </div>
 
@@ -117,7 +218,9 @@
             <div class="kpi-top">
               <div class="kpi-left">
                 <div class="kpi-drg">
-                  <div class="kpi-label">DRG组</div>
+                  <div class="kpi-label">
+                    DRG组
+                  </div>
                   <div class="kpi-value">
                     <template v-if="selectedRow.grouping">
                       <span class="kpi-drg-code">{{ selectedRow.grouping.drg_code }}</span>
@@ -131,14 +234,18 @@
 
                 <div class="kpi-row">
                   <div class="kpi-item">
-                    <div class="kpi-label">权重</div>
+                    <div class="kpi-label">
+                      权重
+                    </div>
                     <div class="kpi-value">
                       <span v-if="selectedRow.grouping">{{ formatWeight(selectedRow.grouping.weight) }}</span>
                       <span v-else>-</span>
                     </div>
                   </div>
                   <div class="kpi-item">
-                    <div class="kpi-label">付费标准</div>
+                    <div class="kpi-label">
+                      付费标准
+                    </div>
                     <div class="kpi-value">
                       <span v-if="typeof selectedRow.baselinePayment === 'number'">{{ formatCurrency(selectedRow.baselinePayment) }}</span>
                       <span v-else>-</span>
@@ -148,12 +255,21 @@
 
                 <div class="kpi-row">
                   <div class="kpi-item">
-                    <div class="kpi-label">医疗总费用</div>
-                    <div class="kpi-value">{{ formatCurrency(selectedRow.actualCost) }}</div>
+                    <div class="kpi-label">
+                      医疗总费用
+                    </div>
+                    <div class="kpi-value">
+                      {{ formatCurrency(selectedRow.actualCost) }}
+                    </div>
                   </div>
                   <div class="kpi-item">
-                    <div class="kpi-label">盈亏</div>
-                    <div class="kpi-value" :style="{ color: typeof selectedRow.profitMargin === 'number' && selectedRow.profitMargin < 0 ? '#cf1322' : '#3f8600' }">
+                    <div class="kpi-label">
+                      盈亏
+                    </div>
+                    <div
+                      class="kpi-value"
+                      :style="{ color: typeof selectedRow.profitMargin === 'number' && selectedRow.profitMargin < 0 ? '#cf1322' : '#3f8600' }"
+                    >
                       <span v-if="typeof selectedRow.profitMargin === 'number'">{{ formatCurrency(selectedRow.profitMargin) }}</span>
                       <span v-else>-</span>
                     </div>
@@ -178,10 +294,16 @@
                   />
                 </div>
 
-                <div class="kpi-bar" v-if="typeof selectedRow.profitMargin === 'number' && typeof selectedRow.baselinePayment === 'number'">
+                <div
+                  v-if="typeof selectedRow.profitMargin === 'number' && typeof selectedRow.baselinePayment === 'number'"
+                  class="kpi-bar"
+                >
                   <div class="kpi-bar-title">
                     <span>亏损</span>
-                    <span class="kpi-bar-value" style="color: #cf1322">
+                    <span
+                      class="kpi-bar-value"
+                      style="color: #cf1322"
+                    >
                       {{ formatCurrency(Math.max(0, -selectedRow.profitMargin)) }}
                     </span>
                   </div>
@@ -196,12 +318,28 @@
             </div>
           </div>
 
-          <a-tabs v-model:activeKey="activeDrawerTab" type="card">
-            <a-tab-pane key="basic" tab="基本信息">
-              <a-descriptions bordered size="small" :column="1">
-                <a-descriptions-item label="住院号">{{ selectedRow.admission_id }}</a-descriptions-item>
-                <a-descriptions-item label="姓名">{{ selectedRow.patient_name }}</a-descriptions-item>
-                <a-descriptions-item label="性别/年龄">{{ getGenderText(selectedRow.patient_gender) }} / {{ selectedRow.patient_age }}岁</a-descriptions-item>
+          <a-tabs
+            v-model:active-key="activeDrawerTab"
+            type="card"
+          >
+            <a-tab-pane
+              key="basic"
+              tab="基本信息"
+            >
+              <a-descriptions
+                bordered
+                size="small"
+                :column="1"
+              >
+                <a-descriptions-item label="住院号">
+                  {{ selectedRow.admission_id }}
+                </a-descriptions-item>
+                <a-descriptions-item label="姓名">
+                  {{ selectedRow.patient_name }}
+                </a-descriptions-item>
+                <a-descriptions-item label="性别/年龄">
+                  {{ getGenderText(selectedRow.patient_gender) }} / {{ selectedRow.patient_age }}岁
+                </a-descriptions-item>
                 <a-descriptions-item label="主要诊断">
                   {{ selectedRow.primary_diagnosis_code }} {{ selectedRow.primary_diagnosis_name }}
                 </a-descriptions-item>
@@ -211,14 +349,19 @@
                   </span>
                   <span v-else>-</span>
                 </a-descriptions-item>
-                <a-descriptions-item label="当前医疗总费用">{{ formatCurrency(selectedRow.actualCost) }}</a-descriptions-item>
+                <a-descriptions-item label="当前医疗总费用">
+                  {{ formatCurrency(selectedRow.actualCost) }}
+                </a-descriptions-item>
                 <a-descriptions-item label="预估医保支付价格">
                   <span v-if="typeof selectedRow.baselinePayment === 'number'">{{ formatCurrency(selectedRow.baselinePayment) }}</span>
                   <span v-else>-</span>
                 </a-descriptions-item>
                 <a-descriptions-item label="医保支付率检测">
                   <span v-if="typeof selectedRow.costRate === 'number'">
-                    <a-progress :percent="Math.min(100, selectedRow.costRate)" size="small" />
+                    <a-progress
+                      :percent="Math.min(100, selectedRow.costRate)"
+                      size="small"
+                    />
                   </span>
                   <span v-else>-</span>
                 </a-descriptions-item>
@@ -227,130 +370,267 @@
               <a-divider style="margin: 12px 0" />
 
               <a-collapse>
-                <a-collapse-panel key="complete" :header="`诊断及手术操作完整性`">
-                  <a-space direction="vertical" style="width: 100%">
-                    <a-alert type="success" show-icon message="入组核心要素校验通过（演示）" />
+                <a-collapse-panel
+                  key="complete"
+                  :header="`诊断及手术操作完整性`"
+                >
+                  <a-space
+                    direction="vertical"
+                    style="width: 100%"
+                  >
+                    <a-alert
+                      type="success"
+                      show-icon
+                      message="入组核心要素校验通过（演示）"
+                    />
                   </a-space>
                 </a-collapse-panel>
 
-                <a-collapse-panel key="accuracy" :header="`编码准确性`">
-                  <a-space direction="vertical" style="width: 100%">
-                    <a-alert type="info" show-icon message="编码准确性校验：演示占位" />
+                <a-collapse-panel
+                  key="accuracy"
+                  :header="`编码准确性`"
+                >
+                  <a-space
+                    direction="vertical"
+                    style="width: 100%"
+                  >
+                    <a-alert
+                      type="info"
+                      show-icon
+                      message="编码准确性校验：演示占位"
+                    />
                   </a-space>
                 </a-collapse-panel>
 
-                <a-collapse-panel key="order" :header="`诊断/手术顺序推荐`">
-                  <a-space direction="vertical" style="width: 100%">
+                <a-collapse-panel
+                  key="order"
+                  :header="`诊断/手术顺序推荐`"
+                >
+                  <a-space
+                    direction="vertical"
+                    style="width: 100%"
+                  >
                     <div class="recommend-row">
-                      <div class="recommend-title">诊断顺序推荐</div>
+                      <div class="recommend-title">
+                        诊断顺序推荐
+                      </div>
                       <a-space>
-                        <a-tag color="blue">C98.200</a-tag>
-                        <a-button size="small" @click="copyText('C98.200')">
+                        <a-tag color="blue">
+                          C98.200
+                        </a-tag>
+                        <a-button
+                          size="small"
+                          @click="copyText('C98.200')"
+                        >
                           <CopyOutlined />
                           复制
                         </a-button>
-                        <a-button size="small" @click="showEvidence">查看依据</a-button>
+                        <a-button
+                          size="small"
+                          @click="showEvidence"
+                        >
+                          查看依据
+                        </a-button>
                       </a-space>
                     </div>
 
                     <div class="recommend-row">
-                      <div class="recommend-title">手术操作顺序推荐</div>
+                      <div class="recommend-title">
+                        手术操作顺序推荐
+                      </div>
                       <a-space>
-                        <a-tag color="blue">09.2300</a-tag>
-                        <a-button size="small" @click="copyText('09.2300')">
+                        <a-tag color="blue">
+                          09.2300
+                        </a-tag>
+                        <a-button
+                          size="small"
+                          @click="copyText('09.2300')"
+                        >
                           <CopyOutlined />
                           复制
                         </a-button>
-                        <a-button size="small" @click="showEvidence">查看依据</a-button>
+                        <a-button
+                          size="small"
+                          @click="showEvidence"
+                        >
+                          查看依据
+                        </a-button>
                       </a-space>
                     </div>
                   </a-space>
                 </a-collapse-panel>
 
-                <a-collapse-panel key="grouping" header="DRG入组结果">
+                <a-collapse-panel
+                  key="grouping"
+                  header="DRG入组结果"
+                >
                   <div v-if="selectedRow.grouping">
-                    <a-descriptions bordered size="small" :column="1">
-                      <a-descriptions-item label="DRG组名">{{ selectedRow.grouping.drg_name }}</a-descriptions-item>
-                      <a-descriptions-item label="DRG组权重">{{ formatWeight(selectedRow.grouping.weight) }}</a-descriptions-item>
-                      <a-descriptions-item label="DRG成本系数">-</a-descriptions-item>
-                      <a-descriptions-item label="DRG医疗总费用上限">-</a-descriptions-item>
+                    <a-descriptions
+                      bordered
+                      size="small"
+                      :column="1"
+                    >
+                      <a-descriptions-item label="DRG组名">
+                        {{ selectedRow.grouping.drg_name }}
+                      </a-descriptions-item>
+                      <a-descriptions-item label="DRG组权重">
+                        {{ formatWeight(selectedRow.grouping.weight) }}
+                      </a-descriptions-item>
+                      <a-descriptions-item label="DRG成本系数">
+                        -
+                      </a-descriptions-item>
+                      <a-descriptions-item label="DRG医疗总费用上限">
+                        -
+                      </a-descriptions-item>
                     </a-descriptions>
                   </div>
                   <div v-else>
-                    <a-alert type="error" show-icon message="未入组（演示）：主要诊断与主要手术不一致" />
+                    <a-alert
+                      type="error"
+                      show-icon
+                      message="未入组（演示）：主要诊断与主要手术不一致"
+                    />
                   </div>
                 </a-collapse-panel>
               </a-collapse>
             </a-tab-pane>
 
-            <a-tab-pane key="feeDetail" tab="费用详情">
+            <a-tab-pane
+              key="feeDetail"
+              tab="费用详情"
+            >
               <!-- 骨架屏加载状态 -->
-              <div v-if="drawerLoading" class="fee-dashboard-skeleton">
+              <div
+                v-if="loading"
+                class="fee-dashboard-skeleton"
+              >
                 <!-- 第一行：核心指标骨架屏 -->
                 <a-row :gutter="16">
-                  <a-col :span="8" v-for="i in 3" :key="i">
+                  <a-col
+                    v-for="i in 3"
+                    :key="i"
+                    :span="8"
+                  >
                     <div class="stat-card skeleton">
-                      <a-skeleton active :paragraph="{ rows: 1 }" :title="{ width: '40%' }" />
+                      <a-skeleton
+                        active
+                        :paragraph="{ rows: 1 }"
+                        :title="{ width: '40%' }"
+                      />
                     </div>
                   </a-col>
                 </a-row>
 
                 <!-- 第二行：图表分析骨架屏 -->
-                <a-row :gutter="16" style="margin-top: 16px">
+                <a-row
+                  :gutter="16"
+                  style="margin-top: 16px"
+                >
                   <a-col :span="14">
-                    <a-card size="small" :bordered="false" class="chart-card">
+                    <a-card
+                      size="small"
+                      :bordered="false"
+                      class="chart-card"
+                    >
                       <template #title>
-                        <a-skeleton-button active size="small" :style="{ width: '120px' }" />
+                        <a-skeleton-button
+                          active
+                          size="small"
+                          :style="{ width: '120px' }"
+                        />
                       </template>
                       <div style="height: 320px; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px;">
-                         <a-skeleton-image />
+                        <a-skeleton-image />
                       </div>
                     </a-card>
                   </a-col>
                   <a-col :span="10">
-                    <a-card size="small" :bordered="false" class="chart-card">
-                       <template #title>
-                        <a-skeleton-button active size="small" :style="{ width: '120px' }" />
+                    <a-card
+                      size="small"
+                      :bordered="false"
+                      class="chart-card"
+                    >
+                      <template #title>
+                        <a-skeleton-button
+                          active
+                          size="small"
+                          :style="{ width: '120px' }"
+                        />
                       </template>
                       <div style="height: 320px; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px;">
-                         <a-skeleton-avatar :size="120" active shape="circle" />
+                        <a-skeleton-avatar
+                          :size="120"
+                          active
+                          shape="circle"
+                        />
                       </div>
                     </a-card>
                   </a-col>
                 </a-row>
                 
                 <!-- 第三行：高值耗材骨架屏 -->
-                <a-card size="small" :bordered="false" class="chart-card" style="margin-top: 16px">
-                   <template #title>
-                        <a-skeleton-button active size="small" :style="{ width: '120px' }" />
-                   </template>
-                   <a-row :gutter="16">
-                     <a-col :span="8" v-for="i in 3" :key="i">
-                        <div style="height: 120px; background: #fafafa; border-radius: 8px; padding: 16px;">
-                           <a-skeleton active avatar :paragraph="{ rows: 2 }" />
-                        </div>
-                     </a-col>
-                   </a-row>
+                <a-card
+                  size="small"
+                  :bordered="false"
+                  class="chart-card"
+                  style="margin-top: 16px"
+                >
+                  <template #title>
+                    <a-skeleton-button
+                      active
+                      size="small"
+                      :style="{ width: '120px' }"
+                    />
+                  </template>
+                  <a-row :gutter="16">
+                    <a-col
+                      v-for="i in 3"
+                      :key="i"
+                      :span="8"
+                    >
+                      <div style="height: 120px; background: #fafafa; border-radius: 8px; padding: 16px;">
+                        <a-skeleton
+                          active
+                          avatar
+                          :paragraph="{ rows: 2 }"
+                        />
+                      </div>
+                    </a-col>
+                  </a-row>
                 </a-card>
               </div>
 
               <!-- 实际内容 -->
-              <div v-else class="fee-dashboard">
+              <div
+                v-else
+                class="fee-dashboard"
+              >
                 <!-- 第一行：核心指标 -->
                 <a-row :gutter="16">
                   <a-col :span="8">
                     <div class="stat-card blue">
-                      <div class="stat-label">医疗总费用</div>
-                      <div class="stat-value">¥{{ formatCurrency(selectedRow?.actualCost || 0) }}</div>
-                      <div class="stat-trend" v-if="selectedRow?.grouping">
+                      <div class="stat-label">
+                        医疗总费用
+                      </div>
+                      <div class="stat-value">
+                        ¥{{ formatCurrency(selectedRow?.actualCost || 0) }}
+                      </div>
+                      <div
+                        v-if="selectedRow?.grouping"
+                        class="stat-trend"
+                      >
                         <span>参考标准: {{ formatCurrency(selectedRow?.baselinePayment || 0) }}</span>
                       </div>
                     </div>
                   </a-col>
                   <a-col :span="8">
                     <div class="stat-card purple">
-                      <div class="stat-label">医保支付率</div>
-                      <div class="stat-value">{{ formatPercentage(selectedRow?.costRate || 0, 1) }}</div>
+                      <div class="stat-label">
+                        医保支付率
+                      </div>
+                      <div class="stat-value">
+                        {{ formatPercentage(selectedRow?.costRate || 0, 1) }}
+                      </div>
                       <div class="stat-bar">
                         <a-progress 
                           :percent="Math.min(100, selectedRow?.costRate || 0)" 
@@ -362,8 +642,13 @@
                     </div>
                   </a-col>
                   <a-col :span="8">
-                    <div class="stat-card" :class="typeof selectedRow?.profitMargin === 'number' && selectedRow.profitMargin < 0 ? 'red' : 'green'">
-                      <div class="stat-label">预估盈亏</div>
+                    <div
+                      class="stat-card"
+                      :class="typeof selectedRow?.profitMargin === 'number' && selectedRow.profitMargin < 0 ? 'red' : 'green'"
+                    >
+                      <div class="stat-label">
+                        预估盈亏
+                      </div>
                       <div class="stat-value">
                         {{ typeof selectedRow?.profitMargin === 'number' ? (selectedRow.profitMargin > 0 ? '+' : '') : '' }}
                         {{ formatCurrency(selectedRow?.profitMargin) }}
@@ -379,43 +664,82 @@
                 </a-row>
 
                 <!-- 第二行：图表分析 -->
-                <a-row :gutter="16" style="margin-top: 16px">
+                <a-row
+                  :gutter="16"
+                  style="margin-top: 16px"
+                >
                   <a-col :span="14">
-                    <a-card size="small" :bordered="false" class="chart-card">
+                    <a-card
+                      size="small"
+                      :bordered="false"
+                      class="chart-card"
+                    >
                       <template #title>
-                        <div class="card-title">费用累计趋势</div>
+                        <div class="card-title">
+                          费用累计趋势
+                        </div>
                       </template>
                       <FeeTrendChart 
                         v-if="feeTrend.length > 0" 
                         :trend="feeTrend" 
                         :baseline-payment="selectedRow?.baselinePayment || null" 
                       />
-                      <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+                      <a-empty
+                        v-else
+                        description="暂无数据"
+                        :image="Empty.PRESENTED_IMAGE_SIMPLE"
+                      />
                     </a-card>
                   </a-col>
                   <a-col :span="10">
-                    <a-card size="small" :bordered="false" class="chart-card">
+                    <a-card
+                      size="small"
+                      :bordered="false"
+                      class="chart-card"
+                    >
                       <template #title>
-                        <div class="card-title">费用构成分析</div>
+                        <div class="card-title">
+                          费用构成分析
+                        </div>
                       </template>
-                      <FeeCompositionChart v-if="feeComposition" :composition="feeComposition" />
-                      <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+                      <FeeCompositionChart
+                        v-if="feeComposition"
+                        :composition="feeComposition"
+                      />
+                      <a-empty
+                        v-else
+                        description="暂无数据"
+                        :image="Empty.PRESENTED_IMAGE_SIMPLE"
+                      />
                     </a-card>
                   </a-col>
                 </a-row>
                 
                 <!-- 第三行：高值耗材 -->
-                <a-card size="small" :bordered="false" class="chart-card" style="margin-top: 16px">
+                <a-card
+                  size="small"
+                  :bordered="false"
+                  class="chart-card"
+                  style="margin-top: 16px"
+                >
                   <template #title>
-                    <div class="card-title">高值耗材清单</div>
+                    <div class="card-title">
+                      高值耗材清单
+                    </div>
                   </template>
                   <HighValueMaterialsList :materials="highValueMaterials" />
                 </a-card>
               </div>
             </a-tab-pane>
 
-            <a-tab-pane key="fix" tab="修正建议">
-              <a-space direction="vertical" style="width: 100%">
+            <a-tab-pane
+              key="fix"
+              tab="修正建议"
+            >
+              <a-space
+                direction="vertical"
+                style="width: 100%"
+              >
                 <a-alert
                   v-if="selectedRow.groupingStatus !== 'grouped'"
                   type="error"
@@ -424,52 +748,125 @@
                   :description="`原因：${selectedRow.ungroupedReason || '—'}`"
                 />
 
-                <a-card size="small" title="入组详情建议" :bordered="false">
-                  <a-space direction="vertical" style="width: 100%" size="middle">
-                    <div v-for="(item, index) in drawerSuggestions" :key="`${index}-${item.title}`" class="suggestion-item">
-                      <div class="suggestion-index">{{ index + 1 }}</div>
+                <a-card
+                  size="small"
+                  title="入组详情建议"
+                  :bordered="false"
+                >
+                  <a-space
+                    direction="vertical"
+                    style="width: 100%"
+                    size="middle"
+                  >
+                    <div
+                      v-for="(item, index) in drawerSuggestions"
+                      :key="`${index}-${item.title}`"
+                      class="suggestion-item"
+                    >
+                      <div class="suggestion-index">
+                        {{ index + 1 }}
+                      </div>
                       <div class="suggestion-main">
-                        <div class="suggestion-title">{{ item.title }}</div>
-                        <a-typography-paragraph :ellipsis="{ rows: 2, expandable: true }" style="margin-bottom: 8px">
+                        <div class="suggestion-title">
+                          {{ item.title }}
+                        </div>
+                        <a-typography-paragraph
+                          :ellipsis="{ rows: 2, expandable: true }"
+                          style="margin-bottom: 8px"
+                        >
                           {{ item.description }}
                         </a-typography-paragraph>
                         <a-space>
-                          <a-button size="small" @click="showSuggestionDetail(item.title, item.description)">详情</a-button>
-                          <a-button size="small" @click="copyText(item.description)">
+                          <a-button
+                            size="small"
+                            @click="showSuggestionDetail(item.title, item.description)"
+                          >
+                            详情
+                          </a-button>
+                          <a-button
+                            size="small"
+                            @click="copyText(item.description)"
+                          >
                             <CopyOutlined />
                             复制
                           </a-button>
-                          <a-button size="small" type="primary" @click="goFix(selectedRow!.admission_id)">去修正</a-button>
+                          <a-button
+                            size="small"
+                            type="primary"
+                            @click="goFix(selectedRow!.admission_id)"
+                          >
+                            去修正
+                          </a-button>
                         </a-space>
                       </div>
                     </div>
                   </a-space>
                 </a-card>
 
-                <a-card size="small" title="更多建议" :bordered="false">
-                  <a-space direction="vertical" style="width: 100%" size="middle">
-                    <div v-for="(item, index) in drawerMoreSuggestions" :key="`${index}-${item.title}`" class="suggestion-item">
-                      <div class="suggestion-index">{{ index + 1 }}</div>
+                <a-card
+                  size="small"
+                  title="更多建议"
+                  :bordered="false"
+                >
+                  <a-space
+                    direction="vertical"
+                    style="width: 100%"
+                    size="middle"
+                  >
+                    <div
+                      v-for="(item, index) in drawerMoreSuggestions"
+                      :key="`${index}-${item.title}`"
+                      class="suggestion-item"
+                    >
+                      <div class="suggestion-index">
+                        {{ index + 1 }}
+                      </div>
                       <div class="suggestion-main">
-                        <div class="suggestion-title">{{ item.title }}</div>
-                        <a-typography-paragraph :ellipsis="{ rows: 2, expandable: true }" style="margin-bottom: 8px">
+                        <div class="suggestion-title">
+                          {{ item.title }}
+                        </div>
+                        <a-typography-paragraph
+                          :ellipsis="{ rows: 2, expandable: true }"
+                          style="margin-bottom: 8px"
+                        >
                           {{ item.description }}
                         </a-typography-paragraph>
                         <a-space>
-                          <a-button size="small" @click="showSuggestionDetail(item.title, item.description)">详情</a-button>
-                          <a-button size="small" @click="copyText(item.description)">
+                          <a-button
+                            size="small"
+                            @click="showSuggestionDetail(item.title, item.description)"
+                          >
+                            详情
+                          </a-button>
+                          <a-button
+                            size="small"
+                            @click="copyText(item.description)"
+                          >
                             <CopyOutlined />
                             复制
                           </a-button>
-                          <a-button size="small" type="primary" @click="goFix(selectedRow!.admission_id)">去修正</a-button>
+                          <a-button
+                            size="small"
+                            type="primary"
+                            @click="goFix(selectedRow!.admission_id)"
+                          >
+                            去修正
+                          </a-button>
                         </a-space>
                       </div>
                     </div>
                   </a-space>
                 </a-card>
 
-                <a-modal v-model:open="suggestionDetailOpen" :title="suggestionDetailTitle" :footer="null" width="640">
-                  <div style="white-space: pre-wrap">{{ suggestionDetailContent }}</div>
+                <a-modal
+                  v-model:open="suggestionDetailOpen"
+                  :title="suggestionDetailTitle"
+                  :footer="null"
+                  width="640"
+                >
+                  <div style="white-space: pre-wrap">
+                    {{ suggestionDetailContent }}
+                  </div>
                 </a-modal>
               </a-space>
             </a-tab-pane>
@@ -600,7 +997,8 @@ const handleExport = async () => {
 
   exporting.value = true
   try {
-    const fileName = `费用监测清单_${activeListTab.value}_${dayjs().format('YYYYMMDD')}`
+    const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const fileName = `费用监测清单_${activeListTab.value}_${dateTag}`
     
     const headerMap: Record<string, string> = {
       admission_id: '住院号',

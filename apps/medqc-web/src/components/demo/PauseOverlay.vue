@@ -1,17 +1,25 @@
 <template>
   <transition name="fade">
-    <div v-if="visible" class="pause-overlay">
+    <div
+      v-if="visible"
+      class="pause-overlay"
+    >
       <div class="pause-content">
         <!-- 暂停图标和标题 -->
         <div class="pause-header">
           <PauseCircleOutlined class="pause-icon" />
-          <h2 class="pause-title">演示已暂停</h2>
+          <h2 class="pause-title">
+            演示已暂停
+          </h2>
         </div>
 
         <!-- 当前进度信息 -->
         <div class="progress-info">
           <div class="current-step">
-            <component :is="currentStepIcon" class="step-icon" />
+            <component
+              :is="currentStepIcon"
+              class="step-icon"
+            />
             <span class="step-name">{{ currentStepName }}</span>
           </div>
           <div class="progress-bar">
@@ -24,13 +32,19 @@
               :show-info="true"
             />
           </div>
-          <div class="pause-duration" v-if="pauseDuration">
+          <div
+            v-if="pauseDuration"
+            class="pause-duration"
+          >
             已暂停：{{ pauseDuration }}
           </div>
         </div>
 
         <!-- 已完成的步骤 -->
-        <div class="completed-steps" v-if="completedSteps.length > 0">
+        <div
+          v-if="completedSteps.length > 0"
+          class="completed-steps"
+        >
           <h3 class="section-title">
             <CheckCircleOutlined class="title-icon" />
             已完成的步骤
@@ -48,7 +62,10 @@
         </div>
 
         <!-- 剩余步骤 -->
-        <div class="remaining-steps" v-if="remainingSteps.length > 0">
+        <div
+          v-if="remainingSteps.length > 0"
+          class="remaining-steps"
+        >
           <h3 class="section-title">
             <ClockCircleOutlined class="title-icon" />
             剩余步骤
@@ -59,7 +76,10 @@
               :key="step.key"
               class="step-item pending"
             >
-              <component :is="step.icon" class="step-icon-small" />
+              <component
+                :is="step.icon"
+                class="step-icon-small"
+              />
               <span>{{ step.label }}</span>
             </li>
           </ul>
@@ -70,16 +90,16 @@
           <a-button
             type="primary"
             size="large"
-            @click="$emit('resume')"
             class="resume-button"
+            @click="$emit('resume')"
           >
             <PlayCircleOutlined />
             继续演示
           </a-button>
           <a-button
             size="large"
-            @click="$emit('stop')"
             danger
+            @click="$emit('stop')"
           >
             <StopOutlined />
             停止演示

@@ -6,14 +6,20 @@
     </div>
 
     <!-- 系统状态 -->
-    <a-card title="系统状态" class="mb-4">
+    <a-card
+      title="系统状态"
+      class="mb-4"
+    >
       <div class="status-grid">
         <a-statistic
           title="服务状态"
           :value="systemStatus?.status || '未知'"
           :value-style="{ color: systemStatus?.status === 'running' ? '#3f8600' : '#cf1322' }"
         />
-        <a-statistic title="服务版本" :value="systemStatus?.version || '未知'" />
+        <a-statistic
+          title="服务版本"
+          :value="systemStatus?.version || '未知'"
+        />
         <a-statistic
           title="健康状态"
           :value="healthStatus?.status || '未知'"
@@ -21,14 +27,24 @@
         />
       </div>
 
-      <a-button :loading="statusLoading" class="mt-4" @click="checkSystemStatus">
+      <a-button
+        :loading="statusLoading"
+        class="mt-4"
+        @click="checkSystemStatus"
+      >
         刷新状态
       </a-button>
     </a-card>
 
     <!-- 优化演示 -->
-    <a-card title="三层漏斗优化演示" class="mb-4">
-      <div v-if="demoData" class="demo-content">
+    <a-card
+      title="三层漏斗优化演示"
+      class="mb-4"
+    >
+      <div
+        v-if="demoData"
+        class="demo-content"
+      >
         <div class="optimization-stats">
           <a-row :gutter="16">
             <a-col :span="6">
@@ -44,7 +60,10 @@
               />
             </a-col>
             <a-col :span="6">
-              <a-statistic title="成本降低" :value="demoData.benefits?.cost_reduction || '未知'" />
+              <a-statistic
+                title="成本降低"
+                :value="demoData.benefits?.cost_reduction || '未知'"
+              />
             </a-col>
             <a-col :span="6">
               <a-statistic
@@ -57,7 +76,10 @@
 
         <div class="workflow-steps mt-4">
           <h4>优化工作流程：</h4>
-          <a-steps direction="vertical" size="small">
+          <a-steps
+            direction="vertical"
+            size="small"
+          >
             <a-step
               v-for="(step, index) in demoData.workflow"
               :key="index"
@@ -74,8 +96,7 @@
               <strong>年度成本节省：</strong>{{ demoData.real_world_impact?.annual_cost_savings }}
             </li>
             <li>
-              <strong>Token使用减少：</strong
-              >{{ demoData.real_world_impact?.token_usage_reduction }}
+              <strong>Token使用减少：</strong>{{ demoData.real_world_impact?.token_usage_reduction }}
             </li>
             <li>
               <strong>准确率保持：</strong>{{ demoData.real_world_impact?.accuracy_maintained }}
@@ -84,14 +105,26 @@
         </div>
       </div>
 
-      <a-button :loading="demoLoading" class="mt-4" @click="loadDemo"> 加载演示数据 </a-button>
+      <a-button
+        :loading="demoLoading"
+        class="mt-4"
+        @click="loadDemo"
+      >
+        加载演示数据
+      </a-button>
     </a-card>
 
     <!-- 质控分析测试 -->
-    <a-card title="质控分析测试" class="mb-4">
+    <a-card
+      title="质控分析测试"
+      class="mb-4"
+    >
       <a-form layout="vertical">
         <a-form-item label="病历ID">
-          <a-input v-model:value="testRequest.record_id" placeholder="例如：MR_20241223_001" />
+          <a-input
+            v-model:value="testRequest.record_id"
+            placeholder="例如：MR_20241223_001"
+          />
         </a-form-item>
 
         <a-form-item label="病历内容">
@@ -108,9 +141,15 @@
             mode="multiple"
             placeholder="选择要应用的质控规则"
           >
-            <a-select-option value="S3.5.1"> 主诉与主要诊断一致性 </a-select-option>
-            <a-select-option value="S4.13.2b"> 病史逻辑合理性 </a-select-option>
-            <a-select-option value="S5.10.1"> 治疗方案适宜性 </a-select-option>
+            <a-select-option value="S3.5.1">
+              主诉与主要诊断一致性
+            </a-select-option>
+            <a-select-option value="S4.13.2b">
+              病史逻辑合理性
+            </a-select-option>
+            <a-select-option value="S5.10.1">
+              治疗方案适宜性
+            </a-select-option>
           </a-select>
         </a-form-item>
 
@@ -121,19 +160,34 @@
         </a-form-item>
 
         <a-form-item>
-          <a-button type="primary" :loading="analysisLoading" @click="runAnalysis">
+          <a-button
+            type="primary"
+            :loading="analysisLoading"
+            @click="runAnalysis"
+          >
             开始分析
           </a-button>
-          <a-button class="ml-2" @click="loadSampleData"> 加载示例数据 </a-button>
+          <a-button
+            class="ml-2"
+            @click="loadSampleData"
+          >
+            加载示例数据
+          </a-button>
         </a-form-item>
       </a-form>
 
       <!-- 分析结果 -->
-      <div v-if="analysisResult" class="analysis-result mt-4">
+      <div
+        v-if="analysisResult"
+        class="analysis-result mt-4"
+      >
         <a-divider>分析结果</a-divider>
 
         <!-- 优化统计 -->
-        <div v-if="analysisResult.optimization_stats" class="optimization-stats mb-4">
+        <div
+          v-if="analysisResult.optimization_stats"
+          class="optimization-stats mb-4"
+        >
           <h4>Token优化效果：</h4>
           <a-row :gutter="16">
             <a-col :span="8">
@@ -181,7 +235,10 @@
               />
             </a-col>
             <a-col :span="8">
-              <a-statistic title="总Token使用" :value="analysisResult.total_tokens_used" />
+              <a-statistic
+                title="总Token使用"
+                :value="analysisResult.total_tokens_used"
+              />
             </a-col>
             <a-col :span="8">
               <a-statistic

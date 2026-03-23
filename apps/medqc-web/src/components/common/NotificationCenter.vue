@@ -42,12 +42,12 @@ const getNotificationColor = (type: string) => {
 }
 
 // 处理通知点击
-const handleNotificationClick = (notificationItem) => {
+const handleNotificationClick = (notificationItem: { id: string }) => {
   notificationStore.markAsRead(notificationItem.id)
 }
 
 // 关闭通知
-const handleCloseNotification = (notificationItem) => {
+const handleCloseNotification = (notificationItem: { id: string }) => {
   notificationStore.removeNotification(notificationItem.id)
 }
 
@@ -85,7 +85,7 @@ const formatTime = (timestamp: string) => {
     <a-dropdown 
       :trigger="['click']" 
       placement="bottomRight"
-      :overlayStyle="{ width: '400px', maxHeight: '500px' }"
+      :overlay-style="{ width: '400px', maxHeight: '500px' }"
     >
       <a-button 
         type="text" 
@@ -95,7 +95,10 @@ const formatTime = (timestamp: string) => {
         :class="{ 'has-notifications': hasNotifications }"
       >
         <template #icon>
-          <a-badge :count="unreadCount" :offset="[0, 0]">
+          <a-badge
+            :count="unreadCount"
+            :offset="[0, 0]"
+          >
             <BellOutlined />
           </a-badge>
         </template>
@@ -106,14 +109,16 @@ const formatTime = (timestamp: string) => {
           <!-- 头部 -->
           <div class="notification-header">
             <div class="flex items-center justify-between">
-              <h3 class="text-base font-semibold text-gray-900">通知中心</h3>
+              <h3 class="text-base font-semibold text-gray-900">
+                通知中心
+              </h3>
               <div class="flex items-center space-x-2">
                 <a-button 
                   v-if="unreadCount > 0"
                   type="link" 
                   size="small"
-                  @click="handleMarkAllRead"
                   class="text-xs"
+                  @click="handleMarkAllRead"
                 >
                   全部已读
                 </a-button>
@@ -121,8 +126,8 @@ const formatTime = (timestamp: string) => {
                   v-if="hasNotifications"
                   type="link" 
                   size="small"
-                  @click="handleClearAll"
                   class="text-xs text-red-500"
+                  @click="handleClearAll"
                 >
                   清空全部
                 </a-button>
@@ -138,7 +143,9 @@ const formatTime = (timestamp: string) => {
             >
               <div class="text-center py-8">
                 <BellOutlined class="text-4xl text-gray-300 mb-2" />
-                <p class="text-gray-500">暂无通知</p>
+                <p class="text-gray-500">
+                  暂无通知
+                </p>
               </div>
             </div>
             
@@ -181,8 +188,8 @@ const formatTime = (timestamp: string) => {
                       type="text"
                       size="small"
                       shape="circle"
-                      @click.stop="handleCloseNotification(item)"
                       class="text-gray-400 hover:text-gray-600"
+                      @click.stop="handleCloseNotification(item)"
                     >
                       <template #icon>
                         <CloseOutlined />

@@ -1,18 +1,24 @@
 <template>
-  <div class="emr-viewer" ref="viewerRef">
+  <div
+    ref="viewerRef"
+    class="emr-viewer"
+  >
     <!-- 文书标签页（仅在没有外部导航时显示） -->
-    <div v-if="!hideDocTabs && documents.length > 1" class="mb-5">
+    <div
+      v-if="!hideDocTabs && documents.length > 1"
+      class="mb-5"
+    >
       <div class="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl border border-gray-100/50">
         <button
           v-for="doc in documents"
           :key="doc.id"
-          @click="activeDocId = doc.id; loadDocument(doc)"
           :class="[
             'px-4 py-1.5 text-[13px] font-medium whitespace-nowrap rounded-lg transition-all duration-200',
             activeDocId === doc.id
               ? 'bg-white text-blue-700 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
               : 'text-gray-500 hover:text-gray-700'
           ]"
+          @click="activeDocId = doc.id; loadDocument(doc)"
         >
           {{ doc.doc_name || doc.doc_type }}
         </button>
@@ -22,7 +28,10 @@
     <!-- 工具栏已移除：患者/科室信息由外层 Header 展示 -->
 
     <!-- 加载中 -->
-    <div v-if="loading" class="flex items-center justify-center h-64">
+    <div
+      v-if="loading"
+      class="flex items-center justify-center h-64"
+    >
       <a-spin tip="正在加载文书内容..." />
     </div>
 
@@ -37,10 +46,15 @@
 
 
     <!-- 空状态 -->
-    <div v-else class="flex flex-col items-center justify-center h-64 text-gray-400">
+    <div
+      v-else
+      class="flex flex-col items-center justify-center h-64 text-gray-400"
+    >
       <FileTextOutlined class="text-4xl mb-3" />
       <p>暂无文书内容</p>
-      <p class="text-xs">请在左侧选择病历</p>
+      <p class="text-xs">
+        请在左侧选择病历
+      </p>
     </div>
 
     <!-- 缺陷列表面板（悬浮） -->
@@ -50,7 +64,10 @@
     >
       <div class="flex items-center justify-between border-b border-slate-200/80 bg-white/72 px-4 py-3">
         <span class="text-sm font-bold text-slate-700">缺陷标注 ({{ annotations.length }})</span>
-        <button @click="showAnnotationPanel = false" class="text-slate-400 transition-colors hover:text-slate-600">
+        <button
+          class="text-slate-400 transition-colors hover:text-slate-600"
+          @click="showAnnotationPanel = false"
+        >
           ✕
         </button>
       </div>
@@ -75,7 +92,9 @@
             />
             <span class="font-medium text-slate-700 truncate">{{ ann.rule_name || ann.category }}</span>
           </div>
-          <p class="text-slate-500 text-xs line-clamp-2">{{ ann.description }}</p>
+          <p class="text-slate-500 text-xs line-clamp-2">
+            {{ ann.description }}
+          </p>
         </div>
       </div>
     </div>
@@ -83,8 +102,8 @@
     <!-- 缺陷面板触发按钮 -->
     <button
       v-if="annotations.length > 0 && !showAnnotationPanel"
-      @click="showAnnotationPanel = true"
       class="fixed right-4 bottom-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_12px_24px_rgba(37,99,235,0.22)] transition-all hover:scale-105 hover:bg-blue-700"
+      @click="showAnnotationPanel = true"
     >
       <span class="text-sm font-bold">{{ annotations.length }}</span>
     </button>

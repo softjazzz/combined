@@ -137,10 +137,14 @@ class FrontPageProcedures(BaseModel):
     is_main_surgery: Optional[str] = None
     unplanned_reoperation: Optional[str] = None
     surgeon_name: Optional[str] = None
+    surgeon_code: Optional[str] = None
     assistant1_name: Optional[str] = None
+    assistant1_code: Optional[str] = None
     assistant2_name: Optional[str] = None
+    assistant2_code: Optional[str] = None
     anesthesia_method: Optional[str] = None
     anesthetist_name: Optional[str] = None
+    anesthetist_code: Optional[str] = None
     incision_healing_grade: Optional[str] = None
     other_procedures: Optional[List[Dict[str, str]]] = None
 
@@ -151,6 +155,7 @@ class FrontPageOtherMedicalInfo(BaseModel):
     model_config = ConfigDict(coerce_numbers_to_str=True)
 
     pathology_text: Optional[str] = None
+    pathology_icd: Optional[str] = None
     pathology_no: Optional[str] = None
 
     drug_allergy_flag: Optional[str] = None
@@ -166,6 +171,7 @@ class FrontPageOtherMedicalInfo(BaseModel):
     icu_type: Optional[str] = None
     icu_enter_time: Optional[str] = None
     icu_leave_time: Optional[str] = None
+    icu_transfer_status: Optional[str] = None
 
     injury_poison_flag: Optional[str] = None
     injury_poison_cause_text: Optional[str] = None
@@ -174,6 +180,13 @@ class FrontPageOtherMedicalInfo(BaseModel):
     brain_injury_coma_in: Optional[Dict[str, Any]] = None
     coma_before_admission: Optional[Dict[str, Any]] = None
     coma_after_admission: Optional[Dict[str, Any]] = None
+    # 兼容 HIS 侧扁平字段
+    brain_injury_before_admission_days: Optional[int] = None
+    brain_injury_before_admission_hours: Optional[int] = None
+    brain_injury_before_admission_minutes: Optional[int] = None
+    brain_injury_after_admission_days: Optional[int] = None
+    brain_injury_after_admission_hours: Optional[int] = None
+    brain_injury_after_admission_minutes: Optional[int] = None
 
     @field_validator("drug_allergy_flag", "rh_blood_type", "injury_poison_flag", mode="before")
     @classmethod

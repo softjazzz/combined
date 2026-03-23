@@ -3,11 +3,17 @@
     <!-- 顶部操作栏 -->
     <div class="content-qc-tab__header">
       <div class="content-qc-tab__header-main">
-        <div class="content-qc-tab__eyebrow">当前质控</div>
+        <div class="content-qc-tab__eyebrow">
+          当前质控
+        </div>
         <div class="header-left">
           <SafetyCertificateOutlined class="header-icon" />
           <span class="header-title">内涵质控</span>
-          <a-tag v-if="totalCount > 0" color="error" size="small">
+          <a-tag
+            v-if="totalCount > 0"
+            color="error"
+            size="small"
+          >
             {{ totalCount }}
           </a-tag>
         </div>
@@ -28,14 +34,19 @@
     </div>
 
     <!-- 加载态 — 实时进度时间线 -->
-    <div v-if="loading" class="content-qc-tab__progress">
+    <div
+      v-if="loading"
+      class="content-qc-tab__progress"
+    >
       <!-- 进度头部 -->
       <div class="progress-header">
         <div class="progress-avatar">
           <ThunderboltOutlined class="text-white text-lg" />
         </div>
         <div>
-          <div class="progress-title">正在逐文书质控分析</div>
+          <div class="progress-title">
+            正在逐文书质控分析
+          </div>
           <div class="progress-sub">
             已完成 {{ completedSections.length }} / {{ totalSections }} 个文书
           </div>
@@ -46,7 +57,10 @@
       <!-- 进度条 -->
       <div class="progress-bar-wrap">
         <div class="progress-bar-bg">
-          <div class="progress-bar-fill" :style="{ width: `${progressPercent}%` }" />
+          <div
+            class="progress-bar-fill"
+            :style="{ width: `${progressPercent}%` }"
+          />
         </div>
       </div>
 
@@ -63,19 +77,40 @@
           }"
         >
           <!-- 状态图标 -->
-          <div class="timeline-dot" :class="`timeline-dot--${sec.status}`">
-            <CheckCircleOutlined v-if="sec.status === 'done'" class="text-white text-[10px]" />
-            <span v-else-if="sec.status === 'active'" class="dot-ping" />
-            <span v-else class="dot-idle" />
+          <div
+            class="timeline-dot"
+            :class="`timeline-dot--${sec.status}`"
+          >
+            <CheckCircleOutlined
+              v-if="sec.status === 'done'"
+              class="text-white text-[10px]"
+            />
+            <span
+              v-else-if="sec.status === 'active'"
+              class="dot-ping"
+            />
+            <span
+              v-else
+              class="dot-idle"
+            />
           </div>
           <!-- 内容 -->
           <div class="timeline-content">
             <div class="timeline-title-row">
-              <span class="timeline-label" :class="`timeline-label--${sec.status}`">{{
+              <span
+                class="timeline-label"
+                :class="`timeline-label--${sec.status}`"
+              >{{
                 sec.label
               }}</span>
-              <span v-if="sec.duration" class="timeline-time">{{ sec.duration }}s</span>
-              <span v-if="sec.status === 'active'" class="timeline-active-hint">分析中...</span>
+              <span
+                v-if="sec.duration"
+                class="timeline-time"
+              >{{ sec.duration }}s</span>
+              <span
+                v-if="sec.status === 'active'"
+                class="timeline-active-hint"
+              >分析中...</span>
             </div>
             <!-- 已完成的质控结果预览 -->
             <div
@@ -83,23 +118,38 @@
               class="timeline-result"
             >
               <span class="result-tag result-tag--rules">{{ sec.ruleCount }} 条规则</span>
-              <span v-if="(sec.issueCount ?? 0) > 0" class="result-tag result-tag--issues"
-                >{{ sec.issueCount }} 个问题</span
-              >
-              <span v-else class="result-tag result-tag--pass">全部通过</span>
+              <span
+                v-if="(sec.issueCount ?? 0) > 0"
+                class="result-tag result-tag--issues"
+              >{{ sec.issueCount }} 个问题</span>
+              <span
+                v-else
+                class="result-tag result-tag--pass"
+              >全部通过</span>
             </div>
             <!-- 发现的问题逐条展示 -->
             <div
               v-if="sec.status === 'done' && sec.issues && sec.issues.length > 0"
               class="timeline-issues"
             >
-              <div v-for="(iss, i) in sec.issues.slice(0, 3)" :key="i" class="timeline-issue-item">
-                <a-tag :color="severityTagColor(iss.severity)" size="small" class="!text-[10px]">
+              <div
+                v-for="(iss, i) in sec.issues.slice(0, 3)"
+                :key="i"
+                class="timeline-issue-item"
+              >
+                <a-tag
+                  :color="severityTagColor(iss.severity)"
+                  size="small"
+                  class="!text-[10px]"
+                >
                   {{ severityLabel(iss.severity) }}
                 </a-tag>
                 <span class="issue-text">{{ iss.description }}</span>
               </div>
-              <div v-if="sec.issues.length > 3" class="timeline-issue-more">
+              <div
+                v-if="sec.issues.length > 3"
+                class="timeline-issue-more"
+              >
                 +{{ sec.issues.length - 3 }} 条...
               </div>
             </div>
@@ -109,11 +159,16 @@
     </div>
 
     <!-- 空态 - 未分析 -->
-    <div v-else-if="!analyzed && issues.length === 0" class="content-qc-tab__empty">
+    <div
+      v-else-if="!analyzed && issues.length === 0"
+      class="content-qc-tab__empty"
+    >
       <div class="empty-icon-wrap">
         <SafetyCertificateOutlined class="empty-icon" />
       </div>
-      <div class="empty-title">内涵质控分析</div>
+      <div class="empty-title">
+        内涵质控分析
+      </div>
       <div class="empty-desc">
         基于 LLM 对病历全文进行深度语义校验，聚焦诊疗逻辑、病程记录完整性与知情同意等内涵质量。
       </div>
@@ -132,15 +187,27 @@
     </div>
 
     <!-- 结果列表 -->
-    <div v-else class="content-qc-tab__body custom-scrollbar">
+    <div
+      v-else
+      class="content-qc-tab__body custom-scrollbar"
+    >
       <!-- 汇总卡片 -->
-      <div v-if="summary" class="summary-card">
+      <div
+        v-if="summary"
+        class="summary-card"
+      >
         <div class="summary-card__hero">
           <div>
-            <div class="summary-card__eyebrow">本次内涵质控</div>
-            <div class="summary-card__title">逐文书语义校验结果</div>
+            <div class="summary-card__eyebrow">
+              本次内涵质控
+            </div>
+            <div class="summary-card__title">
+              逐文书语义校验结果
+            </div>
           </div>
-          <div class="summary-card__progress">{{ summary.complianceRate }}%</div>
+          <div class="summary-card__progress">
+            {{ summary.complianceRate }}%
+          </div>
         </div>
         <div class="summary-row">
           <span class="summary-label">总规则数</span>
@@ -148,7 +215,10 @@
         </div>
         <div class="summary-row">
           <span class="summary-label">合规率</span>
-          <span class="summary-value" :class="complianceClass">{{ summary.complianceRate }}%</span>
+          <span
+            class="summary-value"
+            :class="complianceClass"
+          >{{ summary.complianceRate }}%</span>
         </div>
         <div class="summary-row">
           <span class="summary-label">发现问题</span>
@@ -162,15 +232,29 @@
 
       <!-- 文书分类结果 -->
       <template v-if="issues.length > 0">
-        <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="issue-group">
+        <section
+          v-for="(group, gIdx) in groupedIssues"
+          :key="gIdx"
+          class="issue-group"
+        >
           <header class="group-header">
-            <span class="group-dot" :style="{ background: severityColor(group.severity) }" />
+            <span
+              class="group-dot"
+              :style="{ background: severityColor(group.severity) }"
+            />
             <span class="group-title">{{ group.title }}</span>
             <span class="group-count">({{ group.items.length }})</span>
           </header>
-          <article v-for="(issue, iIdx) in group.items" :key="iIdx" class="issue-item">
+          <article
+            v-for="(issue, iIdx) in group.items"
+            :key="iIdx"
+            class="issue-item"
+          >
             <div class="issue-top">
-              <a-tag :color="severityTagColor(issue.severity)" size="small">
+              <a-tag
+                :color="severityTagColor(issue.severity)"
+                size="small"
+              >
                 {{ severityLabel(issue.severity) }}
               </a-tag>
               <span class="issue-rule">{{ issue.ruleName }}</span>
@@ -178,24 +262,40 @@
             <div class="issue-desc">
               {{ issue.description }}
             </div>
-            <div v-if="issue.suggestion" class="issue-suggestion">💡 {{ issue.suggestion }}</div>
+            <div
+              v-if="issue.suggestion"
+              class="issue-suggestion"
+            >
+              💡 {{ issue.suggestion }}
+            </div>
           </article>
         </section>
       </template>
 
       <!-- 无问题 -->
-      <div v-else class="content-qc-tab__empty-result">
+      <div
+        v-else
+        class="content-qc-tab__empty-result"
+      >
         <CheckCircleOutlined class="empty-result-icon" />
-        <div class="empty-result-text">内涵质控通过，未发现问题</div>
+        <div class="empty-result-text">
+          内涵质控通过，未发现问题
+        </div>
       </div>
     </div>
 
     <!-- 底部 -->
-    <footer v-if="analyzed && !loading" class="content-qc-tab__footer">
-      <span
-        >共 <strong>{{ totalCount }}</strong> 个问题</span
+    <footer
+      v-if="analyzed && !loading"
+      class="content-qc-tab__footer"
+    >
+      <span>共 <strong>{{ totalCount }}</strong> 个问题</span>
+      <a-button
+        type="link"
+        size="small"
+        :loading="loading"
+        @click="runContentQC"
       >
-      <a-button type="link" size="small" :loading="loading" @click="runContentQC">
         <ReloadOutlined /> 重新分析
       </a-button>
     </footer>

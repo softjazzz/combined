@@ -12,18 +12,30 @@
             <div class="text-sm text-slate-400">
               {{ currentStep }}/{{ totalSteps }} 步骤
             </div>
-            <div class="text-sm font-medium" :class="getStatusColor(status)">
+            <div
+              class="text-sm font-medium"
+              :class="getStatusColor(status)"
+            >
               {{ getStatusLabel(status) }}
             </div>
-            <a-button size="small" type="link" @click="showDebugInfo = !showDebugInfo">
+            <a-button
+              size="small"
+              type="link"
+              @click="showDebugInfo = !showDebugInfo"
+            >
               {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
             </a-button>
           </div>
         </div>
 
         <!-- 调试信息面板（进度） -->
-        <div v-if="showDebugInfo" class="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 mb-4">
-          <div class="text-sky-300 font-medium mb-2">📊 进度调试信息</div>
+        <div
+          v-if="showDebugInfo"
+          class="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 mb-4"
+        >
+          <div class="text-sky-300 font-medium mb-2">
+            📊 进度调试信息
+          </div>
           <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify({
             status,
             currentStep,
@@ -51,20 +63,36 @@
         <!-- 状态指示器 -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="text-center p-3 rounded-lg bg-slate-700/30">
-            <div class="text-lg font-bold text-blue-400">{{ processedRecords }}</div>
-            <div class="text-xs text-slate-400">已处理记录</div>
+            <div class="text-lg font-bold text-blue-400">
+              {{ processedRecords }}
+            </div>
+            <div class="text-xs text-slate-400">
+              已处理记录
+            </div>
           </div>
           <div class="text-center p-3 rounded-lg bg-slate-700/30">
-            <div class="text-lg font-bold text-amber-400">{{ totalRecords }}</div>
-            <div class="text-xs text-slate-400">总记录数</div>
+            <div class="text-lg font-bold text-amber-400">
+              {{ totalRecords }}
+            </div>
+            <div class="text-xs text-slate-400">
+              总记录数
+            </div>
           </div>
           <div class="text-center p-3 rounded-lg bg-slate-700/30">
-            <div class="text-lg font-bold text-emerald-400">{{ completedAnalyses }}</div>
-            <div class="text-xs text-slate-400">完成分析</div>
+            <div class="text-lg font-bold text-emerald-400">
+              {{ completedAnalyses }}
+            </div>
+            <div class="text-xs text-slate-400">
+              完成分析
+            </div>
           </div>
           <div class="text-center p-3 rounded-lg bg-slate-700/30">
-            <div class="text-lg font-bold text-red-400">{{ foundIssues }}</div>
-            <div class="text-xs text-slate-400">发现问题</div>
+            <div class="text-lg font-bold text-red-400">
+              {{ foundIssues }}
+            </div>
+            <div class="text-xs text-slate-400">
+              发现问题
+            </div>
           </div>
         </div>
       </div>
@@ -99,7 +127,9 @@
               <div class="flex-1 min-w-0">
                 <!-- 步骤标题和状态 -->
                 <div class="flex items-center justify-between mb-2">
-                  <h5 class="font-medium text-slate-100">{{ step.name }}</h5>
+                  <h5 class="font-medium text-slate-100">
+                    {{ step.name }}
+                  </h5>
                   <div class="flex items-center gap-2">
                     <a-tag
                       :color="getStepStatusColor(step.status)"
@@ -108,17 +138,25 @@
                     >
                       {{ getStepStatusLabel(step.status) }}
                     </a-tag>
-                    <span v-if="step.duration" class="text-xs text-slate-400">
+                    <span
+                      v-if="step.duration"
+                      class="text-xs text-slate-400"
+                    >
                       {{ formatDuration(step.duration) }}
                     </span>
                   </div>
                 </div>
 
                 <!-- 步骤描述 -->
-                <p class="text-sm text-slate-300 mb-3">{{ step.description }}</p>
+                <p class="text-sm text-slate-300 mb-3">
+                  {{ step.description }}
+                </p>
 
                 <!-- 步骤进度条 -->
-                <div v-if="step.status === 'running' || step.status === 'completed'" class="mb-3">
+                <div
+                  v-if="step.status === 'running' || step.status === 'completed'"
+                  class="mb-3"
+                >
                   <div class="flex items-center justify-between mb-1">
                     <span class="text-xs text-slate-400">{{ step.current_task || '处理中...' }}</span>
                     <span class="text-xs text-slate-400">{{ step.progress }}%</span>
@@ -132,32 +170,54 @@
                 </div>
 
                 <!-- 步骤详细信息 -->
-                <div v-if="step.details" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                  <div v-if="step.details.processed" class="flex items-center gap-1">
+                <div
+                  v-if="step.details"
+                  class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs"
+                >
+                  <div
+                    v-if="step.details.processed"
+                    class="flex items-center gap-1"
+                  >
                     <CheckCircleOutlined class="text-emerald-400" />
                     <span class="text-slate-400">已处理: {{ step.details.processed }}</span>
                   </div>
-                  <div v-if="step.details.errors" class="flex items-center gap-1">
+                  <div
+                    v-if="step.details.errors"
+                    class="flex items-center gap-1"
+                  >
                     <ExclamationCircleOutlined class="text-red-400" />
                     <span class="text-slate-400">错误: {{ step.details.errors }}</span>
                   </div>
-                  <div v-if="step.details.warnings" class="flex items-center gap-1">
+                  <div
+                    v-if="step.details.warnings"
+                    class="flex items-center gap-1"
+                  >
                     <WarningOutlined class="text-amber-400" />
                     <span class="text-slate-400">警告: {{ step.details.warnings }}</span>
                   </div>
-                  <div v-if="step.details.time_remaining" class="flex items-center gap-1">
+                  <div
+                    v-if="step.details.time_remaining"
+                    class="flex items-center gap-1"
+                  >
                     <ClockCircleOutlined class="text-blue-400" />
                     <span class="text-slate-400">剩余: {{ step.details.time_remaining }}</span>
                   </div>
                 </div>
 
                 <!-- 错误信息 -->
-                <div v-if="step.status === 'failed' && step.error" class="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <div
+                  v-if="step.status === 'failed' && step.error"
+                  class="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20"
+                >
                   <div class="flex items-start gap-2">
                     <ExclamationCircleOutlined class="text-red-400 text-sm mt-0.5" />
                     <div>
-                      <div class="text-sm font-medium text-red-300 mb-1">执行失败</div>
-                      <div class="text-xs text-red-200">{{ step.error }}</div>
+                      <div class="text-sm font-medium text-red-300 mb-1">
+                        执行失败
+                      </div>
+                      <div class="text-xs text-red-200">
+                        {{ step.error }}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -182,8 +242,8 @@
             <span class="text-xs text-slate-400">自动滚动</span>
             <a-button
               size="small"
-              @click="clearLogs"
               class="bg-slate-700/50 border-slate-600/50 text-slate-300"
+              @click="clearLogs"
             >
               <ClearOutlined />
               清空
@@ -219,34 +279,34 @@
       <div class="flex items-center justify-center gap-4">
         <a-button
           v-if="status === 'running'"
-          @click="pauseAnalysis"
           class="bg-amber-500/20 border-amber-400/30 text-amber-300 hover:bg-amber-500/30"
+          @click="pauseAnalysis"
         >
           <PauseCircleOutlined />
           暂停分析
         </a-button>
         <a-button
           v-if="status === 'paused'"
-          @click="resumeAnalysis"
           class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30"
+          @click="resumeAnalysis"
         >
           <PlayCircleOutlined />
           继续分析
         </a-button>
         <a-button
           v-if="status === 'running' || status === 'paused'"
-          @click="stopAnalysis"
           danger
           class="bg-red-500/20 border-red-400/30 text-red-300 hover:bg-red-500/30"
+          @click="stopAnalysis"
         >
           <StopOutlined />
           停止分析
         </a-button>
         <a-button
           v-if="status === 'completed' || status === 'failed'"
-          @click="restartAnalysis"
           type="primary"
           class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-none"
+          @click="restartAnalysis"
         >
           <ReloadOutlined />
           重新分析

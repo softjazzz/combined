@@ -1,8 +1,15 @@
 <template>
   <div class="bottom-collapse-panels">
-    <a-collapse v-model:active-key="activeKeys" :bordered="false" class="collapse-container">
+    <a-collapse
+      v-model:active-key="activeKeys"
+      :bordered="false"
+      class="collapse-container"
+    >
       <!-- 统计与进度面板 -->
-      <a-collapse-panel key="stats" class="collapse-panel">
+      <a-collapse-panel
+        key="stats"
+        class="collapse-panel"
+      >
         <template #header>
           <div class="panel-header">
             <BarChartOutlined class="panel-icon" />
@@ -30,7 +37,10 @@
       </a-collapse-panel>
 
       <!-- 演示日志面板 -->
-      <a-collapse-panel key="logs" class="collapse-panel">
+      <a-collapse-panel
+        key="logs"
+        class="collapse-panel"
+      >
         <template #header>
           <div class="panel-header">
             <FileTextOutlined class="panel-icon" />
@@ -42,11 +52,17 @@
             />
           </div>
         </template>
-        <EnhancedLogPanel :logs="demoStore.demoLogs" @clear="demoStore.clearDemoLogs" />
+        <EnhancedLogPanel
+          :logs="demoStore.demoLogs"
+          @clear="demoStore.clearDemoLogs"
+        />
       </a-collapse-panel>
 
       <!-- 性能监控面板 -->
-      <a-collapse-panel key="perf" class="collapse-panel">
+      <a-collapse-panel
+        key="perf"
+        class="collapse-panel"
+      >
         <template #header>
           <div class="panel-header">
             <DashboardOutlined class="panel-icon" />
@@ -58,7 +74,13 @@
             >
               已启用
             </a-tag>
-            <a-tag v-else color="default" size="small">未启用</a-tag>
+            <a-tag
+              v-else
+              color="default"
+              size="small"
+            >
+              未启用
+            </a-tag>
           </div>
         </template>
         <div v-if="demoStore.performanceMonitorEnabled">
@@ -78,7 +100,11 @@
           show-icon
         >
           <template #action>
-            <a-button size="small" type="primary" @click="handleEnablePerformanceMonitor">
+            <a-button
+              size="small"
+              type="primary"
+              @click="handleEnablePerformanceMonitor"
+            >
               立即启用
             </a-button>
           </template>

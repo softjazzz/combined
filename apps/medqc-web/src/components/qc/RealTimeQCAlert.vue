@@ -9,12 +9,19 @@
       >
         <div class="alert-content">
           <div class="alert-icon">
-            <i :class="getAlertIcon(currentAlert.severity)"></i>
+            <i :class="getAlertIcon(currentAlert.severity)" />
           </div>
           <div class="alert-text">
-            <div class="alert-title">{{ getAlertTitle(currentAlert.severity) }}</div>
-            <div class="alert-message">{{ currentAlert.message }}</div>
-            <div class="alert-location" v-if="currentAlert.location">
+            <div class="alert-title">
+              {{ getAlertTitle(currentAlert.severity) }}
+            </div>
+            <div class="alert-message">
+              {{ currentAlert.message }}
+            </div>
+            <div
+              v-if="currentAlert.location"
+              class="alert-location"
+            >
               位置: {{ currentAlert.location }}
             </div>
           </div>
@@ -23,60 +30,84 @@
         <div class="alert-actions">
           <button
             v-if="currentAlert.suggestion"
-            @click="showSuggestion"
             class="btn-suggestion"
+            @click="showSuggestion"
           >
-            <i class="fas fa-lightbulb mr-1"></i>
+            <i class="fas fa-lightbulb mr-1" />
             建议
           </button>
           <button
-            @click="dismissAlert"
             class="btn-dismiss"
+            @click="dismissAlert"
           >
-            <i class="fas fa-times"></i>
+            <i class="fas fa-times" />
           </button>
         </div>
       </div>
     </Transition>
 
     <!-- 预警历史面板 -->
-    <div v-if="showHistory" class="alert-history-panel">
+    <div
+      v-if="showHistory"
+      class="alert-history-panel"
+    >
       <div class="history-header">
         <h3 class="history-title">
-          <i class="fas fa-history mr-2"></i>
+          <i class="fas fa-history mr-2" />
           预警历史
         </h3>
         <div class="history-controls">
-          <select v-model="historyFilter" class="filter-select">
-            <option value="all">全部</option>
-            <option value="critical">严重</option>
-            <option value="error">错误</option>
-            <option value="warning">警告</option>
-            <option value="info">信息</option>
+          <select
+            v-model="historyFilter"
+            class="filter-select"
+          >
+            <option value="all">
+              全部
+            </option>
+            <option value="critical">
+              严重
+            </option>
+            <option value="error">
+              错误
+            </option>
+            <option value="warning">
+              警告
+            </option>
+            <option value="info">
+              信息
+            </option>
           </select>
           <button
-            @click="clearHistory"
             class="btn-clear"
+            @click="clearHistory"
           >
-            <i class="fas fa-trash mr-1"></i>
+            <i class="fas fa-trash mr-1" />
             清空
           </button>
           <button
-            @click="closeHistory"
             class="btn-close"
+            @click="closeHistory"
           >
-            <i class="fas fa-times"></i>
+            <i class="fas fa-times" />
           </button>
         </div>
       </div>
 
       <div class="history-content">
-        <div v-if="filteredHistory.length === 0" class="no-history">
-          <i class="fas fa-inbox text-gray-400 text-4xl mb-3"></i>
-          <p class="text-gray-600">暂无预警历史</p>
+        <div
+          v-if="filteredHistory.length === 0"
+          class="no-history"
+        >
+          <i class="fas fa-inbox text-gray-400 text-4xl mb-3" />
+          <p class="text-gray-600">
+            暂无预警历史
+          </p>
         </div>
 
-        <div v-else class="history-list">
+        <div
+          v-else
+          class="history-list"
+        >
           <div
             v-for="(alert, index) in filteredHistory"
             :key="index"
@@ -84,27 +115,35 @@
             :class="`history-${alert.severity}`"
           >
             <div class="history-icon">
-              <i :class="getAlertIcon(alert.severity)"></i>
+              <i :class="getAlertIcon(alert.severity)" />
             </div>
             <div class="history-content">
-              <div class="history-message">{{ alert.message }}</div>
+              <div class="history-message">
+                {{ alert.message }}
+              </div>
               <div class="history-meta">
                 <span class="history-type">{{ alert.type }}</span>
                 <span class="history-time">{{ formatTime(alert.timestamp) }}</span>
-                <span v-if="alert.location" class="history-location">{{ alert.location }}</span>
+                <span
+                  v-if="alert.location"
+                  class="history-location"
+                >{{ alert.location }}</span>
               </div>
-              <div v-if="alert.suggestion" class="history-suggestion">
-                <i class="fas fa-lightbulb text-yellow-500 mr-1"></i>
+              <div
+                v-if="alert.suggestion"
+                class="history-suggestion"
+              >
+                <i class="fas fa-lightbulb text-yellow-500 mr-1" />
                 {{ alert.suggestion }}
               </div>
             </div>
             <div class="history-actions">
               <button
-                @click="replayAlert(alert)"
                 class="btn-replay"
                 title="重新显示"
+                @click="replayAlert(alert)"
               >
-                <i class="fas fa-redo"></i>
+                <i class="fas fa-redo" />
               </button>
             </div>
           </div>
@@ -113,17 +152,20 @@
     </div>
 
     <!-- 预警设置面板 -->
-    <div v-if="showSettings" class="alert-settings-panel">
+    <div
+      v-if="showSettings"
+      class="alert-settings-panel"
+    >
       <div class="settings-header">
         <h3 class="settings-title">
-          <i class="fas fa-cog mr-2"></i>
+          <i class="fas fa-cog mr-2" />
           预警设置
         </h3>
         <button
-          @click="closeSettings"
           class="btn-close"
+          @click="closeSettings"
         >
-          <i class="fas fa-times"></i>
+          <i class="fas fa-times" />
         </button>
       </div>
 
@@ -133,34 +175,34 @@
           <div class="setting-options">
             <label class="option-item">
               <input
-                type="checkbox"
                 v-model="alertSettings.enableCritical"
+                type="checkbox"
                 class="option-checkbox"
-              />
+              >
               <span class="option-text">严重问题</span>
             </label>
             <label class="option-item">
               <input
-                type="checkbox"
                 v-model="alertSettings.enableError"
+                type="checkbox"
                 class="option-checkbox"
-              />
+              >
               <span class="option-text">错误</span>
             </label>
             <label class="option-item">
               <input
-                type="checkbox"
                 v-model="alertSettings.enableWarning"
+                type="checkbox"
                 class="option-checkbox"
-              />
+              >
               <span class="option-text">警告</span>
             </label>
             <label class="option-item">
               <input
-                type="checkbox"
                 v-model="alertSettings.enableInfo"
+                type="checkbox"
                 class="option-checkbox"
-              />
+              >
               <span class="option-text">信息</span>
             </label>
           </div>
@@ -168,11 +210,22 @@
 
         <div class="setting-group">
           <label class="setting-label">显示时间</label>
-          <select v-model="alertSettings.displayDuration" class="setting-select">
-            <option :value="3000">3秒</option>
-            <option :value="5000">5秒</option>
-            <option :value="10000">10秒</option>
-            <option :value="0">手动关闭</option>
+          <select
+            v-model="alertSettings.displayDuration"
+            class="setting-select"
+          >
+            <option :value="3000">
+              3秒
+            </option>
+            <option :value="5000">
+              5秒
+            </option>
+            <option :value="10000">
+              10秒
+            </option>
+            <option :value="0">
+              手动关闭
+            </option>
           </select>
         </div>
 
@@ -181,10 +234,10 @@
           <div class="setting-options">
             <label class="option-item">
               <input
-                type="checkbox"
                 v-model="alertSettings.enableSound"
+                type="checkbox"
                 class="option-checkbox"
-              />
+              >
               <span class="option-text">启用声音提醒</span>
             </label>
           </div>
@@ -192,27 +245,38 @@
 
         <div class="setting-group">
           <label class="setting-label">位置</label>
-          <select v-model="alertSettings.position" class="setting-select">
-            <option value="top-right">右上角</option>
-            <option value="top-left">左上角</option>
-            <option value="bottom-right">右下角</option>
-            <option value="bottom-left">左下角</option>
+          <select
+            v-model="alertSettings.position"
+            class="setting-select"
+          >
+            <option value="top-right">
+              右上角
+            </option>
+            <option value="top-left">
+              左上角
+            </option>
+            <option value="bottom-right">
+              右下角
+            </option>
+            <option value="bottom-left">
+              左下角
+            </option>
           </select>
         </div>
 
         <div class="settings-actions">
           <button
-            @click="saveSettings"
             class="btn-save"
+            @click="saveSettings"
           >
-            <i class="fas fa-save mr-2"></i>
+            <i class="fas fa-save mr-2" />
             保存设置
           </button>
           <button
-            @click="resetSettings"
             class="btn-reset"
+            @click="resetSettings"
           >
-            <i class="fas fa-undo mr-2"></i>
+            <i class="fas fa-undo mr-2" />
             重置
           </button>
         </div>
@@ -222,23 +286,26 @@
     <!-- 控制按钮 -->
     <div class="alert-controls">
       <button
-        @click="toggleHistory"
         class="control-btn"
         :class="{ active: showHistory }"
         title="预警历史"
+        @click="toggleHistory"
       >
-        <i class="fas fa-history"></i>
-        <span class="control-badge" v-if="alertHistory.length > 0">
+        <i class="fas fa-history" />
+        <span
+          v-if="alertHistory.length > 0"
+          class="control-badge"
+        >
           {{ alertHistory.length }}
         </span>
       </button>
       <button
-        @click="toggleSettings"
         class="control-btn"
         :class="{ active: showSettings }"
         title="预警设置"
+        @click="toggleSettings"
       >
-        <i class="fas fa-cog"></i>
+        <i class="fas fa-cog" />
       </button>
     </div>
   </div>

@@ -3,38 +3,68 @@
     <!-- 顶部概览卡片 -->
     <div class="stats-row">
       <div class="stat-card stat-records">
-        <div class="stat-icon"><FileTextOutlined /></div>
+        <div class="stat-icon">
+          <FileTextOutlined />
+        </div>
         <div class="stat-body">
-          <div class="stat-value">{{ stats.total_records || 0 }}</div>
-          <div class="stat-label">病案总数</div>
+          <div class="stat-value">
+            {{ stats.total_records || 0 }}
+          </div>
+          <div class="stat-label">
+            病案总数
+          </div>
         </div>
       </div>
       <div class="stat-card stat-diag">
-        <div class="stat-icon"><MedicineBoxOutlined /></div>
+        <div class="stat-icon">
+          <MedicineBoxOutlined />
+        </div>
         <div class="stat-body">
-          <div class="stat-value">{{ totalDiagnoses }}</div>
-          <div class="stat-label">诊断条目</div>
+          <div class="stat-value">
+            {{ totalDiagnoses }}
+          </div>
+          <div class="stat-label">
+            诊断条目
+          </div>
         </div>
       </div>
       <div class="stat-card stat-surgery">
-        <div class="stat-icon"><ExperimentOutlined /></div>
+        <div class="stat-icon">
+          <ExperimentOutlined />
+        </div>
         <div class="stat-body">
-          <div class="stat-value">{{ totalSurgeries }}</div>
-          <div class="stat-label">手术记录</div>
+          <div class="stat-value">
+            {{ totalSurgeries }}
+          </div>
+          <div class="stat-label">
+            手术记录
+          </div>
         </div>
       </div>
       <div class="stat-card stat-dept">
-        <div class="stat-icon"><ApartmentOutlined /></div>
+        <div class="stat-icon">
+          <ApartmentOutlined />
+        </div>
         <div class="stat-body">
-          <div class="stat-value">{{ departments.length }}</div>
-          <div class="stat-label">覆盖科室</div>
+          <div class="stat-value">
+            {{ departments.length }}
+          </div>
+          <div class="stat-label">
+            覆盖科室
+          </div>
         </div>
       </div>
       <div class="stat-card stat-tables">
-        <div class="stat-icon"><DatabaseOutlined /></div>
+        <div class="stat-icon">
+          <DatabaseOutlined />
+        </div>
         <div class="stat-body">
-          <div class="stat-value">{{ schema.total_tables || 0 }}</div>
-          <div class="stat-label">CDM 数据表</div>
+          <div class="stat-value">
+            {{ schema.total_tables || 0 }}
+          </div>
+          <div class="stat-label">
+            CDM 数据表
+          </div>
         </div>
       </div>
     </div>
@@ -42,9 +72,11 @@
     <!-- 数据源状态 -->
     <div class="datasource-bar">
       <div class="ds-left">
-        <span class="ds-dot ds-active"></span>
+        <span class="ds-dot ds-active" />
         <span class="ds-text">数据源：<strong>SQLite</strong>（本地测试）</span>
-        <a-tag color="green">已连接</a-tag>
+        <a-tag color="green">
+          已连接
+        </a-tag>
       </div>
       <div class="ds-right">
         <a-tag>CDM V1.0</a-tag>
@@ -61,10 +93,18 @@
           <span>表浏览</span>
           <!-- 结构/数据 切换 -->
           <div class="view-toggle">
-            <div class="toggle-btn" :class="{ active: leftView === 'schema' }" @click="leftView = 'schema'">
+            <div
+              class="toggle-btn"
+              :class="{ active: leftView === 'schema' }"
+              @click="leftView = 'schema'"
+            >
               <ProfileOutlined /> 结构
             </div>
-            <div class="toggle-btn" :class="{ active: leftView === 'data' }" @click="switchToDataView()">
+            <div
+              class="toggle-btn"
+              :class="{ active: leftView === 'data' }"
+              @click="switchToDataView()"
+            >
               <OrderedListOutlined /> 数据
             </div>
           </div>
@@ -81,12 +121,18 @@
           >
             <span class="tab-label">{{ table.label }}</span>
             <span class="tab-name">{{ table.name }}</span>
-            <a-badge :count="table.column_count" :number-style="{ backgroundColor: selectedTable === table.name ? '#2563eb' : '#94a3b8', fontSize: '11px' }" />
+            <a-badge
+              :count="table.column_count"
+              :number-style="{ backgroundColor: selectedTable === table.name ? '#2563eb' : '#94a3b8', fontSize: '11px' }"
+            />
           </div>
         </div>
 
         <!-- ===== 结构视图 ===== -->
-        <div class="columns-list" v-if="leftView === 'schema' && currentTableColumns.length">
+        <div
+          v-if="leftView === 'schema' && currentTableColumns.length"
+          class="columns-list"
+        >
           <div class="col-header-row">
             <span class="col-h col-h-name">字段名</span>
             <span class="col-h col-h-type">类型</span>
@@ -99,7 +145,10 @@
             :class="{ 'col-pk': col.primary_key }"
           >
             <span class="col-name">
-              <span v-if="col.primary_key" class="pk-badge">PK</span>
+              <span
+                v-if="col.primary_key"
+                class="pk-badge"
+              >PK</span>
               {{ col.name }}
             </span>
             <span class="col-type">{{ col.type }}</span>
@@ -108,14 +157,26 @@
         </div>
 
         <!-- ===== 数据视图 ===== -->
-        <div class="table-data-view" v-if="leftView === 'data'">
-          <div v-if="tableDataLoading" class="data-loading">
+        <div
+          v-if="leftView === 'data'"
+          class="table-data-view"
+        >
+          <div
+            v-if="tableDataLoading"
+            class="data-loading"
+          >
             <a-spin /> 加载中...
           </div>
-          <div v-else-if="tableData.items.length === 0" class="data-empty">
+          <div
+            v-else-if="tableData.items.length === 0"
+            class="data-empty"
+          >
             暂无数据
           </div>
-          <div v-else class="data-table-wrap">
+          <div
+            v-else
+            class="data-table-wrap"
+          >
             <div class="data-table-info">
               共 <strong>{{ tableData.total }}</strong> 条 · 第 {{ tableData.page }} 页
             </div>
@@ -123,13 +184,30 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th v-for="col in tableData.columns" :key="col" class="data-th">{{ col }}</th>
+                    <th
+                      v-for="col in tableData.columns"
+                      :key="col"
+                      class="data-th"
+                    >
+                      {{ col }}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, idx) in tableData.items" :key="idx" class="data-tr">
-                    <td v-for="col in tableData.columns" :key="col" class="data-td">
-                      <span class="cell-value" :title="String(row[col] ?? '')">{{ formatCell(row[col]) }}</span>
+                  <tr
+                    v-for="(row, idx) in tableData.items"
+                    :key="idx"
+                    class="data-tr"
+                  >
+                    <td
+                      v-for="col in tableData.columns"
+                      :key="col"
+                      class="data-td"
+                    >
+                      <span
+                        class="cell-value"
+                        :title="String(row[col] ?? '')"
+                      >{{ formatCell(row[col]) }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -144,7 +222,12 @@
         <div class="panel-header">
           <UnorderedListOutlined />
           <span>数据预览</span>
-          <a-tag v-if="patients.length" color="blue">{{ patients.length }} 条记录</a-tag>
+          <a-tag
+            v-if="patients.length"
+            color="blue"
+          >
+            {{ patients.length }} 条记录
+          </a-tag>
         </div>
 
         <!-- 病例卡片 -->
@@ -158,7 +241,12 @@
           >
             <div class="pt-top">
               <span class="pt-name">{{ pt.name }}</span>
-              <a-tag :color="pt.sex === '男' ? 'blue' : 'pink'" size="small">{{ pt.sex }}</a-tag>
+              <a-tag
+                :color="pt.sex === '男' ? 'blue' : 'pink'"
+                size="small"
+              >
+                {{ pt.sex }}
+              </a-tag>
               <span class="pt-age">{{ pt.age }}</span>
             </div>
             <div class="pt-info">
@@ -171,7 +259,12 @@
                 {{ formatDate(pt.admission_datetime) }} → {{ formatDate(pt.discharge_datetime) }}
                 <span class="pt-days">{{ pt.hospital_duration }}天</span>
               </span>
-              <a-button size="small" type="link" @click.stop="openRecordModal(pt)" class="pt-view-btn">
+              <a-button
+                size="small"
+                type="link"
+                class="pt-view-btn"
+                @click.stop="openRecordModal(pt)"
+              >
                 <DatabaseOutlined /> 表数据
               </a-button>
             </div>
@@ -179,16 +272,28 @@
         </div>
 
         <!-- 选中病例详情 -->
-        <div v-if="selectedDetail" class="detail-panel">
+        <div
+          v-if="selectedDetail"
+          class="detail-panel"
+        >
           <div class="detail-header">
             <h3>{{ selectedDetail.name }} — 病案详情</h3>
           </div>
           <!-- 诊断 -->
           <div class="detail-section">
-            <div class="section-title"><MedicineBoxOutlined /> 诊断 ({{ selectedDetail.diagnoses?.length || 0 }})</div>
+            <div class="section-title">
+              <MedicineBoxOutlined /> 诊断 ({{ selectedDetail.diagnoses?.length || 0 }})
+            </div>
             <div class="diag-list">
-              <div v-for="d in selectedDetail.diagnoses" :key="d.diagnosis_id" class="diag-item">
-                <a-tag :color="d.diagnosis_type?.includes('主要') ? 'red' : 'orange'" size="small">
+              <div
+                v-for="d in selectedDetail.diagnoses"
+                :key="d.diagnosis_id"
+                class="diag-item"
+              >
+                <a-tag
+                  :color="d.diagnosis_type?.includes('主要') ? 'red' : 'orange'"
+                  size="small"
+                >
                   {{ d.diagnosis_type?.includes('主要') ? '主诊断' : '其他' }}
                 </a-tag>
                 <span class="diag-name">{{ d.diagnosis_name }}</span>
@@ -197,25 +302,48 @@
             </div>
           </div>
           <!-- 手术 -->
-          <div class="detail-section" v-if="selectedDetail.surgeries?.length">
-            <div class="section-title"><ExperimentOutlined /> 手术 ({{ selectedDetail.surgeries.length }})</div>
+          <div
+            v-if="selectedDetail.surgeries?.length"
+            class="detail-section"
+          >
+            <div class="section-title">
+              <ExperimentOutlined /> 手术 ({{ selectedDetail.surgeries.length }})
+            </div>
             <div class="diag-list">
-              <div v-for="s in selectedDetail.surgeries" :key="s.surgery_id" class="diag-item">
-                <a-tag color="purple" size="small">{{ s.surgical_level || '手术' }}</a-tag>
+              <div
+                v-for="s in selectedDetail.surgeries"
+                :key="s.surgery_id"
+                class="diag-item"
+              >
+                <a-tag
+                  color="purple"
+                  size="small"
+                >
+                  {{ s.surgical_level || '手术' }}
+                </a-tag>
                 <span class="diag-name">{{ s.surgery_name }}</span>
                 <code class="diag-code">{{ s.surgery_code }}</code>
               </div>
             </div>
           </div>
           <!-- 费用 -->
-          <div class="detail-section" v-if="selectedDetail.cost">
-            <div class="section-title"><DollarOutlined /> 费用</div>
+          <div
+            v-if="selectedDetail.cost"
+            class="detail-section"
+          >
+            <div class="section-title">
+              <DollarOutlined /> 费用
+            </div>
             <div class="cost-grid">
               <div class="cost-total">
                 <span>总费用</span>
                 <strong>¥{{ selectedDetail.cost.total_cost }}</strong>
               </div>
-              <div class="cost-item" v-for="(val, key) in costItems" :key="key">
+              <div
+                v-for="(val, key) in costItems"
+                :key="key"
+                class="cost-item"
+              >
                 <span>{{ key }}</span>
                 <span>¥{{ val }}</span>
               </div>
@@ -232,32 +360,63 @@
       width="90%"
       :footer="null"
       class="record-modal"
-      :bodyStyle="{ padding: '16px', maxHeight: '75vh', overflow: 'auto' }"
+      :body-style="{ padding: '16px', maxHeight: '75vh', overflow: 'auto' }"
     >
-      <div v-if="recordModalLoading" class="modal-loading">
+      <div
+        v-if="recordModalLoading"
+        class="modal-loading"
+      >
         <a-spin size="large" />
         <span>加载表数据中...</span>
       </div>
       <div v-else>
         <!-- 表 Tab 切换 -->
-        <a-tabs v-model:activeKey="recordActiveTab" size="small">
+        <a-tabs
+          v-model:active-key="recordActiveTab"
+          size="small"
+        >
           <a-tab-pane
             v-for="tab in recordTabs"
             :key="tab.name"
             :tab="`${tab.label} (${tab.count})`"
           >
-            <div v-if="tab.count === 0" class="data-empty">此表中无该患者数据</div>
-            <div v-else class="data-table-scroll modal-table-scroll">
+            <div
+              v-if="tab.count === 0"
+              class="data-empty"
+            >
+              此表中无该患者数据
+            </div>
+            <div
+              v-else
+              class="data-table-scroll modal-table-scroll"
+            >
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th v-for="col in tab.columns" :key="col" class="data-th">{{ col }}</th>
+                    <th
+                      v-for="col in tab.columns"
+                      :key="col"
+                      class="data-th"
+                    >
+                      {{ col }}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, idx) in tab.items" :key="idx" class="data-tr">
-                    <td v-for="col in tab.columns" :key="col" class="data-td">
-                      <span class="cell-value" :title="String(row[col] ?? '')">{{ formatCell(row[col]) }}</span>
+                  <tr
+                    v-for="(row, idx) in tab.items"
+                    :key="idx"
+                    class="data-tr"
+                  >
+                    <td
+                      v-for="col in tab.columns"
+                      :key="col"
+                      class="data-td"
+                    >
+                      <span
+                        class="cell-value"
+                        :title="String(row[col] ?? '')"
+                      >{{ formatCell(row[col]) }}</span>
                     </td>
                   </tr>
                 </tbody>

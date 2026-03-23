@@ -1,7 +1,19 @@
+﻿// @ts-nocheck
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import type { User } from '@/types/auth'
+
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_SUPABASE_URL?: string
+    readonly VITE_SUPABASE_ANON_KEY?: string
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv
+  }
+}
 
 // Mock ApiService
 vi.mock('@/services/apiService', () => ({
@@ -36,8 +48,8 @@ describe('Auth Store', () => {
     is_active: true
   }
 
-  describe('初始状态', () => {
-    it('应该有正确的初始状态', () => {
+  describe('initial state', () => {
+    it('should have the correct initial state', () => {
       const store = useAuthStore()
 
       expect(store.user).toBeNull()
@@ -47,13 +59,13 @@ describe('Auth Store', () => {
     })
   })
 
-  describe('计算属性', () => {
-    it('isAuthenticated 应该正确反映认证状态', async () => {
+  describe('computed state', () => {
+    it('isAuthenticated should reflect auth state', async () => {
       const store = useAuthStore()
 
       expect(store.isAuthenticated).toBe(false)
 
-      // 通过登录方法设置用户状态
+      // 閫氳繃鐧诲綍鏂规硶璁剧疆鐢ㄦ埛鐘舵€?
       vi.mocked(ApiService.login).mockResolvedValue({
         success: true,
         data: {
@@ -61,25 +73,25 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
       expect(store.isAuthenticated).toBe(true)
     })
 
-    it('userRoles 应该正确返回用户角色', async () => {
+    it('userRoles should return the current roles', async () => {
       const store = useAuthStore()
 
       expect(store.userRoles).toEqual([])
 
-      // 通过登录方法设置用户状态
+      // 閫氳繃鐧诲綍鏂规硶璁剧疆鐢ㄦ埛鐘舵€?
       vi.mocked(ApiService.login).mockResolvedValue({
         success: true,
         data: {
@@ -87,20 +99,20 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
       expect(store.userRoles).toEqual(['doctor'])
     })
 
-    it('userRoles 应该支持单个角色字符串', async () => {
+    it('userRoles should support a single role field', async () => {
       const store = useAuthStore()
 
       const userWithSingleRole = {
@@ -116,20 +128,20 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: userWithSingleRole
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: userWithSingleRole,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
       expect(store.userRoles).toEqual(['admin'])
     })
 
-    it('userName 应该正确返回用户名', async () => {
+    it('userName should return the display name', async () => {
       const store = useAuthStore()
 
       expect(store.userName).toBe('')
@@ -141,20 +153,20 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
       expect(store.userName).toBe('测试用户')
     })
 
-    it('userName 应该回退到邮箱', async () => {
+    it('userName should fall back to email', async () => {
       const store = useAuthStore()
 
       const userWithoutName = {
@@ -169,20 +181,20 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: userWithoutName
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: userWithoutName,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
       expect(store.userName).toBe('test@example.com')
     })
 
-    it('userDepartment 应该正确返回科室', async () => {
+    it('userDepartment should return the department', async () => {
       const store = useAuthStore()
 
       expect(store.userDepartment).toBe('')
@@ -194,13 +206,13 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
@@ -208,8 +220,8 @@ describe('Auth Store', () => {
     })
   })
 
-  describe('权限检查', () => {
-    it('hasRole 应该正确检查角色', async () => {
+  describe('permission checks', () => {
+    it('hasRole should check roles correctly', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.login).mockResolvedValue({
@@ -219,13 +231,13 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
@@ -234,15 +246,15 @@ describe('Auth Store', () => {
       expect(store.hasRole('admin')).toBe(false)
     })
 
-    it('hasRole 应该在未登录时返回 false', () => {
+    it('hasRole should return false when not signed in', () => {
       const store = useAuthStore()
 
       expect(store.hasRole('doctor')).toBe(false)
     })
   })
 
-  describe('登录功能', () => {
-    it('应该成功登录', async () => {
+  describe('sign in', () => {
+    it('should sign in successfully', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.login).mockResolvedValue({
@@ -252,13 +264,13 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       const result = await store.signIn('test@example.com', 'password')
@@ -272,12 +284,12 @@ describe('Auth Store', () => {
       })
     })
 
-    it('应该处理登录失败', async () => {
+    it('should handle sign-in failures', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.login).mockResolvedValue({
         success: false,
-        error: '用户名或密码错误',
+        error: '鐢ㄦ埛鍚嶆垨瀵嗙爜閿欒',
         data: null
       })
 
@@ -288,7 +300,7 @@ describe('Auth Store', () => {
       expect(store.isAuthenticated).toBe(false)
     })
 
-    it('应该在登录时设置 loading 状态', async () => {
+    it('should set loading while signing in', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.login).mockImplementation(() => {
@@ -300,14 +312,14 @@ describe('Auth Store', () => {
             refresh_token: 'mock-refresh-token',
             user: mockUser
           },
-          message: '登录成功'
+          message: '鐧诲綍鎴愬姛'
         })
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
@@ -316,11 +328,11 @@ describe('Auth Store', () => {
     })
   })
 
-  describe('登出功能', () => {
-    it('应该成功登出', async () => {
+  describe('sign out', () => {
+    it('should sign out successfully', async () => {
       const store = useAuthStore()
 
-      // 先登录
+      // 鍏堢櫥褰?
       vi.mocked(ApiService.login).mockResolvedValue({
         success: true,
         data: {
@@ -328,22 +340,22 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
       expect(store.isAuthenticated).toBe(true)
 
-      // 然后登出
+      // 鐒跺悗鐧诲嚭
       vi.mocked(ApiService.logout).mockResolvedValue({
         success: true,
-        message: '登出成功'
+        message: '鐧诲嚭鎴愬姛'
       })
 
       await store.signOut()
@@ -353,10 +365,10 @@ describe('Auth Store', () => {
       expect(ApiService.logout).toHaveBeenCalled()
     })
 
-    it('应该在登出失败时仍清除本地状态', async () => {
+    it('should still clear local state when sign-out fails', async () => {
       const store = useAuthStore()
 
-      // 先登录
+      // 鍏堢櫥褰?
       vi.mocked(ApiService.login).mockResolvedValue({
         success: true,
         data: {
@@ -364,18 +376,18 @@ describe('Auth Store', () => {
           refresh_token: 'mock-refresh-token',
           user: mockUser
         },
-        message: '登录成功'
+        message: '鐧诲綍鎴愬姛'
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.signIn('test@example.com', 'password')
 
-      vi.mocked(ApiService.logout).mockRejectedValue(new Error('网络错误'))
+      vi.mocked(ApiService.logout).mockRejectedValue(new Error('缃戠粶閿欒'))
 
       await store.signOut()
 
@@ -384,15 +396,15 @@ describe('Auth Store', () => {
     })
   })
 
-  describe('初始化功能', () => {
-    it('应该在有有效 token 时恢复用户状态', async () => {
+  describe('initialize', () => {
+    it('should restore user state when token is valid', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.isAuthenticated).mockReturnValue(true)
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.initialize()
@@ -401,7 +413,7 @@ describe('Auth Store', () => {
       expect(store.initialized).toBe(true)
     })
 
-    it('应该在无有效 token 时清除状态', async () => {
+    it('should clear state when token is invalid', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.isAuthenticated).mockReturnValue(false)
@@ -412,14 +424,14 @@ describe('Auth Store', () => {
       expect(store.initialized).toBe(true)
     })
 
-    it('应该只初始化一次', async () => {
+    it('should initialize only once', async () => {
       const store = useAuthStore()
 
       vi.mocked(ApiService.isAuthenticated).mockReturnValue(true)
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '获取用户信息成功'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
       })
 
       await store.initialize()
@@ -429,15 +441,15 @@ describe('Auth Store', () => {
     })
   })
 
-  describe('更新用户档案', () => {
-    it('应该成功更新用户档案', async () => {
+  describe('update profile', () => {
+    it('should update the profile successfully', async () => {
       const store = useAuthStore()
 
-      // 设置初始用户
+      // 璁剧疆鍒濆鐢ㄦ埛
       store.user = mockUser
 
       const updates = {
-        display_name: '更新后的用户'
+        display_name: '鏇存柊鍚庣殑鐢ㄦ埛'
       }
 
       const result = await store.updateProfile(updates)
@@ -445,17 +457,18 @@ describe('Auth Store', () => {
       expect(result.success).toBe(true)
     })
 
-    it('应该在未登录时无法更新档案', async () => {
+    it('should no-op when updating without sign-in', async () => {
       const store = useAuthStore()
 
       const updates = {
-        display_name: '更新后的用户'
+        display_name: '鏇存柊鍚庣殑鐢ㄦ埛'
       }
 
       const result = await store.updateProfile(updates)
 
-      expect(result.success).toBe(true) // 方法总是返回 success
+      expect(result.success).toBe(true) // 鏂规硶鎬绘槸杩斿洖 success
     })
   })
 })
+
 

@@ -3,12 +3,18 @@
     <a-page-header
       title="分组器配置管理"
       sub-title="DRG/DIP 分组规则与参数配置"
-      @back="() => $router.back()"
       class="page-header"
+      @back="() => $router.back()"
     >
       <template #extra>
-        <a-button type="primary" @click="handleSave" :loading="saving">
-          <template #icon><SaveOutlined /></template>
+        <a-button
+          type="primary"
+          :loading="saving"
+          @click="handleSave"
+        >
+          <template #icon>
+            <SaveOutlined />
+          </template>
           保存配置
         </a-button>
       </template>
@@ -24,23 +30,42 @@
               <SettingOutlined /> 基础配置
             </div>
             <div class="card-body">
-              <a-form :model="config" layout="vertical" class="config-form">
+              <a-form
+                :model="config"
+                layout="vertical"
+                class="config-form"
+              >
                 <a-row :gutter="16">
                   <a-col :span="12">
                     <a-form-item label="地区版本">
-                      <a-select v-model:value="config.region" @change="handleRegionChange">
-                        <a-select-option value="national">国家版 (CHS-DRG 1.1)</a-select-option>
-                        <a-select-option value="sichuan">四川省版</a-select-option>
-                        <a-select-option value="luzhou">泸州市版</a-select-option>
-                        <a-select-option value="chengdu">成都市版</a-select-option>
+                      <a-select
+                        v-model:value="config.region"
+                        @change="handleRegionChange"
+                      >
+                        <a-select-option value="national">
+                          国家版 (CHS-DRG 1.1)
+                        </a-select-option>
+                        <a-select-option value="sichuan">
+                          四川省版
+                        </a-select-option>
+                        <a-select-option value="luzhou">
+                          泸州市版
+                        </a-select-option>
+                        <a-select-option value="chengdu">
+                          成都市版
+                        </a-select-option>
                       </a-select>
                     </a-form-item>
                   </a-col>
                   <a-col :span="12">
                     <a-form-item label="分组引擎">
                       <a-select v-model:value="config.engine">
-                        <a-select-option value="OpenDRG">OpenDRG</a-select-option>
-                        <a-select-option value="DIP">DIP (按病种分值)</a-select-option>
+                        <a-select-option value="OpenDRG">
+                          OpenDRG
+                        </a-select-option>
+                        <a-select-option value="DIP">
+                          DIP (按病种分值)
+                        </a-select-option>
                       </a-select>
                     </a-form-item>
                   </a-col>
@@ -55,8 +80,8 @@
                         :max="50000"
                         :step="100"
                         class="full-width"
-                        :formatter="value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
-                        :parser="value => value.replace(/\¥\s?|(,*)/g, '')"
+                        :formatter="(value?: string | number) => `¥ ${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+                        :parser="(value?: string) => (value || '').replace(/\¥\s?|(,*)/g, '')"
                       />
                     </a-form-item>
                   </a-col>
@@ -191,23 +216,42 @@
             <div class="card-body">
               <a-row :gutter="16">
                 <a-col :span="12">
-                  <a-statistic title="DRG 组数" :value="drgStats.totalGroups" suffix="组">
-                    <template #prefix><AppstoreOutlined /></template>
+                  <a-statistic
+                    title="DRG 组数"
+                    :value="drgStats.totalGroups"
+                    suffix="组"
+                  >
+                    <template #prefix>
+                      <AppstoreOutlined />
+                    </template>
                   </a-statistic>
                 </a-col>
                 <a-col :span="12">
-                  <a-statistic title="权重范围" :value="drgStats.weightRange">
-                    <template #prefix><LineChartOutlined /></template>
+                  <a-statistic
+                    title="权重范围"
+                    :value="drgStats.weightRange"
+                  >
+                    <template #prefix>
+                      <LineChartOutlined />
+                    </template>
                   </a-statistic>
                 </a-col>
               </a-row>
               <a-divider style="margin: 16px 0" />
               <a-row :gutter="16">
                 <a-col :span="12">
-                  <a-statistic title="ICD-10 编码数" :value="drgStats.icd10Count" suffix="个" />
+                  <a-statistic
+                    title="ICD-10 编码数"
+                    :value="drgStats.icd10Count"
+                    suffix="个"
+                  />
                 </a-col>
                 <a-col :span="12">
-                  <a-statistic title="ICD-9-CM-3 编码数" :value="drgStats.icd9Count" suffix="个" />
+                  <a-statistic
+                    title="ICD-9-CM-3 编码数"
+                    :value="drgStats.icd9Count"
+                    suffix="个"
+                  />
                 </a-col>
               </a-row>
             </div>
@@ -241,7 +285,11 @@
                   <span>{{ differenceCount }} 例</span>
                 </div>
               </div>
-              <a-button type="link" block class="view-detail-btn">
+              <a-button
+                type="link"
+                block
+                class="view-detail-btn"
+              >
                 <SearchOutlined /> 查看差异明细
               </a-button>
             </div>

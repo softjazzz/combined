@@ -7,19 +7,33 @@
             <RobotOutlined />
           </div>
           <div>
-            <div class="text-xl md:text-2xl font-extrabold text-gray-900 tracking-tight">智能病历导入</div>
-            <div class="text-xs md:text-sm text-gray-500 mt-0.5">AI 解析医疗文本与文档，快速生成结构化病历信息</div>
+            <div class="text-xl md:text-2xl font-extrabold text-gray-900 tracking-tight">
+              智能病历导入
+            </div>
+            <div class="text-xs md:text-sm text-gray-500 mt-0.5">
+              AI 解析医疗文本与文档，快速生成结构化病历信息
+            </div>
           </div>
         </div>
       </template>
 
       <template #extra>
         <a-space>
-          <a-button @click="showApiConfig = true" type="default" class="hover:shadow-sm">
-            <template #icon><SettingOutlined /></template>
+          <a-button
+            type="default"
+            class="hover:shadow-sm"
+            @click="showApiConfig = true"
+          >
+            <template #icon>
+              <SettingOutlined />
+            </template>
             配置
           </a-button>
-          <a-button @click="handleCancel" type="default" class="hover:shadow-sm">
+          <a-button
+            type="default"
+            class="hover:shadow-sm"
+            @click="handleCancel"
+          >
             返回
           </a-button>
         </a-space>
@@ -36,208 +50,294 @@
       />
 
       <!-- Tab页设计 -->
-      <a-tabs v-model:activeKey="activeTab" type="card" class="mt-4">
+      <a-tabs
+        v-model:active-key="activeTab"
+        type="card"
+        class="mt-4"
+      >
         <!-- Tab 1: 文本输入 -->
-        <a-tab-pane key="text" tab="文本输入">
+        <a-tab-pane
+          key="text"
+          tab="文本输入"
+        >
           <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-blue-100/50 via-sky-100/40 to-indigo-100/50">
-            <a-card size="small" title="直接输入医疗文本" class="rounded-2xl shadow-md ring-1 ring-slate-200/70">
-
-            <a-textarea
-              v-model:value="inputText"
-              :rows="8"
-              placeholder="请输入医疗记录文本，例如：\n患者姓名，性别，年龄，主诉...\n现病史：...\n既往史：...\n入院诊断：..."
-              class="mb-3"
-            />
-            <div class="flex items-center justify-between">
-              <a-space>
-                <a-button @click="parseText" :loading="parsing" type="primary" size="large">
-                  <template #icon><ThunderboltOutlined /></template>
-                  解析文本
-                </a-button>
-                <a-button @click="clearText" type="default">
-                  清空文本
-                </a-button>
-              </a-space>
-              <a-space v-if="parseResult && parseResult.success">
-                <a-tag color="success">
-                  <CheckCircleOutlined />
-                  解析完成
-                </a-tag>
-                <a-button
-                  @click="smartImportTextResult"
-                  :loading="importing"
-                  type="primary"
-                  size="large"
-                >
-                  <template #icon><DatabaseOutlined /></template>
-                  智能导入数据库
-                </a-button>
-              </a-space>
-            </div>
-          </a-card>
+            <a-card
+              size="small"
+              title="直接输入医疗文本"
+              class="rounded-2xl shadow-md ring-1 ring-slate-200/70"
+            >
+              <a-textarea
+                v-model:value="inputText"
+                :rows="8"
+                placeholder="请输入医疗记录文本，例如：\n患者姓名，性别，年龄，主诉...\n现病史：...\n既往史：...\n入院诊断：..."
+                class="mb-3"
+              />
+              <div class="flex items-center justify-between">
+                <a-space>
+                  <a-button
+                    :loading="parsing"
+                    type="primary"
+                    size="large"
+                    @click="parseText"
+                  >
+                    <template #icon>
+                      <ThunderboltOutlined />
+                    </template>
+                    解析文本
+                  </a-button>
+                  <a-button
+                    type="default"
+                    @click="clearText"
+                  >
+                    清空文本
+                  </a-button>
+                </a-space>
+                <a-space v-if="parseResult && parseResult.success">
+                  <a-tag color="success">
+                    <CheckCircleOutlined />
+                    解析完成
+                  </a-tag>
+                  <a-button
+                    :loading="importing"
+                    type="primary"
+                    size="large"
+                    @click="smartImportTextResult"
+                  >
+                    <template #icon>
+                      <DatabaseOutlined />
+                    </template>
+                    智能导入数据库
+                  </a-button>
+                </a-space>
+              </div>
+            </a-card>
           </div>
         </a-tab-pane>
 
         <!-- Tab 2: 文件上传 -->
-        <a-tab-pane key="file" tab="文件上传">
+        <a-tab-pane
+          key="file"
+          tab="文件上传"
+        >
           <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-blue-100/50 via-sky-100/40 to-indigo-100/50">
-            <a-card size="small" title="上传医疗文档" class="rounded-2xl shadow-md ring-1 ring-slate-200/70">
-
-            <!-- 文件上传区域 -->
-            <a-upload-dragger
-              :file-list="[]"
-              :before-upload="beforeUpload"
-              accept=".pdf,.doc,.docx,.txt"
-              :multiple="true"
-              :show-upload-list="false"
-              @change="handleUploadChange"
-              class="mb-4 rounded-2xl border-2 border-dashed border-blue-300/70 bg-gradient-to-br from-white via-white to-blue-50/40 shadow-sm hover:shadow-md transition-all"
+            <a-card
+              size="small"
+              title="上传医疗文档"
+              class="rounded-2xl shadow-md ring-1 ring-slate-200/70"
             >
-              <p class="ant-upload-drag-icon">
-                <InboxOutlined />
-              </p>
-              <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
-              <p class="ant-upload-hint">
-                支持 PDF、Word、文本文件格式，可批量上传
-              </p>
-            </a-upload-dragger>
+              <!-- 文件上传区域 -->
+              <a-upload-dragger
+                :file-list="[]"
+                :before-upload="beforeUpload"
+                accept=".pdf,.doc,.docx,.txt"
+                :multiple="true"
+                :show-upload-list="false"
+                class="mb-4 rounded-2xl border-2 border-dashed border-blue-300/70 bg-gradient-to-br from-white via-white to-blue-50/40 shadow-sm hover:shadow-md transition-all"
+                @change="handleUploadChange"
+              >
+                <p class="ant-upload-drag-icon">
+                  <InboxOutlined />
+                </p>
+                <p class="ant-upload-text">
+                  点击或拖拽文件到此区域上传
+                </p>
+                <p class="ant-upload-hint">
+                  支持 PDF、Word、文本文件格式，可批量上传
+                </p>
+              </a-upload-dragger>
 
-            <!-- 文件管理区域 -->
-            <div v-if="uploadedFiles.length > 0" class="mt-4 bg-blue-50/40 rounded-2xl p-4 border md:border-2 border-blue-300">
-              <a-divider>已上传文件 ({{ uploadedFiles.length }})</a-divider>
+              <!-- 文件管理区域 -->
+              <div
+                v-if="uploadedFiles.length > 0"
+                class="mt-4 bg-blue-50/40 rounded-2xl p-4 border md:border-2 border-blue-300"
+              >
+                <a-divider>已上传文件 ({{ uploadedFiles.length }})</a-divider>
 
-              <!-- 批量操作增强 -->
-              <div class="mb-3 text-center p-4 bg-white/95 rounded-xl border md:border-2 border-blue-300 hover:border-blue-400 shadow-md hover:shadow-lg transition-all">
-                <a-space size="large">
-                  <a-button @click="parseAllFiles" :loading="batchParsing" type="primary" size="default">
-                    <template #icon><ThunderboltOutlined /></template>
-                    {{ batchParsing ? '解析中...' : '一键解析所有文件' }}
-                  </a-button>
-
-                  <a-button
-                    v-if="batchParsing"
-                    @click="pauseBatchProcessing"
-                    :disabled="!canPauseBatch"
-                  >
-                    <template #icon><PauseCircleOutlined /></template>
-                    {{ batchPaused ? '继续' : '暂停' }}
-                  </a-button>
-
-                  <a-button
-                    v-if="batchParsing"
-                    @click="cancelBatchProcessing"
-                    danger
-                  >
-                    <template #icon><StopOutlined /></template>
-                    取消
-                  </a-button>
-
-                  <a-button @click="clearAllFiles" type="default" size="default" danger>
-                    清空所有文件
-                  </a-button>
-
-                  <a-button @click="showBatchImportView" type="dashed">
-                    <template #icon><AppstoreOutlined /></template>
-                    高级批量导入
-                  </a-button>
-                </a-space>
-              </div>
-
-              <!-- 批量处理进度 -->
-              <div v-if="batchParsing || batchProgress.total > 0" class="mb-3 p-3 bg-blue-50/60 rounded-xl border border-blue-200">
-                <div class="flex justify-between items-center mb-2">
-                  <span class="text-sm font-medium text-blue-800">批量处理进度</span>
-                  <span class="text-xs text-blue-600">
-                    {{ batchProgress.completed }} / {{ batchProgress.total }}
-                    {{ batchProgress.currentFile ? `(正在处理: ${batchProgress.currentFile})` : '' }}
-                  </span>
-                </div>
-                <a-progress
-                  :percent="batchProgressPercent"
-                  :status="batchParsing ? 'active' : (batchProgress.hasErrors ? 'exception' : 'success')"
-                  size="small"
-                />
-              </div>
-
-              <!-- 简洁文件列表 -->
-              <div class="bg-white rounded-xl p-3 border md:border-2 border-gray-300 hover:border-gray-400 shadow-sm mb-4">
-                <a-list
-                  :data-source="uploadedFiles"
-                  size="small"
-                  :split="false"
-                >
-                  <template #renderItem="{ item, index }">
-                    <a-list-item
-                      :class="[
-                        'cursor-pointer transition-transform rounded-xl px-3 py-2 mb-2 ui-card ui-card-muted hover:border-blue-400 hover:shadow-md hover:-translate-y-[1px] duration-200 ease-out',
-                        currentFileIndex === index ? 'ring-2 ring-blue-300 border-blue-500 bg-blue-50/60 shadow-md' : ''
-                      ]"
-                      @click="selectFile(index)"
+                <!-- 批量操作增强 -->
+                <div class="mb-3 text-center p-4 bg-white/95 rounded-xl border md:border-2 border-blue-300 hover:border-blue-400 shadow-md hover:shadow-lg transition-all">
+                  <a-space size="large">
+                    <a-button
+                      :loading="batchParsing"
+                      type="primary"
+                      size="default"
+                      @click="parseAllFiles"
                     >
-                      <template #actions>
-                        <a-dropdown>
-                          <a-button size="small" type="text">
-                            <MoreOutlined />
-                          </a-button>
-                          <template #overlay>
-                            <a-menu>
-                              <a-menu-item @click="removeFile(index)" danger>
-                                <DeleteOutlined />
-                                删除文件
-                              </a-menu-item>
-                            </a-menu>
-                          </template>
-                        </a-dropdown>
+                      <template #icon>
+                        <ThunderboltOutlined />
                       </template>
+                      {{ batchParsing ? '解析中...' : '一键解析所有文件' }}
+                    </a-button>
 
-                      <a-list-item-meta>
-                        <template #avatar>
-                          <FileOutlined class="text-blue-500 text-base" />
+                    <a-button
+                      v-if="batchParsing"
+                      :disabled="!canPauseBatch"
+                      @click="pauseBatchProcessing"
+                    >
+                      <template #icon>
+                        <PauseCircleOutlined />
+                      </template>
+                      {{ batchPaused ? '继续' : '暂停' }}
+                    </a-button>
+
+                    <a-button
+                      v-if="batchParsing"
+                      danger
+                      @click="cancelBatchProcessing"
+                    >
+                      <template #icon>
+                        <StopOutlined />
+                      </template>
+                      取消
+                    </a-button>
+
+                    <a-button
+                      type="default"
+                      size="default"
+                      danger
+                      @click="clearAllFiles"
+                    >
+                      清空所有文件
+                    </a-button>
+
+                    <a-button
+                      type="dashed"
+                      @click="showBatchImportView"
+                    >
+                      <template #icon>
+                        <AppstoreOutlined />
+                      </template>
+                      高级批量导入
+                    </a-button>
+                  </a-space>
+                </div>
+
+                <!-- 批量处理进度 -->
+                <div
+                  v-if="batchParsing || batchProgress.total > 0"
+                  class="mb-3 p-3 bg-blue-50/60 rounded-xl border border-blue-200"
+                >
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium text-blue-800">批量处理进度</span>
+                    <span class="text-xs text-blue-600">
+                      {{ batchProgress.completed }} / {{ batchProgress.total }}
+                      {{ batchProgress.currentFile ? `(正在处理: ${batchProgress.currentFile})` : '' }}
+                    </span>
+                  </div>
+                  <a-progress
+                    :percent="batchProgressPercent"
+                    :status="batchParsing ? 'active' : (batchProgress.hasErrors ? 'exception' : 'success')"
+                    size="small"
+                  />
+                </div>
+
+                <!-- 简洁文件列表 -->
+                <div class="bg-white rounded-xl p-3 border md:border-2 border-gray-300 hover:border-gray-400 shadow-sm mb-4">
+                  <a-list
+                    :data-source="uploadedFiles"
+                    size="small"
+                    :split="false"
+                  >
+                    <template #renderItem="{ item, index }">
+                      <a-list-item
+                        :class="[
+                          'cursor-pointer transition-transform rounded-xl px-3 py-2 mb-2 ui-card ui-card-muted hover:border-blue-400 hover:shadow-md hover:-translate-y-[1px] duration-200 ease-out',
+                          currentFileIndex === index ? 'ring-2 ring-blue-300 border-blue-500 bg-blue-50/60 shadow-md' : ''
+                        ]"
+                        @click="selectFile(index)"
+                      >
+                        <template #actions>
+                          <a-dropdown>
+                            <a-button
+                              size="small"
+                              type="text"
+                            >
+                              <MoreOutlined />
+                            </a-button>
+                            <template #overlay>
+                              <a-menu>
+                                <a-menu-item
+                                  danger
+                                  @click="removeFile(index)"
+                                >
+                                  <DeleteOutlined />
+                                  删除文件
+                                </a-menu-item>
+                              </a-menu>
+                            </template>
+                          </a-dropdown>
                         </template>
-                        <template #title>
-                          <div class="flex items-center justify-between w-full">
-                            <span class="font-medium text-slate-800 max-w-[300px] truncate" :title="item.name">{{ item.name }}</span>
-                            <div class="ml-3">
-                              <a-tag v-if="item.parsing" color="processing" size="small">
-                                <LoadingOutlined />
-                                解析中
-                              </a-tag>
-                              <a-tag v-else-if="item.parsed" color="success" size="small">
-                                <CheckCircleOutlined />
-                                已解析
-                              </a-tag>
-                              <a-tag v-else-if="item.error" color="error" size="small">
-                                <ExclamationCircleOutlined />
-                                解析失败
-                              </a-tag>
-                              <a-tag v-else color="default" size="small">
-                                待解析
-                              </a-tag>
+
+                        <a-list-item-meta>
+                          <template #avatar>
+                            <FileOutlined class="text-blue-500 text-base" />
+                          </template>
+                          <template #title>
+                            <div class="flex items-center justify-between w-full">
+                              <span
+                                class="font-medium text-slate-800 max-w-[300px] truncate"
+                                :title="item.name"
+                              >{{ item.name }}</span>
+                              <div class="ml-3">
+                                <a-tag
+                                  v-if="item.parsing"
+                                  color="processing"
+                                  size="small"
+                                >
+                                  <LoadingOutlined />
+                                  解析中
+                                </a-tag>
+                                <a-tag
+                                  v-else-if="item.parsed"
+                                  color="success"
+                                  size="small"
+                                >
+                                  <CheckCircleOutlined />
+                                  已解析
+                                </a-tag>
+                                <a-tag
+                                  v-else-if="item.error"
+                                  color="error"
+                                  size="small"
+                                >
+                                  <ExclamationCircleOutlined />
+                                  解析失败
+                                </a-tag>
+                                <a-tag
+                                  v-else
+                                  color="default"
+                                  size="small"
+                                >
+                                  待解析
+                                </a-tag>
+                              </div>
                             </div>
-                          </div>
-                        </template>
-                        <template #description>
-                          <span class="text-slate-500 text-xs">
-                            {{ formatFileSize(item.size) }} • {{ item.uploadTime }}
-                          </span>
-                        </template>
-                      </a-list-item-meta>
-                    </a-list-item>
-                  </template>
-                </a-list>
+                          </template>
+                          <template #description>
+                            <span class="text-slate-500 text-xs">
+                              {{ formatFileSize(item.size) }} • {{ item.uploadTime }}
+                            </span>
+                          </template>
+                        </a-list-item-meta>
+                      </a-list-item>
+                    </template>
+                  </a-list>
+                </div>
               </div>
-            </div>
-
-
-          </a-card>
+            </a-card>
           </div>
         </a-tab-pane>
-        </a-tabs>
+      </a-tabs>
 
       <!-- 文件解析内容预览 -->
-      <div v-if="currentFile && currentFile.parsed && currentFile.parseResult" class="mt-4 border-t-2 border-blue-100/70 pt-4">
+      <div
+        v-if="currentFile && currentFile.parsed && currentFile.parseResult"
+        class="mt-4 border-t-2 border-blue-100/70 pt-4"
+      >
         <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-sky-100/40 via-blue-100/30 to-indigo-100/40">
-          <a-card size="small" class="rounded-2xl shadow-md ring-1 ring-slate-200/70">
+          <a-card
+            size="small"
+            class="rounded-2xl shadow-md ring-1 ring-slate-200/70"
+          >
             <template #title>
               <div class="card-title-with-icon">
                 <FileTextOutlined class="card-title-with-icon__icon" />
@@ -247,23 +347,33 @@
 
             <template #extra>
               <a-space>
-                <a-tag v-if="currentFile.imported" color="success" class="shadow-sm">
+                <a-tag
+                  v-if="currentFile.imported"
+                  color="success"
+                  class="shadow-sm"
+                >
                   <CheckCircleOutlined />
                   已导入数据库
                 </a-tag>
-                <a-tag v-else color="geekblue" class="shadow-sm">
+                <a-tag
+                  v-else
+                  color="geekblue"
+                  class="shadow-sm"
+                >
                   <CheckCircleOutlined />
                   解析完成
                 </a-tag>
                 <a-button
                   v-if="!currentFile.imported"
                   size="small"
-                  @click="smartImportToDatabase"
                   :loading="importing"
                   type="primary"
                   class="hover:shadow"
+                  @click="smartImportToDatabase"
                 >
-                  <template #icon><DatabaseOutlined /></template>
+                  <template #icon>
+                    <DatabaseOutlined />
+                  </template>
                   智能导入数据库
                 </a-button>
                 <a-button
@@ -273,99 +383,149 @@
                   class="hover:shadow"
                   @click="viewImportResult"
                 >
-                  <template #icon><EyeOutlined /></template>
+                  <template #icon>
+                    <EyeOutlined />
+                  </template>
                   查看导入结果
                 </a-button>
               </a-space>
             </template>
 
-          <!-- 解析统计信息 -->
-          <div class="parse-stats mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <a-row :gutter="0" style="display: contents">
-
-              <a-col :xs="12" :sm="12" :md="12" :lg="12">
-                <div class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3">
-                  <div class="flex flex-col gap-1">
-                    <div class="text-[13px] text-gray-500 font-medium">内容长度</div>
-                    <div class="text-[15px] font-semibold text-gray-900 truncate">
-                      {{ ((currentFile.parseResult && currentFile.parseResult.content ? currentFile.parseResult.content.length : 0)).toLocaleString() }} 字符
+            <!-- 解析统计信息 -->
+            <div class="parse-stats mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <a-row
+                :gutter="0"
+                style="display: contents"
+              >
+                <a-col
+                  :xs="12"
+                  :sm="12"
+                  :md="12"
+                  :lg="12"
+                >
+                  <div class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3">
+                    <div class="flex flex-col gap-1">
+                      <div class="text-[13px] text-gray-500 font-medium">
+                        内容长度
+                      </div>
+                      <div class="text-[15px] font-semibold text-gray-900 truncate">
+                        {{ ((currentFile.parseResult && currentFile.parseResult.content ? currentFile.parseResult.content.length : 0)).toLocaleString() }} 字符
+                      </div>
                     </div>
                   </div>
-                </div>
-              </a-col>
-              <a-col :xs="12" :sm="12" :md="12" :lg="12">
-                <div class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3">
-                  <div class="flex flex-col gap-1">
-                    <div class="text-[13px] text-gray-500 font-medium">页数</div>
-                    <div class="text-[15px] font-semibold text-gray-900 truncate">{{ currentFile.parseResult.pages || 1 }} 页</div>
+                </a-col>
+                <a-col
+                  :xs="12"
+                  :sm="12"
+                  :md="12"
+                  :lg="12"
+                >
+                  <div class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3">
+                    <div class="flex flex-col gap-1">
+                      <div class="text-[13px] text-gray-500 font-medium">
+                        页数
+                      </div>
+                      <div class="text-[15px] font-semibold text-gray-900 truncate">
+                        {{ currentFile.parseResult.pages || 1 }} 页
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </a-col>
-            </a-row>
-          </div>
+                </a-col>
+              </a-row>
+            </div>
 
-          <!-- 解析内容 -->
-          <div class="parsed-content-display">
-            <a-collapse>
-              <a-collapse-panel key="content" class="border border-blue-200 rounded-xl">
-                <template #header>
-                  <div class="collapse-header">
-                    <FileTextOutlined class="collapse-header__icon" />
-                    <span>提取的文本内容</span>
+            <!-- 解析内容 -->
+            <div class="parsed-content-display">
+              <a-collapse>
+                <a-collapse-panel
+                  key="content"
+                  class="border border-blue-200 rounded-xl"
+                >
+                  <template #header>
+                    <div class="collapse-header">
+                      <FileTextOutlined class="collapse-header__icon" />
+                      <span>提取的文本内容</span>
+                    </div>
+                  </template>
+                  <div class="max-h-96 overflow-y-auto bg-gray-50 border rounded p-4">
+                    <pre class="content-text font-sans text-[13px] leading-6 text-gray-800 whitespace-pre-wrap break-words m-0">{{ currentFile.parseResult.content || '无内容' }}</pre>
                   </div>
-                </template>
-                <div class="max-h-96 overflow-y-auto bg-gray-50 border rounded p-4">
-                  <pre class="content-text font-sans text-[13px] leading-6 text-gray-800 whitespace-pre-wrap break-words m-0">{{ currentFile.parseResult.content || '无内容' }}</pre>
-                </div>
-              </a-collapse-panel>
+                </a-collapse-panel>
 
-              <!-- PDF原文预览 (仅PDF文件) -->
-              <a-collapse-panel v-if="currentFile.type === 'application/pdf' && currentFile.previewUrl" key="pdf" class="border border-blue-200 rounded-xl">
-                <template #header>
-                  <div class="collapse-header">
-                    <FilePdfOutlined class="collapse-header__icon" />
-                    <span>PDF原文预览</span>
+                <!-- PDF原文预览 (仅PDF文件) -->
+                <a-collapse-panel
+                  v-if="currentFile.type === 'application/pdf' && currentFile.previewUrl"
+                  key="pdf"
+                  class="border border-blue-200 rounded-xl"
+                >
+                  <template #header>
+                    <div class="collapse-header">
+                      <FilePdfOutlined class="collapse-header__icon" />
+                      <span>PDF原文预览</span>
+                    </div>
+                  </template>
+                  <div class="bg-gray-50 p-4 rounded-md border">
+                    <div class="mb-2 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <a-space>
+                        <span class="text-sm text-gray-600 font-medium truncate max-w-[200px]">{{ currentFile.name }}</span>
+                        <a-divider type="vertical" />
+                        <a-button
+                          size="small"
+                          :disabled="pdfScale <= 0.5"
+                          @click="zoomOut"
+                        >
+                          <template #icon>
+                            <ZoomOutOutlined />
+                          </template>
+                        </a-button>
+                        <span class="text-sm font-medium text-gray-800 min-w-10 text-center">{{ Math.round(pdfScale * 100) }}%</span>
+                        <a-button
+                          size="small"
+                          :disabled="pdfScale >= 2"
+                          @click="zoomIn"
+                        >
+                          <template #icon>
+                            <ZoomInOutlined />
+                          </template>
+                        </a-button>
+                        <a-button
+                          size="small"
+                          @click="resetZoom"
+                        >
+                          <template #icon>
+                            <ReloadOutlined />
+                          </template>
+                          重置
+                        </a-button>
+                      </a-space>
+                    </div>
+                    <div class="mt-3 rounded-2xl overflow-hidden bg-gradient-to-br from-sky-100/30 via-blue-100/20 to-indigo-100/30">
+                      <iframe
+                        :src="currentFile.previewUrl"
+                        :style="{ transform: `scale(${pdfScale})`, transformOrigin: 'top left' }"
+                        width="100%"
+                        height="500px"
+                        frameborder="0"
+                      />
+                    </div>
                   </div>
-                </template>
-                <div class="bg-gray-50 p-4 rounded-md border">
-                  <div class="mb-2 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <a-space>
-                      <span class="text-sm text-gray-600 font-medium truncate max-w-[200px]">{{ currentFile.name }}</span>
-                      <a-divider type="vertical" />
-                      <a-button size="small" @click="zoomOut" :disabled="pdfScale <= 0.5">
-                        <template #icon><ZoomOutOutlined /></template>
-                      </a-button>
-                      <span class="text-sm font-medium text-gray-800 min-w-10 text-center">{{ Math.round(pdfScale * 100) }}%</span>
-                      <a-button size="small" @click="zoomIn" :disabled="pdfScale >= 2">
-                        <template #icon><ZoomInOutlined /></template>
-                      </a-button>
-                      <a-button size="small" @click="resetZoom">
-                        <template #icon><ReloadOutlined /></template>
-                        重置
-                      </a-button>
-                    </a-space>
-                  </div>
-                  <div class="mt-3 rounded-2xl overflow-hidden bg-gradient-to-br from-sky-100/30 via-blue-100/20 to-indigo-100/30">
-                    <iframe
-                      :src="currentFile.previewUrl"
-                      :style="{ transform: `scale(${pdfScale})`, transformOrigin: 'top left' }"
-                      width="100%"
-                      height="500px"
-                      frameborder="0"
-                    ></iframe>
-                  </div>
-                </div>
-              </a-collapse-panel>
-            </a-collapse>
-          </div>
+                </a-collapse-panel>
+              </a-collapse>
+            </div>
           </a-card>
         </div>
       </div>
 
       <!-- 导入结果展示 -->
-      <div v-if="importResult" class="mt-4">
+      <div
+        v-if="importResult"
+        class="mt-4"
+      >
         <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-green-100/60 via-emerald-100/50 to-teal-100/60">
-          <a-card size="small" class="rounded-2xl shadow-md ring-1 ring-emerald-200/60">
+          <a-card
+            size="small"
+            class="rounded-2xl shadow-md ring-1 ring-emerald-200/60"
+          >
             <template #title>
               <div class="card-title-with-icon">
                 <TrophyOutlined class="card-title-with-icon__icon success" />
@@ -378,19 +538,33 @@
                   <CheckCircleOutlined />
                   已保存到数据库
                 </a-tag>
-                <a-button size="small" @click="viewInDatabase" type="primary">
-                  <template #icon><EyeOutlined /></template>
+                <a-button
+                  size="small"
+                  type="primary"
+                  @click="viewInDatabase"
+                >
+                  <template #icon>
+                    <EyeOutlined />
+                  </template>
                   查看记录
                 </a-button>
               </a-space>
             </template>
 
-            <a-descriptions bordered size="small" :column="2">
+            <a-descriptions
+              bordered
+              size="small"
+              :column="2"
+            >
               <a-descriptions-item label="记录ID">
-                <a-typography-text copyable>{{ importResult.id }}</a-typography-text>
+                <a-typography-text copyable>
+                  {{ importResult.id }}
+                </a-typography-text>
               </a-descriptions-item>
               <a-descriptions-item label="病历编号">
-                <a-typography-text copyable>{{ importResult.record_number }}</a-typography-text>
+                <a-typography-text copyable>
+                  {{ importResult.record_number }}
+                </a-typography-text>
               </a-descriptions-item>
               <a-descriptions-item label="患者姓名">
                 {{ importResult.patient_name }}
@@ -406,7 +580,10 @@
                   {{ importResult.status === 'pending' ? '待处理' : '已完成' }}
                 </a-tag>
               </a-descriptions-item>
-              <a-descriptions-item label="创建时间" :span="2">
+              <a-descriptions-item
+                label="创建时间"
+                :span="2"
+              >
                 {{ new Date(importResult.created_at).toLocaleString() }}
               </a-descriptions-item>
             </a-descriptions>
@@ -415,9 +592,20 @@
       </div>
 
       <!-- 解析结果简化展示 -->
-      <div v-if="parseResult" class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-emerald-100/60 via-green-100/50 to-teal-100/60">
-        <a-card size="small" title="解析结果概览" class="rounded-2xl shadow-md ring-1 ring-emerald-200/60">
-          <a-descriptions bordered size="small" :column="2">
+      <div
+        v-if="parseResult"
+        class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-emerald-100/60 via-green-100/50 to-teal-100/60"
+      >
+        <a-card
+          size="small"
+          title="解析结果概览"
+          class="rounded-2xl shadow-md ring-1 ring-emerald-200/60"
+        >
+          <a-descriptions
+            bordered
+            size="small"
+            :column="2"
+          >
             <a-descriptions-item label="患者姓名">
               {{ (parseResult.data && parseResult.data.patientName) || '未识别' }}
             </a-descriptions-item>
@@ -435,15 +623,26 @@
           <!-- 操作按钮 -->
           <div class="mt-4">
             <a-space>
-              <a-button @click="showResultModal = true" type="primary" ghost>
+              <a-button
+                type="primary"
+                ghost
+                @click="showResultModal = true"
+              >
                 <EyeOutlined class="mr-1" />
                 查看详细解析结果
               </a-button>
-              <a-button @click="saveRecord" :loading="saving" type="primary">
+              <a-button
+                :loading="saving"
+                type="primary"
+                @click="saveRecord"
+              >
                 <DatabaseOutlined class="mr-1" />
                 保存到数据库
               </a-button>
-              <a-button @click="exportResult" type="default">
+              <a-button
+                type="default"
+                @click="exportResult"
+              >
                 导出结果
               </a-button>
             </a-space>
@@ -452,11 +651,20 @@
       </div>
 
       <!-- 操作日志 -->
-      <a-card v-if="operationLog" size="small" title="操作日志" class="mb-4 bg-white rounded-2xl shadow-lg border md:border-2 border-gray-300 hover:border-gray-400">
+      <a-card
+        v-if="operationLog"
+        size="small"
+        title="操作日志"
+        class="mb-4 bg-white rounded-2xl shadow-lg border md:border-2 border-gray-300 hover:border-gray-400"
+      >
         <div class="bg-gray-50 rounded p-3">
           <pre class="bg-gray-900 text-white p-3 rounded max-h-52 overflow-y-auto font-mono text-xs leading-5 m-0">{{ operationLog }}</pre>
           <div class="text-right mt-2">
-            <a-button size="small" @click="clearLog" type="link">
+            <a-button
+              size="small"
+              type="link"
+              @click="clearLog"
+            >
               清空日志
             </a-button>
           </div>
@@ -470,7 +678,7 @@
       title="大模型API配置"
       width="1000px"
       :footer="null"
-      :destroyOnClose="true"
+      :destroy-on-close="true"
     >
       <LLMApiConfigStudio @config-updated="handleApiConfigUpdated" />
     </a-modal>
@@ -517,7 +725,7 @@ import { Empty } from 'ant-design-vue'
 import MedicalDocumentResultModal from '@/components/MedicalDocumentResultModal.vue'
 // import { type UserLLMConfig } from '@/services/llmConfigService'
 // import LLMApiConfigStudio from '@/components/LLMApiConfigStudio.vue'
-// import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 // 临时类型定义
 interface UserLLMConfig {
@@ -571,7 +779,7 @@ interface UploadedFile {
   name: string
   size: number
   type: string
-  file: File
+  file: File | null
   uploadTime: string
   parsed: boolean
   parsing: boolean
@@ -579,7 +787,7 @@ interface UploadedFile {
   error: string | null
   previewUrl: string | null
   imported: boolean
-  importResult: Record<string, unknown>
+  importResult: Record<string, unknown> | null
 }
 
 interface ParsedFileResult {
@@ -798,6 +1006,9 @@ const parseFile = async (index: number) => {
 
   try {
     // 调用后端PDF解析API
+    if (!file.file) {
+      throw new Error('文件对象为空，无法解析')
+    }
     const formData = new FormData()
     formData.append('file', file.file)
     formData.append('options', '{}')
@@ -848,6 +1059,9 @@ const parseCurrentFile = async () => {
 
   try {
     // 调用后端PDF解析API
+    if (!currentFile.value.file) {
+      throw new Error('文件对象为空，无法解析')
+    }
     const formData = new FormData()
     formData.append('file', currentFile.value.file)
     formData.append('options', '{}')
@@ -987,7 +1201,7 @@ const smartImportToDatabase = async () => {
 
     // 提取患者姓名（优先从医疗信息中获取，否则使用默认值）
     const patientName = getMedicalInfoString(medicalInfo, 'patient_name') ||
-                       extractPatientNameFromContent(parseResult.content) ||
+                       extractPatientNameFromContent(parseResult.content || '') ||
                        '未知患者'
 
     const importData = {
@@ -1083,7 +1297,6 @@ const showLLMAnalysis = async () => {
     await llmService.loadConfigFromDatabase(currentConfig.value.config_name)
 
     const result = await llmService.extractMedicalData(currentFile.value.parseResult.content, {
-      extractDocuments: true,
       extractPatientInfo: true,
       extractDiagnosis: true
     })
@@ -2520,5 +2733,3 @@ pre {
 }
 
 </stylex>
-
-

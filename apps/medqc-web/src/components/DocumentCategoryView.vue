@@ -1,17 +1,29 @@
 <template>
   <div class="document-category-view">
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <a-skeleton :loading="true" active>
+    <div
+      v-if="loading"
+      class="loading-container"
+    >
+      <a-skeleton
+        :loading="true"
+        active
+      >
         <a-skeleton-paragraph :rows="5" />
       </a-skeleton>
     </div>
 
     <!-- 文档分类展示 -->
-    <div v-else-if="documentData.categories.length > 0" class="categories-container">
+    <div
+      v-else-if="documentData.categories.length > 0"
+      class="categories-container"
+    >
       <!-- 统计概览 -->
       <div class="summary-card">
-        <a-card :bordered="false" class="summary-header">
+        <a-card
+          :bordered="false"
+          class="summary-header"
+        >
           <div class="summary-content">
             <div class="summary-item">
               <span class="summary-label">总文档数</span>
@@ -31,7 +43,10 @@
 
       <!-- 分类列表 -->
       <div class="categories-list">
-        <a-collapse v-model:activeKey="activeCategories" accordion>
+        <a-collapse
+          v-model:active-key="activeCategories"
+          accordion
+        >
           <a-collapse-panel
             v-for="category in documentData.categories"
             :key="category.category_code"
@@ -43,7 +58,10 @@
               <div class="category-header">
                 <div class="category-info">
                   <span class="category-name">{{ category.category_name }}</span>
-                  <a-tag color="blue" class="document-count">
+                  <a-tag
+                    color="blue"
+                    class="document-count"
+                  >
                     {{ category.document_count }} 个文档
                   </a-tag>
                 </div>
@@ -64,7 +82,10 @@
             <!-- 分类内容 -->
             <div class="category-content">
               <!-- 适用规则展示 -->
-              <div class="applicable-rules-section" v-if="getApplicableRules(category.category_code).length > 0">
+              <div
+                v-if="getApplicableRules(category.category_code).length > 0"
+                class="applicable-rules-section"
+              >
                 <h4 class="rules-title">
                   <ExperimentOutlined />
                   适用质控规则 ({{ getApplicableRules(category.category_code).length }}条)
@@ -80,10 +101,16 @@
                     <div class="rule-header">
                       <span class="rule-name">{{ rule.name }}</span>
                       <div class="rule-tags">
-                        <a-tag size="small" :color="getCategoryColor(rule.category)">
+                        <a-tag
+                          size="small"
+                          :color="getCategoryColor(rule.category)"
+                        >
                           {{ getCategoryDisplayName(rule.category) }}
                         </a-tag>
-                        <a-tag size="small" :color="getSeverityColor(rule.defect_level)">
+                        <a-tag
+                          size="small"
+                          :color="getSeverityColor(rule.defect_level)"
+                        >
                           {{ getSeverityDisplayName(rule.defect_level) }}
                         </a-tag>
                       </div>
@@ -101,127 +128,148 @@
 
               <!-- 文档列表 -->
               <div class="documents-section">
-                <h4 class="documents-title" v-if="getApplicableRules(category.category_code).length > 0">
+                <h4
+                  v-if="getApplicableRules(category.category_code).length > 0"
+                  class="documents-title"
+                >
                   <FileTextOutlined />
                   文档列表 ({{ category.document_count }}个)
                 </h4>
                 <div class="documents-grid">
-                <a-card
-                  v-for="document in category.documents"
-                  :key="document.id"
-                  hoverable
-                  class="document-card"
-                  @click="handleDocumentClick(document)"
-                >
-                  <div class="document-header">
-                    <div class="document-title">
-                      <span class="title-text">{{ document.title }}</span>
-                      <div class="document-tags">
-                        <a-tag
-                          :color="document.ai_classified ? 'green' : 'default'"
-                          class="ai-tag"
+                  <a-card
+                    v-for="document in category.documents"
+                    :key="document.id"
+                    hoverable
+                    class="document-card"
+                    @click="handleDocumentClick(document)"
+                  >
+                    <div class="document-header">
+                      <div class="document-title">
+                        <span class="title-text">{{ document.title }}</span>
+                        <div class="document-tags">
+                          <a-tag
+                            :color="document.ai_classified ? 'green' : 'default'"
+                            class="ai-tag"
+                          >
+                            {{ document.ai_classified ? 'AI分类' : '手动' }}
+                          </a-tag>
+                          <!-- 质控状态标签 -->
+                          <a-tag
+                            v-if="document.qc_status"
+                            :color="getQCStatusColor(document.qc_status)"
+                            class="qc-status-tag"
+                          >
+                            <template #icon>
+                              <CheckCircleOutlined v-if="document.qc_status === 'passed'" />
+                              <ExclamationCircleOutlined v-else-if="document.qc_status === 'warning'" />
+                              <CloseCircleOutlined v-else-if="document.qc_status === 'failed'" />
+                              <ClockCircleOutlined v-else-if="document.qc_status === 'pending'" />
+                              <LoadingOutlined v-else-if="document.qc_status === 'analyzing'" />
+                            </template>
+                            {{ getQCStatusText(document.qc_status) }}
+                          </a-tag>
+                          <!-- 质控问题数量提示 -->
+                          <a-tag
+                            v-if="(document.qc_issues_count || 0) > 0"
+                            color="orange"
+                            class="qc-issues-tag"
+                          >
+                            {{ document.qc_issues_count || 0 }}个问题
+                          </a-tag>
+                        </div>
+                      </div>
+                      <div class="document-meta">
+                        <span class="document-type">{{ getDocumentTypeName(document) }}</span>
+                        <span
+                          v-if="(document.classification_confidence || 0) > 0"
+                          class="confidence"
                         >
-                          {{ document.ai_classified ? 'AI分类' : '手动' }}
-                        </a-tag>
-                        <!-- 质控状态标签 -->
-                        <a-tag
-                          v-if="document.qc_status"
-                          :color="getQCStatusColor(document.qc_status)"
-                          class="qc-status-tag"
+                          分类置信度: {{ Math.round((document.classification_confidence || 0) * 100) }}%
+                        </span>
+                        <!-- 质控评分 -->
+                        <span
+                          v-if="document.qc_score !== null && document.qc_score !== undefined"
+                          class="qc-score"
                         >
-                          <template #icon>
-                            <CheckCircleOutlined v-if="document.qc_status === 'passed'" />
-                            <ExclamationCircleOutlined v-else-if="document.qc_status === 'warning'" />
-                            <CloseCircleOutlined v-else-if="document.qc_status === 'failed'" />
-                            <ClockCircleOutlined v-else-if="document.qc_status === 'pending'" />
-                            <LoadingOutlined v-else-if="document.qc_status === 'analyzing'" />
-                          </template>
-                          {{ getQCStatusText(document.qc_status) }}
-                        </a-tag>
-                        <!-- 质控问题数量提示 -->
-                        <a-tag
-                          v-if="document.qc_issues_count > 0"
-                          color="orange"
-                          class="qc-issues-tag"
+                          <a-tooltip :title="`质控评分: ${document.qc_score}/100分`">
+                            <span :class="getQCScoreClass(document.qc_score)">
+                              质控: {{ document.qc_score }}分
+                            </span>
+                          </a-tooltip>
+                        </span>
+                        <!-- 最后质控分析时间 -->
+                        <span
+                          v-if="document.qc_last_analyzed"
+                          class="qc-last-analyzed"
                         >
-                          {{ document.qc_issues_count }}个问题
-                        </a-tag>
+                          <a-tooltip :title="`最后质控时间: ${formatDateTime(document.qc_last_analyzed)}`">
+                            <ClockCircleOutlined />
+                            {{ formatRelativeTime(document.qc_last_analyzed) }}
+                          </a-tooltip>
+                        </span>
                       </div>
                     </div>
-                    <div class="document-meta">
-                      <span class="document-type">{{ getDocumentTypeName(document) }}</span>
-                      <span v-if="document.classification_confidence > 0" class="confidence">
-                        分类置信度: {{ Math.round(document.classification_confidence * 100) }}%
-                      </span>
-                      <!-- 质控评分 -->
-                      <span v-if="document.qc_score !== null && document.qc_score !== undefined" class="qc-score">
-                        <a-tooltip :title="`质控评分: ${document.qc_score}/100分`">
-                          <span :class="getQCScoreClass(document.qc_score)">
-                            质控: {{ document.qc_score }}分
-                          </span>
-                        </a-tooltip>
-                      </span>
-                      <!-- 最后质控分析时间 -->
-                      <span v-if="document.qc_last_analyzed" class="qc-last-analyzed">
-                        <a-tooltip :title="`最后质控时间: ${formatDateTime(document.qc_last_analyzed)}`">
-                          <ClockCircleOutlined />
-                          {{ formatRelativeTime(document.qc_last_analyzed) }}
-                        </a-tooltip>
-                      </span>
-                    </div>
-                  </div>
 
-                  <div class="document-content">
-                    <p class="content-preview">{{ document.content_preview }}</p>
-                  </div>
+                    <div class="document-content">
+                      <p class="content-preview">
+                        {{ document.content_preview }}
+                      </p>
+                    </div>
 
-                  <div class="document-footer">
-                    <div class="document-status">
-                      <a-tag
-                        :color="getStatusTagColor(document.qc_status)"
-                      >
-                        {{ getStatusText(document.qc_status) }}
-                      </a-tag>
-                      <span v-if="document.qc_score" class="qc-score">
-                        质控分: {{ document.qc_score }}
-                      </span>
+                    <div class="document-footer">
+                      <div class="document-status">
+                        <a-tag
+                          :color="getStatusTagColor(document.qc_status)"
+                        >
+                          {{ getStatusText(document.qc_status) }}
+                        </a-tag>
+                        <span
+                          v-if="document.qc_score"
+                          class="qc-score"
+                        >
+                          质控分: {{ document.qc_score }}
+                        </span>
+                      </div>
+                      <div class="document-actions">
+                        <a-button
+                          size="small"
+                          type="primary"
+                          @click.stop="editDocument(document)"
+                        >
+                          编辑
+                        </a-button>
+                        <a-button
+                          size="small"
+                          @click.stop="viewDocument(document)"
+                        >
+                          查看
+                        </a-button>
+                        <a-button
+                          size="small"
+                          type="default"
+                          :loading="analyzingDocuments.has(document.id)"
+                          @click.stop="analyzeDocumentQC(document, category.category_code)"
+                        >
+                          <template #icon>
+                            <ExperimentOutlined />
+                          </template>
+                          {{ analyzingDocuments.has(document.id) ? '分析中' : '质控分析' }}
+                        </a-button>
+                        <a-button
+                          v-if="document.qc_status && document.qc_status !== 'pending'"
+                          size="small"
+                          type="link"
+                          @click.stop="viewQCResults(document)"
+                        >
+                          <template #icon>
+                            <BarChartOutlined />
+                          </template>
+                          查看结果
+                        </a-button>
+                      </div>
                     </div>
-                    <div class="document-actions">
-                      <a-button
-                        size="small"
-                        type="primary"
-                        @click.stop="editDocument(document)"
-                      >
-                        编辑
-                      </a-button>
-                      <a-button
-                        size="small"
-                        @click.stop="viewDocument(document)"
-                      >
-                        查看
-                      </a-button>
-                      <a-button
-                        size="small"
-                        type="default"
-                        :loading="analyzingDocuments.has(document.id)"
-                        @click.stop="analyzeDocumentQC(document, category.category_code)"
-                      >
-                        <template #icon><ExperimentOutlined /></template>
-                        {{ analyzingDocuments.has(document.id) ? '分析中' : '质控分析' }}
-                      </a-button>
-                      <a-button
-                        size="small"
-                        type="link"
-                        @click.stop="viewQCResults(document)"
-                        v-if="document.qc_status && document.qc_status !== 'pending'"
-                      >
-                        <template #icon><BarChartOutlined /></template>
-                        查看结果
-                      </a-button>
-                    </div>
-                  </div>
-                </a-card>
-              </div>
+                  </a-card>
+                </div>
               </div>
             </div>
           </a-collapse-panel>
@@ -230,7 +278,10 @@
     </div>
 
     <!-- 空状态 -->
-    <div v-else class="empty-state">
+    <div
+      v-else
+      class="empty-state"
+    >
       <a-empty description="暂无文档数据" />
     </div>
 
@@ -242,9 +293,15 @@
       class="document-dialog"
       :footer="null"
     >
-      <div v-if="selectedDocument" class="document-detail">
+      <div
+        v-if="selectedDocument"
+        class="document-detail"
+      >
         <div class="document-info">
-          <a-descriptions :column="2" bordered>
+          <a-descriptions
+            :column="2"
+            bordered
+          >
             <a-descriptions-item label="文档类型">
               {{ getDocumentTypeName(selectedDocument) }}
             </a-descriptions-item>
@@ -253,8 +310,11 @@
                 {{ selectedDocument.ai_classified ? '是' : '否' }}
               </a-tag>
             </a-descriptions-item>
-            <a-descriptions-item label="置信度" v-if="selectedDocument.classification_confidence > 0">
-              {{ Math.round(selectedDocument.classification_confidence * 100) }}%
+            <a-descriptions-item
+              v-if="(selectedDocument.classification_confidence || 0) > 0"
+              label="置信度"
+            >
+              {{ Math.round((selectedDocument.classification_confidence || 0) * 100) }}%
             </a-descriptions-item>
             <a-descriptions-item label="质控状态">
               <a-tag :color="getStatusTagColor(selectedDocument.qc_status)">
@@ -265,7 +325,9 @@
         </div>
         <div class="document-content-full">
           <h4>文档内容</h4>
-          <div class="content-text">{{ getFullContent(selectedDocument) }}</div>
+          <div class="content-text">
+            {{ getFullContent(selectedDocument) }}
+          </div>
         </div>
       </div>
     </a-modal>
@@ -300,24 +362,34 @@
           <a-button
             size="small"
             type="link"
-            @click="showDebugInfo = !showDebugInfo"
             style="margin-left: 16px;"
+            @click="showDebugInfo = !showDebugInfo"
           >
             {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
           </a-button>
         </div>
       </template>
 
-      <div v-if="showQCResults && currentQCDocument && qcAnalysisResult" class="qc-results-container">
+      <div
+        v-if="showQCResults && currentQCDocument && qcAnalysisResult"
+        class="qc-results-container"
+      >
         <!-- 调试开关（备用，若标题插槽不可见） -->
         <div class="flex justify-end mb-2">
-          <a-button size="small" type="link" @click="showDebugInfo = !showDebugInfo">
+          <a-button
+            size="small"
+            type="link"
+            @click="showDebugInfo = !showDebugInfo"
+          >
             {{ showDebugInfo ? '隐藏调试信息' : '显示调试信息' }}
           </a-button>
         </div>
 
         <!-- 调试信息面板 -->
-        <div v-if="showDebugInfo" class="debug-panel">
+        <div
+          v-if="showDebugInfo"
+          class="debug-panel"
+        >
           <div class="debug-section">
             <h4>📊 性能指标计算结果</h4>
             <pre>{{ JSON.stringify({
@@ -345,18 +417,33 @@
         </div>
 
         <!-- 性能指标（兼容无 performance_metrics 的情况） -->
-        <div v-if="qcAnalysisResult" class="summary-metrics compact">
+        <div
+          v-if="qcAnalysisResult"
+          class="summary-metrics compact"
+        >
           <div class="metric-item">
-            <div class="metric-label">累计耗时</div>
-            <div class="metric-value">{{ formatSeconds(qcPerformanceMetrics.totalTime) }}</div>
+            <div class="metric-label">
+              累计耗时
+            </div>
+            <div class="metric-value">
+              {{ formatSeconds(qcPerformanceMetrics.totalTime) }}
+            </div>
           </div>
           <div class="metric-item">
-            <div class="metric-label">平均耗时</div>
-            <div class="metric-value">{{ formatSeconds(qcAverageTime) }}</div>
+            <div class="metric-label">
+              平均耗时
+            </div>
+            <div class="metric-value">
+              {{ formatSeconds(qcAverageTime) }}
+            </div>
           </div>
           <div class="metric-item">
-            <div class="metric-label">Token 消耗</div>
-            <div class="metric-value">{{ formatTokens(qcPerformanceMetrics.totalTokens) }}</div>
+            <div class="metric-label">
+              Token 消耗
+            </div>
+            <div class="metric-value">
+              {{ formatTokens(qcPerformanceMetrics.totalTokens) }}
+            </div>
           </div>
         </div>
 
@@ -394,6 +481,11 @@ import type {
   AnalysisResultPayload
 } from '@/types/document-category'
 import { resolveApiBaseUrl, extractApiData } from '@/utils/api-helpers'
+
+type QCAnalysisResultCompat = QCAnalysisResult & {
+  evaluation_results?: Array<{ metadata?: unknown }>
+  performance_metrics?: unknown
+}
 
 const props = defineProps({
   recordId: {
@@ -541,8 +633,8 @@ const sortDocumentCategories = (categories: DocumentCategoryItem[]): DocumentCat
   }
 
   return [...categories].sort((a, b) => {
-    const priorityA = categoryPriority[a.category_code] || 999 // 未定义的分类放在最后
-    const priorityB = categoryPriority[b.category_code] || 999
+    const priorityA = categoryPriority[a.category_code as keyof typeof categoryPriority] || 999 // 未定义的分类放在最后
+    const priorityB = categoryPriority[b.category_code as keyof typeof categoryPriority] || 999
 
     // 按优先级升序排序（数字越小优先级越高）
     if (priorityA !== priorityB) {
@@ -576,7 +668,7 @@ const getTypeTagColor = (typeCode: string) => {
     'preoperative_summary': 'red',
     'operation_record': 'red'
   }
-  return typeMap[typeCode] || 'default'
+  return typeMap[typeCode as keyof typeof typeMap] || 'default'
 }
 
 // 将英文分类代码映射为用于规则分组的中文文书类型标签
@@ -611,7 +703,8 @@ const getCategoryColor = (category?: string) => {
     'consistency': 'purple',
     'compliance': 'red'
   }
-  return categoryColors[category] || 'default'
+  if (!category) return 'default'
+  return categoryColors[category as keyof typeof categoryColors] || 'default'
 }
 
 // 获取分类显示名称
@@ -623,7 +716,8 @@ const getCategoryDisplayName = (category?: string) => {
     'consistency': '一致性',
     'compliance': '合规性'
   }
-  return categoryNames[category] || category
+  if (!category) return '未知分类'
+  return categoryNames[category as keyof typeof categoryNames] || category
 }
 
 // 获取严重程度颜色
@@ -633,7 +727,8 @@ const getSeverityColor = (severity?: string) => {
     'major': 'orange',
     'minor': 'blue'
   }
-  return severityColors[severity] || 'default'
+  if (!severity) return 'default'
+  return severityColors[severity as keyof typeof severityColors] || 'default'
 }
 
 // 获取严重程度显示名称
@@ -643,7 +738,8 @@ const getSeverityDisplayName = (severity?: string) => {
     'major': '重要缺陷',
     'minor': '一般缺陷'
   }
-  return severityNames[severity] || severity
+  if (!severity) return '未知'
+  return severityNames[severity as keyof typeof severityNames] || severity
 }
 
 // 兼容缺失的 type_info 或 type_name 字段
@@ -663,7 +759,8 @@ const getStatusTagColor = (status?: string) => {
     'warning': 'orange',
     'failed': 'red'
   }
-  return statusMap[status] || 'default'
+  if (!status) return 'default'
+  return statusMap[status as keyof typeof statusMap] || 'default'
 }
 
 // 质控状态相关方法
@@ -675,7 +772,8 @@ const getQCStatusColor = (status?: string) => {
     'pending': 'default',
     'analyzing': 'blue'
   }
-  return statusColors[status] || 'default'
+  if (!status) return 'default'
+  return statusColors[status as keyof typeof statusColors] || 'default'
 }
 
 const getQCStatusText = (status?: string) => {
@@ -686,7 +784,8 @@ const getQCStatusText = (status?: string) => {
     'pending': '待质控',
     'analyzing': '分析中'
   }
-  return statusTexts[status] || '未知状态'
+  if (!status) return '未知状态'
+  return statusTexts[status as keyof typeof statusTexts] || '未知状态'
 }
 
 // 质控评分样式类
@@ -740,7 +839,8 @@ const getStatusText = (status?: string) => {
     'warning': '质控警告',
     'failed': '质控失败'
   }
-  return statusMap[status] || '未知'
+  if (!status) return '未知'
+  return statusMap[status as keyof typeof statusMap] || '未知'
 }
 
 const handleDocumentClick = (document: DocumentItem) => {
@@ -964,16 +1064,17 @@ const viewQCResults = (document: DocumentItem) => {
 }
 
 // 质控分析完成回调
-const onAnalysisComplete = (result: AnalysisResultPayload) => {
+const onAnalysisComplete = (result: unknown) => {
+  const payload = result as AnalysisResultPayload
   try {
     if (!currentAnalysisDocument.value) return
 
     // 更新文档的质控状态
     const updatedDocument: DocumentItem = {
       ...currentAnalysisDocument.value,
-      qc_status: result.qc_status,
-      qc_score: result.qc_score,
-      qc_last_analyzed: result.analysis_time
+      qc_status: payload.qc_status,
+      qc_score: payload.qc_score,
+      qc_last_analyzed: payload.analysis_time
     }
 
     // 在documentData中更新对应的文档
@@ -983,12 +1084,12 @@ const onAnalysisComplete = (result: AnalysisResultPayload) => {
     })
 
     // 显示分析结果
-    const statusText = getStatusText(result.qc_status)
-    const statusIcon = result.qc_status === 'passed' ? '✅' :
-                      result.qc_status === 'warning' ? '⚠️' : '❌'
+    const statusText = getStatusText(payload.qc_status)
+    const statusIcon = payload.qc_status === 'passed' ? '✅' :
+                      payload.qc_status === 'warning' ? '⚠️' : '❌'
 
     message.success(
-      `${statusIcon} 质控分析完成！状态: ${statusText}，评分: ${result.qc_score}分`,
+      `${statusIcon} 质控分析完成！状态: ${statusText}，评分: ${payload.qc_score}分`,
       3
     )
 
@@ -1565,7 +1666,3 @@ watch(() => props.recordId, () => {
   }
 }
 </style>
-type QCAnalysisResultCompat = QCAnalysisResult & {
-  evaluation_results?: Array<{ metadata?: unknown }>
-  performance_metrics?: unknown
-}

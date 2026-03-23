@@ -41,9 +41,15 @@
       <!-- Right Content Area -->
       <div class="content-area">
         <!-- Tab 1: QC Results -->
-        <div v-if="store.activeCdssTab === 'qc'" class="tab-pane fade-in">
+        <div
+          v-if="store.activeCdssTab === 'qc'"
+          class="tab-pane fade-in"
+        >
           <!-- Empty State -->
-          <div v-if="!store.currentQCResult" class="empty-state">
+          <div
+            v-if="!store.currentQCResult"
+            class="empty-state"
+          >
             <a-empty
               :image="Empty.PRESENTED_IMAGE_SIMPLE"
               description="暂无质控结果"
@@ -55,16 +61,24 @@
           </div>
 
           <!-- QC Content -->
-          <div v-else class="qc-content scrollable">
+          <div
+            v-else
+            class="qc-content scrollable"
+          >
             <!-- Summary Card -->
             <div class="section-card summary-section">
               <div class="card-header">
                 <span class="title">质控结果概览</span>
-                <a-tag color="cyan">{{ QCRuleSetLabels[store.currentQCResult.ruleSet] }}</a-tag>
+                <a-tag color="cyan">
+                  {{ QCRuleSetLabels[store.currentQCResult.ruleSet] }}
+                </a-tag>
               </div>
               
               <div class="grade-row">
-                <div class="grade-badge" :class="`grade-${store.currentQCResult.evaluationSummary.overallGrade}`">
+                <div
+                  class="grade-badge"
+                  :class="`grade-${store.currentQCResult.evaluationSummary.overallGrade}`"
+                >
                   {{ store.currentQCResult.evaluationSummary.overallGrade }}
                 </div>
                 <div class="score-info">
@@ -110,12 +124,18 @@
                 </a-tag>
               </div>
 
-              <div v-if="store.currentViolations.length === 0" class="no-violations">
+              <div
+                v-if="store.currentViolations.length === 0"
+                class="no-violations"
+              >
                 <CheckCircleOutlined class="success-icon" />
                 <p>质控通过，未发现问题</p>
               </div>
 
-              <div v-else class="violations-list">
+              <div
+                v-else
+                class="violations-list"
+              >
                 <div
                   v-for="(violation, index) in store.currentViolations"
                   :key="`${violation.ruleId}-${index}`"
@@ -133,7 +153,10 @@
                   <div class="violation-desc">
                     {{ violation.description }}
                   </div>
-                  <div v-if="violation.suggestion" class="violation-suggestion">
+                  <div
+                    v-if="violation.suggestion"
+                    class="violation-suggestion"
+                  >
                     <BulbOutlined class="icon" />
                     <span>{{ violation.suggestion }}</span>
                   </div>
@@ -143,8 +166,13 @@
 
             <!-- Actions -->
             <div class="panel-footer">
-              <a-button block @click="handleExportReport">
-                <template #icon><ExportOutlined /></template>
+              <a-button
+                block
+                @click="handleExportReport"
+              >
+                <template #icon>
+                  <ExportOutlined />
+                </template>
                 导出质控报告
               </a-button>
             </div>
@@ -152,9 +180,15 @@
         </div>
 
         <!-- Tab 2: Frontpage -->
-        <div v-else-if="store.activeCdssTab === 'frontpage'" class="tab-pane fade-in">
-           <!-- Empty State -->
-           <div v-if="!store.frontpageDraft" class="empty-state">
+        <div
+          v-else-if="store.activeCdssTab === 'frontpage'"
+          class="tab-pane fade-in"
+        >
+          <!-- Empty State -->
+          <div
+            v-if="!store.frontpageDraft"
+            class="empty-state"
+          >
             <a-empty
               :image="Empty.PRESENTED_IMAGE_SIMPLE"
               description="暂无病案首页数据"
@@ -164,15 +198,22 @@
                 :loading="store.isFrontpageGenerating"
                 @click="handleGenerateFrontpage"
               >
-                <template #icon><FileAddOutlined /></template>
+                <template #icon>
+                  <FileAddOutlined />
+                </template>
                 {{ store.isFrontpageGenerating ? '生成中...' : '生成病案首页' }}
               </a-button>
             </a-empty>
           </div>
 
-          <div v-else class="frontpage-content scrollable">
+          <div
+            v-else
+            class="frontpage-content scrollable"
+          >
             <div class="section-card">
-              <div class="card-header"><span class="title">基本信息</span></div>
+              <div class="card-header">
+                <span class="title">基本信息</span>
+              </div>
               <div class="info-grid">
                 <div class="info-item">
                   <span class="label">姓名</span>
@@ -194,7 +235,9 @@
             </div>
 
             <div class="section-card">
-              <div class="card-header"><span class="title">住院信息</span></div>
+              <div class="card-header">
+                <span class="title">住院信息</span>
+              </div>
               <div class="info-list">
                 <div class="list-row">
                   <span class="label">入院时间</span>
@@ -220,13 +263,20 @@
             </div>
 
             <div class="section-card">
-              <div class="card-header"><span class="title">诊断信息</span></div>
+              <div class="card-header">
+                <span class="title">诊断信息</span>
+              </div>
               <div class="diagnosis-section">
                 <div class="diag-group main">
                   <span class="label">主要诊断</span>
-                  <div class="diag-value">{{ store.frontpageDraft.diagnoses.dischargeMainDiagnosisText || '-' }}</div>
+                  <div class="diag-value">
+                    {{ store.frontpageDraft.diagnoses.dischargeMainDiagnosisText || '-' }}
+                  </div>
                 </div>
-                <div v-if="store.frontpageDraft.diagnoses.dischargeOtherDiagnosesTexts.length > 0" class="diag-group">
+                <div
+                  v-if="store.frontpageDraft.diagnoses.dischargeOtherDiagnosesTexts.length > 0"
+                  class="diag-group"
+                >
                   <span class="label">其他诊断</span>
                   <div class="diag-list">
                     <div
@@ -243,12 +293,23 @@
             </div>
 
             <div class="panel-footer">
-              <a-button block @click="handleViewFullFrontpage">
-                <template #icon><EyeOutlined /></template>
+              <a-button
+                block
+                @click="handleViewFullFrontpage"
+              >
+                <template #icon>
+                  <EyeOutlined />
+                </template>
                 查看完整首页
               </a-button>
-              <a-button block style="margin-top: 8px" @click="handleGenerateFrontpage">
-                <template #icon><ReloadOutlined /></template>
+              <a-button
+                block
+                style="margin-top: 8px"
+                @click="handleGenerateFrontpage"
+              >
+                <template #icon>
+                  <ReloadOutlined />
+                </template>
                 重新生成
               </a-button>
             </div>

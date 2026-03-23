@@ -5,12 +5,16 @@
     <a-card title="QCRulesDemoPanel 测试">
       <QCRulesDemoPanel 
         :selected-rules="testRules"
+        :available-rules="testRules"
         :test-record="testRecord"
         @rules-updated="handleRulesUpdated"
       />
     </a-card>
     
-    <a-card title="测试数据" style="margin-top: 16px;">
+    <a-card
+      title="测试数据"
+      style="margin-top: 16px;"
+    >
       <pre>{{ JSON.stringify({ testRules, testRecord }, null, 2) }}</pre>
     </a-card>
   </div>
@@ -24,14 +28,17 @@ import type { QualityControlRule } from '@/types/quality-control'
 const testRules = ref<QualityControlRule[]>([
   {
     id: 'rule-001',
+    pointId: 'point-001',
+    conditions: [],
+    logicOperator: 'AND',
+    createTime: new Date().toISOString(),
+    updateTime: new Date().toISOString(),
     name: '病历完整性检查',
     description: '检查病历基本信息完整性',
     category: '完整性',
     severity: 'high',
-    condition: '自动触发',
-    checkItems: ['患者信息', '诊断信息'],
     weight: 1.0,
-    enabled: true
+    isActive: true
   }
 ])
 

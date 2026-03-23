@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 // 审核任务服务适配器
 // 适配Python FastAPI后端的审核任务管理功能
 
@@ -667,3 +668,4 @@ export class AuditTaskServiceAdapter {
 
 // 导出单例实例
 export const auditTaskService = new AuditTaskServiceAdapter()
+

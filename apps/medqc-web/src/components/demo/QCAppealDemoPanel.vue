@@ -1,17 +1,23 @@
 <template>
   <div class="qc-appeal-demo-panel">
-    <a-card title="申诉功能演示" class="appeal-panel">
+    <a-card
+      title="申诉功能演示"
+      class="appeal-panel"
+    >
       <template #extra>
         <a-space>
-          <a-badge :count="pendingCount" :offset="[10, 0]">
+          <a-badge
+            :count="pendingCount"
+            :offset="[10, 0]"
+          >
             <FormOutlined />
           </a-badge>
           <a-button
             type="primary"
             size="small"
             :icon="h(PlusOutlined)"
-            @click="handleCreateAppeal"
             :disabled="!activeNotification"
+            @click="handleCreateAppeal"
           >
             新建申诉
           </a-button>
@@ -20,7 +26,10 @@
 
       <!-- 申诉控制和筛选 -->
       <div class="appeal-controls">
-        <a-row :gutter="16" align="middle">
+        <a-row
+          :gutter="16"
+          align="middle"
+        >
           <a-col :span="6">
             <a-input-search
               v-model:value="searchKeyword"
@@ -36,12 +45,24 @@
               style="width: 100%"
               @change="handleFilterChange"
             >
-              <a-select-option value="">全部状态</a-select-option>
-              <a-select-option value="pending">待审核</a-select-option>
-              <a-select-option value="reviewing">审核中</a-select-option>
-              <a-select-option value="approved">已通过</a-select-option>
-              <a-select-option value="rejected">已驳回</a-select-option>
-              <a-select-option value="cancelled">已撤销</a-select-option>
+              <a-select-option value="">
+                全部状态
+              </a-select-option>
+              <a-select-option value="pending">
+                待审核
+              </a-select-option>
+              <a-select-option value="reviewing">
+                审核中
+              </a-select-option>
+              <a-select-option value="approved">
+                已通过
+              </a-select-option>
+              <a-select-option value="rejected">
+                已驳回
+              </a-select-option>
+              <a-select-option value="cancelled">
+                已撤销
+              </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="4">
@@ -51,12 +72,24 @@
               style="width: 100%"
               @change="handleFilterChange"
             >
-              <a-select-option value="">全部理由</a-select-option>
-              <a-select-option value="rule_misapplication">规则误用</a-select-option>
-              <a-select-option value="data_inaccuracy">数据不准确</a-select-option>
-              <a-select-option value="context_missing">缺少上下文</a-select-option>
-              <a-select-option value="technical_error">技术错误</a-select-option>
-              <a-select-option value="other">其他原因</a-select-option>
+              <a-select-option value="">
+                全部理由
+              </a-select-option>
+              <a-select-option value="rule_misapplication">
+                规则误用
+              </a-select-option>
+              <a-select-option value="data_inaccuracy">
+                数据不准确
+              </a-select-option>
+              <a-select-option value="context_missing">
+                缺少上下文
+              </a-select-option>
+              <a-select-option value="technical_error">
+                技术错误
+              </a-select-option>
+              <a-select-option value="other">
+                其他原因
+              </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="4">
@@ -68,18 +101,30 @@
           </a-col>
           <a-col :span="6">
             <a-space>
-              <a-button @click="handleRefresh" :icon="h(ReloadOutlined)">
+              <a-button
+                :icon="h(ReloadOutlined)"
+                @click="handleRefresh"
+              >
                 刷新
               </a-button>
-              <a-button @click="handleExport" :icon="h(DownloadOutlined)">
+              <a-button
+                :icon="h(DownloadOutlined)"
+                @click="handleExport"
+              >
                 导出
               </a-button>
               <a-dropdown>
                 <template #overlay>
                   <a-menu @click="handleBatchAction">
-                    <a-menu-item key="approve">批量通过</a-menu-item>
-                    <a-menu-item key="reject">批量驳回</a-menu-item>
-                    <a-menu-item key="delete">批量删除</a-menu-item>
+                    <a-menu-item key="approve">
+                      批量通过
+                    </a-menu-item>
+                    <a-menu-item key="reject">
+                      批量驳回
+                    </a-menu-item>
+                    <a-menu-item key="delete">
+                      批量删除
+                    </a-menu-item>
                   </a-menu>
                 </template>
                 <a-button>
@@ -93,47 +138,83 @@
       </div>
 
       <!-- 申诉统计 -->
-      <div class="appeal-stats" v-if="appeals.length > 0">
+      <div
+        v-if="appeals.length > 0"
+        class="appeal-stats"
+      >
         <a-row :gutter="16">
           <a-col :span="4">
-            <a-statistic title="总申诉" :value="appeals.length" />
+            <a-statistic
+              title="总申诉"
+              :value="appeals.length"
+            />
           </a-col>
           <a-col :span="4">
-            <a-statistic title="待审核" :value="pendingCount" :value-style="{ color: '#faad14' }" />
+            <a-statistic
+              title="待审核"
+              :value="pendingCount"
+              :value-style="{ color: '#faad14' }"
+            />
           </a-col>
           <a-col :span="4">
-            <a-statistic title="审核中" :value="reviewingCount" :value-style="{ color: '#1890ff' }" />
+            <a-statistic
+              title="审核中"
+              :value="reviewingCount"
+              :value-style="{ color: '#1890ff' }"
+            />
           </a-col>
           <a-col :span="4">
-            <a-statistic title="已通过" :value="approvedCount" :value-style="{ color: '#52c41a' }" />
+            <a-statistic
+              title="已通过"
+              :value="approvedCount"
+              :value-style="{ color: '#52c41a' }"
+            />
           </a-col>
           <a-col :span="4">
-            <a-statistic title="已驳回" :value="rejectedCount" :value-style="{ color: '#f5222d' }" />
+            <a-statistic
+              title="已驳回"
+              :value="rejectedCount"
+              :value-style="{ color: '#f5222d' }"
+            />
           </a-col>
           <a-col :span="4">
-            <a-statistic title="通过率" :value="approvalRate" suffix="%" :value-style="{ color: '#52c41a' }" />
+            <a-statistic
+              title="通过率"
+              :value="approvalRate"
+              suffix="%"
+              :value-style="{ color: '#52c41a' }"
+            />
           </a-col>
         </a-row>
       </div>
 
       <!-- 申诉列表 -->
       <div class="appeals-section">
-        <div v-if="filteredAppeals.length === 0" class="empty-appeals">
+        <div
+          v-if="filteredAppeals.length === 0"
+          class="empty-appeals"
+        >
           <a-empty :description="appeals.length === 0 ? '暂无申诉记录' : '没有符合条件的申诉'">
             <a-button
-              type="primary"
-              @click="handleCreateAppeal"
-              :disabled="!activeNotification"
               v-if="appeals.length === 0"
+              type="primary"
+              :disabled="!activeNotification"
+              @click="handleCreateAppeal"
             >
               创建申诉
             </a-button>
           </a-empty>
         </div>
 
-        <div v-else class="appeals-list">
+        <div
+          v-else
+          class="appeals-list"
+        >
           <!-- 批量操作选择 -->
-          <div class="batch-selection" v-if="filteredAppeals.length > 1">
+          <div
+            v-if="filteredAppeals.length > 1"
+            class="batch-selection"
+          >
             <a-checkbox
               :indeterminate="selectedAppeals.length > 0 && selectedAppeals.length < filteredAppeals.length"
               :checked="selectedAppeals.length === filteredAppeals.length"
@@ -154,7 +235,10 @@
             }"
           >
             <!-- 选择框 -->
-            <div class="appeal-checkbox" v-if="filteredAppeals.length > 1">
+            <div
+              v-if="filteredAppeals.length > 1"
+              class="appeal-checkbox"
+            >
               <a-checkbox
                 :checked="selectedAppeals.includes(appeal.id)"
                 @change="(e: Event) => handleSelectAppeal(appeal.id, (e.target as HTMLInputElement | null)?.checked ?? false)"
@@ -174,12 +258,17 @@
             
             <div class="appeal-content">
               <h5>申诉理由: {{ getReasonText(appeal.reason) }}</h5>
-              <p class="appeal-description">{{ appeal.description }}</p>
+              <p class="appeal-description">
+                {{ appeal.description }}
+              </p>
             </div>
             
             <div class="appeal-actions">
               <a-space>
-                <a-button size="small" @click="handleViewAppeal(appeal)">
+                <a-button
+                  size="small"
+                  @click="handleViewAppeal(appeal)"
+                >
                   查看详情
                 </a-button>
                 <a-button 
@@ -204,10 +293,18 @@
       </div>
       
       <!-- 当前申诉详情 -->
-      <div v-if="currentAppeal" class="current-appeal">
+      <div
+        v-if="currentAppeal"
+        class="current-appeal"
+      >
         <a-divider>申诉详情</a-divider>
         <div class="appeal-details">
-          <a-descriptions title="申诉信息" :column="2" bordered size="small">
+          <a-descriptions
+            title="申诉信息"
+            :column="2"
+            bordered
+            size="small"
+          >
             <a-descriptions-item label="申诉编号">
               {{ currentAppeal.id }}
             </a-descriptions-item>
@@ -222,7 +319,10 @@
             <a-descriptions-item label="提交时间">
               {{ formatTime(currentAppeal.submittedAt) }}
             </a-descriptions-item>
-            <a-descriptions-item label="申诉描述" :span="2">
+            <a-descriptions-item
+              label="申诉描述"
+              :span="2"
+            >
               {{ currentAppeal.description }}
             </a-descriptions-item>
             <a-descriptions-item 
@@ -235,7 +335,10 @@
           </a-descriptions>
           
           <!-- 附件列表 -->
-          <div v-if="currentAppeal.attachments.length > 0" class="attachments">
+          <div
+            v-if="currentAppeal.attachments.length > 0"
+            class="attachments"
+          >
             <h5>附件</h5>
             <a-list 
               :data-source="currentAppeal.attachments" 
@@ -266,8 +369,8 @@
         <a-space>
           <a-button 
             type="primary" 
-            @click="handleCreateAppeal"
             :disabled="!activeNotification"
+            @click="handleCreateAppeal"
           >
             <PlusOutlined />
             创建申诉

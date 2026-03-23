@@ -1,6 +1,9 @@
 <template>
   <div class="qc-rules-demo-panel">
-    <a-card title="质控规则演示" class="rules-panel">
+    <a-card
+      title="质控规则演示"
+      class="rules-panel"
+    >
       <template #extra>
         <a-tooltip title="规则配置">
           <SettingOutlined />
@@ -18,13 +21,20 @@
           style="margin-bottom: 16px;"
         >
           <template #description>
-            <a-space :size="8" wrap>
+            <a-space
+              :size="8"
+              wrap
+            >
               <a-tag color="blue">
                 <FileProtectOutlined />
                 四川省标准（2023版）
               </a-tag>
-              <a-tag color="green">权威规则</a-tag>
-              <a-tag color="purple">LLM优化</a-tag>
+              <a-tag color="green">
+                权威规则
+              </a-tag>
+              <a-tag color="purple">
+                LLM优化
+              </a-tag>
             </a-space>
             <div style="margin-top: 8px; font-size: 13px;">
               基于《四川省住院病历质量评定标准（2023年版）》，包含完整的质控规则库
@@ -56,7 +66,10 @@
               />
             </a-col>
           </a-row>
-          <a-typography-text type="secondary" class="summary-tip">
+          <a-typography-text
+            type="secondary"
+            class="summary-tip"
+          >
             建议勾选至少 3 条规则以保障规则覆盖范围。
           </a-typography-text>
         </div>
@@ -70,13 +83,21 @@
             >
               全选当前列表
             </a-checkbox>
-            <a-button size="small" @click="clearAllRules" :disabled="selectedRules.length === 0">
+            <a-button
+              size="small"
+              :disabled="selectedRules.length === 0"
+              @click="clearAllRules"
+            >
               清空选择
             </a-button>
           </a-space>
         </div>
 
-        <div v-if="selectedDocuments && selectedDocuments.length > 0" class="document-filter-info" style="margin-bottom: 12px;">
+        <div
+          v-if="selectedDocuments && selectedDocuments.length > 0"
+          class="document-filter-info"
+          style="margin-bottom: 12px;"
+        >
           <a-alert
             type="info"
             show-icon
@@ -86,44 +107,63 @@
           />
         </div>
 
-        <div class="rules-filter" style="margin-bottom: 16px;">
+        <div
+          class="rules-filter"
+          style="margin-bottom: 16px;"
+        >
           <a-row :gutter="8">
             <a-col :span="8">
               <a-select
                 v-model:value="categoryFilter"
                 placeholder="按类别筛选"
-                allowClear
+                allow-clear
                 size="small"
                 style="width: 100%;"
               >
-                <a-select-option value="completeness">完整性</a-select-option>
-                <a-select-option value="consistency">一致性</a-select-option>
-                <a-select-option value="rationality">合理性</a-select-option>
+                <a-select-option value="completeness">
+                  完整性
+                </a-select-option>
+                <a-select-option value="consistency">
+                  一致性
+                </a-select-option>
+                <a-select-option value="rationality">
+                  合理性
+                </a-select-option>
               </a-select>
             </a-col>
             <a-col :span="8">
               <a-select
                 v-model:value="severityFilter"
                 placeholder="按严重程度筛选"
-                allowClear
+                allow-clear
                 size="small"
                 style="width: 100%;"
               >
-                <a-select-option value="high">严重</a-select-option>
-                <a-select-option value="medium">重要</a-select-option>
-                <a-select-option value="low">轻微</a-select-option>
+                <a-select-option value="high">
+                  严重
+                </a-select-option>
+                <a-select-option value="medium">
+                  重要
+                </a-select-option>
+                <a-select-option value="low">
+                  轻微
+                </a-select-option>
               </a-select>
             </a-col>
             <a-col :span="8">
               <a-select
                 v-model:value="statusFilter"
                 placeholder="按状态筛选"
-                allowClear
+                allow-clear
                 size="small"
                 style="width: 100%;"
               >
-                <a-select-option value="active">启用</a-select-option>
-                <a-select-option value="inactive">禁用</a-select-option>
+                <a-select-option value="active">
+                  启用
+                </a-select-option>
+                <a-select-option value="inactive">
+                  禁用
+                </a-select-option>
               </a-select>
             </a-col>
           </a-row>
@@ -159,20 +199,46 @@
       <!-- 测试病历信息 -->
       <div class="record-section">
         <h4>测试病历</h4>
-        <div v-if="!testRecord" class="empty-record">
+        <div
+          v-if="!testRecord"
+          class="empty-record"
+        >
           <a-empty description="暂无选择的测试病历">
-            <a-button type="dashed" @click="selectTestRecord">
+            <a-button
+              type="dashed"
+              @click="selectTestRecord"
+            >
               选择测试病历
             </a-button>
           </a-empty>
         </div>
-        <div v-else class="record-info">
-          <a-descriptions :column="2" size="small" bordered>
-            <a-descriptions-item label="病历号">{{ testRecord.id }}</a-descriptions-item>
-            <a-descriptions-item label="患者姓名">{{ testRecord.patient_name || testRecord.patientName }}</a-descriptions-item>
-            <a-descriptions-item label="科室">{{ testRecord.department }}</a-descriptions-item>
-            <a-descriptions-item label="入院日期">{{ testRecord.admission_date || testRecord.admissionDate }}</a-descriptions-item>
-            <a-descriptions-item label="病历类型" :span="2">{{ testRecord.record_type || testRecord.type }}</a-descriptions-item>
+        <div
+          v-else
+          class="record-info"
+        >
+          <a-descriptions
+            :column="2"
+            size="small"
+            bordered
+          >
+            <a-descriptions-item label="病历号">
+              {{ testRecord.id }}
+            </a-descriptions-item>
+            <a-descriptions-item label="患者姓名">
+              {{ testRecord.patient_name || testRecord.patientName }}
+            </a-descriptions-item>
+            <a-descriptions-item label="科室">
+              {{ testRecord.department }}
+            </a-descriptions-item>
+            <a-descriptions-item label="入院日期">
+              {{ testRecord.admission_date || testRecord.admissionDate }}
+            </a-descriptions-item>
+            <a-descriptions-item
+              label="病历类型"
+              :span="2"
+            >
+              {{ testRecord.record_type || testRecord.type }}
+            </a-descriptions-item>
           </a-descriptions>
         </div>
       </div>
@@ -184,8 +250,8 @@
             type="primary"
             :icon="h(PlayCircleOutlined)"
             :disabled="selectedRules.length === 0 || !testRecord"
-            @click="handleStartAnalysis"
             size="large"
+            @click="handleStartAnalysis"
           >
             开始质控分析
           </a-button>
@@ -210,12 +276,14 @@ import { DOCUMENT_TYPE_TO_CATEGORY } from '@/utils/documentTypeUtils'
 import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
 
 // Props
-const props = defineProps<{
-  selectedRules: unknown[]
-  availableRules: unknown[]
+const props = withDefaults(defineProps<{
+  selectedRules: QualityControlRule[]
+  availableRules?: QualityControlRule[]
   testRecord: Record<string, unknown>
   selectedDocuments?: Array<{ id: string; title?: string; type?: string; created_at?: string }>
-}>()
+}>(), {
+  availableRules: () => []
+})
 
 // Emits
 const emit = defineEmits<{
@@ -230,7 +298,7 @@ const statusFilter = ref<string>()
 const paginationState = reactive({ current: 1, pageSize: 6 })
 
 // 可用规则由父组件传入（来源：Supabase / 本地回退）
-const availableRules = (props.availableRules || []) as any[]
+const availableRules = props.availableRules as QualityControlRule[]
 
 const getRuleIdentity = (rule: any): string => {
   if (!rule) return ''

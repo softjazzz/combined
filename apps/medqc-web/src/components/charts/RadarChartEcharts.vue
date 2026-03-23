@@ -84,7 +84,7 @@ const chartOption = computed(() => {
       formatter: (params: RadarTooltipParams) => {
         const name = params.name || ''
         const value = Array.isArray(params.value) ? params.value : []
-        const color = color || '#1890ff'
+        const color = '#1890ff'
         let content = `<div style="font-weight: bold; margin-bottom: 8px;">${name}</div>`
         
         value.forEach((val: number, index: number) => {
@@ -203,4 +203,3 @@ defineExpose({
   }
 }
 </style> 
-

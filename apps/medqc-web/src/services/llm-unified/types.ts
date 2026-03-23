@@ -15,6 +15,8 @@ export interface LLMConfig {
   timeout?: number
 }
 
+export type UserLLMConfig = LLMConfig
+
 export interface CallOptions {
   temperature?: number
   maxTokens?: number

@@ -2,15 +2,27 @@
   <div class="hm-frontpage-preview">
     <div class="toolbar">
       <a-space>
-        <a-button :disabled="!srcdoc" @click="printIframe">打印</a-button>
-        <a-typography-text type="secondary" class="hint">
+        <a-button
+          :disabled="!srcdoc"
+          @click="printIframe"
+        >
+          打印
+        </a-button>
+        <a-typography-text
+          type="secondary"
+          class="hint"
+        >
           基于 HM 模板回填（仅展示/打印，一期不含编辑交互）
         </a-typography-text>
       </a-space>
     </div>
     
     <div class="frame-wrap">
-      <iframe ref="iframeRef" class="preview-frame" :srcdoc="srcdoc" />
+      <iframe
+        ref="iframeRef"
+        class="preview-frame"
+        :srcdoc="srcdoc"
+      />
     </div>
   </div>
 </template>

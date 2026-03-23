@@ -3,23 +3,33 @@
     <!-- 页面标题 -->
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">评分标准配置</h1>
-        <p class="text-gray-500 text-sm mt-1">管理质控扣分规则、最高扣分限制和一票否决项</p>
+        <h1 class="text-2xl font-bold text-gray-800">
+          评分标准配置
+        </h1>
+        <p class="text-gray-500 text-sm mt-1">
+          管理质控扣分规则、最高扣分限制和一票否决项
+        </p>
       </div>
       <div class="flex gap-3">
         <a-upload
-          :showUploadList="false"
+          :show-upload-list="false"
           accept=".xlsx,.xls"
-          :customRequest="handleImport"
+          :custom-request="handleImport"
         >
           <a-button :loading="importing">
             <UploadOutlined /> 导入 Excel
           </a-button>
         </a-upload>
-        <a-button @click="handleExport" :loading="exporting">
+        <a-button
+          :loading="exporting"
+          @click="handleExport"
+        >
           <DownloadOutlined /> 导出 Excel
         </a-button>
-        <a-button type="primary" @click="openDrawer()">
+        <a-button
+          type="primary"
+          @click="openDrawer()"
+        >
           <PlusOutlined /> 新增规则
         </a-button>
       </div>
@@ -36,12 +46,17 @@
         ]"
         @click="activeCategory = activeCategory === catName ? '' : catName as string"
       >
-        <div class="text-sm text-gray-500">{{ catName }}</div>
+        <div class="text-sm text-gray-500">
+          {{ catName }}
+        </div>
         <div class="flex items-end justify-between mt-2">
           <span class="text-2xl font-bold text-gray-800">{{ cat.total }}</span>
           <div class="text-xs">
             <span class="text-green-600">{{ cat.enabled }} 启用</span>
-            <span v-if="cat.veto_count" class="text-red-500 ml-2">{{ cat.veto_count }} 否决</span>
+            <span
+              v-if="cat.veto_count"
+              class="text-red-500 ml-2"
+            >{{ cat.veto_count }} 否决</span>
           </div>
         </div>
       </div>
@@ -60,16 +75,23 @@
       </div>
 
       <a-table
-        :dataSource="filteredRules"
+        :data-source="filteredRules"
         :columns="columns"
-        rowKey="id"
+        row-key="id"
         :pagination="{ pageSize: 20, showTotal: (t: number) => `共 ${t} 条` }"
         size="middle"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
-            <div class="font-medium text-gray-800">{{ record.name }}</div>
-            <div v-if="record.description" class="text-xs text-gray-400 mt-0.5">{{ record.description }}</div>
+            <div class="font-medium text-gray-800">
+              {{ record.name }}
+            </div>
+            <div
+              v-if="record.description"
+              class="text-xs text-gray-400 mt-0.5"
+            >
+              {{ record.description }}
+            </div>
           </template>
 
           <template v-if="column.key === 'category'">
@@ -82,16 +104,25 @@
           </template>
 
           <template v-if="column.key === 'deduction'">
-            <span class="font-bold" :class="record.veto ? 'text-red-600' : 'text-orange-600'">
+            <span
+              class="font-bold"
+              :class="record.veto ? 'text-red-600' : 'text-orange-600'"
+            >
               {{ record.veto ? '一票否决' : `-${record.deduction}分` }}
             </span>
-            <div v-if="!record.veto && record.max_deduction !== record.deduction" class="text-xs text-gray-400">
+            <div
+              v-if="!record.veto && record.max_deduction !== record.deduction"
+              class="text-xs text-gray-400"
+            >
               最高 -{{ record.max_deduction }}分
             </div>
           </template>
 
           <template v-if="column.key === 'severity'">
-            <a-tag :color="severityColor(record.severity)" size="small">
+            <a-tag
+              :color="severityColor(record.severity)"
+              size="small"
+            >
               {{ severityLabel(record.severity) }}
             </a-tag>
           </template>
@@ -99,17 +130,32 @@
           <template v-if="column.key === 'enabled'">
             <a-switch
               :checked="record.enabled"
-              @change="handleToggle(record)"
               size="small"
               :loading="togglingId === record.id"
+              @change="handleToggle(record)"
             />
           </template>
 
           <template v-if="column.key === 'actions'">
             <a-space>
-              <a-button type="link" size="small" @click="openDrawer(record)">编辑</a-button>
-              <a-popconfirm title="确定删除此规则？" @confirm="handleDelete(record.id)">
-                <a-button type="link" size="small" danger>删除</a-button>
+              <a-button
+                type="link"
+                size="small"
+                @click="openDrawer(record)"
+              >
+                编辑
+              </a-button>
+              <a-popconfirm
+                title="确定删除此规则？"
+                @confirm="handleDelete(record.id)"
+              >
+                <a-button
+                  type="link"
+                  size="small"
+                  danger
+                >
+                  删除
+                </a-button>
               </a-popconfirm>
             </a-space>
           </template>
@@ -122,20 +168,36 @@
       v-model:open="drawerVisible"
       :title="editingRule ? '编辑规则' : '新增规则'"
       :width="480"
-      :bodyStyle="{ padding: '24px' }"
+      :body-style="{ padding: '24px' }"
       @close="closeDrawer"
     >
-      <a-form :model="formData" layout="vertical">
-        <a-form-item label="规则名称" required>
-          <a-input v-model:value="formData.name" placeholder="例如：入院记录24h内完成" />
+      <a-form
+        :model="formData"
+        layout="vertical"
+      >
+        <a-form-item
+          label="规则名称"
+          required
+        >
+          <a-input
+            v-model:value="formData.name"
+            placeholder="例如：入院记录24h内完成"
+          />
         </a-form-item>
 
         <a-form-item label="类别">
-          <a-select v-model:value="formData.category" :options="categoryOptions" />
+          <a-select
+            v-model:value="formData.category"
+            :options="categoryOptions"
+          />
         </a-form-item>
 
         <a-form-item label="说明">
-          <a-textarea v-model:value="formData.description" :rows="2" placeholder="规则详细说明" />
+          <a-textarea
+            v-model:value="formData.description"
+            :rows="2"
+            placeholder="规则详细说明"
+          />
         </a-form-item>
 
         <a-form-item label="是否一票否决">
@@ -147,12 +209,24 @@
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item label="单项扣分">
-                <a-input-number v-model:value="formData.deduction" :min="0.5" :max="50" :step="0.5" style="width: 100%" />
+                <a-input-number
+                  v-model:value="formData.deduction"
+                  :min="0.5"
+                  :max="50"
+                  :step="0.5"
+                  style="width: 100%"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item label="最高扣分">
-                <a-input-number v-model:value="formData.max_deduction" :min="0.5" :max="100" :step="0.5" style="width: 100%" />
+                <a-input-number
+                  v-model:value="formData.max_deduction"
+                  :min="0.5"
+                  :max="100"
+                  :step="0.5"
+                  style="width: 100%"
+                />
               </a-form-item>
             </a-col>
           </a-row>
@@ -160,18 +234,32 @@
 
         <a-form-item label="严重级别">
           <a-radio-group v-model:value="formData.severity">
-            <a-radio-button value="info">提示</a-radio-button>
-            <a-radio-button value="warning">警告</a-radio-button>
-            <a-radio-button value="error">错误</a-radio-button>
-            <a-radio-button value="critical">严重</a-radio-button>
+            <a-radio-button value="info">
+              提示
+            </a-radio-button>
+            <a-radio-button value="warning">
+              警告
+            </a-radio-button>
+            <a-radio-button value="error">
+              错误
+            </a-radio-button>
+            <a-radio-button value="critical">
+              严重
+            </a-radio-button>
           </a-radio-group>
         </a-form-item>
       </a-form>
 
       <template #footer>
         <div class="flex justify-end gap-3">
-          <a-button @click="closeDrawer">取消</a-button>
-          <a-button type="primary" @click="handleSave" :loading="saving">
+          <a-button @click="closeDrawer">
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="saving"
+            @click="handleSave"
+          >
             {{ editingRule ? '保存' : '创建' }}
           </a-button>
         </div>

@@ -1,6 +1,10 @@
 <template>
   <div class="fee-composition-chart">
-    <VChart :option="chartOption" :autoresize="true" style="height: 320px" />
+    <VChart
+      :option="chartOption"
+      :autoresize="true"
+      style="height: 320px"
+    />
   </div>
 </template>
 

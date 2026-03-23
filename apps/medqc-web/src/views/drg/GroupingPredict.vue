@@ -3,14 +3,22 @@
     <a-page-header
       title="DRG 分组预测"
       sub-title="DRG 入组预测和模拟试算"
-      @back="() => $router.back()"
       class="page-header"
+      @back="() => $router.back()"
     >
       <template #extra>
-         <a-button type="primary" @click="handlePredict" :loading="predicting" :disabled="!canPredict" class="predict-btn">
-           <template #icon><ThunderboltOutlined /></template>
-           开始预测
-         </a-button>
+        <a-button
+          type="primary"
+          :loading="predicting"
+          :disabled="!canPredict"
+          class="predict-btn"
+          @click="handlePredict"
+        >
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
+          开始预测
+        </a-button>
       </template>
     </a-page-header>
 
@@ -32,17 +40,25 @@
                   show-search
                   placeholder="从现有病案导入数据..."
                   class="import-select"
-                  @change="handleImportCase"
                   :options="caseOptions"
+                  @change="handleImportCase"
                 />
               </div>
               
               <!-- 分组引擎选择 -->
               <div class="engine-selector">
                 <span class="engine-label">分组引擎:</span>
-                <a-radio-group v-model:value="engineType" button-style="solid" class="engine-radio-group">
-                  <a-radio-button value="DRG">OpenDRG</a-radio-button>
-                  <a-radio-button value="DIP">DIP (按病种分值)</a-radio-button>
+                <a-radio-group
+                  v-model:value="engineType"
+                  button-style="solid"
+                  class="engine-radio-group"
+                >
+                  <a-radio-button value="DRG">
+                    OpenDRG
+                  </a-radio-button>
+                  <a-radio-button value="DIP">
+                    DIP (按病种分值)
+                  </a-radio-button>
                 </a-radio-group>
               </div>
 
@@ -65,10 +81,10 @@
                   <div class="form-group">
                     <label class="form-label">总费用 (预估)</label>
                     <a-input-number
-                       v-model:value="formData.total_cost"
-                       class="cost-input"
-                       :formatter="value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
-                       :parser="value => value.replace(/\¥\s?|(,*)/g, '')"
+                      v-model:value="formData.total_cost"
+                      class="cost-input"
+                      :formatter="(value: string | number | undefined) => `¥ ${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+                      :parser="(value: string | undefined) => (value || '').replace(/\¥\s?|(,*)/g, '')"
                     />
                   </div>
                 </a-col>
@@ -78,25 +94,48 @@
               <div class="section-block">
                 <div class="section-header">
                   <span class="section-title">次诊断</span>
-                  <a-button type="link" size="small" class="add-btn" @click="addSecondaryDiagnosis">
+                  <a-button
+                    type="link"
+                    size="small"
+                    class="add-btn"
+                    @click="addSecondaryDiagnosis"
+                  >
                     <PlusOutlined /> 添加
                   </a-button>
                 </div>
-                <div v-if="formData.secondary_diagnoses.length === 0" class="empty-hint">
+                <div
+                  v-if="formData.secondary_diagnoses.length === 0"
+                  class="empty-hint"
+                >
                   暂无次诊断，点击"添加"按钮添加
                 </div>
-                <div v-for="(item, index) in formData.secondary_diagnoses" :key="index" class="dynamic-item">
+                <div
+                  v-for="(item, index) in formData.secondary_diagnoses"
+                  :key="index"
+                  class="dynamic-item"
+                >
                   <ICDCodeSearch
-                     v-model:value="item.code"
-                     v-model:name="item.name"
-                     category="diagnosis"
-                     placeholder="次诊断"
-                     class="flex-input"
-                   />
-                   <a-checkbox v-model:checked="item.is_complication" class="complication-check">并发症</a-checkbox>
-                   <a-button type="text" danger size="small" class="delete-btn" @click="removeSecondaryDiagnosis(index)">
-                     <DeleteOutlined />
-                   </a-button>
+                    v-model:value="item.code"
+                    v-model:name="item.name"
+                    category="diagnosis"
+                    placeholder="次诊断"
+                    class="flex-input"
+                  />
+                  <a-checkbox
+                    v-model:checked="item.is_complication"
+                    class="complication-check"
+                  >
+                    并发症
+                  </a-checkbox>
+                  <a-button
+                    type="text"
+                    danger
+                    size="small"
+                    class="delete-btn"
+                    @click="removeSecondaryDiagnosis(index)"
+                  >
+                    <DeleteOutlined />
+                  </a-button>
                 </div>
               </div>
 
@@ -104,24 +143,42 @@
               <div class="section-block">
                 <div class="section-header">
                   <span class="section-title">手术操作</span>
-                  <a-button type="link" size="small" class="add-btn" @click="addProcedure">
+                  <a-button
+                    type="link"
+                    size="small"
+                    class="add-btn"
+                    @click="addProcedure"
+                  >
                     <PlusOutlined /> 添加
                   </a-button>
                 </div>
-                <div v-if="formData.procedures.length === 0" class="empty-hint">
+                <div
+                  v-if="formData.procedures.length === 0"
+                  class="empty-hint"
+                >
                   暂无手术操作
                 </div>
-                <div v-for="(item, index) in formData.procedures" :key="index" class="dynamic-item">
+                <div
+                  v-for="(item, index) in formData.procedures"
+                  :key="index"
+                  class="dynamic-item"
+                >
                   <ICDCodeSearch
-                     v-model:value="item.code"
-                     v-model:name="item.name"
-                     category="procedure"
-                     placeholder="手术操作"
-                     class="flex-input"
-                   />
-                   <a-button type="text" danger size="small" class="delete-btn" @click="removeProcedure(index)">
-                     <DeleteOutlined />
-                   </a-button>
+                    v-model:value="item.code"
+                    v-model:name="item.name"
+                    category="procedure"
+                    placeholder="手术操作"
+                    class="flex-input"
+                  />
+                  <a-button
+                    type="text"
+                    danger
+                    size="small"
+                    class="delete-btn"
+                    @click="removeProcedure(index)"
+                  >
+                    <DeleteOutlined />
+                  </a-button>
                 </div>
               </div>
             </div>
@@ -131,34 +188,50 @@
         <!-- 右侧：预测结果 -->
         <a-col :span="10">
           <a-spin :spinning="predicting">
-            <DRGResultCard v-if="groupingResult" :result="groupingResult" :engineType="engineType" style="margin-bottom: 16px" />
+            <DRGResultCard
+              v-if="groupingResult"
+              :result="groupingResult"
+              :engine-type="engineType"
+              style="margin-bottom: 16px"
+            />
             
             <!-- 结果占位符 -->
-            <div v-else class="empty-result-card">
+            <div
+              v-else
+              class="empty-result-card"
+            >
               <div class="empty-icon">
                 <FileSearchOutlined />
               </div>
-              <div class="empty-text">点击"开始预测"获取分组结果</div>
+              <div class="empty-text">
+                点击"开始预测"获取分组结果
+              </div>
             </div>
 
             <!-- 盈亏分析卡片 -->
-            <div v-if="groupingResult" class="profit-card">
+            <div
+              v-if="groupingResult"
+              class="profit-card"
+            >
               <div class="card-header">
                 <span class="card-title">盈亏分析模拟</span>
               </div>
               <div class="card-body">
                 <div class="profit-row">
                   <span class="profit-label">预估收入 (基准支付)</span>
-                  <span class="profit-value">¥{{ groupingResult.baseline_payment.toLocaleString() }}</span>
+                  <span class="profit-value">¥{{ (groupingResult.baseline_payment ?? 0).toLocaleString() }}</span>
                 </div>
                 <div class="profit-row">
                   <span class="profit-label">预估成本 (总费用)</span>
                   <span class="profit-value">¥{{ (formData.total_cost || 0).toLocaleString() }}</span>
                 </div>
-                <div class="profit-divider"></div>
+                <div class="profit-divider" />
                 <div class="profit-row total">
                   <span class="profit-label">预计盈亏</span>
-                  <span class="profit-value" :class="{ 'is-profit': profit > 0, 'is-loss': profit < 0 }">
+                  <span
+                    class="profit-value"
+                    :class="{ 'is-profit': profit > 0, 'is-loss': profit < 0 }"
+                  >
                     {{ profit > 0 ? '+' : '' }}¥{{ profit.toLocaleString() }}
                   </span>
                 </div>
@@ -199,7 +272,7 @@ const canPredict = computed(() => !!formData.value.primary_diagnosis_code)
 const caseOptions = computed(() => caseFrontPages.value.map(c => ({ label: `${c.admission_id} - ${c.patient_name}`, value: c.admission_id })))
 const profit = computed(() => {
   if (!groupingResult.value) return 0
-  return groupingResult.value.baseline_payment - (formData.value.total_cost || 0)
+  return (groupingResult.value.baseline_payment ?? 0) - (formData.value.total_cost || 0)
 })
 
 /** 加载病案列表 */

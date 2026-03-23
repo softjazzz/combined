@@ -3,23 +3,26 @@
   <div class="multi-level-audit">
     <!-- 审核级别标签页 -->
     <a-tabs 
-      v-model:activeKey="activeTab" 
-      @change="handleTabChange"
+      v-model:active-key="activeTab" 
       class="audit-level-tabs"
+      @change="handleTabChange"
     >
       <!-- 科室级审核 -->
-      <a-tab-pane key="department" tab="科室级审核">
+      <a-tab-pane
+        key="department"
+        tab="科室级审核"
+      >
         <template #tab>
           <span class="tab-title">
             <TeamOutlined />
             科室级审核
             <a-badge 
-              v-if="auditResults.department?.status === 'completed'"
+              v-if="auditResults.department?.status === 'approved'"
               status="success" 
               class="tab-badge"
             />
             <a-badge 
-              v-else-if="auditResults.department?.status === 'in_progress'"
+              v-else-if="auditResults.department?.status === 'submitted'"
               status="processing" 
               class="tab-badge"
             />
@@ -47,12 +50,12 @@
             <BankOutlined />
             院级审核
             <a-badge 
-              v-if="auditResults.hospital?.status === 'completed'"
+              v-if="auditResults.hospital?.status === 'approved'"
               status="success" 
               class="tab-badge"
             />
             <a-badge 
-              v-else-if="auditResults.hospital?.status === 'in_progress'"
+              v-else-if="auditResults.hospital?.status === 'submitted'"
               status="processing" 
               class="tab-badge"
             />
@@ -83,12 +86,12 @@
             <CrownOutlined />
             专家级审核
             <a-badge 
-              v-if="auditResults.expert?.status === 'completed'"
+              v-if="auditResults.expert?.status === 'approved'"
               status="success" 
               class="tab-badge"
             />
             <a-badge 
-              v-else-if="auditResults.expert?.status === 'in_progress'"
+              v-else-if="auditResults.expert?.status === 'submitted'"
               status="processing" 
               class="tab-badge"
             />
@@ -165,6 +168,22 @@ interface Props {
   taskItem?: QCAuditTaskItem
 }
 
+interface AuditHistoryItem {
+  level: AuditLevel
+  reviewer: string
+  score: number
+  status: QCAuditResult['status']
+  submitted_at: string | null | undefined
+  review_duration: QCAuditResult['review_duration']
+}
+
+interface ModifyFormRef {
+  validateAndGetData: () => Promise<ModifyLowerLevelPayload | null | undefined>
+}
+
+type CreateAuditResultPayload = Parameters<typeof auditResultService.createAuditResult>[3]
+type ModifyLowerLevelPayload = Parameters<typeof auditResultService.modifyLowerLevelResult>[2]
+
 const props = defineProps<Props>()
 
 // Emits
@@ -185,12 +204,12 @@ const auditResults = ref<Record<AuditLevel, QCAuditResult | null>>({
   expert: null
 })
 
-const auditHistory = ref<any[]>([])
+const auditHistory = ref<AuditHistoryItem[]>([])
 
 // 修改下级结果相关
 const modifyModalVisible = ref(false)
 const modifyTarget = ref<QCAuditResult | null>(null)
-const modifyFormRef = ref()
+const modifyFormRef = ref<ModifyFormRef | null>(null)
 
 // 审核员信息
 const departmentReviewer = computed(() => auditResults.value.department?.reviewer_name)
@@ -223,6 +242,15 @@ const getErrorMessage = (error: unknown): string => {
   return '未知错误'
 }
 
+const getCurrentReviewerId = (): string | null => {
+  const reviewerId = authStore.user?.id
+  if (!reviewerId) {
+    message.error('未获取到当前用户，请重新登录后重试')
+    return null
+  }
+  return reviewerId
+}
+
 // 方法
 const loadAuditResults = async () => {
   try {
@@ -240,7 +268,7 @@ const loadAuditResults = async () => {
     // 构建审核历史
     auditHistory.value = results.map(result => ({
       level: result.audit_level,
-      reviewer: result.reviewer_name,
+      reviewer: result.reviewer_name || '',
       score: result.audit_score,
       status: result.status,
       submitted_at: result.submitted_at,
@@ -258,12 +286,15 @@ const handleTabChange = (key: string) => {
   activeTab.value = key as AuditLevel
 }
 
-const handleDepartmentUpdate = async (resultData) => {
+const handleDepartmentUpdate = async (resultData: CreateAuditResultPayload) => {
   try {
+    const reviewerId = getCurrentReviewerId()
+    if (!reviewerId) return
+
     const result = await auditResultService.createAuditResult(
       props.taskItemId,
       'department',
-      authStore.user.id,
+      reviewerId,
       resultData
     )
     
@@ -276,12 +307,15 @@ const handleDepartmentUpdate = async (resultData) => {
   }
 }
 
-const handleHospitalUpdate = async (resultData) => {
+const handleHospitalUpdate = async (resultData: CreateAuditResultPayload) => {
   try {
+    const reviewerId = getCurrentReviewerId()
+    if (!reviewerId) return
+
     const result = await auditResultService.createAuditResult(
       props.taskItemId,
       'hospital',
-      authStore.user.id,
+      reviewerId,
       resultData
     )
     
@@ -294,12 +328,15 @@ const handleHospitalUpdate = async (resultData) => {
   }
 }
 
-const handleExpertUpdate = async (resultData) => {
+const handleExpertUpdate = async (resultData: CreateAuditResultPayload) => {
   try {
+    const reviewerId = getCurrentReviewerId()
+    if (!reviewerId) return
+
     const result = await auditResultService.createAuditResult(
       props.taskItemId,
       'expert',
-      authStore.user.id,
+      reviewerId,
       resultData
     )
     
@@ -340,9 +377,12 @@ const handleConfirmModification = async () => {
       return
     }
     
+    const reviewerId = getCurrentReviewerId()
+    if (!reviewerId) return
+
     await auditResultService.modifyLowerLevelResult(
       modifyTarget.value.id,
-      authStore.user.id,
+      reviewerId,
       formData
     )
     
@@ -356,11 +396,11 @@ const handleConfirmModification = async () => {
   }
 }
 
-const handleModificationChange = (data) => {
+const handleModificationChange = (_data: ModifyLowerLevelPayload) => {
   // 处理修改表单数据变化
 }
 
-const handleViewHistoryDetail = (historyItem) => {
+const handleViewHistoryDetail = (historyItem: AuditHistoryItem) => {
   // 查看历史详情
   console.log('查看历史详情:', historyItem)
 }

@@ -1,7 +1,11 @@
 <template>
   <div class="step-progress">
     <!-- 步骤指示器 -->
-    <a-steps :current="currentStepIndex" size="small" class="mb-4">
+    <a-steps
+      :current="currentStepIndex"
+      size="small"
+      class="mb-4"
+    >
       <a-step
         v-for="step in steps"
         :key="step.key"
@@ -18,7 +22,10 @@
     <div class="progress-section">
       <div class="progress-header">
         <span class="progress-label">
-          <component :is="currentStepIcon" class="step-icon" />
+          <component
+            :is="currentStepIcon"
+            class="step-icon"
+          />
           {{ currentStepLabel }}
         </span>
         <span class="progress-percentage">{{ progress }}%</span>
@@ -46,8 +53,8 @@
       type="error"
       :message="error"
       closable
-      @close="$emit('clear-error')"
       class="mt-3"
+      @close="$emit('clear-error')"
     />
   </div>
 </template>

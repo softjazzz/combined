@@ -10,8 +10,10 @@
               'status-active': isMonitoring,
               'status-inactive': !isMonitoring
             }"
-          ></div>
-          <h2 class="dashboard-title">实时质控监控</h2>
+          />
+          <h2 class="dashboard-title">
+            实时质控监控
+          </h2>
         </div>
         <div class="system-health">
           <span class="health-label">系统状态:</span>
@@ -28,28 +30,31 @@
         <div class="control-buttons">
           <button
             v-if="!isMonitoring"
-            @click="startMonitoring"
             class="btn-start"
             :disabled="isStarting"
+            @click="startMonitoring"
           >
-            <i class="fas fa-play mr-2"></i>
+            <i class="fas fa-play mr-2" />
             {{ isStarting ? '启动中...' : '启动监控' }}
           </button>
           <button
             v-else
-            @click="stopMonitoring"
             class="btn-stop"
             :disabled="isStopping"
+            @click="stopMonitoring"
           >
-            <i class="fas fa-stop mr-2"></i>
+            <i class="fas fa-stop mr-2" />
             {{ isStopping ? '停止中...' : '停止监控' }}
           </button>
           <button
-            @click="refreshDashboard"
             class="btn-refresh"
             :disabled="isRefreshing"
+            @click="refreshDashboard"
           >
-            <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshing }"></i>
+            <i
+              class="fas fa-sync-alt"
+              :class="{ 'fa-spin': isRefreshing }"
+            />
           </button>
         </div>
       </div>
@@ -59,63 +64,102 @@
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-icon">
-          <i class="fas fa-users text-blue-500"></i>
+          <i class="fas fa-users text-blue-500" />
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ monitorStatus.connectedUsers }}</div>
-          <div class="stat-label">在线用户</div>
+          <div class="stat-value">
+            {{ monitorStatus.connectedUsers }}
+          </div>
+          <div class="stat-label">
+            在线用户
+          </div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="stat-icon">
-          <i class="fas fa-cog fa-spin text-orange-500" v-if="monitorStatus.activeAnalyses > 0"></i>
-          <i class="fas fa-cog text-gray-400" v-else></i>
+          <i
+            v-if="monitorStatus.activeAnalyses > 0"
+            class="fas fa-cog fa-spin text-orange-500"
+          />
+          <i
+            v-else
+            class="fas fa-cog text-gray-400"
+          />
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ monitorStatus.activeAnalyses }}</div>
-          <div class="stat-label">活跃分析</div>
+          <div class="stat-value">
+            {{ monitorStatus.activeAnalyses }}
+          </div>
+          <div class="stat-label">
+            活跃分析
+          </div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="stat-icon">
-          <i class="fas fa-chart-line text-green-500"></i>
+          <i class="fas fa-chart-line text-green-500" />
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ monitorStatus.totalAnalysesToday }}</div>
-          <div class="stat-label">今日分析</div>
+          <div class="stat-value">
+            {{ monitorStatus.totalAnalysesToday }}
+          </div>
+          <div class="stat-label">
+            今日分析
+          </div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="stat-icon">
-          <i class="fas fa-clock text-purple-500"></i>
+          <i class="fas fa-clock text-purple-500" />
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ formatResponseTime(monitorStatus.averageResponseTime) }}</div>
-          <div class="stat-label">平均响应</div>
+          <div class="stat-value">
+            {{ formatResponseTime(monitorStatus.averageResponseTime) }}
+          </div>
+          <div class="stat-label">
+            平均响应
+          </div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="stat-icon">
-          <i class="fas fa-exclamation-triangle text-red-500" v-if="criticalIssues.length > 0"></i>
-          <i class="fas fa-shield-alt text-green-500" v-else></i>
+          <i
+            v-if="criticalIssues.length > 0"
+            class="fas fa-exclamation-triangle text-red-500"
+          />
+          <i
+            v-else
+            class="fas fa-shield-alt text-green-500"
+          />
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ criticalIssues.length }}</div>
-          <div class="stat-label">严重问题</div>
+          <div class="stat-value">
+            {{ criticalIssues.length }}
+          </div>
+          <div class="stat-label">
+            严重问题
+          </div>
         </div>
       </div>
 
       <div class="stat-card">
         <div class="stat-icon">
-          <i class="fas fa-server" :class="getSystemLoadClass()"></i>
+          <i
+            class="fas fa-server"
+            :class="getSystemLoadClass()"
+          />
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ Math.round(monitorStatus.systemLoad) }}%</div>
-          <div class="stat-label">系统负载</div>
+          <div class="stat-value">
+            {{ Math.round(monitorStatus.systemLoad) }}%
+          </div>
+          <div class="stat-label">
+            系统负载
+          </div>
         </div>
       </div>
     </div>
@@ -124,29 +168,46 @@
     <div class="alerts-section">
       <div class="section-header">
         <h3 class="section-title">
-          <i class="fas fa-bell mr-2"></i>
+          <i class="fas fa-bell mr-2" />
           实时预警
         </h3>
         <div class="alert-summary">
-          <span class="alert-count critical" v-if="criticalIssues.length > 0">
+          <span
+            v-if="criticalIssues.length > 0"
+            class="alert-count critical"
+          >
             {{ criticalIssues.length }} 严重
           </span>
-          <span class="alert-count warning" v-if="warningIssues.length > 0">
+          <span
+            v-if="warningIssues.length > 0"
+            class="alert-count warning"
+          >
             {{ warningIssues.length }} 警告
           </span>
-          <span class="alert-count info" v-if="alertQueue.length === 0">
+          <span
+            v-if="alertQueue.length === 0"
+            class="alert-count info"
+          >
             无预警
           </span>
         </div>
       </div>
 
       <div class="alerts-container">
-        <div v-if="alertQueue.length === 0" class="no-alerts">
-          <i class="fas fa-check-circle text-green-500 text-4xl mb-3"></i>
-          <p class="text-gray-600">当前无质控预警</p>
+        <div
+          v-if="alertQueue.length === 0"
+          class="no-alerts"
+        >
+          <i class="fas fa-check-circle text-green-500 text-4xl mb-3" />
+          <p class="text-gray-600">
+            当前无质控预警
+          </p>
         </div>
 
-        <div v-else class="alerts-list">
+        <div
+          v-else
+          class="alerts-list"
+        >
           <div
             v-for="(alert, index) in alertQueue.slice(0, 10)"
             :key="index"
@@ -154,10 +215,12 @@
             :class="`alert-${alert.severity}`"
           >
             <div class="alert-icon">
-              <i :class="getAlertIcon(alert.severity)"></i>
+              <i :class="getAlertIcon(alert.severity)" />
             </div>
             <div class="alert-content">
-              <div class="alert-message">{{ alert.message }}</div>
+              <div class="alert-message">
+                {{ alert.message }}
+              </div>
               <div class="alert-meta">
                 <span class="alert-type">{{ alert.type }}</span>
                 <span class="alert-time">刚刚</span>
@@ -165,10 +228,10 @@
             </div>
             <div class="alert-actions">
               <button
-                @click="dismissAlert(index)"
                 class="btn-dismiss"
+                @click="dismissAlert(index)"
               >
-                <i class="fas fa-times"></i>
+                <i class="fas fa-times" />
               </button>
             </div>
           </div>
@@ -180,27 +243,48 @@
     <div class="results-section">
       <div class="section-header">
         <h3 class="section-title">
-          <i class="fas fa-chart-bar mr-2"></i>
+          <i class="fas fa-chart-bar mr-2" />
           最近分析结果
         </h3>
         <div class="results-controls">
-          <select v-model="resultFilter" class="filter-select">
-            <option value="all">全部</option>
-            <option value="critical">严重问题</option>
-            <option value="error">错误</option>
-            <option value="warning">警告</option>
-            <option value="info">信息</option>
+          <select
+            v-model="resultFilter"
+            class="filter-select"
+          >
+            <option value="all">
+              全部
+            </option>
+            <option value="critical">
+              严重问题
+            </option>
+            <option value="error">
+              错误
+            </option>
+            <option value="warning">
+              警告
+            </option>
+            <option value="info">
+              信息
+            </option>
           </select>
         </div>
       </div>
 
       <div class="results-container">
-        <div v-if="filteredResults.length === 0" class="no-results">
-          <i class="fas fa-search text-gray-400 text-4xl mb-3"></i>
-          <p class="text-gray-600">暂无分析结果</p>
+        <div
+          v-if="filteredResults.length === 0"
+          class="no-results"
+        >
+          <i class="fas fa-search text-gray-400 text-4xl mb-3" />
+          <p class="text-gray-600">
+            暂无分析结果
+          </p>
         </div>
 
-        <div v-else class="results-list">
+        <div
+          v-else
+          class="results-list"
+        >
           <div
             v-for="result in filteredResults.slice(0, 20)"
             :key="result.id"
@@ -210,25 +294,31 @@
             <div class="result-header">
               <div class="result-info">
                 <span class="result-id">{{ result.recordId.slice(-8) }}</span>
-                <span class="result-level" :class="`level-${result.alertLevel}`">
+                <span
+                  class="result-level"
+                  :class="`level-${result.alertLevel}`"
+                >
                   {{ getLevelText(result.alertLevel) }}
                 </span>
                 <span class="result-time">{{ formatTime(result.timestamp) }}</span>
               </div>
               <div class="result-metrics">
                 <span class="metric">
-                  <i class="fas fa-clock"></i>
+                  <i class="fas fa-clock" />
                   {{ result.processingTime }}ms
                 </span>
                 <span class="metric">
-                  <i class="fas fa-percentage"></i>
+                  <i class="fas fa-percentage" />
                   {{ Math.round(result.confidence * 100) }}%
                 </span>
               </div>
             </div>
 
             <div class="result-content">
-              <div class="result-issues" v-if="result.issues.length > 0">
+              <div
+                v-if="result.issues.length > 0"
+                class="result-issues"
+              >
                 <div class="issues-summary">
                   发现 {{ result.issues.length }} 个问题:
                 </div>
@@ -241,14 +331,22 @@
                   >
                     {{ issue.message }}
                   </span>
-                  <span v-if="result.issues.length > 3" class="more-issues">
+                  <span
+                    v-if="result.issues.length > 3"
+                    class="more-issues"
+                  >
                     +{{ result.issues.length - 3 }} 更多
                   </span>
                 </div>
               </div>
 
-              <div class="result-suggestions" v-if="result.suggestions.length > 0">
-                <div class="suggestions-summary">建议:</div>
+              <div
+                v-if="result.suggestions.length > 0"
+                class="result-suggestions"
+              >
+                <div class="suggestions-summary">
+                  建议:
+                </div>
                 <div class="suggestions-list">
                   <div
                     v-for="(suggestion, idx) in result.suggestions.slice(0, 2)"
@@ -263,10 +361,10 @@
 
             <div class="result-actions">
               <button
-                @click="viewResultDetails(result)"
                 class="btn-view-details"
+                @click="viewResultDetails(result)"
               >
-                <i class="fas fa-eye mr-1"></i>
+                <i class="fas fa-eye mr-1" />
                 详情
               </button>
             </div>
@@ -279,20 +377,22 @@
     <div class="performance-section">
       <div class="section-header">
         <h3 class="section-title">
-          <i class="fas fa-tachometer-alt mr-2"></i>
+          <i class="fas fa-tachometer-alt mr-2" />
           系统性能
         </h3>
       </div>
 
       <div class="performance-charts">
         <div class="chart-container">
-          <div class="chart-title">响应时间趋势</div>
+          <div class="chart-title">
+            响应时间趋势
+          </div>
           <div class="chart-placeholder">
             <div class="performance-bar">
               <div 
                 class="performance-fill"
                 :style="{ width: getPerformanceWidth() }"
-              ></div>
+              />
             </div>
             <div class="performance-text">
               {{ formatResponseTime(monitorStatus.averageResponseTime) }} 平均响应时间
@@ -301,13 +401,15 @@
         </div>
 
         <div class="chart-container">
-          <div class="chart-title">系统负载</div>
+          <div class="chart-title">
+            系统负载
+          </div>
           <div class="chart-placeholder">
             <div class="load-gauge">
               <div 
                 class="load-indicator"
                 :style="{ transform: `rotate(${getLoadRotation()}deg)` }"
-              ></div>
+              />
             </div>
             <div class="load-text">
               {{ Math.round(monitorStatus.systemLoad) }}% 当前负载

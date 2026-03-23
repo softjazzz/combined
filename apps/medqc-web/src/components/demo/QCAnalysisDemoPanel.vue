@@ -1,16 +1,28 @@
 <template>
   <div class="qc-analysis-demo-panel">
-    <a-card title="质控分析过程" class="analysis-panel">
+    <a-card
+      title="质控分析过程"
+      class="analysis-panel"
+    >
       <template #extra>
         <a-tooltip title="分析状态">
-          <LoadingOutlined v-if="isRunning" spin />
-          <CheckCircleOutlined v-else-if="analysisResult" style="color: #52c41a" />
+          <LoadingOutlined
+            v-if="isRunning"
+            spin
+          />
+          <CheckCircleOutlined
+            v-else-if="analysisResult"
+            style="color: #52c41a"
+          />
           <ClockCircleOutlined v-else />
         </a-tooltip>
       </template>
       
       <!-- 分析步骤（运行中时显示） -->
-      <div class="analysis-steps" v-if="isRunning && analysisSteps.length > 0">
+      <div
+        v-if="isRunning && analysisSteps.length > 0"
+        class="analysis-steps"
+      >
         <h4>分析步骤</h4>
         <a-steps 
           :current="getCurrentStepIndex()" 
@@ -36,7 +48,10 @@
       </div>
       
       <!-- 分析结果汇总（完成后显示） -->
-      <div class="analysis-result-summary" v-if="analysisResult && !isRunning">
+      <div
+        v-if="analysisResult && !isRunning"
+        class="analysis-result-summary"
+      >
         <h4>分析结果汇总</h4>
         <a-row :gutter="16">
           <a-col :span="6">
@@ -74,29 +89,47 @@
         
         <!-- 查看详细报告按钮 -->
         <div class="view-detail-section">
-          <a-button type="primary" size="large" block @click="handleViewDetail">
+          <a-button
+            type="primary"
+            size="large"
+            block
+            @click="handleViewDetail"
+          >
             <FileTextOutlined />
             查看完整质控报告
           </a-button>
-          <p class="hint-text">点击查看详细的分析步骤、问题列表和规则明细</p>
+          <p class="hint-text">
+            点击查看详细的分析步骤、问题列表和规则明细
+          </p>
         </div>
       </div>
 
       <!-- 空状态 -->
-      <div v-else-if="!isRunning" class="empty-state">
+      <div
+        v-else-if="!isRunning"
+        class="empty-state"
+      >
         <a-empty description="暂无分析结果">
-          <a-button type="primary" @click="handleStartAnalysis">
+          <a-button
+            type="primary"
+            @click="handleStartAnalysis"
+          >
             开始分析
           </a-button>
         </a-empty>
       </div>
       
       <!-- 加载状态 -->
-      <div v-else class="loading-state">
+      <div
+        v-else
+        class="loading-state"
+      >
         <a-spin size="large">
           <div class="loading-content">
             <p>正在进行质控分析...</p>
-            <p class="loading-tip">请稍候，这可能需要几分钟时间</p>
+            <p class="loading-tip">
+              请稍候，这可能需要几分钟时间
+            </p>
           </div>
         </a-spin>
       </div>
@@ -106,7 +139,7 @@
     <QCResultDetailModal
       v-model:visible="showDetailModal"
       :result="analysisResult"
-      :analysisSteps="analysisSteps"
+      :analysis-steps="analysisSteps"
       @close="showDetailModal = false"
     />
   </div>

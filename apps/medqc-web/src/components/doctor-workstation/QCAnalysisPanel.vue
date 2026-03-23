@@ -3,45 +3,61 @@
     <!-- 面板头部 -->
     <div class="panel-header">
       <h3 class="panel-title">
-        <i class="fas fa-shield-alt"></i>
+        <i class="fas fa-shield-alt" />
         质控分析
       </h3>
       <button 
         class="refresh-btn"
-        @click="$emit('refresh')"
         :disabled="isAnalyzing"
         title="刷新分析"
+        @click="$emit('refresh')"
       >
-        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isAnalyzing }"></i>
+        <i
+          class="fas fa-sync-alt"
+          :class="{ 'fa-spin': isAnalyzing }"
+        />
       </button>
     </div>
 
     <!-- 分析状态 -->
-    <div v-if="isAnalyzing" class="analysis-loading">
+    <div
+      v-if="isAnalyzing"
+      class="analysis-loading"
+    >
       <div class="loading-spinner">
-        <i class="fas fa-spinner fa-spin"></i>
+        <i class="fas fa-spinner fa-spin" />
       </div>
       <p>正在进行质控分析...</p>
     </div>
 
     <!-- 分析结果 -->
-    <div v-else-if="analysisResult" class="analysis-results">
+    <div
+      v-else-if="normalizedResult"
+      class="analysis-results"
+    >
       <!-- 总体评分 -->
       <div class="score-section">
         <div class="score-card">
           <div class="score-value">
-            {{ analysisResult.overall_score }}
+            {{ normalizedResult.overall_score }}
           </div>
-          <div class="score-total">/ {{ analysisResult.max_score }}</div>
-          <div class="score-label">总分</div>
+          <div class="score-total">
+            / {{ normalizedResult.max_score }}
+          </div>
+          <div class="score-label">
+            总分
+          </div>
         </div>
         
         <div class="score-details">
           <div class="score-percentage">
-            {{ Math.round((analysisResult.overall_score / analysisResult.max_score) * 100) }}%
+            {{ Math.round((normalizedResult.overall_score / normalizedResult.max_score) * 100) }}%
           </div>
-          <div class="score-grade" :class="getGradeClass(analysisResult.overall_score)">
-            {{ getGrade(analysisResult.overall_score) }}
+          <div
+            class="score-grade"
+            :class="getGradeClass(normalizedResult.overall_score)"
+          >
+            {{ getGrade(normalizedResult.overall_score) }}
           </div>
         </div>
       </div>
@@ -51,26 +67,26 @@
         <div class="progress-bar">
           <div 
             class="progress-fill"
-            :class="getGradeClass(analysisResult.overall_score)"
-            :style="{ width: `${(analysisResult.overall_score / analysisResult.max_score) * 100}%` }"
-          ></div>
+            :class="getGradeClass(normalizedResult.overall_score)"
+            :style="{ width: `${(normalizedResult.overall_score / normalizedResult.max_score) * 100}%` }"
+          />
         </div>
         <div class="progress-labels">
           <span>0</span>
-          <span>{{ analysisResult.max_score }}</span>
+          <span>{{ normalizedResult.max_score }}</span>
         </div>
       </div>
 
       <!-- 规则检查结果 -->
       <div class="rules-section">
         <h4 class="section-title">
-          <i class="fas fa-list-check"></i>
+          <i class="fas fa-list-check" />
           规则检查结果
         </h4>
         
         <div class="rules-list">
           <div 
-            v-for="rule in analysisResult.analysis_results" 
+            v-for="rule in normalizedResult.analysis_results" 
             :key="rule.rule_id"
             class="rule-item"
             :class="{ 'rule-failed': !rule.passed }"
@@ -80,11 +96,15 @@
                 <i 
                   class="fas"
                   :class="rule.passed ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'"
-                ></i>
+                />
               </div>
               <div class="rule-info">
-                <div class="rule-name">{{ rule.rule_name }}</div>
-                <div class="rule-category">{{ getCategoryName(rule.category) }}</div>
+                <div class="rule-name">
+                  {{ rule.rule_name }}
+                </div>
+                <div class="rule-category">
+                  {{ getCategoryName(rule.category) }}
+                </div>
               </div>
               <div class="rule-score">
                 <span class="score">{{ rule.score }}</span>
@@ -93,7 +113,10 @@
             </div>
             
             <!-- 问题详情 -->
-            <div v-if="rule.issues.length > 0" class="rule-issues">
+            <div
+              v-if="rule.issues.length > 0"
+              class="rule-issues"
+            >
               <div 
                 v-for="issue in rule.issues" 
                 :key="issue.code"
@@ -108,19 +131,21 @@
                       'text-warning': issue.severity === 'major',
                       'text-info': issue.severity === 'minor'
                     }"
-                  ></i>
+                  />
                   <span class="issue-description">{{ issue.description }}</span>
                 </div>
                 <div class="issue-details">
-                  <div class="issue-location">位置：{{ issue.location }}</div>
+                  <div class="issue-location">
+                    位置：{{ issue.location }}
+                  </div>
                   <div class="issue-suggestion">
                     建议：{{ issue.suggestion }}
                     <button 
                       class="apply-suggestion-btn"
-                      @click="$emit('apply-suggestion', issue.suggestion)"
                       title="应用建议"
+                      @click="$emit('apply-suggestion', issue.suggestion)"
                     >
-                      <i class="fas fa-magic"></i>
+                      <i class="fas fa-magic" />
                     </button>
                   </div>
                 </div>
@@ -131,9 +156,12 @@
       </div>
 
       <!-- 改进建议 -->
-      <div v-if="structuredAnalysisSuggestions.length > 0" class="suggestions-section">
+      <div
+        v-if="structuredAnalysisSuggestions.length > 0"
+        class="suggestions-section"
+      >
         <h4 class="section-title">
-          <i class="fas fa-lightbulb"></i>
+          <i class="fas fa-lightbulb" />
           改进建议
         </h4>
         
@@ -144,40 +172,53 @@
             class="suggestion-item"
           >
             <div class="suggestion-content">
-              <i class="fas fa-arrow-right"></i>
+              <i class="fas fa-arrow-right" />
               <div class="suggestion-steps">
-                <div v-if="suggestion.title" class="suggestion-title">{{ suggestion.title }}</div>
+                <div
+                  v-if="suggestion.title"
+                  class="suggestion-title"
+                >
+                  {{ suggestion.title }}
+                </div>
                 <ol class="pl-5 list-decimal space-y-1">
-                  <li v-for="(step, index) in suggestion.steps" :key="index">{{ step }}</li>
+                  <li
+                    v-for="(step, index) in suggestion.steps"
+                    :key="index"
+                  >
+                    {{ step }}
+                  </li>
                 </ol>
               </div>
             </div>
             <button 
               class="apply-suggestion-btn"
-              @click="$emit('apply-suggestion', suggestion.description || suggestion.steps.join(' '))"
               title="应用建议"
+              @click="$emit('apply-suggestion', suggestion.description || suggestion.steps.join(' '))"
             >
-              <i class="fas fa-magic"></i>
+              <i class="fas fa-magic" />
             </button>
           </div>
         </div>
       </div>
 
       <!-- 严重问题警告 -->
-      <div v-if="analysisResult.critical_issues.length > 0" class="critical-issues-section">
+      <div
+        v-if="normalizedResult.critical_issues.length > 0"
+        class="critical-issues-section"
+      >
         <h4 class="section-title critical">
-          <i class="fas fa-exclamation-triangle"></i>
+          <i class="fas fa-exclamation-triangle" />
           严重问题
         </h4>
         
         <div class="critical-issues-list">
           <div 
-            v-for="issue in analysisResult.critical_issues" 
+            v-for="issue in normalizedResult.critical_issues" 
             :key="issue.code"
             class="critical-issue-item"
           >
             <div class="critical-issue-header">
-              <i class="fas fa-times-circle text-danger"></i>
+              <i class="fas fa-times-circle text-danger" />
               <span class="critical-issue-description">{{ issue.description }}</span>
             </div>
             <div class="critical-issue-suggestion">
@@ -189,18 +230,23 @@
 
       <!-- 分析时间 -->
       <div class="analysis-timestamp">
-        <i class="fas fa-clock"></i>
-        分析时间：{{ formatTimestamp(analysisResult.analysis_timestamp) }}
+        <i class="fas fa-clock" />
+        分析时间：{{ formatTimestamp(normalizedResult.analysis_timestamp) }}
       </div>
     </div>
 
     <!-- 无分析结果 -->
-    <div v-else class="no-analysis">
+    <div
+      v-else
+      class="no-analysis"
+    >
       <div class="no-analysis-icon">
-        <i class="fas fa-search"></i>
+        <i class="fas fa-search" />
       </div>
       <p>暂无质控分析结果</p>
-      <p class="no-analysis-hint">请输入病历内容后点击"质控分析"按钮</p>
+      <p class="no-analysis-hint">
+        请输入病历内容后点击"质控分析"按钮
+      </p>
     </div>
   </div>
 </template>
@@ -223,6 +269,67 @@ defineEmits<{
   refresh: []
   'apply-suggestion': [suggestion: string]
 }>()
+
+interface NormalizedIssue {
+  code: string
+  description: string
+  severity: 'critical' | 'major' | 'minor'
+  location: string
+  suggestion: string
+}
+
+interface NormalizedRuleResult {
+  rule_id: string
+  rule_name: string
+  category: string
+  passed: boolean
+  score: number
+  max_score: number
+  issues: NormalizedIssue[]
+}
+
+interface NormalizedQCAnalysisResult {
+  overall_score: number
+  max_score: number
+  analysis_results: NormalizedRuleResult[]
+  critical_issues: NormalizedIssue[]
+  analysis_timestamp: string
+}
+
+const normalizedResult = computed<NormalizedQCAnalysisResult | null>(() => {
+  if (!props.analysisResult) return null
+
+  const score = Number(props.analysisResult.score ?? 0)
+  const normalizedIssues: NormalizedIssue[] = (props.analysisResult.issues || []).map((issue, index) => {
+    const rawSeverity = String(issue.severity || '').toLowerCase()
+    const severity = rawSeverity === 'critical' || rawSeverity === 'major' || rawSeverity === 'minor'
+      ? rawSeverity
+      : 'minor'
+    return {
+      code: `ISSUE_${index + 1}`,
+      description: issue.description || '检测到潜在问题',
+      severity,
+      location: '病历内容',
+      suggestion: '请根据质控规范补充和修正内容'
+    }
+  })
+
+  return {
+    overall_score: score,
+    max_score: 100,
+    analysis_results: [{
+      rule_id: 'QC_SUMMARY',
+      rule_name: '综合质量评估',
+      category: 'completeness',
+      passed: normalizedIssues.length === 0,
+      score,
+      max_score: 100,
+      issues: normalizedIssues
+    }],
+    critical_issues: normalizedIssues.filter(issue => issue.severity === 'critical'),
+    analysis_timestamp: new Date().toISOString()
+  }
+})
 
 // 计算属性和方法
 const getGrade = (score: number): string => {

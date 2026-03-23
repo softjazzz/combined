@@ -1,8 +1,14 @@
 <template>
   <div class="result-page">
     <!-- 如果没有结果数据，显示警告信息 -->
-    <div v-if="!result || !result.success || !data" class="no-result-container">
-      <a-page-header title="LLM 精准解析结果" sub-title="结构化信息与文书目录" />
+    <div
+      v-if="!result || !result.success || !data"
+      class="no-result-container"
+    >
+      <a-page-header
+        title="LLM 精准解析结果"
+        sub-title="结构化信息与文书目录"
+      />
       <a-alert
         type="warning"
         show-icon
@@ -11,7 +17,12 @@
         description="请先在智能导入或简易导入中运行一次 LLM 精准解析。"
       />
       <div class="back-button">
-        <a-button type="primary" @click="goBack">返回首页</a-button>
+        <a-button
+          type="primary"
+          @click="goBack"
+        >
+          返回首页
+        </a-button>
       </div>
     </div>
 

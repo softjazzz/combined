@@ -5,11 +5,18 @@
       class="flex h-full min-h-[360px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-200 bg-white/72 text-slate-400"
     >
       <InboxOutlined class="mb-3 text-4xl text-slate-300" />
-      <div class="text-sm font-medium text-slate-500">&#24403;&#21069;&#31579;&#36873;&#26465;&#20214;&#19979;&#26242;&#26080;&#30149;&#21382;</div>
-      <div class="mt-1 text-xs text-slate-400">&#35843;&#25972;&#31185;&#23460;&#12289;&#29366;&#24577;&#25110;&#25628;&#32034;&#26465;&#20214;&#21518;&#20877;&#35797;</div>
+      <div class="text-sm font-medium text-slate-500">
+        &#24403;&#21069;&#31579;&#36873;&#26465;&#20214;&#19979;&#26242;&#26080;&#30149;&#21382;
+      </div>
+      <div class="mt-1 text-xs text-slate-400">
+        &#35843;&#25972;&#31185;&#23460;&#12289;&#29366;&#24577;&#25110;&#25628;&#32034;&#26465;&#20214;&#21518;&#20877;&#35797;
+      </div>
     </div>
 
-    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+    <div
+      v-else
+      class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5"
+    >
       <article
         v-for="record in records"
         :key="record.id"
@@ -29,19 +36,27 @@
             </div>
           </div>
 
-          <span :class="statusTone(record.status)" class="inline-flex shrink-0 items-center rounded-full px-3 py-1 text-[11px] font-bold">
+          <span
+            :class="statusTone(record.status)"
+            class="inline-flex shrink-0 items-center rounded-full px-3 py-1 text-[11px] font-bold"
+          >
             {{ getStatusLabel(record.status) }}
           </span>
         </div>
 
         <div class="mt-5 flex items-center gap-2 text-[13px] text-slate-600">
           <span class="truncate font-semibold text-slate-600">{{ record.department || '\u672a\u5206\u79d1\u5ba4' }}</span>
-          <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-          <span :class="stayTone(record.days)" class="font-semibold">{{ stayLabel(record.days) }}</span>
+          <span class="h-1 w-1 rounded-full bg-slate-300" />
+          <span
+            :class="stayTone(record.days)"
+            class="font-semibold"
+          >{{ stayLabel(record.days) }}</span>
         </div>
 
         <div class="mt-4 border-t border-slate-100 pt-4">
-          <div class="text-[12px] font-medium tracking-[0.08em] text-slate-400">&#20303;&#38498;&#21306;&#38388;</div>
+          <div class="text-[12px] font-medium tracking-[0.08em] text-slate-400">
+            &#20303;&#38498;&#21306;&#38388;
+          </div>
           <div class="mt-1 text-[18px] font-bold tracking-[-0.02em] text-slate-700">
             {{ formatDateRange(record.admissionDate, record.dischargeDate) }}
           </div>
@@ -49,7 +64,10 @@
       </article>
     </div>
 
-    <div v-if="totalPages > 1" class="flex justify-center py-5">
+    <div
+      v-if="totalPages > 1"
+      class="flex justify-center py-5"
+    >
       <a-pagination
         v-model:current="currentPageModel"
         :total="total"

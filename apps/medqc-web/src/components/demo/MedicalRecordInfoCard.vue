@@ -3,16 +3,32 @@
   用于 LLMQCDemoEnhanced 页面，展示已选病历的关键信息
 -->
 <template>
-  <a-card title="病历信息" :bordered="false" class="medical-record-info-card">
+  <a-card
+    title="病历信息"
+    :bordered="false"
+    class="medical-record-info-card"
+  >
     <template #extra>
-      <a-tag v-if="documentInfo" color="blue">
+      <a-tag
+        v-if="documentInfo"
+        color="blue"
+      >
         <FileTextOutlined />
         {{ documentInfo.type || documentInfo.title }}
       </a-tag>
-      <a-tag v-else color="default">未选择文书</a-tag>
+      <a-tag
+        v-else
+        color="default"
+      >
+        未选择文书
+      </a-tag>
     </template>
 
-    <a-descriptions :column="2" bordered size="small">
+    <a-descriptions
+      :column="2"
+      bordered
+      size="small"
+    >
       <a-descriptions-item label="患者姓名">
         <span class="font-medium">{{ recordInfo.patientName || '-' }}</span>
       </a-descriptions-item>
@@ -41,7 +57,10 @@
         {{ formatDate(recordInfo.recordTime) }}
       </a-descriptions-item>
       
-      <a-descriptions-item label="初步诊断" :span="2">
+      <a-descriptions-item
+        label="初步诊断"
+        :span="2"
+      >
         <span class="text-gray-700">{{ recordInfo.diagnosis || '-' }}</span>
       </a-descriptions-item>
     </a-descriptions>

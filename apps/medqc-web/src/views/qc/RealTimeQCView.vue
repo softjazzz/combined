@@ -14,7 +14,7 @@
                 'status-active': isMonitoring,
                 'status-inactive': !isMonitoring
               }"
-            ></div>
+            />
             <span class="status-text">
               {{ isMonitoring ? '监控中' : '已停止' }}
             </span>
@@ -22,21 +22,21 @@
           
           <button
             v-if="!isMonitoring"
-            @click="startMonitoring"
             class="btn-primary"
             :disabled="isStarting"
+            @click="startMonitoring"
           >
-            <i class="fas fa-play mr-2"></i>
+            <i class="fas fa-play mr-2" />
             {{ isStarting ? '启动中...' : '启动监控' }}
           </button>
           
           <button
             v-else
-            @click="stopMonitoring"
             class="btn-secondary"
             :disabled="isStopping"
+            @click="stopMonitoring"
           >
-            <i class="fas fa-stop mr-2"></i>
+            <i class="fas fa-stop mr-2" />
             {{ isStopping ? '停止中...' : '停止监控' }}
           </button>
         </div>
@@ -55,40 +55,51 @@
         <div class="section-card">
           <div class="card-header">
             <h3 class="card-title">
-              <i class="fas fa-rules mr-2"></i>
+              <i class="fas fa-rules mr-2" />
               质控规则管理
             </h3>
             <div class="card-actions">
               <button
-                @click="refreshRules"
                 class="btn-refresh"
                 :disabled="isRefreshingRules"
+                @click="refreshRules"
               >
-                <i class="fas fa-sync-alt" :class="{ 'fa-spin': isRefreshingRules }"></i>
+                <i
+                  class="fas fa-sync-alt"
+                  :class="{ 'fa-spin': isRefreshingRules }"
+                />
               </button>
               <button
-                @click="showAddRule"
                 class="btn-add"
+                @click="showAddRule"
               >
-                <i class="fas fa-plus mr-1"></i>
+                <i class="fas fa-plus mr-1" />
                 新增规则
               </button>
             </div>
           </div>
 
           <div class="card-content">
-            <div v-if="qcRules.length === 0" class="empty-state">
-              <i class="fas fa-clipboard-list text-gray-400 text-4xl mb-3"></i>
-              <p class="text-gray-600">暂无质控规则</p>
+            <div
+              v-if="qcRules.length === 0"
+              class="empty-state"
+            >
+              <i class="fas fa-clipboard-list text-gray-400 text-4xl mb-3" />
+              <p class="text-gray-600">
+                暂无质控规则
+              </p>
               <button
-                @click="loadDefaultRules"
                 class="btn-load-default"
+                @click="loadDefaultRules"
               >
                 加载默认规则
               </button>
             </div>
 
-            <div v-else class="rules-list">
+            <div
+              v-else
+              class="rules-list"
+            >
               <div
                 v-for="rule in qcRules"
                 :key="rule.id"
@@ -97,17 +108,27 @@
               >
                 <div class="rule-info">
                   <div class="rule-header">
-                    <h4 class="rule-name">{{ rule.name }}</h4>
+                    <h4 class="rule-name">
+                      {{ rule.name }}
+                    </h4>
                     <div class="rule-badges">
-                      <span class="rule-type" :class="`type-${rule.type}`">
+                      <span
+                        class="rule-type"
+                        :class="`type-${rule.type}`"
+                      >
                         {{ getRuleTypeText(rule.type) }}
                       </span>
-                      <span class="rule-severity" :class="`severity-${rule.severity}`">
+                      <span
+                        class="rule-severity"
+                        :class="`severity-${rule.severity}`"
+                      >
                         {{ getSeverityText(rule.severity) }}
                       </span>
                     </div>
                   </div>
-                  <p class="rule-description">{{ rule.description }}</p>
+                  <p class="rule-description">
+                    {{ rule.description }}
+                  </p>
                   <div class="rule-meta">
                     <span class="rule-priority">优先级: {{ rule.priority }}</span>
                     <span class="rule-status">
@@ -118,23 +139,23 @@
 
                 <div class="rule-actions">
                   <button
-                    @click="toggleRule(rule)"
                     class="btn-toggle"
                     :class="rule.isActive ? 'btn-disable' : 'btn-enable'"
+                    @click="toggleRule(rule)"
                   >
-                    <i :class="rule.isActive ? 'fas fa-pause' : 'fas fa-play'"></i>
+                    <i :class="rule.isActive ? 'fas fa-pause' : 'fas fa-play'" />
                   </button>
                   <button
-                    @click="editRule(rule)"
                     class="btn-edit"
+                    @click="editRule(rule)"
                   >
-                    <i class="fas fa-edit"></i>
+                    <i class="fas fa-edit" />
                   </button>
                   <button
-                    @click="deleteRule(rule)"
                     class="btn-delete"
+                    @click="deleteRule(rule)"
                   >
-                    <i class="fas fa-trash"></i>
+                    <i class="fas fa-trash" />
                   </button>
                 </div>
               </div>
@@ -148,34 +169,55 @@
         <div class="section-card">
           <div class="card-header">
             <h3 class="card-title">
-              <i class="fas fa-file-alt mr-2"></i>
+              <i class="fas fa-file-alt mr-2" />
               实时分析日志
             </h3>
             <div class="card-actions">
-              <select v-model="logFilter" class="filter-select">
-                <option value="all">全部</option>
-                <option value="critical">严重</option>
-                <option value="error">错误</option>
-                <option value="warning">警告</option>
-                <option value="info">信息</option>
+              <select
+                v-model="logFilter"
+                class="filter-select"
+              >
+                <option value="all">
+                  全部
+                </option>
+                <option value="critical">
+                  严重
+                </option>
+                <option value="error">
+                  错误
+                </option>
+                <option value="warning">
+                  警告
+                </option>
+                <option value="info">
+                  信息
+                </option>
               </select>
               <button
-                @click="clearLogs"
                 class="btn-clear"
+                @click="clearLogs"
               >
-                <i class="fas fa-trash mr-1"></i>
+                <i class="fas fa-trash mr-1" />
                 清空日志
               </button>
             </div>
           </div>
 
           <div class="card-content">
-            <div v-if="filteredLogs.length === 0" class="empty-state">
-              <i class="fas fa-file-alt text-gray-400 text-4xl mb-3"></i>
-              <p class="text-gray-600">暂无分析日志</p>
+            <div
+              v-if="filteredLogs.length === 0"
+              class="empty-state"
+            >
+              <i class="fas fa-file-alt text-gray-400 text-4xl mb-3" />
+              <p class="text-gray-600">
+                暂无分析日志
+              </p>
             </div>
 
-            <div v-else class="logs-list">
+            <div
+              v-else
+              class="logs-list"
+            >
               <div
                 v-for="log in filteredLogs.slice(0, 50)"
                 :key="log.id"
@@ -186,7 +228,10 @@
                   <div class="log-info">
                     <span class="log-time">{{ formatTime(log.timestamp) }}</span>
                     <span class="log-record">记录: {{ log.recordId.slice(-8) }}</span>
-                    <span class="log-level" :class="`level-${log.alertLevel}`">
+                    <span
+                      class="log-level"
+                      :class="`level-${log.alertLevel}`"
+                    >
                       {{ getLevelText(log.alertLevel) }}
                     </span>
                   </div>
@@ -196,7 +241,10 @@
                   </div>
                 </div>
 
-                <div class="log-content" v-if="log.issues.length > 0">
+                <div
+                  v-if="log.issues.length > 0"
+                  class="log-content"
+                >
                   <div class="log-issues">
                     <span
                       v-for="(issue, idx) in log.issues.slice(0, 3)"
@@ -206,7 +254,10 @@
                     >
                       {{ issue.message }}
                     </span>
-                    <span v-if="log.issues.length > 3" class="more-issues">
+                    <span
+                      v-if="log.issues.length > 3"
+                      class="more-issues"
+                    >
                       +{{ log.issues.length - 3 }} 更多
                     </span>
                   </div>
@@ -222,17 +273,20 @@
     <RealTimeQCAlert />
 
     <!-- 规则编辑对话框 -->
-    <div v-if="showRuleDialog" class="rule-dialog-overlay">
+    <div
+      v-if="showRuleDialog"
+      class="rule-dialog-overlay"
+    >
       <div class="rule-dialog">
         <div class="dialog-header">
           <h3 class="dialog-title">
             {{ editingRule ? '编辑规则' : '新增规则' }}
           </h3>
           <button
-            @click="closeRuleDialog"
             class="btn-close"
+            @click="closeRuleDialog"
           >
-            <i class="fas fa-times"></i>
+            <i class="fas fa-times" />
           </button>
         </div>
 
@@ -244,7 +298,7 @@
               type="text"
               class="form-input"
               placeholder="请输入规则名称"
-            />
+            >
           </div>
 
           <div class="form-group">
@@ -254,27 +308,49 @@
               class="form-textarea"
               placeholder="请输入规则描述"
               rows="3"
-            ></textarea>
+            />
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">规则类型</label>
-              <select v-model="ruleForm.type" class="form-select">
-                <option value="content">内容检查</option>
-                <option value="format">格式检查</option>
-                <option value="logic">逻辑检查</option>
-                <option value="completeness">完整性检查</option>
+              <select
+                v-model="ruleForm.type"
+                class="form-select"
+              >
+                <option value="content">
+                  内容检查
+                </option>
+                <option value="format">
+                  格式检查
+                </option>
+                <option value="logic">
+                  逻辑检查
+                </option>
+                <option value="completeness">
+                  完整性检查
+                </option>
               </select>
             </div>
 
             <div class="form-group">
               <label class="form-label">严重程度</label>
-              <select v-model="ruleForm.severity" class="form-select">
-                <option value="info">信息</option>
-                <option value="warning">警告</option>
-                <option value="error">错误</option>
-                <option value="critical">严重</option>
+              <select
+                v-model="ruleForm.severity"
+                class="form-select"
+              >
+                <option value="info">
+                  信息
+                </option>
+                <option value="warning">
+                  警告
+                </option>
+                <option value="error">
+                  错误
+                </option>
+                <option value="critical">
+                  严重
+                </option>
               </select>
             </div>
           </div>
@@ -288,7 +364,7 @@
                 class="form-input"
                 min="1"
                 max="10"
-              />
+              >
             </div>
 
             <div class="form-group">
@@ -298,34 +374,37 @@
                   v-model="ruleForm.isActive"
                   type="checkbox"
                   class="form-checkbox"
-                />
+                >
                 <span>启用规则</span>
               </label>
             </div>
           </div>
 
-          <div class="form-group" v-if="ruleForm.type === 'content'">
+          <div
+            v-if="ruleForm.type === 'content'"
+            class="form-group"
+          >
             <label class="form-label">匹配模式</label>
             <input
               v-model="ruleForm.pattern"
               type="text"
               class="form-input"
               placeholder="请输入正则表达式"
-            />
+            >
           </div>
         </div>
 
         <div class="dialog-actions">
           <button
-            @click="closeRuleDialog"
             class="btn-cancel"
+            @click="closeRuleDialog"
           >
             取消
           </button>
           <button
-            @click="saveRule"
             class="btn-save"
             :disabled="!isRuleFormValid"
+            @click="saveRule"
           >
             保存
           </button>
@@ -441,7 +520,7 @@ const showAddRule = () => {
 
 const editRule = (rule: QCRule) => {
   editingRule.value = rule
-  ruleForm.value = { ...rule }
+  ruleForm.value = { ...rule, pattern: rule.pattern || '' }
   showRuleDialog.value = true
 }
 

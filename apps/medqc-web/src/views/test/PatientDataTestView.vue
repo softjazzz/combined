@@ -1,35 +1,42 @@
 <template>
   <div class="p-6 max-w-6xl mx-auto">
     <div class="bg-white rounded-lg shadow-md p-6">
-      <h1 class="text-2xl font-bold mb-6">患者数据测试页面</h1>
+      <h1 class="text-2xl font-bold mb-6">
+        患者数据测试页面
+      </h1>
       
       <!-- 测试按钮 -->
       <div class="mb-6 flex space-x-4">
         <button 
-          @click="testDatabaseData"
           :disabled="loading"
           class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+          @click="testDatabaseData"
         >
           {{ loading ? '测试中...' : '测试数据库数据' }}
         </button>
         <button 
-          @click="testDemoData"
           :disabled="loading"
           class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+          @click="testDemoData"
         >
           测试演示数据
         </button>
         <button 
-          @click="clearResults"
           class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          @click="clearResults"
         >
           清空结果
         </button>
       </div>
 
       <!-- 测试结果 -->
-      <div v-if="testResults.length > 0" class="mb-6">
-        <h2 class="text-lg font-semibold mb-3">测试结果</h2>
+      <div
+        v-if="testResults.length > 0"
+        class="mb-6"
+      >
+        <h2 class="text-lg font-semibold mb-3">
+          测试结果
+        </h2>
         <div class="space-y-2 max-h-96 overflow-y-auto">
           <div 
             v-for="(result, index) in testResults" 
@@ -41,8 +48,13 @@
               'bg-blue-50 border-blue-200': result.type === 'info'
             }"
           >
-            <div class="font-mono text-sm">{{ result.message }}</div>
-            <div v-if="result.data" class="mt-2 text-xs text-gray-600">
+            <div class="font-mono text-sm">
+              {{ result.message }}
+            </div>
+            <div
+              v-if="result.data"
+              class="mt-2 text-xs text-gray-600"
+            >
               {{ JSON.stringify(result.data, null, 2) }}
             </div>
           </div>
@@ -50,8 +62,13 @@
       </div>
 
       <!-- 患者列表 -->
-      <div v-if="patients.length > 0" class="mb-6">
-        <h2 class="text-lg font-semibold mb-3">患者列表 ({{ patients.length }} 个)</h2>
+      <div
+        v-if="patients.length > 0"
+        class="mb-6"
+      >
+        <h2 class="text-lg font-semibold mb-3">
+          患者列表 ({{ patients.length }} 个)
+        </h2>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div 
             v-for="patient in patients" 
@@ -63,8 +80,12 @@
                 {{ patient.patient_name.charAt(0) }}
               </div>
               <div>
-                <div class="font-semibold">{{ patient.patient_name }}</div>
-                <div class="text-sm text-gray-600">{{ patient.patient_age }}岁 {{ patient.patient_gender === 'M' ? '男' : '女' }}</div>
+                <div class="font-semibold">
+                  {{ patient.patient_name }}
+                </div>
+                <div class="text-sm text-gray-600">
+                  {{ patient.patient_age }}岁 {{ patient.patient_gender === 'M' ? '男' : '女' }}
+                </div>
               </div>
             </div>
             <div class="text-sm space-y-1">
@@ -80,8 +101,8 @@
       <!-- 返回按钮 -->
       <div class="flex justify-center">
         <button 
-          @click="goBack"
           class="px-6 py-3 bg-gray-500 text-white rounded-lg hover: bg-gray-600"
+          @click="goBack"
         >
           返回
         </button>
@@ -106,10 +127,14 @@ const testResults = ref<Array<{
 }>>([])
 
 const addResult = (type: 'success' | 'error' | 'info', message: string, data?: unknown) => {
+  const normalizedData =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : undefined
   testResults.value.push({
     type,
     message: `[${new Date().toLocaleTimeString()}] ${message}`,
-    data
+    data: normalizedData
   })
 }
 

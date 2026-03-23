@@ -53,6 +53,24 @@ function joinList(values: unknown): string | undefined {
   return texts.join('，')
 }
 
+function toOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function getComaPart(
+  other: any,
+  phase: 'before' | 'after',
+  part: 'days' | 'hours' | 'minutes'
+): number | undefined {
+  const nestedKey = phase === 'before' ? 'coma_before_admission' : 'coma_after_admission'
+  const flatPrefix = phase === 'before' ? 'brain_injury_before_admission' : 'brain_injury_after_admission'
+  const nestedValue = toOptionalNumber(other?.[nestedKey]?.[part])
+  if (nestedValue !== undefined) return nestedValue
+  return toOptionalNumber(other?.[`${flatPrefix}_${part}`])
+}
+
 /**
  * 将 MedQC 的 `FrontPageDraft`（API snake_case）转换为 HM 模板回填需要的数据。
  *
@@ -169,13 +187,13 @@ export function frontPageDraftToDeMap(frontpageDraft: any): {
     'DE04.50.001.00': other?.abo_blood_type, // ABO血型代码
     'DE04.50.010.00': rhToCode({ rh: other?.rh_blood_type, rhText: other?.rh_blood_type_text }), // Rh血型代码
     // 颅脑损伤昏迷时间（入院前）
-    'DE05.10.138.01': other?.brain_injury_before_admission_hours, // 入院前-天
-    'DE05.10.138.02': other?.brain_injury_before_admission_hours, // 入院前-小时
-    'DE05.10.138.03': other?.brain_injury_before_admission_minutes, // 入院前-分钟
+    'DE05.10.138.01': getComaPart(other, 'before', 'days'), // 入院前-天
+    'DE05.10.138.02': getComaPart(other, 'before', 'hours'), // 入院前-小时
+    'DE05.10.138.03': getComaPart(other, 'before', 'minutes'), // 入院前-分钟
     // 颅脑损伤昏迷时间（入院后）
-    'DE05.10.138.01.002': other?.brain_injury_after_admission_hours, // 入院后-天
-    'DE05.10.138.02.002': other?.brain_injury_after_admission_hours, // 入院后-小时
-    'DE05.10.138.03.002': other?.brain_injury_after_admission_minutes, // 入院后-分钟
+    'DE05.10.138.01.002': getComaPart(other, 'after', 'days'), // 入院后-天
+    'DE05.10.138.02.002': getComaPart(other, 'after', 'hours'), // 入院后-小时
+    'DE05.10.138.03.002': getComaPart(other, 'after', 'minutes'), // 入院后-分钟
 
     // 费用
     'DE07.00.010.00': costs?.total_cost, // 住院总费用

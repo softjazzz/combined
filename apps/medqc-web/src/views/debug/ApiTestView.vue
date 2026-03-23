@@ -7,9 +7,13 @@
           <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center">
             <ApiOutlined class="text-white text-sm" />
           </div>
-          <h1 class="text-2xl font-bold text-slate-100">API集成测试</h1>
+          <h1 class="text-2xl font-bold text-slate-100">
+            API集成测试
+          </h1>
         </div>
-        <p class="text-slate-400 text-sm">前后端API对接联调测试工具</p>
+        <p class="text-slate-400 text-sm">
+          前后端API对接联调测试工具
+        </p>
       </div>
 
       <!-- API连接测试 -->
@@ -28,7 +32,9 @@
           
           <div class="space-y-4">
             <div class="p-4 rounded-lg bg-slate-700/30 border border-slate-600/30">
-              <h4 class="text-sm font-medium text-slate-200 mb-2">测试账户</h4>
+              <h4 class="text-sm font-medium text-slate-200 mb-2">
+                测试账户
+              </h4>
               <div class="space-y-2 text-xs">
                 <div class="flex justify-between">
                   <span class="text-slate-400">管理员:</span>
@@ -47,34 +53,34 @@
 
             <div class="grid grid-cols-2 gap-3">
               <a-button 
-                @click="testLogin"
                 :loading="authTesting.login"
                 size="small"
                 class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300"
+                @click="testLogin"
               >
                 登录测试
               </a-button>
               <a-button 
-                @click="testGetUser"
                 :loading="authTesting.getUser"
                 size="small"
                 class="bg-blue-500/20 border-blue-400/30 text-blue-300"
+                @click="testGetUser"
               >
                 获取用户
               </a-button>
               <a-button 
-                @click="testUpdateProfile"
                 :loading="authTesting.updateProfile"
                 size="small"
                 class="bg-purple-500/20 border-purple-400/30 text-purple-300"
+                @click="testUpdateProfile"
               >
                 更新资料
               </a-button>
               <a-button 
-                @click="testLogout"
                 :loading="authTesting.logout"
                 size="small"
                 class="bg-red-500/20 border-red-400/30 text-red-300"
+                @click="testLogout"
               >
                 登出测试
               </a-button>
@@ -91,7 +97,9 @@
           
           <div class="space-y-4">
             <div class="p-4 rounded-lg bg-slate-700/30 border border-slate-600/30">
-              <h4 class="text-sm font-medium text-slate-200 mb-2">API接口</h4>
+              <h4 class="text-sm font-medium text-slate-200 mb-2">
+                API接口
+              </h4>
               <div class="space-y-1 text-xs text-slate-400">
                 <div>• GET /api/records - 获取记录列表</div>
                 <div>• POST /api/records - 创建记录</div>
@@ -102,34 +110,34 @@
 
             <div class="grid grid-cols-2 gap-3">
               <a-button 
-                @click="testGetRecords"
                 :loading="recordTesting.getRecords"
                 size="small"
                 class="bg-blue-500/20 border-blue-400/30 text-blue-300"
+                @click="testGetRecords"
               >
                 获取列表
               </a-button>
               <a-button 
-                @click="testCreateRecord"
                 :loading="recordTesting.createRecord"
                 size="small"
                 class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300"
+                @click="testCreateRecord"
               >
                 创建记录
               </a-button>
               <a-button 
-                @click="testUploadFile"
                 :loading="recordTesting.uploadFile"
                 size="small"
                 class="bg-purple-500/20 border-purple-400/30 text-purple-300"
+                @click="testUploadFile"
               >
                 文件上传
               </a-button>
               <a-button 
-                @click="testGetStatistics"
                 :loading="recordTesting.getStatistics"
                 size="small"
                 class="bg-amber-500/20 border-amber-400/30 text-amber-300"
+                @click="testGetStatistics"
               >
                 获取统计
               </a-button>
@@ -146,7 +154,9 @@
           
           <div class="space-y-4">
             <div class="p-4 rounded-lg bg-slate-700/30 border border-slate-600/30">
-              <h4 class="text-sm font-medium text-slate-200 mb-2">AI分析功能</h4>
+              <h4 class="text-sm font-medium text-slate-200 mb-2">
+                AI分析功能
+              </h4>
               <div class="space-y-1 text-xs text-slate-400">
                 <div>• POST /api/qc/analyze - 开始分析</div>
                 <div>• GET /api/qc/result/:id - 获取结果</div>
@@ -157,34 +167,34 @@
 
             <div class="grid grid-cols-2 gap-3">
               <a-button 
-                @click="testGetQCRules"
                 :loading="qcTesting.getRules"
                 size="small"
                 class="bg-purple-500/20 border-purple-400/30 text-purple-300"
+                @click="testGetQCRules"
               >
                 获取规则
               </a-button>
               <a-button 
-                @click="testStartAnalysis"
                 :loading="qcTesting.startAnalysis"
                 size="small"
                 class="bg-emerald-500/20 border-emerald-400/30 text-emerald-300"
+                @click="testStartAnalysis"
               >
                 开始分析
               </a-button>
               <a-button 
-                @click="testGetQCResult"
                 :loading="qcTesting.getResult"
                 size="small"
                 class="bg-blue-500/20 border-blue-400/30 text-blue-300"
+                @click="testGetQCResult"
               >
                 获取结果
               </a-button>
               <a-button 
-                @click="testGetQCHistory"
                 :loading="qcTesting.getHistory"
                 size="small"
                 class="bg-amber-500/20 border-amber-400/30 text-amber-300"
+                @click="testGetQCHistory"
               >
                 获取历史
               </a-button>
@@ -201,8 +211,8 @@
             </h3>
             <a-button 
               size="small"
-              @click="clearLogs"
               class="bg-slate-700/50 border-slate-600/50 text-slate-300"
+              @click="clearLogs"
             >
               清空日志
             </a-button>
@@ -220,12 +230,22 @@
                 <span class="text-slate-500">{{ formatTime(log.timestamp) }}</span>
               </div>
               <div>{{ log.message }}</div>
-              <div v-if="log.details" class="mt-1 text-slate-400">{{ log.details }}</div>
+              <div
+                v-if="log.details"
+                class="mt-1 text-slate-400"
+              >
+                {{ log.details }}
+              </div>
             </div>
           </div>
 
-          <div v-if="testLogs.length === 0" class="text-center py-8">
-            <div class="text-slate-400 text-sm">暂无测试日志</div>
+          <div
+            v-if="testLogs.length === 0"
+            class="text-center py-8"
+          >
+            <div class="text-slate-400 text-sm">
+              暂无测试日志
+            </div>
           </div>
         </div>
       </div>
@@ -378,7 +398,7 @@ const testUpdateProfile = async () => {
   authTesting.updateProfile = true
   try {
     const response = await ApiService.updateProfile({
-      bio: '测试更新资料 - ' + new Date().toLocaleString()
+      display_name: '测试用户 - ' + new Date().toLocaleString()
     })
     
     if (response.success) {
@@ -484,13 +504,15 @@ const testCreateRecord = async () => {
   recordTesting.createRecord = true
   try {
     const response = await ApiService.createMedicalRecord({
-      patient_name: '测试患者',
-      patient_age: 30,
-      patient_gender: 'male',
+      record_name: '测试病历',
+      patient_info: {
+        name: '测试患者',
+        age: 30,
+        gender: 'M'
+      },
       department: '内科',
-      admission_date: new Date().toISOString().split('T')[0],
-      record_type: 'inpatient',
-      content: '这是一个测试病案记录，用于API测试。'
+      primary_diagnosis: '测试诊断',
+      raw_text: '这是一个测试病案记录，用于API测试。'
     })
     
     if (response.success) {

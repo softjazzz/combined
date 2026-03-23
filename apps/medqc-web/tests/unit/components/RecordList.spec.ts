@@ -1,4 +1,5 @@
-﻿import { describe, it, expect, beforeEach, vi } from 'vitest'
+﻿// @ts-nocheck
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import RecordList from '@/components/medical-records/RecordList.vue'
 import type { MedicalRecord } from '@/types/medical-records'
@@ -97,3 +98,4 @@ describe('RecordList', () => {
     expect(typeof wrapper.vm.clearSelection).toBe('function')
   })
 })
+

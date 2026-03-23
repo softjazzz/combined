@@ -1,18 +1,33 @@
 <template>
-  <div class="empty-state" :class="containerClass">
+  <div
+    class="empty-state"
+    :class="containerClass"
+  >
     <div class="empty-content">
       <!-- 图标/图片 -->
-      <div class="empty-icon" :class="iconClass">
+      <div
+        class="empty-icon"
+        :class="iconClass"
+      >
         <component 
-          v-if="icon" 
           :is="icon" 
+          v-if="icon" 
           class="icon-component"
           :style="{ color: iconColor }"
         />
-        <div v-else-if="image" class="empty-image">
-          <img :src="image" :alt="title" />
+        <div
+          v-else-if="image"
+          class="empty-image"
+        >
+          <img
+            :src="image"
+            :alt="title"
+          >
         </div>
-        <div v-else class="default-icon">
+        <div
+          v-else
+          class="default-icon"
+        >
           <component 
             :is="getDefaultIcon()" 
             class="icon-component"
@@ -22,13 +37,23 @@
       </div>
       
       <!-- 标题 -->
-      <h3 class="empty-title">{{ title }}</h3>
+      <h3 class="empty-title">
+        {{ title }}
+      </h3>
       
       <!-- 描述 -->
-      <p v-if="description" class="empty-description">{{ description }}</p>
+      <p
+        v-if="description"
+        class="empty-description"
+      >
+        {{ description }}
+      </p>
       
       <!-- 操作按钮 -->
-      <div v-if="actions.length > 0 || $slots.actions" class="empty-actions">
+      <div
+        v-if="actions.length > 0 || $slots.actions"
+        class="empty-actions"
+      >
         <slot name="actions">
           <a-space :size="12">
             <a-button
@@ -48,7 +73,10 @@
       </div>
       
       <!-- 额外内容 -->
-      <div v-if="$slots.extra" class="empty-extra">
+      <div
+        v-if="$slots.extra"
+        class="empty-extra"
+      >
         <slot name="extra" />
       </div>
     </div>
@@ -57,6 +85,7 @@
 
 <script setup lang="ts">
 import { h, computed } from 'vue'
+import type { Component } from 'vue'
 import {
   InboxOutlined,
   ExclamationCircleOutlined,
@@ -73,7 +102,7 @@ interface ActionItem {
   text: string
   type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
   size?: 'small' | 'middle' | 'large'
-  icon?: Record<string, unknown>
+  icon?: Component
   loading?: boolean
   disabled?: boolean
   onClick?: () => void
@@ -83,7 +112,7 @@ interface Props {
   type?: 'empty' | 'error' | 'network' | 'search' | 'permission' | 'maintenance' | 'custom'
   title?: string
   description?: string
-  icon?: Record<string, unknown>
+  icon?: Component
   image?: string
   iconColor?: string
   size?: 'small' | 'medium' | 'large'

@@ -1,11 +1,15 @@
 import type { MedicalRecord, QCResult, QCRule, UserRole } from './supabase'
 import type { User as AuthUser } from './auth'
+import type {
+  CreateMedicalRecordRequest as CreateMedicalRecordRequestCompat,
+  UpdateMedicalRecordRequest as UpdateMedicalRecordRequestCompat,
+} from '@/services/supabaseMedicalRecordService'
 
 // 重新导出auth类型
 export * from './auth'
 
 // 重新导出API类型
-export * from './api'
+export type { ApiSuccessResponse, ApiErrorResponse } from './api'
 
 // 用户相关类型
 export type User = AuthUser
@@ -227,6 +231,21 @@ export interface DashboardCard {
   icon?: unknown // Vue组件引用
   color?: string
   loading?: boolean
+}
+
+export type CreateMedicalRecordRequest = CreateMedicalRecordRequestCompat
+export type UpdateMedicalRecordRequest = UpdateMedicalRecordRequestCompat
+
+export interface UserProfile {
+  id: string
+  name?: string
+  role?: string
+  department?: string
+}
+
+export interface SearchResult<T = unknown> {
+  items: T[]
+  total: number
 }
 
 // 路由元信息

@@ -340,12 +340,20 @@ onMounted(() => {
         <UserOutlined class="title-icon" />
         用户管理
       </h1>
-      <p class="page-description">管理系统用户账户、角色和权限</p>
+      <p class="page-description">
+        管理系统用户账户、角色和权限
+      </p>
     </div>
 
     <!-- 搜索表单 -->
-    <a-card class="search-card" :bordered="false">
-      <a-form layout="inline" :model="searchForm">
+    <a-card
+      class="search-card"
+      :bordered="false"
+    >
+      <a-form
+        layout="inline"
+        :model="searchForm"
+      >
         <a-form-item label="关键词">
           <a-input
             v-model:value="searchForm.keyword"
@@ -366,10 +374,18 @@ onMounted(() => {
             allow-clear
             style="width: 150px"
           >
-            <a-select-option value="信息科"> 信息科 </a-select-option>
-            <a-select-option value="质控科"> 质控科 </a-select-option>
-            <a-select-option value="内科"> 内科 </a-select-option>
-            <a-select-option value="外科"> 外科 </a-select-option>
+            <a-select-option value="信息科">
+              信息科
+            </a-select-option>
+            <a-select-option value="质控科">
+              质控科
+            </a-select-option>
+            <a-select-option value="内科">
+              内科
+            </a-select-option>
+            <a-select-option value="外科">
+              外科
+            </a-select-option>
           </a-select>
         </a-form-item>
 
@@ -380,10 +396,18 @@ onMounted(() => {
             allow-clear
             style="width: 150px"
           >
-            <a-select-option value="admin"> 管理员 </a-select-option>
-            <a-select-option value="qc_manager"> 质控管理员 </a-select-option>
-            <a-select-option value="qc_staff"> 质控人员 </a-select-option>
-            <a-select-option value="doctor"> 医务人员 </a-select-option>
+            <a-select-option value="admin">
+              管理员
+            </a-select-option>
+            <a-select-option value="qc_manager">
+              质控管理员
+            </a-select-option>
+            <a-select-option value="qc_staff">
+              质控人员
+            </a-select-option>
+            <a-select-option value="doctor">
+              医务人员
+            </a-select-option>
           </a-select>
         </a-form-item>
 
@@ -394,24 +418,41 @@ onMounted(() => {
             allow-clear
             style="width: 120px"
           >
-            <a-select-option value="active"> 正常 </a-select-option>
-            <a-select-option value="inactive"> 停用 </a-select-option>
-            <a-select-option value="locked"> 锁定 </a-select-option>
+            <a-select-option value="active">
+              正常
+            </a-select-option>
+            <a-select-option value="inactive">
+              停用
+            </a-select-option>
+            <a-select-option value="locked">
+              锁定
+            </a-select-option>
           </a-select>
         </a-form-item>
 
         <a-form-item>
-          <a-button type="primary" @click="handleSearch">
+          <a-button
+            type="primary"
+            @click="handleSearch"
+          >
             <SearchOutlined />
             搜索
           </a-button>
-          <a-button style="margin-left: 8px" @click="handleResetSearch"> 重置 </a-button>
+          <a-button
+            style="margin-left: 8px"
+            @click="handleResetSearch"
+          >
+            重置
+          </a-button>
         </a-form-item>
       </a-form>
     </a-card>
 
     <!-- 操作工具栏 -->
-    <a-card class="toolbar-card" :bordered="false">
+    <a-card
+      class="toolbar-card"
+      :bordered="false"
+    >
       <div class="toolbar">
         <div class="toolbar-left">
           <PermissionButton
@@ -437,7 +478,10 @@ onMounted(() => {
         </div>
 
         <div class="toolbar-right">
-          <a-button :loading="loading" @click="handleRefresh">
+          <a-button
+            :loading="loading"
+            @click="handleRefresh"
+          >
             <ReloadOutlined />
             刷新
           </a-button>
@@ -485,7 +529,10 @@ onMounted(() => {
                 :color="getRoleTag(role).color"
                 class="role-tag"
               >
-                <component :is="getRoleTag(role).icon" class="role-icon" />
+                <component
+                  :is="getRoleTag(role).icon"
+                  class="role-icon"
+                />
                 {{ getRoleTag(role).text }}
               </a-tag>
             </div>
@@ -541,74 +588,190 @@ onMounted(() => {
     </a-card>
 
     <!-- 新增用户模态框 -->
-    <a-modal v-model:open="showCreateModal" title="新增用户" :width="600" @ok="handleCreateSubmit">
-      <a-form :model="createForm" layout="vertical">
-        <a-form-item label="邮箱地址" required>
-          <a-input v-model:value="createForm.email" placeholder="请输入邮箱地址" />
+    <a-modal
+      v-model:open="showCreateModal"
+      title="新增用户"
+      :width="600"
+      @ok="handleCreateSubmit"
+    >
+      <a-form
+        :model="createForm"
+        layout="vertical"
+      >
+        <a-form-item
+          label="邮箱地址"
+          required
+        >
+          <a-input
+            v-model:value="createForm.email"
+            placeholder="请输入邮箱地址"
+          />
         </a-form-item>
 
-        <a-form-item label="显示名称" required>
-          <a-input v-model:value="createForm.display_name" placeholder="请输入显示名称" />
+        <a-form-item
+          label="显示名称"
+          required
+        >
+          <a-input
+            v-model:value="createForm.display_name"
+            placeholder="请输入显示名称"
+          />
         </a-form-item>
 
-        <a-form-item label="所属科室" required>
-          <a-select v-model:value="createForm.department" placeholder="请选择科室">
-            <a-select-option value="信息科"> 信息科 </a-select-option>
-            <a-select-option value="质控科"> 质控科 </a-select-option>
-            <a-select-option value="内科"> 内科 </a-select-option>
-            <a-select-option value="外科"> 外科 </a-select-option>
+        <a-form-item
+          label="所属科室"
+          required
+        >
+          <a-select
+            v-model:value="createForm.department"
+            placeholder="请选择科室"
+          >
+            <a-select-option value="信息科">
+              信息科
+            </a-select-option>
+            <a-select-option value="质控科">
+              质控科
+            </a-select-option>
+            <a-select-option value="内科">
+              内科
+            </a-select-option>
+            <a-select-option value="外科">
+              外科
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="用户角色" required>
-          <a-select v-model:value="createForm.roles" mode="multiple" placeholder="请选择角色">
-            <a-select-option value="admin"> 管理员 </a-select-option>
-            <a-select-option value="qc_manager"> 质控管理员 </a-select-option>
-            <a-select-option value="qc_staff"> 质控人员 </a-select-option>
-            <a-select-option value="doctor"> 医务人员 </a-select-option>
+        <a-form-item
+          label="用户角色"
+          required
+        >
+          <a-select
+            v-model:value="createForm.roles"
+            mode="multiple"
+            placeholder="请选择角色"
+          >
+            <a-select-option value="admin">
+              管理员
+            </a-select-option>
+            <a-select-option value="qc_manager">
+              质控管理员
+            </a-select-option>
+            <a-select-option value="qc_staff">
+              质控人员
+            </a-select-option>
+            <a-select-option value="doctor">
+              医务人员
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="初始密码" required>
-          <a-input-password v-model:value="createForm.password" placeholder="请输入初始密码" />
+        <a-form-item
+          label="初始密码"
+          required
+        >
+          <a-input-password
+            v-model:value="createForm.password"
+            placeholder="请输入初始密码"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
 
     <!-- 编辑用户模态框 -->
-    <a-modal v-model:open="showEditModal" title="编辑用户" :width="600" @ok="handleEditSubmit">
-      <a-form :model="editForm" layout="vertical">
-        <a-form-item label="邮箱地址" required>
-          <a-input v-model:value="editForm.email" placeholder="请输入邮箱地址" />
+    <a-modal
+      v-model:open="showEditModal"
+      title="编辑用户"
+      :width="600"
+      @ok="handleEditSubmit"
+    >
+      <a-form
+        :model="editForm"
+        layout="vertical"
+      >
+        <a-form-item
+          label="邮箱地址"
+          required
+        >
+          <a-input
+            v-model:value="editForm.email"
+            placeholder="请输入邮箱地址"
+          />
         </a-form-item>
 
-        <a-form-item label="显示名称" required>
-          <a-input v-model:value="editForm.display_name" placeholder="请输入显示名称" />
+        <a-form-item
+          label="显示名称"
+          required
+        >
+          <a-input
+            v-model:value="editForm.display_name"
+            placeholder="请输入显示名称"
+          />
         </a-form-item>
 
-        <a-form-item label="所属科室" required>
-          <a-select v-model:value="editForm.department" placeholder="请选择科室">
-            <a-select-option value="信息科"> 信息科 </a-select-option>
-            <a-select-option value="质控科"> 质控科 </a-select-option>
-            <a-select-option value="内科"> 内科 </a-select-option>
-            <a-select-option value="外科"> 外科 </a-select-option>
+        <a-form-item
+          label="所属科室"
+          required
+        >
+          <a-select
+            v-model:value="editForm.department"
+            placeholder="请选择科室"
+          >
+            <a-select-option value="信息科">
+              信息科
+            </a-select-option>
+            <a-select-option value="质控科">
+              质控科
+            </a-select-option>
+            <a-select-option value="内科">
+              内科
+            </a-select-option>
+            <a-select-option value="外科">
+              外科
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="用户角色" required>
-          <a-select v-model:value="editForm.roles" mode="multiple" placeholder="请选择角色">
-            <a-select-option value="admin"> 管理员 </a-select-option>
-            <a-select-option value="qc_manager"> 质控管理员 </a-select-option>
-            <a-select-option value="qc_staff"> 质控人员 </a-select-option>
-            <a-select-option value="doctor"> 医务人员 </a-select-option>
+        <a-form-item
+          label="用户角色"
+          required
+        >
+          <a-select
+            v-model:value="editForm.roles"
+            mode="multiple"
+            placeholder="请选择角色"
+          >
+            <a-select-option value="admin">
+              管理员
+            </a-select-option>
+            <a-select-option value="qc_manager">
+              质控管理员
+            </a-select-option>
+            <a-select-option value="qc_staff">
+              质控人员
+            </a-select-option>
+            <a-select-option value="doctor">
+              医务人员
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="用户状态" required>
-          <a-select v-model:value="editForm.status" placeholder="请选择状态">
-            <a-select-option value="active"> 正常 </a-select-option>
-            <a-select-option value="inactive"> 停用 </a-select-option>
-            <a-select-option value="locked"> 锁定 </a-select-option>
+        <a-form-item
+          label="用户状态"
+          required
+        >
+          <a-select
+            v-model:value="editForm.status"
+            placeholder="请选择状态"
+          >
+            <a-select-option value="active">
+              正常
+            </a-select-option>
+            <a-select-option value="inactive">
+              停用
+            </a-select-option>
+            <a-select-option value="locked">
+              锁定
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-form>

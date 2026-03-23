@@ -1,14 +1,23 @@
 <template>
   <div class="medical-record-detail-new">
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <a-spin size="large" tip="加载中...">
-        <div class="loading-placeholder"></div>
+    <div
+      v-if="loading"
+      class="loading-container"
+    >
+      <a-spin
+        size="large"
+        tip="加载中..."
+      >
+        <div class="loading-placeholder" />
       </a-spin>
     </div>
 
     <!-- 错误状态 -->
-    <div v-else-if="error" class="error-container">
+    <div
+      v-else-if="error"
+      class="error-container"
+    >
       <a-card>
         <a-result
           status="error"
@@ -16,8 +25,15 @@
           sub-title="请检查记录ID是否正确，或稍后重试"
         >
           <template #extra>
-            <a-button type="primary" @click="loadData">重新加载</a-button>
-            <a-button @click="goBack">返回</a-button>
+            <a-button
+              type="primary"
+              @click="loadData"
+            >
+              重新加载
+            </a-button>
+            <a-button @click="goBack">
+              返回
+            </a-button>
           </template>
         </a-result>
       </a-card>
@@ -68,12 +84,22 @@
 
       <!-- 主要内容区域 -->
       <template #content>
-        <div class="content-area" :style="contentStyle">
+        <div
+          class="content-area"
+          :style="contentStyle"
+        >
           <!-- 文档标题和元信息 -->
-          <div v-if="currentDocument" class="document-header">
-            <h2 class="document-title">{{ currentDocument.title }}</h2>
+          <div
+            v-if="currentDocument"
+            class="document-header"
+          >
+            <h2 class="document-title">
+              {{ currentDocument.title }}
+            </h2>
             <div class="document-meta">
-              <a-tag color="blue">{{ currentDocument.category || '未分类' }}</a-tag>
+              <a-tag color="blue">
+                {{ currentDocument.category || '未分类' }}
+              </a-tag>
               <a-tag
                 v-if="currentDocument.ai_classified"
                 color="green"
@@ -87,10 +113,16 @@
           </div>
 
           <!-- 文档内容 -->
-          <div class="document-content" ref="contentRef">
+          <div
+            ref="contentRef"
+            class="document-content"
+          >
             <div v-if="currentDocument">
               <!-- 编辑模式 -->
-              <div v-if="isEditing" class="edit-mode">
+              <div
+                v-if="isEditing"
+                class="edit-mode"
+              >
                 <DocumentEditor
                   :content="editingContent"
                   :auto-save="false"
@@ -100,17 +132,29 @@
               </div>
 
               <!-- 只读模式 -->
-              <div v-else class="read-mode">
+              <div
+                v-else
+                class="read-mode"
+              >
                 <div v-if="summaryMode && currentDocument.summary">
                   <h4>摘要</h4>
-                  <div class="content-text" v-html="highlightedContent(currentDocument.summary)"></div>
+                  <div
+                    class="content-text"
+                    v-html="highlightedContent(currentDocument.summary)"
+                  />
                 </div>
                 <div v-else>
-                  <div class="content-text" v-html="highlightedContent(displayContent)"></div>
+                  <div
+                    class="content-text"
+                    v-html="highlightedContent(displayContent)"
+                  />
                 </div>
               </div>
             </div>
-            <div v-else class="no-document">
+            <div
+              v-else
+              class="no-document"
+            >
               <a-empty
                 description="请从左侧选择要查看的文档"
                 :image="Empty.PRESENTED_IMAGE_SIMPLE"

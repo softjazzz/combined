@@ -5,7 +5,12 @@
         <TrophyOutlined class="title-icon" />
         工作表现
       </h3>
-      <a-segmented v-model:value="activePeriod" :options="periodOptions" size="small" @change="handlePeriodChange" />
+      <a-segmented
+        v-model:value="activePeriod"
+        :options="periodOptions"
+        size="small"
+        @change="handlePeriodChange"
+      />
     </div>
 
     <div class="board-content">
@@ -14,7 +19,10 @@
         <div class="section-title">
           <BugOutlined /> 缺陷发现排名
         </div>
-        <div v-if="rankingData.defect_ranking?.length" class="ranking-list">
+        <div
+          v-if="rankingData.defect_ranking?.length"
+          class="ranking-list"
+        >
           <div
             v-for="(item, index) in rankingData.defect_ranking.slice(0, 5)"
             :key="'d-' + index"
@@ -26,12 +34,15 @@
               <div
                 class="rank-bar"
                 :style="{ width: getBarWidth(item.count || item.value, rankingData.defect_ranking) + '%' }"
-              ></div>
+              />
             </div>
             <span class="rank-value">{{ item.count || item.value }}</span>
           </div>
         </div>
-        <div v-else class="empty-ranking">
+        <div
+          v-else
+          class="empty-ranking"
+        >
           <span class="text-gray-400 text-xs">暂无数据</span>
         </div>
       </div>
@@ -41,7 +52,10 @@
         <div class="section-title">
           <FileTextOutlined /> 病历审核排名
         </div>
-        <div v-if="rankingData.record_ranking?.length" class="ranking-list">
+        <div
+          v-if="rankingData.record_ranking?.length"
+          class="ranking-list"
+        >
           <div
             v-for="(item, index) in rankingData.record_ranking.slice(0, 5)"
             :key="'r-' + index"
@@ -53,12 +67,15 @@
               <div
                 class="rank-bar rank-bar-green"
                 :style="{ width: getBarWidth(item.count || item.value, rankingData.record_ranking) + '%' }"
-              ></div>
+              />
             </div>
             <span class="rank-value">{{ item.count || item.value }}</span>
           </div>
         </div>
-        <div v-else class="empty-ranking">
+        <div
+          v-else
+          class="empty-ranking"
+        >
           <span class="text-gray-400 text-xs">暂无数据</span>
         </div>
       </div>

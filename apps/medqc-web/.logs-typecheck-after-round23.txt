@@ -1,0 +1,38 @@
+
+> medical-qc-system@1.0.0 type-check
+> vue-tsc --noEmit
+
+src/components/BatchFileProcessor.vue(214,16): error TS2322: Type '{ patientName?: string; content?: string; confidence?: number; documents?: unknown[]; }' is not assignable to type 'Partial<{ documents: ExtractedDocument[]; patientName?: string; department?: string; patientAge?: number; patientGender?: string; primaryDiagnosis?: string; secondaryDiagnosis?: string[]; majorSurgery?: string; confidence?: number; content?: string; }>'.
+  Types of property 'documents' are incompatible.
+    Type 'unknown[]' is not assignable to type 'ExtractedDocument[]'.
+      Type '{}' is missing the following properties from type 'ExtractedDocument': id, type, title, content, and 2 more.
+src/components/BatchFileProcessor.vue(215,16): error TS2559: Type '{ success: boolean; data?: { patientName?: string; content?: string; confidence?: number; documents?: unknown[]; }; message?: string; fileName: string; originalText?: string; }' has no properties in common with type 'LLMAnalysisMeta'.
+src/components/charts/RadarChartEcharts.vue(87,23): error TS2448: Block-scoped variable 'color' used before its declaration.
+src/components/common/BatchOperations.vue(404,5): error TS2349: This expression is not callable.
+  Type '{}' has no call signatures.
+src/components/common/BatchOperationsComponent.vue(404,5): error TS2349: This expression is not callable.
+  Type '{}' has no call signatures.
+src/components/common/DataTableComponent.vue(156,12): error TS2322: Type 'EmptyAction[]' is not assignable to type 'ActionItem[]'.
+  Type 'EmptyAction' is not assignable to type 'ActionItem'.
+    Types of property 'icon' are incompatible.
+      Type 'Component' is not assignable to type 'Record<string, unknown>'.
+        Type 'FunctionalComponent<any, {}, any, {}>' is not assignable to type 'Record<string, unknown>'.
+          Index signature for type 'string' is missing in type 'FunctionalComponent<any, {}, any, {}>'.
+src/components/common/DataTableComponent.vue(157,12): error TS2322: Type '(action: EmptyAction) => void' is not assignable to type '(action: ActionItem) => any'.
+  Types of parameters 'action' and 'action' are incompatible.
+    Type 'ActionItem' is not assignable to type 'EmptyAction'.
+      Types of property 'type' are incompatible.
+        Type '"default" | "link" | "text" | "primary" | "dashed"' is not assignable to type '"default" | "primary"'.
+          Type '"link"' is not assignable to type '"default" | "primary"'.
+src/components/doctor-workstation/DoctorWorkstation.vue(624,34): error TS2339: Property 'template_content' does not exist on type 'MedicalRecordTemplate'.
+src/components/doctor-workstation/DoctorWorkstation.vue(706,48): error TS2345: Argument of type 'Partial<MedicalRecord>' is not assignable to parameter of type 'CreateMedicalRecordRequest'.
+  Property 'patient_name' is optional in type 'Partial<MedicalRecord>' but required in type 'CreateMedicalRecordRequest'.
+src/components/medical/BatchUploadComponent.vue(417,35): error TS2538: Type 'unknown' cannot be used as an index type.
+src/components/medical/QCAnalysisPanelComponent.vue(508,11): error TS2353: Object literal may only specify known properties, and 'itemId' does not exist in type 'QCIssueItem | { code: string; severity: string; description: string; suggestion: string; }'.
+src/views/debug/ApiTestView.vue(381,7): error TS2353: Object literal may only specify known properties, and 'bio' does not exist in type 'Partial<User>'.
+src/views/debug/ApiTestView.vue(487,7): error TS2353: Object literal may only specify known properties, and 'patient_name' does not exist in type 'CreateMedicalRecordRequest'.
+src/views/drg/FeeMonitoring.vue(288,26): error TS2339: Property 'drawerLoading' does not exist on type 'CreateComponentPublicInstanceWithMixins<ToResolvedProps<{}, {}>, { Empty: { new (...args: any[]): CreateComponentPublicInstanceWithMixins<Readonly<ExtractPropTypes<{ prefixCls: StringConstructor; imageStyle: { type: PropType<CSSProperties>; default: CSSProperties; }; image: { ...; }; description: { ...; }; }>> & Rea...'.
+src/views/drg/FeeMonitoring.vue(603,55): error TS2304: Cannot find name 'dayjs'.
+src/views/medical-records/BatchSmartImportView.vue(240,14): error TS2559: Type '{ success?: boolean; fileName?: string; message?: string; data?: { confidence?: number; patientName?: string; department?: string; }; originalText?: string; }' has no properties in common with type 'LLMAnalysisMeta'.
+src/views/medical-records/SmartImportMedicalRecordNew.vue(1086,7): error TS2353: Object literal may only specify known properties, and 'extractDocuments' does not exist in type 'ParseOptions'.
+src/views/medical-records/SmartImportMedicalRecordNew.vue(1440,32): error TS2304: Cannot find name 'supabase'.

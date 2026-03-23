@@ -7,39 +7,62 @@
 
     <div class="content-wrapper">
       <!-- 规则引擎状态 -->
-      <a-card title="规则引擎状态" class="status-card" :loading="loading">
+      <a-card
+        title="规则引擎状态"
+        class="status-card"
+        :loading="loading"
+      >
         <div class="status-grid">
           <div class="status-item">
-            <div class="status-label">引擎状态</div>
-            <div class="status-value" :class="engineStatus.status">
+            <div class="status-label">
+              引擎状态
+            </div>
+            <div
+              class="status-value"
+              :class="engineStatus.status"
+            >
               <a-badge :status="engineStatus.status === 'healthy' ? 'success' : 'error'" />
               {{ engineStatus.status === 'healthy' ? '运行正常' : '异常' }}
             </div>
           </div>
           <div class="status-item">
-            <div class="status-label">活跃规则数</div>
+            <div class="status-label">
+              活跃规则数
+            </div>
             <div class="status-value">
               {{ engineStatus.activeRules }}
             </div>
           </div>
           <div class="status-item">
-            <div class="status-label">今日执行次数</div>
+            <div class="status-label">
+              今日执行次数
+            </div>
             <div class="status-value">
               {{ engineStatus.executionCount }}
             </div>
           </div>
           <div class="status-item">
-            <div class="status-label">平均响应时间</div>
-            <div class="status-value">{{ engineStatus.avgResponseTime }}ms</div>
+            <div class="status-label">
+              平均响应时间
+            </div>
+            <div class="status-value">
+              {{ engineStatus.avgResponseTime }}ms
+            </div>
           </div>
         </div>
       </a-card>
 
       <!-- 规则管理 -->
-      <a-card title="规则管理" class="rules-card">
+      <a-card
+        title="规则管理"
+        class="rules-card"
+      >
         <template #extra>
           <a-space>
-            <a-button type="primary" @click="showCreateModal = true">
+            <a-button
+              type="primary"
+              @click="showCreateModal = true"
+            >
               <template #icon>
                 <PlusOutlined />
               </template>
@@ -63,10 +86,18 @@
                 allow-clear
                 @change="handleFilterChange"
               >
-                <a-select-option value="completeness"> 完整性检查 </a-select-option>
-                <a-select-option value="consistency"> 一致性检查 </a-select-option>
-                <a-select-option value="timeliness"> 及时性检查 </a-select-option>
-                <a-select-option value="accuracy"> 准确性检查 </a-select-option>
+                <a-select-option value="completeness">
+                  完整性检查
+                </a-select-option>
+                <a-select-option value="consistency">
+                  一致性检查
+                </a-select-option>
+                <a-select-option value="timeliness">
+                  及时性检查
+                </a-select-option>
+                <a-select-option value="accuracy">
+                  准确性检查
+                </a-select-option>
               </a-select>
             </a-col>
             <a-col :span="6">
@@ -76,8 +107,12 @@
                 allow-clear
                 @change="handleFilterChange"
               >
-                <a-select-option value="active"> 启用 </a-select-option>
-                <a-select-option value="inactive"> 禁用 </a-select-option>
+                <a-select-option value="active">
+                  启用
+                </a-select-option>
+                <a-select-option value="inactive">
+                  禁用
+                </a-select-option>
               </a-select>
             </a-col>
             <a-col :span="8">
@@ -116,10 +151,31 @@
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
-                <a-button type="link" size="small" @click="editRule(record)"> 编辑 </a-button>
-                <a-button type="link" size="small" @click="testRule(record)"> 测试 </a-button>
-                <a-popconfirm title="确定要删除这个规则吗？" @confirm="deleteRule(record)">
-                  <a-button type="link" size="small" danger> 删除 </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="editRule(record)"
+                >
+                  编辑
+                </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="testRule(record)"
+                >
+                  测试
+                </a-button>
+                <a-popconfirm
+                  title="确定要删除这个规则吗？"
+                  @confirm="deleteRule(record)"
+                >
+                  <a-button
+                    type="link"
+                    size="small"
+                    danger
+                  >
+                    删除
+                  </a-button>
                 </a-popconfirm>
               </a-space>
             </template>
@@ -136,50 +192,107 @@
       @ok="handleSaveRule"
       @cancel="handleCancelEdit"
     >
-      <a-form ref="ruleFormRef" :model="ruleForm" :rules="ruleFormRules" layout="vertical">
+      <a-form
+        ref="ruleFormRef"
+        :model="ruleForm"
+        :rules="ruleFormRules"
+        layout="vertical"
+      >
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="规则名称" name="name">
-              <a-input v-model:value="ruleForm.name" placeholder="请输入规则名称" />
+            <a-form-item
+              label="规则名称"
+              name="name"
+            >
+              <a-input
+                v-model:value="ruleForm.name"
+                placeholder="请输入规则名称"
+              />
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="规则类别" name="category">
-              <a-select v-model:value="ruleForm.category" placeholder="请选择规则类别">
-                <a-select-option value="completeness"> 完整性检查 </a-select-option>
-                <a-select-option value="consistency"> 一致性检查 </a-select-option>
-                <a-select-option value="timeliness"> 及时性检查 </a-select-option>
-                <a-select-option value="accuracy"> 准确性检查 </a-select-option>
+            <a-form-item
+              label="规则类别"
+              name="category"
+            >
+              <a-select
+                v-model:value="ruleForm.category"
+                placeholder="请选择规则类别"
+              >
+                <a-select-option value="completeness">
+                  完整性检查
+                </a-select-option>
+                <a-select-option value="consistency">
+                  一致性检查
+                </a-select-option>
+                <a-select-option value="timeliness">
+                  及时性检查
+                </a-select-option>
+                <a-select-option value="accuracy">
+                  准确性检查
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
         </a-row>
 
-        <a-form-item label="规则描述" name="description">
-          <a-textarea v-model:value="ruleForm.description" placeholder="请输入规则描述" :rows="3" />
+        <a-form-item
+          label="规则描述"
+          name="description"
+        >
+          <a-textarea
+            v-model:value="ruleForm.description"
+            placeholder="请输入规则描述"
+            :rows="3"
+          />
         </a-form-item>
 
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="优先级" name="priority">
-              <a-select v-model:value="ruleForm.priority" placeholder="请选择优先级">
-                <a-select-option value="high"> 高 </a-select-option>
-                <a-select-option value="medium"> 中 </a-select-option>
-                <a-select-option value="low"> 低 </a-select-option>
+            <a-form-item
+              label="优先级"
+              name="priority"
+            >
+              <a-select
+                v-model:value="ruleForm.priority"
+                placeholder="请选择优先级"
+              >
+                <a-select-option value="high">
+                  高
+                </a-select-option>
+                <a-select-option value="medium">
+                  中
+                </a-select-option>
+                <a-select-option value="low">
+                  低
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="规则状态" name="status">
-              <a-select v-model:value="ruleForm.status" placeholder="请选择状态">
-                <a-select-option value="active"> 启用 </a-select-option>
-                <a-select-option value="inactive"> 禁用 </a-select-option>
+            <a-form-item
+              label="规则状态"
+              name="status"
+            >
+              <a-select
+                v-model:value="ruleForm.status"
+                placeholder="请选择状态"
+              >
+                <a-select-option value="active">
+                  启用
+                </a-select-option>
+                <a-select-option value="inactive">
+                  禁用
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
         </a-row>
 
-        <a-form-item label="规则条件" name="conditions">
+        <a-form-item
+          label="规则条件"
+          name="conditions"
+        >
           <a-textarea
             v-model:value="ruleForm.conditions"
             placeholder="请输入规则条件（JSON格式）"

@@ -13,11 +13,18 @@
       <template #extra>
         <a-space>
           <a-button @click="handleReset">
-            <template #icon><ReloadOutlined /></template>
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             重置
           </a-button>
-          <a-button type="primary" @click="handleViewDocs">
-            <template #icon><QuestionCircleOutlined /></template>
+          <a-button
+            type="primary"
+            @click="handleViewDocs"
+          >
+            <template #icon>
+              <QuestionCircleOutlined />
+            </template>
             使用说明
           </a-button>
         </a-space>
@@ -38,7 +45,10 @@
     <!-- 主内容区域 -->
     <a-row :gutter="24">
       <!-- 左侧：病历内容 -->
-      <a-col :xs="24" :lg="12">
+      <a-col
+        :xs="24"
+        :lg="12"
+      >
         <!-- 病历选择器 -->
         <MedicalRecordSelector
           @load-preset="sichuanStore.loadPresetExample"
@@ -46,8 +56,16 @@
         />
 
         <!-- 病历信息卡片 -->
-        <a-card title="病历信息" class="mt-4" :bordered="false">
-          <a-descriptions :column="2" bordered size="small">
+        <a-card
+          title="病历信息"
+          class="mt-4"
+          :bordered="false"
+        >
+          <a-descriptions
+            :column="2"
+            bordered
+            size="small"
+          >
             <a-descriptions-item label="患者姓名">
               {{ sichuanStore.medicalRecordInfo.patientName }}
             </a-descriptions-item>
@@ -69,7 +87,10 @@
             <a-descriptions-item label="记录时间">
               {{ sichuanStore.medicalRecordInfo.recordTime }}
             </a-descriptions-item>
-            <a-descriptions-item label="初步诊断" :span="2">
+            <a-descriptions-item
+              label="初步诊断"
+              :span="2"
+            >
               {{ sichuanStore.medicalRecordInfo.diagnosis }}
             </a-descriptions-item>
           </a-descriptions>
@@ -82,21 +103,31 @@
           block
           :loading="sichuanStore.isAnalyzing"
           :disabled="!sichuanStore.documentContent"
-          @click="handleStartAnalysis"
           class="mt-4"
+          @click="handleStartAnalysis"
         >
-          <template #icon><ThunderboltOutlined /></template>
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
           {{ sichuanStore.isAnalyzing ? '分析中...' : '开始质控分析' }}
         </a-button>
 
         <!-- 分析进度 -->
-        <a-card v-if="sichuanStore.isAnalyzing" class="mt-4" :bordered="false">
+        <a-card
+          v-if="sichuanStore.isAnalyzing"
+          class="mt-4"
+          :bordered="false"
+        >
           <a-spin>
             <template #tip>
               <div class="analysis-progress">
                 <p>正在调用四川质控引擎...</p>
-                <p class="progress-detail">使用阿里云百炼 LLM API（qwen2.5-14b-instruct）</p>
-                <p class="progress-detail">单次 Prompt 模式，预计耗时 20-30 秒</p>
+                <p class="progress-detail">
+                  使用阿里云百炼 LLM API（qwen2.5-14b-instruct）
+                </p>
+                <p class="progress-detail">
+                  单次 Prompt 模式，预计耗时 20-30 秒
+                </p>
               </div>
             </template>
           </a-spin>
@@ -104,7 +135,10 @@
       </a-col>
 
       <!-- 右侧：质控结果 -->
-      <a-col :xs="24" :lg="12">
+      <a-col
+        :xs="24"
+        :lg="12"
+      >
         <!-- 空状态 -->
         <a-empty
           v-if="!sichuanStore.qcResult"
@@ -131,21 +165,43 @@
         />
 
         <!-- 操作按钮 -->
-        <a-card v-if="sichuanStore.qcResult" class="mt-4" :bordered="false">
-          <a-space direction="vertical" style="width: 100%">
+        <a-card
+          v-if="sichuanStore.qcResult"
+          class="mt-4"
+          :bordered="false"
+        >
+          <a-space
+            direction="vertical"
+            style="width: 100%"
+          >
             <a-button-group style="width: 100%">
-              <a-button style="width: 50%" @click="handleExportJSON">
-                <template #icon><FileTextOutlined /></template>
+              <a-button
+                style="width: 50%"
+                @click="handleExportJSON"
+              >
+                <template #icon>
+                  <FileTextOutlined />
+                </template>
                 导出 JSON
               </a-button>
-              <a-button style="width: 50%" @click="handleExportMarkdown">
-                <template #icon><FileMarkdownOutlined /></template>
+              <a-button
+                style="width: 50%"
+                @click="handleExportMarkdown"
+              >
+                <template #icon>
+                  <FileMarkdownOutlined />
+                </template>
                 导出 Markdown
               </a-button>
             </a-button-group>
 
-            <a-button block @click="handleViewFullReport">
-              <template #icon><EyeOutlined /></template>
+            <a-button
+              block
+              @click="handleViewFullReport"
+            >
+              <template #icon>
+                <EyeOutlined />
+              </template>
               查看完整报告
             </a-button>
           </a-space>
@@ -154,16 +210,28 @@
     </a-row>
 
     <!-- 底部：日志和性能监控 -->
-    <a-row :gutter="24" class="mt-6">
-      <a-col :xs="24" :lg="12">
+    <a-row
+      :gutter="24"
+      class="mt-6"
+    >
+      <a-col
+        :xs="24"
+        :lg="12"
+      >
         <EnhancedLogPanel
           :logs="formattedLogs"
           @clear="sichuanStore.clearLogs"
         />
       </a-col>
 
-      <a-col :xs="24" :lg="12">
-        <a-card title="性能监控" :bordered="false">
+      <a-col
+        :xs="24"
+        :lg="12"
+      >
+        <a-card
+          title="性能监控"
+          :bordered="false"
+        >
           <a-empty
             v-if="!sichuanStore.qcResult"
             description="暂无性能数据"
@@ -171,15 +239,25 @@
           />
 
           <div v-else>
-            <a-descriptions :column="1" bordered size="small">
+            <a-descriptions
+              :column="1"
+              bordered
+              size="small"
+            >
               <a-descriptions-item label="处理时间">
-                <a-tag color="blue">{{ sichuanStore.processingTime.toFixed(2) }} 秒</a-tag>
+                <a-tag color="blue">
+                  {{ sichuanStore.processingTime.toFixed(2) }} 秒
+                </a-tag>
               </a-descriptions-item>
               <a-descriptions-item label="Token 使用量">
-                <a-tag color="purple">{{ sichuanStore.tokenUsage.toLocaleString() }}</a-tag>
+                <a-tag color="purple">
+                  {{ sichuanStore.tokenUsage.toLocaleString() }}
+                </a-tag>
               </a-descriptions-item>
               <a-descriptions-item label="Token 节省率">
-                <a-tag color="green">{{ (sichuanStore.tokenSavingsRate * 100).toFixed(1) }}%</a-tag>
+                <a-tag color="green">
+                  {{ (sichuanStore.tokenSavingsRate * 100).toFixed(1) }}%
+                </a-tag>
               </a-descriptions-item>
               <a-descriptions-item label="预估成本">
                 <a-tag color="orange">

@@ -46,6 +46,11 @@ export interface ShadowGroupingResultItem {
     error_message?: string;
 }
 
+export interface ShadowGroupingBatchResponse {
+    baseline: ShadowGroupingResultData;
+    results: ShadowGroupingResultItem[];
+}
+
 // ==========================================
 // 实体抽取与差距分析相关 (Layer A/B)
 // ==========================================

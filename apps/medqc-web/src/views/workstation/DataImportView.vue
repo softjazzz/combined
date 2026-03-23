@@ -7,7 +7,9 @@
           <CloudUploadOutlined />
           病历数据导入
         </h2>
-        <p class="header-desc">通过 Excel / CSV 文件批量导入住院病历数据，支持格式校验和错误报告</p>
+        <p class="header-desc">
+          通过 Excel / CSV 文件批量导入住院病历数据，支持格式校验和错误报告
+        </p>
       </div>
       <a-button @click="$router.push('/dashboard/workstation')">
         <ArrowLeftOutlined />
@@ -16,17 +18,35 @@
     </div>
 
     <!-- 步骤条 -->
-    <a-steps :current="currentStep" class="import-steps">
-      <a-step title="上传文件" description="选择 Excel/CSV 文件" />
-      <a-step title="格式校验" description="检查字段和数据格式" />
-      <a-step title="数据预览" description="确认导入内容" />
-      <a-step title="导入完成" description="查看导入结果" />
+    <a-steps
+      :current="currentStep"
+      class="import-steps"
+    >
+      <a-step
+        title="上传文件"
+        description="选择 Excel/CSV 文件"
+      />
+      <a-step
+        title="格式校验"
+        description="检查字段和数据格式"
+      />
+      <a-step
+        title="数据预览"
+        description="确认导入内容"
+      />
+      <a-step
+        title="导入完成"
+        description="查看导入结果"
+      />
     </a-steps>
 
     <!-- 步骤内容 -->
     <div class="step-content">
       <!-- Step 1: 上传文件 -->
-      <div v-if="currentStep === 0" class="step-upload">
+      <div
+        v-if="currentStep === 0"
+        class="step-upload"
+      >
         <div class="upload-area">
           <a-upload-dragger
             name="file"
@@ -38,21 +58,33 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">点击或拖拽 Excel / CSV 文件到此区域</p>
-            <p class="ant-upload-hint">单次最多导入 500 条病历记录</p>
+            <p class="ant-upload-text">
+              点击或拖拽 Excel / CSV 文件到此区域
+            </p>
+            <p class="ant-upload-hint">
+              单次最多导入 500 条病历记录
+            </p>
           </a-upload-dragger>
         </div>
 
         <a-divider>或使用模板</a-divider>
 
         <div class="template-section">
-          <a-card size="small" class="template-card" hoverable @click="downloadTemplate">
+          <a-card
+            size="small"
+            class="template-card"
+            hoverable
+            @click="downloadTemplate"
+          >
             <template #cover>
               <div class="template-icon">
                 <FileExcelOutlined style="font-size: 36px; color: #52c41a" />
               </div>
             </template>
-            <a-card-meta title="病历导入模板.xlsx" description="标准化病历数据模板，包含必填字段说明">
+            <a-card-meta
+              title="病历导入模板.xlsx"
+              description="标准化病历数据模板，包含必填字段说明"
+            >
               <template #avatar>
                 <DownloadOutlined style="font-size: 20px; color: #1677ff" />
               </template>
@@ -62,13 +94,25 @@
 
         <div class="required-fields">
           <h4>必填字段说明（7 个必须字段）</h4>
-          <a-table :dataSource="requiredFields" :columns="fieldColumns" :pagination="false" size="small" bordered />
+          <a-table
+            :data-source="requiredFields"
+            :columns="fieldColumns"
+            :pagination="false"
+            size="small"
+            bordered
+          />
         </div>
       </div>
 
       <!-- Step 2: 格式校验 -->
-      <div v-if="currentStep === 1" class="step-validate">
-        <a-spin :spinning="validating" tip="正在校验数据格式...">
+      <div
+        v-if="currentStep === 1"
+        class="step-validate"
+      >
+        <a-spin
+          :spinning="validating"
+          tip="正在校验数据格式..."
+        >
           <div v-if="!validating && validationResult">
             <a-result
               :status="validationResult.errors.length === 0 ? 'success' : 'warning'"
@@ -76,20 +120,33 @@
               :sub-title="`共解析 ${validationResult.totalRows} 行数据，${validationResult.validRows} 行有效`"
             >
               <template #extra>
-                <a-button v-if="validationResult.errors.length === 0" type="primary" @click="currentStep = 2">
+                <a-button
+                  v-if="validationResult.errors.length === 0"
+                  type="primary"
+                  @click="currentStep = 2"
+                >
                   继续下一步
                 </a-button>
-                <a-button v-else type="primary" @click="currentStep = 2">
+                <a-button
+                  v-else
+                  type="primary"
+                  @click="currentStep = 2"
+                >
                   忽略错误继续
                 </a-button>
-                <a-button @click="currentStep = 0">重新上传</a-button>
+                <a-button @click="currentStep = 0">
+                  重新上传
+                </a-button>
               </template>
             </a-result>
 
-            <div v-if="validationResult.errors.length > 0" class="error-list">
+            <div
+              v-if="validationResult.errors.length > 0"
+              class="error-list"
+            >
               <h4><WarningOutlined style="color: #faad14" /> 错误详情</h4>
               <a-table
-                :dataSource="validationResult.errors"
+                :data-source="validationResult.errors"
                 :columns="errorColumns"
                 :pagination="{ pageSize: 10 }"
                 size="small"
@@ -101,15 +158,30 @@
       </div>
 
       <!-- Step 3: 数据预览 -->
-      <div v-if="currentStep === 2" class="step-preview">
+      <div
+        v-if="currentStep === 2"
+        class="step-preview"
+      >
         <div class="preview-stats">
-          <a-statistic title="总记录数" :value="previewData.length" class="stat-item" />
-          <a-statistic title="涉及科室" :value="previewDepts.length" class="stat-item" />
-          <a-statistic title="时间范围" :value="previewDateRange" class="stat-item" />
+          <a-statistic
+            title="总记录数"
+            :value="previewData.length"
+            class="stat-item"
+          />
+          <a-statistic
+            title="涉及科室"
+            :value="previewDepts.length"
+            class="stat-item"
+          />
+          <a-statistic
+            title="时间范围"
+            :value="previewDateRange"
+            class="stat-item"
+          />
         </div>
 
         <a-table
-          :dataSource="previewData"
+          :data-source="previewData"
           :columns="previewColumns"
           :pagination="{ pageSize: 5 }"
           :scroll="{ x: 1200 }"
@@ -126,8 +198,14 @@
       </div>
 
       <!-- Step 4: 导入完成 -->
-      <div v-if="currentStep === 3" class="step-result">
-        <a-spin :spinning="importing" tip="正在导入数据...">
+      <div
+        v-if="currentStep === 3"
+        class="step-result"
+      >
+        <a-spin
+          :spinning="importing"
+          tip="正在导入数据..."
+        >
           <a-result
             v-if="!importing && importResult"
             :status="importResult.failCount === 0 ? 'success' : 'warning'"
@@ -135,15 +213,28 @@
             :sub-title="importResult.failCount > 0 ? `${importResult.failCount} 条失败` : '所有数据已成功导入'"
           >
             <template #extra>
-              <a-button type="primary" @click="$router.push('/dashboard/workstation')">
+              <a-button
+                type="primary"
+                @click="$router.push('/dashboard/workstation')"
+              >
                 前往工作站查看
               </a-button>
-              <a-button @click="resetAll">继续导入</a-button>
+              <a-button @click="resetAll">
+                继续导入
+              </a-button>
             </template>
             <div class="import-detail">
-              <a-descriptions bordered size="small" :column="2">
-                <a-descriptions-item label="文件名">{{ fileList[0]?.name || '–' }}</a-descriptions-item>
-                <a-descriptions-item label="导入时间">{{ importResult.importTime }}</a-descriptions-item>
+              <a-descriptions
+                bordered
+                size="small"
+                :column="2"
+              >
+                <a-descriptions-item label="文件名">
+                  {{ fileList[0]?.name || '–' }}
+                </a-descriptions-item>
+                <a-descriptions-item label="导入时间">
+                  {{ importResult.importTime }}
+                </a-descriptions-item>
                 <a-descriptions-item label="成功条数">
                   <span style="color: #52c41a; font-weight: 600">{{ importResult.successCount }}</span>
                 </a-descriptions-item>
@@ -152,8 +243,12 @@
                     {{ importResult.failCount }}
                   </span>
                 </a-descriptions-item>
-                <a-descriptions-item label="覆盖记录">{{ importResult.overwriteCount }}</a-descriptions-item>
-                <a-descriptions-item label="新增记录">{{ importResult.newCount }}</a-descriptions-item>
+                <a-descriptions-item label="覆盖记录">
+                  {{ importResult.overwriteCount }}
+                </a-descriptions-item>
+                <a-descriptions-item label="新增记录">
+                  {{ importResult.newCount }}
+                </a-descriptions-item>
               </a-descriptions>
             </div>
           </a-result>
@@ -162,8 +257,14 @@
     </div>
 
     <!-- 底部操作 -->
-    <div class="import-footer" v-if="currentStep < 3">
-      <a-button :disabled="currentStep === 0" @click="currentStep--">
+    <div
+      v-if="currentStep < 3"
+      class="import-footer"
+    >
+      <a-button
+        :disabled="currentStep === 0"
+        @click="currentStep--"
+      >
         上一步
       </a-button>
       <a-button

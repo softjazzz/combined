@@ -1,8 +1,15 @@
 <template>
   <div class="record-detail-panel">
     <!-- 基本信息 -->
-    <a-card title="基本信息" class="mb-6" :bordered="false">
-      <a-descriptions :column="2" bordered>
+    <a-card
+      title="基本信息"
+      class="mb-6"
+      :bordered="false"
+    >
+      <a-descriptions
+        :column="2"
+        bordered
+      >
         <a-descriptions-item label="患者姓名">
           {{ record.patient_name }}
         </a-descriptions-item>
@@ -41,10 +48,16 @@
     >
       <div class="flex items-center justify-between mb-4">
         <div class="text-center">
-          <div class="text-3xl font-bold mb-2" :style="{ color: getScoreColor(record.qc_score) }">
+          <div
+            class="text-3xl font-bold mb-2"
+            :style="{ color: getScoreColor(record.qc_score) }"
+          >
             {{ record.qc_score }}分
           </div>
-          <a-tag :color="getGradeColor(record.qc_grade)" size="large">
+          <a-tag
+            :color="getGradeColor(record.qc_grade)"
+            size="large"
+          >
             {{ record.qc_grade }}级
           </a-tag>
         </div>
@@ -59,20 +72,33 @@
       </div>
       
       <div class="text-sm text-gray-600">
-        <p v-if="record.qc_grade === 'A'" class="text-green-600">
+        <p
+          v-if="record.qc_grade === 'A'"
+          class="text-green-600"
+        >
           ✅ 优秀：病案记录完整、规范，符合质控标准
         </p>
-        <p v-else-if="record.qc_grade === 'B'" class="text-orange-600">
+        <p
+          v-else-if="record.qc_grade === 'B'"
+          class="text-orange-600"
+        >
           ⚠️ 良好：病案记录基本符合要求，有小部分需要改进
         </p>
-        <p v-else-if="record.qc_grade === 'C'" class="text-red-600">
+        <p
+          v-else-if="record.qc_grade === 'C'"
+          class="text-red-600"
+        >
           ❌ 需改进：病案记录存在明显问题，需要重点关注和改进
         </p>
       </div>
     </a-card>
 
     <!-- 病案内容 -->
-    <a-card title="病案内容" class="mb-6" :bordered="false">
+    <a-card
+      title="病案内容"
+      class="mb-6"
+      :bordered="false"
+    >
       <template #extra>
         <a-space>
           <a-button 
@@ -110,7 +136,9 @@
             {{ getFileIcon(record.file_name) }}
           </div>
           <div>
-            <div class="font-medium">{{ record.file_name }}</div>
+            <div class="font-medium">
+              {{ record.file_name }}
+            </div>
             <div class="text-sm text-gray-500">
               {{ record.file_size ? formatFileSize(record.file_size) : '未知大小' }}
             </div>
@@ -132,15 +160,22 @@
     </a-card>
 
     <!-- 操作历史 -->
-    <a-card title="操作历史" :bordered="false">
+    <a-card
+      title="操作历史"
+      :bordered="false"
+    >
       <a-timeline>
         <a-timeline-item color="green">
           <template #dot>
             <ClockCircleOutlined />
           </template>
           <div>
-            <div class="font-medium">记录创建</div>
-            <div class="text-sm text-gray-500">{{ formatDateTime(record.created_at) }}</div>
+            <div class="font-medium">
+              记录创建
+            </div>
+            <div class="text-sm text-gray-500">
+              {{ formatDateTime(record.created_at) }}
+            </div>
           </div>
         </a-timeline-item>
         
@@ -152,8 +187,12 @@
             <LoadingOutlined />
           </template>
           <div>
-            <div class="font-medium">正在分析</div>
-            <div class="text-sm text-gray-500">AI质控分析进行中...</div>
+            <div class="font-medium">
+              正在分析
+            </div>
+            <div class="text-sm text-gray-500">
+              AI质控分析进行中...
+            </div>
           </div>
         </a-timeline-item>
         
@@ -165,8 +204,12 @@
             <CheckCircleOutlined />
           </template>
           <div>
-            <div class="font-medium">分析完成</div>
-            <div class="text-sm text-gray-500">{{ formatDateTime(record.updated_at) }}</div>
+            <div class="font-medium">
+              分析完成
+            </div>
+            <div class="text-sm text-gray-500">
+              {{ formatDateTime(record.updated_at) }}
+            </div>
           </div>
         </a-timeline-item>
         
@@ -178,8 +221,12 @@
             <CloseCircleOutlined />
           </template>
           <div>
-            <div class="font-medium">分析失败</div>
-            <div class="text-sm text-gray-500">{{ formatDateTime(record.updated_at) }}</div>
+            <div class="font-medium">
+              分析失败
+            </div>
+            <div class="text-sm text-gray-500">
+              {{ formatDateTime(record.updated_at) }}
+            </div>
           </div>
         </a-timeline-item>
       </a-timeline>

@@ -12,8 +12,11 @@
             :src="currentAvatar" 
             :alt="userName || '用户头像'"
             class="w-full h-full object-cover"
-          />
-          <div v-else class="text-white text-2xl font-bold">
+          >
+          <div
+            v-else
+            class="text-white text-2xl font-bold"
+          >
             {{ avatarInitial }}
           </div>
         </div>
@@ -23,15 +26,19 @@
           v-if="uploading" 
           class="absolute inset-0 flex items-center justify-center"
         >
-          <div class="w-24 h-24 rounded-full border-4 border-transparent border-t-cyan-400 animate-spin"></div>
+          <div class="w-24 h-24 rounded-full border-4 border-transparent border-t-cyan-400 animate-spin" />
         </div>
       </div>
 
       <!-- 上传控制区域 -->
       <div class="flex-1">
         <div class="mb-2">
-          <h4 class="text-sm font-medium text-slate-200">个人头像</h4>
-          <p class="text-xs text-slate-400">支持 JPG、PNG 格式，文件大小不超过 2MB</p>
+          <h4 class="text-sm font-medium text-slate-200">
+            个人头像
+          </h4>
+          <p class="text-xs text-slate-400">
+            支持 JPG、PNG 格式，文件大小不超过 2MB
+          </p>
         </div>
 
         <div class="flex gap-2">
@@ -57,8 +64,8 @@
             v-if="currentAvatar && !isDefaultAvatar"
             size="small" 
             danger
-            @click="handleRemove"
             class="bg-red-500/20 border-red-400/30 text-red-300 hover:bg-red-500/30"
+            @click="handleRemove"
           >
             <DeleteOutlined />
             删除
@@ -68,8 +75,8 @@
           <a-button 
             v-if="currentAvatar && !isDefaultAvatar"
             size="small"
-            @click="handleReset"
             class="bg-slate-500/20 border-slate-400/30 text-slate-300 hover:bg-slate-500/30"
+            @click="handleReset"
           >
             <ReloadOutlined />
             重置
@@ -77,7 +84,10 @@
         </div>
 
         <!-- 上传状态提示 -->
-        <div v-if="uploadStatus" class="mt-2">
+        <div
+          v-if="uploadStatus"
+          class="mt-2"
+        >
           <div 
             v-if="uploadStatus.type === 'success'" 
             class="flex items-center gap-1 text-xs text-emerald-400"
@@ -104,10 +114,17 @@
     </div>
 
     <!-- 头像预设选择 -->
-    <div v-if="showPresets" class="mt-6">
+    <div
+      v-if="showPresets"
+      class="mt-6"
+    >
       <div class="mb-3">
-        <h5 class="text-sm font-medium text-slate-200 mb-1">选择预设头像</h5>
-        <p class="text-xs text-slate-400">或者从下方预设头像中选择一个</p>
+        <h5 class="text-sm font-medium text-slate-200 mb-1">
+          选择预设头像
+        </h5>
+        <p class="text-xs text-slate-400">
+          或者从下方预设头像中选择一个
+        </p>
       </div>
       
       <div class="grid grid-cols-6 gap-3">
@@ -122,7 +139,7 @@
             :src="preset.url" 
             :alt="preset.name"
             class="w-full h-full object-cover"
-          />
+          >
         </div>
       </div>
     </div>
@@ -140,7 +157,10 @@ import {
   ExclamationCircleOutlined,
   InfoCircleOutlined
 } from '@ant-design/icons-vue'
-import type { UploadRequestOption } from 'ant-design-vue/es/upload/interface'
+
+interface UploadRequestOption {
+  file: File | Blob
+}
 
 interface Props {
   modelValue?: string

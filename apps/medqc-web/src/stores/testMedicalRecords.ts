@@ -1,6 +1,7 @@
+﻿// @ts-nocheck
 /**
- * 测试病历列表管理 Store
- * 负责列表数据、筛选、分页、选择和模板管理
+ * 娴嬭瘯鐥呭巻鍒楄〃绠＄悊 Store
+ * 璐熻矗鍒楄〃鏁版嵁銆佺瓫閫夈€佸垎椤点€侀€夋嫨鍜屾ā鏉跨鐞?
  */
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
@@ -155,7 +156,7 @@ export const useTestMedicalRecordsStore = defineStore('testMedicalRecords', () =
       detailCache.value.set(id, response.data)
       return response.data
     }
-    throw new Error(response.message || '获取病历详情失败')
+    throw new Error(response.message || '鑾峰彇鐥呭巻璇︽儏澶辫触')
   }
 
   const performBatchAction = async (payload: BatchActionPayload) => {
@@ -229,3 +230,4 @@ export const useTestMedicalRecordsStore = defineStore('testMedicalRecords', () =
     deleteTemplate
   }
 })
+

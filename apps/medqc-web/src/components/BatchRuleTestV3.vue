@@ -4,19 +4,25 @@
     <div class="page-header">
       <div class="header-content">
         <div class="header-left">
-          <h1 class="header-title">批量质控评估</h1>
-          <p class="header-subtitle">上下分屏布局 + 标签页 · 可拖动调整高度</p>
+          <h1 class="header-title">
+            批量质控评估
+          </h1>
+          <p class="header-subtitle">
+            上下分屏布局 + 标签页 · 可拖动调整高度
+          </p>
         </div>
         <div class="header-right">
           <a-space :size="12">
             <!-- LLM 设置按钮 -->
             <a-button
-              @click="showLLMSettings"
               size="large"
               class="llm-settings-button"
               data-testid="llm-settings-btn"
+              @click="showLLMSettings"
             >
-              <template #icon><ApiOutlined /></template>
+              <template #icon>
+                <ApiOutlined />
+              </template>
               <span>LLM 设置</span>
             </a-button>
 
@@ -24,7 +30,9 @@
               进度：{{ testProgress.completed }}/{{ testProgress.total }}
             </a-tag>
             <a-button @click="goBack">
-              <template #icon><ArrowLeftOutlined /></template>
+              <template #icon>
+                <ArrowLeftOutlined />
+              </template>
               返回列表
             </a-button>
           </a-space>
@@ -35,16 +43,25 @@
     <!-- 上下分屏容器 -->
     <div class="split-container">
       <!-- 上半部：输入区 -->
-      <div class="top-section" :style="{ height: topHeight + '%' }">
+      <div
+        class="top-section"
+        :style="{ height: topHeight + '%' }"
+      >
         <div class="top-content">
           <!-- 左侧：规则选择 (35%) -->
           <div class="rules-panel">
-            <a-card :bordered="false" class="panel-card">
+            <a-card
+              :bordered="false"
+              class="panel-card"
+            >
               <template #title>
                 <div class="panel-title">
                   <AppstoreOutlined />
                   <span>规则选择</span>
-                  <a-tag v-if="selectedRuleIds.length > 0" color="blue">
+                  <a-tag
+                    v-if="selectedRuleIds.length > 0"
+                    color="blue"
+                  >
                     {{ selectedRuleIds.length }} 条
                   </a-tag>
                 </div>
@@ -64,7 +81,10 @@
                     :key="config.key"
                     :value="config.key"
                   >
-                    <component :is="iconComponents[config.icon]" style="margin-right: 4px" />
+                    <component
+                      :is="iconComponents[config.icon]"
+                      style="margin-right: 4px"
+                    />
                     {{ config.label }}
                   </a-select-option>
                 </a-select>
@@ -73,38 +93,56 @@
               <!-- 筛选工具 -->
               <div class="control-group">
                 <label class="control-label">筛选</label>
-                <a-space direction="vertical" style="width: 100%" :size="8">
+                <a-space
+                  direction="vertical"
+                  style="width: 100%"
+                  :size="8"
+                >
                   <a-input
                     v-model:value="searchText"
                     placeholder="搜索规则..."
-                    allowClear
+                    allow-clear
                     :disabled="isTesting"
                   >
-                    <template #prefix><SearchOutlined /></template>
+                    <template #prefix>
+                      <SearchOutlined />
+                    </template>
                   </a-input>
 
                   <a-select
                     v-model:value="filterDefectLevel"
                     placeholder="缺陷等级"
-                    allowClear
+                    allow-clear
                     style="width: 100%"
                     :disabled="isTesting"
                   >
-                    <a-select-option value="严重缺陷">🔴 严重</a-select-option>
-                    <a-select-option value="一般缺陷">🟡 一般</a-select-option>
-                    <a-select-option value="轻微缺陷">🟢 轻微</a-select-option>
+                    <a-select-option value="严重缺陷">
+                      🔴 严重
+                    </a-select-option>
+                    <a-select-option value="一般缺陷">
+                      🟡 一般
+                    </a-select-option>
+                    <a-select-option value="轻微缺陷">
+                      🟢 轻微
+                    </a-select-option>
                   </a-select>
 
                   <a-select
                     v-model:value="filterComplexity"
                     placeholder="复杂度"
-                    allowClear
+                    allow-clear
                     style="width: 100%"
                     :disabled="isTesting"
                   >
-                    <a-select-option value="高复杂度">🟠 高</a-select-option>
-                    <a-select-option value="中复杂度">🟢 中</a-select-option>
-                    <a-select-option value="低复杂度">🔵 低</a-select-option>
+                    <a-select-option value="高复杂度">
+                      🟠 高
+                    </a-select-option>
+                    <a-select-option value="中复杂度">
+                      🟢 中
+                    </a-select-option>
+                    <a-select-option value="低复杂度">
+                      🔵 低
+                    </a-select-option>
                   </a-select>
                 </a-space>
               </div>
@@ -114,8 +152,8 @@
                 <a-checkbox
                   :checked="isAllSelected"
                   :indeterminate="isIndeterminate"
-                  @change="toggleSelectAll"
                   :disabled="isTesting || filteredRules.length === 0"
+                  @change="toggleSelectAll"
                 >
                   全选
                 </a-checkbox>
@@ -144,11 +182,19 @@
                   <div class="rule-info-compact">
                     <div class="rule-header-compact">
                       <span class="rule-id-compact">{{ rule.rule_id }}</span>
-                      <a-tag :color="getDefectLevelColor(rule.defect_level)" size="small">
+                      <a-tag
+                        :color="getDefectLevelColor(rule.defect_level)"
+                        size="small"
+                      >
                         {{ normalizeDefectLevel(rule.defect_level) }}
                       </a-tag>
                     </div>
-                    <div class="rule-name-compact" :title="rule.name">{{ rule.name }}</div>
+                    <div
+                      class="rule-name-compact"
+                      :title="rule.name"
+                    >
+                      {{ rule.name }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -157,7 +203,10 @@
 
           <!-- 右侧：病历编辑 (65%) -->
           <div class="medical-panel">
-            <a-card :bordered="false" class="panel-card">
+            <a-card
+              :bordered="false"
+              class="panel-card"
+            >
               <template #title>
                 <div class="panel-title">
                   <FileTextOutlined />
@@ -168,7 +217,11 @@
                 </div>
               </template>
               <template #extra>
-                <a-button size="small" @click="resetMedicalText" :disabled="isTesting">
+                <a-button
+                  size="small"
+                  :disabled="isTesting"
+                  @click="resetMedicalText"
+                >
                   重置文本
                 </a-button>
               </template>
@@ -180,7 +233,7 @@
                   :placeholder="`请输入或编辑${currentConfig.label}...`"
                   :auto-size="{ minRows: 15, maxRows: 25 }"
                   class="medical-textarea"
-                  showCount
+                  show-count
                   :maxlength="5000"
                 />
               </div>
@@ -192,10 +245,12 @@
                   size="large"
                   :loading="isTesting"
                   :disabled="selectedRuleIds.length === 0 || !medicalText.trim()"
-                  @click="startBatchTest"
                   style="flex: 1"
+                  @click="startBatchTest"
                 >
-                  <template #icon><ThunderboltOutlined /></template>
+                  <template #icon>
+                    <ThunderboltOutlined />
+                  </template>
                   {{ isTesting ? `评估中 ${testProgress.completed}/${testProgress.total}` : '开始批量评估' }}
                 </a-button>
 
@@ -203,10 +258,12 @@
                   size="large"
                   :loading="isProductionTesting"
                   :disabled="selectedRuleIds.length === 0 || !medicalText.trim() || isTesting"
-                  @click="startProductionBatchQC"
                   style="flex: 1"
+                  @click="startProductionBatchQC"
                 >
-                  <template #icon><RocketOutlined /></template>
+                  <template #icon>
+                    <RocketOutlined />
+                  </template>
                   {{ isProductionTesting ? '生产质控中...' : '生产批量质控' }}
                 </a-button>
               </div>
@@ -218,8 +275,8 @@
       <!-- 可拖动的分隔条 -->
       <div
         class="drag-handle"
-        @mousedown="startDrag"
         :class="{ dragging: isDragging }"
+        @mousedown="startDrag"
       >
         <div class="drag-handle-line">
           <div class="drag-handle-icon">
@@ -229,9 +286,15 @@
       </div>
 
       <!-- 下半部：结果区 -->
-      <div class="bottom-section" :style="{ height: (100 - topHeight) + '%' }">
+      <div
+        class="bottom-section"
+        :style="{ height: (100 - topHeight) + '%' }"
+      >
         <div class="bottom-content">
-          <a-card :bordered="false" class="results-card">
+          <a-card
+            :bordered="false"
+            class="results-card"
+          >
             <template #title>
               <div class="results-header-title">
                 <BarChartOutlined />
@@ -240,27 +303,59 @@
             </template>
 
             <!-- 标签页 -->
-            <a-tabs v-model:activeKey="activeTab" type="card" class="results-tabs">
+            <a-tabs
+              v-model:active-key="activeTab"
+              type="card"
+              class="results-tabs"
+            >
               <!-- 概览标签 -->
-              <a-tab-pane key="overview" tab="📊 概览">
-                <div v-if="!productionResult && testResults.length === 0" class="empty-state">
-                  <div class="empty-icon">📊</div>
-                  <div class="empty-text">尚无评估结果</div>
-                  <div class="empty-hint">选择规则并点击评估按钮开始</div>
+              <a-tab-pane
+                key="overview"
+                tab="📊 概览"
+              >
+                <div
+                  v-if="!productionResult && testResults.length === 0"
+                  class="empty-state"
+                >
+                  <div class="empty-icon">
+                    📊
+                  </div>
+                  <div class="empty-text">
+                    尚无评估结果
+                  </div>
+                  <div class="empty-hint">
+                    选择规则并点击评估按钮开始
+                  </div>
                 </div>
 
-                <div v-else-if="isTesting || isProductionTesting" class="loading-state">
+                <div
+                  v-else-if="isTesting || isProductionTesting"
+                  class="loading-state"
+                >
                   <a-spin size="large" />
-                  <div class="loading-text">AI 正在评估中...</div>
+                  <div class="loading-text">
+                    AI 正在评估中...
+                  </div>
                 </div>
 
-                <div v-else-if="productionResult?.data" class="overview-content">
+                <div
+                  v-else-if="productionResult?.data"
+                  class="overview-content"
+                >
                   <div class="overview-grid">
                     <!-- 大卡片：合规率 -->
                     <div class="overview-card overview-card-large">
                       <div class="overview-chart">
-                        <svg viewBox="0 0 200 200" class="circular-chart-large">
-                          <circle class="circle-bg" cx="100" cy="100" r="90" />
+                        <svg
+                          viewBox="0 0 200 200"
+                          class="circular-chart-large"
+                        >
+                          <circle
+                            class="circle-bg"
+                            cx="100"
+                            cy="100"
+                            r="90"
+                          />
                           <circle
                             class="circle-progress"
                             cx="100"
@@ -273,46 +368,71 @@
                           <div class="chart-value-large">
                             {{ productionResult.data.evaluation_summary.compliance_rate?.toFixed(1) || '0.0' }}%
                           </div>
-                          <div class="chart-label-large">合规率</div>
+                          <div class="chart-label-large">
+                            合规率
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     <!-- 统计卡片 -->
                     <div class="overview-card">
-                      <div class="stat-icon error">⚠️</div>
-                      <div class="stat-value">{{ productionResult.data.evaluation_summary.issues_found ?? 0 }}</div>
-                      <div class="stat-label">发现问题</div>
+                      <div class="stat-icon error">
+                        ⚠️
+                      </div>
+                      <div class="stat-value">
+                        {{ productionResult.data.evaluation_summary.issues_found ?? 0 }}
+                      </div>
+                      <div class="stat-label">
+                        发现问题
+                      </div>
                     </div>
 
                     <div class="overview-card">
-                      <div class="stat-icon success">✅</div>
+                      <div class="stat-icon success">
+                        ✅
+                      </div>
                       <div class="stat-value">
                         {{ (productionResult.data.evaluation_results?.filter(r => r.is_compliant).length || 0) }}
                       </div>
-                      <div class="stat-label">合规项目</div>
+                      <div class="stat-label">
+                        合规项目
+                      </div>
                     </div>
 
                     <div class="overview-card">
-                      <div class="stat-icon">⏱️</div>
+                      <div class="stat-icon">
+                        ⏱️
+                      </div>
                       <div class="stat-value">
                         {{ productionResult.data.performance_metrics?.processing_time.toFixed(2) || '0.00' }}s
                       </div>
-                      <div class="stat-label">处理时间</div>
+                      <div class="stat-label">
+                        处理时间
+                      </div>
                     </div>
 
                     <div class="overview-card">
-                      <div class="stat-icon">🎯</div>
+                      <div class="stat-icon">
+                        🎯
+                      </div>
                       <div class="stat-value">
                         {{ productionResult.data.performance_metrics?.token_usage || 0 }}
                       </div>
-                      <div class="stat-label">Token消耗</div>
+                      <div class="stat-label">
+                        Token消耗
+                      </div>
                     </div>
                   </div>
 
                   <!-- 问题分布图 -->
-                  <div v-if="issuesByLevel" class="issues-breakdown">
-                    <div class="breakdown-title">问题分布</div>
+                  <div
+                    v-if="issuesByLevel"
+                    class="issues-breakdown"
+                  >
+                    <div class="breakdown-title">
+                      问题分布
+                    </div>
                     <div class="breakdown-bars">
                       <div class="breakdown-item">
                         <div class="breakdown-label">
@@ -323,7 +443,7 @@
                           <div
                             class="breakdown-bar error"
                             :style="{ width: getBarWidth(issuesByLevel.severe, totalIssues) }"
-                          ></div>
+                          />
                           <span class="breakdown-count">{{ issuesByLevel.severe }}</span>
                         </div>
                       </div>
@@ -337,7 +457,7 @@
                           <div
                             class="breakdown-bar warning"
                             :style="{ width: getBarWidth(issuesByLevel.moderate, totalIssues) }"
-                          ></div>
+                          />
                           <span class="breakdown-count">{{ issuesByLevel.moderate }}</span>
                         </div>
                       </div>
@@ -351,7 +471,7 @@
                           <div
                             class="breakdown-bar success"
                             :style="{ width: getBarWidth(issuesByLevel.minor, totalIssues) }"
-                          ></div>
+                          />
                           <span class="breakdown-count">{{ issuesByLevel.minor }}</span>
                         </div>
                       </div>
@@ -361,12 +481,25 @@
               </a-tab-pane>
 
               <!-- 详细标签 -->
-              <a-tab-pane key="details" tab="📝 详细">
-                <div v-if="productionResult?.data?.evaluation_results" class="details-content">
+              <a-tab-pane
+                key="details"
+                tab="📝 详细"
+              >
+                <div
+                  v-if="productionResult?.data?.evaluation_results"
+                  class="details-content"
+                >
                   <div class="details-toolbar">
-                    <a-radio-group v-model:value="resultFilter" size="small">
-                      <a-radio-button value="all">全部</a-radio-button>
-                      <a-radio-button value="issues">仅问题</a-radio-button>
+                    <a-radio-group
+                      v-model:value="resultFilter"
+                      size="small"
+                    >
+                      <a-radio-button value="all">
+                        全部
+                      </a-radio-button>
+                      <a-radio-button value="issues">
+                        仅问题
+                      </a-radio-button>
                     </a-radio-group>
                     <span class="details-count">
                       共 {{ filteredEvaluationResults.length }} 项
@@ -385,40 +518,76 @@
                           <CloseCircleOutlined v-else />
                         </div>
                         <div class="detail-info">
-                          <div class="detail-rule-id">{{ result.rule_id }}</div>
-                          <div class="detail-rule-name">{{ result.rule_name }}</div>
+                          <div class="detail-rule-id">
+                            {{ result.rule_id }}
+                          </div>
+                          <div class="detail-rule-name">
+                            {{ result.rule_name }}
+                          </div>
                         </div>
                         <a-tag :color="result.is_compliant ? 'success' : 'error'">
                           {{ result.is_compliant ? '合规' : '不合规' }}
                         </a-tag>
                       </div>
 
-                      <div v-if="!result.is_compliant && result.findings" class="detail-findings">
-                        <div class="detail-section-label">问题描述：</div>
-                        <div class="detail-section-content">{{ result.findings }}</div>
+                      <div
+                        v-if="!result.is_compliant && result.findings"
+                        class="detail-findings"
+                      >
+                        <div class="detail-section-label">
+                          问题描述：
+                        </div>
+                        <div class="detail-section-content">
+                          {{ result.findings }}
+                        </div>
                       </div>
 
-                      <div v-if="!result.is_compliant && result.evidence" class="detail-evidence">
-                        <div class="detail-section-label">证据引用：</div>
-                        <div class="detail-section-content evidence-text">{{ result.evidence }}</div>
+                      <div
+                        v-if="!result.is_compliant && result.evidence"
+                        class="detail-evidence"
+                      >
+                        <div class="detail-section-label">
+                          证据引用：
+                        </div>
+                        <div class="detail-section-content evidence-text">
+                          {{ result.evidence }}
+                        </div>
                       </div>
 
-                      <div v-if="!result.is_compliant && result.suggestion" class="detail-suggestion">
-                        <div class="detail-section-label">整改建议：</div>
-                        <div class="detail-section-content">{{ result.suggestion }}</div>
+                      <div
+                        v-if="!result.is_compliant && result.suggestion"
+                        class="detail-suggestion"
+                      >
+                        <div class="detail-section-label">
+                          整改建议：
+                        </div>
+                        <div class="detail-section-content">
+                          {{ result.suggestion }}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div v-else class="empty-state">
-                  <div class="empty-text">暂无详细结果</div>
+                <div
+                  v-else
+                  class="empty-state"
+                >
+                  <div class="empty-text">
+                    暂无详细结果
+                  </div>
                 </div>
               </a-tab-pane>
 
               <!-- 时间线标签 -->
-              <a-tab-pane key="timeline" tab="⏱ 时间线">
-                <div v-if="evaluationTimeline.length > 0" class="timeline-content">
+              <a-tab-pane
+                key="timeline"
+                tab="⏱ 时间线"
+              >
+                <div
+                  v-if="evaluationTimeline.length > 0"
+                  class="timeline-content"
+                >
                   <a-timeline>
                     <a-timeline-item
                       v-for="(event, index) in evaluationTimeline"
@@ -426,12 +595,22 @@
                       :color="event.color"
                     >
                       <template #dot>
-                        <component :is="event.icon" style="font-size: 16px" />
+                        <component
+                          :is="event.icon"
+                          style="font-size: 16px"
+                        />
                       </template>
                       <div class="timeline-item-content">
-                        <div class="timeline-time">{{ event.time }}</div>
-                        <div class="timeline-title">{{ event.title }}</div>
-                        <div v-if="event.description" class="timeline-desc">
+                        <div class="timeline-time">
+                          {{ event.time }}
+                        </div>
+                        <div class="timeline-title">
+                          {{ event.title }}
+                        </div>
+                        <div
+                          v-if="event.description"
+                          class="timeline-desc"
+                        >
                           {{ event.description }}
                         </div>
                       </div>
@@ -439,15 +618,27 @@
                   </a-timeline>
                 </div>
 
-                <div v-else class="empty-state">
-                  <div class="empty-text">暂无评估记录</div>
+                <div
+                  v-else
+                  class="empty-state"
+                >
+                  <div class="empty-text">
+                    暂无评估记录
+                  </div>
                 </div>
               </a-tab-pane>
 
               <!-- 导出标签 -->
-              <a-tab-pane key="export" tab="💾 导出">
+              <a-tab-pane
+                key="export"
+                tab="💾 导出"
+              >
                 <div class="export-content">
-                  <a-space direction="vertical" style="width: 100%" :size="16">
+                  <a-space
+                    direction="vertical"
+                    style="width: 100%"
+                    :size="16"
+                  >
                     <a-alert
                       message="导出评估报告"
                       description="将质控评估结果导出为不同格式，便于存档和分享"
@@ -456,28 +647,56 @@
                     />
 
                     <div class="export-options">
-                      <div class="export-option-card" @click="exportAsJSON">
+                      <div
+                        class="export-option-card"
+                        @click="exportAsJSON"
+                      >
                         <FileTextOutlined class="export-icon" />
-                        <div class="export-title">导出为 JSON</div>
-                        <div class="export-desc">结构化数据格式，便于程序处理</div>
+                        <div class="export-title">
+                          导出为 JSON
+                        </div>
+                        <div class="export-desc">
+                          结构化数据格式，便于程序处理
+                        </div>
                       </div>
 
-                      <div class="export-option-card" @click="exportAsExcel">
+                      <div
+                        class="export-option-card"
+                        @click="exportAsExcel"
+                      >
                         <FileExcelOutlined class="export-icon" />
-                        <div class="export-title">导出为 Excel</div>
-                        <div class="export-desc">表格格式，便于数据分析</div>
+                        <div class="export-title">
+                          导出为 Excel
+                        </div>
+                        <div class="export-desc">
+                          表格格式，便于数据分析
+                        </div>
                       </div>
 
-                      <div class="export-option-card" @click="exportAsPDF">
+                      <div
+                        class="export-option-card"
+                        @click="exportAsPDF"
+                      >
                         <FilePdfOutlined class="export-icon" />
-                        <div class="export-title">导出为 PDF</div>
-                        <div class="export-desc">标准文档格式，便于打印存档</div>
+                        <div class="export-title">
+                          导出为 PDF
+                        </div>
+                        <div class="export-desc">
+                          标准文档格式，便于打印存档
+                        </div>
                       </div>
 
-                      <div class="export-option-card" @click="copyToClipboard">
+                      <div
+                        class="export-option-card"
+                        @click="copyToClipboard"
+                      >
                         <CopyOutlined class="export-icon" />
-                        <div class="export-title">复制到剪贴板</div>
-                        <div class="export-desc">快速复制结果文本</div>
+                        <div class="export-title">
+                          复制到剪贴板
+                        </div>
+                        <div class="export-desc">
+                          快速复制结果文本
+                        </div>
                       </div>
                     </div>
                   </a-space>
@@ -495,11 +714,13 @@
       title="LLM 配置"
       width="80%"
       placement="right"
-      :destroyOnClose="true"
+      :destroy-on-close="true"
     >
       <template #extra>
         <a-space>
-          <a-button @click="llmSettingsVisible = false">关闭</a-button>
+          <a-button @click="llmSettingsVisible = false">
+            关闭
+          </a-button>
         </a-space>
       </template>
       <LLMApiConfig />
@@ -787,17 +1008,22 @@ const startBatchTest = async () => {
 
         if (response.success && response.data) {
           testResults.value.push({
-            rule_id: ruleId,
-            rule_name: rule.name,
-            rule_code: ruleId,
-            document_name: currentConfig.value.label,
-            compliant: response.data.is_compliant,
-            confidence: response.data.confidence,
+            ruleId,
+            ruleName: rule.name,
+            isCompliant: response.data.is_compliant,
+            status: response.data.status,
+            findings: response.data.findings,
+            applicability: response.data.applicability,
+            notApplicable: response.data.not_applicable,
+            notApplicableReason: response.data.not_applicable_reason,
+            evidenceVerified: response.data.evidence_verified,
+            confidence: response.data.confidence ?? 0,
             evidence: response.data.findings || response.data.evidence,
-            reasoning: response.data.evidence,
             suggestion: response.data.suggestion,
-            execution_time: response.data.execution_time || 0,
-            issues: []
+            issues: response.data.issues || [],
+            llmRawOutput: response.data.llm_raw_output,
+            metadata: response.data.metadata,
+            error: response.success ? undefined : (response.message || '评估失败')
           })
         }
       } catch (error) {
@@ -835,7 +1061,6 @@ const startProductionBatchQC = async () => {
       document_content: medicalText.value,
       document_type: currentConfig.value.label,
       rule_ids: selectedRuleIds.value,
-      use_multi_document_mode: false,
       persist: false
     })
 

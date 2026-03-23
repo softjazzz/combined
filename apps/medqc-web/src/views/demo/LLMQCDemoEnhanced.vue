@@ -59,14 +59,17 @@
     <!-- 原有的内容继续... -->
     <div class="demo-content-placeholder">
       <!-- 这里保留原有的步骤导航和其他内容 -->
-      <div v-if="false" class="legacy-controls">
+      <div
+        v-if="false"
+        class="legacy-controls"
+      >
         <div class="demo-controls">
           <a-space wrap>
             <a-button
               type="primary"
-              @click="handleStartDemo"
               :loading="demoStore.isRunning"
               :disabled="!demoStore.canStartDemo"
+              @click="handleStartDemo"
             >
               <PlayCircleOutlined />
               {{ demoStore.isRunning ? '分析进行中' : '开始分析' }}
@@ -83,8 +86,8 @@
 
             <a-button
               v-if="demoStore.isRunning"
-              @click="handleStopDemo"
               danger
+              @click="handleStopDemo"
             >
               <StopOutlined />
               停止
@@ -100,29 +103,35 @@
             <!-- 步骤导航 -->
             <a-button
               :icon="h(LeftOutlined)"
-              @click="demoStore.previousStep()"
               :disabled="demoStore.currentStep === 'target'"
               size="small"
+              @click="demoStore.previousStep()"
             >
               上一步
             </a-button>
 
             <a-select
               :value="demoStore.currentStep"
-              @change="handleStepJump"
               style="width: 120px"
               size="small"
+              @change="handleStepJump"
             >
-              <a-select-option value="target">测试对象</a-select-option>
-              <a-select-option value="rules">规则配置</a-select-option>
-              <a-select-option value="run">运行与结果</a-select-option>
+              <a-select-option value="target">
+                测试对象
+              </a-select-option>
+              <a-select-option value="rules">
+                规则配置
+              </a-select-option>
+              <a-select-option value="run">
+                运行与结果
+              </a-select-option>
             </a-select>
 
             <a-button
               :icon="h(RightOutlined)"
-              @click="demoStore.nextStep()"
               :disabled="demoStore.currentStep === 'run'"
               size="small"
+              @click="demoStore.nextStep()"
             >
               下一步
             </a-button>
@@ -162,7 +171,10 @@
       </div>
 
       <!-- 进度条 -->
-      <div class="progress-section" v-if="demoStore.isRunning || demoStore.progress > 0">
+      <div
+        v-if="demoStore.isRunning || demoStore.progress > 0"
+        class="progress-section"
+      >
         <a-progress
           :percent="demoStore.progress"
           :status="demoStore.error ? 'exception' : 'active'"
@@ -181,7 +193,9 @@
             <div class="step-icon">
               <component :is="step.icon" />
             </div>
-            <div class="step-label">{{ step.label }}</div>
+            <div class="step-label">
+              {{ step.label }}
+            </div>
           </div>
         </div>
       </div>
@@ -206,7 +220,11 @@
         show-icon
       >
         <template #action>
-          <a-button size="small" @click="handleRefreshData" :loading="demoStore.isLoadingData">
+          <a-button
+            size="small"
+            :loading="demoStore.isLoadingData"
+            @click="handleRefreshData"
+          >
             重试连接
           </a-button>
         </template>
@@ -220,8 +238,8 @@
       type="error"
       show-icon
       closable
-      @close="demoStore.error = null"
       class="error-alert"
+      @close="demoStore.error = null"
     />
 
     <!-- 全屏主工作区 -->
@@ -230,16 +248,22 @@
       <div class="demo-display">
         <!-- 当前步骤指示器 -->
         <div class="step-indicator">
-          <a-tag :color="getStepColor(demoStore.currentStep)" size="large">
+          <a-tag
+            :color="getStepColor(demoStore.currentStep)"
+            size="large"
+          >
             <component :is="getCurrentStepIcon()" />
             {{ getCurrentStepLabel() }}
           </a-tag>
 
-          <div class="step-navigation" v-if="demoStore.isRunning">
+          <div
+            v-if="demoStore.isRunning"
+            class="step-navigation"
+          >
             <a-button
               size="small"
-              @click="demoStore.previousStep"
               :disabled="demoStore.currentStep === 'target'"
+              @click="demoStore.previousStep"
             >
               <LeftOutlined />
               上一步
@@ -247,8 +271,8 @@
             <a-button
               size="small"
               type="primary"
-              @click="demoStore.nextStep"
               :disabled="demoStore.currentStep === 'run'"
+              @click="demoStore.nextStep"
             >
               下一步
               <RightOutlined />
@@ -257,13 +281,19 @@
         </div>
 
         <!-- 条件引导提示（在非“测试对象”步骤时显示，且使用非 banner 样式，更克制） -->
-        <div class="readiness-alert" v-if="demoStore.currentStep !== 'target'">
+        <div
+          v-if="demoStore.currentStep !== 'target'"
+          class="readiness-alert"
+        >
           <a-alert
             :type="readinessAlert.type"
             :message="readinessAlert.message"
             show-icon
           />
-          <div class="readiness-actions" style="margin-top: 8px;">
+          <div
+            class="readiness-actions"
+            style="margin-top: 8px;"
+          >
             <a-space>
               <a-button
                 v-if="!demoStore.testRecord || (demoStore.selectedDocumentList?.length||0)===0"
@@ -294,7 +324,10 @@
         <!-- 动态内容区域 -->
         <div class="content-area">
           <!-- 测试对象选择 -->
-          <div v-if="demoStore.currentStep === 'target'" class="step-content">
+          <div
+            v-if="demoStore.currentStep === 'target'"
+            class="step-content"
+          >
             <!-- 快速开始提示 -->
             <a-alert
               v-if="!demoStore.testRecord"
@@ -314,7 +347,11 @@
             />
 
             <!-- 操作按钮 -->
-            <a-space direction="vertical" style="width: 100%" :size="16">
+            <a-space
+              direction="vertical"
+              style="width: 100%"
+              :size="16"
+            >
               <a-button
                 v-if="!demoStore.testRecord"
                 type="primary"
@@ -360,11 +397,14 @@
           </div>
 
           <!-- 规则配置 -->
-          <div v-else-if="demoStore.currentStep === 'rules'" class="step-content">
+          <div
+            v-else-if="demoStore.currentStep === 'rules'"
+            class="step-content"
+          >
             <QCRulesDemoPanel
               :selected-rules="demoStore.selectedRules"
               :available-rules="demoStore.applicableRules"
-              :test-record="demoStore.testRecord"
+              :test-record="demoStore.testRecord || {}"
               :selected-documents="demoStore.selectedDocumentList"
               @rules-updated="handleRulesUpdated"
               @start-analysis="handleStartDemo"
@@ -372,11 +412,17 @@
           </div>
 
           <!-- 运行与结果（合并原分析/完成等） -->
-          <div v-else class="step-content">
+          <div
+            v-else
+            class="step-content"
+          >
             <!-- 有结果：显示总结 + 违规列表 -->
             <template v-if="demoStore.analysisResult">
-              <QCResultSummary :result="demoStore.analysisResult" />
-              <ViolationsList class="mt-4" :violations="demoStore.analysisResult.violations || []" />
+              <QCResultSummary :result="qcSummaryResult" />
+              <ViolationsList
+                class="mt-4"
+                :violations="violationsForView"
+              />
             </template>
 
             <!-- 无结果且未运行：显示空态提示 -->
@@ -397,7 +443,10 @@
           </div>
 
           <!-- 暂停遮罩（覆盖整个演示区） -->
-          <div v-if="demoStore.isPaused" class="paused-overlay">
+          <div
+            v-if="demoStore.isPaused"
+            class="paused-overlay"
+          >
             <span>已暂停</span>
           </div>
         </div>
@@ -407,7 +456,10 @@
     <!-- 折叠区：统计/日志/性能（默认收起，减少首屏信息量） -->
     <div class="mt-4">
       <a-collapse :default-active-key="[]">
-        <a-collapse-panel key="stats" header="统计与进度">
+        <a-collapse-panel
+          key="stats"
+          header="统计与进度"
+        >
           <StatisticsCards
             :selected-rules-count="demoStore.selectedRulesCount"
             :total-rules-count="demoStore.totalRulesCount"
@@ -422,10 +474,19 @@
             :start-time="demoStore.demoStartTime"
           />
         </a-collapse-panel>
-        <a-collapse-panel key="logs" header="演示日志">
-          <EnhancedLogPanel :logs="demoStore.demoLogs" @clear="demoStore.clearDemoLogs" />
+        <a-collapse-panel
+          key="logs"
+          header="演示日志"
+        >
+          <EnhancedLogPanel
+            :logs="demoStore.demoLogs"
+            @clear="demoStore.clearDemoLogs"
+          />
         </a-collapse-panel>
-        <a-collapse-panel key="perf" header="性能监控">
+        <a-collapse-panel
+          key="perf"
+          header="性能监控"
+        >
           <PerformanceMonitor
             v-if="demoStore.performanceMonitorEnabled"
             :step-timings="demoStore.stepTimings"
@@ -434,7 +495,12 @@
             @export="handlePerformanceExport"
             @reset="demoStore.resetPerformanceData"
           />
-          <a-alert v-else type="info" message="默认不启用性能监控，可通过菜单开启后查看" show-icon />
+          <a-alert
+            v-else
+            type="info"
+            message="默认不启用性能监控，可通过菜单开启后查看"
+            show-icon
+          />
         </a-collapse-panel>
       </a-collapse>
     </div>
@@ -463,14 +529,14 @@
     >
       <a-form layout="vertical">
         <a-form-item label="自动推进">
-
-
           <a-switch
             v-model:checked="configForm.autoAdvance"
             checked-children="开启"
             un-checked-children="关闭"
           />
-          <div class="form-help">开启后演示将自动进行到下一步</div>
+          <div class="form-help">
+            开启后演示将自动进行到下一步
+          </div>
         </a-form-item>
 
         <a-form-item label="步骤间隔时间（秒）">
@@ -496,14 +562,19 @@
             checked-children="启用"
             un-checked-children="禁用"
           />
-          <div class="form-help">启用后会模拟真实的处理时间</div>
+          <div class="form-help">
+            启用后会模拟真实的处理时间
+          </div>
         </a-form-item>
       </a-form>
     </a-modal>
 
 
     <!-- 病历与文书合并选择器 -->
-    <RecordDocumentPicker v-model="showTargetPicker" @picked="onTargetPicked" />
+    <RecordDocumentPicker
+      v-model="showTargetPicker"
+      @picked="onTargetPicked"
+    />
 
     <!-- 隐藏的文件输入 -->
     <input
@@ -512,7 +583,7 @@
       accept=".json"
       style="display: none"
       @change="handleFileImport"
-    />
+    >
 
     <!-- 暂停遮罩 -->
     <PauseOverlay
@@ -562,7 +633,7 @@ import MedicalRecordInfoCard from '@/components/demo/MedicalRecordInfoCard.vue'
 import EmptyResultState from '@/components/demo/EmptyResultState.vue'
 
 import { useQCDemoStore } from '@/stores/qcDemo'
-import type { QualityControlRule, Appeal } from '@/types/quality-control'
+import type { QualityControlRule, Appeal, QCResult, QCIssue, QCNotification } from '@/types/quality-control'
 
 // 引入子组件
 import QCRulesDemoPanel from '@/components/demo/QCRulesDemoPanel.vue'
@@ -659,6 +730,86 @@ const readinessAlert = computed(() => {
   return { type: 'info', message: '请完善测试对象与规则' }
 })
 
+const qcSummaryResult = computed(() => {
+  const result = demoStore.analysisResult
+  if (!result) {
+    return {
+      document_id: '',
+      evaluation_summary: {
+        total_rules: 0,
+        compliant_rules: 0,
+        compliance_rate: 0,
+        overall_grade: 'C',
+        critical_violations: 0
+      },
+      performance_metrics: {
+        processing_time: 0,
+        token_usage: 0,
+        estimated_cost: 0
+      },
+      optimization_metrics: {
+        token_savings_rate: 0,
+        estimated_original_tokens: 0,
+        actual_tokens_saved: 0,
+        cost_savings: 0
+      },
+      evaluation_results: [],
+      timestamp: new Date().toISOString(),
+      status: 'pending',
+      mode: 'single_prompt'
+    }
+  }
+
+  const totalRules = result.ruleResults?.length ?? 0
+  const compliantRules = result.ruleResults?.filter(item => item.passed).length ?? 0
+  const complianceRate = totalRules > 0 ? (compliantRules / totalRules) * 100 : result.overallScore
+
+  return {
+    document_id: result.recordId,
+    evaluation_summary: {
+      total_rules: totalRules,
+      compliant_rules: compliantRules,
+      compliance_rate: Number(complianceRate.toFixed(1)),
+      overall_grade: result.overallGrade || 'C',
+      critical_violations: result.issues?.filter(item => item.severity === 'critical').length ?? 0
+    },
+    performance_metrics: {
+      processing_time: (result.metadata?.processingTime ?? 0) / 1000,
+      token_usage: result.metadata?.totalTokens ?? 0,
+      estimated_cost: 0
+    },
+    optimization_metrics: {
+      token_savings_rate: 0,
+      estimated_original_tokens: 0,
+      actual_tokens_saved: 0,
+      cost_savings: 0
+    },
+    evaluation_results: result.ruleResults || [],
+    timestamp: result.analysisDate || new Date().toISOString(),
+    status: 'completed',
+    mode: 'single_prompt'
+  }
+})
+
+const toViolationSeverity = (severity: QCIssue['severity']): 'high' | 'medium' | 'low' => {
+  if (severity === 'critical' || severity === 'high') return 'high'
+  if (severity === 'medium') return 'medium'
+  return 'low'
+}
+
+const violationsForView = computed(() => {
+  const result: QCResult | null = demoStore.analysisResult
+  if (!result?.issues) return []
+
+  return result.issues.map((issue, index) => ({
+    id: issue.id || `violation-${index + 1}`,
+    title: issue.ruleName || issue.category || '质控问题',
+    severity: toViolationSeverity(issue.severity),
+    description: issue.description || '检测到潜在问题',
+    suggestion: issue.suggestion || '请结合病历内容进行修正'
+  }))
+})
+
 
 
 // 事件处理
@@ -695,17 +846,6 @@ const handleRefreshData = async () => {
       rules: demoStore.availableRules.length,
       connected: demoStore.isDatabaseConnected
     })
-
-/*
-
-//   
-const onTargetPicked = ({ record, document }: { record: unknown; document: { id: string; title?: string; type?: string; created_at?: string } }) => {
-  demoStore.testRecord = record as any
-  demoStore.setSelectedDocument(document)
-  message.success(` a已选择：${record.patient_name} · ${document.title}`)
-*/
-
-
 
     // 根据连接状态显示不同的成功消息
     if (demoStore.isDatabaseConnected) {
@@ -823,24 +963,25 @@ const handlePerformanceExport = () => {
   console.log('性能数据已导出')
 }
 
-const handleNotificationModalAction = (action: string, notification?: unknown) => {
+const handleNotificationModalAction = (action: string, notification?: QCNotification) => {
   console.log('通知模态框操作:', action, notification)
+  const activeNotification = notification ?? demoStore.activeNotification ?? undefined
 
   switch (action) {
     case 'confirm':
-      demoStore.handleNotificationAction('confirm', notification || demoStore.activeNotification)
+      demoStore.handleNotificationAction('confirm', activeNotification)
       demoStore.showNotificationModal = false
       message.success('通知已确认处理')
       break
     case 'ignore':
-      demoStore.handleNotificationAction('ignore', notification || demoStore.activeNotification)
+      demoStore.handleNotificationAction('ignore', activeNotification)
       demoStore.showNotificationModal = false
 
 
       message.info('通知已忽略')
       break
     case 'appeal':
-      demoStore.handleNotificationAction('appeal', notification || demoStore.activeNotification)
+      demoStore.handleNotificationAction('appeal', activeNotification)
       demoStore.showNotificationModal = false
       message.info('申诉流程已启动')
       break
@@ -854,7 +995,7 @@ const handleNotificationModalAction = (action: string, notification?: unknown) =
       message.info('历史记录功能开发中')
       break
     case 'mark-read':
-      demoStore.handleNotificationAction('mark-read', notification || demoStore.activeNotification)
+      demoStore.handleNotificationAction('mark-read', activeNotification)
       message.success('已标记为已读')
       break
     default:
@@ -880,9 +1021,10 @@ const handleStopDemo = () => {
   })
 }
 
-const handleAppealSubmitted = (appeal: Appeal) => {
+const handleAppealSubmitted = (appeal: unknown) => {
+  const typedAppeal = appeal as Appeal
   console.log('申诉已提交:', appeal)
-  demoStore.createAppeal(appeal)
+  demoStore.createAppeal(typedAppeal)
   demoStore.showAppealModal = false
   message.success('申诉已提交，等待审核')
 }

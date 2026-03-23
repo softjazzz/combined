@@ -3,12 +3,17 @@
     <!-- ══════════ Section 1: 用户列表 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">用户列表</h2>
+        <h2 class="ds-section-title">
+          用户列表
+        </h2>
         <p class="ds-section-desc">
           管理系统中所有用户账号。可按邮箱、角色、状态筛选，支持新增、编辑和停用操作。
         </p>
         <div style="margin-top: 16px;">
-          <button class="ds-btn ds-btn--primary" @click="showCreateUserModal">
+          <button
+            class="ds-btn ds-btn--primary"
+            @click="showCreateUserModal"
+          >
             + 新增用户
           </button>
         </div>
@@ -22,20 +27,48 @@
               class="um-filter-input"
               placeholder="搜索邮箱..."
               @input="handleUserSearch"
-            />
-            <select v-model="userSearch.role" class="ds-select-native" @change="handleUserSearch">
-              <option value="">全部角色</option>
-              <option value="admin">管理员</option>
-              <option value="qc_manager">质控管理员</option>
-              <option value="qc_staff">质控人员</option>
-              <option value="doctor">医务人员</option>
+            >
+            <select
+              v-model="userSearch.role"
+              class="ds-select-native"
+              @change="handleUserSearch"
+            >
+              <option value="">
+                全部角色
+              </option>
+              <option value="admin">
+                管理员
+              </option>
+              <option value="qc_manager">
+                质控管理员
+              </option>
+              <option value="qc_staff">
+                质控人员
+              </option>
+              <option value="doctor">
+                医务人员
+              </option>
             </select>
-            <select v-model="userSearch.status" class="ds-select-native" @change="handleUserSearch">
-              <option value="">全部状态</option>
-              <option value="active">激活</option>
-              <option value="inactive">停用</option>
+            <select
+              v-model="userSearch.status"
+              class="ds-select-native"
+              @change="handleUserSearch"
+            >
+              <option value="">
+                全部状态
+              </option>
+              <option value="active">
+                激活
+              </option>
+              <option value="inactive">
+                停用
+              </option>
             </select>
-            <button class="ds-btn ds-btn--outline" @click="refreshUsers" :disabled="loading">
+            <button
+              class="ds-btn ds-btn--outline"
+              :disabled="loading"
+              @click="refreshUsers"
+            >
               刷新
             </button>
           </div>
@@ -55,8 +88,12 @@
                   {{ (user.display_name || user.email)?.charAt(0) }}
                 </div>
                 <div class="um-user-meta">
-                  <div class="ds-row__label">{{ user.display_name || user.email }}</div>
-                  <div class="ds-row__hint">{{ user.email }}</div>
+                  <div class="ds-row__label">
+                    {{ user.display_name || user.email }}
+                  </div>
+                  <div class="ds-row__hint">
+                    {{ user.email }}
+                  </div>
                 </div>
               </div>
               <div class="um-user-details">
@@ -74,12 +111,17 @@
                   <span
                     class="ds-badge__dot"
                     :class="user.is_active ? 'ds-badge__dot--green' : 'ds-badge__dot--slate'"
-                  ></span>
+                  />
                   {{ user.is_active ? '激活' : '停用' }}
                 </span>
               </div>
               <div class="um-user-actions">
-                <button class="ds-btn ds-btn--ghost" @click="$emit('edit-user', user)">编辑</button>
+                <button
+                  class="ds-btn ds-btn--ghost"
+                  @click="$emit('edit-user', user)"
+                >
+                  编辑
+                </button>
                 <button
                   class="ds-btn ds-btn--ghost"
                   :class="user.is_active ? 'um-action--warn' : 'um-action--ok'"
@@ -89,13 +131,16 @@
                 </button>
               </div>
             </div>
-            <div v-if="filteredUsers.length === 0" class="um-empty">
+            <div
+              v-if="filteredUsers.length === 0"
+              class="um-empty"
+            >
               暂无匹配的用户
             </div>
           </div>
           <div class="ds-card__footer">
             <span class="ds-row__hint">共 {{ filteredUsers.length }} / {{ users.length }} 位用户</span>
-            <span></span>
+            <span />
           </div>
         </div>
       </div>

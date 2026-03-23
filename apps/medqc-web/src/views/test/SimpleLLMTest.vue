@@ -1,7 +1,10 @@
 <template>
   <div class="simple-llm-test">
     <a-card title="简化版LLM配置测试">
-      <a-space direction="vertical" style="width: 100%">
+      <a-space
+        direction="vertical"
+        style="width: 100%"
+      >
         <!-- 当前配置显示 -->
         <a-alert
           v-if="currentConfig"
@@ -13,47 +16,82 @@
         
         <!-- 操作按钮 -->
         <a-space>
-          <a-button @click="initDatabase" :loading="loading" type="primary">
+          <a-button
+            :loading="loading"
+            type="primary"
+            @click="initDatabase"
+          >
             初始化数据库
           </a-button>
-          <a-button @click="loadDefaultConfig" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="loadDefaultConfig"
+          >
             加载默认配置
           </a-button>
-          <a-button @click="showConfigModal = true" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="showConfigModal = true"
+          >
             配置管理
           </a-button>
-          <a-button @click="testLLMService" :loading="loading" type="dashed">
+          <a-button
+            :loading="loading"
+            type="dashed"
+            @click="testLLMService"
+          >
             测试LLM服务
           </a-button>
-          <a-button @click="debugDatabase" :loading="loading">
+          <a-button
+            :loading="loading"
+            @click="debugDatabase"
+          >
             调试数据库
           </a-button>
-          <a-button @click="cleanupDuplicates" :loading="loading" type="default">
+          <a-button
+            :loading="loading"
+            type="default"
+            @click="cleanupDuplicates"
+          >
             清理重复配置
           </a-button>
         </a-space>
 
         <!-- 测试结果 -->
-        <a-card size="small" title="操作结果">
+        <a-card
+          size="small"
+          title="操作结果"
+        >
           <pre>{{ testResult }}</pre>
         </a-card>
 
         <!-- 文本输入测试 -->
-        <a-card size="small" title="文本解析测试">
+        <a-card
+          size="small"
+          title="文本解析测试"
+        >
           <a-textarea
             v-model:value="testText"
             :rows="4"
             placeholder="输入医疗文本进行测试解析..."
           />
           <div class="mt-2">
-            <a-button @click="parseText" :loading="parsing" type="primary">
+            <a-button
+              :loading="parsing"
+              type="primary"
+              @click="parseText"
+            >
               解析文本
             </a-button>
           </div>
         </a-card>
 
         <!-- 解析结果 -->
-        <a-card v-if="parseResult" size="small" title="解析结果">
+        <a-card
+          v-if="parseResult"
+          size="small"
+          title="解析结果"
+        >
           <pre>{{ parseResult }}</pre>
         </a-card>
       </a-space>
@@ -66,7 +104,10 @@
       width="600px"
       @ok="showConfigModal = false"
     >
-      <a-alert message="配置管理功能暂时禁用，请使用其他测试功能" type="info" />
+      <a-alert
+        message="配置管理功能暂时禁用，请使用其他测试功能"
+        type="info"
+      />
     </a-modal>
   </div>
 </template>

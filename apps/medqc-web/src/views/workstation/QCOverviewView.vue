@@ -7,7 +7,10 @@
         质控消息概览
       </h2>
       <div class="header-actions">
-        <a-range-picker v-model:value="dateRange" style="width: 260px" />
+        <a-range-picker
+          v-model:value="dateRange"
+          style="width: 260px"
+        />
         <a-button @click="refreshData">
           <ReloadOutlined />
           刷新
@@ -17,15 +20,32 @@
 
     <!-- 统计卡片 -->
     <div class="stat-cards">
-      <div class="stat-card" v-for="stat in summaryStats" :key="stat.label">
-        <div class="stat-icon" :style="{ background: stat.bg }">
-          <component :is="stat.icon" :style="{ color: stat.color, fontSize: '24px' }" />
+      <div
+        v-for="stat in summaryStats"
+        :key="stat.label"
+        class="stat-card"
+      >
+        <div
+          class="stat-icon"
+          :style="{ background: stat.bg }"
+        >
+          <component
+            :is="stat.icon"
+            :style="{ color: stat.color, fontSize: '24px' }"
+          />
         </div>
         <div class="stat-info">
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
+          <div class="stat-value">
+            {{ stat.value }}
+          </div>
+          <div class="stat-label">
+            {{ stat.label }}
+          </div>
         </div>
-        <div class="stat-trend" :class="stat.trend > 0 ? 'up' : 'down'">
+        <div
+          class="stat-trend"
+          :class="stat.trend > 0 ? 'up' : 'down'"
+        >
           {{ stat.trend > 0 ? '↑' : '↓' }} {{ Math.abs(stat.trend) }}%
         </div>
       </div>
@@ -36,9 +56,22 @@
       <!-- 左侧：消息列表 -->
       <div class="msg-panel">
         <div class="msg-header">
-          <a-segmented v-model:value="messageTab" :options="messageTabs" size="small" />
-          <a-badge :count="unreadCount" :offset="[-8, -4]">
-            <a-button size="small" type="link" @click="markAllRead">全部已读</a-button>
+          <a-segmented
+            v-model:value="messageTab"
+            :options="messageTabs"
+            size="small"
+          />
+          <a-badge
+            :count="unreadCount"
+            :offset="[-8, -4]"
+          >
+            <a-button
+              size="small"
+              type="link"
+              @click="markAllRead"
+            >
+              全部已读
+            </a-button>
           </a-badge>
         </div>
         <div class="msg-list">
@@ -49,10 +82,18 @@
             :class="{ unread: !msg.read, active: selectedMsg?.id === msg.id }"
             @click="selectMessage(msg)"
           >
-            <div class="msg-dot" v-if="!msg.read"></div>
+            <div
+              v-if="!msg.read"
+              class="msg-dot"
+            />
             <div class="msg-content">
               <div class="msg-title">
-                <a-tag :color="severityColor(msg.severity)" size="small">{{ severityLabel(msg.severity) }}</a-tag>
+                <a-tag
+                  :color="severityColor(msg.severity)"
+                  size="small"
+                >
+                  {{ severityLabel(msg.severity) }}
+                </a-tag>
                 <span>{{ msg.title }}</span>
               </div>
               <div class="msg-meta">
@@ -60,7 +101,10 @@
               </div>
             </div>
           </div>
-          <div v-if="filteredMessages.length === 0" class="msg-empty">
+          <div
+            v-if="filteredMessages.length === 0"
+            class="msg-empty"
+          >
             <CheckCircleOutlined style="font-size: 40px; color: #52c41a" />
             <p>暂无质控消息</p>
           </div>
@@ -72,14 +116,31 @@
         <template v-if="selectedMsg">
           <div class="detail-header">
             <h3>{{ selectedMsg.title }}</h3>
-            <a-tag :color="severityColor(selectedMsg.severity)">{{ severityLabel(selectedMsg.severity) }}</a-tag>
+            <a-tag :color="severityColor(selectedMsg.severity)">
+              {{ severityLabel(selectedMsg.severity) }}
+            </a-tag>
           </div>
-          <a-descriptions bordered size="small" :column="2" class="detail-info">
-            <a-descriptions-item label="患者">{{ selectedMsg.patientName }}</a-descriptions-item>
-            <a-descriptions-item label="住院号">{{ selectedMsg.inpatNo }}</a-descriptions-item>
-            <a-descriptions-item label="科室">{{ selectedMsg.deptName }}</a-descriptions-item>
-            <a-descriptions-item label="发现时间">{{ selectedMsg.time }}</a-descriptions-item>
-            <a-descriptions-item label="规则编号">{{ selectedMsg.ruleId }}</a-descriptions-item>
+          <a-descriptions
+            bordered
+            size="small"
+            :column="2"
+            class="detail-info"
+          >
+            <a-descriptions-item label="患者">
+              {{ selectedMsg.patientName }}
+            </a-descriptions-item>
+            <a-descriptions-item label="住院号">
+              {{ selectedMsg.inpatNo }}
+            </a-descriptions-item>
+            <a-descriptions-item label="科室">
+              {{ selectedMsg.deptName }}
+            </a-descriptions-item>
+            <a-descriptions-item label="发现时间">
+              {{ selectedMsg.time }}
+            </a-descriptions-item>
+            <a-descriptions-item label="规则编号">
+              {{ selectedMsg.ruleId }}
+            </a-descriptions-item>
             <a-descriptions-item label="扣分">
               <span style="color: #ff4d4f; font-weight: 600">-{{ selectedMsg.deduction }}分</span>
             </a-descriptions-item>
@@ -91,7 +152,10 @@
             <p>{{ selectedMsg.suggestion }}</p>
           </div>
           <div class="detail-actions">
-            <a-button type="primary" @click="goToRecord(selectedMsg)">
+            <a-button
+              type="primary"
+              @click="goToRecord(selectedMsg)"
+            >
               <FileSearchOutlined />
               查看病历
             </a-button>

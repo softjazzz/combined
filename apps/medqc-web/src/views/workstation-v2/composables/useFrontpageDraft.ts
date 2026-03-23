@@ -3,6 +3,7 @@ import axios from 'axios'
 import { message } from 'ant-design-vue'
 import type { FrontpageFocusTarget, IcdApplyTarget, PatientRecord } from '../types'
 import type { ICDCodeDetail } from '../components/ICDDetailPanel.vue'
+import { frontpageApi, type FrontpageExtractionSettings } from '@/api/frontpage'
 
 /** 模块中文名映射 */
 export const MODULE_LABELS: Record<string, string> = {
@@ -19,7 +20,7 @@ export const MODULE_LABELS: Record<string, string> = {
 export interface CompletedModule {
   name: string
   label: string
-  /** 模块提取到的关键字段预览（最多3项） */
+  /** 从抽取结果里整理关键字段预览（用于界面展示） */
   preview: string[]
   timestamp: number
 }
@@ -46,6 +47,22 @@ export function useFrontpageDraft(
   const frontpageFocusTarget = ref<'' | FrontpageFocusTarget>('')
   const completedModules = ref<CompletedModule[]>([])
   const generateStartTime = ref(0)
+  const extractionSettings = ref<FrontpageExtractionSettings | null>(null)
+  const defaultPreviewTab = ref<'fields' | 'preview'>('fields')
+
+  async function ensureExtractionSettingsLoaded() {
+    if (extractionSettings.value) return extractionSettings.value
+    try {
+      const resp = await frontpageApi.getExtractionSettings()
+      extractionSettings.value = resp.settings
+      defaultPreviewTab.value = resp.settings.default_preview_tab
+    } catch (error) {
+      console.warn('读取首页抽取设置失败，使用默认策略', error)
+      extractionSettings.value = null
+      defaultPreviewTab.value = 'fields'
+    }
+    return extractionSettings.value
+  }
 
   const frontpageFields = computed(() => {
     const draft = frontpageDraft.value
@@ -65,7 +82,7 @@ export function useFrontpageDraft(
     addField('basic', '婚姻状况', bi.marital_status_text)
     addField('basic', '身份证号', bi.id_number)
     addField('basic', '职业', bi.occupation)
-    addField('basic', '住院号', draft.hospitalization?.medical_record_no || '')
+    addField('basic', '病案号', draft.hospitalization?.medical_record_no || '')
 
     const hosp = draft.hospitalization || {}
     addField('basic', '医疗机构名称', hosp.hospital_name)
@@ -96,23 +113,23 @@ export function useFrontpageDraft(
         add(bi.patient_name ? `姓名: ${bi.patient_name}` : '')
         add(bi.gender_text ? `性别: ${bi.gender_text}` : '')
         add(bi.age_years ? `年龄: ${bi.age_years}岁` : '')
-        add(bi.birth_date ? `出生: ${bi.birth_date}` : '')
+        add(bi.birth_date ? `出生日期: ${bi.birth_date}` : '')
         add(bi.ethnicity ? `民族: ${bi.ethnicity}` : '')
-        add(bi.marital_status_text ? `婚姻: ${bi.marital_status_text}` : '')
-        add(bi.id_number ? `身份证: ${bi.id_number.replace(/^(.{6}).+(.{4})$/, '$1****$2')}` : '')
+        add(bi.marital_status_text ? `婚姻状况: ${bi.marital_status_text}` : '')
+        add(bi.id_number ? `证件号: ${bi.id_number.replace(/^(.{6}).+(.{4})$/, '$1****$2')}` : '')
         add(bi.occupation ? `职业: ${bi.occupation}` : '')
         add(bi.contact_name ? `联系人: ${bi.contact_name}` : '')
         break
       }
       case 'hospitalization': {
         const h = fp.hospitalization || {}
-        add(h.hospital_name ? `医院: ${h.hospital_name}` : '')
-        add(h.admission_datetime ? `入院: ${h.admission_datetime.split(' ')[0]}` : '')
-        add(h.discharge_datetime ? `出院: ${h.discharge_datetime.split(' ')[0]}` : '')
-        add(h.actual_hospital_days ? `天数: ${h.actual_hospital_days}天` : '')
+        add(h.hospital_name ? `医疗机构名称: ${h.hospital_name}` : '')
+        add(h.admission_datetime ? `入院日期: ${h.admission_datetime.split(' ')[0]}` : '')
+        add(h.discharge_datetime ? `出院日期: ${h.discharge_datetime.split(' ')[0]}` : '')
+        add(h.actual_hospital_days ? `住院天数: ${h.actual_hospital_days}天` : '')
         add(h.admission_dept ? `入院科室: ${h.admission_dept}` : '')
         add(h.discharge_dept ? `出院科室: ${h.discharge_dept}` : '')
-        add(h.payment_method_text ? `付费方式: ${h.payment_method_text}` : '')
+        add(h.payment_method_text ? `医疗付费方式: ${h.payment_method_text}` : '')
         add(h.admission_way_text ? `入院途径: ${h.admission_way_text}` : '')
         add(h.medical_record_no ? `病案号: ${h.medical_record_no}` : '')
         break
@@ -130,7 +147,7 @@ export function useFrontpageDraft(
           })
         }
         const eds = d.ed_diagnosis_texts || []
-        if (eds.length) add(`门急诊诊断: ${eds.join('、')}`)
+        if (eds.length) add(`门诊诊断: ${eds.join('、')}`)
         break
       }
       case 'procedures': {
@@ -154,11 +171,11 @@ export function useFrontpageDraft(
         const o = fp.other_medical_info || {}
         add(o.abo_blood_type ? `ABO血型: ${o.abo_blood_type}` : '')
         add(o.rh_blood_type_text ? `Rh血型: ${o.rh_blood_type_text}` : '')
-        add(o.drug_allergy_flag === '2' ? `药物过敏: 有` : o.drug_allergy_flag === '1' ? '药物过敏: 无' : '')
+        add(o.drug_allergy_flag === '2' ? '药物过敏: 有' : o.drug_allergy_flag === '1' ? '药物过敏: 无' : '')
         add(o.drug_allergy_drugs?.length ? `过敏药物: ${o.drug_allergy_drugs.join('、')}` : '')
         add(o.pathology_text ? `病理诊断: ${o.pathology_text}` : '')
         add(o.pathology_no ? `病理号: ${o.pathology_no}` : '')
-        add(o.ventilation_hours ? `呼吸机: ${o.ventilation_hours}小时` : '')
+        add(o.ventilation_hours ? `机械通气时长: ${o.ventilation_hours}小时` : '')
         break
       }
       case 'staff': {
@@ -169,13 +186,13 @@ export function useFrontpageDraft(
         add(s.resident_physician ? `住院医师: ${s.resident_physician}` : '')
         add(s.responsible_nurse ? `责任护士: ${s.responsible_nurse}` : '')
         add(s.coder ? `编码员: ${s.coder}` : '')
-        add(s.medical_record_quality ? `病案质量: ${s.medical_record_quality}` : '')
+        add(s.medical_record_quality ? `病案质量等级: ${s.medical_record_quality}` : '')
         break
       }
       case 'costs': {
         const c = fp.costs || {}
-        add(c.total_cost ? `总费用: ¥${c.total_cost}` : '')
-        add(c.self_paid ? `自付: ¥${c.self_paid}` : '')
+        add(c.total_cost ? `住院总费用: ¥${c.total_cost}` : '')
+        add(c.self_paid ? `自付金额: ¥${c.self_paid}` : '')
         const cats = c.categories || {}
         if (cats.western_medicine) add(`西药费: ¥${cats.western_medicine}`)
         if (cats.surgery_treatment) add(`手术费: ¥${cats.surgery_treatment}`)
@@ -201,8 +218,15 @@ export function useFrontpageDraft(
   async function generateFrontpage() {
     if (!selectedRecord.value) return
 
-    // 如果已有草稿，说明是"重新生成"，需强制走 LLM
+    // 如果已有草稿，说明是“重新生成”，需强制走 LLM
     const isRegenerate = !!frontpageDraft.value
+    const settings = await ensureExtractionSettingsLoaded()
+    const allowForceRegenerate = settings?.allow_force_llm_regenerate !== false
+    const effectiveForceLlm = isRegenerate && allowForceRegenerate
+
+    if (isRegenerate && !allowForceRegenerate) {
+      message.warning('当前配置已禁用强制重抽，本次将按普通重抽执行')
+    }
 
     frontpageGenerating.value = true
     frontpagePostProcessing.value = true
@@ -232,7 +256,7 @@ export function useFrontpageDraft(
         body: JSON.stringify({
           visit_id: selectedId.value,
           medical_text: '',
-          force_llm: isRegenerate,
+          force_llm: effectiveForceLlm,
         }),
       })
 
@@ -360,7 +384,7 @@ export function useFrontpageDraft(
     }
 
     try {
-      // ⚠️ 注意：AI 草稿保存到独立副表 ai_frontpage_draft，不覆盖原始 HIS 首页数据（mr 表）
+      // 注意：AI 草稿保存到独立副表 ai_frontpage_draft，不覆盖原始 HIS 首页数据（mr 表）
       await axios.post('/api/medical-records/ai-frontpage-draft', {
         institute_id: record.instituteId || null,
         patient_id: record.patientId,
@@ -510,8 +534,10 @@ export function useFrontpageDraft(
     frontpageModule,
     frontpageFocusTarget,
     frontpageFields,
+    defaultPreviewTab,
     completedModules,
     setDraftEmpty,
+    ensureExtractionSettingsLoaded,
     generateFrontpage,
     handleExportFrontpage,
     handleSaveFrontpage,

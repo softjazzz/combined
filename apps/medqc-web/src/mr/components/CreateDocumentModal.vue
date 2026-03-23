@@ -15,7 +15,11 @@
       class="create-document-form"
     >
       <!-- 文档类型选择 -->
-      <a-form-item label="文档类型" name="documentType" required>
+      <a-form-item
+        label="文档类型"
+        name="documentType"
+        required
+      >
         <a-select
           v-model:value="formData.documentType"
           placeholder="请选择文档类型"
@@ -35,7 +39,10 @@
               :label="type.type_name"
             >
               {{ type.type_name }}
-              <span class="type-description" v-if="type.description">
+              <span
+                v-if="type.description"
+                class="type-description"
+              >
                 - {{ type.description }}
               </span>
             </a-select-option>
@@ -44,7 +51,11 @@
       </a-form-item>
 
       <!-- 文档标题 -->
-      <a-form-item label="文档标题" name="title" required>
+      <a-form-item
+        label="文档标题"
+        name="title"
+        required
+      >
         <a-input
           v-model:value="formData.title"
           placeholder="请输入文档标题"
@@ -54,7 +65,11 @@
       </a-form-item>
 
       <!-- 文档内容 -->
-      <a-form-item label="文档内容" name="content" required>
+      <a-form-item
+        label="文档内容"
+        name="content"
+        required
+      >
         <a-textarea
           v-model:value="formData.content"
           placeholder="请输入文档内容..."
@@ -65,7 +80,10 @@
       </a-form-item>
 
       <!-- 文档摘要（可选） -->
-      <a-form-item label="文档摘要（可选）" name="summary">
+      <a-form-item
+        label="文档摘要（可选）"
+        name="summary"
+      >
         <a-textarea
           v-model:value="formData.summary"
           placeholder="请输入文档摘要，留空将自动生成..."
@@ -78,8 +96,14 @@
 
     <template #footer>
       <a-space>
-        <a-button @click="handleCancel">取消</a-button>
-        <a-button type="primary" :loading="loading" @click="handleSubmit">
+        <a-button @click="handleCancel">
+          取消
+        </a-button>
+        <a-button
+          type="primary"
+          :loading="loading"
+          @click="handleSubmit"
+        >
           创建文档
         </a-button>
       </a-space>

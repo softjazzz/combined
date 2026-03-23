@@ -16,12 +16,12 @@
 
         <div class="flex flex-wrap items-center gap-2.5">
           <span class="metric-pill">
-            <span class="metric-dot"></span>
+            <span class="metric-dot" />
             ICD-10
             <strong>{{ stats.icd10Count?.toLocaleString() || '--' }}</strong>
           </span>
           <span class="metric-pill">
-            <span class="metric-dot metric-dot-light"></span>
+            <span class="metric-dot metric-dot-light" />
             ICD-9
             <strong>{{ stats.icd9Count?.toLocaleString() || '--' }}</strong>
           </span>
@@ -39,7 +39,7 @@
             class="search-input"
             @keydown.enter="$emit('search', localQuery)"
             @input="onQueryChange"
-          />
+          >
           <div class="search-hint">
             <span v-if="localQuery.length > 0">Enter 搜索</span>
             <template v-else>

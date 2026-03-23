@@ -1,75 +1,87 @@
 <template>
   <div class="demo-control-panel">
-    <a-row :gutter="16" align="middle" justify="space-between" class="control-row">
-        <!-- 左侧：演示控制按钮 -->
-        <a-col :flex="1">
-          <a-space :size="12" wrap class="control-left">
-            <a-select
-              :value="demoStore.currentStep"
-              style="width: 180px"
-              size="middle"
-              @change="handleStepChange"
-            >
-              <a-select-option value="target">
-                <FileSearchOutlined />
-                测试对象选择
-              </a-select-option>
-              <a-select-option value="rules">
-                <SettingOutlined />
-                规则配置
-              </a-select-option>
-              <a-select-option value="run">
-                <ThunderboltOutlined />
-                运行与结果
-              </a-select-option>
-            </a-select>
-          </a-space>
-        </a-col>
+    <a-row
+      :gutter="16"
+      align="middle"
+      justify="space-between"
+      class="control-row"
+    >
+      <!-- 左侧：演示控制按钮 -->
+      <a-col :flex="1">
+        <a-space
+          :size="12"
+          wrap
+          class="control-left"
+        >
+          <a-select
+            :value="demoStore.currentStep"
+            style="width: 180px"
+            size="middle"
+            @change="handleStepChange"
+          >
+            <a-select-option value="target">
+              <FileSearchOutlined />
+              测试对象选择
+            </a-select-option>
+            <a-select-option value="rules">
+              <SettingOutlined />
+              规则配置
+            </a-select-option>
+            <a-select-option value="run">
+              <ThunderboltOutlined />
+              运行与结果
+            </a-select-option>
+          </a-select>
+        </a-space>
+      </a-col>
 
-        <!-- 右侧：进度显示 + 快捷操作 -->
-        <a-col :flex="'none'">
-          <a-space :size="16">
-            <!-- 进度显示 -->
-            <a-tooltip title="当前进度">
-              <a-progress
-                type="circle"
-                :percent="demoStore.progress"
-                :width="40"
-                :stroke-width="8"
-                :status="demoStore.error ? 'exception' : 'normal'"
-              />
-            </a-tooltip>
+      <!-- 右侧：进度显示 + 快捷操作 -->
+      <a-col :flex="'none'">
+        <a-space :size="16">
+          <!-- 进度显示 -->
+          <a-tooltip title="当前进度">
+            <a-progress
+              type="circle"
+              :percent="demoStore.progress"
+              :width="40"
+              :stroke-width="8"
+              :status="demoStore.error ? 'exception' : 'normal'"
+            />
+          </a-tooltip>
 
-            <!-- 快捷操作菜单 -->
-            <a-dropdown>
-              <a-button :icon="h(MoreOutlined)">
-                更多
-              </a-button>
-              <template #overlay>
-                <a-menu @click="handleMenuClick">
-                  <a-menu-item key="import">
-                    <ImportOutlined />
-                    导入演示状态
-                  </a-menu-item>
-                  <a-menu-item key="export">
-                    <ExportOutlined />
-                    导出演示状态
-                  </a-menu-item>
-                  <a-menu-divider />
-                  <a-menu-item key="config">
-                    <SettingOutlined />
-                    演示配置
-                  </a-menu-item>
-                  <a-menu-item key="clear" danger>
-                    <DeleteOutlined />
-                    清除状态
-                  </a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
-          </a-space>
-        </a-col>
-      </a-row>
+          <!-- 快捷操作菜单 -->
+          <a-dropdown>
+            <a-button :icon="h(MoreOutlined)">
+              更多
+            </a-button>
+            <template #overlay>
+              <a-menu @click="handleMenuClick">
+                <a-menu-item key="import">
+                  <ImportOutlined />
+                  导入演示状态
+                </a-menu-item>
+                <a-menu-item key="export">
+                  <ExportOutlined />
+                  导出演示状态
+                </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item key="config">
+                  <SettingOutlined />
+                  演示配置
+                </a-menu-item>
+                <a-menu-item
+                  key="clear"
+                  danger
+                >
+                  <DeleteOutlined />
+                  清除状态
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
+        </a-space>
+      </a-col>
+    </a-row>
   </div>
 </template>
 

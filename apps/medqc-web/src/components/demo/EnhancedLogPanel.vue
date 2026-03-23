@@ -5,22 +5,25 @@
       <div class="header-left">
         <FileTextOutlined class="header-icon" />
         <span class="header-title">演示日志</span>
-        <a-badge :count="filteredLogs.length" :overflow-count="999" />
+        <a-badge
+          :count="filteredLogs.length"
+          :overflow-count="999"
+        />
       </div>
       <div class="header-right">
         <a-space>
           <a-button
             size="small"
-            @click="handleCopyAll"
             :disabled="filteredLogs.length === 0"
+            @click="handleCopyAll"
           >
             <CopyOutlined />
             复制全部
           </a-button>
           <a-button
             size="small"
-            @click="handleExport"
             :disabled="filteredLogs.length === 0"
+            @click="handleExport"
           >
             <DownloadOutlined />
             导出日志
@@ -63,15 +66,26 @@
         button-style="solid"
         size="small"
       >
-        <a-radio-button value="all">全部</a-radio-button>
-        <a-radio-button value="info">信息</a-radio-button>
-        <a-radio-button value="warning">警告</a-radio-button>
-        <a-radio-button value="error">错误</a-radio-button>
+        <a-radio-button value="all">
+          全部
+        </a-radio-button>
+        <a-radio-button value="info">
+          信息
+        </a-radio-button>
+        <a-radio-button value="warning">
+          警告
+        </a-radio-button>
+        <a-radio-button value="error">
+          错误
+        </a-radio-button>
       </a-radio-group>
     </div>
 
     <!-- 日志列表 -->
-    <div class="log-list" ref="logListRef">
+    <div
+      ref="logListRef"
+      class="log-list"
+    >
       <div
         v-for="(log, index) in filteredLogs"
         :key="index"
@@ -85,7 +99,10 @@
               :class="`level-icon level-${log.level}`"
             />
             <span class="log-timestamp">{{ log.timestamp }}</span>
-            <a-tag :color="getLevelColor(log.level)" size="small">
+            <a-tag
+              :color="getLevelColor(log.level)"
+              size="small"
+            >
               {{ getLevelLabel(log.level) }}
             </a-tag>
           </div>
@@ -101,10 +118,10 @@
             </a-tooltip>
             <a-tooltip title="展开/折叠">
               <a-button
+                v-if="log.message.length > 100"
                 type="text"
                 size="small"
                 @click="toggleLogExpand(index)"
-                v-if="log.message.length > 100"
               >
                 <DownOutlined v-if="!expandedLogs.has(index)" />
                 <UpOutlined v-else />
@@ -112,10 +129,16 @@
             </a-tooltip>
           </div>
         </div>
-        <div class="log-message" :class="{ expanded: expandedLogs.has(index) }">
+        <div
+          class="log-message"
+          :class="{ expanded: expandedLogs.has(index) }"
+        >
           {{ log.message }}
         </div>
-        <div v-if="log.details" class="log-details">
+        <div
+          v-if="log.details"
+          class="log-details"
+        >
           <pre>{{ JSON.stringify(log.details, null, 2) }}</pre>
         </div>
       </div>

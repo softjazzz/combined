@@ -1,9 +1,16 @@
 <template>
   <div class="target-selection-step">
     <!-- 顶部统计卡片 -->
-    <a-row :gutter="16" class="stats-row">
+    <a-row
+      :gutter="16"
+      class="stats-row"
+    >
       <a-col :span="8">
-        <a-card size="small" :bordered="false" class="stat-card">
+        <a-card
+          size="small"
+          :bordered="false"
+          class="stat-card"
+        >
           <a-statistic
             title="可用病历"
             :value="demoStore.availableRecords.length"
@@ -16,7 +23,11 @@
         </a-card>
       </a-col>
       <a-col :span="8">
-        <a-card size="small" :bordered="false" class="stat-card">
+        <a-card
+          size="small"
+          :bordered="false"
+          class="stat-card"
+        >
           <a-statistic
             title="已选病历"
             :value="demoStore.testRecord ? 1 : 0"
@@ -30,7 +41,11 @@
         </a-card>
       </a-col>
       <a-col :span="8">
-        <a-card size="small" :bordered="false" class="stat-card">
+        <a-card
+          size="small"
+          :bordered="false"
+          class="stat-card"
+        >
           <a-statistic
             title="已选文书"
             :value="demoStore.selectedDocumentList.length"
@@ -46,17 +61,24 @@
     </a-row>
 
     <!-- 主内容区 -->
-    <a-row :gutter="16" class="content-row">
+    <a-row
+      :gutter="16"
+      class="content-row"
+    >
       <!-- 左侧：病历列表 -->
       <a-col :span="12">
-        <a-card title="选择测试病历" :bordered="false" class="section-card">
+        <a-card
+          title="选择测试病历"
+          :bordered="false"
+          class="section-card"
+        >
           <template #extra>
             <a-space>
               <a-button
                 size="small"
                 :icon="h(ReloadOutlined)"
-                @click="handleRefreshRecords"
                 :loading="demoStore.isLoadingData"
+                @click="handleRefreshRecords"
               >
                 刷新
               </a-button>
@@ -65,7 +87,11 @@
 
           <!-- 筛选器 -->
           <div class="filters-section">
-            <a-space direction="vertical" style="width: 100%" :size="12">
+            <a-space
+              direction="vertical"
+              style="width: 100%"
+              :size="12"
+            >
               <a-input-search
                 v-model:value="searchKeyword"
                 placeholder="搜索病历（患者姓名、病历号）"
@@ -81,7 +107,9 @@
                     style="width: 100%"
                     @change="handleDepartmentChange"
                   >
-                    <a-select-option value="">全部科室</a-select-option>
+                    <a-select-option value="">
+                      全部科室
+                    </a-select-option>
                     <a-select-option
                       v-for="dept in demoStore.availableDepartments"
                       :key="dept"
@@ -99,9 +127,15 @@
                     style="width: 100%"
                     @change="handleStatusChange"
                   >
-                    <a-select-option value="">全部状态</a-select-option>
-                    <a-select-option value="active">活跃</a-select-option>
-                    <a-select-option value="archived">已归档</a-select-option>
+                    <a-select-option value="">
+                      全部状态
+                    </a-select-option>
+                    <a-select-option value="active">
+                      活跃
+                    </a-select-option>
+                    <a-select-option value="archived">
+                      已归档
+                    </a-select-option>
                   </a-select>
                 </a-col>
               </a-row>
@@ -127,16 +161,27 @@
                         <a-space>
                           <UserOutlined />
                           <span class="patient-name">{{ item.patient_name || '未知患者' }}</span>
-                          <a-tag v-if="item.patient_gender" size="small">
+                          <a-tag
+                            v-if="item.patient_gender"
+                            size="small"
+                          >
                             {{ item.patient_gender === 'M' ? '男' : '女' }}
                           </a-tag>
-                          <a-tag v-if="item.patient_age" size="small" color="blue">
+                          <a-tag
+                            v-if="item.patient_age"
+                            size="small"
+                            color="blue"
+                          >
                             {{ item.patient_age }}岁
                           </a-tag>
                         </a-space>
                       </template>
                       <template #description>
-                        <a-space direction="vertical" :size="4" style="width: 100%">
+                        <a-space
+                          direction="vertical"
+                          :size="4"
+                          style="width: 100%"
+                        >
                           <div>
                             <a-space :size="8">
                               <span><EnvironmentOutlined /> {{ item.department || '未知科室' }}</span>
@@ -162,7 +207,11 @@
                     <template #description>
                       <div class="empty-description">
                         <span>暂无病历数据</span>
-                        <a-button type="link" size="small" @click="handleResetFilters">
+                        <a-button
+                          type="link"
+                          size="small"
+                          @click="handleResetFilters"
+                        >
                           重置筛选
                         </a-button>
                       </div>
@@ -177,16 +226,26 @@
 
       <!-- 右侧：文书选择 -->
       <a-col :span="12">
-        <a-card title="选择测试文书" :bordered="false" class="section-card">
+        <a-card
+          title="选择测试文书"
+          :bordered="false"
+          class="section-card"
+        >
           <template #extra>
             <a-space>
-              <a-tag v-if="demoStore.testRecord" color="blue">
+              <a-tag
+                v-if="demoStore.testRecord"
+                color="blue"
+              >
                 {{ demoStore.testRecord.patient_name }}
               </a-tag>
             </a-space>
           </template>
 
-          <div v-if="!demoStore.testRecord" class="empty-state">
+          <div
+            v-if="!demoStore.testRecord"
+            class="empty-state"
+          >
             <a-empty description="请先选择测试病历">
               <template #image>
                 <FileSearchOutlined :style="{ fontSize: '64px', color: '#bfbfbf' }" />
@@ -194,9 +253,17 @@
             </a-empty>
           </div>
 
-          <div v-else class="documents-section">
+          <div
+            v-else
+            class="documents-section"
+          >
             <!-- 病历信息摘要 -->
-            <a-descriptions :column="1" size="small" bordered class="record-summary">
+            <a-descriptions
+              :column="1"
+              size="small"
+              bordered
+              class="record-summary"
+            >
               <a-descriptions-item label="患者姓名">
                 {{ demoStore.testRecord.patient_name }}
               </a-descriptions-item>
@@ -206,7 +273,10 @@
               <a-descriptions-item label="入院日期">
                 {{ formatDate(demoStore.testRecord.admission_date) }}
               </a-descriptions-item>
-              <a-descriptions-item label="主要诊断" v-if="testRecordPrimaryDiagnosis">
+              <a-descriptions-item
+                v-if="testRecordPrimaryDiagnosis"
+                label="主要诊断"
+              >
                 {{ testRecordPrimaryDiagnosis }}
               </a-descriptions-item>
             </a-descriptions>
@@ -280,7 +350,10 @@
           下一步：配置规则
           <RightOutlined />
         </a-button>
-        <a-button size="large" @click="handleClearSelection">
+        <a-button
+          size="large"
+          @click="handleClearSelection"
+        >
           清空选择
         </a-button>
       </a-space>
@@ -294,9 +367,17 @@
       :width="720"
       :body-style="{ paddingBottom: '80px' }"
     >
-      <div v-if="previewDocument" class="document-preview">
+      <div
+        v-if="previewDocument"
+        class="document-preview"
+      >
         <!-- 文书信息 -->
-        <a-descriptions :column="1" bordered size="small" class="document-info">
+        <a-descriptions
+          :column="1"
+          bordered
+          size="small"
+          class="document-info"
+        >
           <a-descriptions-item label="文书标题">
             <a-space>
               <FileTextOutlined />
@@ -306,11 +387,19 @@
           <a-descriptions-item label="文书类型">
             {{ previewDocument.document_type || previewDocument.type || '未知类型' }}
           </a-descriptions-item>
-          <a-descriptions-item label="创建时间" v-if="previewDocument.created_at">
+          <a-descriptions-item
+            v-if="previewDocument.created_at"
+            label="创建时间"
+          >
             <CalendarOutlined /> {{ formatDate(previewDocument.created_at) }}
           </a-descriptions-item>
-          <a-descriptions-item label="文档ID" v-if="previewDocument.id">
-            <a-typography-text copyable>{{ previewDocument.id }}</a-typography-text>
+          <a-descriptions-item
+            v-if="previewDocument.id"
+            label="文档ID"
+          >
+            <a-typography-text copyable>
+              {{ previewDocument.id }}
+            </a-typography-text>
           </a-descriptions-item>
         </a-descriptions>
 
@@ -321,26 +410,41 @@
           <h4>
             <FileSearchOutlined />
             文书内容
-            <a-tag v-if="getContentLength(previewDocument)" color="blue" style="margin-left: 8px">
+            <a-tag
+              v-if="getContentLength(previewDocument)"
+              color="blue"
+              style="margin-left: 8px"
+            >
               {{ getContentLength(previewDocument) }} 字
             </a-tag>
           </h4>
 
-          <div v-if="getDocumentContent(previewDocument)" class="content-wrapper">
-            <div class="content-text" v-html="getDocumentContentHtml(previewDocument)"></div>
+          <div
+            v-if="getDocumentContent(previewDocument)"
+            class="content-wrapper"
+          >
+            <div
+              class="content-text"
+              v-html="getDocumentContentHtml(previewDocument)"
+            />
           </div>
-          <a-empty v-else description="该文书暂无内容" />
+          <a-empty
+            v-else
+            description="该文书暂无内容"
+          />
         </div>
       </div>
 
       <!-- 抽屉底部操作按钮 -->
       <template #footer>
         <a-space>
-          <a-button @click="previewDrawerVisible = false">关闭</a-button>
+          <a-button @click="previewDrawerVisible = false">
+            关闭
+          </a-button>
           <a-button
             type="primary"
-            @click="handleSelectFromPreview"
             :disabled="isDocumentSelected(previewDocument)"
+            @click="handleSelectFromPreview"
           >
             <CheckCircleOutlined />
             选择此文书
@@ -368,9 +472,9 @@ import {
   RightOutlined,
   EyeOutlined
 } from '@ant-design/icons-vue'
-import type { MedicalRecord } from '@/types/quality-control'
+import type { MedicalRecord } from '@/types/medical-records'
 
-import { ApiService } from '@/services/apiService'
+import { listDocuments } from '@/services/medicalDocumentApi'
 
 const demoStore = useQCDemoStore()
 
@@ -436,8 +540,7 @@ const filteredRecords = computed(() => {
 
 const testRecordPrimaryDiagnosis = computed(() => {
   if (!demoStore.testRecord) return ''
-  const legacy = (demoStore.testRecord as unknown as { primary_diagnosis?: string }).primary_diagnosis
-  return legacy || demoStore.testRecord.primaryDiagnosis || ''
+  return (demoStore.testRecord as unknown as { primary_diagnosis?: string }).primary_diagnosis || ''
 })
 
 const paginatedRecords = computed(() => {
@@ -506,19 +609,20 @@ const handleSelectRecord = async (record: MedicalRecord) => {
     demoStore.selectTestRecord(record)
 
     // 加载该病历的真实文书列表
-    const resp = await ApiService.getMedicalRecordDocuments(record.id)
-    if (resp.success && Array.isArray(resp.data) && resp.data.length > 0) {
+    const resp = await listDocuments(record.id)
+    const docs = Array.isArray(resp?.data) ? resp.data : (Array.isArray(resp) ? resp : [])
+    if (docs.length > 0) {
       // 回填到 testRecord.documents，供可用文书列表使用
-      demoStore.selectTestRecord({ ...(record as any), documents: resp.data } as any)
+      demoStore.selectTestRecord({ ...(record as any), documents: docs } as any)
       // 自动选择优先文书（入院记录优先），以便可以直接开始质控
-      const docList = resp.data
+      const docList = docs
       const preferred = docList.find((d: any) =>
         d.type === 'admission_record' || (d.title && String(d.title).includes('入院记录'))
       ) || docList[0]
       if (preferred) {
         demoStore.setSelectedDocument(preferred as any)
       }
-      message.success(`已选择病历：${record.patient_name}（已加载 ${resp.data.length} 篇文书）`)
+      message.success(`已选择病历：${record.patient_name}（已加载 ${docs.length} 篇文书）`)
     } else {
       // 接口成功但无文书，保持默认占位文书
       message.warning(`已选择病历：${record.patient_name}（未找到关联文书，使用默认文书）`)

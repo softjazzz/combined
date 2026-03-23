@@ -340,10 +340,14 @@ export interface FrontPageProcedures {
   mainProcedureDate?: string
   mainProcedureLevel?: string
   surgeonName?: string
+  surgeonCode?: string
   assistant1Name?: string
+  assistant1Code?: string
   assistant2Name?: string
+  assistant2Code?: string
   anesthesiaMethod?: string
   anesthetistName?: string
+  anesthetistCode?: string
   incisionHealingGrade?: string
   mainProcedureCode?: string
 }
@@ -353,6 +357,7 @@ export interface FrontPageProcedures {
  */
 export interface FrontPageOtherMedicalInfo {
   pathologyText?: string
+  pathologyIcd?: string
   pathologyNo?: string
   drugAllergyFlag?: string
   drugAllergyFlagText?: string
@@ -364,6 +369,7 @@ export interface FrontPageOtherMedicalInfo {
   icuType?: string
   icuEnterTime?: string
   icuLeaveTime?: string
+  icuTransferStatus?: string
   [key: string]: any
 }
 
@@ -399,7 +405,7 @@ export interface FrontPageDraft {
   otherMedicalInfo: FrontPageOtherMedicalInfo
   staff: FrontPageStaff
   costs: FrontPageCosts
-  evidence?: Record<string, string>      // 字段对应的原文片段
+  evidence?: Record<string, any>         // 证据结构（含 main_diagnosis_llm / coding_audit_llm）
   confidence?: Record<string, number>    // 字段级置信度 0-1
 }
 

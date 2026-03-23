@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import type { DocItem, FrontpageFocusTarget, QCIssueLike } from '../types'
+import { normalizeDefect } from '../normalize'
 
 interface LocatePayload {
   target: FrontpageFocusTarget
@@ -23,11 +24,13 @@ export function useQcPipeline() {
   const qcRefreshSeed = ref(0)
 
   const assistBadgeCount = computed(() =>
-    assistIssues.value.filter(issue => !(issue as any).dismissed).length,
+    assistIssues.value.filter(issue => !issue.dismissed).length,
   )
 
   function handleAssistIssuesChange(issues: QCIssueLike[]) {
-    assistIssues.value = issues.filter(issue => !(issue as any).dismissed)
+    assistIssues.value = issues
+      .map((issue, index) => normalizeDefect(issue, index))
+      .filter(issue => !issue.dismissed)
   }
 
   function touchCodingRefresh() {

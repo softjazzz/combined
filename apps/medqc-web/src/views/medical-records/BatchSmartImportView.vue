@@ -4,15 +4,25 @@
     <div class="page-header">
       <div class="header-content">
         <div class="title-section">
-          <h1 class="page-title">批量智能导入</h1>
-          <p class="page-subtitle">支持多文件批量上传和LLM智能解析</p>
+          <h1 class="page-title">
+            批量智能导入
+          </h1>
+          <p class="page-subtitle">
+            支持多文件批量上传和LLM智能解析
+          </p>
         </div>
         <div class="header-actions">
           <a-space>
-            <a-button @click="showLLMConfig = true" :icon="h(SettingOutlined)">
+            <a-button
+              :icon="h(SettingOutlined)"
+              @click="showLLMConfig = true"
+            >
               LLM配置
             </a-button>
-            <a-button @click="showHelp = true" :icon="h(QuestionCircleOutlined)">
+            <a-button
+              :icon="h(QuestionCircleOutlined)"
+              @click="showHelp = true"
+            >
               使用帮助
             </a-button>
           </a-space>
@@ -25,7 +35,10 @@
       <a-row :gutter="24">
         <!-- 左侧：批量文件处理 -->
         <a-col :span="16">
-          <a-card title="批量文件处理" class="batch-processor-card">
+          <a-card
+            title="批量文件处理"
+            class="batch-processor-card"
+          >
             <BatchFileProcessor
               :max-file-size="50"
               :max-file-count="20"
@@ -40,42 +53,78 @@
         <!-- 右侧：操作日志和统计 -->
         <a-col :span="8">
           <!-- 处理统计 -->
-          <a-card title="处理统计" class="stats-card mb-4">
+          <a-card
+            title="处理统计"
+            class="stats-card mb-4"
+          >
             <div class="stats-grid">
               <div class="stat-item">
-                <div class="stat-value">{{ totalProcessed }}</div>
-                <div class="stat-label">已处理文件</div>
+                <div class="stat-value">
+                  {{ totalProcessed }}
+                </div>
+                <div class="stat-label">
+                  已处理文件
+                </div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">{{ successCount }}</div>
-                <div class="stat-label">成功解析</div>
+                <div class="stat-value">
+                  {{ successCount }}
+                </div>
+                <div class="stat-label">
+                  成功解析
+                </div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">{{ failureCount }}</div>
-                <div class="stat-label">解析失败</div>
+                <div class="stat-value">
+                  {{ failureCount }}
+                </div>
+                <div class="stat-label">
+                  解析失败
+                </div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">{{ averageConfidence }}%</div>
-                <div class="stat-label">平均置信度</div>
+                <div class="stat-value">
+                  {{ averageConfidence }}%
+                </div>
+                <div class="stat-label">
+                  平均置信度
+                </div>
               </div>
             </div>
           </a-card>
 
           <!-- 操作日志 -->
-          <a-card title="操作日志" class="log-card">
+          <a-card
+            title="操作日志"
+            class="log-card"
+          >
             <div class="log-container">
               <div 
                 v-for="(log, index) in operationLogs" 
                 :key="index"
                 :class="['log-item', `log-${log.type}`]"
               >
-                <div class="log-time">{{ formatTime(log.timestamp) }}</div>
-                <div class="log-message">{{ log.message }}</div>
+                <div class="log-time">
+                  {{ formatTime(log.timestamp) }}
+                </div>
+                <div class="log-message">
+                  {{ log.message }}
+                </div>
               </div>
             </div>
             <div class="log-actions">
-              <a-button size="small" @click="clearLogs">清空日志</a-button>
-              <a-button size="small" @click="exportLogs">导出日志</a-button>
+              <a-button
+                size="small"
+                @click="clearLogs"
+              >
+                清空日志
+              </a-button>
+              <a-button
+                size="small"
+                @click="exportLogs"
+              >
+                导出日志
+              </a-button>
             </div>
           </a-card>
         </a-col>
@@ -83,28 +132,31 @@
     </div>
 
     <!-- 批量结果汇总 -->
-    <div v-if="batchResults.length > 0" class="batch-summary">
+    <div
+      v-if="batchResults.length > 0"
+      class="batch-summary"
+    >
       <a-card title="批量处理结果汇总">
         <div class="summary-actions mb-4">
           <a-space size="large">
             <a-button 
               type="primary" 
               size="large"
-              @click="showBatchResultsModal = true"
               :icon="h(EyeOutlined)"
+              @click="showBatchResultsModal = true"
             >
               查看所有结果 ({{ batchResults.length }})
             </a-button>
             <a-button 
-              @click="exportAllResults"
               :icon="h(DownloadOutlined)"
+              @click="exportAllResults"
             >
               导出所有结果
             </a-button>
             <a-button 
-              @click="saveAllToDatabase"
               :loading="savingAll"
               :icon="h(DatabaseOutlined)"
+              @click="saveAllToDatabase"
             >
               批量保存到数据库
             </a-button>
@@ -121,7 +173,10 @@
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.key === 'fileName'">
               <div class="file-name-cell">
-                <component :is="getFileIcon(record.fileName)" class="file-icon" />
+                <component
+                  :is="getFileIcon(record.fileName)"
+                  class="file-icon"
+                />
                 <span>{{ record.fileName }}</span>
               </div>
             </template>
@@ -139,10 +194,16 @@
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
-                <a-button size="small" @click="viewSingleResult(index)">
+                <a-button
+                  size="small"
+                  @click="viewSingleResult(index)"
+                >
                   查看
                 </a-button>
-                <a-button size="small" @click="saveSingleResult(record)">
+                <a-button
+                  size="small"
+                  @click="saveSingleResult(record)"
+                >
                   保存
                 </a-button>
               </a-space>
@@ -175,7 +236,10 @@
     >
       <div class="help-content">
         <h3>批量智能导入使用指南</h3>
-        <a-steps direction="vertical" size="small">
+        <a-steps
+          direction="vertical"
+          size="small"
+        >
           <a-step title="上传文件">
             <template #description>
               <p>支持拖拽或点击上传多个医疗文档文件</p>
@@ -228,7 +292,10 @@
       :footer="null"
       class="batch-results-detail-modal"
     >
-      <a-tabs v-model:activeKey="activeResultTab" type="card">
+      <a-tabs
+        v-model:active-key="activeResultTab"
+        type="card"
+      >
         <a-tab-pane 
           v-for="(result, index) in batchResults" 
           :key="index" 
@@ -270,15 +337,22 @@ import {
 import BatchFileProcessor from '@/components/BatchFileProcessor.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import LLMResultModal from '@/components/LLMResultModal.vue'
+import type { ExtractedDocument } from '@/services/llmService'
 
 interface BatchResultItem {
   success?: boolean
   fileName?: string
   message?: string
+  provider?: string
+  model?: string
+  endpoint?: string
+  tokensUsed?: number
+  processingTime?: number
   data?: {
     confidence?: number
     patientName?: string
     department?: string
+    documents?: ExtractedDocument[]
   }
   originalText?: string
 }

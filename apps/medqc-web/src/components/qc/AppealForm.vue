@@ -2,10 +2,10 @@
   <a-modal
     :title="title"
     :open="visible"
+    :confirm-loading="submitting"
+    width="600px"
     @ok="handleSubmit"
     @cancel="handleCancel"
-    :confirmLoading="submitting"
-    width="600px"
   >
     <a-form
       ref="formRef"
@@ -24,15 +24,28 @@
         </template>
       </a-alert>
 
-      <a-form-item label="申诉类型" name="appealType">
-        <a-select v-model:value="formState.appealType" placeholder="请选择申诉类型">
-          <a-select-option v-for="opt in APPEAL_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
+      <a-form-item
+        label="申诉类型"
+        name="appealType"
+      >
+        <a-select
+          v-model:value="formState.appealType"
+          placeholder="请选择申诉类型"
+        >
+          <a-select-option
+            v-for="opt in APPEAL_TYPE_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
+          >
             {{ opt.label }}
           </a-select-option>
         </a-select>
       </a-form-item>
 
-      <a-form-item label="申诉理由" name="appealReason">
+      <a-form-item
+        label="申诉理由"
+        name="appealReason"
+      >
         <a-textarea
           v-model:value="formState.appealReason"
           :rows="4"
@@ -43,21 +56,25 @@
       </a-form-item>
       
       <!-- 这里预留上传组件位置，暂时只做UI展示 -->
-      <a-form-item label="证据文件" name="evidenceUrls">
+      <a-form-item
+        label="证据文件"
+        name="evidenceUrls"
+      >
         <a-upload
-            v-model:file-list="fileList"
-            action="/api/v1/upload" 
-            list-type="picture"
-            :before-upload="() => false" 
-          >
+          v-model:file-list="fileList"
+          action="/api/v1/upload" 
+          list-type="picture"
+          :before-upload="() => false" 
+        >
           <a-button>
             <upload-outlined />
             上传证据
           </a-button>
         </a-upload>
-        <div class="text-gray-400 text-xs mt-1">支持图片/PDF，单个文件不超过5MB</div>
+        <div class="text-gray-400 text-xs mt-1">
+          支持图片/PDF，单个文件不超过5MB
+        </div>
       </a-form-item>
-
     </a-form>
   </a-modal>
 </template>

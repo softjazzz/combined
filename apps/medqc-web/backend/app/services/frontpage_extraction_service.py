@@ -275,10 +275,14 @@ PROCEDURES_PROMPT = """从以下病历中提取手术及操作信息，并严格
   "other_procedures_texts": ["其他手术1", "其他手术2"],
   "other_procedures": [{{"text": "手术名称", "date": "YYYY-MM-DD"}}],
   "surgeon_name": "术者姓名",
+  "surgeon_code": "术者医师代码（工号/编码）",
   "assistant1_name": "I助姓名",
+  "assistant1_code": "I助医师代码（工号/编码）",
   "assistant2_name": "II助姓名",
+  "assistant2_code": "II助医师代码（工号/编码）",
   "anesthesia_method": "麻醉方式",
   "anesthetist_name": "麻醉医师姓名",
+  "anesthetist_code": "麻醉医师代码（工号/编码）",
   "incision_healing_grade": "切口愈合等级"
 }}
 ```
@@ -327,10 +331,14 @@ DIAG_PROC_PROMPT = """从以下病历中一次性提取“诊断信息”和“�
     "other_procedures_texts": ["其他手术1", "其他手术2"],
     "other_procedures": [{{"text": "手术名", "date": "YYYY-MM-DD"}}],
     "surgeon_name": "术者姓名",
+    "surgeon_code": "术者医师代码",
     "assistant1_name": "I助",
+    "assistant1_code": "I助医师代码",
     "assistant2_name": "II助",
+    "assistant2_code": "II助医师代码",
     "anesthesia_method": "麻醉方式",
     "anesthetist_name": "麻醉医师",
+    "anesthetist_code": "麻醉医师代码",
     "incision_healing_grade": "切口愈合等级"
   }}
 }}
@@ -350,6 +358,7 @@ OTHER_MEDICAL_INFO_PROMPT = """从以下病历中提取其他医疗信息。
 ```json
 {{
   "pathology_text": "病理诊断",
+  "pathology_icd": "病理诊断编码（如可提取）",
   "pathology_no": "病理号",
   "drug_allergy_flag": "1=无, 2=有",
   "drug_allergy_drugs": ["过敏药物1", "过敏药物2"],
@@ -360,6 +369,7 @@ OTHER_MEDICAL_INFO_PROMPT = """从以下病历中提取其他医疗信息。
   "icu_type": "ICU类型",
   "icu_enter_time": "进入ICU时间",
   "icu_leave_time": "退出ICU时间",
+  "icu_transfer_status": "ICU转移情况（如：普通病房/他院/死亡等）",
   "injury_poison_flag": "1=无, 2=有（仅外伤/中毒等诊断时填2）",
   "injury_poison_cause_text": "损伤中毒外部原因名称（如：机动车交通事故、意外跌落）",
   "injury_poison_cause_icd": "损伤中毒外部原因ICD编码（V/W/X/Y章节，如V01-V99）",
@@ -486,6 +496,191 @@ ADMISSION_CONDITION_PROMPT = """你是一位资深病案编码专家，请根据
 直接输出 JSON："""
 
 
+MAIN_DIAGNOSIS_LLM_EVIDENCE_PROMPT = """你是一位资深病案编码与临床语义分析专家。请基于病历内容与候选诊断，给出“主诊断推荐解释”。
+
+【任务目标】
+1. 从医学语义角度判断最适合作为主诊断的疾病（llm_recommended_main_diagnosis）。
+2. 给出简洁结论（conclusion）和一段推理摘要（reasoning_summary）。
+3. 仅输出最多3条关键证据（key_evidence），每条必须包含：
+   - quote: 原文片段
+   - source: 来源定位（如“出院诊断第2条”“病程记录第5天”等）
+   - why_it_supports: 该证据如何支持推荐
+
+【输入信息】
+- 医生填写主诊断：{clinician_main_diagnosis}
+- 候选诊断列表：{candidate_diagnoses}
+- 主要手术/关键治疗：{main_procedure_text}
+
+【病历精选片段】
+{medical_excerpt}
+
+【输出要求】
+- 只输出 JSON，不要输出任何解释性正文
+- confidence 取值 0~1
+- key_evidence 最多 3 条，优先高信息密度句子
+- conclusion 使用一句话，面向编码员
+
+【输出格式】
+```json
+{{
+  "clinician_main_diagnosis": "医生填写主诊断",
+  "llm_recommended_main_diagnosis": "LLM推荐主诊断",
+  "is_consistent_with_clinician": true,
+  "confidence": 0.86,
+  "conclusion": "一句话结论",
+  "key_evidence": [
+    {{
+      "quote": "原文片段1",
+      "source": "来源1",
+      "why_it_supports": "支持理由1"
+    }}
+  ],
+  "reasoning_summary": "一段推理摘要"
+}}
+```"""
+
+
+CODING_AUDIT_LLM_PROMPT = """你是一位资深病案编码审核专家。请根据病历上下文，完成“医生书写质量审核”。
+
+【任务目标】
+1. 识别并输出以下4类问题：
+   - diagnosis_missing（医生可能漏写诊断）
+   - procedure_missing（医生可能漏写手术/操作）
+   - diagnosis_inappropriate（主诊断可能不当）
+   - diagnosis_insufficient_evidence（主诊断证据不足）
+2. 输出面向编码员的一句话总结（summary）与结构化 findings。
+3. 所有结论必须有病历证据支持，避免泛泛描述。
+
+【输入信息】
+- 医生填写主诊断：{clinician_main_diagnosis}
+- 医生诊断列表：{clinician_diagnoses}
+- 医生手术列表：{clinician_procedures}
+- 系统诊断列表：{system_diagnoses}
+- 系统手术列表：{system_procedures}
+- 既有LLM主诊断推荐（如有）：{llm_recommended_main}
+- LLM主诊断推荐：{llm_recommended_main}
+
+【病历精选片段】
+{medical_excerpt}
+
+【输出要求】
+- 只输出 JSON，不要输出解释性正文
+- confidence 取值 0~1
+- findings 最多 6 条，每条 evidence 最多 2 条
+- type 仅允许：diagnosis_missing/procedure_missing/diagnosis_inappropriate/diagnosis_insufficient_evidence
+- severity 仅允许：high/medium/low
+
+【输出格式】
+```json
+{{
+  "version": "v1",
+  "summary": "一句话总结",
+  "confidence": 0.82,
+  "counts": {{
+    "diagnosis_missing": 1,
+    "procedure_missing": 0,
+    "diagnosis_inappropriate": 1,
+    "diagnosis_insufficient_evidence": 0
+  }},
+  "findings": [
+    {{
+      "type": "diagnosis_missing",
+      "severity": "high",
+      "clinician_text": "医生当前书写",
+      "llm_recommendation": "建议补充诊断名称",
+      "reason": "判定理由",
+      "evidence": [
+        {{
+          "quote": "病历原文片段",
+          "source": "来源定位",
+          "why_it_supports": "支持理由"
+        }}
+      ]
+    }}
+  ]
+}}
+```"""
+
+
+MAIN_AND_AUDIT_LLM_EVIDENCE_PROMPT = """你是一位资深病案编码审核专家。请一次完成“主诊断推荐解释 + 编码审核风险识别”。
+
+【任务目标】
+1. 输出主诊断解释（main_diagnosis_llm）：
+   - 医生填写主诊断 vs LLM推荐主诊断
+   - 一句话结论 + 置信度 + 最多3条关键证据
+2. 输出编码审核风险（coding_audit_llm）：
+   - 识别4类风险：diagnosis_missing / procedure_missing / diagnosis_inappropriate / diagnosis_insufficient_evidence
+   - 给出 summary、counts、findings（最多6条）
+
+【输入信息】
+- 医生填写主诊断：{clinician_main_diagnosis}
+- 候选诊断列表：{candidate_diagnoses}
+- 主要手术/关键治疗：{main_procedure_text}
+- 医生诊断列表：{clinician_diagnoses}
+- 医生手术列表：{clinician_procedures}
+- 系统诊断列表：{system_diagnoses}
+- 系统手术列表：{system_procedures}
+
+【病历精选片段】
+{medical_excerpt}
+
+【输出要求】
+- 只输出 JSON，不要输出解释性正文
+- confidence 取值 0~1
+- main_diagnosis_llm.key_evidence 最多 3 条
+- coding_audit_llm.findings 最多 6 条，每条 evidence 最多 2 条
+- finding.type 仅允许：diagnosis_missing/procedure_missing/diagnosis_inappropriate/diagnosis_insufficient_evidence
+- finding.severity 仅允许：high/medium/low
+
+【输出格式】
+```json
+{{
+  "main_diagnosis_llm": {{
+    "clinician_main_diagnosis": "医生填写主诊断",
+    "llm_recommended_main_diagnosis": "LLM推荐主诊断",
+    "is_consistent_with_clinician": true,
+    "confidence": 0.86,
+    "conclusion": "一句话结论",
+    "key_evidence": [
+      {{
+        "quote": "原文片段1",
+        "source": "来源1",
+        "why_it_supports": "支持理由1"
+      }}
+    ],
+    "reasoning_summary": "一段推理摘要"
+  }},
+  "coding_audit_llm": {{
+    "version": "v1",
+    "summary": "一句话总结",
+    "confidence": 0.82,
+    "counts": {{
+      "diagnosis_missing": 1,
+      "procedure_missing": 0,
+      "diagnosis_inappropriate": 1,
+      "diagnosis_insufficient_evidence": 0
+    }},
+    "findings": [
+      {{
+        "type": "diagnosis_missing",
+        "severity": "high",
+        "clinician_text": "医生当前书写",
+        "llm_recommendation": "建议补充诊断名称",
+        "reason": "判定理由",
+        "evidence": [
+          {{
+            "quote": "病历原文片段",
+            "source": "来源定位",
+            "why_it_supports": "支持理由"
+          }}
+        ]
+      }}
+    ]
+  }}
+}}
+```"""
+
+
 class FrontPageExtractionService:
     """病案首页抽取服务（LLM 版）"""
 
@@ -536,7 +731,9 @@ class FrontPageExtractionService:
         else:
             return await self._load_demo_frontpage()
 
-    async def extract_from_text(self, medical_text: str) -> FrontPageDraft:
+    async def extract_from_text(
+        self, medical_text: str, context_strategy: Optional[str] = None
+    ) -> FrontPageDraft:
         """
         直接从病历文本提取病案首页信息
         
@@ -553,7 +750,9 @@ class FrontPageExtractionService:
         if self._use_llm:
             try:
                 logger.info(f"开始从文本提取首页信息，文本长度: {len(medical_text)}")
-                return await self._extract_with_llm(medical_text)
+                return await self._extract_with_llm(
+                    medical_text, context_strategy=context_strategy
+                )
             except Exception as e:
                 logger.error(f"LLM 抽取失败: {e}")
                 raise
@@ -562,7 +761,11 @@ class FrontPageExtractionService:
             return await self._load_demo_frontpage()
 
     async def extract_from_text_stream(
-        self, medical_text: str, visit_id: str = None, force_llm: bool = False
+        self,
+        medical_text: str,
+        visit_id: str = None,
+        force_llm: bool = False,
+        context_strategy: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, Dict[str, Any]], None]:
         """
         逐步抽取首页信息，按模块产出结果（用于前端分批展示）。
@@ -700,7 +903,6 @@ class FrontPageExtractionService:
         # 诊断/手术/其他医疗：始终从病历文书 LLM 提取（不从首页目标表读取）
         need_diag_llm = True
         need_proc_llm = True
-        need_diag_proc_llm = need_diag_llm or need_proc_llm
         need_other_llm = True
 
         logger.info(
@@ -845,10 +1047,18 @@ class FrontPageExtractionService:
         if need_hosp_llm:
             prompt = format_prompt_or_none("hospitalization", HOSPITALIZATION_PROMPT)
             add_task("hospitalization", self._extract_json(prompt) if prompt else None)
-        diag_proc_text = self._build_diag_proc_context_text(llm_text)
-        if need_diag_proc_llm:
-            prompt = format_prompt_or_none("diag_proc", DIAG_PROC_PROMPT, diag_proc_text)
-            add_task("diag_proc", self._extract_json(prompt, max_tokens=1800) if prompt else None)
+        diag_proc_text = self._select_context_text(
+            llm_text,
+            context_strategy,
+            max_chars=4200,
+            default_mode="retrieval",
+        )
+        if need_diag_llm:
+            prompt = format_prompt_or_none("diagnoses", DIAGNOSES_PROMPT, diag_proc_text)
+            add_task("diagnoses", self._extract_json(prompt, max_tokens=1200) if prompt else None)
+        if need_proc_llm:
+            prompt = format_prompt_or_none("procedures", PROCEDURES_PROMPT, diag_proc_text)
+            add_task("procedures", self._extract_json(prompt, max_tokens=1200) if prompt else None)
         if need_other_llm:
             prompt = format_prompt_or_none("other_medical_info", OTHER_MEDICAL_INFO_PROMPT)
             add_task("other_medical_info", self._extract_json(prompt) if prompt else None)
@@ -865,7 +1075,7 @@ class FrontPageExtractionService:
             if name == "coding_result":
                 fp_data["confidence"] = {**fp_data.get("confidence", {}), **validation_info}
                 yield ("update", {"module": "confidence", "frontpage": fp_data})
-            elif name == "diag_proc":
+            elif name in ("diagnoses", "procedures"):
                 fp_data["diagnoses"] = fp_data.get("diagnoses") or {}
                 fp_data["procedures"] = fp_data.get("procedures") or {}
                 yield ("update", {"module": "diagnoses", "frontpage": fp_data})
@@ -901,41 +1111,55 @@ class FrontPageExtractionService:
                 yield ("update", {"module": "confidence", "frontpage": fp_data})
                 continue
 
-            if name == "diag_proc":
+            if name == "diagnoses":
                 try:
                     diag_payload: Dict[str, Any] = {}
-                    proc_payload: Dict[str, Any] = {}
                     if isinstance(result, dict):
                         raw_diag = result.get("diagnoses")
-                        raw_proc = result.get("procedures")
                         if not isinstance(raw_diag, dict) and any(
                             k in result for k in ("discharge_main_diagnosis_text", "ed_diagnosis_texts")
                         ):
                             raw_diag = result
+                        diag_payload = raw_diag if isinstance(raw_diag, dict) else {}
+
+                    if not diag_payload:
+                        logger.warning("stream: diagnoses returned empty payload, retry once")
+                        diag_fallback = await self._extract_json(
+                            DIAGNOSES_PROMPT.format(medical_text=diag_proc_text), max_tokens=1200
+                        )
+                        diag_payload = diag_fallback if isinstance(diag_fallback, dict) else {}
+
+                    fp_data["diagnoses"] = self._normalize_diagnoses_structure(llm_text, diag_payload)
+                except Exception:
+                    logger.exception("stream: failed to process module 'diagnoses' result")
+                    fp_data["diagnoses"] = fp_data.get("diagnoses") or {}
+
+                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+                continue
+
+            if name == "procedures":
+                try:
+                    proc_payload: Dict[str, Any] = {}
+                    if isinstance(result, dict):
+                        raw_proc = result.get("procedures")
                         if not isinstance(raw_proc, dict) and any(
                             k in result for k in ("main_procedure_text", "other_procedures_texts")
                         ):
                             raw_proc = result
-                        diag_payload = raw_diag if isinstance(raw_diag, dict) else {}
                         proc_payload = raw_proc if isinstance(raw_proc, dict) else {}
 
-                    if not diag_payload and not proc_payload:
-                        logger.warning("stream: diag_proc returned empty payload")
-                        diag_fallback, proc_fallback = await asyncio.gather(
-                            self._extract_json(DIAGNOSES_PROMPT.format(medical_text=diag_proc_text), max_tokens=1200),
-                            self._extract_json(PROCEDURES_PROMPT.format(medical_text=diag_proc_text), max_tokens=1200),
+                    if not proc_payload:
+                        logger.warning("stream: procedures returned empty payload, retry once")
+                        proc_fallback = await self._extract_json(
+                            PROCEDURES_PROMPT.format(medical_text=diag_proc_text), max_tokens=1200
                         )
-                        diag_payload = diag_fallback if isinstance(diag_fallback, dict) else {}
                         proc_payload = proc_fallback if isinstance(proc_fallback, dict) else {}
 
-                    fp_data["diagnoses"] = self._normalize_diagnoses_structure(llm_text, diag_payload)
                     fp_data["procedures"] = self._normalize_procedures_structure(proc_payload)
                 except Exception:
-                    logger.exception("stream: failed to process module '%s' result", name)
-                    fp_data["diagnoses"] = fp_data.get("diagnoses") or {}
+                    logger.exception("stream: failed to process module 'procedures' result")
                     fp_data["procedures"] = fp_data.get("procedures") or {}
 
-                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
                 yield ("update", {"module": "procedures", "frontpage": fp_data})
                 continue
 
@@ -945,6 +1169,8 @@ class FrontPageExtractionService:
                         result = self._normalize_diagnoses_structure(llm_text, result)
                     elif name == "procedures":
                         result = self._normalize_procedures_structure(result)
+                    elif name == "other_medical_info":
+                        result = self._normalize_other_medical_info_structure(result)
                     fp_data[name] = result
                 elif result is None:
                     fp_data[name] = fp_data.get(name) or {}
@@ -989,14 +1215,18 @@ class FrontPageExtractionService:
         # ===== 主诊断规则裁决（在 ICD 编码前） =====
         try:
             if isinstance(fp_data.get("diagnoses"), dict) and fp_data.get("diagnoses"):
+                clinician_main_before_rules = str(
+                    fp_data["diagnoses"].get("discharge_main_diagnosis_text") or ""
+                ).strip()
                 from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
                 fp_data["diagnoses"], _rule_trace = apply_main_diagnosis_guideline_rules(
                     medical_text=llm_text,
                     diagnoses=fp_data["diagnoses"],
                     procedures=fp_data.get("procedures") or {},
                 )
-                if _rule_trace:
-                    fp_data.setdefault("evidence", {})["guideline_rule_trace"] = _rule_trace
+                fp_data.setdefault("evidence", {})["guideline_rule_trace"] = _rule_trace or []
+                if clinician_main_before_rules:
+                    fp_data["evidence"]["clinician_main_diagnosis"] = clinician_main_before_rules
                 yield ("update", {"module": "diagnoses", "frontpage": fp_data})
         except Exception:
             logger.exception("stream: main diagnosis guideline rules failed")
@@ -1041,9 +1271,27 @@ class FrontPageExtractionService:
 
         fp_data["confidence"] = {**fp_data.get("confidence", {}), **validation_info}
         fp_data["evidence"] = fp_data.get("evidence") or {}
+        try:
+            merged_evidence = await self._build_main_and_audit_llm_evidence(
+                medical_text=llm_text,
+                diagnoses=fp_data.get("diagnoses"),
+                procedures=fp_data.get("procedures"),
+                clinician_main_diagnosis=fp_data["evidence"].get("clinician_main_diagnosis"),
+                context_strategy=context_strategy,
+            )
+            fp_data["evidence"]["main_diagnosis_llm"] = merged_evidence.get("main_diagnosis_llm")
+            fp_data["evidence"]["coding_audit_llm"] = merged_evidence.get("coding_audit_llm")
+            yield ("update", {"module": "evidence", "frontpage": fp_data})
+        except Exception:
+            logger.exception("stream: build llm evidence failed")
+
         if isinstance(fp_data.get("diagnoses"), dict):
             fp_data["evidence"]["diagnoses"] = self._build_diagnosis_evidence(
-                llm_text, fp_data.get("diagnoses"), fp_data.get("procedures")
+                llm_text,
+                fp_data.get("diagnoses"),
+                fp_data.get("procedures"),
+                guideline_rule_trace=fp_data["evidence"].get("guideline_rule_trace"),
+                clinician_main_diagnosis=fp_data["evidence"].get("clinician_main_diagnosis"),
             )
 
         # Final: 直接输出已构建的 fp_data
@@ -1390,6 +1638,9 @@ class FrontPageExtractionService:
         except Exception as e:
             logger.error(f"_prefill_from_cdm 整体异常: {e}")
 
+        fp_data["other_medical_info"] = self._normalize_other_medical_info_structure(
+            fp_data.get("other_medical_info")
+        )
         logger.info(f"_prefill_from_cdm 完成: 已从源头表填充首页草稿")
         return fp_data
 
@@ -1700,7 +1951,37 @@ class FrontPageExtractionService:
         )
         return compact
 
-    async def _extract_with_llm(self, medical_text: str) -> FrontPageDraft:
+    def _normalize_context_strategy(
+        self,
+        context_strategy: Optional[str],
+        default_mode: str = "full",
+    ) -> str:
+        mode = str(context_strategy or "").strip().lower()
+        if mode in {"full", "retrieval"}:
+            return mode
+        if mode:
+            logger.warning(
+                "unknown context_strategy=%s, fallback=%s", mode, default_mode
+            )
+        return default_mode
+
+    def _select_context_text(
+        self,
+        medical_text: str,
+        context_strategy: Optional[str],
+        *,
+        max_chars: int,
+        default_mode: str,
+    ) -> str:
+        mode = self._normalize_context_strategy(context_strategy, default_mode=default_mode)
+        text = medical_text or ""
+        if mode == "full":
+            return text
+        return self._build_diag_proc_context_text(text, max_chars=max_chars)
+
+    async def _extract_with_llm(
+        self, medical_text: str, context_strategy: Optional[str] = None
+    ) -> FrontPageDraft:
         """使用 LLM 分步抽取各模块信息，并结合外部编码服务进行校验"""
         logger.info("开始 LLM 分步抽取病案首页信息...")
         
@@ -1722,14 +2003,23 @@ class FrontPageExtractionService:
         logger.info("Step 2: 并行提取其他模块及外部编码...")
         from .external_coding_service import get_external_coding_service
         ext_coding_service = get_external_coding_service()
+        diag_proc_context_text = self._select_context_text(
+            medical_text,
+            context_strategy,
+            max_chars=4200,
+            default_mode="full",
+        )
         
         # 定义并行任务
-        diag_proc_text = self._build_diag_proc_context_text(medical_text)
         tasks = {
             "hospitalization": self._extract_json(HOSPITALIZATION_PROMPT.format(medical_text=medical_text)),
-            "diag_proc": self._extract_json(
-                DIAG_PROC_PROMPT.format(medical_text=diag_proc_text),
-                max_tokens=1800,
+            "diagnoses": self._extract_json(
+                DIAGNOSES_PROMPT.format(medical_text=diag_proc_context_text),
+                max_tokens=1200,
+            ),
+            "procedures": self._extract_json(
+                PROCEDURES_PROMPT.format(medical_text=diag_proc_context_text),
+                max_tokens=1200,
             ),
             "other_medical": self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
             "staff": self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
@@ -1746,7 +2036,8 @@ class FrontPageExtractionService:
             
             # 处理结果
             hospitalization = results.get("hospitalization") if not isinstance(results.get("hospitalization"), Exception) else {}
-            diag_proc_result = results.get("diag_proc") if not isinstance(results.get("diag_proc"), Exception) else {}
+            diagnoses = results.get("diagnoses") if not isinstance(results.get("diagnoses"), Exception) else {}
+            procedures = results.get("procedures") if not isinstance(results.get("procedures"), Exception) else {}
             other_medical = results.get("other_medical") if not isinstance(results.get("other_medical"), Exception) else {}
             staff = results.get("staff") if not isinstance(results.get("staff"), Exception) else {}
             coding_result = results.get("coding_result") if not isinstance(results.get("coding_result"), Exception) else None
@@ -1756,38 +2047,30 @@ class FrontPageExtractionService:
             
             # 初始化默认值
             hospitalization = hospitalization or {}
-            diagnoses = {}
-            procedures = {}
-            if isinstance(diag_proc_result, dict):
-                diag_payload = diag_proc_result.get("diagnoses")
-                proc_payload = diag_proc_result.get("procedures")
-                # 容错: 模型未按双对象返回时，尝试识别扁平结构
-                if not isinstance(diag_payload, dict) and any(
-                    k in diag_proc_result
-                    for k in ("discharge_main_diagnosis_text", "ed_diagnosis_texts")
-                ):
-                    diag_payload = diag_proc_result
-                if not isinstance(proc_payload, dict) and any(
-                    k in diag_proc_result
-                    for k in ("main_procedure_text", "other_procedures_texts")
-                ):
-                    proc_payload = diag_proc_result
-                diagnoses = diag_payload if isinstance(diag_payload, dict) else {}
-                procedures = proc_payload if isinstance(proc_payload, dict) else {}
+            diagnoses = diagnoses or {}
+            procedures = procedures or {}
 
-            if not diagnoses and not procedures:
-                logger.warning("diag_proc combined extraction empty, fallback to separate prompts")
-                diag_fallback, proc_fallback = await asyncio.gather(
-                    self._extract_json(DIAGNOSES_PROMPT.format(medical_text=diag_proc_text), max_tokens=1200),
-                    self._extract_json(PROCEDURES_PROMPT.format(medical_text=diag_proc_text), max_tokens=1200),
+            if not diagnoses:
+                logger.warning("diagnoses extraction empty, retry once")
+                diag_fallback = await self._extract_json(
+                    DIAGNOSES_PROMPT.format(medical_text=diag_proc_context_text),
+                    max_tokens=1200,
                 )
                 diagnoses = diag_fallback or {}
+
+            if not procedures:
+                logger.warning("procedures extraction empty, retry once")
+                proc_fallback = await self._extract_json(
+                    PROCEDURES_PROMPT.format(medical_text=diag_proc_context_text),
+                    max_tokens=1200,
+                )
                 procedures = proc_fallback or {}
 
             other_medical = other_medical or {}
             staff = staff or {}
             diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
             procedures = self._normalize_procedures_structure(procedures)
+            other_medical = self._normalize_other_medical_info_structure(other_medical)
 
         except Exception as e:
             logger.error(f"并行抽取发生严重错误: {e}")
@@ -1846,7 +2129,12 @@ class FrontPageExtractionService:
         
 
         # ===== 主诊断规则裁决（在 ICD 编码前） =====
+        clinician_main_before_rules = ""
+        _rule_trace_llm: List[Dict[str, Any]] = []
         if diagnoses:
+            clinician_main_before_rules = str(
+                diagnoses.get("discharge_main_diagnosis_text") or ""
+            ).strip()
             from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
             diagnoses, _rule_trace_llm = apply_main_diagnosis_guideline_rules(
                 medical_text=medical_text,
@@ -1862,6 +2150,22 @@ class FrontPageExtractionService:
         if procedures:
             procedures = self._normalize_procedures_structure(procedures)
             procedures = resolve_procedure_codes(procedures)
+
+        # LLM 审核证据（单次推理输出 main_diagnosis_llm + coding_audit_llm）
+        main_diagnosis_llm: Optional[Dict[str, Any]] = None
+        coding_audit_llm: Optional[Dict[str, Any]] = None
+        try:
+            merged_evidence = await self._build_main_and_audit_llm_evidence(
+                medical_text=medical_text,
+                diagnoses=diagnoses,
+                procedures=procedures,
+                clinician_main_diagnosis=clinician_main_before_rules,
+                context_strategy=context_strategy,
+            )
+            main_diagnosis_llm = merged_evidence.get("main_diagnosis_llm")
+            coding_audit_llm = merged_evidence.get("coding_audit_llm")
+        except Exception:
+            logger.exception("build llm evidence failed")
         
         # 组装 FrontPageDraft
         frontpage_data = {
@@ -1873,7 +2177,17 @@ class FrontPageExtractionService:
             "staff": staff,
             "costs": {"total_cost": None, "self_paid": None, "categories": {}},
             "evidence": {
-                "diagnoses": self._build_diagnosis_evidence(medical_text, diagnoses, procedures)
+                "guideline_rule_trace": _rule_trace_llm,
+                "clinician_main_diagnosis": clinician_main_before_rules,
+                "main_diagnosis_llm": main_diagnosis_llm,
+                "coding_audit_llm": coding_audit_llm,
+                "diagnoses": self._build_diagnosis_evidence(
+                    medical_text,
+                    diagnoses,
+                    procedures,
+                    guideline_rule_trace=_rule_trace_llm,
+                    clinician_main_diagnosis=clinician_main_before_rules,
+                ),
             },
             "confidence": validation_info, # 将校验信息放入 confidence 字段
         }
@@ -1991,6 +2305,50 @@ class FrontPageExtractionService:
                     diagnoses[field] = str(int(val)) if float(val).is_integer() else str(val)
 
             frontpage_data["diagnoses"] = diagnoses
+
+        other_medical_info = self._normalize_other_medical_info_structure(
+            frontpage_data.get("other_medical_info")
+        )
+        frontpage_data["other_medical_info"] = other_medical_info
+
+        costs = frontpage_data.get("costs")
+        if isinstance(costs, dict):
+            categories = costs.get("categories")
+            if isinstance(categories, dict):
+                legacy_to_semantic = {
+                    "1": "general_medical_service",
+                    "2": "general_treatment",
+                    "3": "nursing_care",
+                    "4": "other_service",
+                    "5": "pathological_diagnostic",
+                    "6": "laboratory_diagnostic",
+                    "7": "imaging_diagnostic",
+                    "8": "clinical_diagnostic",
+                    "9": "nonsurgical_treatment",
+                    "10": "clinical_physical_therapy",
+                    "11": "surgery_treatment",
+                    "12": "anesthesia",
+                    "13": "surgery",
+                    "14": "rehabilitation",
+                    "15_cm": "chinese_medicine_treatment",
+                    "15": "western_medicine",
+                    "16": "antibacterial_drug",
+                    "17": "chinese_patent_medicine",
+                    "18": "chinese_herbal_medicine",
+                    "19": "blood",
+                    "20": "albumin",
+                    "21": "globulin",
+                    "22": "coagulation_factor",
+                    "23": "cytokine",
+                    "24": "exam_disposable_material",
+                    "25": "treat_disposable_material",
+                    "26": "surgery_disposable_material",
+                }
+                for legacy_key, semantic_key in legacy_to_semantic.items():
+                    if semantic_key not in categories and legacy_key in categories:
+                        categories[semantic_key] = categories.get(legacy_key)
+                costs["categories"] = categories
+            frontpage_data["costs"] = costs
 
         # basic_info 数值字段容错：空字符串/非法字符串 -> None，避免 model_validate 500
         basic_info = frontpage_data.get("basic_info")
@@ -2308,6 +2666,8 @@ class FrontPageExtractionService:
         medical_text: str,
         diagnoses: Optional[Dict[str, Any]],
         procedures: Optional[Dict[str, Any]] = None,
+        guideline_rule_trace: Optional[List[Dict[str, Any]]] = None,
+        clinician_main_diagnosis: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Build diagnosis evidence list for frontend trust display.
@@ -2330,16 +2690,29 @@ class FrontPageExtractionService:
         if not entries:
             return []
 
+        clinician_main_text = self._normalize_diag_text(clinician_main_diagnosis or "")
+        if not clinician_main_text and isinstance(guideline_rule_trace, list):
+            for rule_item in guideline_rule_trace:
+                if not isinstance(rule_item, dict):
+                    continue
+                if rule_item.get("rule") == "主诊断更换":
+                    old_main = self._normalize_diag_text(rule_item.get("old_main") or "")
+                    if old_main:
+                        clinician_main_text = old_main
+                        break
+
         blocks = self._extract_diagnosis_section_blocks(medical_text)
-        block_lines: List[Tuple[str, str]] = []
+        block_lines: List[Tuple[str, str, int]] = []
+        section_line_counter: Dict[str, int] = {}
         for sec, sec_text in blocks:
             for ln in sec_text.split("\n"):
                 cleaned_ln = ln.strip()
                 if cleaned_ln:
-                    block_lines.append((sec, cleaned_ln))
+                    section_line_counter[sec] = section_line_counter.get(sec, 0) + 1
+                    block_lines.append((sec, cleaned_ln, section_line_counter[sec]))
         diagnosis_line_keys = {
             self._diagnosis_canonical_key(line)
-            for _, line in block_lines
+            for _, line, _ in block_lines
             if self._diagnosis_canonical_key(line)
         }
 
@@ -2451,6 +2824,7 @@ class FrontPageExtractionService:
                     "status": bool(source_ok),
                     "evidence_quote": quote or "",
                     "explain": "主要诊断候选应首先来自出院/入院诊断条目。",
+                    "rule_ref": "《住院病案首页填写规范（暂行）》第10、11条",
                 }
             )
 
@@ -2473,6 +2847,7 @@ class FrontPageExtractionService:
                     "status": bool(proc_ok) if is_main else True,
                     "evidence_quote": proc_support_quote,
                     "explain": "主要诊断应尽量与主要手术或关键治疗过程一致。",
+                    "rule_ref": "《住院病案首页填写规范（暂行）》第11条第（二）项",
                 }
             )
 
@@ -2487,6 +2862,7 @@ class FrontPageExtractionService:
                     "status": bool(burden_quote) if is_main else True,
                     "evidence_quote": burden_quote,
                     "explain": "主要诊断通常应与住院主要医疗资源消耗相对应。",
+                    "rule_ref": "《住院病案首页填写规范（暂行）》第10条",
                 }
             )
 
@@ -2498,6 +2874,7 @@ class FrontPageExtractionService:
                         "status": bool(status_ok),
                         "evidence_quote": "" if status_ok else diag_text,
                         "explain": "“术后状态/后状态”通常作为其他诊断记录。",
+                        "rule_ref": "《住院病案首页填写规范（暂行）》第18、19条",
                     }
                 )
             else:
@@ -2507,11 +2884,12 @@ class FrontPageExtractionService:
                         "status": True,
                         "evidence_quote": quote or "",
                         "explain": "该条目作为并存病或状态记录，纳入其他诊断。",
+                        "rule_ref": "《住院病案首页填写规范（暂行）》第18、19、20条",
                     }
                 )
             return checks
 
-        def _line_match(diag_text: str) -> Optional[Tuple[str, str, str, float]]:
+        def _line_match(diag_text: str) -> Optional[Tuple[str, str, str, float, int]]:
             diag_key = self._diagnosis_canonical_key(diag_text)
             if not diag_key:
                 return None
@@ -2525,23 +2903,23 @@ class FrontPageExtractionService:
 
             # exact-ish match first: prefer concise diagnosis-item lines over long narratives
             sec_priority = {"出院诊断": 0, "入院诊断": 1, "初步诊断": 2, "门诊诊断": 3, "急诊诊断": 4}
-            exact_candidates: List[Tuple[int, int, str, str]] = []
-            for sec, line in block_lines:
+            exact_candidates: List[Tuple[int, int, str, str, int]] = []
+            for sec, line, line_no in block_lines:
                 line_key = self._diagnosis_canonical_key(line)
                 if not line_key:
                     continue
                 if diag_key in line_key or line_key in diag_key:
                     extra_len = max(0, len(line_key) - len(diag_key))
-                    exact_candidates.append((sec_priority.get(sec, 9), extra_len, sec, line))
+                    exact_candidates.append((sec_priority.get(sec, 9), extra_len, sec, line, line_no))
             if exact_candidates:
                 exact_candidates.sort(key=lambda x: (x[0], x[1], len(x[3])))
-                _, _, sec, line = exact_candidates[0]
+                _, _, sec, line, line_no = exact_candidates[0]
 
                 # 强制降级规则：
                 # 当命中句过长且包含治疗叙述词时，优先回退到“编号诊断行”（1./2./3.）
                 if _is_narrative_long(line):
-                    numbered_candidates: List[Tuple[int, int, str, str]] = []
-                    for nsec, nline in block_lines:
+                    numbered_candidates: List[Tuple[int, int, str, str, int]] = []
+                    for nsec, nline, nline_no in block_lines:
                         if not re.match(r"^\s*\d{1,2}[\.、\)]", nline):
                             continue
                         nkey = self._diagnosis_canonical_key(nline)
@@ -2549,19 +2927,19 @@ class FrontPageExtractionService:
                             continue
                         if diag_key in nkey or nkey in diag_key:
                             nextra = max(0, len(nkey) - len(diag_key))
-                            numbered_candidates.append((sec_priority.get(nsec, 9), nextra, nsec, nline))
+                            numbered_candidates.append((sec_priority.get(nsec, 9), nextra, nsec, nline, nline_no))
                     if numbered_candidates:
                         numbered_candidates.sort(key=lambda x: (x[0], x[1], len(x[3])))
-                        _, _, sec, line = numbered_candidates[0]
-                        return sec, line, "exact_numbered", 0.93
+                        _, _, sec, line, line_no = numbered_candidates[0]
+                        return sec, line, "exact_numbered", 0.93, line_no
 
-                return sec, line, "exact", 0.93
+                return sec, line, "exact", 0.93, line_no
 
             # fallback fuzzy by token overlap
             diag_tokens = [t for t in re.split(r"[\s,，;；、]+", diag_text) if len(t) >= 2]
-            best: Optional[Tuple[str, str, str, float]] = None
+            best: Optional[Tuple[str, str, str, float, int]] = None
             best_score = 0.0
-            for sec, line in block_lines:
+            for sec, line, line_no in block_lines:
                 if not line:
                     continue
                 hit = 0
@@ -2573,7 +2951,7 @@ class FrontPageExtractionService:
                 score = hit / len(diag_tokens)
                 if score > best_score and score >= 0.5:
                     best_score = score
-                    best = (sec, line, "fuzzy", round(0.6 + 0.3 * score, 2))
+                    best = (sec, line, "fuzzy", round(0.6 + 0.3 * score, 2), line_no)
             return best
 
         evidence: List[Dict[str, Any]] = []
@@ -2594,7 +2972,7 @@ class FrontPageExtractionService:
                 logic = "作为其他诊断，来自出院（或初步）诊断条目，并做病历文本一致性校验。"
 
             if matched:
-                sec, quote, mode, conf = matched
+                sec, quote, mode, conf, line_no = matched
                 reasoning_checks = _reasoning_checks(
                     diag_text, dtype, sec, quote, support_quotes
                 )
@@ -2604,6 +2982,7 @@ class FrontPageExtractionService:
                         "diagnosis_type": dtype,
                         "quote": quote,
                         "section": sec,
+                        "quote_location": f"{sec} 第{line_no}条",
                         "match_mode": mode,
                         "confidence": conf,
                         "selection_logic": logic,
@@ -2621,6 +3000,7 @@ class FrontPageExtractionService:
                         "diagnosis_type": dtype,
                         "quote": None,
                         "section": "unknown",
+                        "quote_location": "unknown",
                         "match_mode": "none",
                         "confidence": 0.0,
                         "selection_logic": logic,
@@ -2650,6 +3030,7 @@ class FrontPageExtractionService:
                 matched = _line_match(cand)
                 quote = matched[1] if matched else None
                 section = matched[0] if matched else "unknown"
+                quote_location = f"{matched[0]} 第{matched[4]}条" if matched else "unknown"
                 support_quotes = _supporting_quotes(cand, quote)
                 has_proc_support = False
                 proc_support_quote = ""
@@ -2675,8 +3056,7 @@ class FrontPageExtractionService:
                 status_penalty = -3 if is_status else 0
                 total_score = section_score + proc_score + burden_score + status_penalty
 
-                reasons: List[str] = []
-                reasons.append(f"来源章节：{section}")
+                reasons: List[str] = [f"来源章节：{section}"]
                 if has_proc_support:
                     reasons.append("与主要治疗/手术方向一致")
                 if has_burden_support:
@@ -2684,14 +3064,24 @@ class FrontPageExtractionService:
                 if is_status:
                     reasons.append("疑似术后/既往状态，不宜优先为主诊断")
 
+                reject_reasons: List[str] = []
+                if not has_proc_support:
+                    reject_reasons.append("缺少与主要治疗/手术的直接一致性证据")
+                if not has_burden_support:
+                    reject_reasons.append("缺少明显病情严重程度或资源消耗佐证")
+                if is_status:
+                    reject_reasons.append("存在“术后/后状态/既往”特征，应优先归入其他诊断")
+
                 candidate_rows.append(
                     {
                         "diagnosis_text": cand,
                         "score": total_score,
                         "section": section,
+                        "quote_location": quote_location,
                         "quote": quote,
                         "support_quote": proc_support_quote,
                         "reasons": reasons,
+                        "reject_reasons": reject_reasons,
                     }
                 )
 
@@ -2704,6 +3094,45 @@ class FrontPageExtractionService:
                 if recommended and selected_main
                 else True
             )
+            clinician_main = clinician_main_text or selected_main
+            differs_from_clinician = (
+                self._diagnosis_canonical_key(recommended)
+                != self._diagnosis_canonical_key(clinician_main)
+                if recommended and clinician_main
+                else False
+            )
+            recommended_row = next(
+                (
+                    row for row in candidate_rows
+                    if self._diagnosis_canonical_key(row.get("diagnosis_text"))
+                    == self._diagnosis_canonical_key(recommended)
+                ),
+                None,
+            )
+            recommendation_reasons: List[Dict[str, Any]] = []
+            if isinstance(recommended_row, dict):
+                support_quote = str(recommended_row.get("support_quote") or "").strip()
+                main_quote = str(recommended_row.get("quote") or "").strip()
+                for reason in recommended_row.get("reasons") or []:
+                    if not isinstance(reason, str):
+                        continue
+                    recommendation_reasons.append(
+                        {
+                            "type": "support",
+                            "reason": reason,
+                            "evidence_quote": support_quote or main_quote,
+                        }
+                    )
+                for reason in recommended_row.get("reject_reasons") or []:
+                    if not isinstance(reason, str):
+                        continue
+                    recommendation_reasons.append(
+                        {
+                            "type": "risk",
+                            "reason": reason,
+                            "evidence_quote": main_quote,
+                        }
+                    )
 
             analysis = {
                 "recommended_main_diagnosis": recommended,
@@ -2717,21 +3146,51 @@ class FrontPageExtractionService:
                 "candidates": candidate_rows[:5],
             }
 
+            def _manual_review_points() -> List[str]:
+                points: List[str] = []
+                if candidate_rows and len(candidate_rows) > 1:
+                    gap = (candidate_rows[0].get("score") or 0) - (candidate_rows[1].get("score") or 0)
+                    if gap <= 1:
+                        points.append("前两位候选评分接近（<=1分），建议编码员人工复核主诊断。")
+                if candidate_rows and not any(
+                    any("资源消耗佐证" in r for r in (c.get("reasons") or [])) for c in candidate_rows[:1]
+                ):
+                    points.append("当前主诊断缺少明确资源消耗佐证，建议补充病程/监护/关键检查证据。")
+                if not consistent and recommended:
+                    points.append(f"系统候选排序更倾向“{recommended}”，建议复核是否需要纠偏。")
+                return points
+
+            coder_summary = (
+                f"主诊断候选共{len(candidate_rows)}项，系统推荐“{recommended or '未知'}”，"
+                f"当前填写“{selected_main or '未知'}”，一致性：{'一致' if consistent else '不一致'}。"
+            )
+            recommendation_summary = (
+                f"医生填写主诊断为“{clinician_main or '未知'}”，系统推荐“{recommended or '未知'}”。"
+                f"{'系统推荐更适合作为主要诊断。' if differs_from_clinician else '系统推荐与医生填写一致。'}"
+            )
+
             for ev in evidence:
                 if ev.get("diagnosis_type") == "main":
                     ev["candidate_analysis"] = analysis
+                    ev["coder_summary"] = coder_summary
+                    ev["clinician_main_diagnosis"] = clinician_main
+                    ev["system_recommended_main_diagnosis"] = recommended
+                    ev["recommendation_differs_from_clinician"] = bool(differs_from_clinician)
+                    ev["recommendation_label"] = "更适合作为主要诊断"
+                    ev["recommendation_reasons"] = recommendation_reasons
+                    ev["recommendation_summary"] = recommendation_summary
+                    ev["manual_review_points"] = _manual_review_points()
                     checks = ev.get("reasoning_checks")
                     if isinstance(checks, list):
                         checks.append(
                             {
                                 "item": "与候选排序一致性校验",
                                 "status": bool(consistent),
-                                "evidence_quote": (
-                                    f"系统推荐：{recommended}" if recommended else ""
-                                ),
+                                "evidence_quote": "",
                                 "explain": (
                                     "系统基于章节来源、治疗/手术一致性、资源消耗佐证对候选诊断排序。"
                                 ),
+                                "rule_ref": "《住院病案首页填写规范（暂行）》第10、11、18、19条",
                             }
                         )
                     if not consistent and recommended:
@@ -2745,10 +3204,10 @@ class FrontPageExtractionService:
         # Build labeled raw evidence lines for frontend display/audit.
         try:
             key_to_section: Dict[str, str] = {}
-            for sec, line in block_lines:
+            for sec, line, line_no in block_lines:
                 k = self._diagnosis_canonical_key(line)
                 if k and k not in key_to_section:
-                    key_to_section[k] = sec
+                    key_to_section[k] = f"{sec} 第{line_no}条"
 
             def _source_of_text(text: str) -> str:
                 k = self._diagnosis_canonical_key(text)
@@ -2768,6 +3227,8 @@ class FrontPageExtractionService:
                 def _push(text: Any, role: str) -> None:
                     s = str(text or "").strip()
                     if not s:
+                        return
+                    if "系统推荐：" in s:
                         return
                     if s in seen:
                         return
@@ -2936,6 +3397,391 @@ class FrontPageExtractionService:
             logger.error(f"入院病情推理失败: {e}")
         
         return diagnoses
+
+    def _normalize_main_diagnosis_llm_payload(
+        self,
+        result: Optional[Dict[str, Any]],
+        clinician_main: str,
+        fallback_main: str,
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(result, dict):
+            return None
+
+        recommended = str(result.get("llm_recommended_main_diagnosis") or "").strip()
+        if not recommended:
+            return None
+
+        consistent = result.get("is_consistent_with_clinician")
+        if not isinstance(consistent, bool):
+            consistent = (
+                self._diagnosis_canonical_key(recommended)
+                == self._diagnosis_canonical_key(clinician_main or fallback_main)
+            )
+
+        confidence_raw = result.get("confidence")
+        try:
+            confidence = float(confidence_raw)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+
+        key_evidence_raw = result.get("key_evidence")
+        key_evidence: List[Dict[str, str]] = []
+        evidence_seen = set()
+        if isinstance(key_evidence_raw, list):
+            for item in key_evidence_raw:
+                if not isinstance(item, dict):
+                    continue
+                quote = str(item.get("quote") or "").strip()
+                if not quote:
+                    continue
+                quote_key = self._diagnosis_canonical_key(quote)
+                if quote_key and quote_key in evidence_seen:
+                    continue
+                evidence_seen.add(quote_key)
+                key_evidence.append(
+                    {
+                        "quote": quote,
+                        "source": str(item.get("source") or "病历原文").strip() or "病历原文",
+                        "why_it_supports": str(item.get("why_it_supports") or "").strip()
+                        or "该证据支持当前主诊断推荐。",
+                    }
+                )
+                if len(key_evidence) >= 3:
+                    break
+
+        conclusion = str(result.get("conclusion") or "").strip()
+        if not conclusion:
+            conclusion = (
+                f"医生填写主诊断“{clinician_main or fallback_main or '未知'}”，LLM 推荐“{recommended}”，"
+                f"{'两者一致。' if consistent else '建议以 LLM 推荐作为主诊断复核重点。'}"
+            )
+        reasoning_summary = str(result.get("reasoning_summary") or "").strip()
+        if not reasoning_summary:
+            reasoning_summary = "LLM 已结合候选诊断、关键治疗及病程证据完成主诊断语义推理。"
+
+        return {
+            "clinician_main_diagnosis": clinician_main or fallback_main,
+            "llm_recommended_main_diagnosis": recommended,
+            "is_consistent_with_clinician": bool(consistent),
+            "confidence": round(confidence, 2),
+            "conclusion": conclusion,
+            "key_evidence": key_evidence,
+            "reasoning_summary": reasoning_summary,
+        }
+
+    def _extract_clinician_procedures_for_audit(
+        self, medical_text: str, max_items: int = 12
+    ) -> List[str]:
+        if not medical_text:
+            return []
+
+        text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [ln.strip() for ln in text.split("\n") if ln and ln.strip()]
+        candidates: List[str] = []
+        pattern = re.compile(
+            r"(?:手术(?:及操作)?(?:名称)?|主要手术|手术操作|手术经过|操作)\s*[:：]\s*(.+)$",
+            re.IGNORECASE,
+        )
+        numbered_pat = re.compile(r"^\s*\d{1,2}[\.、\)]\s*(.+)$")
+        surgical_hint = ("术", "操作", "介入", "置入", "切除", "造影", "消融", "缝合")
+
+        for line in lines:
+            m = pattern.search(line)
+            value = ""
+            if m:
+                value = (m.group(1) or "").strip()
+            else:
+                n = numbered_pat.match(line)
+                if n:
+                    maybe = (n.group(1) or "").strip()
+                    if any(h in maybe for h in surgical_hint):
+                        value = maybe
+            if not value:
+                continue
+            for part in self._split_procedure_candidates(value):
+                if part:
+                    candidates.append(part)
+                if len(candidates) >= max_items:
+                    break
+            if len(candidates) >= max_items:
+                break
+
+        deduped: List[str] = []
+        seen = set()
+        for item in candidates:
+            key = item.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(item)
+        return deduped[:max_items]
+
+    def _normalize_coding_audit_llm_payload(
+        self, result: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(result, dict):
+            return None
+
+        allowed_types = {
+            "diagnosis_missing",
+            "procedure_missing",
+            "diagnosis_inappropriate",
+            "diagnosis_insufficient_evidence",
+        }
+        allowed_severity = {"high", "medium", "low"}
+        findings_raw = result.get("findings")
+        findings: List[Dict[str, Any]] = []
+        finding_keys = set()
+        if isinstance(findings_raw, list):
+            for item in findings_raw:
+                if not isinstance(item, dict):
+                    continue
+                f_type = str(item.get("type") or "").strip().lower()
+                if f_type not in allowed_types:
+                    continue
+                severity = str(item.get("severity") or "medium").strip().lower()
+                if severity not in allowed_severity:
+                    severity = "medium"
+                clinician_text = str(item.get("clinician_text") or "").strip()
+                llm_recommendation = str(item.get("llm_recommendation") or "").strip()
+                finding_key = (
+                    f_type,
+                    self._diagnosis_canonical_key(clinician_text),
+                    self._diagnosis_canonical_key(llm_recommendation),
+                )
+                if finding_key in finding_keys:
+                    continue
+                finding_keys.add(finding_key)
+                evidence_rows: List[Dict[str, str]] = []
+                raw_evidence = item.get("evidence")
+                if isinstance(raw_evidence, list):
+                    for ev in raw_evidence:
+                        if not isinstance(ev, dict):
+                            continue
+                        quote = str(ev.get("quote") or "").strip()
+                        if not quote:
+                            continue
+                        evidence_rows.append(
+                            {
+                                "quote": quote,
+                                "source": str(ev.get("source") or "病历原文").strip() or "病历原文",
+                                "why_it_supports": str(ev.get("why_it_supports") or "").strip()
+                                or "该证据支持当前审核结论。",
+                            }
+                        )
+                        if len(evidence_rows) >= 2:
+                            break
+                findings.append(
+                    {
+                        "type": f_type,
+                        "severity": severity,
+                        "clinician_text": clinician_text,
+                        "llm_recommendation": llm_recommendation,
+                        "reason": str(item.get("reason") or "").strip(),
+                        "evidence": evidence_rows,
+                    }
+                )
+                if len(findings) >= 6:
+                    break
+
+        counts_result = result.get("counts")
+        counts: Dict[str, int] = {
+            "diagnosis_missing": 0,
+            "procedure_missing": 0,
+            "diagnosis_inappropriate": 0,
+            "diagnosis_insufficient_evidence": 0,
+        }
+        if isinstance(counts_result, dict):
+            for key in counts:
+                try:
+                    counts[key] = max(0, int(counts_result.get(key, 0) or 0))
+                except (TypeError, ValueError):
+                    counts[key] = 0
+        else:
+            for item in findings:
+                f_type = item.get("type")
+                if f_type in counts:
+                    counts[f_type] += 1
+
+        confidence_raw = result.get("confidence")
+        try:
+            confidence = float(confidence_raw)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+
+        summary = str(result.get("summary") or "").strip()
+        has_structured_payload = isinstance(result.get("counts"), dict) or isinstance(
+            result.get("findings"), list
+        )
+        if not summary and not has_structured_payload:
+            return None
+        if not summary:
+            total_issues = sum(counts.values())
+            if total_issues:
+                summary = f"共识别{total_issues}项编码审核风险，建议人工复核重点条目。"
+            else:
+                summary = "当前未识别到明确编码审核风险。"
+
+        return {
+            "version": str(result.get("version") or "v1"),
+            "summary": summary,
+            "confidence": round(confidence, 2),
+            "counts": counts,
+            "findings": findings,
+        }
+
+    async def _build_main_and_audit_llm_evidence(
+        self,
+        medical_text: str,
+        diagnoses: Optional[Dict[str, Any]],
+        procedures: Optional[Dict[str, Any]],
+        clinician_main_diagnosis: Optional[str] = None,
+        main_diagnosis_llm: Optional[Dict[str, Any]] = None,
+        context_strategy: Optional[str] = None,
+    ) -> Dict[str, Optional[Dict[str, Any]]]:
+        if not self._use_llm or not self.llm_client:
+            return {"main_diagnosis_llm": None, "coding_audit_llm": None}
+        if not isinstance(diagnoses, dict):
+            return {"main_diagnosis_llm": None, "coding_audit_llm": None}
+
+        system_main = str(diagnoses.get("discharge_main_diagnosis_text") or "").strip()
+        system_others_raw = diagnoses.get("discharge_other_diagnoses_texts")
+        system_others = (
+            [str(x).strip() for x in system_others_raw if str(x).strip()]
+            if isinstance(system_others_raw, list)
+            else []
+        )
+        system_diagnoses = [x for x in [system_main, *system_others] if x]
+        if not system_diagnoses:
+            return {"main_diagnosis_llm": None, "coding_audit_llm": None}
+
+        clinician_diagnoses = self._extract_discharge_diagnoses_from_text(medical_text or "")
+        if not clinician_diagnoses:
+            clinician_diagnoses = list(system_diagnoses)
+        clinician_main = str(clinician_main_diagnosis or "").strip()
+        if not clinician_main:
+            clinician_main = clinician_diagnoses[0] if clinician_diagnoses else system_main
+
+        system_main_proc = ""
+        system_other_procs: List[str] = []
+        if isinstance(procedures, dict):
+            system_main_proc = str(procedures.get("main_procedure_text") or "").strip()
+            other = procedures.get("other_procedures_texts")
+            if isinstance(other, list):
+                system_other_procs = [str(x).strip() for x in other if str(x).strip()]
+        system_procedures = [x for x in [system_main_proc, *system_other_procs] if x]
+
+        clinician_procedures = self._extract_clinician_procedures_for_audit(medical_text or "")
+        if not clinician_procedures:
+            clinician_procedures = list(system_procedures)
+
+        candidate_diagnoses: List[str] = []
+        for item in system_diagnoses:
+            if item and item not in candidate_diagnoses:
+                candidate_diagnoses.append(item)
+
+        llm_recommended_main = ""
+        if isinstance(main_diagnosis_llm, dict):
+            llm_recommended_main = str(
+                main_diagnosis_llm.get("llm_recommended_main_diagnosis") or ""
+            ).strip()
+
+        excerpt = self._select_context_text(
+            medical_text or "",
+            context_strategy,
+            max_chars=3600,
+            default_mode="retrieval",
+        )
+
+        prompt = MAIN_AND_AUDIT_LLM_EVIDENCE_PROMPT.format(
+            clinician_main_diagnosis=clinician_main or "未知",
+            candidate_diagnoses="；".join(candidate_diagnoses[:10]) or "未提取到",
+            main_procedure_text=system_main_proc or "未提取到",
+            clinician_diagnoses="；".join(clinician_diagnoses[:10]) or "未提取到",
+            clinician_procedures="；".join(clinician_procedures[:10]) or "未提取到",
+            system_diagnoses="；".join(system_diagnoses[:10]) or "未提取到",
+            system_procedures="；".join(system_procedures[:10]) or "未提取到",
+            llm_recommended_main=llm_recommended_main or "未提取到",
+            medical_excerpt=excerpt or "（无病历片段）",
+        )
+        result = await self._extract_json(prompt, max_tokens=1700)
+        if not isinstance(result, dict):
+            return {"main_diagnosis_llm": None, "coding_audit_llm": None}
+
+        main_result = result.get("main_diagnosis_llm")
+        audit_result = result.get("coding_audit_llm")
+
+        # 兼容旧 prompt 结构（扁平主诊断解释 / 扁平审核输出）
+        if not isinstance(main_result, dict):
+            if any(
+                key in result
+                for key in (
+                    "llm_recommended_main_diagnosis",
+                    "key_evidence",
+                    "reasoning_summary",
+                    "conclusion",
+                )
+            ):
+                main_result = result
+        if not isinstance(audit_result, dict):
+            if any(key in result for key in ("findings", "counts", "summary")):
+                audit_result = result
+
+        normalized_main = self._normalize_main_diagnosis_llm_payload(
+            main_result if isinstance(main_result, dict) else None,
+            clinician_main=clinician_main,
+            fallback_main=system_main,
+        )
+        normalized_audit = self._normalize_coding_audit_llm_payload(
+            audit_result if isinstance(audit_result, dict) else None
+        )
+
+        return {
+            "main_diagnosis_llm": normalized_main,
+            "coding_audit_llm": normalized_audit,
+        }
+
+    async def _build_main_diagnosis_llm_evidence(
+        self,
+        medical_text: str,
+        diagnoses: Optional[Dict[str, Any]],
+        procedures: Optional[Dict[str, Any]],
+        clinician_main_diagnosis: Optional[str] = None,
+        context_strategy: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """兼容壳：内部复用单次推理方法。"""
+        merged = await self._build_main_and_audit_llm_evidence(
+            medical_text=medical_text,
+            diagnoses=diagnoses,
+            procedures=procedures,
+            clinician_main_diagnosis=clinician_main_diagnosis,
+            context_strategy=context_strategy,
+        )
+        result = merged.get("main_diagnosis_llm")
+        return result if isinstance(result, dict) else None
+
+    async def _build_coding_audit_llm(
+        self,
+        medical_text: str,
+        diagnoses: Optional[Dict[str, Any]],
+        procedures: Optional[Dict[str, Any]],
+        clinician_main_diagnosis: Optional[str] = None,
+        main_diagnosis_llm: Optional[Dict[str, Any]] = None,
+        context_strategy: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """兼容壳：内部复用单次推理方法。"""
+        merged = await self._build_main_and_audit_llm_evidence(
+            medical_text=medical_text,
+            diagnoses=diagnoses,
+            procedures=procedures,
+            clinician_main_diagnosis=clinician_main_diagnosis,
+            main_diagnosis_llm=main_diagnosis_llm,
+            context_strategy=context_strategy,
+        )
+        result = merged.get("coding_audit_llm")
+        return result if isinstance(result, dict) else None
 
     async def _suggest_diagnosis_codes(self, diagnoses: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -3127,6 +3973,88 @@ class FrontPageExtractionService:
             out.append(item)
         return out
 
+    @staticmethod
+    def _normalize_other_medical_info_structure(other_medical: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """规范化“其他医疗信息”，兼容扁平字段与嵌套字段。"""
+        out = dict(other_medical) if isinstance(other_medical, dict) else {}
+
+        def _to_int(value: Any) -> Optional[int]:
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, (int, float)):
+                return int(value)
+            try:
+                text = str(value).strip()
+                if not text:
+                    return None
+                return int(float(text))
+            except Exception:
+                return None
+
+        pathology = out.get("pathology_diagnosis")
+        if isinstance(pathology, dict):
+            out["pathology_text"] = out.get("pathology_text") or pathology.get("text")
+            out["pathology_icd"] = out.get("pathology_icd") or pathology.get("icd10") or pathology.get("code")
+            out["pathology_no"] = out.get("pathology_no") or pathology.get("pathology_no")
+
+        icu_stay = out.get("icu_stay")
+        if isinstance(icu_stay, dict):
+            out["icu_type"] = out.get("icu_type") or icu_stay.get("icu_type")
+            out["icu_enter_time"] = out.get("icu_enter_time") or icu_stay.get("enter_time")
+            out["icu_leave_time"] = out.get("icu_leave_time") or icu_stay.get("leave_time")
+            out["icu_transfer_status"] = out.get("icu_transfer_status") or icu_stay.get("transfer_status")
+
+        before = out.get("coma_before_admission") if isinstance(out.get("coma_before_admission"), dict) else {}
+        after = out.get("coma_after_admission") if isinstance(out.get("coma_after_admission"), dict) else {}
+
+        before_days = _to_int(before.get("days"))
+        before_hours = _to_int(before.get("hours"))
+        before_minutes = _to_int(before.get("minutes"))
+        after_days = _to_int(after.get("days"))
+        after_hours = _to_int(after.get("hours"))
+        after_minutes = _to_int(after.get("minutes"))
+
+        if before_days is None:
+            before_days = _to_int(out.get("brain_injury_before_admission_days"))
+        if before_hours is None:
+            before_hours = _to_int(out.get("brain_injury_before_admission_hours"))
+        if before_minutes is None:
+            before_minutes = _to_int(out.get("brain_injury_before_admission_minutes"))
+        if after_days is None:
+            after_days = _to_int(out.get("brain_injury_after_admission_days"))
+        if after_hours is None:
+            after_hours = _to_int(out.get("brain_injury_after_admission_hours"))
+        if after_minutes is None:
+            after_minutes = _to_int(out.get("brain_injury_after_admission_minutes"))
+
+        out["brain_injury_before_admission_days"] = before_days
+        out["brain_injury_before_admission_hours"] = before_hours
+        out["brain_injury_before_admission_minutes"] = before_minutes
+        out["brain_injury_after_admission_days"] = after_days
+        out["brain_injury_after_admission_hours"] = after_hours
+        out["brain_injury_after_admission_minutes"] = after_minutes
+
+        if out.get("coma_before_admission") is None and (
+            before_days is not None or before_hours is not None or before_minutes is not None
+        ):
+            out["coma_before_admission"] = {
+                "days": before_days or 0,
+                "hours": before_hours or 0,
+                "minutes": before_minutes or 0,
+            }
+        if out.get("coma_after_admission") is None and (
+            after_days is not None or after_hours is not None or after_minutes is not None
+        ):
+            out["coma_after_admission"] = {
+                "days": after_days or 0,
+                "hours": after_hours or 0,
+                "minutes": after_minutes or 0,
+            }
+
+        return out
+
     def _normalize_procedures_structure(self, procedures: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Normalize procedure structure with guideline-style selection:
@@ -3211,17 +4139,26 @@ class FrontPageExtractionService:
             "main_procedure_date": main_proc.get("date"),
             "main_procedure_level": main_proc.get("level"),
             "surgeon_name": main_proc.get("surgeon_name"),
+            "surgeon_code": main_proc.get("surgeon_code"),
             "assistant1_name": main_proc.get("assistant1_name"),
+            "assistant1_code": main_proc.get("assistant1_code"),
             "assistant2_name": main_proc.get("assistant2_name"),
+            "assistant2_code": main_proc.get("assistant2_code"),
             "anesthesia_method": main_proc.get("anesthesia_method"),
             "anesthetist_name": main_proc.get("anesthetist_name"),
+            "anesthetist_code": main_proc.get("anesthetist_code"),
             "incision_healing_grade": main_proc.get("incision_healing_grade"),
         }
+
+        other_medical = self._normalize_other_medical_info_structure(
+            raw_frontpage.get("other_medical_info")
+        )
 
         frontpage_data = {
             **raw_frontpage,
             "diagnoses": diagnoses,
             "procedures": procedures,
+            "other_medical_info": other_medical,
         }
 
         return FrontPageDraft.model_validate(frontpage_data)
@@ -3229,5 +4166,3 @@ class FrontPageExtractionService:
 
 # 提供单例风格的访问方式
 default_frontpage_service = FrontPageExtractionService()
-
-

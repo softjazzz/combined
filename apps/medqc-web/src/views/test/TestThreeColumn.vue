@@ -4,19 +4,35 @@
     <p>这是一个测试页面，用于验证三栏布局组件是否正常工作。</p>
     
     <div style="margin: 20px 0;">
-      <a-button @click="testComponents">测试组件导入</a-button>
-      <a-button @click="testAPI" style="margin-left: 10px;">测试API</a-button>
+      <a-button @click="testComponents">
+        测试组件导入
+      </a-button>
+      <a-button
+        style="margin-left: 10px;"
+        @click="testAPI"
+      >
+        测试API
+      </a-button>
     </div>
     
-    <div v-if="testResults.length > 0" style="margin-top: 20px;">
+    <div
+      v-if="testResults.length > 0"
+      style="margin-top: 20px;"
+    >
       <h3>测试结果：</h3>
       <ul>
-        <li v-for="result in testResults" :key="result.name">
+        <li
+          v-for="result in testResults"
+          :key="result.name"
+        >
           <strong>{{ result.name }}:</strong> 
           <span :style="{ color: result.success ? 'green' : 'red' }">
             {{ result.success ? '✓ 成功' : '✗ 失败' }}
           </span>
-          <span v-if="result.error" style="color: red; margin-left: 10px;">
+          <span
+            v-if="result.error"
+            style="color: red; margin-left: 10px;"
+          >
             {{ result.error }}
           </span>
         </li>

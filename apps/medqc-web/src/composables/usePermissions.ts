@@ -3,7 +3,7 @@
  * 病案质控系统 - 权限检查与控制
  */
 
-import { computed, inject, type ComputedRef } from 'vue'
+import { computed, inject, type ComputedRef, type DirectiveBinding } from 'vue'
 // import { useAuthStore } from '@/stores/auth'
 
 // 临时模拟AuthStore
@@ -427,10 +427,16 @@ export function usePermissions() {
  */
 export function usePermissionDirective() {
   const { hasPermission, checkPermission } = usePermissions()
+
+  interface PermissionDirectiveValue {
+    resource: ResourceType
+    action: PermissionAction
+    context?: Record<string, unknown>
+  }
   
   // v-permission 指令实现
   const vPermission = {
-    mounted(el, binding) {
+    mounted(el: HTMLElement, binding: DirectiveBinding<PermissionDirectiveValue>) {
       const { resource, action, context } = binding.value
       
       if (!resource || !action) {
@@ -445,7 +451,7 @@ export function usePermissionDirective() {
       }
     },
     
-    updated(el, binding) {
+    updated(el: HTMLElement, binding: DirectiveBinding<PermissionDirectiveValue>) {
       const { resource, action, context } = binding.value
       
       if (!resource || !action) {

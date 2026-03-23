@@ -7,14 +7,20 @@
       @back="() => $router.push('/demo/lx33')"
     >
       <template #extra>
-        <a-button type="primary" @click="() => $router.push('/demo/lx33')">
+        <a-button
+          type="primary"
+          @click="() => $router.push('/demo/lx33')"
+        >
           <LeftOutlined /> 返回规则列表
         </a-button>
       </template>
     </a-page-header>
 
     <!-- 统计卡片 -->
-    <a-row :gutter="16" class="stats-row">
+    <a-row
+      :gutter="16"
+      class="stats-row"
+    >
       <a-col :span="6">
         <a-card>
           <a-statistic
@@ -80,9 +86,15 @@
             style="width: 150px"
             @change="handleSearch"
           >
-            <a-select-option value="">全部</a-select-option>
-            <a-select-option value="correct">正确</a-select-option>
-            <a-select-option value="incorrect">错误</a-select-option>
+            <a-select-option value="">
+              全部
+            </a-select-option>
+            <a-select-option value="correct">
+              正确
+            </a-select-option>
+            <a-select-option value="incorrect">
+              错误
+            </a-select-option>
           </a-select>
         </a-form-item>
 
@@ -93,13 +105,27 @@
             style="width: 200px"
             @change="handleSearch"
           >
-            <a-select-option value="">全部</a-select-option>
-            <a-select-option value="false_positive">误报</a-select-option>
-            <a-select-option value="false_negative">漏报</a-select-option>
-            <a-select-option value="wrong_reasoning">推理错误</a-select-option>
-            <a-select-option value="incomplete_check">检查不完整</a-select-option>
-            <a-select-option value="rule_ambiguity">规则歧义</a-select-option>
-            <a-select-option value="other">其他</a-select-option>
+            <a-select-option value="">
+              全部
+            </a-select-option>
+            <a-select-option value="false_positive">
+              误报
+            </a-select-option>
+            <a-select-option value="false_negative">
+              漏报
+            </a-select-option>
+            <a-select-option value="wrong_reasoning">
+              推理错误
+            </a-select-option>
+            <a-select-option value="incomplete_check">
+              检查不完整
+            </a-select-option>
+            <a-select-option value="rule_ambiguity">
+              规则歧义
+            </a-select-option>
+            <a-select-option value="other">
+              其他
+            </a-select-option>
           </a-select>
         </a-form-item>
 
@@ -114,7 +140,10 @@
 
         <a-form-item>
           <a-space>
-            <a-button type="primary" @click="handleSearch">
+            <a-button
+              type="primary"
+              @click="handleSearch"
+            >
               <SearchOutlined /> 搜索
             </a-button>
             <a-button @click="handleReset">
@@ -146,7 +175,10 @@
           </template>
 
           <template v-if="column.key === 'error_category'">
-            <a-tag v-if="record.error_category" color="orange">
+            <a-tag
+              v-if="record.error_category"
+              color="orange"
+            >
               {{ errorCategoryText(record.error_category) }}
             </a-tag>
             <span v-else>-</span>
@@ -174,10 +206,19 @@
 
           <template v-if="column.key === 'actions'">
             <a-space>
-              <a-button type="link" size="small" @click="handleViewDetail(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleViewDetail(record)"
+              >
                 <EyeOutlined /> 查看详情
               </a-button>
-              <a-button type="link" size="small" danger @click="handleDelete(record)">
+              <a-button
+                type="link"
+                size="small"
+                danger
+                @click="handleDelete(record)"
+              >
                 <DeleteOutlined /> 删除
               </a-button>
             </a-space>
@@ -200,9 +241,15 @@
         </div>
       </template>
 
-      <div class="feedback-detail" v-if="currentFeedback">
+      <div
+        v-if="currentFeedback"
+        class="feedback-detail"
+      >
         <!-- 基本信息卡片 -->
-        <a-card class="detail-card basic-info-card" :bordered="false">
+        <a-card
+          class="detail-card basic-info-card"
+          :bordered="false"
+        >
           <template #title>
             <div class="card-header">
               <InfoCircleOutlined class="card-icon" />
@@ -214,11 +261,19 @@
             <div class="info-row">
               <div class="info-item">
                 <span class="info-label">规则编号</span>
-                <a-tag color="blue" class="info-tag">{{ currentFeedback.rule_code }}</a-tag>
+                <a-tag
+                  color="blue"
+                  class="info-tag"
+                >
+                  {{ currentFeedback.rule_code }}
+                </a-tag>
               </div>
               <div class="info-item">
                 <span class="info-label">评估结果</span>
-                <a-tag :color="currentFeedback.evaluation_result ? 'success' : 'error'" class="info-tag result-tag">
+                <a-tag
+                  :color="currentFeedback.evaluation_result ? 'success' : 'error'"
+                  class="info-tag result-tag"
+                >
                   <CheckCircleOutlined v-if="currentFeedback.evaluation_result" />
                   <CloseCircleOutlined v-else />
                   {{ currentFeedback.evaluation_result ? '合规' : '不合规' }}
@@ -226,7 +281,10 @@
               </div>
               <div class="info-item">
                 <span class="info-label">反馈类型</span>
-                <a-tag :color="currentFeedback.feedback_type === 'correct' ? 'success' : 'error'" class="info-tag result-tag">
+                <a-tag
+                  :color="currentFeedback.feedback_type === 'correct' ? 'success' : 'error'"
+                  class="info-tag result-tag"
+                >
                   <CheckCircleOutlined v-if="currentFeedback.feedback_type === 'correct'" />
                   <CloseCircleOutlined v-else />
                   {{ currentFeedback.feedback_type === 'correct' ? '正确' : '错误' }}
@@ -248,14 +306,23 @@
               </div>
             </div>
 
-            <div class="info-row" v-if="currentFeedback.error_category">
+            <div
+              v-if="currentFeedback.error_category"
+              class="info-row"
+            >
               <div class="info-item">
                 <span class="info-label">错误类别</span>
-                <a-tag color="orange" class="info-tag">
+                <a-tag
+                  color="orange"
+                  class="info-tag"
+                >
                   {{ errorCategoryText(currentFeedback.error_category) }}
                 </a-tag>
               </div>
-              <div class="info-item" v-if="currentFeedback.feedback_by">
+              <div
+                v-if="currentFeedback.feedback_by"
+                class="info-item"
+              >
                 <span class="info-label">反馈人</span>
                 <span class="info-value">{{ currentFeedback.feedback_by }}</span>
               </div>
@@ -265,8 +332,14 @@
               </div>
             </div>
 
-            <div class="info-row" v-else>
-              <div class="info-item" v-if="currentFeedback.feedback_by">
+            <div
+              v-else
+              class="info-row"
+            >
+              <div
+                v-if="currentFeedback.feedback_by"
+                class="info-item"
+              >
                 <span class="info-label">反馈人</span>
                 <span class="info-value">{{ currentFeedback.feedback_by }}</span>
               </div>
@@ -286,7 +359,11 @@
         </a-card>
 
         <!-- 错误详情 -->
-        <a-card v-if="currentFeedback.error_detail" class="detail-card" :bordered="false">
+        <a-card
+          v-if="currentFeedback.error_detail"
+          class="detail-card"
+          :bordered="false"
+        >
           <template #title>
             <div class="card-header">
               <ExclamationCircleOutlined class="card-icon" />
@@ -301,7 +378,11 @@
         </a-card>
 
         <!-- 补充证据 -->
-        <a-card v-if="currentFeedback.evidence" class="detail-card" :bordered="false">
+        <a-card
+          v-if="currentFeedback.evidence"
+          class="detail-card"
+          :bordered="false"
+        >
           <template #title>
             <div class="card-header">
               <FileSearchOutlined class="card-icon" />
@@ -316,7 +397,11 @@
         </a-card>
 
         <!-- 病历原文 -->
-        <a-card v-if="currentFeedback.medical_text" class="detail-card" :bordered="false">
+        <a-card
+          v-if="currentFeedback.medical_text"
+          class="detail-card"
+          :bordered="false"
+        >
           <template #title>
             <div class="card-header">
               <FileTextOutlined class="card-icon" />
@@ -358,9 +443,14 @@
       </a-form>
       <template v-if="pendingDeleteRecord">
         <a-divider style="margin: 12px 0" />
-        <a-descriptions :column="1" size="small">
+        <a-descriptions
+          :column="1"
+          size="small"
+        >
           <a-descriptions-item label="即将删除">
-            <a-tag color="red">{{ pendingDeleteRecord.rule_code }}</a-tag>
+            <a-tag color="red">
+              {{ pendingDeleteRecord.rule_code }}
+            </a-tag>
             {{ pendingDeleteRecord.rule_name }}
           </a-descriptions-item>
         </a-descriptions>

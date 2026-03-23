@@ -161,7 +161,10 @@ class SimpleExecutionMonitor implements ExecutionMonitor {
 
 // Result Validator
 class ResultValidator {
-  validate(result, rule): QCRuleResult {
+  validate(
+    result: unknown,
+    rule: { id: string; name: string; rule_code: string }
+  ): QCRuleResult {
     try {
       // Parse JSON response if it's a string
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result
@@ -171,7 +174,7 @@ class ResultValidator {
         ruleId: parsedResult.ruleId || rule.id,
         ruleName: rule.name,
         ruleCode: rule.rule_code,
-        isCompliant: parsedResult.isCompliant ?? null,
+        isCompliant: parsedResult.isCompliant ?? false,
         score: parsedResult.completenessScore || parsedResult.score || 0,
         findings: this.validateFindings(parsedResult.findings || []),
         confidence: parsedResult.confidence || 0,
@@ -186,7 +189,7 @@ class ResultValidator {
         ruleId: rule.id,
         ruleName: rule.name,
         ruleCode: rule.rule_code,
-        isCompliant: null,
+        isCompliant: false,
         score: 0,
         findings: [{
           type: 'validation_error',
@@ -457,7 +460,7 @@ ${index + 1}. 规则名称：${task.rule.name}
         ruleId: task.rule.id,
         ruleName: task.rule.name,
         ruleCode: task.rule.rule_code,
-        isCompliant: null,
+        isCompliant: false,
         score: 0,
         findings: [{
           type: 'execution_error',

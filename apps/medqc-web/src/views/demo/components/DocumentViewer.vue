@@ -5,7 +5,10 @@
 <template>
   <div class="document-viewer">
     <!-- Empty State -->
-    <div v-if="!store.currentDocument" class="empty-state">
+    <div
+      v-if="!store.currentDocument"
+      class="empty-state"
+    >
       <a-empty
         :image="Empty.PRESENTED_IMAGE_SIMPLE"
         description="请选择病例和文书"
@@ -13,31 +16,51 @@
     </div>
 
     <!-- Document Content -->
-    <div v-else class="viewer-container">
+    <div
+      v-else
+      class="viewer-container"
+    >
       <!-- Top Toolbar -->
       <div class="toolbar">
         <div class="breadcrumb-area">
-           <FileTextOutlined class="icon" />
-           <span class="current-doc">{{ store.currentDocument.title }}</span>
-           <span class="divider">/</span>
-           <span class="case-name">{{ store.currentCase?.caseName }}</span>
+          <FileTextOutlined class="icon" />
+          <span class="current-doc">{{ store.currentDocument.title }}</span>
+          <span class="divider">/</span>
+          <span class="case-name">{{ store.currentCase?.caseName }}</span>
         </div>
 
         <div class="tool-actions">
           <a-tooltip title="打印">
-            <a-button type="text" size="small" @click="handlePrint">
-              <template #icon><PrinterOutlined /></template>
+            <a-button
+              type="text"
+              size="small"
+              @click="handlePrint"
+            >
+              <template #icon>
+                <PrinterOutlined />
+              </template>
             </a-button>
           </a-tooltip>
           <a-tooltip title="复制内容">
-            <a-button type="text" size="small" @click="handleCopy">
-              <template #icon><CopyOutlined /></template>
+            <a-button
+              type="text"
+              size="small"
+              @click="handleCopy"
+            >
+              <template #icon>
+                <CopyOutlined />
+              </template>
             </a-button>
           </a-tooltip>
           <a-divider type="vertical" />
           <a-tooltip title="历史版本">
-            <a-button type="text" size="small">
-              <template #icon><HistoryOutlined /></template>
+            <a-button
+              type="text"
+              size="small"
+            >
+              <template #icon>
+                <HistoryOutlined />
+              </template>
             </a-button>
           </a-tooltip>
         </div>
@@ -49,8 +72,12 @@
         <div class="paper-sheet">
           <!-- Document Header -->
           <div class="doc-header">
-            <div class="hospital-name">第一人民医院</div>
-            <h1 class="doc-title">{{ store.currentDocument.title }}</h1>
+            <div class="hospital-name">
+              第一人民医院
+            </div>
+            <h1 class="doc-title">
+              {{ store.currentDocument.title }}
+            </h1>
             <div class="meta-row">
               <span class="label">记录时间:</span>
               <span class="value">{{ store.currentDocument.recordTime }}</span>
@@ -94,14 +121,14 @@
           
           <!-- Doctor Signatures -->
           <div class="signatures">
-             <div class="sig-item">
-               <span class="label">医师签名:</span>
-               <span class="value">李医生</span>
-             </div>
-             <div class="sig-item">
-               <span class="label">记录时间:</span>
-               <span class="value">{{ store.currentDocument.recordTime }}</span>
-             </div>
+            <div class="sig-item">
+              <span class="label">医师签名:</span>
+              <span class="value">李医生</span>
+            </div>
+            <div class="sig-item">
+              <span class="label">记录时间:</span>
+              <span class="value">{{ store.currentDocument.recordTime }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -134,27 +161,31 @@
           <a-button
             type="primary"
             :loading="store.isQCAnalyzing"
-            @click="handleQCAnalysis"
             class="action-btn"
+            @click="handleQCAnalysis"
           >
-            <template #icon><ThunderboltOutlined /></template>
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
             质控分析
           </a-button>
 
           <a-button
             :loading="store.isFrontpageGenerating"
-            @click="handleGenerateFrontpage"
             class="action-btn"
+            @click="handleGenerateFrontpage"
           >
-            <template #icon><FileAddOutlined /></template>
+            <template #icon>
+              <FileAddOutlined />
+            </template>
             生成病案首页
           </a-button>
           
           <a-button
             v-if="store.currentCase && store.currentCase.documents.length > 1"
             :loading="store.isWholeCaseQCAnalyzing"
-            @click="handleWholeCaseQC"
             class="action-btn"
+            @click="handleWholeCaseQC"
           >
             整病例质控
           </a-button>

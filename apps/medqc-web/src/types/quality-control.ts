@@ -253,11 +253,22 @@ export interface Appeal {
   reasonText: string
   description: string
   attachments: File[]
-  status: 'pending' | 'reviewing' | 'approved' | 'rejected'
+  status: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'cancelled'
   submittedAt: Date
   reviewedAt?: Date
   reviewerComment?: string
   submittedBy: string
+}
+
+export type AppealStatus = Appeal['status']
+
+export interface MedicalRecord {
+  id: string
+  patient_name: string
+  department: string
+  content: string
+  record_type?: string
+  [key: string]: unknown
 }
 
 // 演示步骤模型

@@ -4,13 +4,24 @@
     <div class="max-w-7xl mx-auto mb-6">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-4">
-          <a-button @click="goBack" type="default" size="large" class="hover:shadow-md">
-            <template #icon><ArrowLeftOutlined /></template>
+          <a-button
+            type="default"
+            size="large"
+            class="hover:shadow-md"
+            @click="goBack"
+          >
+            <template #icon>
+              <ArrowLeftOutlined />
+            </template>
             返回
           </a-button>
           <div>
-            <h1 class="text-2xl font-bold text-gray-800">医疗记录详情</h1>
-            <p class="text-gray-600 mt-1">查看完整的医疗记录信息</p>
+            <h1 class="text-2xl font-bold text-gray-800">
+              医疗记录详情
+            </h1>
+            <p class="text-gray-600 mt-1">
+              查看完整的医疗记录信息
+            </p>
           </div>
         </div>
         <div class="flex items-center space-x-3">
@@ -34,30 +45,36 @@
             type="primary"
             size="large"
             class="hover:shadow-md bg-blue-600 border-blue-600"
-            @click="goToSichuanQC"
             :loading="qcLoading"
+            @click="goToSichuanQC"
           >
-            <template #icon><CheckCircleOutlined /></template>
+            <template #icon>
+              <CheckCircleOutlined />
+            </template>
             🏥 四川省病历质控
           </a-button>
           <a-button
             type="primary"
             size="large"
             class="hover:shadow-md"
-            @click="handleEdit"
             :loading="editLoading"
+            @click="handleEdit"
           >
-            <template #icon><EditOutlined /></template>
+            <template #icon>
+              <EditOutlined />
+            </template>
             编辑
           </a-button>
           <a-button
             type="default"
             size="large"
             class="hover:shadow-md"
-            @click="handleExport"
             :loading="exportLoading"
+            @click="handleExport"
           >
-            <template #icon><DownloadOutlined /></template>
+            <template #icon>
+              <DownloadOutlined />
+            </template>
             导出
           </a-button>
           <a-button
@@ -65,20 +82,24 @@
             type="default"
             size="large"
             class="hover:shadow-md"
-            @click="handleDelete"
             :loading="deleteLoading"
+            @click="handleDelete"
           >
-            <template #icon><DeleteOutlined /></template>
+            <template #icon>
+              <DeleteOutlined />
+            </template>
             删除
           </a-button>
           <a-button
             type="default"
             size="large"
             class="hover:shadow-md"
-            @click="refreshData"
             :loading="loading"
+            @click="refreshData"
           >
-            <template #icon><ReloadOutlined /></template>
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             刷新
           </a-button>
         </div>
@@ -96,12 +117,18 @@
     </a-button>
 
     <!-- 加载状态 -->
-    <div v-if="loading" class="max-w-7xl mx-auto">
+    <div
+      v-if="loading"
+      class="max-w-7xl mx-auto"
+    >
       <a-card class="bg-white shadow-sm border border-gray-200 rounded-lg">
         <div class="flex items-center justify-center py-12">
           <a-spin size="large">
             <template #indicator>
-              <LoadingOutlined style="font-size: 24px" spin />
+              <LoadingOutlined
+                style="font-size: 24px"
+                spin
+              />
             </template>
           </a-spin>
           <span class="ml-3 text-lg text-gray-600">加载中...</span>
@@ -110,7 +137,10 @@
     </div>
 
     <!-- 错误状态 -->
-    <div v-else-if="error" class="max-w-7xl mx-auto">
+    <div
+      v-else-if="error"
+      class="max-w-7xl mx-auto"
+    >
       <a-card class="bg-white shadow-sm border border-gray-200 rounded-lg">
         <a-result
           status="error"
@@ -118,25 +148,44 @@
           sub-title="请检查记录ID是否正确，或稍后重试"
         >
           <template #extra>
-            <a-button type="primary" @click="loadRecord">重新加载</a-button>
-            <a-button @click="goBack">返回</a-button>
+            <a-button
+              type="primary"
+              @click="loadRecord"
+            >
+              重新加载
+            </a-button>
+            <a-button @click="goBack">
+              返回
+            </a-button>
           </template>
         </a-result>
       </a-card>
     </div>
 
     <!-- 增强视图 -->
-    <div v-if="record && viewMode === 'enhanced'" class="max-w-7xl mx-auto">
+    <div
+      v-if="record && viewMode === 'enhanced'"
+      class="max-w-7xl mx-auto"
+    >
       <div class="enhanced-view-container">
-        <div class="enhanced-layout" :class="{ 'sidebar-hidden': !showSidebar }">
+        <div
+          class="enhanced-layout"
+          :class="{ 'sidebar-hidden': !showSidebar }"
+        >
           <!-- 左侧：增强内容查看器 -->
           <div class="enhanced-content">
             <!-- 内容切换提示 -->
-            <div v-if="record.selectedDocumentContent" class="content-switch-bar">
+            <div
+              v-if="record.selectedDocumentContent"
+              class="content-switch-bar"
+            >
               <div class="switch-info">
                 <span class="current-content">当前查看: {{ record.selectedDocumentTitle }}</span>
               </div>
-              <a-button size="small" @click="returnToOriginalContent">
+              <a-button
+                size="small"
+                @click="returnToOriginalContent"
+              >
                 <ArrowLeftOutlined />
                 返回完整病历
               </a-button>
@@ -153,7 +202,10 @@
           </div>
 
           <!-- 右侧：患者信息和文档分类 -->
-          <div v-if="showSidebar" class="enhanced-sidebar">
+          <div
+            v-if="showSidebar"
+            class="enhanced-sidebar"
+          >
             <!-- 患者基本信息卡片 -->
             <div class="patient-info-card">
               <div class="card-header">
@@ -202,76 +254,117 @@
     </div>
 
     <!-- 经典视图（原有内容） -->
-    <div v-else-if="record && viewMode === 'classic'" class="max-w-7xl mx-auto space-y-6">
+    <div
+      v-else-if="record && viewMode === 'classic'"
+      class="max-w-7xl mx-auto space-y-6"
+    >
       <!-- 患者基本信息 -->
-      <a-card title="患者基本信息" class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
+      <a-card
+        title="患者基本信息"
+        class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200"
+      >
         <template #extra>
           <a-tag :color="getStatusColor(record.status)">
             {{ getStatusText(record.status) }}
           </a-tag>
         </template>
           
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>患者姓名</label>
-                <div class="info-value">{{ record.patient_name }}</div>
+        <a-row :gutter="[24, 16]">
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>患者姓名</label>
+              <div class="info-value">
+                {{ record.patient_name }}
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>年龄性别</label>
-                <div class="info-value">{{ record.patient_age }}岁 {{ record.patient_gender }}</div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>年龄性别</label>
+              <div class="info-value">
+                {{ record.patient_age }}岁 {{ record.patient_gender }}
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>病历编号</label>
-                <div class="info-value">
-                  <a-typography-text
-                    :copyable="{
-                      text: record.record_number,
-                      onCopy: () => handleCopySuccess('病历编号')
-                    }"
-                  >
-                    {{ record.record_number }}
-                  </a-typography-text>
-                </div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>病历编号</label>
+              <div class="info-value">
+                <a-typography-text
+                  :copyable="{
+                    text: record.record_number,
+                    onCopy: () => handleCopySuccess('病历编号')
+                  }"
+                >
+                  {{ record.record_number }}
+                </a-typography-text>
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>记录ID</label>
-                <div class="info-value">
-                  <a-typography-text
-                    :copyable="{
-                      text: record.id,
-                      onCopy: () => handleCopySuccess('记录ID')
-                    }"
-                    class="text-xs"
-                  >
-                    {{ record.id }}
-                  </a-typography-text>
-                </div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>记录ID</label>
+              <div class="info-value">
+                <a-typography-text
+                  :copyable="{
+                    text: record.id,
+                    onCopy: () => handleCopySuccess('记录ID')
+                  }"
+                  class="text-xs"
+                >
+                  {{ record.id }}
+                </a-typography-text>
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>创建时间</label>
-                <div class="info-value">{{ formatDateTime(record.created_at) }}</div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>创建时间</label>
+              <div class="info-value">
+                {{ formatDateTime(record.created_at) }}
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>更新时间</label>
-                <div class="info-value">{{ formatDateTime(record.updated_at) }}</div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>更新时间</label>
+              <div class="info-value">
+                {{ formatDateTime(record.updated_at) }}
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
+            </div>
+          </a-col>
+        </a-row>
+      </a-card>
 
       <!-- 诊断信息 -->
-      <a-card title="诊断信息" class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
+      <a-card
+        title="诊断信息"
+        class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200"
+      >
         <template #extra>
           <a-tag color="processing">
             <MedicineBoxOutlined />
@@ -279,113 +372,156 @@
           </a-tag>
         </template>
           
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :md="12">
-              <div class="info-item">
-                <label>主要诊断</label>
-                <div class="info-value">
-                  {{ record.diagnosis_primary || '未填写' }}
-                </div>
+        <a-row :gutter="[24, 16]">
+          <a-col
+            :xs="24"
+            :md="12"
+          >
+            <div class="info-item">
+              <label>主要诊断</label>
+              <div class="info-value">
+                {{ record.diagnosis_primary || '未填写' }}
               </div>
-            </a-col>
-            <a-col :xs="24" :md="12">
-              <div class="info-item">
-                <label>次要诊断</label>
-                <div class="info-value">
-                  <div v-if="record.diagnosis_secondary && record.diagnosis_secondary.length > 0" class="space-y-1">
-                    <a-tag 
-                      v-for="(diagnosis, index) in record.diagnosis_secondary" 
-                      :key="index"
-                      color="blue"
-                      class="mb-1"
-                    >
-                      {{ diagnosis }}
-                    </a-tag>
-                  </div>
-                  <span v-else class="text-gray-500">无</span>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :md="12"
+          >
+            <div class="info-item">
+              <label>次要诊断</label>
+              <div class="info-value">
+                <div
+                  v-if="record.diagnosis_secondary && record.diagnosis_secondary.length > 0"
+                  class="space-y-1"
+                >
+                  <a-tag 
+                    v-for="(diagnosis, index) in record.diagnosis_secondary" 
+                    :key="index"
+                    color="blue"
+                    class="mb-1"
+                  >
+                    {{ diagnosis }}
+                  </a-tag>
                 </div>
+                <span
+                  v-else
+                  class="text-gray-500"
+                >无</span>
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
+            </div>
+          </a-col>
+        </a-row>
+      </a-card>
 
       <!-- 病历内容 - 使用标签页展示 -->
-      <a-card title="病历内容" class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
+      <a-card
+        title="病历内容"
+        class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200"
+      >
         <template #extra>
           <a-space>
             <a-tag color="orange">
               <FileTextOutlined />
               {{ record.word_count }} 字
             </a-tag>
-            <a-tag v-if="documentStats.total_documents > 0" color="blue">
+            <a-tag
+              v-if="documentStats.total_documents > 0"
+              color="blue"
+            >
               <FolderOutlined />
               {{ documentStats.total_documents }} 个文档
             </a-tag>
           </a-space>
         </template>
 
-          <a-tabs v-model:activeKey="activeContentTab" type="card" class="content-tabs">
-            <!-- 原始内容标签页 -->
-            <a-tab-pane key="original" tab="原始内容">
-              <div class="medical-content">
-                <div class="flex justify-between items-center mb-4">
-                  <span class="text-sm text-gray-600">
-                    完整病历内容
-                    <span v-if="(record.content || record.raw_text) && (record.content || record.raw_text).length > 1000" 
-                          class="text-xs text-blue-600 ml-2">
-                      ({{ (record.content || record.raw_text).length }} 字符)
-                    </span>
+        <a-tabs
+          v-model:active-key="activeContentTab"
+          type="card"
+          class="content-tabs"
+        >
+          <!-- 原始内容标签页 -->
+          <a-tab-pane
+            key="original"
+            tab="原始内容"
+          >
+            <div class="medical-content">
+              <div class="flex justify-between items-center mb-4">
+                <span class="text-sm text-gray-600">
+                  完整病历内容
+                  <span
+                    v-if="currentRecordContent.length > 1000" 
+                    class="text-xs text-blue-600 ml-2"
+                  >
+                    ({{ currentRecordContent.length }} 字符)
                   </span>
-                  <a-button 
-                    v-if="(record.content || record.raw_text) && (record.content || record.raw_text).length > 1000"
-                    size="small" 
-                    type="primary" 
+                </span>
+                <a-button 
+                  v-if="currentRecordContent.length > 1000"
+                  size="small" 
+                  type="primary" 
+                  @click="toggleContentExpanded"
+                >
+                  {{ contentExpanded ? '收起' : '展开全部' }}
+                </a-button>
+              </div>
+              <div
+                :class="[
+                  'content-text',
+                  { 'content-collapsed': !contentExpanded && currentRecordContent.length > 1000 }
+                ]"
+              >
+                <pre class="whitespace-pre-wrap font-sans">{{ currentRecordContent }}</pre>
+              </div>
+              <div
+                v-if="!contentExpanded && currentRecordContent.length > 1000"
+                class="content-fade"
+              >
+                <div class="text-center pt-4">
+                  <a-button
+                    type="link"
+                    class="text-blue-600"
                     @click="toggleContentExpanded"
                   >
-                    {{ contentExpanded ? '收起' : '展开全部' }}
+                    点击展开查看完整内容 (剩余 {{ currentRecordContent.length - 1000 }} 字符)
                   </a-button>
                 </div>
-                <div
-                  :class="[
-                    'content-text',
-                    { 'content-collapsed': !contentExpanded && (record.content || record.raw_text) && (record.content || record.raw_text).length > 1000 }
-                  ]"
-                >
-                  <pre class="whitespace-pre-wrap font-sans">{{ record.content || record.raw_text }}</pre>
-                </div>
-                <div v-if="!contentExpanded && (record.content || record.raw_text) && (record.content || record.raw_text).length > 1000"
-                     class="content-fade">
-                  <div class="text-center pt-4">
-                    <a-button type="link" @click="toggleContentExpanded" class="text-blue-600">
-                      点击展开查看完整内容 (剩余 {{ (record.content || record.raw_text).length - 1000 }} 字符)
-                    </a-button>
-                  </div>
-                </div>
               </div>
-            </a-tab-pane>
+            </div>
+          </a-tab-pane>
 
-            <!-- 文档分类标签页 -->
-            <a-tab-pane key="documents" tab="文档分类">
-              <DocumentCategoryView
-                :record-id="record.id"
-                @document-edit="handleDocumentEdit"
-                @document-view="handleDocumentView"
-              />
-            </a-tab-pane>
+          <!-- 文档分类标签页 -->
+          <a-tab-pane
+            key="documents"
+            tab="文档分类"
+          >
+            <DocumentCategoryView
+              :record-id="record.id"
+              @document-edit="handleDocumentEdit"
+              @document-view="handleDocumentView"
+            />
+          </a-tab-pane>
 
-            <!-- 编辑模式标签页 -->
-            <a-tab-pane key="editor" tab="编辑文档" v-if="showEditor">
-              <DocumentCategoryEditor
-                :record-id="record.id"
-                @save-success="handleDocumentSaveSuccess"
-                @save-error="handleDocumentSaveError"
-              />
-            </a-tab-pane>
-          </a-tabs>
-        </a-card>
+          <!-- 编辑模式标签页 -->
+          <a-tab-pane
+            v-if="showEditor"
+            key="editor"
+            tab="编辑文档"
+          >
+            <DocumentCategoryEditor
+              :record-id="record.id"
+              @save-success="handleDocumentSaveSuccess"
+              @save-error="handleDocumentSaveError"
+            />
+          </a-tab-pane>
+        </a-tabs>
+      </a-card>
 
       <!-- 文件信息 -->
-      <a-card title="文件信息" class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
+      <a-card
+        title="文件信息"
+        class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200"
+      >
         <template #extra>
           <a-tag color="purple">
             <FolderOpenOutlined />
@@ -393,96 +529,158 @@
           </a-tag>
         </template>
           
-          <div v-if="record.file_attachments && record.file_attachments.length > 0">
-            <div v-for="(file, index) in record.file_attachments" :key="index" 
-                 class="file-item p-4 border border-gray-200 rounded-lg mb-3 last:mb-0">
-              <a-row :gutter="[16, 8]">
-                <a-col :xs="24" :sm="12" :md="6">
-                  <div class="info-item">
-                    <label>文件名</label>
-                    <div class="info-value">{{ file.filename }}</div>
+        <div v-if="record.file_attachments && record.file_attachments.length > 0">
+          <div
+            v-for="(file, index) in record.file_attachments"
+            :key="index" 
+            class="file-item p-4 border border-gray-200 rounded-lg mb-3 last:mb-0"
+          >
+            <a-row :gutter="[16, 8]">
+              <a-col
+                :xs="24"
+                :sm="12"
+                :md="6"
+              >
+                <div class="info-item">
+                  <label>文件名</label>
+                  <div class="info-value">
+                    {{ file.filename }}
                   </div>
-                </a-col>
-                <a-col :xs="24" :sm="12" :md="6">
-                  <div class="info-item">
-                    <label>文件大小</label>
-                    <div class="info-value">{{ formatFileSize(file.size) }}</div>
+                </div>
+              </a-col>
+              <a-col
+                :xs="24"
+                :sm="12"
+                :md="6"
+              >
+                <div class="info-item">
+                  <label>文件大小</label>
+                  <div class="info-value">
+                    {{ formatFileSize(file.size) }}
                   </div>
-                </a-col>
-                <a-col :xs="24" :sm="12" :md="6">
-                  <div class="info-item">
-                    <label>文件类型</label>
-                    <div class="info-value">{{ file.type }}</div>
+                </div>
+              </a-col>
+              <a-col
+                :xs="24"
+                :sm="12"
+                :md="6"
+              >
+                <div class="info-item">
+                  <label>文件类型</label>
+                  <div class="info-value">
+                    {{ file.type }}
                   </div>
-                </a-col>
-                <a-col :xs="24" :sm="12" :md="6">
-                  <div class="info-item">
-                    <label>页数</label>
-                    <div class="info-value">{{ file.pages || 1 }} 页</div>
+                </div>
+              </a-col>
+              <a-col
+                :xs="24"
+                :sm="12"
+                :md="6"
+              >
+                <div class="info-item">
+                  <label>页数</label>
+                  <div class="info-value">
+                    {{ file.pages || 1 }} 页
                   </div>
-                </a-col>
-              </a-row>
-            </div>
+                </div>
+              </a-col>
+            </a-row>
           </div>
-          <div v-else class="text-center py-8 text-gray-500">
-            <InboxOutlined class="text-4xl mb-2" />
-            <p>暂无文件信息</p>
-          </div>
-        </a-card>
+        </div>
+        <div
+          v-else
+          class="text-center py-8 text-gray-500"
+        >
+          <InboxOutlined class="text-4xl mb-2" />
+          <p>暂无文件信息</p>
+        </div>
+      </a-card>
 
       <!-- 质控信息 -->
-      <a-card title="质控信息" class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
+      <a-card
+        title="质控信息"
+        class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200"
+      >
         <template #extra>
           <a-space>
-            <a-tag v-if="record.qc_score" :color="getQcScoreColor(record.qc_score)">
+            <a-tag
+              v-if="record.qc_score"
+              :color="getQcScoreColor(record.qc_score)"
+            >
               评分: {{ record.qc_score }}
             </a-tag>
-            <a-tag v-if="record.qc_grade" :color="getQcGradeColor(record.qc_grade)">
+            <a-tag
+              v-if="record.qc_grade"
+              :color="getQcGradeColor(record.qc_grade)"
+            >
               等级: {{ record.qc_grade }}
             </a-tag>
           </a-space>
         </template>
           
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>优先级</label>
-                <div class="info-value">
-                  <a-tag :color="getPriorityColor(record.priority_level)">
-                    {{ getPriorityText(record.priority_level) }}
+        <a-row :gutter="[24, 16]">
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>优先级</label>
+              <div class="info-value">
+                <a-tag :color="getPriorityColor(record.priority_level)">
+                  {{ getPriorityText(record.priority_level) }}
+                </a-tag>
+              </div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>标签</label>
+              <div class="info-value">
+                <div
+                  v-if="record.tags && record.tags.length > 0"
+                  class="space-y-1"
+                >
+                  <a-tag 
+                    v-for="(tag, index) in record.tags" 
+                    :key="index"
+                    color="cyan"
+                    class="mb-1"
+                  >
+                    {{ tag }}
                   </a-tag>
                 </div>
+                <span
+                  v-else
+                  class="text-gray-500"
+                >无标签</span>
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>标签</label>
-                <div class="info-value">
-                  <div v-if="record.tags && record.tags.length > 0" class="space-y-1">
-                    <a-tag 
-                      v-for="(tag, index) in record.tags" 
-                      :key="index"
-                      color="cyan"
-                      class="mb-1"
-                    >
-                      {{ tag }}
-                    </a-tag>
-                  </div>
-                  <span v-else class="text-gray-500">无标签</span>
-                </div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>记录类型</label>
+              <div class="info-value">
+                {{ getRecordTypeText(record.record_type) }}
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>记录类型</label>
-                <div class="info-value">{{ getRecordTypeText(record.record_type) }}</div>
-              </div>
-            </a-col>
-          </a-row>
-        </a-card>
+            </div>
+          </a-col>
+        </a-row>
+      </a-card>
 
       <!-- 元数据信息 -->
-      <a-card title="元数据信息" class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200">
+      <a-card
+        title="元数据信息"
+        class="bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow duration-200"
+      >
         <template #extra>
           <a-tag color="default">
             <DatabaseOutlined />
@@ -490,79 +688,104 @@
           </a-tag>
         </template>
           
-          <a-row :gutter="[24, 16]">
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>导入方法</label>
-                <div class="info-value">{{ record.metadata?.import_method || '未知' }}</div>
+        <a-row :gutter="[24, 16]">
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>导入方法</label>
+              <div class="info-value">
+                {{ record.metadata?.import_method || '未知' }}
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>解析方法</label>
-                <div class="info-value">{{ record.metadata?.parse_result?.method || '未知' }}</div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>解析方法</label>
+              <div class="info-value">
+                {{ record.metadata?.parse_result?.method || '未知' }}
               </div>
-            </a-col>
-            <a-col :xs="24" :sm="12" :md="8">
-              <div class="info-item">
-                <label>导入时间</label>
-                <div class="info-value">{{ formatDateTime(record.metadata?.import_time) }}</div>
+            </div>
+          </a-col>
+          <a-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
+            <div class="info-item">
+              <label>导入时间</label>
+              <div class="info-value">
+                {{ formatDateTime(record.metadata?.import_time) }}
               </div>
-            </a-col>
-          </a-row>
+            </div>
+          </a-col>
+        </a-row>
           
-          <!-- 解析结果详情 -->
-          <div v-if="record.metadata?.parse_result" class="mt-6">
-            <a-divider>解析结果详情</a-divider>
-            <a-descriptions bordered size="small" :column="1">
-              <a-descriptions-item 
-                v-if="record.metadata.parse_result.medical_info?.department" 
-                label="科室"
+        <!-- 解析结果详情 -->
+        <div
+          v-if="record.metadata?.parse_result"
+          class="mt-6"
+        >
+          <a-divider>解析结果详情</a-divider>
+          <a-descriptions
+            bordered
+            size="small"
+            :column="1"
+          >
+            <a-descriptions-item 
+              v-if="record.metadata.parse_result.medical_info?.department" 
+              label="科室"
+            >
+              {{ record.metadata.parse_result.medical_info.department }}
+            </a-descriptions-item>
+            <a-descriptions-item 
+              v-if="record.metadata.parse_result.medical_info?.symptoms?.length" 
+              label="症状"
+            >
+              <a-tag 
+                v-for="(symptom, index) in record.metadata.parse_result.medical_info.symptoms" 
+                :key="index"
+                color="orange"
+                class="mb-1 mr-1"
               >
-                {{ record.metadata.parse_result.medical_info.department }}
-              </a-descriptions-item>
-              <a-descriptions-item 
-                v-if="record.metadata.parse_result.medical_info?.symptoms?.length" 
-                label="症状"
+                {{ symptom }}
+              </a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item 
+              v-if="record.metadata.parse_result.medical_info?.procedures?.length" 
+              label="手术/操作"
+            >
+              <a-tag 
+                v-for="(procedure, index) in record.metadata.parse_result.medical_info.procedures" 
+                :key="index"
+                color="purple"
+                class="mb-1 mr-1"
               >
-                <a-tag 
-                  v-for="(symptom, index) in record.metadata.parse_result.medical_info.symptoms" 
-                  :key="index"
-                  color="orange"
-                  class="mb-1 mr-1"
-                >
-                  {{ symptom }}
-                </a-tag>
-              </a-descriptions-item>
-              <a-descriptions-item 
-                v-if="record.metadata.parse_result.medical_info?.procedures?.length" 
-                label="手术/操作"
+                {{ procedure }}
+              </a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item 
+              v-if="record.metadata.parse_result.medical_info?.medications?.length" 
+              label="用药"
+            >
+              <a-tag 
+                v-for="(medication, index) in record.metadata.parse_result.medical_info.medications" 
+                :key="index"
+                color="green"
+                class="mb-1 mr-1"
               >
-                <a-tag 
-                  v-for="(procedure, index) in record.metadata.parse_result.medical_info.procedures" 
-                  :key="index"
-                  color="purple"
-                  class="mb-1 mr-1"
-                >
-                  {{ procedure }}
-                </a-tag>
-              </a-descriptions-item>
-              <a-descriptions-item 
-                v-if="record.metadata.parse_result.medical_info?.medications?.length" 
-                label="用药"
-              >
-                <a-tag 
-                  v-for="(medication, index) in record.metadata.parse_result.medical_info.medications" 
-                  :key="index"
-                  color="green"
-                  class="mb-1 mr-1"
-                >
-                  {{ medication }}
-                </a-tag>
-              </a-descriptions-item>
-            </a-descriptions>
-          </div>
-        </a-card>
+                {{ medication }}
+              </a-tag>
+            </a-descriptions-item>
+          </a-descriptions>
+        </div>
+      </a-card>
     </div>
   </div>
 
@@ -573,12 +796,15 @@
     width="1200px"
     :footer="null"
     :closable="qcStatus === 'completed' || qcStatus === 'error'"
-    :maskClosable="false"
+    :mask-closable="false"
     centered
   >
     <div class="qc-modal-content">
       <!-- 质控模式选择 -->
-      <div v-if="qcStatus === 'idle'" class="qc-mode-selector mb-4">
+      <div
+        v-if="qcStatus === 'idle'"
+        class="qc-mode-selector mb-4"
+      >
         <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3">
@@ -594,14 +820,30 @@
             <a-tooltip placement="left">
               <template #title>
                 <div class="text-sm">
-                  <p class="mb-2"><strong>🔄 多文书模式</strong> (推荐):</p>
-                  <p class="mb-1">• 智能分离不同文书类型</p>
-                  <p class="mb-1">• 为每种文书设计专门化prompt</p>
-                  <p class="mb-1">• 并行评估，准确性更高</p>
-                  <p class="mb-3">• 处理速度更快</p>
-                  <p class="mb-2"><strong>📝 单一prompt模式</strong>:</p>
-                  <p class="mb-1">• 使用一个大prompt评估整本病历</p>
-                  <p class="mb-1">• 兼容旧版本</p>
+                  <p class="mb-2">
+                    <strong>🔄 多文书模式</strong> (推荐):
+                  </p>
+                  <p class="mb-1">
+                    • 智能分离不同文书类型
+                  </p>
+                  <p class="mb-1">
+                    • 为每种文书设计专门化prompt
+                  </p>
+                  <p class="mb-1">
+                    • 并行评估，准确性更高
+                  </p>
+                  <p class="mb-3">
+                    • 处理速度更快
+                  </p>
+                  <p class="mb-2">
+                    <strong>📝 单一prompt模式</strong>:
+                  </p>
+                  <p class="mb-1">
+                    • 使用一个大prompt评估整本病历
+                  </p>
+                  <p class="mb-1">
+                    • 兼容旧版本
+                  </p>
                   <p>• 适用于简单病历</p>
                 </div>
               </template>
@@ -628,8 +870,13 @@
         />
 
         <!-- 文书类型识别结果 -->
-        <div v-if="detectedDocumentTypes.length > 0" class="detected-types mb-4">
-          <h4 class="text-lg font-semibold mb-2">📋 识别到的文书类型</h4>
+        <div
+          v-if="detectedDocumentTypes.length > 0"
+          class="detected-types mb-4"
+        >
+          <h4 class="text-lg font-semibold mb-2">
+            📋 识别到的文书类型
+          </h4>
           <div class="flex flex-wrap gap-2">
             <a-tag
               v-for="docType in detectedDocumentTypes"
@@ -648,8 +895,13 @@
       </div>
 
       <!-- 质控进度 -->
-      <div v-if="qcStatus === 'evaluating'" class="qc-progress mb-6">
-        <h4 class="text-lg font-semibold mb-4">📊 质控评估进度</h4>
+      <div
+        v-if="qcStatus === 'evaluating'"
+        class="qc-progress mb-6"
+      >
+        <h4 class="text-lg font-semibold mb-4">
+          📊 质控评估进度
+        </h4>
         <div class="space-y-4">
           <div
             v-for="docType in detectedDocumentTypes"
@@ -674,10 +926,18 @@
       </div>
 
       <!-- 质控结果 -->
-      <div v-if="qcStatus === 'completed'" class="qc-results">
-        <h4 class="text-lg font-semibold mb-4">📋 质控评估结果</h4>
+      <div
+        v-if="qcStatus === 'completed'"
+        class="qc-results"
+      >
+        <h4 class="text-lg font-semibold mb-4">
+          📋 质控评估结果
+        </h4>
 
-        <a-tabs v-model:activeKey="activeQCTab" type="card">
+        <a-tabs
+          v-model:active-key="activeQCTab"
+          type="card"
+        >
           <a-tab-pane
             v-for="docType in detectedDocumentTypes"
             :key="docType"
@@ -743,7 +1003,10 @@
                       <div class="qc-result-content w-full">
                         <a-list-item-meta>
                           <template #title>
-                            <a-tag :color="(item.compliant || item.is_compliant) ? 'success' : 'error'" class="mr-2">
+                            <a-tag
+                              :color="(item.compliant || item.is_compliant) ? 'success' : 'error'"
+                              class="mr-2"
+                            >
                               {{ item.rule_id }}
                             </a-tag>
                             {{ item.rule_name }}
@@ -783,7 +1046,10 @@
       </div>
 
       <!-- 病历原文高亮显示区域 -->
-      <div v-if="showOriginalContent && highlightTexts.length > 0" class="original-content-section mb-6">
+      <div
+        v-if="showOriginalContent && highlightTexts.length > 0"
+        class="original-content-section mb-6"
+      >
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
           <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
             <div class="flex items-center justify-between">
@@ -800,7 +1066,9 @@
                   size="small"
                   @click="clearAllHighlights"
                 >
-                  <template #icon><CloseOutlined /></template>
+                  <template #icon>
+                    <CloseOutlined />
+                  </template>
                   清除标注
                 </a-button>
                 <a-button
@@ -808,7 +1076,9 @@
                   size="small"
                   @click="showOriginalContent = false"
                 >
-                  <template #icon><EyeInvisibleOutlined /></template>
+                  <template #icon>
+                    <EyeInvisibleOutlined />
+                  </template>
                   隐藏
                 </a-button>
               </div>
@@ -825,14 +1095,20 @@
       </div>
 
       <!-- 错误状态 -->
-      <div v-if="qcStatus === 'error'" class="qc-error text-center py-8">
+      <div
+        v-if="qcStatus === 'error'"
+        class="qc-error text-center py-8"
+      >
         <a-result
           status="error"
           title="质控评估失败"
           sub-title="请检查网络连接或联系系统管理员"
         >
           <template #extra>
-            <a-button type="primary" @click="showQCModal = false">
+            <a-button
+              type="primary"
+              @click="showQCModal = false"
+            >
               关闭
             </a-button>
             <a-button @click="goToSichuanQC">
@@ -843,9 +1119,15 @@
       </div>
 
       <!-- 模态框底部操作 -->
-      <div v-if="qcStatus === 'completed'" class="qc-footer mt-6 text-center">
+      <div
+        v-if="qcStatus === 'completed'"
+        class="qc-footer mt-6 text-center"
+      >
         <a-space>
-          <a-button type="primary" @click="exportQCReport">
+          <a-button
+            type="primary"
+            @click="exportQCReport"
+          >
             📄 导出质控报告
           </a-button>
           <a-button @click="showQCModal = false">
@@ -864,28 +1146,45 @@
     class="document-view-dialog"
     :footer="null"
   >
-    <div v-if="selectedDocument" class="document-detail-content">
+    <div
+      v-if="selectedDocument"
+      class="document-detail-content"
+    >
       <!-- 文档信息 -->
       <div class="document-info-section mb-4">
-        <a-descriptions :column="2" bordered size="small">
+        <a-descriptions
+          :column="2"
+          bordered
+          size="small"
+        >
           <a-descriptions-item label="文档类型">
-            <a-tag color="blue">{{ selectedDocument.type_info?.type_name || '未知类型' }}</a-tag>
+            <a-tag color="blue">
+              {{ selectedDocument.type_info?.type_name || '未知类型' }}
+            </a-tag>
           </a-descriptions-item>
           <a-descriptions-item label="AI分类">
             <a-tag :color="selectedDocument.ai_classified ? 'green' : 'default'">
               {{ selectedDocument.ai_classified ? '是' : '否' }}
             </a-tag>
           </a-descriptions-item>
-          <a-descriptions-item label="置信度" v-if="selectedDocument.classification_confidence > 0">
-            {{ Math.round(selectedDocument.classification_confidence * 100) }}%
+          <a-descriptions-item
+            v-if="(selectedDocument.classification_confidence || 0) > 0"
+            label="置信度"
+          >
+            {{ Math.round((selectedDocument.classification_confidence || 0) * 100) }}%
           </a-descriptions-item>
           <a-descriptions-item label="质控状态">
-            <a-tag :color="getQCStatusColor(selectedDocument.qc_status)">
-              {{ getStatusText(selectedDocument.qc_status) }}
+            <a-tag :color="getQCStatusColor(selectedDocument.qc_status || '')">
+              {{ getStatusText(selectedDocument.qc_status || '') }}
             </a-tag>
           </a-descriptions-item>
-          <a-descriptions-item label="质控分数" v-if="selectedDocument.qc_score">
-            <a-tag color="orange">{{ selectedDocument.qc_score }}分</a-tag>
+          <a-descriptions-item
+            v-if="selectedDocument.qc_score"
+            label="质控分数"
+          >
+            <a-tag color="orange">
+              {{ selectedDocument.qc_score }}分
+            </a-tag>
           </a-descriptions-item>
           <a-descriptions-item label="创建时间">
             {{ formatDateTime(selectedDocument.created_at) }}
@@ -895,7 +1194,9 @@
 
       <!-- 文档内容 -->
       <div class="document-content-section">
-        <h4 class="mb-3">文档内容</h4>
+        <h4 class="mb-3">
+          文档内容
+        </h4>
         <div class="document-content-wrapper">
           <pre class="document-content-text">{{ selectedDocument.content }}</pre>
         </div>
@@ -904,12 +1205,19 @@
       <!-- 操作按钮 -->
       <div class="document-actions-section mt-4 text-center">
         <a-space>
-          <a-button type="primary" @click="handleEditSelectedDocument">
-            <template #icon><EditOutlined /></template>
+          <a-button
+            type="primary"
+            @click="handleEditSelectedDocument"
+          >
+            <template #icon>
+              <EditOutlined />
+            </template>
             编辑文档
           </a-button>
           <a-button @click="copyDocumentContent">
-            <template #icon><CopyOutlined /></template>
+            <template #icon>
+              <CopyOutlined />
+            </template>
             复制内容
           </a-button>
           <a-button @click="documentViewDialogVisible = false">
@@ -962,7 +1270,7 @@ const router = useRouter()
 const loading = ref(false)
 const error = ref('')
 interface LegacyRecordLike {
-  id?: string
+  id: string
   content?: string
   raw_text?: string
   selectedDocumentContent?: string | null
@@ -970,7 +1278,7 @@ interface LegacyRecordLike {
   patient_name?: string
   patient_age?: string | number
   patient_gender?: string
-  status?: string
+  status: string
   [key: string]: any
 }
 
@@ -995,11 +1303,11 @@ interface LegacyDocumentLike {
 }
 
 interface QCEvaluationProgressLike {
-  total?: number
-  completed?: number
-  passed?: number
-  failed?: number
-  rules?: Record<string, {
+  total: number
+  completed: number
+  passed: number
+  failed: number
+  rules: Record<string, {
     status?: string
     confidence?: number
     reasoning?: string
@@ -1021,6 +1329,13 @@ interface QCEvaluationResultLike {
   evidence?: string
   suggestions?: string[]
   [key: string]: any
+}
+
+interface DocumentClassificationDataLike {
+  documents: LegacyDocumentLike[]
+  classificationResult?: { [key: string]: unknown; method?: string }
+  categories: unknown[]
+  totalDocuments: number
 }
 
 const record = ref<LegacyRecordLike | null>(null)
@@ -1060,9 +1375,9 @@ const documentStats = ref({
 })
 
 // 文档分类数据状态
-const documentClassificationData = ref({
+const documentClassificationData = ref<DocumentClassificationDataLike>({
   documents: [],
-  classificationResult: null,
+  classificationResult: undefined,
   categories: [],
   totalDocuments: 0
 })
@@ -1081,6 +1396,8 @@ const computedSummaryText = computed(() => {
   const base = record.value?.content || record.value?.raw_text || ''
   return String(base).slice(0, 400)
 })
+
+const currentRecordContent = computed(() => String(record.value?.content || record.value?.raw_text || ''))
 
 const toggleSidebar = () => {
   showSidebar.value = !showSidebar.value
@@ -1531,6 +1848,11 @@ const loadDocumentStats = async () => {
 
 // 编辑功能
 const handleEdit = () => {
+  if (!record.value?.id) {
+    message.error('记录尚未加载，无法编辑')
+    return
+  }
+
   editLoading.value = true
   try {
     // 跳转到编辑页面
@@ -1544,32 +1866,38 @@ const handleEdit = () => {
 
 // 导出功能
 const handleExport = async () => {
+  const currentRecord = record.value
+  if (!currentRecord) {
+    message.error('记录尚未加载，无法导出')
+    return
+  }
+
   exportLoading.value = true
   try {
     // 创建导出内容
     const exportData = {
       基本信息: {
-        患者姓名: record.value.patient_name,
-        年龄: record.value.patient_age,
-        性别: record.value.patient_gender,
-        病历编号: record.value.record_number,
-        记录ID: record.value.id,
-        创建时间: formatDateTime(record.value.created_at)
+        患者姓名: currentRecord.patient_name,
+        年龄: currentRecord.patient_age,
+        性别: currentRecord.patient_gender,
+        病历编号: currentRecord.record_number,
+        记录ID: currentRecord.id,
+        创建时间: formatDateTime(currentRecord.created_at)
       },
       诊断信息: {
-        主要诊断: record.value.diagnosis_primary,
-        次要诊断: record.value.diagnosis_secondary
+        主要诊断: currentRecord.diagnosis_primary,
+        次要诊断: currentRecord.diagnosis_secondary
       },
-      病历内容: record.value.content,
-      文件信息: record.value.file_attachments,
+      病历内容: currentRecord.content,
+      文件信息: currentRecord.file_attachments,
       质控信息: {
-        状态: getStatusText(record.value.status),
-        优先级: getPriorityText(record.value.priority_level),
-        标签: record.value.tags,
-        质控评分: record.value.qc_score,
-        质控等级: record.value.qc_grade
+        状态: getStatusText(currentRecord.status),
+        优先级: getPriorityText(currentRecord.priority_level),
+        标签: currentRecord.tags,
+        质控评分: currentRecord.qc_score,
+        质控等级: currentRecord.qc_grade
       },
-      元数据: record.value.metadata
+      元数据: currentRecord.metadata
     }
 
     // 创建并下载文件
@@ -1578,7 +1906,7 @@ const handleExport = async () => {
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `医疗记录_${record.value.patient_name}_${record.value.record_number}.json`
+    link.download = `医疗记录_${currentRecord.patient_name}_${currentRecord.record_number}.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -1619,11 +1947,17 @@ const handleDelete = () => {
 
 // 执行删除操作
 const performDelete = async () => {
-  console.log('开始执行删除操作，记录ID:', record.value.id)
+  if (!record.value?.id) {
+    message.error('记录尚未加载，无法删除')
+    return
+  }
+  const currentRecordId = record.value.id
+
+  console.log('开始执行删除操作，记录ID:', currentRecordId)
   deleteLoading.value = true
 
   try {
-    const deleteUrl = `${API_BASE_URL}/api/medical-records/${record.value.id}`
+    const deleteUrl = `${API_BASE_URL}/api/medical-records/${currentRecordId}`
     console.log('删除请求URL:', deleteUrl)
 
     const response = await fetch(deleteUrl, {
@@ -1849,8 +2183,14 @@ const goToSichuanQC = () => {
 
 // 开始四川省质控评估（保留给结果页内触发调用）
 const startSichuanQC = async () => {
-  const hasBaseText = !!(record.value?.content && String(record.value.content).trim().length > 0) ||
-    !!(record.value?.raw_text && String(record.value.raw_text).trim().length > 0)
+  const currentRecord = record.value
+  if (!currentRecord) {
+    message.error('记录尚未加载，无法执行质控')
+    return
+  }
+
+  const hasBaseText = !!(currentRecord.content && String(currentRecord.content).trim().length > 0) ||
+    !!(currentRecord.raw_text && String(currentRecord.raw_text).trim().length > 0)
 
   // 若无正文内容，但存在多文书模式能力，则自动切换到多文书模式
   if (!hasBaseText && !useMultiDocumentMode.value) {
@@ -1865,7 +2205,7 @@ const startSichuanQC = async () => {
   try {
     // 1. 智能识别文书类型
     console.log('🔍 开始智能识别文书类型...')
-    const baseForDetect = String(record.value.content || record.value.raw_text || '')
+    const baseForDetect = String(currentRecord.content || currentRecord.raw_text || '')
     const types = detectDocumentTypes(baseForDetect)
     detectedDocumentTypes.value = types
     activeQCTab.value = types.length > 0 ? types[0] : ''
@@ -1894,6 +2234,10 @@ const startSichuanQC = async () => {
 // 执行质控评估
 const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule[]) => {
   console.log('🚀 开始执行质控评估...')
+  const currentRecord = record.value
+  if (!currentRecord) {
+    throw new Error('记录尚未加载，无法执行质控评估')
+  }
 
   // 初始化进度
   qcProgress.value = {}
@@ -1919,8 +2263,8 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
 
     // 调用后端API进行质控评估 - 使用新的多文书模式
     const evaluationRequest = {
-      document_id: record.value.id || 'unknown',
-      document_content: String(record.value.content || record.value.raw_text || ''), // 确保不为null/undefined
+      document_id: currentRecord.id || 'unknown',
+      document_content: String(currentRecord.content || currentRecord.raw_text || ''), // 确保不为null/undefined
       document_type: documentTypes.length > 0 ? documentTypes[0] : '病程记录', // 兼容性
       document_types: documentTypes,
       rule_ids: rules.map(rule => rule.rule_id),
@@ -1931,10 +2275,10 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
         documentTypes.map(dt => [dt, (rulesByDocumentType.value[dt] || [])])
       ),
       patient_info: {
-        name: record.value.patient_name || '未知',
-        age: String(record.value.patient_age || '未知'), // 确保转换为字符串
-        gender: record.value.patient_gender || '未知',
-        record_id: record.value.id
+        name: currentRecord.patient_name || '未知',
+        age: String(currentRecord.patient_age || '未知'), // 确保转换为字符串
+        gender: currentRecord.patient_gender || '未知',
+        record_id: currentRecord.id
       }
     }
 
@@ -2215,7 +2559,7 @@ const getQCProgress = (docType: string): number => {
 }
 
 // 获取质控状态颜色
-const getQCStatusColor = (status: string): string => {
+const getQCStatusColor = (status?: string): string => {
   switch (status) {
     case 'passed': return 'success'
     case 'failed': return 'error'
@@ -2381,24 +2725,26 @@ const formatFileSize = (bytes: number) => {
 }
 
 // 获取状态颜色
-const getStatusColor = (status: string) => {
+const getStatusColor = (status?: string) => {
   const colors: Record<string, string> = {
     'pending': 'processing',
     'completed': 'success',
     'failed': 'error',
     'reviewing': 'warning'
   }
+  if (!status) return 'default'
   return colors[status] || 'default'
 }
 
 // 获取状态文本
-const getStatusText = (status: string) => {
+const getStatusText = (status?: string) => {
   const texts: Record<string, string> = {
     'pending': '待处理',
     'completed': '已完成',
     'failed': '失败',
     'reviewing': '审核中'
   }
+  if (!status) return '未知'
   return texts[status] || status
 }
 

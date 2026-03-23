@@ -1,5 +1,8 @@
 <template>
-  <div class="page-header" :class="headerClass">
+  <div
+    class="page-header"
+    :class="headerClass"
+  >
     <!-- 主要头部区域 -->
     <div class="header-main">
       <!-- 左侧内容 -->
@@ -9,8 +12,8 @@
           v-if="showBack"
           type="text"
           :icon="h(ArrowLeftOutlined)"
-          @click="handleBack"
           class="back-button"
+          @click="handleBack"
         >
           {{ backText }}
         </a-button>
@@ -18,10 +21,19 @@
         <!-- 标题区域 -->
         <div class="title-section">
           <h1 class="page-title">
-            <component v-if="icon" :is="icon" class="title-icon" />
+            <component
+              :is="icon"
+              v-if="icon"
+              class="title-icon"
+            />
             {{ title }}
           </h1>
-          <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
+          <p
+            v-if="subtitle"
+            class="page-subtitle"
+          >
+            {{ subtitle }}
+          </p>
         </div>
       </div>
       
@@ -46,11 +58,24 @@
     </div>
     
     <!-- 面包屑导航 -->
-    <div v-if="showBreadcrumb && breadcrumbs.length > 0" class="breadcrumb-section">
+    <div
+      v-if="showBreadcrumb && breadcrumbs.length > 0"
+      class="breadcrumb-section"
+    >
       <a-breadcrumb>
-        <a-breadcrumb-item v-for="item in breadcrumbs" :key="item.path">
-          <component v-if="item.icon" :is="item.icon" class="breadcrumb-icon" />
-          <router-link v-if="item.path && !item.disabled" :to="item.path">
+        <a-breadcrumb-item
+          v-for="item in breadcrumbs"
+          :key="item.path"
+        >
+          <component
+            :is="item.icon"
+            v-if="item.icon"
+            class="breadcrumb-icon"
+          />
+          <router-link
+            v-if="item.path && !item.disabled"
+            :to="item.path"
+          >
             {{ item.name }}
           </router-link>
           <span v-else>{{ item.name }}</span>
@@ -59,8 +84,14 @@
     </div>
     
     <!-- 标签页 -->
-    <div v-if="tabs.length > 0" class="tabs-section">
-      <a-tabs v-model:activeKey="activeTab" @change="handleTabChange">
+    <div
+      v-if="tabs.length > 0"
+      class="tabs-section"
+    >
+      <a-tabs
+        v-model:active-key="activeTab"
+        @change="handleTabChange"
+      >
         <a-tab-pane
           v-for="tab in tabs"
           :key="tab.key"
@@ -68,16 +99,27 @@
           :disabled="tab.disabled"
         >
           <template #tab>
-            <component v-if="tab.icon" :is="tab.icon" class="tab-icon" />
+            <component
+              :is="tab.icon"
+              v-if="tab.icon"
+              class="tab-icon"
+            />
             {{ tab.label }}
-            <a-badge v-if="tab.badge" :count="tab.badge" class="tab-badge" />
+            <a-badge
+              v-if="tab.badge"
+              :count="tab.badge"
+              class="tab-badge"
+            />
           </template>
         </a-tab-pane>
       </a-tabs>
     </div>
     
     <!-- 统计信息 -->
-    <div v-if="stats.length > 0" class="stats-section">
+    <div
+      v-if="stats.length > 0"
+      class="stats-section"
+    >
       <a-row :gutter="[16, 16]">
         <a-col
           v-for="stat in stats"
@@ -88,12 +130,22 @@
           :lg="4"
         >
           <div class="stat-item">
-            <div class="stat-icon" :style="{ color: stat.color }">
-              <component v-if="stat.icon" :is="stat.icon" />
+            <div
+              class="stat-icon"
+              :style="{ color: stat.color }"
+            >
+              <component
+                :is="stat.icon"
+                v-if="stat.icon"
+              />
             </div>
             <div class="stat-content">
-              <div class="stat-value">{{ stat.value }}</div>
-              <div class="stat-label">{{ stat.label }}</div>
+              <div class="stat-value">
+                {{ stat.value }}
+              </div>
+              <div class="stat-label">
+                {{ stat.label }}
+              </div>
             </div>
           </div>
         </a-col>
@@ -103,14 +155,14 @@
 </template>
 
 <script setup lang="ts">
-import { h, computed } from 'vue'
+import { h, computed, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 
 interface BreadcrumbItem {
   name: string
   path?: string
-  icon?: Record<string, unknown>
+  icon?: Component
   disabled?: boolean
 }
 
@@ -118,7 +170,7 @@ interface ActionItem {
   key: string
   text: string
   type?: 'primary' | 'default' | 'dashed' | 'text' | 'link'
-  icon?: Record<string, unknown>
+  icon?: Component
   loading?: boolean
   disabled?: boolean
   onClick?: () => void
@@ -127,7 +179,7 @@ interface ActionItem {
 interface TabItem {
   key: string
   label: string
-  icon?: Record<string, unknown>
+  icon?: Component
   badge?: number
   disabled?: boolean
 }
@@ -136,14 +188,14 @@ interface StatItem {
   key: string
   label: string
   value: string | number
-  icon?: Record<string, unknown>
+  icon?: Component
   color?: string
 }
 
 interface Props {
   title: string
   subtitle?: string
-  icon?: Record<string, unknown>
+  icon?: Component
   showBack?: boolean
   backText?: string
   showBreadcrumb?: boolean

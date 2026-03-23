@@ -1,13 +1,26 @@
 <template>
   <div class="test-page">
-    <a-page-header title="多文档合并测试" sub-title="测试多文档解析结果的合并和展示功能" />
+    <a-page-header
+      title="多文档合并测试"
+      sub-title="测试多文档解析结果的合并和展示功能"
+    />
     
-    <a-card title="测试控制面板" class="mb-4">
+    <a-card
+      title="测试控制面板"
+      class="mb-4"
+    >
       <a-space>
-        <a-button type="primary" @click="runMergeTest" :loading="testing">
+        <a-button
+          type="primary"
+          :loading="testing"
+          @click="runMergeTest"
+        >
           运行合并测试
         </a-button>
-        <a-button @click="showLLMResult" :disabled="!mergedResult">
+        <a-button
+          :disabled="!mergedResult"
+          @click="showLLMResult"
+        >
           查看LLM结果页面
         </a-button>
         <a-button @click="clearResults">
@@ -19,25 +32,49 @@
     <a-row :gutter="16">
       <!-- 左侧：原始数据 -->
       <a-col :span="12">
-        <a-card title="模拟原始解析结果" size="small">
+        <a-card
+          title="模拟原始解析结果"
+          size="small"
+        >
           <pre class="json-display">{{ JSON.stringify(mockResults, null, 2) }}</pre>
         </a-card>
       </a-col>
 
       <!-- 右侧：合并结果 -->
       <a-col :span="12">
-        <a-card title="合并后结果" size="small">
+        <a-card
+          title="合并后结果"
+          size="small"
+        >
           <div v-if="mergedResult">
-            <a-descriptions size="small" bordered>
-              <a-descriptions-item label="患者姓名">{{ mergedResult.data.patientName }}</a-descriptions-item>
-              <a-descriptions-item label="科室">{{ mergedResult.data.department }}</a-descriptions-item>
-              <a-descriptions-item label="主要诊断">{{ mergedResult.data.primaryDiagnosis }}</a-descriptions-item>
-              <a-descriptions-item label="文档总数">{{ mergedResult.data.totalFiles }}</a-descriptions-item>
-              <a-descriptions-item label="合并时间">{{ mergedResult.mergeTime }}</a-descriptions-item>
+            <a-descriptions
+              size="small"
+              bordered
+            >
+              <a-descriptions-item label="患者姓名">
+                {{ mergedResult.data.patientName }}
+              </a-descriptions-item>
+              <a-descriptions-item label="科室">
+                {{ mergedResult.data.department }}
+              </a-descriptions-item>
+              <a-descriptions-item label="主要诊断">
+                {{ mergedResult.data.primaryDiagnosis }}
+              </a-descriptions-item>
+              <a-descriptions-item label="文档总数">
+                {{ mergedResult.data.totalFiles }}
+              </a-descriptions-item>
+              <a-descriptions-item label="合并时间">
+                {{ mergedResult.mergeTime }}
+              </a-descriptions-item>
             </a-descriptions>
             
-            <h4 class="mt-3">文档列表 ({{ mergedResult.data.documents.length }}个)</h4>
-            <a-list size="small" :data-source="mergedResult.data.documents">
+            <h4 class="mt-3">
+              文档列表 ({{ mergedResult.data.documents.length }}个)
+            </h4>
+            <a-list
+              size="small"
+              :data-source="mergedResult.data.documents"
+            >
               <template #renderItem="{ item }">
                 <a-list-item>
                   <a-list-item-meta
@@ -48,7 +85,10 @@
               </template>
             </a-list>
           </div>
-          <a-empty v-else description="暂无合并结果" />
+          <a-empty
+            v-else
+            description="暂无合并结果"
+          />
         </a-card>
       </a-col>
     </a-row>

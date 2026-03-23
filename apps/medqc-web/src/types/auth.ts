@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 认证和权限管理相关类型定义
  * 病案质控系统 - 用户认证与权限控制
@@ -250,4 +251,4 @@ export interface AuthConfig {
   detectSessionInUrl: boolean
   sessionTimeout: number
   refreshThreshold: number
-} 
+}

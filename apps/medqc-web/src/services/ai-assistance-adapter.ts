@@ -253,9 +253,9 @@ export class AIAssistanceServiceAdapter {
       console.log('整改计划生成成功')
       return plan
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('生成整改计划失败:', error)
-      throw new Error(`生成整改计划失败: ${error.message}`)
+      throw new Error(`生成整改计划失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -288,9 +288,9 @@ export class AIAssistanceServiceAdapter {
       console.log('智能分析完成')
       return result
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('智能分析失败:', error)
-      throw new Error(`智能分析失败: ${error.message}`)
+      throw new Error(`智能分析失败: ${getErrorMessage(error)}`)
     }
   }
 
@@ -456,7 +456,7 @@ export class AIAssistanceServiceAdapter {
    * 缓存AI分析结果（前端缓存）
    */
   private analysisCache = new Map<string, {
-    data
+    data: unknown
     timestamp: number
     ttl: number
   }>()

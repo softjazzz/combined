@@ -1,65 +1,95 @@
 <template>
   <div :class="['ws-v2', { 'ws-v2-embedded': embedded }]">
     <!-- 侧边栏（仅独立模式） -->
-    <aside v-if="!embedded" :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]">
+    <aside
+      v-if="!embedded"
+      :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]"
+    >
       <div class="sidebar-header">
-        <div v-if="!sidebarCollapsed" class="sidebar-title">
+        <div
+          v-if="!sidebarCollapsed"
+          class="sidebar-title"
+        >
           <ThunderboltOutlined style="color: #1677ff" />
           <span>AI 质控工作站</span>
         </div>
-        <a-button type="text" size="small" @click="sidebarCollapsed = !sidebarCollapsed">
+        <a-button
+          type="text"
+          size="small"
+          @click="sidebarCollapsed = !sidebarCollapsed"
+        >
           <MenuFoldOutlined v-if="!sidebarCollapsed" />
           <MenuUnfoldOutlined v-else />
         </a-button>
       </div>
 
       <a-menu
-        v-model:selectedKeys="menuSelectedKeys"
+        v-model:selected-keys="menuSelectedKeys"
         mode="inline"
         :inline-collapsed="sidebarCollapsed"
         @click="onMenuClick"
       >
         <a-menu-item key="workbench">
-          <template #icon><DesktopOutlined /></template>
+          <template #icon>
+            <DesktopOutlined />
+          </template>
           <span>工作台</span>
         </a-menu-item>
 
         <a-menu-divider />
 
         <a-sub-menu key="drg-sub">
-          <template #icon><ClusterOutlined /></template>
-          <template #title>DRG/DIP</template>
+          <template #icon>
+            <ClusterOutlined />
+          </template>
+          <template #title>
+            DRG/DIP
+          </template>
           <a-menu-item key="pre-analysis">
-            <template #icon><FileSearchOutlined /></template>
+            <template #icon>
+              <FileSearchOutlined />
+            </template>
             事前分析
           </a-menu-item>
           <a-menu-item key="mid-analysis">
-            <template #icon><DashboardOutlined /></template>
+            <template #icon>
+              <DashboardOutlined />
+            </template>
             事中监控
           </a-menu-item>
           <a-menu-item key="payment">
-            <template #icon><DollarOutlined /></template>
+            <template #icon>
+              <DollarOutlined />
+            </template>
             付费监测
           </a-menu-item>
           <a-menu-item key="post-analysis">
-            <template #icon><BarChartOutlined /></template>
+            <template #icon>
+              <BarChartOutlined />
+            </template>
             事后分析
           </a-menu-item>
         </a-sub-menu>
 
         <a-menu-item key="icd-search">
-          <template #icon><SearchOutlined /></template>
+          <template #icon>
+            <SearchOutlined />
+          </template>
           <span>ICD 编码查询</span>
         </a-menu-item>
 
         <a-menu-divider />
 
         <a-menu-item key="upload">
-          <template #icon><CloudUploadOutlined /></template>
+          <template #icon>
+            <CloudUploadOutlined />
+          </template>
           <span>数据上传</span>
         </a-menu-item>
         <a-menu-item key="messages">
-          <template #icon><BellOutlined /></template>
+          <template #icon>
+            <BellOutlined />
+          </template>
           <span>质控消息</span>
         </a-menu-item>
       </a-menu>
@@ -68,17 +98,32 @@
     <!-- 主内容区 -->
     <main class="ws-v2-main">
       <!-- 工作台视图 -->
-      <div v-if="currentView === 'workbench'" class="workbench-layout">
+      <div
+        v-if="currentView === 'workbench'"
+        class="workbench-layout"
+      >
         <!-- 上方双栏区 -->
-        <div class="workbench-panels" ref="panelsRef">
+        <div
+          ref="panelsRef"
+          class="workbench-panels"
+        >
           <!-- 左栏：病历原文 -->
-          <div class="panel-left" :style="{ width: leftPanelWidth + '%' }">
+          <div
+            class="panel-left"
+            :style="{ width: leftPanelWidth + '%' }"
+          >
             <div class="panel-header">
               <span class="panel-title">
                 <FileTextOutlined /> 病历原文
               </span>
               <a-space>
-                <a-button v-if="demoCase" size="small" type="primary" :loading="extracting" @click="extractStructuredData">
+                <a-button
+                  v-if="demoCase"
+                  size="small"
+                  type="primary"
+                  :loading="extracting"
+                  @click="extractStructuredData"
+                >
                   <ThunderboltOutlined /> AI 提取
                 </a-button>
               </a-space>
@@ -87,34 +132,53 @@
               <MedicalRecordPanel
                 :medical-text="demoCase?.medical_text || ''"
                 :loading="loading"
+                :test-cases="testCases"
+                @select-test-case="loadDemoCase"
               />
             </div>
           </div>
 
           <!-- 可拖拽分隔线 -->
-          <div class="resize-handle" @mousedown="startResize"></div>
+          <div
+            class="resize-handle"
+            @mousedown="startResize"
+          />
 
           <!-- 右栏：分析面板 -->
-          <div class="panel-right" :style="{ width: (100 - leftPanelWidth) + '%' }">
+          <div
+            class="panel-right"
+            :style="{ width: (100 - leftPanelWidth) + '%' }"
+          >
             <div class="panel-header">
-              <a-segmented v-model:value="activeTab" :options="analysisTabs" size="small" />
+              <a-segmented
+                v-model:value="activeTab"
+                :options="analysisTabs"
+                size="small"
+              />
             </div>
             <div class="panel-body custom-scrollbar">
               <!-- Tab1: 首页结果 (M1) -->
               <StructuredDataView
                 v-if="activeTab === 'frontpage'"
                 :extracting="extracting"
+                :extraction-progress="extractionProgress"
+                :extraction-status="extractionStatus"
                 :frontpage="frontpage"
                 :has-medical-text="!!demoCase?.medical_text"
                 @extract="extractStructuredData"
               />
 
               <!-- Tab2: 质控结果 (M2 + M3-A) -->
-              <div v-else-if="activeTab === 'qc'" class="tab-placeholder">
+              <div
+                v-else-if="activeTab === 'qc'"
+                class="tab-placeholder"
+              >
                 <SafetyCertificateOutlined style="font-size: 48px; color: #1677ff" />
                 <h3>首页质控</h3>
                 <p>形式质控（M2）+ 内涵质控（M3-A）</p>
-                <p class="hint">Phase 2 开发：≥160 条质控规则引擎</p>
+                <p class="hint">
+                  Phase 2 开发：≥160 条质控规则引擎
+                </p>
               </div>
 
               <!-- Tab3: DRG 分组 (M6) -->
@@ -152,7 +216,9 @@
               <ProfileOutlined /> 测试用例
             </span>
             <a-space>
-              <a-tag color="blue">{{ testCases.length }} 份</a-tag>
+              <a-tag color="blue">
+                {{ testCases.length }} 份
+              </a-tag>
             </a-space>
           </div>
           <div class="test-case-bar">
@@ -161,8 +227,8 @@
               :key="idx"
               :type="currentCaseIndex === idx ? 'primary' : 'default'"
               size="small"
-              @click="loadDemoCase(idx)"
               :loading="loading && currentCaseIndex === idx"
+              @click="loadDemoCase(idx)"
             >
               {{ tc.name }}
             </a-button>
@@ -200,14 +266,21 @@
       />
 
       <!-- 质控消息 -->
-      <div v-else-if="currentView === 'messages'" class="tab-placeholder" style="height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+      <div
+        v-else-if="currentView === 'messages'"
+        class="tab-placeholder"
+        style="height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column;"
+      >
         <BellOutlined style="font-size: 48px; color: #1677ff" />
         <h3>质控消息概览</h3>
         <p>M5：每日问题汇总 + 科室分布</p>
       </div>
 
       <!-- ICD 编码查询（独立全屏视图） -->
-      <div v-else-if="currentView === 'icd-search'" class="icd-fullpage">
+      <div
+        v-else-if="currentView === 'icd-search'"
+        class="icd-fullpage"
+      >
         <ICDSearchPanel />
       </div>
     </main>
@@ -219,7 +292,7 @@
       :suggestions="suggestions"
       :get-suggestion-title="getSuggestionTitle"
       @update:open="suggestionDrawerVisible = $event"
-      @handle="handleSuggestion"
+      @handle="handleSuggestionAction"
     />
 
     <!-- 质控提醒浮动窗口 -->
@@ -317,7 +390,7 @@ const selectedBatchId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
 
 // ===== Composables =====
-const { extracting, extractStructuredData } = useMedicalTextExtraction({
+const { extracting, extractionProgress, extractionStatus, extractStructuredData } = useMedicalTextExtraction({
   demoCase,
   onStartExtract: () => {
     console.log('[workstation-v2] AI 提取开始')
@@ -379,6 +452,15 @@ function openOptimization() {
   if (demoCase.value?.case_id) {
     openOptimizationDrawer(demoCase.value.case_id)
   }
+}
+
+function handleSuggestionAction(id: number, action: 'accept' | 'reject') {
+  const caseId = demoCase.value?.case_id
+  if (!caseId) {
+    message.warning('未找到当前病历，无法处理建议')
+    return
+  }
+  handleSuggestion(id, action, caseId)
 }
 
 // ==================== 导航 ====================

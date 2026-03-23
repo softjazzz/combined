@@ -4,9 +4,9 @@
       ref="formRef"
       :model="profileForm"
       :rules="profileRules"
-      @finish="handleSubmit"
       layout="vertical"
       size="large"
+      @finish="handleSubmit"
     >
       <!-- 头像上传区域 -->
       <div class="mb-6">
@@ -21,7 +21,10 @@
       <!-- 基本信息 -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <!-- 姓名 -->
-        <a-form-item name="display_name" class="mb-4">
+        <a-form-item
+          name="display_name"
+          class="mb-4"
+        >
           <label class="block text-xs font-medium text-slate-300 mb-2">姓名</label>
           <a-input
             v-model:value="profileForm.display_name"
@@ -31,7 +34,10 @@
         </a-form-item>
 
         <!-- 邮箱（只读） -->
-        <a-form-item name="email" class="mb-4">
+        <a-form-item
+          name="email"
+          class="mb-4"
+        >
           <label class="block text-xs font-medium text-slate-300 mb-2">邮箱</label>
           <a-input
             v-model:value="profileForm.email"
@@ -44,7 +50,10 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <!-- 科室 -->
-        <a-form-item name="department" class="mb-4">
+        <a-form-item
+          name="department"
+          class="mb-4"
+        >
           <label class="block text-xs font-medium text-slate-300 mb-2">科室</label>
           <a-select
             v-model:value="profileForm.department"
@@ -65,7 +74,10 @@
         </a-form-item>
 
         <!-- 手机号 -->
-        <a-form-item name="phone" class="mb-4">
+        <a-form-item
+          name="phone"
+          class="mb-4"
+        >
           <label class="block text-xs font-medium text-slate-300 mb-2">手机号</label>
           <a-input
             v-model:value="profileForm.phone"
@@ -96,7 +108,10 @@
       </div>
 
       <!-- 个人简介 -->
-      <a-form-item name="bio" class="mb-6">
+      <a-form-item
+        name="bio"
+        class="mb-6"
+      >
         <label class="block text-xs font-medium text-slate-300 mb-2">个人简介</label>
         <a-textarea
           v-model:value="profileForm.bio"
@@ -114,8 +129,12 @@
         <div class="space-y-3">
           <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
             <div>
-              <div class="text-sm text-slate-200">邮件通知</div>
-              <div class="text-xs text-slate-400">接收系统重要通知邮件</div>
+              <div class="text-sm text-slate-200">
+                邮件通知
+              </div>
+              <div class="text-xs text-slate-400">
+                接收系统重要通知邮件
+              </div>
             </div>
             <a-switch 
               v-model:checked="profileForm.notifications.email"
@@ -125,8 +144,12 @@
           
           <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
             <div>
-              <div class="text-sm text-slate-200">短信通知</div>
-              <div class="text-xs text-slate-400">接收紧急事件短信提醒</div>
+              <div class="text-sm text-slate-200">
+                短信通知
+              </div>
+              <div class="text-xs text-slate-400">
+                接收紧急事件短信提醒
+              </div>
             </div>
             <a-switch 
               v-model:checked="profileForm.notifications.sms"
@@ -136,8 +159,12 @@
           
           <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
             <div>
-              <div class="text-sm text-slate-200">系统推送</div>
-              <div class="text-xs text-slate-400">接收浏览器推送通知</div>
+              <div class="text-sm text-slate-200">
+                系统推送
+              </div>
+              <div class="text-xs text-slate-400">
+                接收浏览器推送通知
+              </div>
             </div>
             <a-switch 
               v-model:checked="profileForm.notifications.push"
@@ -156,14 +183,17 @@
           size="large"
           class="flex-1 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-none font-semibold shadow-lg hover:shadow-xl"
         >
-          <SaveOutlined v-if="!loading" class="mr-2" />
+          <SaveOutlined
+            v-if="!loading"
+            class="mr-2"
+          />
           保存更改
         </a-button>
         
         <a-button
           size="large"
-          @click="handleReset"
           class="h-12 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20"
+          @click="handleReset"
         >
           <ReloadOutlined class="mr-2" />
           重置
@@ -175,13 +205,17 @@
     <div class="mt-8 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
       <div class="flex items-center justify-between">
         <div>
-          <h4 class="text-sm font-medium text-amber-200 mb-1">账户安全</h4>
-          <p class="text-xs text-amber-200/80">管理密码和安全设置</p>
+          <h4 class="text-sm font-medium text-amber-200 mb-1">
+            账户安全
+          </h4>
+          <p class="text-xs text-amber-200/80">
+            管理密码和安全设置
+          </p>
         </div>
         <a-button
           size="small"
-          @click="$emit('change-password')"
           class="bg-amber-500/20 border-amber-400/30 text-amber-300 hover:bg-amber-500/30"
+          @click="$emit('change-password')"
         >
           <LockOutlined class="mr-1" />
           修改密码

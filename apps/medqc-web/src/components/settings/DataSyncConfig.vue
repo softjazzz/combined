@@ -1,10 +1,11 @@
 <template>
   <div class="ds-root">
-
     <!-- ══════════ Section 1: MongoDB 数据源 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">MongoDB 数据源</h2>
+        <h2 class="ds-section-title">
+          MongoDB 数据源
+        </h2>
         <p class="ds-section-desc">
           管理对端 HIS MongoDB 的连接信息和读取偏好。建议使用只读账号 +
           <code class="ds-code">secondaryPreferred</code>，避免影响临床主库性能。
@@ -15,41 +16,68 @@
           <div class="ds-card__body ds-divide">
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">连接状态</div>
-                <div class="ds-row__hint">当前数据源的连通性。需要在医院内网环境才能连通。</div>
+                <div class="ds-row__label">
+                  连接状态
+                </div>
+                <div class="ds-row__hint">
+                  当前数据源的连通性。需要在医院内网环境才能连通。
+                </div>
               </div>
-              <span v-if="mongoStatus.connected" class="ds-badge ds-badge--ok">
-                <span class="ds-badge__dot ds-badge__dot--green"></span>已连接
+              <span
+                v-if="mongoStatus.connected"
+                class="ds-badge ds-badge--ok"
+              >
+                <span class="ds-badge__dot ds-badge__dot--green" />已连接
               </span>
-              <span v-else class="ds-badge ds-badge--off">
-                <span class="ds-badge__dot ds-badge__dot--slate"></span>未配置
+              <span
+                v-else
+                class="ds-badge ds-badge--off"
+              >
+                <span class="ds-badge__dot ds-badge__dot--slate" />未配置
               </span>
             </div>
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">连接 URI</div>
-                <div class="ds-row__hint">MongoDB 连接地址（密码已脱敏）</div>
+                <div class="ds-row__label">
+                  连接 URI
+                </div>
+                <div class="ds-row__hint">
+                  MongoDB 连接地址（密码已脱敏）
+                </div>
               </div>
               <code class="ds-value-box">{{ mongoConfig.mongo_uri_display || '未配置' }}</code>
             </div>
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">目标数据库</div>
-                <div class="ds-row__hint">需要同步的库名称</div>
+                <div class="ds-row__label">
+                  目标数据库
+                </div>
+                <div class="ds-row__hint">
+                  需要同步的库名称
+                </div>
               </div>
               <code class="ds-value-box ds-value-box--filled">{{ mongoConfig.mongo_database || '—' }}</code>
             </div>
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">读偏好配置</div>
-                <div class="ds-row__hint">决定数据从主节点还是从节点读取</div>
+                <div class="ds-row__label">
+                  读偏好配置
+                </div>
+                <div class="ds-row__hint">
+                  决定数据从主节点还是从节点读取
+                </div>
               </div>
               <code class="ds-value-box ds-value-box--filled">{{ mongoConfig.read_preference || '—' }}</code>
             </div>
           </div>
           <div class="ds-card__footer">
-            <span></span>
-            <button class="ds-btn ds-btn--outline" @click="showMongoModal = true">编辑连接配置</button>
+            <span />
+            <button
+              class="ds-btn ds-btn--outline"
+              @click="showMongoModal = true"
+            >
+              编辑连接配置
+            </button>
           </div>
         </div>
       </div>
@@ -58,7 +86,9 @@
     <!-- ══════════ Section 2: 同步概览 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">同步概览</h2>
+        <h2 class="ds-section-title">
+          同步概览
+        </h2>
         <p class="ds-section-desc">
           Visit 生命周期状态分布与各 Tier 最近运行情况。
           只有 <code class="ds-code">SYNCED</code> 状态的 visit 才对质控引擎可见。
@@ -70,39 +100,39 @@
           <div class="ds-card__body">
             <div class="ds-dashboard">
               <div class="ds-dashboard__item">
-                <span class="ds-dashboard__dot ds-dashboard__dot--slate"></span>
+                <span class="ds-dashboard__dot ds-dashboard__dot--slate" />
                 <div class="ds-dashboard__data">
                   <span class="ds-dashboard__num">{{ mongoStats.PENDING || 0 }}</span>
                   <span class="ds-dashboard__label">待抽取</span>
                 </div>
               </div>
-              <div class="ds-dashboard__sep"></div>
+              <div class="ds-dashboard__sep" />
               <div class="ds-dashboard__item">
-                <span class="ds-dashboard__dot ds-dashboard__dot--amber"></span>
+                <span class="ds-dashboard__dot ds-dashboard__dot--amber" />
                 <div class="ds-dashboard__data">
                   <span class="ds-dashboard__num">{{ mongoStats.PARTIAL || 0 }}</span>
                   <span class="ds-dashboard__label">部分同步</span>
                 </div>
               </div>
-              <div class="ds-dashboard__sep"></div>
+              <div class="ds-dashboard__sep" />
               <div class="ds-dashboard__item">
-                <span class="ds-dashboard__dot ds-dashboard__dot--green"></span>
+                <span class="ds-dashboard__dot ds-dashboard__dot--green" />
                 <div class="ds-dashboard__data">
                   <span class="ds-dashboard__num">{{ mongoStats.SYNCED || 0 }}</span>
                   <span class="ds-dashboard__label">已完成</span>
                 </div>
               </div>
-              <div class="ds-dashboard__sep"></div>
+              <div class="ds-dashboard__sep" />
               <div class="ds-dashboard__item">
-                <span class="ds-dashboard__dot ds-dashboard__dot--orange"></span>
+                <span class="ds-dashboard__dot ds-dashboard__dot--orange" />
                 <div class="ds-dashboard__data">
                   <span class="ds-dashboard__num">{{ mongoStats.STALE || 0 }}</span>
                   <span class="ds-dashboard__label">需重拉</span>
                 </div>
               </div>
-              <div class="ds-dashboard__sep"></div>
+              <div class="ds-dashboard__sep" />
               <div class="ds-dashboard__item">
-                <span class="ds-dashboard__dot ds-dashboard__dot--red"></span>
+                <span class="ds-dashboard__dot ds-dashboard__dot--red" />
                 <div class="ds-dashboard__data">
                   <span class="ds-dashboard__num">{{ mongoStats.FAILED || 0 }}</span>
                   <span class="ds-dashboard__label">失败</span>
@@ -114,8 +144,12 @@
           <div class="ds-card__body ds-divide">
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">Tier 1 · 索引发现</div>
-                <div class="ds-row__hint">轻量扫描出院索引，发现新增 visit</div>
+                <div class="ds-row__label">
+                  Tier 1 · 索引发现
+                </div>
+                <div class="ds-row__hint">
+                  轻量扫描出院索引，发现新增 visit
+                </div>
               </div>
               <div class="ds-row__right-col">
                 <span class="ds-value-box ds-value-box--filled">{{ mongoSyncState.tier1_discovered || 0 }} 条</span>
@@ -124,8 +158,12 @@
             </div>
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">Tier 2 · 结构化数据</div>
-                <div class="ds-row__hint">首页、诊断、手术、费用 4 张核心表</div>
+                <div class="ds-row__label">
+                  Tier 2 · 结构化数据
+                </div>
+                <div class="ds-row__hint">
+                  首页、诊断、手术、费用 4 张核心表
+                </div>
               </div>
               <div class="ds-row__right-col">
                 <span class="ds-value-box ds-value-box--filled">{{ mongoSyncState.tier2_synced || 0 }} 条</span>
@@ -134,8 +172,12 @@
             </div>
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">Tier 3 · 病历全文</div>
-                <div class="ds-row__hint">23 类文书全量拉取（仅夜间窗口）</div>
+                <div class="ds-row__label">
+                  Tier 3 · 病历全文
+                </div>
+                <div class="ds-row__hint">
+                  23 类文书全量拉取（仅夜间窗口）
+                </div>
               </div>
               <div class="ds-row__right-col">
                 <span class="ds-value-box ds-value-box--filled">{{ mongoSyncState.tier3_synced || 0 }} 条</span>
@@ -145,23 +187,47 @@
           </div>
           <!-- Footer: 警告 + 触发按钮 -->
           <div class="ds-card__footer">
-            <span v-if="!mongoConfig.enabled" class="ds-footer-warn">
+            <span
+              v-if="!mongoConfig.enabled"
+              class="ds-footer-warn"
+            >
               <span class="ds-footer-warn__icon">⚠</span> 同步已关闭，需先在下方启用
             </span>
-            <span v-else></span>
+            <span v-else />
             <div class="ds-card__footer-right">
-              <select v-model="mongoSyncTier" class="ds-select-native">
-                <option value="all">全部 Tier</option>
-                <option value="tier1">Tier1 索引</option>
-                <option value="tier2">Tier2 结构</option>
-                <option value="tier3">Tier3 全文</option>
+              <select
+                v-model="mongoSyncTier"
+                class="ds-select-native"
+              >
+                <option value="all">
+                  全部 Tier
+                </option>
+                <option value="tier1">
+                  Tier1 索引
+                </option>
+                <option value="tier2">
+                  Tier2 结构
+                </option>
+                <option value="tier3">
+                  Tier3 全文
+                </option>
               </select>
-              <button class="ds-btn ds-btn--primary" @click="triggerMongoSync"
-                :disabled="!mongoConfig.enabled || mongoSyncState.is_running">
-                <SyncOutlined v-if="!mongoSyncState.is_running" style="font-size:12px" />
+              <button
+                class="ds-btn ds-btn--primary"
+                :disabled="!mongoConfig.enabled || mongoSyncState.is_running"
+                @click="triggerMongoSync"
+              >
+                <SyncOutlined
+                  v-if="!mongoSyncState.is_running"
+                  style="font-size:12px"
+                />
                 执行同步
               </button>
-              <button class="ds-btn ds-btn--ghost" @click="loadMongoStatus" title="刷新状态">
+              <button
+                class="ds-btn ds-btn--ghost"
+                title="刷新状态"
+                @click="loadMongoStatus"
+              >
                 <ReloadOutlined style="font-size:13px" />
               </button>
             </div>
@@ -173,7 +239,9 @@
     <!-- ══════════ Section 3: 抽取策略配置 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">抽取策略配置</h2>
+        <h2 class="ds-section-title">
+          抽取策略配置
+        </h2>
         <p class="ds-section-desc">
           控制数据抽取的节奏、窗口与速率保护参数。调整这些参数将直接影响 HIS 数据库的读取压力，请在非业务高峰期谨慎修改。
         </p>
@@ -183,37 +251,71 @@
           <!-- 置顶开关 Banner -->
           <div class="ds-switch-banner">
             <div>
-              <div class="ds-row__label">全局同步总开关</div>
-              <div class="ds-row__hint">开启后系统将按设定频率自动执行增量抽取</div>
+              <div class="ds-row__label">
+                全局同步总开关
+              </div>
+              <div class="ds-row__hint">
+                开启后系统将按设定频率自动执行增量抽取
+              </div>
             </div>
-            <a-switch v-model:checked="configForm.enabled" checked-children="启用" un-checked-children="关闭" />
+            <a-switch
+              v-model:checked="configForm.enabled"
+              checked-children="启用"
+              un-checked-children="关闭"
+            />
           </div>
 
           <!-- 采集窗口 -->
           <div class="ds-grid-section">
-            <div class="ds-grid-section__label">采集窗口</div>
+            <div class="ds-grid-section__label">
+              采集窗口
+            </div>
             <div class="ds-grid">
               <div class="ds-field">
                 <label class="ds-field__label">出院稳定窗口</label>
-                <div class="ds-field__hint">出院后等待 N 天才纳入终末质控</div>
+                <div class="ds-field__hint">
+                  出院后等待 N 天才纳入终末质控
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.discharge_stable_days" :min="0" :max="30" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.discharge_stable_days"
+                    :min="0"
+                    :max="30"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">天</span>
                 </div>
               </div>
               <div class="ds-field">
                 <label class="ds-field__label">回看窗口</label>
-                <div class="ds-field__hint">水位线回退 N 分钟，防时钟漂移漏数</div>
+                <div class="ds-field__hint">
+                  水位线回退 N 分钟，防时钟漂移漏数
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.lookback_minutes" :min="0" :max="120" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.lookback_minutes"
+                    :min="0"
+                    :max="120"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">分钟</span>
                 </div>
               </div>
               <div class="ds-field">
                 <label class="ds-field__label">滚动重扫</label>
-                <div class="ds-field__hint">最近 N 天修订的已完成 visit 强制重拉</div>
+                <div class="ds-field__hint">
+                  最近 N 天修订的已完成 visit 强制重拉
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.rescan_recent_days" :min="0" :max="30" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.rescan_recent_days"
+                    :min="0"
+                    :max="30"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">天</span>
                 </div>
               </div>
@@ -222,30 +324,54 @@
 
           <!-- 调度频率 -->
           <div class="ds-grid-section">
-            <div class="ds-grid-section__label">调度频率</div>
+            <div class="ds-grid-section__label">
+              调度频率
+            </div>
             <div class="ds-grid">
               <div class="ds-field">
                 <label class="ds-field__label">Tier 1 索引发现</label>
-                <div class="ds-field__hint">轻量查询，建议 15 - 60 分钟</div>
+                <div class="ds-field__hint">
+                  轻量查询，建议 15 - 60 分钟
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.tier1_interval_minutes" :min="5" :max="1440" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.tier1_interval_minutes"
+                    :min="5"
+                    :max="1440"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">分钟</span>
                 </div>
               </div>
               <div class="ds-field">
                 <label class="ds-field__label">Tier 2 结构化拉取</label>
-                <div class="ds-field__hint">中等开销，建议 60 - 240 分钟</div>
+                <div class="ds-field__hint">
+                  中等开销，建议 60 - 240 分钟
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.tier2_interval_minutes" :min="10" :max="1440" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.tier2_interval_minutes"
+                    :min="10"
+                    :max="1440"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">分钟</span>
                 </div>
               </div>
             </div>
             <div class="ds-field ds-field--wide">
               <label class="ds-field__label">Tier 3 全文抽取定时</label>
-              <div class="ds-field__hint">Cron 表达式，开销最大，建议仅夜间执行</div>
+              <div class="ds-field__hint">
+                Cron 表达式，开销最大，建议仅夜间执行
+              </div>
               <div class="ds-cron-input">
-                <a-input v-model:value="configForm.tier3_cron" placeholder="0 2 * * *" class="ds-cron-input__field" />
+                <a-input
+                  v-model:value="configForm.tier3_cron"
+                  placeholder="0 2 * * *"
+                  class="ds-cron-input__field"
+                />
                 <span class="ds-cron-input__hint">每天凌晨 02:00 执行</span>
               </div>
             </div>
@@ -253,39 +379,77 @@
 
           <!-- 速率保护 -->
           <div class="ds-grid-section">
-            <div class="ds-grid-section__label">速率保护</div>
+            <div class="ds-grid-section__label">
+              速率保护
+            </div>
             <div class="ds-grid ds-grid--3">
               <div class="ds-field">
                 <label class="ds-field__label">单批处理量</label>
-                <div class="ds-field__hint">每次最多处理的 visit 数</div>
+                <div class="ds-field__hint">
+                  每次最多处理的 visit 数
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.max_batch_size" :min="10" :max="1000" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.max_batch_size"
+                    :min="10"
+                    :max="1000"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">条</span>
                 </div>
               </div>
               <div class="ds-field">
                 <label class="ds-field__label">请求间隔</label>
-                <div class="ds-field__hint">两次查询间的等待</div>
+                <div class="ds-field__hint">
+                  两次查询间的等待
+                </div>
                 <div class="ds-input-group">
-                  <a-input-number v-model:value="configForm.inter_request_delay_ms" :min="50" :max="5000" :step="50" :controls="false" class="ds-input-group__input" />
+                  <a-input-number
+                    v-model:value="configForm.inter_request_delay_ms"
+                    :min="50"
+                    :max="5000"
+                    :step="50"
+                    :controls="false"
+                    class="ds-input-group__input"
+                  />
                   <span class="ds-input-group__suffix">ms</span>
                 </div>
               </div>
               <div class="ds-field">
                 <label class="ds-field__label">夜间窗口</label>
-                <div class="ds-field__hint">Tier3 仅在此时段执行</div>
+                <div class="ds-field__hint">
+                  Tier3 仅在此时段执行
+                </div>
                 <div class="ds-time-range">
-                  <a-input v-model:value="configForm.night_window_start" placeholder="22:00" class="ds-time-range__input" />
+                  <a-input
+                    v-model:value="configForm.night_window_start"
+                    placeholder="22:00"
+                    class="ds-time-range__input"
+                  />
                   <span class="ds-time-range__sep">—</span>
-                  <a-input v-model:value="configForm.night_window_end" placeholder="06:00" class="ds-time-range__input" />
+                  <a-input
+                    v-model:value="configForm.night_window_end"
+                    placeholder="06:00"
+                    class="ds-time-range__input"
+                  />
                 </div>
               </div>
             </div>
           </div>
 
           <div class="ds-card__footer">
-            <button class="ds-btn ds-btn--ghost-text" @click="loadMongoConfig">取消更改</button>
-            <button class="ds-btn ds-btn--primary" @click="saveMongoConfig" :disabled="configSaving">
+            <button
+              class="ds-btn ds-btn--ghost-text"
+              @click="loadMongoConfig"
+            >
+              取消更改
+            </button>
+            <button
+              class="ds-btn ds-btn--primary"
+              :disabled="configSaving"
+              @click="saveMongoConfig"
+            >
               保存抽取策略
             </button>
           </div>
@@ -296,7 +460,9 @@
     <!-- ══════════ MongoDB 连接弹窗 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">DRG 演示模式</h2>
+        <h2 class="ds-section-title">
+          DRG 演示模式
+        </h2>
         <p class="ds-section-desc">
           控制 DRG 演示页是否强制使用 Mock 数据。开启后，`mid/payment/post` 三个页面会直接使用前端演示数据。
         </p>
@@ -306,8 +472,12 @@
           <div class="ds-card__body ds-divide">
             <div class="ds-row">
               <div class="ds-row__left">
-                <div class="ds-row__label">Mock 数据总开关</div>
-                <div class="ds-row__hint">作用范围：`workstation-v4/drg/mid`、`workstation-v4/drg/payment`、`workstation-v4/drg/post`</div>
+                <div class="ds-row__label">
+                  Mock 数据总开关
+                </div>
+                <div class="ds-row__hint">
+                  作用范围：`workstation-v4/drg/mid`、`workstation-v4/drg/payment`、`workstation-v4/drg/post`
+                </div>
               </div>
               <a-switch
                 :checked="drgMockEnabled"
@@ -320,7 +490,7 @@
           <div class="ds-card__footer">
             <span class="ds-row__hint">关闭后会优先请求真实后端；请求失败时页面仍保留兜底展示。</span>
             <span :class="drgMockEnabled ? 'ds-badge ds-badge--ok' : 'ds-badge ds-badge--off'">
-              <span :class="drgMockEnabled ? 'ds-badge__dot ds-badge__dot--green' : 'ds-badge__dot ds-badge__dot--slate'"></span>
+              <span :class="drgMockEnabled ? 'ds-badge__dot ds-badge__dot--green' : 'ds-badge__dot ds-badge__dot--slate'" />
               {{ drgMockEnabled ? 'Mock 演示中' : '真实优先' }}
             </span>
           </div>
@@ -328,34 +498,77 @@
       </div>
     </div>
 
-    <a-modal v-model:open="showMongoModal" title="MongoDB 连接配置" :confirm-loading="connSaving"
-      @ok="saveMongoConnection" ok-text="保存并测试" cancel-text="取消" :width="520">
+    <a-modal
+      v-model:open="showMongoModal"
+      title="MongoDB 连接配置"
+      :confirm-loading="connSaving"
+      ok-text="保存并测试"
+      cancel-text="取消"
+      :width="520"
+      @ok="saveMongoConnection"
+    >
       <div style="padding-top: 8px">
-        <a-alert message="建议使用只读账号 + secondaryPreferred 读偏好" type="info" show-icon style="margin-bottom: 16px" />
+        <a-alert
+          message="建议使用只读账号 + secondaryPreferred 读偏好"
+          type="info"
+          show-icon
+          style="margin-bottom: 16px"
+        />
         <a-form layout="vertical">
           <a-form-item label="连接 URI">
-            <a-input v-model:value="connForm.mongo_uri" placeholder="mongodb://user:pass@host:27017/db" />
-            <div class="ds-modal-hint">支持 mongodb:// 和 mongodb+srv://，TLS 在 URI 中加 ?tls=true</div>
+            <a-input
+              v-model:value="connForm.mongo_uri"
+              placeholder="mongodb://user:pass@host:27017/db"
+            />
+            <div class="ds-modal-hint">
+              支持 mongodb:// 和 mongodb+srv://，TLS 在 URI 中加 ?tls=true
+            </div>
           </a-form-item>
           <a-form-item label="数据库名">
-            <a-input v-model:value="connForm.mongo_database" placeholder="his_emr" />
+            <a-input
+              v-model:value="connForm.mongo_database"
+              placeholder="his_emr"
+            />
           </a-form-item>
           <a-form-item label="读偏好">
-            <a-select v-model:value="connForm.read_preference" style="width: 100%">
-              <a-select-option value="secondaryPreferred">secondaryPreferred（推荐）</a-select-option>
-              <a-select-option value="secondary">secondary（仅从库）</a-select-option>
-              <a-select-option value="primaryPreferred">primaryPreferred</a-select-option>
-              <a-select-option value="nearest">nearest</a-select-option>
+            <a-select
+              v-model:value="connForm.read_preference"
+              style="width: 100%"
+            >
+              <a-select-option value="secondaryPreferred">
+                secondaryPreferred（推荐）
+              </a-select-option>
+              <a-select-option value="secondary">
+                secondary（仅从库）
+              </a-select-option>
+              <a-select-option value="primaryPreferred">
+                primaryPreferred
+              </a-select-option>
+              <a-select-option value="nearest">
+                nearest
+              </a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item label="连接超时 (ms)">
-            <a-input-number v-model:value="connForm.connect_timeout_ms" :min="1000" :max="30000" :step="1000" style="width: 100%" />
+            <a-input-number
+              v-model:value="connForm.connect_timeout_ms"
+              :min="1000"
+              :max="30000"
+              :step="1000"
+              style="width: 100%"
+            />
           </a-form-item>
         </a-form>
-        <div v-if="connTestResult" style="margin-top: 12px">
-          <a-alert :type="connTestResult.connected ? 'success' : 'error'"
+        <div
+          v-if="connTestResult"
+          style="margin-top: 12px"
+        >
+          <a-alert
+            :type="connTestResult.connected ? 'success' : 'error'"
             :message="connTestResult.connected ? '✅ 连接成功 — MongoDB v' + (connTestResult.version || '') : '❌ 连接失败'"
-            :description="connTestResult.error || ''" show-icon />
+            :description="connTestResult.error || ''"
+            show-icon
+          />
         </div>
       </div>
     </a-modal>

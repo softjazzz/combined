@@ -73,15 +73,19 @@
     </a-tooltip>
 
     <!-- 加载中指示 -->
-    <a-spin v-if="actionLoading" size="small" class="ml-1" />
+    <a-spin
+      v-if="actionLoading"
+      size="small"
+      class="ml-1"
+    />
 
     <!-- 派发整改弹窗 -->
     <a-modal
       v-model:open="showRemediationModal"
       title="派发整改"
-      @ok="handleRemediation"
       :confirm-loading="actionLoading"
       width="480px"
+      @ok="handleRemediation"
     >
       <div class="space-y-4 py-2">
         <div>
@@ -107,9 +111,9 @@
     <a-modal
       v-model:open="showRejectModal"
       title="驳回整改"
-      @ok="handleReject"
       :confirm-loading="actionLoading"
       width="400px"
+      @ok="handleReject"
     >
       <div class="py-2">
         <label class="block text-sm font-medium text-slate-700 mb-1">驳回原因</label>

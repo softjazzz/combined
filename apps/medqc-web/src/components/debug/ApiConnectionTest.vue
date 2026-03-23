@@ -10,7 +10,7 @@
           <div 
             class="w-3 h-3 rounded-full"
             :class="connectionStatus === 'connected' ? 'bg-emerald-400' : connectionStatus === 'connecting' ? 'bg-amber-400' : 'bg-red-400'"
-          ></div>
+          />
           <span 
             class="text-sm font-medium"
             :class="connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-amber-400' : 'text-red-400'"
@@ -22,7 +22,9 @@
 
       <!-- API基础信息 -->
       <div class="mb-6 p-4 rounded-lg bg-slate-700/30 border border-slate-600/30">
-        <h4 class="text-sm font-medium text-slate-200 mb-3">API配置信息</h4>
+        <h4 class="text-sm font-medium text-slate-200 mb-3">
+          API配置信息
+        </h4>
         <div class="space-y-2 text-sm">
           <div class="flex justify-between">
             <span class="text-slate-400">基础URL:</span>
@@ -44,27 +46,27 @@
       <!-- 测试按钮 -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <a-button 
-          @click="testConnection"
           :loading="testing.connection"
           class="h-12 bg-blue-500/20 border-blue-400/30 text-blue-300 hover:bg-blue-500/30"
+          @click="testConnection"
         >
           <ApiOutlined />
           连接测试
         </a-button>
         
         <a-button 
-          @click="testAuth"
           :loading="testing.auth"
           class="h-12 bg-emerald-500/20 border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30"
+          @click="testAuth"
         >
           <UserOutlined />
           认证测试
         </a-button>
         
         <a-button 
-          @click="testAllApis"
           :loading="testing.all"
           class="h-12 bg-purple-500/20 border-purple-400/30 text-purple-300 hover:bg-purple-500/30"
+          @click="testAllApis"
         >
           <ThunderboltOutlined />
           全面测试
@@ -98,24 +100,37 @@
             </div>
           </div>
           
-          <div class="text-sm text-slate-300 mb-2">{{ result.description }}</div>
+          <div class="text-sm text-slate-300 mb-2">
+            {{ result.description }}
+          </div>
           
-          <div v-if="result.details" class="text-xs text-slate-400 font-mono bg-slate-900/50 p-2 rounded border border-slate-600/20">
+          <div
+            v-if="result.details"
+            class="text-xs text-slate-400 font-mono bg-slate-900/50 p-2 rounded border border-slate-600/20"
+          >
             {{ result.details }}
           </div>
           
-          <div v-if="result.error" class="text-xs text-red-300 bg-red-500/10 p-2 rounded border border-red-500/20 mt-2">
+          <div
+            v-if="result.error"
+            class="text-xs text-red-300 bg-red-500/10 p-2 rounded border border-red-500/20 mt-2"
+          >
             错误: {{ result.error }}
           </div>
         </div>
       </div>
 
       <!-- 空状态 -->
-      <div v-if="testResults.length === 0" class="text-center py-8">
+      <div
+        v-if="testResults.length === 0"
+        class="text-center py-8"
+      >
         <div class="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center mx-auto mb-3">
           <ApiOutlined class="text-slate-400 text-2xl" />
         </div>
-        <div class="text-slate-400">点击上方按钮开始API测试</div>
+        <div class="text-slate-400">
+          点击上方按钮开始API测试
+        </div>
       </div>
     </div>
   </div>

@@ -2,8 +2,12 @@
   <div class="permissions-container p-8 bg-gray-50 min-h-screen">
     <!-- 页面标题 -->
     <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">数据权限配置</h1>
-      <p class="text-gray-600">管理用户和角色的数据访问权限</p>
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">
+        数据权限配置
+      </h1>
+      <p class="text-gray-600">
+        管理用户和角色的数据访问权限
+      </p>
     </div>
 
     <!-- 权限概览 -->
@@ -11,8 +15,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">用户总数</p>
-            <p class="text-3xl font-bold text-gray-800">156</p>
+            <p class="text-gray-600 text-sm mb-1">
+              用户总数
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              156
+            </p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
             <UserOutlined class="text-blue-600 text-xl" />
@@ -23,8 +31,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">角色数量</p>
-            <p class="text-3xl font-bold text-gray-800">8</p>
+            <p class="text-gray-600 text-sm mb-1">
+              角色数量
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              8
+            </p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <TeamOutlined class="text-green-600 text-xl" />
@@ -35,8 +47,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">权限规则</p>
-            <p class="text-3xl font-bold text-gray-800">24</p>
+            <p class="text-gray-600 text-sm mb-1">
+              权限规则
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              24
+            </p>
           </div>
           <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
             <SafetyCertificateOutlined class="text-purple-600 text-xl" />
@@ -47,8 +63,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">活跃用户</p>
-            <p class="text-3xl font-bold text-gray-800">142</p>
+            <p class="text-gray-600 text-sm mb-1">
+              活跃用户
+            </p>
+            <p class="text-3xl font-bold text-gray-800">
+              142
+            </p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
             <CheckCircleOutlined class="text-orange-600 text-xl" />
@@ -59,13 +79,26 @@
 
     <!-- 标签页 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-      <a-tabs v-model:activeKey="activeTab" type="card" class="custom-tabs">
+      <a-tabs
+        v-model:active-key="activeTab"
+        type="card"
+        class="custom-tabs"
+      >
         <!-- 用户权限管理 -->
-        <a-tab-pane key="users" tab="用户权限">
+        <a-tab-pane
+          key="users"
+          tab="用户权限"
+        >
           <div class="mb-6">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-gray-800">用户权限管理</h3>
-              <a-button type="primary" @click="handleAddUser" class="rounded-lg">
+              <h3 class="text-lg font-semibold text-gray-800">
+                用户权限管理
+              </h3>
+              <a-button
+                type="primary"
+                class="rounded-lg"
+                @click="handleAddUser"
+              >
                 <PlusOutlined />
                 添加用户
               </a-button>
@@ -97,7 +130,11 @@
                 :options="departmentOptions"
               />
               
-              <a-button type="primary" @click="handleUserSearch" class="rounded-lg">
+              <a-button
+                type="primary"
+                class="rounded-lg"
+                @click="handleUserSearch"
+              >
                 <SearchOutlined />
                 搜索
               </a-button>
@@ -109,9 +146,9 @@
               :data-source="users"
               :loading="loading"
               :pagination="userPagination"
-              @change="handleUserTableChange"
               row-key="id"
               class="rounded-lg"
+              @change="handleUserTableChange"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'status'">
@@ -120,17 +157,30 @@
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'roles'">
-                  <a-tag v-for="role in record.roles" :key="role" color="blue" class="mb-1">
+                  <a-tag
+                    v-for="role in record.roles"
+                    :key="role"
+                    color="blue"
+                    class="mb-1"
+                  >
                     {{ getRoleText(role) }}
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'action'">
                   <div class="flex space-x-2">
-                    <a-button type="link" size="small" @click="handleEditUser(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="handleEditUser(record)"
+                    >
                       <EditOutlined />
                       编辑
                     </a-button>
-                    <a-button type="link" size="small" @click="handleUserPermissions(record)">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="handleUserPermissions(record)"
+                    >
                       <SafetyCertificateOutlined />
                       权限
                     </a-button>
@@ -150,11 +200,20 @@
         </a-tab-pane>
 
         <!-- 角色权限管理 -->
-        <a-tab-pane key="roles" tab="角色权限">
+        <a-tab-pane
+          key="roles"
+          tab="角色权限"
+        >
           <div class="mb-6">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-gray-800">角色权限管理</h3>
-              <a-button type="primary" @click="handleAddRole" class="rounded-lg">
+              <h3 class="text-lg font-semibold text-gray-800">
+                角色权限管理
+              </h3>
+              <a-button
+                type="primary"
+                class="rounded-lg"
+                @click="handleAddRole"
+              >
                 <PlusOutlined />
                 添加角色
               </a-button>
@@ -173,12 +232,19 @@
                       <TeamOutlined class="text-blue-600" />
                     </div>
                     <div>
-                      <h4 class="font-semibold text-gray-800">{{ role.name }}</h4>
-                      <p class="text-sm text-gray-600">{{ role.description }}</p>
+                      <h4 class="font-semibold text-gray-800">
+                        {{ role.name }}
+                      </h4>
+                      <p class="text-sm text-gray-600">
+                        {{ role.description }}
+                      </p>
                     </div>
                   </div>
                   <a-dropdown>
-                    <a-button type="text" size="small">
+                    <a-button
+                      type="text"
+                      size="small"
+                    >
                       <MoreOutlined />
                     </a-button>
                     <template #overlay>
@@ -191,7 +257,10 @@
                           <SafetyCertificateOutlined />
                           权限设置
                         </a-menu-item>
-                        <a-menu-item @click="handleDeleteRole(role)" danger>
+                        <a-menu-item
+                          danger
+                          @click="handleDeleteRole(role)"
+                        >
                           <DeleteOutlined />
                           删除
                         </a-menu-item>
@@ -201,15 +270,26 @@
                 </div>
                 
                 <div class="mb-4">
-                  <p class="text-sm text-gray-600 mb-2">用户数量: <span class="font-medium">{{ role.userCount }}</span></p>
-                  <p class="text-sm text-gray-600">权限数量: <span class="font-medium">{{ role.permissions?.length || 0 }}</span></p>
+                  <p class="text-sm text-gray-600 mb-2">
+                    用户数量: <span class="font-medium">{{ role.userCount }}</span>
+                  </p>
+                  <p class="text-sm text-gray-600">
+                    权限数量: <span class="font-medium">{{ role.permissions?.length || 0 }}</span>
+                  </p>
                 </div>
                 
                 <div class="flex flex-wrap gap-1">
-                  <a-tag v-for="permission in role.permissions?.slice(0, 3)" :key="permission" size="small">
+                  <a-tag
+                    v-for="permission in role.permissions?.slice(0, 3)"
+                    :key="permission"
+                    size="small"
+                  >
                     {{ getPermissionText(permission) }}
                   </a-tag>
-                  <a-tag v-if="role.permissions?.length > 3" size="small">
+                  <a-tag
+                    v-if="role.permissions?.length > 3"
+                    size="small"
+                  >
                     +{{ role.permissions.length - 3 }}
                   </a-tag>
                 </div>
@@ -219,11 +299,20 @@
         </a-tab-pane>
 
         <!-- 权限规则 -->
-        <a-tab-pane key="permissions" tab="权限规则">
+        <a-tab-pane
+          key="permissions"
+          tab="权限规则"
+        >
           <div class="mb-6">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-gray-800">权限规则配置</h3>
-              <a-button type="primary" @click="handleAddPermission" class="rounded-lg">
+              <h3 class="text-lg font-semibold text-gray-800">
+                权限规则配置
+              </h3>
+              <a-button
+                type="primary"
+                class="rounded-lg"
+                @click="handleAddPermission"
+              >
                 <PlusOutlined />
                 添加权限
               </a-button>
@@ -231,7 +320,7 @@
 
             <!-- 权限树 -->
             <a-tree
-              v-model:checkedKeys="checkedPermissions"
+              v-model:checked-keys="checkedPermissions"
               :tree-data="permissionTree"
               checkable
               :default-expand-all="true"
@@ -241,10 +330,17 @@
                 <div class="flex items-center justify-between">
                   <span>{{ title }}</span>
                   <div class="flex space-x-2">
-                    <a-tag :color="getPermissionTypeColor(type)" size="small">
+                    <a-tag
+                      :color="getPermissionTypeColor(type)"
+                      size="small"
+                    >
                       {{ getPermissionTypeText(type) }}
                     </a-tag>
-                    <a-button type="text" size="small" @click="handleEditPermission(key)">
+                    <a-button
+                      type="text"
+                      size="small"
+                      @click="handleEditPermission(key)"
+                    >
                       <EditOutlined />
                     </a-button>
                   </div>
@@ -255,9 +351,14 @@
         </a-tab-pane>
 
         <!-- 访问日志 -->
-        <a-tab-pane key="logs" tab="访问日志">
+        <a-tab-pane
+          key="logs"
+          tab="访问日志"
+        >
           <div class="mb-6">
-            <h3 class="text-lg font-semibold text-gray-800 mb-4">访问日志</h3>
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">
+              访问日志
+            </h3>
             
             <!-- 日志筛选 -->
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -284,12 +385,19 @@
                 class="rounded-lg"
               />
               
-              <a-button type="primary" @click="handleLogSearch" class="rounded-lg">
+              <a-button
+                type="primary"
+                class="rounded-lg"
+                @click="handleLogSearch"
+              >
                 <SearchOutlined />
                 搜索
               </a-button>
               
-              <a-button @click="handleExportLogs" class="rounded-lg">
+              <a-button
+                class="rounded-lg"
+                @click="handleExportLogs"
+              >
                 <DownloadOutlined />
                 导出
               </a-button>
@@ -301,9 +409,9 @@
               :data-source="logs"
               :loading="logLoading"
               :pagination="logPagination"
-              @change="handleLogTableChange"
               row-key="id"
               class="rounded-lg"
+              @change="handleLogTableChange"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'type'">
@@ -341,6 +449,47 @@ import {
   DownloadOutlined
 } from '@ant-design/icons-vue'
 
+interface UserRecord {
+  id: number
+  username: string
+  name: string
+  department: string
+  roles: string[]
+  status: 'active' | 'disabled'
+  lastLogin: string
+}
+
+interface RoleRecord {
+  id: number
+  name: string
+  description: string
+  userCount: number
+  permissions: string[]
+}
+
+interface PermissionTreeNode {
+  title: string
+  key: string
+  type: string
+  children?: PermissionTreeNode[]
+}
+
+interface LogRecord {
+  id: number
+  username: string
+  type: string
+  description: string
+  result: 'success' | 'failed'
+  ip: string
+  timestamp: string
+}
+
+interface PaginationState {
+  current: number
+  pageSize: number
+  total: number
+}
+
 // 响应式数据
 const activeTab = ref('users')
 const loading = ref(false)
@@ -348,28 +497,28 @@ const logLoading = ref(false)
 
 // 用户管理相关
 const userSearch = ref('')
-const selectedRole = ref(undefined)
-const selectedDepartment = ref(undefined)
-const users = ref([])
-const userPagination = ref({
+const selectedRole = ref<string | undefined>(undefined)
+const selectedDepartment = ref<string | undefined>(undefined)
+const users = ref<UserRecord[]>([])
+const userPagination = ref<PaginationState>({
   current: 1,
   pageSize: 10,
   total: 0
 })
 
 // 角色管理相关
-const roles = ref([])
+const roles = ref<RoleRecord[]>([])
 
 // 权限管理相关
-const checkedPermissions = ref([])
-const permissionTree = ref([])
+const checkedPermissions = ref<string[]>([])
+const permissionTree = ref<PermissionTreeNode[]>([])
 
 // 日志管理相关
 const logSearch = ref('')
-const selectedLogType = ref(undefined)
-const logDateRange = ref([])
-const logs = ref([])
-const logPagination = ref({
+const selectedLogType = ref<string | undefined>(undefined)
+const logDateRange = ref<unknown[]>([])
+const logs = ref<LogRecord[]>([])
+const logPagination = ref<PaginationState>({
   current: 1,
   pageSize: 10,
   total: 0
@@ -487,20 +636,20 @@ const handleUserSearch = () => {
   fetchUsers()
 }
 
-const handleEditUser = (record) => {
+const handleEditUser = (record: UserRecord) => {
   message.info(`编辑用户: ${record.name}`)
 }
 
-const handleUserPermissions = (record) => {
+const handleUserPermissions = (record: UserRecord) => {
   message.info(`设置用户权限: ${record.name}`)
 }
 
-const handleToggleUserStatus = (record) => {
+const handleToggleUserStatus = (record: UserRecord) => {
   const action = record.status === 'active' ? '禁用' : '启用'
   message.info(`${action}用户: ${record.name}`)
 }
 
-const handleUserTableChange = (pag) => {
+const handleUserTableChange = (pag: Partial<PaginationState>) => {
   userPagination.value = { ...userPagination.value, ...pag }
   fetchUsers()
 }
@@ -509,15 +658,15 @@ const handleAddRole = () => {
   message.info('添加角色')
 }
 
-const handleEditRole = (role) => {
+const handleEditRole = (role: RoleRecord) => {
   message.info(`编辑角色: ${role.name}`)
 }
 
-const handleRolePermissions = (role) => {
+const handleRolePermissions = (role: RoleRecord) => {
   message.info(`设置角色权限: ${role.name}`)
 }
 
-const handleDeleteRole = (role) => {
+const handleDeleteRole = (role: RoleRecord) => {
   message.info(`删除角色: ${role.name}`)
 }
 
@@ -537,7 +686,7 @@ const handleExportLogs = () => {
   message.info('导出日志')
 }
 
-const handleLogTableChange = (pag) => {
+const handleLogTableChange = (pag: Partial<PaginationState>) => {
   logPagination.value = { ...logPagination.value, ...pag }
   fetchLogs()
 }

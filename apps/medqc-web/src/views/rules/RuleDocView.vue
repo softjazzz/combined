@@ -1,6 +1,9 @@
 <template>
   <div class="rule-doc-view">
-    <a-card title="质控点说明（泸县33条规则逻辑总览）" :bordered="false">
+    <a-card
+      title="质控点说明（泸县33条规则逻辑总览）"
+      :bordered="false"
+    >
       <a-table
         :data-source="ruleDocRows"
         :columns="ruleDocColumns"

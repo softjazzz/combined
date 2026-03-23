@@ -4,9 +4,9 @@
       <!-- 主要操作按钮 -->
       <a-button
         type="primary"
-        @click="$emit('start')"
         :loading="isRunning"
         :disabled="!canStart"
+        @click="$emit('start')"
       >
         <PlayCircleOutlined />
         {{ isRunning ? '分析进行中' : '开始分析' }}
@@ -23,8 +23,8 @@
 
       <a-button
         v-if="isRunning"
-        @click="$emit('stop')"
         danger
+        @click="$emit('stop')"
       >
         <StopOutlined />
         停止
@@ -40,29 +40,35 @@
       <!-- 步骤导航 -->
       <a-button
         :icon="h(LeftOutlined)"
-        @click="$emit('previous-step')"
         :disabled="currentStep === 'target'"
         size="small"
+        @click="$emit('previous-step')"
       >
         上一步
       </a-button>
 
       <a-select
         :value="currentStep"
-        @change="(value) => $emit('jump-step', value)"
         style="width: 120px"
         size="small"
+        @change="(value: string) => $emit('jump-step', value)"
       >
-        <a-select-option value="target">测试对象</a-select-option>
-        <a-select-option value="rules">规则配置</a-select-option>
-        <a-select-option value="run">运行与结果</a-select-option>
+        <a-select-option value="target">
+          测试对象
+        </a-select-option>
+        <a-select-option value="rules">
+          规则配置
+        </a-select-option>
+        <a-select-option value="run">
+          运行与结果
+        </a-select-option>
       </a-select>
 
       <a-button
         :icon="h(RightOutlined)"
-        @click="$emit('next-step')"
         :disabled="currentStep === 'run'"
         size="small"
+        @click="$emit('next-step')"
       >
         下一步
       </a-button>
@@ -152,4 +158,3 @@ const handleMenuAction = ({ key }: { key: string }) => {
   gap: 8px;
 }
 </style>
-

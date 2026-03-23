@@ -1,7 +1,10 @@
 <template>
   <div :class="['semantic-rules-view', showHeader ? 'min-h-screen bg-gray-50 p-3 lg:p-4' : '']">
     <!-- 页面头部 -->
-    <div v-if="showHeader" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
+    <div
+      v-if="showHeader"
+      class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4"
+    >
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div class="flex-1">
           <div class="flex items-center space-x-2 mb-1">
@@ -18,26 +21,32 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <a-button
-            @click="refreshData"
             :loading="loading"
             class="flex items-center space-x-2"
+            @click="refreshData"
           >
-            <template #icon><ReloadOutlined /></template>
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             <span>刷新</span>
           </a-button>
           <a-button
-            @click="showSystemOverview = true"
             class="flex items-center space-x-2"
+            @click="showSystemOverview = true"
           >
-            <template #icon><EyeOutlined /></template>
+            <template #icon>
+              <EyeOutlined />
+            </template>
             <span>系统概览</span>
           </a-button>
           <a-button
             type="primary"
-            @click="openImportRules"
             class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700"
+            @click="openImportRules"
           >
-            <template #icon><ImportOutlined /></template>
+            <template #icon>
+              <ImportOutlined />
+            </template>
             <span>导入规则</span>
           </a-button>
         </div>
@@ -58,7 +67,11 @@
       centered
     >
       <div class="system-overview">
-        <a-descriptions title="系统信息" :column="2" bordered>
+        <a-descriptions
+          title="系统信息"
+          :column="2"
+          bordered
+        >
           <a-descriptions-item label="LLM提供商">
             {{ llmStatus.provider || 'Mock' }}
           </a-descriptions-item>
@@ -71,7 +84,9 @@
             </a-tag>
           </a-descriptions-item>
           <a-descriptions-item label="运行模式">
-            <a-tag color="blue">语义分析模式</a-tag>
+            <a-tag color="blue">
+              语义分析模式
+            </a-tag>
           </a-descriptions-item>
         </a-descriptions>
 
@@ -133,8 +148,12 @@
                     <component :is="item.icon" />
                   </a-avatar>
                 </template>
-                <template #title>{{ item.title }}</template>
-                <template #description>{{ item.description }}</template>
+                <template #title>
+                  {{ item.title }}
+                </template>
+                <template #description>
+                  {{ item.description }}
+                </template>
               </a-list-item-meta>
             </a-list-item>
           </template>

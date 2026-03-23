@@ -2,8 +2,12 @@
   <div class="my-tasks-container p-8 bg-gray-50 min-h-screen">
     <!-- 页面标题 -->
     <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-800 mb-2">我的任务</h1>
-      <p class="text-gray-600">管理和处理分配给我的质控任务</p>
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">
+        我的任务
+      </h1>
+      <p class="text-gray-600">
+        管理和处理分配给我的质控任务
+      </p>
     </div>
 
     <!-- 任务统计卡片 -->
@@ -11,8 +15,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">待处理</p>
-            <p class="text-3xl font-bold text-orange-600">{{ taskStats.draft }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              待处理
+            </p>
+            <p class="text-3xl font-bold text-orange-600">
+              {{ taskStats.draft }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
             <ClockCircleOutlined class="text-orange-600 text-xl" />
@@ -23,8 +31,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">进行中</p>
-            <p class="text-3xl font-bold text-blue-600">{{ taskStats.in_progress }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              进行中
+            </p>
+            <p class="text-3xl font-bold text-blue-600">
+              {{ taskStats.in_progress }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
             <SyncOutlined class="text-blue-600 text-xl" />
@@ -35,8 +47,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">已完成</p>
-            <p class="text-3xl font-bold text-green-600">{{ taskStats.completed }}</p>
+            <p class="text-gray-600 text-sm mb-1">
+              已完成
+            </p>
+            <p class="text-3xl font-bold text-green-600">
+              {{ taskStats.completed }}
+            </p>
           </div>
           <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <CheckCircleOutlined class="text-green-600 text-xl" />
@@ -47,8 +63,12 @@
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-gray-600 text-sm mb-1">完成率</p>
-            <p class="text-3xl font-bold text-purple-600">{{ completionRate }}%</p>
+            <p class="text-gray-600 text-sm mb-1">
+              完成率
+            </p>
+            <p class="text-3xl font-bold text-purple-600">
+              {{ completionRate }}%
+            </p>
           </div>
           <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
             <TrophyOutlined class="text-purple-600 text-xl" />
@@ -59,21 +79,40 @@
 
     <!-- 快捷操作 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
-      <h2 class="text-xl font-semibold text-gray-800 mb-4">快捷操作</h2>
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">
+        快捷操作
+      </h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <a-button type="primary" size="large" @click="handleStartTask" class="rounded-lg h-16">
+        <a-button
+          type="primary"
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleStartTask"
+        >
           <PlayCircleOutlined class="text-lg" />
           <span class="ml-2">开始任务</span>
         </a-button>
-        <a-button size="large" @click="handleViewByStatus('pending')" class="rounded-lg h-16">
+        <a-button
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleViewByStatus('pending')"
+        >
           <ClockCircleOutlined class="text-lg" />
           <span class="ml-2">待处理任务</span>
         </a-button>
-        <a-button size="large" @click="handleViewByStatus('completed')" class="rounded-lg h-16">
+        <a-button
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleViewByStatus('completed')"
+        >
           <CheckCircleOutlined class="text-lg" />
           <span class="ml-2">已完成任务</span>
         </a-button>
-        <a-button size="large" @click="handleTaskReport" class="rounded-lg h-16">
+        <a-button
+          size="large"
+          class="rounded-lg h-16"
+          @click="handleTaskReport"
+        >
           <BarChartOutlined class="text-lg" />
           <span class="ml-2">任务报告</span>
         </a-button>
@@ -95,8 +134,8 @@
           v-model:value="searchKeyword"
           placeholder="搜索任务名称"
           allow-clear
-          @search="handleFilter"
           class="rounded-lg"
+          @search="handleFilter"
         />
         
         <a-range-picker
@@ -105,11 +144,18 @@
         />
         
         <div class="flex space-x-2">
-          <a-button type="primary" @click="handleFilter" class="rounded-lg">
+          <a-button
+            type="primary"
+            class="rounded-lg"
+            @click="handleFilter"
+          >
             <FilterOutlined />
             筛选
           </a-button>
-          <a-button @click="handleResetFilter" class="rounded-lg">
+          <a-button
+            class="rounded-lg"
+            @click="handleResetFilter"
+          >
             <ReloadOutlined />
             重置
           </a-button>
@@ -120,8 +166,15 @@
     <!-- 任务列表 -->
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
       <div class="flex justify-between items-center mb-6">
-        <h2 class="text-xl font-semibold text-gray-800">任务列表</h2>
-        <a-button type="primary" @click="handleRefresh" :loading="loading" class="rounded-lg">
+        <h2 class="text-xl font-semibold text-gray-800">
+          任务列表
+        </h2>
+        <a-button
+          type="primary"
+          :loading="loading"
+          class="rounded-lg"
+          @click="handleRefresh"
+        >
           <ReloadOutlined />
           刷新
         </a-button>
@@ -132,9 +185,9 @@
         :data-source="tasks"
         :loading="loading"
         :pagination="pagination"
-        @change="handleTableChange"
         row-key="id"
         class="rounded-lg"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'">
@@ -143,29 +196,37 @@
             </a-tag>
           </template>
           <template v-if="column.key === 'progress'">
-            <a-progress :percent="record.progress" size="small" :status="record.progress >= 100 ? 'success' : 'active'" />
+            <a-progress
+              :percent="record.progress"
+              size="small"
+              :status="record.progress >= 100 ? 'success' : 'active'"
+            />
           </template>
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
               <a-button 
+                v-if="record.status === 'draft' || record.status === 'assigned'" 
                 type="link" 
-                size="small" 
+                size="small"
                 @click="handleStartWork(record)"
-                v-if="record.status === 'draft' || record.status === 'assigned'"
               >
                 <PlayCircleOutlined />
                 开始
               </a-button>
               <a-button 
+                v-if="record.status === 'in_progress'" 
                 type="link" 
-                size="small" 
+                size="small"
                 @click="handleContinueWork(record)"
-                v-if="record.status === 'in_progress'"
               >
                 <EditOutlined />
                 继续
               </a-button>
-              <a-button type="link" size="small" @click="handleViewDetail(record)">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleViewDetail(record)"
+              >
                 <EyeOutlined />
                 详情
               </a-button>
@@ -180,18 +241,24 @@
       v-model:open="detailDrawerVisible"
       :title="detailTask?.task_name || '任务详情'"
       :width="560"
-      :headerStyle="{ borderBottom: '1px solid #e2e8f0' }"
-      :bodyStyle="{ padding: '20px' }"
+      :header-style="{ borderBottom: '1px solid #e2e8f0' }"
+      :body-style="{ padding: '20px' }"
     >
       <template v-if="detailTask">
         <div class="space-y-4">
           <!-- 基本信息 -->
           <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
-            <h4 class="text-sm font-bold text-slate-500 mb-3">基本信息</h4>
+            <h4 class="text-sm font-bold text-slate-500 mb-3">
+              基本信息
+            </h4>
             <div class="grid grid-cols-2 gap-3 text-sm">
               <div><span class="text-slate-400">编号：</span><span class="font-medium">{{ detailTask.task_number }}</span></div>
               <div><span class="text-slate-400">类型：</span><span class="font-medium">{{ detailTask.task_type === 'one_time' ? '一次性' : '定时' }}</span></div>
-              <div><span class="text-slate-400">状态：</span><a-tag :color="getStatusColor(detailTask.status)">{{ getStatusText(detailTask.status) }}</a-tag></div>
+              <div>
+                <span class="text-slate-400">状态：</span><a-tag :color="getStatusColor(detailTask.status)">
+                  {{ getStatusText(detailTask.status) }}
+                </a-tag>
+              </div>
               <div><span class="text-slate-400">创建人：</span><span class="font-medium">{{ detailTask.creator_name }}</span></div>
               <div><span class="text-slate-400">截止：</span><span class="font-medium">{{ detailTask.deadline || '无' }}</span></div>
               <div><span class="text-slate-400">创建时间：</span><span class="font-medium">{{ formatDate(detailTask.created_at) }}</span></div>
@@ -199,21 +266,42 @@
           </div>
 
           <!-- 进度信息 -->
-          <div class="bg-blue-50 rounded-lg p-4 border border-blue-100" v-if="detailProgress">
-            <h4 class="text-sm font-bold text-blue-700 mb-3">进度详情</h4>
-            <a-progress :percent="detailProgress.progress_pct" :status="detailProgress.progress_pct >= 100 ? 'success' : 'active'" class="mb-3" />
+          <div
+            v-if="detailProgress"
+            class="bg-blue-50 rounded-lg p-4 border border-blue-100"
+          >
+            <h4 class="text-sm font-bold text-blue-700 mb-3">
+              进度详情
+            </h4>
+            <a-progress
+              :percent="detailProgress.progress_pct"
+              :status="detailProgress.progress_pct >= 100 ? 'success' : 'active'"
+              class="mb-3"
+            />
             <div class="grid grid-cols-3 gap-3 text-sm text-center">
               <div class="bg-white rounded-lg p-2 border border-blue-100">
-                <div class="text-lg font-bold text-slate-700">{{ detailProgress.pending_count }}</div>
-                <div class="text-xs text-slate-400">待处理</div>
+                <div class="text-lg font-bold text-slate-700">
+                  {{ detailProgress.pending_count }}
+                </div>
+                <div class="text-xs text-slate-400">
+                  待处理
+                </div>
               </div>
               <div class="bg-white rounded-lg p-2 border border-blue-100">
-                <div class="text-lg font-bold text-blue-600">{{ detailProgress.working_count }}</div>
-                <div class="text-xs text-slate-400">进行中</div>
+                <div class="text-lg font-bold text-blue-600">
+                  {{ detailProgress.working_count }}
+                </div>
+                <div class="text-xs text-slate-400">
+                  进行中
+                </div>
               </div>
               <div class="bg-white rounded-lg p-2 border border-blue-100">
-                <div class="text-lg font-bold text-green-600">{{ detailProgress.done_count }}</div>
-                <div class="text-xs text-slate-400">已完成</div>
+                <div class="text-lg font-bold text-green-600">
+                  {{ detailProgress.done_count }}
+                </div>
+                <div class="text-xs text-slate-400">
+                  已完成
+                </div>
               </div>
             </div>
             <div class="mt-3 grid grid-cols-2 gap-2 text-sm">

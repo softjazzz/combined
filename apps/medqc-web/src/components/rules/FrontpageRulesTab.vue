@@ -11,15 +11,25 @@
         </div>
         <div class="kpi-stats">
           <div>
-            <div class="kpi-value">{{ statistics.total }}</div>
-            <div class="kpi-label">规则总数</div>
+            <div class="kpi-value">
+              {{ statistics.total }}
+            </div>
+            <div class="kpi-label">
+              规则总数
+            </div>
           </div>
           <div>
-            <div class="kpi-value">{{ statistics.categories }}</div>
-            <div class="kpi-label">分类数</div>
+            <div class="kpi-value">
+              {{ statistics.categories }}
+            </div>
+            <div class="kpi-label">
+              分类数
+            </div>
           </div>
         </div>
-        <p class="kpi-note">统一查看首页质控规则总量与分类覆盖情况。</p>
+        <p class="kpi-note">
+          统一查看首页质控规则总量与分类覆盖情况。
+        </p>
       </section>
 
       <section class="kpi-card">
@@ -31,16 +41,37 @@
         </div>
         <div class="severity-list">
           <div class="severity-item">
-            <div class="severity-meta"><span>严重</span><strong>{{ statistics.severity_counts?.error || 0 }}</strong></div>
-            <div class="severity-track"><div class="severity-fill severity-error" :style="{ width: severityPercent('error') }"></div></div>
+            <div class="severity-meta">
+              <span>严重</span><strong>{{ statistics.severity_counts?.error || 0 }}</strong>
+            </div>
+            <div class="severity-track">
+              <div
+                class="severity-fill severity-error"
+                :style="{ width: severityPercent('error') }"
+              />
+            </div>
           </div>
           <div class="severity-item">
-            <div class="severity-meta"><span>警告</span><strong>{{ statistics.severity_counts?.warning || 0 }}</strong></div>
-            <div class="severity-track"><div class="severity-fill severity-warning" :style="{ width: severityPercent('warning') }"></div></div>
+            <div class="severity-meta">
+              <span>警告</span><strong>{{ statistics.severity_counts?.warning || 0 }}</strong>
+            </div>
+            <div class="severity-track">
+              <div
+                class="severity-fill severity-warning"
+                :style="{ width: severityPercent('warning') }"
+              />
+            </div>
           </div>
           <div class="severity-item">
-            <div class="severity-meta"><span>提示</span><strong>{{ statistics.severity_counts?.info || 0 }}</strong></div>
-            <div class="severity-track"><div class="severity-fill severity-info" :style="{ width: severityPercent('info') }"></div></div>
+            <div class="severity-meta">
+              <span>提示</span><strong>{{ statistics.severity_counts?.info || 0 }}</strong>
+            </div>
+            <div class="severity-track">
+              <div
+                class="severity-fill severity-info"
+                :style="{ width: severityPercent('info') }"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -53,10 +84,34 @@
           </div>
         </div>
         <div class="category-grid">
-          <div><div class="category-value">{{ statistics.category_counts?.required || 0 }}</div><div class="category-label">必填性</div></div>
-          <div><div class="category-value">{{ statistics.category_counts?.format || 0 }}</div><div class="category-label">规范性</div></div>
-          <div><div class="category-value">{{ statistics.category_counts?.logic || 0 }}</div><div class="category-label">逻辑性</div></div>
-          <div><div class="category-value">{{ statistics.category_counts?.consistency || 0 }}</div><div class="category-label">一致性</div></div>
+          <div>
+            <div class="category-value">
+              {{ statistics.category_counts?.required || 0 }}
+            </div><div class="category-label">
+              必填性
+            </div>
+          </div>
+          <div>
+            <div class="category-value">
+              {{ statistics.category_counts?.format || 0 }}
+            </div><div class="category-label">
+              规范性
+            </div>
+          </div>
+          <div>
+            <div class="category-value">
+              {{ statistics.category_counts?.logic || 0 }}
+            </div><div class="category-label">
+              逻辑性
+            </div>
+          </div>
+          <div>
+            <div class="category-value">
+              {{ statistics.category_counts?.consistency || 0 }}
+            </div><div class="category-label">
+              一致性
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -65,20 +120,33 @@
       <div class="table-toolbar">
         <label class="field field-search">
           <div class="search-box">
-            <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              class="search-icon"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
             <input
               v-model="searchText"
-              @input="handleSearch"
               type="text"
               placeholder="搜索规则编号、名称、字段或说明"
+              @input="handleSearch"
             >
           </div>
         </label>
 
         <label class="field">
-          <select v-model="filterCategory" @change="applyFilter">
+          <select
+            v-model="filterCategory"
+            @change="applyFilter"
+          >
             <option :value="undefined">全部分类</option>
             <option value="required">必填校验</option>
             <option value="format">格式校验</option>
@@ -88,7 +156,10 @@
         </label>
 
         <label class="field">
-          <select v-model="filterSeverity" @change="applyFilter">
+          <select
+            v-model="filterSeverity"
+            @change="applyFilter"
+          >
             <option :value="undefined">全部严重度</option>
             <option value="error">严重</option>
             <option value="warning">警告</option>
@@ -97,9 +168,22 @@
         </label>
 
         <div class="toolbar-actions">
-          <button @click="fetchRules" class="refresh-btn">
-            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <button
+            class="refresh-btn"
+            @click="fetchRules"
+          >
+            <svg
+              class="btn-icon"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
             刷新
           </button>
@@ -107,7 +191,10 @@
       </div>
 
       <div class="table-scroll">
-        <div v-if="loading" class="loading-mask">
+        <div
+          v-if="loading"
+          class="loading-mask"
+        >
           <a-spin />
         </div>
         <table class="rules-table">
@@ -118,34 +205,60 @@
               <th>校验字段</th>
               <th>分类</th>
               <th>严重度</th>
-              <th class="text-right">状态</th>
+              <th class="text-right">
+                状态
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="record in filteredRules" :key="record.rule_id" class="rule-row" @click="editRule(record)">
+            <tr
+              v-for="record in filteredRules"
+              :key="record.rule_id"
+              class="rule-row"
+              @click="editRule(record)"
+            >
               <td><span class="code-pill">{{ record.rule_id }}</span></td>
               <td>
-                <div class="rule-name">{{ record.rule_name }}</div>
-                <div class="rule-desc" :title="record.description">{{ record.description }}</div>
+                <div class="rule-name">
+                  {{ record.rule_name }}
+                </div>
+                <div
+                  class="rule-desc"
+                  :title="record.description"
+                >
+                  {{ record.description }}
+                </div>
               </td>
               <td><span class="tag-pill">{{ record.field_name }}</span></td>
               <td><span class="tag-pill">{{ getCategoryLabel(record.category) }}</span></td>
               <td><span :class="['tag-pill', getSeverityBgClass(record.severity)]">{{ getSeverityLabel(record.severity) }}</span></td>
-              <td class="text-right" @click.stop>
+              <td
+                class="text-right"
+                @click.stop
+              >
                 <button class="bg-blue-500 border-transparent relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 transition-colors focus:outline-none">
-                  <span class="translate-x-3 inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition"></span>
+                  <span class="translate-x-3 inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition" />
                 </button>
               </td>
             </tr>
             <tr v-if="filteredRules.length === 0 && !loading">
-              <td colspan="6" class="empty-row">暂无匹配数据</td>
+              <td
+                colspan="6"
+                class="empty-row"
+              >
+                暂无匹配数据
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <RuleEditorDrawer v-model:open="drawerVisible" :record="currentRecord" @save="handleSaveRule" />
+    <RuleEditorDrawer
+      v-model:open="drawerVisible"
+      :record="currentRecord"
+      @save="handleSaveRule"
+    />
   </div>
 </template>
 

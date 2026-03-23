@@ -18,7 +18,7 @@ const realtimeService = getRealtimeService()
 
 // 检查连接状态
 const checkConnectionStatus = () => {
-  isConnected.value = realtimeService.getConnectionStatus()
+  isConnected.value = Boolean(realtimeService.isConnected)
 }
 
 // 手动重连

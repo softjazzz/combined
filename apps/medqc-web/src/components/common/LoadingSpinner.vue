@@ -1,36 +1,89 @@
 <template>
-  <div class="loading-spinner" :class="containerClass">
+  <div
+    class="loading-spinner"
+    :class="containerClass"
+  >
     <!-- 默认旋转圆圈 -->
-    <div v-if="type === 'spinner'" class="spinner" :class="spinnerClass">
-      <div class="spinner-circle"></div>
+    <div
+      v-if="type === 'spinner'"
+      class="spinner"
+      :class="spinnerClass"
+    >
+      <div class="spinner-circle" />
     </div>
     
     <!-- 脉冲动画 -->
-    <div v-else-if="type === 'pulse'" class="pulse-container">
-      <div class="pulse-dot" :class="pulseClass"></div>
-      <div class="pulse-dot" :class="pulseClass" style="animation-delay: 0.1s"></div>
-      <div class="pulse-dot" :class="pulseClass" style="animation-delay: 0.2s"></div>
+    <div
+      v-else-if="type === 'pulse'"
+      class="pulse-container"
+    >
+      <div
+        class="pulse-dot"
+        :class="pulseClass"
+      />
+      <div
+        class="pulse-dot"
+        :class="pulseClass"
+        style="animation-delay: 0.1s"
+      />
+      <div
+        class="pulse-dot"
+        :class="pulseClass"
+        style="animation-delay: 0.2s"
+      />
     </div>
     
     <!-- 波纹动画 -->
-    <div v-else-if="type === 'wave'" class="wave-container">
-      <div class="wave-bar" :class="waveClass"></div>
-      <div class="wave-bar" :class="waveClass" style="animation-delay: 0.1s"></div>
-      <div class="wave-bar" :class="waveClass" style="animation-delay: 0.2s"></div>
-      <div class="wave-bar" :class="waveClass" style="animation-delay: 0.3s"></div>
-      <div class="wave-bar" :class="waveClass" style="animation-delay: 0.4s"></div>
+    <div
+      v-else-if="type === 'wave'"
+      class="wave-container"
+    >
+      <div
+        class="wave-bar"
+        :class="waveClass"
+      />
+      <div
+        class="wave-bar"
+        :class="waveClass"
+        style="animation-delay: 0.1s"
+      />
+      <div
+        class="wave-bar"
+        :class="waveClass"
+        style="animation-delay: 0.2s"
+      />
+      <div
+        class="wave-bar"
+        :class="waveClass"
+        style="animation-delay: 0.3s"
+      />
+      <div
+        class="wave-bar"
+        :class="waveClass"
+        style="animation-delay: 0.4s"
+      />
     </div>
     
     <!-- 医疗主题动画 -->
-    <div v-else-if="type === 'medical'" class="medical-container">
-      <div class="medical-cross" :class="medicalClass">
-        <div class="cross-horizontal"></div>
-        <div class="cross-vertical"></div>
+    <div
+      v-else-if="type === 'medical'"
+      class="medical-container"
+    >
+      <div
+        class="medical-cross"
+        :class="medicalClass"
+      >
+        <div class="cross-horizontal" />
+        <div class="cross-vertical" />
       </div>
     </div>
     
     <!-- 加载文本 -->
-    <div v-if="showText" class="loading-text" :class="textClass">
+    <div
+      v-if="showText"
+      class="loading-text"
+      :class="textClass"
+    >
       {{ text }}
     </div>
   </div>

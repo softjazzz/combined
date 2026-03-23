@@ -3,7 +3,11 @@
   展示质控发现的违规项，按严重程度分类
 -->
 <template>
-  <a-card title="违规项列表" :bordered="false" class="violations-list">
+  <a-card
+    title="违规项列表"
+    :bordered="false"
+    class="violations-list"
+  >
     <!-- 统计摘要 -->
     <a-alert
       :message="`共发现 ${violations.length} 项违规`"
@@ -14,7 +18,10 @@
     />
 
     <!-- 违规项列表 -->
-    <a-collapse v-model:activeKey="activeKeys" accordion>
+    <a-collapse
+      v-model:active-key="activeKeys"
+      accordion
+    >
       <a-collapse-panel
         v-for="(violation, index) in violations"
         :key="violation.id"
@@ -49,11 +56,20 @@
           <!-- 操作按钮 -->
           <div class="detail-actions">
             <a-space>
-              <a-button size="small" @click="handleCopyViolation(violation)">
-                <template #icon><CopyOutlined /></template>
+              <a-button
+                size="small"
+                @click="handleCopyViolation(violation)"
+              >
+                <template #icon>
+                  <CopyOutlined />
+                </template>
                 复制
               </a-button>
-              <a-button size="small" type="link" @click="handleViewDetail(violation)">
+              <a-button
+                size="small"
+                type="link"
+                @click="handleViewDetail(violation)"
+              >
                 查看详情
               </a-button>
             </a-space>
@@ -72,7 +88,10 @@
     <!-- 按严重程度分组统计 -->
     <a-divider v-if="violations.length > 0" />
     
-    <div v-if="violations.length > 0" class="severity-stats">
+    <div
+      v-if="violations.length > 0"
+      class="severity-stats"
+    >
       <h4>严重程度分布</h4>
       <a-row :gutter="16">
         <a-col :span="8">

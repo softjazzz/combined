@@ -11,8 +11,8 @@
             allow-clear
             show-search
             :filter-option="filterDepartmentOption"
-            @change="handleFilterChange"
             class="w-full dept-select"
+            @change="handleFilterChange"
           >
             <a-select-option
               v-for="dept in departments"
@@ -29,12 +29,18 @@
             v-model:value="filters.status_filter"
             placeholder="全部状态"
             allow-clear
-            @change="handleFilterChange"
             class="w-full dept-select"
+            @change="handleFilterChange"
           >
-            <a-select-option value="draft">草稿</a-select-option>
-            <a-select-option value="published">已发布</a-select-option>
-            <a-select-option value="archived">已归档</a-select-option>
+            <a-select-option value="draft">
+              草稿
+            </a-select-option>
+            <a-select-option value="published">
+              已发布
+            </a-select-option>
+            <a-select-option value="archived">
+              已归档
+            </a-select-option>
           </a-select>
         </div>
         <div>
@@ -43,11 +49,15 @@
             v-model:value="filters.override_action"
             placeholder="全部类型"
             allow-clear
-            @change="handleFilterChange"
             class="w-full dept-select"
+            @change="handleFilterChange"
           >
-            <a-select-option value="override">覆盖配置</a-select-option>
-            <a-select-option value="disable">禁用规则</a-select-option>
+            <a-select-option value="override">
+              覆盖配置
+            </a-select-option>
+            <a-select-option value="disable">
+              禁用规则
+            </a-select-option>
           </a-select>
         </div>
         <div>
@@ -55,12 +65,12 @@
           <div class="relative">
             <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
             <input
-              type="text"
               v-model="filters.keyword"
+              type="text"
               placeholder="搜索规则编号、名称..."
-              @keyup.enter="handleFilterChange"
               class="w-full pl-9 pr-3 py-[7px] bg-white border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
-            />
+              @keyup.enter="handleFilterChange"
+            >
           </div>
         </div>
       </div>
@@ -71,8 +81,13 @@
       <!-- 列表头部 -->
       <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
         <div class="flex items-center gap-3">
-          <h3 class="text-slate-700 font-semibold text-sm">科室规则列表</h3>
-          <span v-if="rules.length" class="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+          <h3 class="text-slate-700 font-semibold text-sm">
+            科室规则列表
+          </h3>
+          <span
+            v-if="rules.length"
+            class="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100"
+          >
             {{ rules.length }} 条
           </span>
         </div>
@@ -81,7 +96,10 @@
             class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
             @click="refreshRules"
           >
-            <ReloadOutlined :class="{ 'animate-spin': loading }" class="mr-1.5" />
+            <ReloadOutlined
+              :class="{ 'animate-spin': loading }"
+              class="mr-1.5"
+            />
             刷新
           </button>
           <button
@@ -95,7 +113,10 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="!loading && rules.length === 0" class="py-20 px-8">
+      <div
+        v-if="!loading && rules.length === 0"
+        class="py-20 px-8"
+      >
         <div class="max-w-md mx-auto text-center">
           <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-100 flex items-center justify-center">
             <ApartmentOutlined class="text-3xl text-blue-300" />
@@ -134,10 +155,10 @@
         :data-source="rules"
         :loading="loading"
         :pagination="pagination"
-        @change="handleTableChange"
         :scroll="{ x: 1000 }"
         row-key="id"
         class="modern-table"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
           <!-- 编号 -->
@@ -146,7 +167,10 @@
               <span class="font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded text-xs font-semibold select-all border border-slate-200">
                 {{ record.rule_code }}
               </span>
-              <span v-if="record.parent_rule_id" class="px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[10px] font-medium">
+              <span
+                v-if="record.parent_rule_id"
+                class="px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[10px] font-medium"
+              >
                 覆盖
               </span>
             </div>
@@ -155,9 +179,14 @@
           <!-- 规则名称 -->
           <template v-else-if="column.key === 'name'">
             <div class="py-2">
-              <div class="text-slate-800 font-semibold text-sm leading-snug mb-1">{{ record.name }}</div>
+              <div class="text-slate-800 font-semibold text-sm leading-snug mb-1">
+                {{ record.name }}
+              </div>
               <div class="flex items-center gap-2">
-                <span v-if="record.department_id" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100">
+                <span
+                  v-if="record.department_id"
+                  class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100"
+                >
                   {{ getDepartmentName(record.department_id) }}
                 </span>
                 <span
@@ -166,7 +195,11 @@
                 >
                   {{ getStatusText(record.status) }}
                 </span>
-                <span v-if="record.description" class="text-slate-400 text-xs truncate" :title="record.description">
+                <span
+                  v-if="record.description"
+                  class="text-slate-400 text-xs truncate"
+                  :title="record.description"
+                >
                   {{ record.description }}
                 </span>
               </div>
@@ -194,12 +227,18 @@
           <template v-else-if="column.key === 'actions'">
             <div class="flex items-center justify-end gap-2">
               <a-tooltip title="查看详情">
-                <button class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all" @click="viewRule(record)">
+                <button
+                  class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all"
+                  @click="viewRule(record)"
+                >
                   <EyeOutlined />
                 </button>
               </a-tooltip>
               <a-tooltip title="编辑">
-                <button class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all" @click="editRule(record)">
+                <button
+                  class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
+                  @click="editRule(record)"
+                >
                   <EditOutlined />
                 </button>
               </a-tooltip>
@@ -211,7 +250,10 @@
                 发布
               </button>
               <a-tooltip title="变更历史">
-                <button class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 transition-all" @click="viewHistory(record)">
+                <button
+                  class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 transition-all"
+                  @click="viewHistory(record)"
+                >
                   <HistoryOutlined />
                 </button>
               </a-tooltip>
@@ -239,10 +281,10 @@
       :title="modalTitle"
       width="800px"
       :confirm-loading="modalLoading"
-      @ok="handleModalOk"
-      @cancel="handleModalCancel"
       centered
       class="modern-modal"
+      @ok="handleModalOk"
+      @cancel="handleModalCancel"
     >
       <a-form
         ref="formRef"
@@ -252,10 +294,20 @@
         :wrapper-col="{ span: 18 }"
       >
         <!-- 创建模式选择 -->
-        <a-form-item v-if="isCreateMode" label="创建模式">
-          <a-radio-group v-model:value="createMode" @change="handleCreateModeChange">
-            <a-radio value="override">基于全局规则创建</a-radio>
-            <a-radio value="new">全新创建</a-radio>
+        <a-form-item
+          v-if="isCreateMode"
+          label="创建模式"
+        >
+          <a-radio-group
+            v-model:value="createMode"
+            @change="handleCreateModeChange"
+          >
+            <a-radio value="override">
+              基于全局规则创建
+            </a-radio>
+            <a-radio value="new">
+              全新创建
+            </a-radio>
           </a-radio-group>
         </a-form-item>
 
@@ -283,7 +335,11 @@
         </a-form-item>
 
         <!-- 科室选择 -->
-        <a-form-item label="科室" name="department_id" required>
+        <a-form-item
+          label="科室"
+          name="department_id"
+          required
+        >
           <a-select
             v-model:value="formData.department_id"
             placeholder="选择科室"
@@ -300,7 +356,11 @@
           </a-select>
         </a-form-item>
 
-        <a-form-item label="规则编号" name="rule_code" required>
+        <a-form-item
+          label="规则编号"
+          name="rule_code"
+          required
+        >
           <a-input
             v-model:value="formData.rule_code"
             placeholder="例如：COMP_001"
@@ -308,39 +368,91 @@
           />
         </a-form-item>
 
-        <a-form-item label="规则名称" name="name" required>
-          <a-input v-model:value="formData.name" placeholder="输入规则名称" />
+        <a-form-item
+          label="规则名称"
+          name="name"
+          required
+        >
+          <a-input
+            v-model:value="formData.name"
+            placeholder="输入规则名称"
+          />
         </a-form-item>
 
-        <a-form-item label="规则描述" name="description">
-          <a-textarea v-model:value="formData.description" placeholder="输入规则描述" :rows="3" />
+        <a-form-item
+          label="规则描述"
+          name="description"
+        >
+          <a-textarea
+            v-model:value="formData.description"
+            placeholder="输入规则描述"
+            :rows="3"
+          />
         </a-form-item>
 
-        <a-form-item label="规则分类" name="category" required>
-          <a-select v-model:value="formData.category" placeholder="选择规则分类">
-            <a-select-option value="completeness">完整性</a-select-option>
-            <a-select-option value="consistency">一致性</a-select-option>
-            <a-select-option value="rationality">合理性</a-select-option>
-            <a-select-option value="timeliness">及时性</a-select-option>
+        <a-form-item
+          label="规则分类"
+          name="category"
+          required
+        >
+          <a-select
+            v-model:value="formData.category"
+            placeholder="选择规则分类"
+          >
+            <a-select-option value="completeness">
+              完整性
+            </a-select-option>
+            <a-select-option value="consistency">
+              一致性
+            </a-select-option>
+            <a-select-option value="rationality">
+              合理性
+            </a-select-option>
+            <a-select-option value="timeliness">
+              及时性
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="严重程度" name="severity" required>
-          <a-select v-model:value="formData.severity" placeholder="选择严重程度">
-            <a-select-option value="critical">严重</a-select-option>
-            <a-select-option value="major">重要</a-select-option>
-            <a-select-option value="minor">轻微</a-select-option>
+        <a-form-item
+          label="严重程度"
+          name="severity"
+          required
+        >
+          <a-select
+            v-model:value="formData.severity"
+            placeholder="选择严重程度"
+          >
+            <a-select-option value="critical">
+              严重
+            </a-select-option>
+            <a-select-option value="major">
+              重要
+            </a-select-option>
+            <a-select-option value="minor">
+              轻微
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="覆盖行为" name="override_action">
+        <a-form-item
+          label="覆盖行为"
+          name="override_action"
+        >
           <a-radio-group v-model:value="formData.override_action">
-            <a-radio value="override">覆盖配置</a-radio>
-            <a-radio value="disable">禁用规则</a-radio>
+            <a-radio value="override">
+              覆盖配置
+            </a-radio>
+            <a-radio value="disable">
+              禁用规则
+            </a-radio>
           </a-radio-group>
         </a-form-item>
 
-        <a-form-item label="优先级" name="priority">
+        <a-form-item
+          label="优先级"
+          name="priority"
+        >
           <a-input-number
             v-model:value="formData.priority"
             :min="0"
@@ -402,7 +514,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, type TableColumnsType } from 'vue'
+import { onMounted } from 'vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import {
   ReloadOutlined,
   PlusOutlined,

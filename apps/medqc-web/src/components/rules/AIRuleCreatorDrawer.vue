@@ -3,9 +3,9 @@
     :open="visible"
     title="✨ AI 智能创建质控规则"
     :width="720"
-    :destroyOnClose="true"
-    @close="handleClose"
+    :destroy-on-close="true"
     class="ai-rule-creator-drawer"
+    @close="handleClose"
   >
     <!-- 引导提示 -->
     <a-alert
@@ -18,17 +18,24 @@
         <span><BulbOutlined /> 用自然语言描述您的质控需求，AI 将自动生成完整的规则草案</span>
       </template>
       <template #description>
-        示例：检查入院记录是否记录了患者的过敏史，包括药物过敏与食物过敏。<br />
+        示例：检查入院记录是否记录了患者的过敏史，包括药物过敏与食物过敏。<br>
         <a @click="showExamples = true">查看更多示例</a>
       </template>
     </a-alert>
 
     <!-- 需求输入表单 -->
-    <a-card :bordered="false" class="input-card" size="small">
+    <a-card
+      :bordered="false"
+      class="input-card"
+      size="small"
+    >
       <template #title>
         <span><EditOutlined /> 描述您的质控需求</span>
       </template>
-      <a-form :model="formData" layout="vertical">
+      <a-form
+        :model="formData"
+        layout="vertical"
+      >
         <a-form-item
           label="需求描述"
           required
@@ -47,68 +54,163 @@
         <a-row :gutter="12">
           <a-col :span="12">
             <a-form-item label="适用文书">
-              <a-select v-model:value="formData.documentType" show-search>
+              <a-select
+                v-model:value="formData.documentType"
+                show-search
+              >
                 <a-select-opt-group label="病案首页">
-                  <a-select-option value="病案首页">病案首页</a-select-option>
-                  <a-select-option value="病案首页手术记录明细">病案首页手术记录明细</a-select-option>
-                  <a-select-option value="病案首页费用明细">病案首页费用明细</a-select-option>
-                  <a-select-option value="病案首页输血记录明细">病案首页输血记录明细</a-select-option>
-                  <a-select-option value="病案首页重症监护记录明细">病案首页重症监护记录明细</a-select-option>
-                  <a-select-option value="病案首页医院自定义明细">病案首页医院自定义明细</a-select-option>
+                  <a-select-option value="病案首页">
+                    病案首页
+                  </a-select-option>
+                  <a-select-option value="病案首页手术记录明细">
+                    病案首页手术记录明细
+                  </a-select-option>
+                  <a-select-option value="病案首页费用明细">
+                    病案首页费用明细
+                  </a-select-option>
+                  <a-select-option value="病案首页输血记录明细">
+                    病案首页输血记录明细
+                  </a-select-option>
+                  <a-select-option value="病案首页重症监护记录明细">
+                    病案首页重症监护记录明细
+                  </a-select-option>
+                  <a-select-option value="病案首页医院自定义明细">
+                    病案首页医院自定义明细
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="入出院/死亡记录">
-                  <a-select-option value="入院记录">入院记录</a-select-option>
-                  <a-select-option value="出院记录">出院记录</a-select-option>
-                  <a-select-option value="24小时入出院记录">24小时入出院记录</a-select-option>
-                  <a-select-option value="死亡记录">死亡记录</a-select-option>
-                  <a-select-option value="24小时入院死亡记录">24小时入院死亡记录</a-select-option>
-                  <a-select-option value="死亡病例讨论记录">死亡病例讨论记录</a-select-option>
+                  <a-select-option value="入院记录">
+                    入院记录
+                  </a-select-option>
+                  <a-select-option value="出院记录">
+                    出院记录
+                  </a-select-option>
+                  <a-select-option value="24小时入出院记录">
+                    24小时入出院记录
+                  </a-select-option>
+                  <a-select-option value="死亡记录">
+                    死亡记录
+                  </a-select-option>
+                  <a-select-option value="24小时入院死亡记录">
+                    24小时入院死亡记录
+                  </a-select-option>
+                  <a-select-option value="死亡病例讨论记录">
+                    死亡病例讨论记录
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="病程记录">
-                  <a-select-option value="首次病程记录">首次病程记录</a-select-option>
-                  <a-select-option value="日常病程记录">日常病程记录</a-select-option>
-                  <a-select-option value="上级医师查房记录">上级医师查房记录</a-select-option>
-                  <a-select-option value="术后首次病程记录">术后首次病程记录</a-select-option>
-                  <a-select-option value="抢救记录">抢救记录</a-select-option>
-                  <a-select-option value="阶段小结">阶段小结</a-select-option>
-                  <a-select-option value="交班记录">交班记录</a-select-option>
-                  <a-select-option value="接班记录">接班记录</a-select-option>
-                  <a-select-option value="会诊记录">会诊记录</a-select-option>
-                  <a-select-option value="疑难病例讨论记录">疑难病例讨论记录</a-select-option>
-                  <a-select-option value="转出记录">转出记录</a-select-option>
-                  <a-select-option value="转入记录">转入记录</a-select-option>
-                  <a-select-option value="医患沟通记录">医患沟通记录</a-select-option>
+                  <a-select-option value="首次病程记录">
+                    首次病程记录
+                  </a-select-option>
+                  <a-select-option value="日常病程记录">
+                    日常病程记录
+                  </a-select-option>
+                  <a-select-option value="上级医师查房记录">
+                    上级医师查房记录
+                  </a-select-option>
+                  <a-select-option value="术后首次病程记录">
+                    术后首次病程记录
+                  </a-select-option>
+                  <a-select-option value="抢救记录">
+                    抢救记录
+                  </a-select-option>
+                  <a-select-option value="阶段小结">
+                    阶段小结
+                  </a-select-option>
+                  <a-select-option value="交班记录">
+                    交班记录
+                  </a-select-option>
+                  <a-select-option value="接班记录">
+                    接班记录
+                  </a-select-option>
+                  <a-select-option value="会诊记录">
+                    会诊记录
+                  </a-select-option>
+                  <a-select-option value="疑难病例讨论记录">
+                    疑难病例讨论记录
+                  </a-select-option>
+                  <a-select-option value="转出记录">
+                    转出记录
+                  </a-select-option>
+                  <a-select-option value="转入记录">
+                    转入记录
+                  </a-select-option>
+                  <a-select-option value="医患沟通记录">
+                    医患沟通记录
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="手术相关">
-                  <a-select-option value="手术申请">手术申请</a-select-option>
-                  <a-select-option value="手术记录">手术记录</a-select-option>
-                  <a-select-option value="手术风险评估">手术风险评估</a-select-option>
-                  <a-select-option value="术前讨论">术前讨论</a-select-option>
-                  <a-select-option value="术前小结">术前小结</a-select-option>
-                  <a-select-option value="手术知情同意书">手术知情同意书</a-select-option>
-                  <a-select-option value="手术安全核查记录">手术安全核查记录</a-select-option>
-                  <a-select-option value="手术清点记录">手术清点记录</a-select-option>
+                  <a-select-option value="手术申请">
+                    手术申请
+                  </a-select-option>
+                  <a-select-option value="手术记录">
+                    手术记录
+                  </a-select-option>
+                  <a-select-option value="手术风险评估">
+                    手术风险评估
+                  </a-select-option>
+                  <a-select-option value="术前讨论">
+                    术前讨论
+                  </a-select-option>
+                  <a-select-option value="术前小结">
+                    术前小结
+                  </a-select-option>
+                  <a-select-option value="手术知情同意书">
+                    手术知情同意书
+                  </a-select-option>
+                  <a-select-option value="手术安全核查记录">
+                    手术安全核查记录
+                  </a-select-option>
+                  <a-select-option value="手术清点记录">
+                    手术清点记录
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="麻醉相关">
-                  <a-select-option value="麻醉术前访视记录">麻醉术前访视记录</a-select-option>
-                  <a-select-option value="麻醉术后访视记录">麻醉术后访视记录</a-select-option>
-                  <a-select-option value="麻醉记录">麻醉记录</a-select-option>
+                  <a-select-option value="麻醉术前访视记录">
+                    麻醉术前访视记录
+                  </a-select-option>
+                  <a-select-option value="麻醉术后访视记录">
+                    麻醉术后访视记录
+                  </a-select-option>
+                  <a-select-option value="麻醉记录">
+                    麻醉记录
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="输血相关">
-                  <a-select-option value="输血申请单">输血申请单</a-select-option>
-                  <a-select-option value="输血记录">输血记录</a-select-option>
+                  <a-select-option value="输血申请单">
+                    输血申请单
+                  </a-select-option>
+                  <a-select-option value="输血记录">
+                    输血记录
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="检验检查">
-                  <a-select-option value="检验报告">检验报告</a-select-option>
-                  <a-select-option value="检查报告">检查报告</a-select-option>
-                  <a-select-option value="病理检查报告">病理检查报告</a-select-option>
+                  <a-select-option value="检验报告">
+                    检验报告
+                  </a-select-option>
+                  <a-select-option value="检查报告">
+                    检查报告
+                  </a-select-option>
+                  <a-select-option value="病理检查报告">
+                    病理检查报告
+                  </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group label="护理与其他">
-                  <a-select-option value="护理记录">护理记录</a-select-option>
-                  <a-select-option value="危急值记录">危急值记录</a-select-option>
-                  <a-select-option value="新生儿记录">新生儿记录</a-select-option>
-                  <a-select-option value="门诊病历">门诊病历</a-select-option>
-                  <a-select-option value="医保结算清单">医保结算清单</a-select-option>
+                  <a-select-option value="护理记录">
+                    护理记录
+                  </a-select-option>
+                  <a-select-option value="危急值记录">
+                    危急值记录
+                  </a-select-option>
+                  <a-select-option value="新生儿记录">
+                    新生儿记录
+                  </a-select-option>
+                  <a-select-option value="门诊病历">
+                    门诊病历
+                  </a-select-option>
+                  <a-select-option value="医保结算清单">
+                    医保结算清单
+                  </a-select-option>
                 </a-select-opt-group>
               </a-select>
             </a-form-item>
@@ -116,9 +218,15 @@
           <a-col :span="12">
             <a-form-item label="缺陷级别">
               <a-select v-model:value="formData.defectLevel">
-                <a-select-option value="严重缺陷">严重缺陷</a-select-option>
-                <a-select-option value="一般缺陷">一般缺陷</a-select-option>
-                <a-select-option value="提示性缺陷">提示性缺陷</a-select-option>
+                <a-select-option value="严重缺陷">
+                  严重缺陷
+                </a-select-option>
+                <a-select-option value="一般缺陷">
+                  一般缺陷
+                </a-select-option>
+                <a-select-option value="提示性缺陷">
+                  提示性缺陷
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -132,7 +240,9 @@
               :disabled="!canGenerate"
               @click="handleGenerate"
             >
-              <template #icon><ThunderboltOutlined /></template>
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
               AI 智能生成
             </a-button>
             <a-button @click="showExamples = true">
@@ -144,18 +254,28 @@
     </a-card>
 
     <!-- 生成进度 -->
-    <a-card v-if="generating" :bordered="false" class="generating-card" style="margin-top: 16px;">
+    <a-card
+      v-if="generating"
+      :bordered="false"
+      class="generating-card"
+      style="margin-top: 16px;"
+    >
       <div class="generating-content">
         <a-spin size="large">
           <template #tip>
-            <div class="generating-tip">{{ generatingTip }}</div>
+            <div class="generating-tip">
+              {{ generatingTip }}
+            </div>
           </template>
         </a-spin>
       </div>
     </a-card>
 
     <!-- 规则预览 -->
-    <div v-if="generatedRule" style="margin-top: 16px;">
+    <div
+      v-if="generatedRule"
+      style="margin-top: 16px;"
+    >
       <RulePreviewCard
         :rule="generatedRule"
         @save="handleSave"

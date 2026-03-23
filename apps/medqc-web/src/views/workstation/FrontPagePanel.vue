@@ -1,6 +1,12 @@
 <template>
   <div class="frontpage-panel">
-    <a-button type="primary" block :loading="generating" @click="emit('generate')" style="margin-bottom: 16px">
+    <a-button
+      type="primary"
+      block
+      :loading="generating"
+      style="margin-bottom: 16px"
+      @click="emit('generate')"
+    >
       <ThunderboltOutlined />
       AI 生成病案首页
     </a-button>
@@ -9,19 +15,42 @@
       <!-- 进度指示 -->
       <div class="fp-progress">
         <span>填充率</span>
-        <a-progress :percent="fillRate" :stroke-color="fillRate >= 90 ? '#52c41a' : '#faad14'" size="small" />
+        <a-progress
+          :percent="fillRate"
+          :stroke-color="fillRate >= 90 ? '#52c41a' : '#faad14'"
+          size="small"
+        />
       </div>
 
       <!-- 基本信息 -->
-      <div ref="basicSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'basic' }">
-        <div class="fp-section-title">基本信息</div>
+      <div
+        ref="basicSectionRef"
+        class="fp-section"
+        :class="{ 'fp-section--focus': focusTarget === 'basic' }"
+      >
+        <div class="fp-section-title">
+          基本信息
+        </div>
         <div class="fp-grid">
-          <div v-for="f in basicFields" :key="f.label" class="fp-field">
+          <div
+            v-for="f in basicFields"
+            :key="f.label"
+            class="fp-field"
+          >
             <label>{{ f.label }}</label>
             <div class="fp-field-value">
-              <a-input v-model:value="f.value" size="small" />
-              <a-tooltip v-if="f.confidence < 1" :title="`AI 置信度 ${(f.confidence * 100).toFixed(0)}%`">
-                <span class="confidence-dot" :class="confidenceClass(f.confidence)"></span>
+              <a-input
+                v-model:value="f.value"
+                size="small"
+              />
+              <a-tooltip
+                v-if="f.confidence < 1"
+                :title="`AI 置信度 ${(f.confidence * 100).toFixed(0)}%`"
+              >
+                <span
+                  class="confidence-dot"
+                  :class="confidenceClass(f.confidence)"
+                />
               </a-tooltip>
             </div>
           </div>
@@ -29,15 +58,34 @@
       </div>
 
       <!-- 住院信息 -->
-      <div ref="admissionSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'admission' }">
-        <div class="fp-section-title">住院信息</div>
+      <div
+        ref="admissionSectionRef"
+        class="fp-section"
+        :class="{ 'fp-section--focus': focusTarget === 'admission' }"
+      >
+        <div class="fp-section-title">
+          住院信息
+        </div>
         <div class="fp-grid">
-          <div v-for="f in admissionFields" :key="f.label" class="fp-field">
+          <div
+            v-for="f in admissionFields"
+            :key="f.label"
+            class="fp-field"
+          >
             <label>{{ f.label }}</label>
             <div class="fp-field-value">
-              <a-input v-model:value="f.value" size="small" />
-              <a-tooltip v-if="f.confidence < 1" :title="`AI 置信度 ${(f.confidence * 100).toFixed(0)}%`">
-                <span class="confidence-dot" :class="confidenceClass(f.confidence)"></span>
+              <a-input
+                v-model:value="f.value"
+                size="small"
+              />
+              <a-tooltip
+                v-if="f.confidence < 1"
+                :title="`AI 置信度 ${(f.confidence * 100).toFixed(0)}%`"
+              >
+                <span
+                  class="confidence-dot"
+                  :class="confidenceClass(f.confidence)"
+                />
               </a-tooltip>
             </div>
           </div>
@@ -45,52 +93,140 @@
       </div>
 
       <!-- 诊断信息 -->
-      <div ref="diagnosisSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'diagnosis' }">
+      <div
+        ref="diagnosisSectionRef"
+        class="fp-section"
+        :class="{ 'fp-section--focus': focusTarget === 'diagnosis' }"
+      >
         <div class="fp-section-title">
           诊断信息
-          <a-tag color="processing" size="small">AI 提取</a-tag>
+          <a-tag
+            color="processing"
+            size="small"
+          >
+            AI 提取
+          </a-tag>
         </div>
         <div class="diag-list">
-          <div v-for="(diag, idx) in diagnosisFields" :key="idx" class="diag-item">
+          <div
+            v-for="(diag, idx) in diagnosisFields"
+            :key="idx"
+            class="diag-item"
+          >
             <div class="diag-header">
-              <a-tag v-if="idx === 0" color="red" size="small">主诊断</a-tag>
-              <a-tag v-else color="default" size="small">其他诊断 {{ idx }}</a-tag>
-              <span class="confidence-badge" :class="confidenceClass(diag.confidence)">
+              <a-tag
+                v-if="idx === 0"
+                color="red"
+                size="small"
+              >
+                主诊断
+              </a-tag>
+              <a-tag
+                v-else
+                color="default"
+                size="small"
+              >
+                其他诊断 {{ idx }}
+              </a-tag>
+              <span
+                class="confidence-badge"
+                :class="confidenceClass(diag.confidence)"
+              >
                 {{ (diag.confidence * 100).toFixed(0) }}%
               </span>
             </div>
             <div class="diag-row">
-              <a-input v-model:value="diag.name" placeholder="诊断名称" size="small" style="flex: 2" />
-              <a-input v-model:value="diag.code" placeholder="ICD-10 编码" size="small" style="flex: 1" />
+              <a-input
+                v-model:value="diag.name"
+                placeholder="诊断名称"
+                size="small"
+                style="flex: 2"
+              />
+              <a-input
+                v-model:value="diag.code"
+                placeholder="ICD-10 编码"
+                size="small"
+                style="flex: 1"
+              />
             </div>
           </div>
-          <a-button type="dashed" size="small" block @click="addDiagnosis" style="margin-top: 8px">
+          <a-button
+            type="dashed"
+            size="small"
+            block
+            style="margin-top: 8px"
+            @click="addDiagnosis"
+          >
             + 添加诊断
           </a-button>
         </div>
       </div>
 
       <!-- 手术/操作 -->
-      <div ref="procedureSectionRef" class="fp-section" :class="{ 'fp-section--focus': focusTarget === 'procedure' }">
+      <div
+        ref="procedureSectionRef"
+        class="fp-section"
+        :class="{ 'fp-section--focus': focusTarget === 'procedure' }"
+      >
         <div class="fp-section-title">
           手术/操作
-          <a-tag color="processing" size="small">AI 提取</a-tag>
+          <a-tag
+            color="processing"
+            size="small"
+          >
+            AI 提取
+          </a-tag>
         </div>
         <div class="diag-list">
-          <div v-for="(proc, idx) in procedureFields" :key="idx" class="diag-item">
+          <div
+            v-for="(proc, idx) in procedureFields"
+            :key="idx"
+            class="diag-item"
+          >
             <div class="diag-header">
-              <a-tag v-if="idx === 0" color="blue" size="small">主手术</a-tag>
-              <a-tag v-else color="default" size="small">其他操作 {{ idx }}</a-tag>
-              <span class="confidence-badge" :class="confidenceClass(proc.confidence)">
+              <a-tag
+                v-if="idx === 0"
+                color="blue"
+                size="small"
+              >
+                主手术
+              </a-tag>
+              <a-tag
+                v-else
+                color="default"
+                size="small"
+              >
+                其他操作 {{ idx }}
+              </a-tag>
+              <span
+                class="confidence-badge"
+                :class="confidenceClass(proc.confidence)"
+              >
                 {{ (proc.confidence * 100).toFixed(0) }}%
               </span>
             </div>
             <div class="diag-row">
-              <a-input v-model:value="proc.name" placeholder="手术/操作名称" size="small" style="flex: 2" />
-              <a-input v-model:value="proc.code" placeholder="ICD-9-CM-3" size="small" style="flex: 1" />
+              <a-input
+                v-model:value="proc.name"
+                placeholder="手术/操作名称"
+                size="small"
+                style="flex: 2"
+              />
+              <a-input
+                v-model:value="proc.code"
+                placeholder="ICD-9-CM-3"
+                size="small"
+                style="flex: 1"
+              />
             </div>
           </div>
-          <a-button type="dashed" size="small" block @click="addProcedure" style="margin-top: 8px">
+          <a-button
+            type="dashed"
+            size="small"
+            block
+            style="margin-top: 8px"
+            @click="addProcedure"
+          >
             + 添加手术/操作
           </a-button>
         </div>
@@ -98,26 +234,42 @@
 
       <!-- 底部操作 -->
       <div class="fp-actions">
-        <a-button size="small" @click="emit('export', 'health')">
+        <a-button
+          size="small"
+          @click="emit('export', 'health')"
+        >
           <DownloadOutlined />
           卫健委格式
         </a-button>
-        <a-button size="small" @click="emit('export', 'insurance')">
+        <a-button
+          size="small"
+          @click="emit('export', 'insurance')"
+        >
           <DownloadOutlined />
           医保格式
         </a-button>
-        <a-button size="small" @click="emit('export', 'settlement')">
+        <a-button
+          size="small"
+          @click="emit('export', 'settlement')"
+        >
           <DownloadOutlined />
           结算清单
         </a-button>
-        <a-button type="primary" size="small" @click="emit('save')">
+        <a-button
+          type="primary"
+          size="small"
+          @click="emit('save')"
+        >
           <SaveOutlined />
           保存首页
         </a-button>
       </div>
     </template>
 
-    <div v-else-if="!generating" class="fp-empty">
+    <div
+      v-else-if="!generating"
+      class="fp-empty"
+    >
       <FileTextOutlined style="font-size: 32px; color: #d9d9d9" />
       <p>点击上方按钮，AI 将自动提取病历信息生成首页</p>
     </div>

@@ -4,19 +4,36 @@
       <div class="config-content">
         <!-- 配置管理头部 -->
         <div class="config-header mb-4">
-          <a-row :gutter="16" align="middle">
+          <a-row
+            :gutter="16"
+            align="middle"
+          >
             <a-col flex="auto">
-              <h4 class="mb-0">大模型API配置管理</h4>
-              <p class="text-sm text-gray-500 mb-0">配置将安全保存到数据库中</p>
+              <h4 class="mb-0">
+                大模型API配置管理
+              </h4>
+              <p class="text-sm text-gray-500 mb-0">
+                配置将安全保存到数据库中
+              </p>
             </a-col>
             <a-col>
               <a-space>
-                <a-button @click="loadConfigs" :loading="loading">
-                  <template #icon><ReloadOutlined /></template>
+                <a-button
+                  :loading="loading"
+                  @click="loadConfigs"
+                >
+                  <template #icon>
+                    <ReloadOutlined />
+                  </template>
                   刷新
                 </a-button>
-                <a-button type="primary" @click="showCreateModal = true">
-                  <template #icon><PlusOutlined /></template>
+                <a-button
+                  type="primary"
+                  @click="showCreateModal = true"
+                >
+                  <template #icon>
+                    <PlusOutlined />
+                  </template>
                   新建配置
                 </a-button>
               </a-space>
@@ -25,25 +42,51 @@
         </div>
 
         <!-- 现有配置列表 -->
-        <div class="config-list mb-4" v-if="userConfigs.length > 0">
+        <div
+          v-if="userConfigs.length > 0"
+          class="config-list mb-4"
+        >
           <h5>已保存的配置</h5>
-          <a-list size="small" :data-source="userConfigs">
+          <a-list
+            size="small"
+            :data-source="userConfigs"
+          >
             <template #renderItem="{ item }">
               <a-list-item>
                 <template #actions>
-                  <a-button size="small" @click="loadConfig(item)">使用</a-button>
-                  <a-button size="small" @click="editConfig(item)">编辑</a-button>
+                  <a-button
+                    size="small"
+                    @click="loadConfig(item)"
+                  >
+                    使用
+                  </a-button>
+                  <a-button
+                    size="small"
+                    @click="editConfig(item)"
+                  >
+                    编辑
+                  </a-button>
                   <a-popconfirm
                     title="确定要删除这个配置吗？"
                     @confirm="deleteConfig(item.id)"
                   >
-                    <a-button size="small" danger>删除</a-button>
+                    <a-button
+                      size="small"
+                      danger
+                    >
+                      删除
+                    </a-button>
                   </a-popconfirm>
                 </template>
                 <a-list-item-meta>
                   <template #title>
                     <span>{{ item.config_name }}</span>
-                    <a-tag v-if="item.config_name === 'default'" color="blue" size="small" class="ml-2">
+                    <a-tag
+                      v-if="item.config_name === 'default'"
+                      color="blue"
+                      size="small"
+                      class="ml-2"
+                    >
                       默认
                     </a-tag>
                   </template>
@@ -63,7 +106,10 @@
         </div>
 
         <!-- 当前配置显示 -->
-        <div class="current-config" v-if="currentConfig">
+        <div
+          v-if="currentConfig"
+          class="current-config"
+        >
           <a-alert
             :message="`当前使用配置: ${currentConfig.config_name}`"
             :description="`${currentConfig.provider?.provider_name} - ${currentConfig.model?.model_name}`"
@@ -78,35 +124,59 @@
           <a-divider>快速配置</a-divider>
           <a-row :gutter="16">
             <a-col :span="8">
-              <a-card size="small" hoverable @click="quickConfig('alibaba')">
+              <a-card
+                size="small"
+                hoverable
+                @click="quickConfig('alibaba')"
+              >
                 <div class="text-center">
                   <div class="quick-config-icon">
                     <RobotOutlined />
                   </div>
-                  <div class="font-medium">阿里通义千问</div>
-                  <div class="text-xs text-gray-500">企业级AI服务</div>
+                  <div class="font-medium">
+                    阿里通义千问
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    企业级AI服务
+                  </div>
                 </div>
               </a-card>
             </a-col>
             <a-col :span="8">
-              <a-card size="small" hoverable @click="quickConfig('baidu')">
+              <a-card
+                size="small"
+                hoverable
+                @click="quickConfig('baidu')"
+              >
                 <div class="text-center">
                   <div class="quick-config-icon">
                     <BulbOutlined />
                   </div>
-                  <div class="font-medium">百度文心一言</div>
-                  <div class="text-xs text-gray-500">中文理解能力强</div>
+                  <div class="font-medium">
+                    百度文心一言
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    中文理解能力强
+                  </div>
                 </div>
               </a-card>
             </a-col>
             <a-col :span="8">
-              <a-card size="small" hoverable @click="quickConfig('local')">
+              <a-card
+                size="small"
+                hoverable
+                @click="quickConfig('local')"
+              >
                 <div class="text-center">
                   <div class="quick-config-icon">
                     <HomeOutlined />
                   </div>
-                  <div class="font-medium">本地部署模型</div>
-                  <div class="text-xs text-gray-500">数据完全私有</div>
+                  <div class="font-medium">
+                    本地部署模型
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    数据完全私有
+                  </div>
                 </div>
               </a-card>
             </a-col>
@@ -120,26 +190,52 @@
       v-model:open="showCreateModal"
       :title="editingConfig ? '编辑配置' : '创建新配置'"
       width="900px"
+      :confirm-loading="saving"
       @ok="saveConfig"
       @cancel="cancelEdit"
-      :confirm-loading="saving"
     >
-      <a-form :model="configForm" layout="vertical">
+      <a-form
+        :model="configForm"
+        layout="vertical"
+      >
         <!-- 基本信息 -->
-        <a-card size="small" class="mb-3" :bordered="false">
+        <a-card
+          size="small"
+          class="mb-3"
+          :bordered="false"
+        >
           <template #title>
             <a-space><ApiOutlined /> 基本信息</a-space>
           </template>
           <a-row :gutter="16">
             <a-col :span="12">
-              <a-form-item label="配置名称" required :rules="[{ required: true, message: '请输入配置名称' }]">
-                <a-input v-model:value="configForm.config_name" placeholder="如: default, medical_analysis" />
+              <a-form-item
+                label="配置名称"
+                required
+                :rules="[{ required: true, message: '请输入配置名称' }]"
+              >
+                <a-input
+                  v-model:value="configForm.config_name"
+                  placeholder="如: default, medical_analysis"
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
-              <a-form-item label="API提供商" required :rules="[{ required: true, message: '请选择提供商' }]">
-                <a-select v-model:value="configForm.provider_id" @change="onProviderChange" placeholder="请选择提供商">
-                  <a-select-option v-for="provider in providers" :key="provider.id" :value="provider.id">
+              <a-form-item
+                label="API提供商"
+                required
+                :rules="[{ required: true, message: '请选择提供商' }]"
+              >
+                <a-select
+                  v-model:value="configForm.provider_id"
+                  placeholder="请选择提供商"
+                  @change="onProviderChange"
+                >
+                  <a-select-option
+                    v-for="provider in providers"
+                    :key="provider.id"
+                    :value="provider.id"
+                  >
                     {{ provider.provider_name }}
                   </a-select-option>
                 </a-select>
@@ -148,16 +244,31 @@
           </a-row>
           <a-row :gutter="16">
             <a-col :span="12">
-              <a-form-item label="模型" required :rules="[{ required: true, message: '请选择模型' }]">
-                <a-select v-model:value="configForm.model_id" :disabled="!availableModels.length" placeholder="请选择模型">
-                  <a-select-option v-for="model in availableModels" :key="model.id" :value="model.id">
+              <a-form-item
+                label="模型"
+                required
+                :rules="[{ required: true, message: '请选择模型' }]"
+              >
+                <a-select
+                  v-model:value="configForm.model_id"
+                  :disabled="!availableModels.length"
+                  placeholder="请选择模型"
+                >
+                  <a-select-option
+                    v-for="model in availableModels"
+                    :key="model.id"
+                    :value="model.id"
+                  >
                     {{ model.model_name }}
                   </a-select-option>
                 </a-select>
               </a-form-item>
             </a-col>
             <a-col :span="12">
-              <a-form-item label="API密钥" :extra="'部分提供商必填，保存时将加密存储'">
+              <a-form-item
+                label="API密钥"
+                :extra="'部分提供商必填，保存时将加密存储'"
+              >
                 <a-input-password
                   v-model:value="configForm.api_key"
                   placeholder="输入API密钥"
@@ -169,36 +280,55 @@
         </a-card>
 
         <!-- 高级设置 -->
-        <a-card size="small" class="mb-3" :bordered="false">
+        <a-card
+          size="small"
+          class="mb-3"
+          :bordered="false"
+        >
           <template #title>
             <a-space><CloudOutlined /> 高级设置</a-space>
           </template>
           <a-form-item label="自定义端点 (可选)">
-            <a-input v-model:value="configForm.custom_endpoint" placeholder="如: https://api.example.com/v1/chat/completions" />
+            <a-input
+              v-model:value="configForm.custom_endpoint"
+              placeholder="如: https://api.example.com/v1/chat/completions"
+            />
           </a-form-item>
           <a-form-item label="自定义参数 (JSON格式，可选)">
             <a-textarea
               v-model:value="customParametersText"
               :rows="4"
-              placeholder='{"temperature": 0.7, "max_tokens": 2000}'
+              placeholder="{&quot;temperature&quot;: 0.7, &quot;max_tokens&quot;: 2000}"
             />
           </a-form-item>
         </a-card>
 
         <!-- 工具栏：测试/导入导出 -->
         <a-space>
-          <a-button @click="testConnection" :loading="testing">
-            <template #icon><ApiOutlined /></template>
+          <a-button
+            :loading="testing"
+            @click="testConnection"
+          >
+            <template #icon>
+              <ApiOutlined />
+            </template>
             测试连接
           </a-button>
-          <a-upload :before-upload="handleImportConfig" :show-upload-list="false">
+          <a-upload
+            :before-upload="handleImportConfig"
+            :show-upload-list="false"
+          >
             <a-button>
-              <template #icon><UploadOutlined /></template>
+              <template #icon>
+                <UploadOutlined />
+              </template>
               导入配置
             </a-button>
           </a-upload>
           <a-button @click="exportConfig">
-            <template #icon><DownloadOutlined /></template>
+            <template #icon>
+              <DownloadOutlined />
+            </template>
             导出配置
           </a-button>
         </a-space>
@@ -494,7 +624,7 @@ const testConnection = async () => {
     })
 
     // 调用一个轻量 probe（使用已有 parseMedicalText 的最小请求）
-    const result = await llmService.parseMedicalText('ping', { maxTokens: 5, temperature: 0 })
+    const result = await llmService.parseMedicalText('ping')
     if (result.success) {
       message.success('连接正常')
     } else {

@@ -3,8 +3,13 @@
     <div class="monitor-header">
       <h1>系统监控面板</h1>
       <div class="header-actions">
-        <a-button @click="refreshData" :loading="loading">
-          <template #icon><ReloadOutlined /></template>
+        <a-button
+          :loading="loading"
+          @click="refreshData"
+        >
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新
         </a-button>
         <a-switch 
@@ -18,7 +23,11 @@
     <!-- 系统概览 -->
     <div class="overview-section">
       <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-card class="metric-card">
             <a-statistic
               title="系统状态"
@@ -32,7 +41,11 @@
           </a-card>
         </a-col>
         
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-card class="metric-card">
             <a-statistic
               title="平均响应时间"
@@ -40,12 +53,18 @@
               suffix="ms"
               :value-style="{ color: performanceStats.averageResponseTime < 2000 ? '#3f8600' : '#faad14' }"
             >
-              <template #prefix><ClockCircleOutlined /></template>
+              <template #prefix>
+                <ClockCircleOutlined />
+              </template>
             </a-statistic>
           </a-card>
         </a-col>
         
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-card class="metric-card">
             <a-statistic
               title="缓存命中率"
@@ -54,12 +73,18 @@
               :precision="1"
               :value-style="{ color: performanceStats.cacheHitRate > 0.7 ? '#3f8600' : '#faad14' }"
             >
-              <template #prefix><DatabaseOutlined /></template>
+              <template #prefix>
+                <DatabaseOutlined />
+              </template>
             </a-statistic>
           </a-card>
         </a-col>
         
-        <a-col :xs="24" :sm="12" :md="6">
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="6"
+        >
           <a-card class="metric-card">
             <a-statistic
               title="错误率"
@@ -68,7 +93,9 @@
               :precision="2"
               :value-style="{ color: errorStats.errorRate < 0.05 ? '#3f8600' : '#cf1322' }"
             >
-              <template #prefix><WarningOutlined /></template>
+              <template #prefix>
+                <WarningOutlined />
+              </template>
             </a-statistic>
           </a-card>
         </a-col>
@@ -77,16 +104,26 @@
 
     <!-- 服务健康状态 -->
     <div class="services-section">
-      <a-card title="服务健康状态" class="section-card">
+      <a-card
+        title="服务健康状态"
+        class="section-card"
+      >
         <a-row :gutter="[16, 16]">
           <a-col 
             v-for="service in serviceHealth" 
             :key="service.name"
-            :xs="24" :sm="12" :lg="8"
+            :xs="24"
+            :sm="12"
+            :lg="8"
           >
-            <div class="service-item" :class="`service-${service.status}`">
+            <div
+              class="service-item"
+              :class="`service-${service.status}`"
+            >
               <div class="service-header">
-                <div class="service-name">{{ service.name }}</div>
+                <div class="service-name">
+                  {{ service.name }}
+                </div>
                 <a-tag :color="getServiceStatusColor(service.status)">
                   {{ getServiceStatusText(service.status) }}
                 </a-tag>
@@ -98,9 +135,12 @@
                 </div>
                 <div class="metric">
                   <span class="metric-label">最后检查:</span>
-                  <span class="metric-value">{{ formatTime(service.lastCheck) }}</span>
+                  <span class="metric-value">{{ formatTime(service.lastCheck || 0) }}</span>
                 </div>
-                <div v-if="service.error" class="service-error">
+                <div
+                  v-if="service.error"
+                  class="service-error"
+                >
                   <span class="error-label">错误:</span>
                   <span class="error-message">{{ service.error }}</span>
                 </div>
@@ -114,15 +154,33 @@
     <!-- 性能图表 -->
     <div class="charts-section">
       <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :lg="12">
-          <a-card title="响应时间趋势" class="chart-card">
-            <div ref="responseTimeChart" class="chart-container"></div>
+        <a-col
+          :xs="24"
+          :lg="12"
+        >
+          <a-card
+            title="响应时间趋势"
+            class="chart-card"
+          >
+            <div
+              ref="responseTimeChart"
+              class="chart-container"
+            />
           </a-card>
         </a-col>
         
-        <a-col :xs="24" :lg="12">
-          <a-card title="错误统计" class="chart-card">
-            <div ref="errorChart" class="chart-container"></div>
+        <a-col
+          :xs="24"
+          :lg="12"
+        >
+          <a-card
+            title="错误统计"
+            class="chart-card"
+          >
+            <div
+              ref="errorChart"
+              class="chart-container"
+            />
           </a-card>
         </a-col>
       </a-row>
@@ -130,7 +188,10 @@
 
     <!-- 错误日志 -->
     <div class="errors-section">
-      <a-card title="最近错误" class="section-card">
+      <a-card
+        title="最近错误"
+        class="section-card"
+      >
         <a-table
           :columns="errorColumns"
           :data-source="recentErrors"
@@ -147,7 +208,10 @@
               {{ formatDateTime(record.timestamp) }}
             </template>
             <template v-else-if="column.key === 'actions'">
-              <a-button size="small" @click="viewErrorDetails(record)">
+              <a-button
+                size="small"
+                @click="viewErrorDetails(record)"
+              >
                 详情
               </a-button>
             </template>
@@ -163,10 +227,16 @@
       :width="800"
       :footer="null"
     >
-      <div v-if="selectedError" class="error-details">
-        <a-descriptions :column="1" bordered>
+      <div
+        v-if="selectedError"
+        class="error-details"
+      >
+        <a-descriptions
+          :column="1"
+          bordered
+        >
           <a-descriptions-item label="错误类型">
-            <a-tag :color="getErrorSeverityColor(selectedError.severity)">
+            <a-tag :color="getErrorSeverityColor(selectedError.severity || 'low')">
               {{ selectedError.type }}
             </a-tag>
           </a-descriptions-item>
@@ -185,7 +255,10 @@
           <a-descriptions-item label="页面URL">
             {{ selectedError.url }}
           </a-descriptions-item>
-          <a-descriptions-item v-if="selectedError.stack" label="错误堆栈">
+          <a-descriptions-item
+            v-if="selectedError.stack"
+            label="错误堆栈"
+          >
             <pre class="error-stack">{{ selectedError.stack }}</pre>
           </a-descriptions-item>
         </a-descriptions>

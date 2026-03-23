@@ -1,9 +1,15 @@
 <template>
   <div class="qc-notification-demo-panel">
-    <a-card title="医生端质控通知中心" class="notification-panel">
+    <a-card
+      title="医生端质控通知中心"
+      class="notification-panel"
+    >
       <template #extra>
         <a-space>
-          <a-badge :count="unreadCount" :offset="[10, 0]">
+          <a-badge
+            :count="unreadCount"
+            :offset="[10, 0]"
+          >
             <BellOutlined />
           </a-badge>
           <a-tooltip title="自动刷新">
@@ -28,20 +34,33 @@
 
       <!-- 通知筛选和操作栏 -->
       <div class="notification-controls">
-        <a-row :gutter="16" align="middle">
+        <a-row
+          :gutter="16"
+          align="middle"
+        >
           <a-col :span="6">
             <a-select
               v-model:value="filterType"
               placeholder="通知类型"
               style="width: 100%"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             >
-              <a-select-option value="all">全部类型</a-select-option>
-              <a-select-option value="error">错误</a-select-option>
-              <a-select-option value="warning">警告</a-select-option>
-              <a-select-option value="info">信息</a-select-option>
-              <a-select-option value="success">成功</a-select-option>
+              <a-select-option value="all">
+                全部类型
+              </a-select-option>
+              <a-select-option value="error">
+                错误
+              </a-select-option>
+              <a-select-option value="warning">
+                警告
+              </a-select-option>
+              <a-select-option value="info">
+                信息
+              </a-select-option>
+              <a-select-option value="success">
+                成功
+              </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="6">
@@ -49,14 +68,24 @@
               v-model:value="filterSeverity"
               placeholder="严重程度"
               style="width: 100%"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             >
-              <a-select-option value="all">全部程度</a-select-option>
-              <a-select-option value="critical">紧急</a-select-option>
-              <a-select-option value="high">高</a-select-option>
-              <a-select-option value="medium">中</a-select-option>
-              <a-select-option value="low">低</a-select-option>
+              <a-select-option value="all">
+                全部程度
+              </a-select-option>
+              <a-select-option value="critical">
+                紧急
+              </a-select-option>
+              <a-select-option value="high">
+                高
+              </a-select-option>
+              <a-select-option value="medium">
+                中
+              </a-select-option>
+              <a-select-option value="low">
+                低
+              </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="6">
@@ -64,12 +93,18 @@
               v-model:value="filterStatus"
               placeholder="阅读状态"
               style="width: 100%"
-              allowClear
+              allow-clear
               @change="handleFilterChange"
             >
-              <a-select-option value="all">全部状态</a-select-option>
-              <a-select-option value="unread">未读</a-select-option>
-              <a-select-option value="read">已读</a-select-option>
+              <a-select-option value="all">
+                全部状态
+              </a-select-option>
+              <a-select-option value="unread">
+                未读
+              </a-select-option>
+              <a-select-option value="read">
+                已读
+              </a-select-option>
             </a-select>
           </a-col>
           <a-col :span="6">
@@ -78,8 +113,8 @@
                 <a-button
                   size="small"
                   :icon="h(CheckOutlined)"
-                  @click="handleMarkAllAsRead"
                   :disabled="unreadCount === 0"
+                  @click="handleMarkAllAsRead"
                 >
                   全部已读
                 </a-button>
@@ -89,8 +124,8 @@
                   size="small"
                   danger
                   :icon="h(DeleteOutlined)"
-                  @click="handleClearNotifications"
                   :disabled="notifications.length === 0"
+                  @click="handleClearNotifications"
                 >
                   清空
                 </a-button>
@@ -101,35 +136,66 @@
       </div>
 
       <!-- 通知统计 -->
-      <div class="notification-stats" v-if="notifications.length > 0">
+      <div
+        v-if="notifications.length > 0"
+        class="notification-stats"
+      >
         <a-row :gutter="16">
           <a-col :span="6">
-            <a-statistic title="总通知" :value="notifications.length" />
+            <a-statistic
+              title="总通知"
+              :value="notifications.length"
+            />
           </a-col>
           <a-col :span="6">
-            <a-statistic title="未读" :value="unreadCount" :value-style="{ color: '#cf1322' }" />
+            <a-statistic
+              title="未读"
+              :value="unreadCount"
+              :value-style="{ color: '#cf1322' }"
+            />
           </a-col>
           <a-col :span="6">
-            <a-statistic title="紧急" :value="criticalCount" :value-style="{ color: '#ff4d4f' }" />
+            <a-statistic
+              title="紧急"
+              :value="criticalCount"
+              :value-style="{ color: '#ff4d4f' }"
+            />
           </a-col>
           <a-col :span="6">
-            <a-statistic title="今日" :value="todayCount" :value-style="{ color: '#1890ff' }" />
+            <a-statistic
+              title="今日"
+              :value="todayCount"
+              :value-style="{ color: '#1890ff' }"
+            />
           </a-col>
         </a-row>
       </div>
 
       <!-- 通知列表 -->
       <div class="notifications-section">
-        <div v-if="filteredNotifications.length === 0" class="empty-notifications">
+        <div
+          v-if="filteredNotifications.length === 0"
+          class="empty-notifications"
+        >
           <a-empty :description="notifications.length === 0 ? '暂无通知' : '没有符合条件的通知'">
-            <a-button type="primary" @click="handleSimulateNotification" v-if="notifications.length === 0">
+            <a-button
+              v-if="notifications.length === 0"
+              type="primary"
+              @click="handleSimulateNotification"
+            >
               模拟通知
             </a-button>
           </a-empty>
         </div>
 
-        <div v-else class="notifications-list">
-          <transition-group name="notification" tag="div">
+        <div
+          v-else
+          class="notifications-list"
+        >
+          <transition-group
+            name="notification"
+            tag="div"
+          >
             <div
               v-for="notification in paginatedNotifications"
               :key="notification.id"
@@ -146,7 +212,7 @@
               <div
                 v-if="notification.severity === 'critical'"
                 class="critical-indicator"
-              ></div>
+              />
 
               <div class="notification-header">
                 <div class="notification-type">
@@ -160,7 +226,11 @@
                   >
                     {{ getSeverityText(notification.severity) }}
                   </a-tag>
-                  <a-tag v-if="!notification.isRead" color="red" size="small">
+                  <a-tag
+                    v-if="!notification.isRead"
+                    color="red"
+                    size="small"
+                  >
                     NEW
                   </a-tag>
                 </div>
@@ -201,11 +271,18 @@
               </div>
 
               <div class="notification-content">
-                <h5 class="notification-title">{{ notification.title }}</h5>
-                <p class="notification-message">{{ notification.message }}</p>
+                <h5 class="notification-title">
+                  {{ notification.title }}
+                </h5>
+                <p class="notification-message">
+                  {{ notification.message }}
+                </p>
 
                 <!-- 质控结果预览 -->
-                <div v-if="notification.qcResult" class="qc-preview">
+                <div
+                  v-if="notification.qcResult"
+                  class="qc-preview"
+                >
                   <a-row :gutter="8">
                     <a-col :span="8">
                       <a-statistic
@@ -238,9 +315,16 @@
                 </div>
 
                 <!-- 病历信息 -->
-                <div v-if="notification.recordInfo" class="record-info">
-                  <a-tag color="blue">{{ notification.recordInfo.patientName }}</a-tag>
-                  <a-tag color="green">{{ notification.recordInfo.department }}</a-tag>
+                <div
+                  v-if="notification.recordInfo"
+                  class="record-info"
+                >
+                  <a-tag color="blue">
+                    {{ notification.recordInfo.patientName }}
+                  </a-tag>
+                  <a-tag color="green">
+                    {{ notification.recordInfo.department }}
+                  </a-tag>
                   <a-tag>{{ notification.recordInfo.recordNumber }}</a-tag>
                 </div>
               </div>
@@ -287,24 +371,30 @@
           </transition-group>
 
           <!-- 分页 -->
-          <div class="notification-pagination" v-if="filteredNotifications.length > pageSize">
+          <div
+            v-if="filteredNotifications.length > pageSize"
+            class="notification-pagination"
+          >
             <a-pagination
               v-model:current="currentPage"
               v-model:page-size="pageSize"
               :total="filteredNotifications.length"
               :show-size-changer="true"
               :show-quick-jumper="true"
-              :show-total="(total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`"
+              :show-total="showNotificationTotal"
               size="small"
               @change="handlePageChange"
-              @showSizeChange="handlePageSizeChange"
+              @show-size-change="handlePageSizeChange"
             />
           </div>
         </div>
       </div>
       
       <!-- 活动通知详情 -->
-      <div v-if="activeNotification" class="active-notification">
+      <div
+        v-if="activeNotification"
+        class="active-notification"
+      >
         <a-divider>通知详情</a-divider>
         <div class="notification-details">
           <h4>{{ activeNotification.title }}</h4>
@@ -312,7 +402,12 @@
           
           <!-- 质控结果摘要 -->
           <div class="qc-summary">
-            <a-descriptions title="质控结果" :column="2" bordered size="small">
+            <a-descriptions
+              title="质控结果"
+              :column="2"
+              bordered
+              size="small"
+            >
               <a-descriptions-item label="总体评分">
                 <span :style="{ color: getScoreColor(activeNotification.qcResult.overallScore) }">
                   {{ activeNotification.qcResult.overallScore }}分
@@ -331,7 +426,10 @@
           </div>
           
           <!-- 主要问题 -->
-          <div v-if="activeNotification.qcResult.issues.length > 0" class="main-issues">
+          <div
+            v-if="activeNotification.qcResult.issues.length > 0"
+            class="main-issues"
+          >
             <h5>主要问题</h5>
             <a-list 
               :data-source="activeNotification.qcResult.issues.slice(0, 3)" 
@@ -366,11 +464,17 @@
             <PlusOutlined />
             模拟新通知
           </a-button>
-          <a-button @click="handleMarkAllAsRead" :disabled="unreadCount === 0">
+          <a-button
+            :disabled="unreadCount === 0"
+            @click="handleMarkAllAsRead"
+          >
             <CheckOutlined />
             全部已读
           </a-button>
-          <a-button @click="handleClearAll" :disabled="notifications.length === 0">
+          <a-button
+            :disabled="notifications.length === 0"
+            @click="handleClearAll"
+          >
             <DeleteOutlined />
             清空通知
           </a-button>
@@ -468,6 +572,8 @@ const paginatedNotifications = computed(() => {
   const end = start + pageSize.value
   return filteredNotifications.value.slice(start, end)
 })
+const showNotificationTotal = (total: number, range: [number, number]) =>
+  `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
 
 // 方法
 const getNotificationColor = (type: string) => {
@@ -600,6 +706,10 @@ const handleMarkAllAsRead = () => {
 const handleClearNotifications = () => {
   emit('notificationAction', 'clear-all', {} as QCNotification)
   message.success('已清空所有通知')
+}
+
+const handleClearAll = () => {
+  handleClearNotifications()
 }
 
 const handleNotificationClick = (notification: QCNotification) => {

@@ -3,7 +3,9 @@
     <!-- ══════════ Section: 角色一览 ══════════ -->
     <div class="ds-split">
       <div class="ds-split__aside">
-        <h2 class="ds-section-title">角色管理</h2>
+        <h2 class="ds-section-title">
+          角色管理
+        </h2>
         <p class="ds-section-desc">
           定义系统中的角色及其权限范围。点击角色卡片可查看详情和编辑权限分配。
         </p>
@@ -18,12 +20,22 @@
           >
             <div class="ds-card__body">
               <div class="rm-role-header">
-                <div class="rm-role-icon" :style="{ background: role.bgColor }">
-                  <component :is="role.icon" :style="{ color: role.color, fontSize: '18px' }" />
+                <div
+                  class="rm-role-icon"
+                  :style="{ background: role.bgColor }"
+                >
+                  <component
+                    :is="role.icon"
+                    :style="{ color: role.color, fontSize: '18px' }"
+                  />
                 </div>
                 <div class="rm-role-meta">
-                  <div class="ds-row__label">{{ role.name }}</div>
-                  <div class="ds-row__hint">{{ role.description }}</div>
+                  <div class="ds-row__label">
+                    {{ role.name }}
+                  </div>
+                  <div class="ds-row__hint">
+                    {{ role.description }}
+                  </div>
                 </div>
               </div>
             </div>

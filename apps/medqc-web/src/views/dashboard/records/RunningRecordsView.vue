@@ -18,12 +18,24 @@
                   size="middle"
                   @change="handleTimeRangeChange"
                 >
-                  <a-select-option value="all">全部</a-select-option>
-                  <a-select-option value="recent7">近7日</a-select-option>
-                  <a-select-option value="month">月</a-select-option>
-                  <a-select-option value="quarter">季度</a-select-option>
-                  <a-select-option value="year">年</a-select-option>
-                  <a-select-option value="custom">自定义周期</a-select-option>
+                  <a-select-option value="all">
+                    全部
+                  </a-select-option>
+                  <a-select-option value="recent7">
+                    近7日
+                  </a-select-option>
+                  <a-select-option value="month">
+                    月
+                  </a-select-option>
+                  <a-select-option value="quarter">
+                    季度
+                  </a-select-option>
+                  <a-select-option value="year">
+                    年
+                  </a-select-option>
+                  <a-select-option value="custom">
+                    自定义周期
+                  </a-select-option>
                 </a-select>
                 <a-range-picker
                   v-if="queryConditions.timeRange === 'custom'"
@@ -44,10 +56,18 @@
                   size="middle"
                   @change="handleQuery"
                 >
-                  <a-select-option value="all">全部</a-select-option>
-                  <a-select-option value="standard1">标准评分1</a-select-option>
-                  <a-select-option value="standard2">标准评分2</a-select-option>
-                  <a-select-option value="standard3">标准评分3</a-select-option>
+                  <a-select-option value="all">
+                    全部
+                  </a-select-option>
+                  <a-select-option value="standard1">
+                    标准评分1
+                  </a-select-option>
+                  <a-select-option value="standard2">
+                    标准评分2
+                  </a-select-option>
+                  <a-select-option value="standard3">
+                    标准评分3
+                  </a-select-option>
                 </a-select>
               </div>
             </div>
@@ -55,17 +75,30 @@
             <!-- 右侧病历信息查询 -->
             <div class="query-item flex-shrink-0">
               <label class="block text-sm font-medium text-gray-700 mb-2">病历信息</label>
-              <a-input-group compact class="w-80">
+              <a-input-group
+                compact
+                class="w-80"
+              >
                 <a-select
                   v-model:value="queryConditions.searchType"
                   style="width: 40%"
                   size="middle"
                 >
-                  <a-select-option value="registrationNo">病历登记号</a-select-option>
-                  <a-select-option value="serialNo">病历流水号</a-select-option>
-                  <a-select-option value="caseNo">病案号</a-select-option>
-                  <a-select-option value="patientName">患者姓名</a-select-option>
-                  <a-select-option value="doctorName">临床医生</a-select-option>
+                  <a-select-option value="registrationNo">
+                    病历登记号
+                  </a-select-option>
+                  <a-select-option value="serialNo">
+                    病历流水号
+                  </a-select-option>
+                  <a-select-option value="caseNo">
+                    病案号
+                  </a-select-option>
+                  <a-select-option value="patientName">
+                    患者姓名
+                  </a-select-option>
+                  <a-select-option value="doctorName">
+                    临床医生
+                  </a-select-option>
                 </a-select>
                 <a-input
                   v-model:value="queryConditions.searchValue"
@@ -75,7 +108,10 @@
                   @press-enter="handleQuery"
                 >
                   <template #suffix>
-                    <SearchOutlined @click="handleQuery" class="cursor-pointer text-gray-400 hover:text-blue-500" />
+                    <SearchOutlined
+                      class="cursor-pointer text-gray-400 hover:text-blue-500"
+                      @click="handleQuery"
+                    />
                   </template>
                 </a-input>
               </a-input-group>
@@ -88,9 +124,19 @@
           <div class="px-6 py-2">
             <!-- 标签页切换 -->
             <div class="flex items-center mb-2">
-              <a-tabs v-model:activeKey="activeTab" class="defect-tabs" size="default">
-                <a-tab-pane key="defects" tab="缺陷列表" />
-                <a-tab-pane key="records" tab="病历列表" />
+              <a-tabs
+                v-model:active-key="activeTab"
+                class="defect-tabs"
+                size="default"
+              >
+                <a-tab-pane
+                  key="defects"
+                  tab="缺陷列表"
+                />
+                <a-tab-pane
+                  key="records"
+                  tab="病历列表"
+                />
               </a-tabs>
             </div>
 
@@ -111,8 +157,6 @@
                 </a-tag>
               </div>
             </div>
-
-
           </div>
         </div>
 
@@ -124,14 +168,24 @@
               
               <!-- 快捷筛选 -->
               <a-dropdown placement="bottomLeft">
-                <a-button size="small" class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300">
+                <a-button
+                  size="small"
+                  class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
+                >
                   <FilterOutlined class="mr-1" />
                   快捷筛选
                   <DownOutlined class="ml-1 text-xs" />
                 </a-button>
                 <template #overlay>
-                  <a-menu @click="handleQuickFilter" class="min-w-[160px]">
-                    <a-menu-item v-for="template in filterTemplates" :key="template.id" class="text-sm">
+                  <a-menu
+                    class="min-w-[160px]"
+                    @click="handleQuickFilter"
+                  >
+                    <a-menu-item
+                      v-for="template in filterTemplates"
+                      :key="template.id"
+                      class="text-sm"
+                    >
                       <template #icon>
                         <TagOutlined class="text-xs" />
                       </template>
@@ -141,17 +195,30 @@
                 </template>
               </a-dropdown>
 
-              <a-button size="small" type="primary" @click="showFilterModal = true" class="bg-blue-600 border-blue-600">
+              <a-button
+                size="small"
+                type="primary"
+                class="bg-blue-600 border-blue-600"
+                @click="showFilterModal = true"
+              >
                 <PlusOutlined class="mr-1" />
                 新建筛选
               </a-button>
 
-              <a-button size="small" @click="showFilterModal = true" class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300">
+              <a-button
+                size="small"
+                class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
+                @click="showFilterModal = true"
+              >
                 <EditOutlined class="mr-1" />
                 修改筛选
               </a-button>
 
-              <a-button size="small" @click="handleResetFilter" class="border-gray-300 text-gray-600 hover:text-red-600 hover:border-red-300">
+              <a-button
+                size="small"
+                class="border-gray-300 text-gray-600 hover:text-red-600 hover:border-red-300"
+                @click="handleResetFilter"
+              >
                 <ClearOutlined class="mr-1" />
                 重置筛选
               </a-button>
@@ -178,19 +245,25 @@
 
           <!-- 当前筛选条件显示 -->
           <div class="filter-tags-container">
-            <div class="flex flex-wrap gap-2" v-if="activeFilterConditions.length > 0">
+            <div
+              v-if="activeFilterConditions.length > 0"
+              class="flex flex-wrap gap-2"
+            >
               <a-tag
                 v-for="(condition, index) in activeFilterConditions"
                 :key="index"
                 closable
-                @close="removeFilterCondition(index)"
                 color="blue"
                 class="px-2 py-1 text-xs"
+                @close="removeFilterCondition(index)"
               >
                 <span class="font-medium">{{ condition.label }}</span>: {{ condition.value }}
               </a-tag>
             </div>
-            <div v-else class="text-xs text-gray-400 py-1">
+            <div
+              v-else
+              class="text-xs text-gray-400 py-1"
+            >
               暂无筛选条件，点击上方按钮添加筛选条件
             </div>
           </div>
@@ -201,9 +274,15 @@
           <div class="flex items-center justify-between">
             <!-- 左侧批量操作 -->
             <div class="flex items-center space-x-3">
-              <div class="flex items-center space-x-2" v-if="selectedRowKeys.length > 0">
+              <div
+                v-if="selectedRowKeys.length > 0"
+                class="flex items-center space-x-2"
+              >
                 <span class="text-sm text-gray-600">已选择 {{ selectedRowKeys.length }} 项</span>
-                <a-divider type="vertical" class="mx-2" />
+                <a-divider
+                  type="vertical"
+                  class="mx-2"
+                />
               </div>
               
               <!-- 批量操作按钮 -->
@@ -211,9 +290,9 @@
                 v-if="selectedRowKeys.length > 0"
                 type="primary"
                 size="small"
-                @click="handleBatchUrge"
                 :disabled="!canBatchUrge"
                 class="bg-blue-600 border-blue-600"
+                @click="handleBatchUrge"
               >
                 <SendOutlined class="mr-1" />
                 批量催办 ({{ selectedRowKeys.length }})
@@ -222,8 +301,8 @@
               <a-button
                 v-if="selectedRowKeys.length > 0 && currentView === 'records'"
                 size="small"
-                @click="handleBatchRecheck"
                 class="border-orange-300 text-orange-600 hover:text-orange-700 hover:border-orange-400"
+                @click="handleBatchRecheck"
               >
                 <ReloadOutlined class="mr-1" />
                 批量重新质控
@@ -232,15 +311,18 @@
               <a-button
                 v-if="selectedRowKeys.length > 0 && currentView === 'records'"
                 size="small"
-                @click="handleBatchPass"
                 class="border-green-300 text-green-600 hover:text-green-700 hover:border-green-400"
+                @click="handleBatchPass"
               >
                 <CheckOutlined class="mr-1" />
                 批量通过
               </a-button>
 
               <!-- 无选择时的提示 -->
-              <div v-if="selectedRowKeys.length === 0" class="text-sm text-gray-400">
+              <div
+                v-if="selectedRowKeys.length === 0"
+                class="text-sm text-gray-400"
+              >
                 请选择需要操作的记录
               </div>
             </div>
@@ -249,9 +331,9 @@
             <div class="flex items-center space-x-2">
               <a-button 
                 size="small" 
-                @click="handleExportAll" 
-                :loading="exportLoading"
+                :loading="exportLoading" 
                 class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
+                @click="handleExportAll"
               >
                 <DownloadOutlined class="mr-1" />
                 导出全部列表
@@ -260,9 +342,9 @@
               <a-button
                 v-if="currentView === 'records'"
                 size="small"
-                @click="handleExportQCDetails"
                 :loading="exportLoading"
                 class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
+                @click="handleExportQCDetails"
               >
                 <FileExcelOutlined class="mr-1" />
                 导出质控详情
@@ -270,9 +352,9 @@
 
               <a-button 
                 size="small" 
-                @click="handleRefresh" 
-                :loading="loading"
+                :loading="loading" 
                 class="border-gray-300 text-gray-600 hover:text-green-600 hover:border-green-300"
+                @click="handleRefresh"
               >
                 <ReloadOutlined class="mr-1" />
                 刷新
@@ -281,8 +363,8 @@
               <!-- 自定义列设置 -->
               <a-button 
                 size="small" 
-                @click="showColumnSettings = true"
                 class="border-gray-300 text-gray-600 hover:text-purple-600 hover:border-purple-300"
+                @click="showColumnSettings = true"
               >
                 <SettingOutlined />
               </a-button>
@@ -298,23 +380,32 @@
             :loading="loading"
             :pagination="pagination"
             :row-selection="rowSelection"
-            @change="handleTableChange"
             row-key="id"
             size="small"
+            @change="handleTableChange"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'registrationNo'">
-                <a @click="handleViewDetail(record)" class="text-blue-600 hover:text-blue-800">
+                <a
+                  class="text-blue-600 hover:text-blue-800"
+                  @click="handleViewDetail(record)"
+                >
                   {{ record.registrationNo }}
                 </a>
               </template>
               <template v-if="column.key === 'serialNo'">
-                <a @click="handleViewDetail(record)" class="text-blue-600 hover:text-blue-800">
+                <a
+                  class="text-blue-600 hover:text-blue-800"
+                  @click="handleViewDetail(record)"
+                >
                   {{ record.serialNo }}
                 </a>
               </template>
               <template v-if="column.key === 'caseNo'">
-                <a @click="handleViewDetail(record)" class="text-blue-600 hover:text-blue-800">
+                <a
+                  class="text-blue-600 hover:text-blue-800"
+                  @click="handleViewDetail(record)"
+                >
                   {{ record.caseNo }}
                 </a>
               </template>
@@ -325,7 +416,11 @@
               </template>
               <template v-if="column.key === 'action'">
                 <div class="flex space-x-1">
-                  <a-button type="link" size="small" @click="handleViewDetail(record)">
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click="handleViewDetail(record)"
+                  >
                     详情
                   </a-button>
                   <a-button
@@ -351,19 +446,30 @@
       width="900px"
       :footer="null"
       class="filter-modal"
-      :maskClosable="false"
+      :mask-closable="false"
     >
       <div class="filter-form-container">
         <!-- 基础设置 -->
         <div class="filter-section mb-6">
-          <h3 class="section-title">基础设置</h3>
+          <h3 class="section-title">
+            基础设置
+          </h3>
           <div class="form-row">
             <div class="form-item">
               <label class="form-label">筛选类型选择模式：</label>
-              <a-radio-group v-model:value="filterForm.selectionMode" class="ml-2">
-                <a-radio value="single">单选</a-radio>
-                <a-radio value="multiple">不支持多选</a-radio>
-                <a-radio value="multipleSupported">支持多选</a-radio>
+              <a-radio-group
+                v-model:value="filterForm.selectionMode"
+                class="ml-2"
+              >
+                <a-radio value="single">
+                  单选
+                </a-radio>
+                <a-radio value="multiple">
+                  不支持多选
+                </a-radio>
+                <a-radio value="multipleSupported">
+                  支持多选
+                </a-radio>
               </a-radio-group>
             </div>
           </div>
@@ -382,7 +488,9 @@
 
         <!-- 基本信息类 -->
         <div class="filter-section mb-6">
-          <h3 class="section-title">基本信息类</h3>
+          <h3 class="section-title">
+            基本信息类
+          </h3>
           <div class="filter-grid">
             <div class="filter-column">
               <div class="filter-item">
@@ -391,11 +499,17 @@
                   v-model:value="filterForm.department"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="internal">内科</a-select-option>
-                  <a-select-option value="surgery">外科</a-select-option>
-                  <a-select-option value="pediatrics">儿科</a-select-option>
+                  <a-select-option value="internal">
+                    内科
+                  </a-select-option>
+                  <a-select-option value="surgery">
+                    外科
+                  </a-select-option>
+                  <a-select-option value="pediatrics">
+                    儿科
+                  </a-select-option>
                 </a-select>
               </div>
               <div class="filter-item">
@@ -404,10 +518,14 @@
                   v-model:value="filterForm.gender"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="male">男</a-select-option>
-                  <a-select-option value="female">女</a-select-option>
+                  <a-select-option value="male">
+                    男
+                  </a-select-option>
+                  <a-select-option value="female">
+                    女
+                  </a-select-option>
                 </a-select>
               </div>
               <div class="filter-item">
@@ -416,10 +534,14 @@
                   v-model:value="filterForm.admissionDept"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="emergency">急诊科</a-select-option>
-                  <a-select-option value="internal">内科</a-select-option>
+                  <a-select-option value="emergency">
+                    急诊科
+                  </a-select-option>
+                  <a-select-option value="internal">
+                    内科
+                  </a-select-option>
                 </a-select>
               </div>
             </div>
@@ -430,10 +552,14 @@
                   v-model:value="filterForm.recordStatus"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="draft">草稿</a-select-option>
-                  <a-select-option value="completed">已完成</a-select-option>
+                  <a-select-option value="draft">
+                    草稿
+                  </a-select-option>
+                  <a-select-option value="completed">
+                    已完成
+                  </a-select-option>
                 </a-select>
               </div>
               <div class="filter-item">
@@ -442,10 +568,14 @@
                   v-model:value="filterForm.staffType"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="doctor">医生</a-select-option>
-                  <a-select-option value="nurse">护士</a-select-option>
+                  <a-select-option value="doctor">
+                    医生
+                  </a-select-option>
+                  <a-select-option value="nurse">
+                    护士
+                  </a-select-option>
                 </a-select>
               </div>
               <div class="filter-item">
@@ -464,10 +594,14 @@
                   v-model:value="filterForm.hospitalStatus"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="inpatient">住院</a-select-option>
-                  <a-select-option value="outpatient">门诊</a-select-option>
+                  <a-select-option value="inpatient">
+                    住院
+                  </a-select-option>
+                  <a-select-option value="outpatient">
+                    门诊
+                  </a-select-option>
                 </a-select>
               </div>
               <div class="filter-item">
@@ -476,10 +610,14 @@
                   v-model:value="filterForm.dischargeDept"
                   placeholder="请选择"
                   class="filter-select"
-                  allowClear
+                  allow-clear
                 >
-                  <a-select-option value="internal">内科</a-select-option>
-                  <a-select-option value="surgery">外科</a-select-option>
+                  <a-select-option value="internal">
+                    内科
+                  </a-select-option>
+                  <a-select-option value="surgery">
+                    外科
+                  </a-select-option>
                 </a-select>
               </div>
             </div>
@@ -504,9 +642,25 @@
 
         <!-- 底部按钮 -->
         <div class="modal-footer">
-          <a-button @click="handleCancel" class="cancel-btn">取消</a-button>
-          <a-button @click="handleReset" class="reset-btn">清空</a-button>
-          <a-button type="primary" @click="handleConfirm" class="confirm-btn">确定</a-button>
+          <a-button
+            class="cancel-btn"
+            @click="handleCancel"
+          >
+            取消
+          </a-button>
+          <a-button
+            class="reset-btn"
+            @click="handleReset"
+          >
+            清空
+          </a-button>
+          <a-button
+            type="primary"
+            class="confirm-btn"
+            @click="handleConfirm"
+          >
+            确定
+          </a-button>
         </div>
       </div>
     </a-modal>
@@ -534,6 +688,73 @@ import {
   FileTextOutlined
 } from '@ant-design/icons-vue'
 
+type TimeRangeValue = [unknown, unknown] | null
+
+interface QuickFilterItem {
+  key: string
+  label: string
+  active: boolean
+}
+
+interface FilterConditionItem {
+  key: string
+  label: string
+  checked: boolean
+}
+
+interface ActiveFilterCondition {
+  label: string
+  value: string
+}
+
+interface RunningRecord {
+  id: string
+  registrationNo: string
+  serialNo: string
+  caseNo: string
+  patientName: string
+  doctorName: string
+  department: string
+  auditStatus: string
+  isUrgent: boolean
+  disabled?: boolean
+}
+
+interface PaginationLike {
+  current?: number
+  pageSize?: number
+}
+
+type FilterForm = {
+  selectionMode: 'single' | 'multiple' | 'multipleSupported'
+  filterName: string
+  department?: string
+  recordStatus?: string
+  gender?: string
+  staffType?: string
+  hospitalStatus?: string
+  dischargeDept?: string
+  admissionDept?: string
+  dischargeDate?: unknown
+  admissionStartDate?: unknown
+  admissionEndDate?: unknown
+  submitMethod?: string
+  scoreContent?: string
+  scoreItem?: string
+  testCategory?: string
+  qcType?: string
+  testType?: string
+  coreQcCategory?: string
+  qcResultType?: string
+  comprehensiveName?: string
+  scoreValue: string
+  testName?: string
+}
+
+type FilterFormKey = keyof FilterForm
+type ResettableFilterKey = Exclude<FilterFormKey, 'selectionMode' | 'filterName' | 'scoreValue'>
+type LabelFilterKey = Exclude<FilterFormKey, 'selectionMode' | 'filterName'>
+
 // 响应式数据
 const loading = ref(false)
 const exportLoading = ref(false)
@@ -541,7 +762,7 @@ const showFilterModal = ref(false)
 const showColumnSettings = ref(false)
 const currentView = ref('records')
 const selectedRowKeys = ref<string[]>([])
-const customTimeRange = ref()
+const customTimeRange = ref<TimeRangeValue>(null)
 const activeTab = ref('defects')
 
 // 查询条件
@@ -553,7 +774,7 @@ const queryConditions = reactive({
 })
 
 // 筛选条件
-const activeFilterConditions = ref([
+const activeFilterConditions = ref<ActiveFilterCondition[]>([
   { label: '科室', value: '内科' },
   { label: '状态', value: '待审核' }
 ])
@@ -566,7 +787,7 @@ const filterTemplates = ref([
 ])
 
 // 快速筛选标签
-const quickFilters = ref([
+const quickFilters = ref<QuickFilterItem[]>([
   { key: 'all', label: '全部', active: true },
   { key: 'pending', label: '待审核缺陷', active: false },
   { key: 'reviewing', label: '核心质控缺陷', active: false },
@@ -582,14 +803,14 @@ const currentFilterConditions = ref([
 ])
 
 // 多选框筛选条件
-const filterConditions = ref([
+const filterConditions = ref<FilterConditionItem[]>([
   { key: 'pending', label: '待审核病历', checked: false },
   { key: 'reviewing', label: '核查申请中', checked: true },
   { key: 'overtime', label: '超时病历', checked: false }
 ])
 
 // 新建筛选表单数据
-const filterForm = reactive({
+const filterForm = reactive<FilterForm>({
   selectionMode: 'single',
   filterName: '',
   department: undefined,
@@ -616,7 +837,7 @@ const filterForm = reactive({
 })
 
 // 表格数据
-const records = ref([
+const records = ref<RunningRecord[]>([
   {
     id: '1',
     registrationNo: 'R2024001',
@@ -658,8 +879,8 @@ const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   },
-  getCheckboxProps: (record: unknown) => ({
-    disabled: record.disabled
+  getCheckboxProps: (record: Record<string, unknown>) => ({
+    disabled: Boolean(record.disabled)
   })
 }))
 
@@ -674,7 +895,7 @@ const handleTimeRangeChange = (value: string) => {
   handleQuery()
 }
 
-const handleCustomTimeChange = (dates) => {
+const handleCustomTimeChange = (dates: TimeRangeValue) => {
   console.log('Custom time range:', dates)
   handleQuery()
 }
@@ -702,7 +923,7 @@ const removeFilterCondition = (index: number) => {
   activeFilterConditions.value.splice(index, 1)
 }
 
-const handleQuickFilterClick = (filter) => {
+const handleQuickFilterClick = (filter: QuickFilterItem) => {
   // 重置所有筛选状态
   quickFilters.value.forEach(f => f.active = false)
   // 激活当前筛选
@@ -720,7 +941,7 @@ const removeCurrentFilterCondition = (index: number) => {
   message.info('筛选条件已移除')
 }
 
-const handleFilterConditionChange = (condition) => {
+const handleFilterConditionChange = (condition: FilterConditionItem) => {
   console.log('Filter condition changed:', condition.key, condition.checked)
   // 这里可以添加实际的筛选逻辑
 }
@@ -739,13 +960,15 @@ const handleCancel = () => {
 
 const handleReset = () => {
   // 重置表单数据
-  Object.keys(filterForm).forEach(key => {
+  ;(Object.keys(filterForm) as FilterFormKey[]).forEach((key) => {
     if (key === 'selectionMode') {
-      filterForm[key] = 'single'
-    } else if (key === 'filterName' || key === 'scoreValue') {
-      filterForm[key] = ''
+      filterForm.selectionMode = 'single'
+    } else if (key === 'filterName') {
+      filterForm.filterName = ''
+    } else if (key === 'scoreValue') {
+      filterForm.scoreValue = ''
     } else {
-      filterForm[key] = undefined
+      filterForm[key as ResettableFilterKey] = undefined
     }
   })
   message.info('表单已清空')
@@ -759,12 +982,13 @@ const handleConfirm = () => {
   }
 
   // 收集已选择的筛选条件
-  const selectedConditions = []
-  Object.keys(filterForm).forEach(key => {
-    if (filterForm[key] !== undefined && filterForm[key] !== '' && key !== 'selectionMode' && key !== 'filterName') {
+  const selectedConditions: Array<{ key: string; value: unknown; label: string }> = []
+  ;(Object.keys(filterForm) as FilterFormKey[]).forEach((key) => {
+    const value = filterForm[key]
+    if (value !== undefined && value !== '' && key !== 'selectionMode' && key !== 'filterName') {
       selectedConditions.push({
         key,
-        value: filterForm[key],
+        value,
         label: getFieldLabel(key)
       })
     }
@@ -788,7 +1012,7 @@ const handleConfirm = () => {
 
 // 获取字段标签
 const getFieldLabel = (key: string) => {
-  const labelMap = {
+  const labelMap: Record<LabelFilterKey, string> = {
     department: '病历科室',
     recordStatus: '病历状态',
     gender: '患者性别',
@@ -811,7 +1035,7 @@ const getFieldLabel = (key: string) => {
     scoreValue: '分值',
     testName: '检验名称'
   }
-  return labelMap[key] || key
+  return key in labelMap ? labelMap[key as LabelFilterKey] : key
 }
 
 const handleViewChange = (checked: boolean) => {
@@ -854,18 +1078,20 @@ const handleRefresh = () => {
   }, 1000)
 }
 
-const handleTableChange = (pag, filters: unknown,  sorter: unknown) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
+const handleTableChange = (pag: PaginationLike, filters: unknown, sorter: unknown) => {
+  void filters
+  void sorter
+  pagination.current = pag.current ?? pagination.current
+  pagination.pageSize = pag.pageSize ?? pagination.pageSize
   handleQuery()
 }
 
-const handleViewDetail = (record) => {
+const handleViewDetail = (record: RunningRecord) => {
   console.log('View detail:', record)
   message.info('查看详情')
 }
 
-const handleUrgeRecord = (record) => {
+const handleUrgeRecord = (record: RunningRecord) => {
   console.log('Urge record:', record)
   message.info('催办成功')
 }

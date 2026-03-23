@@ -1,6 +1,10 @@
 <template>
   <div class="w-full h-full">
-    <v-chart class="chart" :option="option" :autoresize="true" />
+    <v-chart
+      class="chart"
+      :option="option"
+      :autoresize="true"
+    />
   </div>
 </template>
 

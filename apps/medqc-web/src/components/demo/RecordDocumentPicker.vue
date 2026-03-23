@@ -6,26 +6,53 @@
     @cancel="handleCancel"
   >
     <!-- 步骤指示器 -->
-    <a-steps :current="currentStep - 1" style="margin-bottom: 12px">
+    <a-steps
+      :current="currentStep - 1"
+      style="margin-bottom: 12px"
+    >
       <a-step title="选择病历与文书" />
       <a-step title="选择质控规则" />
       <a-step title="确认" />
     </a-steps>
 
     <!-- 第一步：病历 + 文书 -->
-    <div v-if="currentStep === 1" class="picker-wrap">
+    <div
+      v-if="currentStep === 1"
+      class="picker-wrap"
+    >
       <a-row :gutter="16">
         <a-col :span="11">
-          <a-card size="small" title="病历列表" :extra="recordCountExtra">
-            <a-input-search v-model:value="recordKeyword" placeholder="按患者/科室/住院号搜索" allow-clear @search="onRecordSearch" style="margin-bottom: 8px" />
-            <a-list :data-source="filteredRecords" :row-key="r => r.id" :loading="isLoadingRecords" item-layout="horizontal" class="scroll-list">
+          <a-card
+            size="small"
+            title="病历列表"
+            :extra="recordCountExtra"
+          >
+            <a-input-search
+              v-model:value="recordKeyword"
+              placeholder="按患者/科室/住院号搜索"
+              allow-clear
+              style="margin-bottom: 8px"
+              @search="onRecordSearch"
+            />
+            <a-list
+              :data-source="filteredRecords"
+              :row-key="getRecordRowKey"
+              :loading="isLoadingRecords"
+              item-layout="horizontal"
+              class="scroll-list"
+            >
               <template #renderItem="{ item }">
-                <a-list-item :class="['record-item', { active: selectedRecord && selectedRecord.id === item.id }]" @click="selectRecord(item)">
+                <a-list-item
+                  :class="['record-item', { active: selectedRecord && selectedRecord.id === item.id }]"
+                  @click="selectRecord(item)"
+                >
                   <a-list-item-meta>
                     <template #title>
                       <div class="record-title">
                         <strong>{{ item.patient_name }}</strong>
-                        <a-tag size="small">{{ item.department }}</a-tag>
+                        <a-tag size="small">
+                          {{ item.department }}
+                        </a-tag>
                       </div>
                     </template>
                     <template #description>
@@ -42,33 +69,88 @@
         </a-col>
 
         <a-col :span="13">
-          <a-card size="small" title="文书列表" :extra="docCountExtra">
-            <a-input-search v-model:value="docKeyword" placeholder="按标题/类型筛选" allow-clear style="margin-bottom: 8px" />
+          <a-card
+            size="small"
+            title="文书列表"
+            :extra="docCountExtra"
+          >
+            <a-input-search
+              v-model:value="docKeyword"
+              placeholder="按标题/类型筛选"
+              allow-clear
+              style="margin-bottom: 8px"
+            />
             <div class="doc-toolbar">
               <a-space align="center">
                 <span>选择模式：</span>
-                <a-switch v-model:checked="isMulti" checked-children="多选" un-checked-children="单选" />
-                <a-badge :count="selectedCount" :overflow-count="999">
-                  <a-tag color="blue">已选</a-tag>
+                <a-switch
+                  v-model:checked="isMulti"
+                  checked-children="多选"
+                  un-checked-children="单选"
+                />
+                <a-badge
+                  :count="selectedCount"
+                  :overflow-count="999"
+                >
+                  <a-tag color="blue">
+                    已选
+                  </a-tag>
                 </a-badge>
-                <a-button v-if="isMulti" size="small" @click="selectAllDocs" :disabled="filteredDocuments.length===0">全选</a-button>
-                <a-button v-if="isMulti" size="small" @click="clearAllDocs" :disabled="selectedCount===0">清空</a-button>
+                <a-button
+                  v-if="isMulti"
+                  size="small"
+                  :disabled="filteredDocuments.length===0"
+                  @click="selectAllDocs"
+                >
+                  全选
+                </a-button>
+                <a-button
+                  v-if="isMulti"
+                  size="small"
+                  :disabled="selectedCount===0"
+                  @click="clearAllDocs"
+                >
+                  清空
+                </a-button>
               </a-space>
             </div>
 
-            <a-empty v-if="!selectedRecord && !isLoadingDocs" description="请先在左侧选择一个病历" />
-            <a-skeleton v-else-if="isLoadingDocs" :active="true" :paragraph="{ rows: 4 }" />
-            <a-list v-else :data-source="filteredDocuments" :row-key="d => d.id" item-layout="horizontal" class="scroll-list">
+            <a-empty
+              v-if="!selectedRecord && !isLoadingDocs"
+              description="请先在左侧选择一个病历"
+            />
+            <a-skeleton
+              v-else-if="isLoadingDocs"
+              :active="true"
+              :paragraph="{ rows: 4 }"
+            />
+            <a-list
+              v-else
+              :data-source="filteredDocuments"
+              :row-key="getDocRowKey"
+              item-layout="horizontal"
+              class="scroll-list"
+            >
               <template #renderItem="{ item }">
-                <a-list-item :class="['doc-item', { active: isSelected(item) }]" @click="toggleDoc(item)">
+                <a-list-item
+                  :class="['doc-item', { active: isSelected(item) }]"
+                  @click="toggleDoc(item)"
+                >
                   <a-list-item-meta>
                     <template #title>
                       <div class="doc-title">
                         <template v-if="!isMulti">
-                          <a-radio :checked="isSelected(item)" style="margin-right: 8px" />
+                          <a-radio
+                            :checked="isSelected(item)"
+                            style="margin-right: 8px"
+                          />
                         </template>
                         <template v-else>
-                          <a-checkbox :checked="isSelected(item)" style="margin-right: 8px" @click.stop="toggleDoc(item)" />
+                          <a-checkbox
+                            :checked="isSelected(item)"
+                            style="margin-right: 8px"
+                            @click.stop="toggleDoc(item)"
+                          />
                         </template>
                         <strong>{{ item.title }}</strong>
                         <a-tag
@@ -80,9 +162,9 @@
                           {{ docTypeLabel(getDocTypeCode(item)) }}
                         </a-tag>
                         <a-select
+                          v-model:value="editedTypes[item.id]"
                           class="type-editor"
                           size="small"
-                          v-model:value="editedTypes[item.id]"
                           placeholder="调整类型"
                           style="width: 180px"
                           :show-search="true"
@@ -91,7 +173,11 @@
                           @click.stop
                           @mousedown.stop
                         >
-                          <a-select-option v-for="opt in DOC_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
+                          <a-select-option
+                            v-for="opt in DOC_TYPE_OPTIONS"
+                            :key="opt.value"
+                            :value="opt.value"
+                          >
                             {{ opt.label }}
                           </a-select-option>
                         </a-select>
@@ -112,15 +198,41 @@
     </div>
 
     <!-- 第二步：选择质控规则 -->
-    <div v-else-if="currentStep === 2" class="rules-wrap">
-      <a-card size="small" :title="`质控规则（已选 ${selectedRulesLocal.length} 条）`">
-        <div class="flex items-center gap-2" style="margin-bottom: 8px">
-          <a-input-search v-model:value="ruleKeyword" placeholder="按名称/类别筛选" allow-clear style="flex: 1" />
-          <a-switch v-model:checked="onlyShowApplicable" checked-children="只看适用" un-checked-children="全部" />
+    <div
+      v-else-if="currentStep === 2"
+      class="rules-wrap"
+    >
+      <a-card
+        size="small"
+        :title="`质控规则（已选 ${selectedRulesLocal.length} 条）`"
+      >
+        <div
+          class="flex items-center gap-2"
+          style="margin-bottom: 8px"
+        >
+          <a-input-search
+            v-model:value="ruleKeyword"
+            placeholder="按名称/类别筛选"
+            allow-clear
+            style="flex: 1"
+          />
+          <a-switch
+            v-model:checked="onlyShowApplicable"
+            checked-children="只看适用"
+            un-checked-children="全部"
+          />
         </div>
-        <a-list :data-source="filteredRules" :row-key="r => r.id" item-layout="horizontal" class="scroll-list">
+        <a-list
+          :data-source="filteredRules"
+          :row-key="getRuleRowKey"
+          item-layout="horizontal"
+          class="scroll-list"
+        >
           <template #renderItem="{ item }">
-            <a-list-item :class="['rule-item', { disabled: item._disabled }]" @click="!item._disabled && toggleRule(item)">
+            <a-list-item
+              :class="['rule-item', { disabled: item._disabled }]"
+              @click="!item._disabled && toggleRule(item)"
+            >
               <template #actions>
                 <a-checkbox
                   :checked="isRuleChecked(item)"
@@ -128,7 +240,10 @@
                   @click.stop="toggleRule(item)"
                 />
               </template>
-              <a-list-item-meta :title="item.name || item.ruleCode || item.id" :description="item.description || '暂无描述'">
+              <a-list-item-meta
+                :title="item.name || item.ruleCode || item.id"
+                :description="item.description || '暂无描述'"
+              >
                 <template #avatar>
                   <a-avatar :style="{ backgroundColor: getSeverityColor(item.severity || 'medium') }">
                     {{ getSeverityText(item.severity || 'medium').charAt(0) }}
@@ -137,9 +252,24 @@
               </a-list-item-meta>
               <div>
                 <a-space>
-                  <a-tag size="small" :color="getSeverityColor(item.severity || 'medium')">{{ getSeverityText(item.severity || 'medium') }}</a-tag>
-                  <a-tag size="small" color="blue">{{ item.category || '规则' }}</a-tag>
-                  <a-tag v-if="item._disabled" size="small">不适用</a-tag>
+                  <a-tag
+                    size="small"
+                    :color="getSeverityColor(item.severity || 'medium')"
+                  >
+                    {{ getSeverityText(item.severity || 'medium') }}
+                  </a-tag>
+                  <a-tag
+                    size="small"
+                    color="blue"
+                  >
+                    {{ item.category || '规则' }}
+                  </a-tag>
+                  <a-tag
+                    v-if="item._disabled"
+                    size="small"
+                  >
+                    不适用
+                  </a-tag>
                 </a-space>
               </div>
             </a-list-item>
@@ -149,8 +279,14 @@
     </div>
 
     <!-- 第三步：确认 -->
-    <div v-else class="confirm-wrap">
-      <a-result status="success" title="请确认选择">
+    <div
+      v-else
+      class="confirm-wrap"
+    >
+      <a-result
+        status="success"
+        title="请确认选择"
+      >
         <template #subTitle>
           病历：{{ selectedRecord?.patient_name || '未选择' }} · 文书：{{ selectedCount }} 份 · 规则：{{ selectedRulesLocal.length }} 条
         </template>
@@ -161,12 +297,33 @@
     <template #footer>
       <div class="footer-actions">
         <a-space>
-          <a-button @click="handleCancel">取消</a-button>
+          <a-button @click="handleCancel">
+            取消
+          </a-button>
         </a-space>
         <a-space>
-          <a-button v-if="currentStep > 1" @click="prevStep">上一步</a-button>
-          <a-button v-if="currentStep < 3" type="primary" :disabled="nextDisabled" @click="nextStep">下一步</a-button>
-          <a-button v-else type="primary" :disabled="!canFinish" @click="finish">开始质控</a-button>
+          <a-button
+            v-if="currentStep > 1"
+            @click="prevStep"
+          >
+            上一步
+          </a-button>
+          <a-button
+            v-if="currentStep < 3"
+            type="primary"
+            :disabled="nextDisabled"
+            @click="nextStep"
+          >
+            下一步
+          </a-button>
+          <a-button
+            v-else
+            type="primary"
+            :disabled="!canFinish"
+            @click="finish"
+          >
+            开始质控
+          </a-button>
         </a-space>
       </div>
     </template>
@@ -181,6 +338,12 @@ import { DOCUMENT_TYPE_TO_CATEGORY } from '@/utils/documentTypeUtils'
 import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
 
 type DocInfo = { id: string; title?: string; type?: string; created_at?: string }
+type RecordInfoLite = {
+  id: string
+  patient_name?: string
+  department?: string
+  record_type?: string
+}
 
 const props = defineProps<{
   modelValue?: boolean
@@ -490,7 +653,7 @@ const filteredRecords = computed(() => {
   if (!kw) return demoStore.availableRecords
 
 
-  return demoStore.availableRecords.filter(r =>
+  return demoStore.availableRecords.filter((r: RecordInfoLite) =>
     [r.patient_name, r.department, r.id, r.record_type]
       .filter(Boolean)
       .some((f: any) => String(f).toLowerCase().includes(kw.toLowerCase()))
@@ -524,6 +687,9 @@ const recordCountExtra = computed(() => `共 ${demoStore.availableRecords.length
 const getPopupContainer = () => document.body
 
 const docCountExtra = computed(() => selectedRecord.value ? `共 ${documents.value.length} 份 | 已选 ${selectedCount.value}` : '')
+const getRecordRowKey = (r: RecordInfoLite) => r.id
+const getDocRowKey = (d: DocInfo) => d.id
+const getRuleRowKey = (r: { id: string }) => r.id
 
 async function loadDocuments(recordId: string) {
   isLoadingDocs.value = true

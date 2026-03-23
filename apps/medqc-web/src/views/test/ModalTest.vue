@@ -2,7 +2,10 @@
   <div class="modal-test-page">
     <a-card title="医疗文书解析结果Modal测试">
       <a-space>
-        <a-button type="primary" @click="showTestModal">
+        <a-button
+          type="primary"
+          @click="showTestModal"
+        >
           显示测试Modal
         </a-button>
         <a-button @click="showEmptyModal">

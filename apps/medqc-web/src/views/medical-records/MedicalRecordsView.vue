@@ -2,9 +2,14 @@
   <div class="page-container">
     <!-- 页面标题和操作按钮 -->
     <div class="page-header">
-      <h1 class="page-title">测试病历管理</h1>
+      <h1 class="page-title">
+        测试病历管理
+      </h1>
       <!-- 调试信息 -->
-      <div class="debug-info" style="background: #f0f0f0; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px;">
+      <div
+        class="debug-info"
+        style="background: #f0f0f0; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px;"
+      >
         <span class="inline-flex items-center gap-1">
           <ToolOutlined />
           调试: 记录数={{ records.length }}, 加载中={{ loading }}, 总数={{ pagination.total }}, 视图={{ viewMode }}
@@ -12,15 +17,25 @@
       </div>
       <div class="header-actions">
         <a-space>
-          <a-button size="small" @click="toggleViewMode">
+          <a-button
+            size="small"
+            @click="toggleViewMode"
+          >
             {{ viewMode === 'card' ? '切换表格视图' : '切换卡片视图' }}
           </a-button>
           <a-button @click="handleCreateRecord">
-            <template #icon><PlusOutlined /></template>
+            <template #icon>
+              <PlusOutlined />
+            </template>
             新建病历
           </a-button>
-          <a-button type="primary" @click="handleSmartImport">
-            <template #icon><RobotOutlined /></template>
+          <a-button
+            type="primary"
+            @click="handleSmartImport"
+          >
+            <template #icon>
+              <RobotOutlined />
+            </template>
             智能导入
           </a-button>
         </a-space>
@@ -31,235 +46,345 @@
     <div class="stats-grid">
       <div class="ui-gradient-wrap from-sky-400/40 via-blue-400/30 to-indigo-400/40">
         <a-card class="ui-card ui-card-muted ui-card-hover stat-card">
-        <a-statistic
-          title="总病历数"
-          :value="stats.totalRecords"
-          :value-style="{ color: '#1890ff' }"
-        >
-          <template #prefix>
-            <FileTextOutlined />
-          </template>
-        </a-statistic>
-      </a-card>
+          <a-statistic
+            title="总病历数"
+            :value="stats.totalRecords"
+            :value-style="{ color: '#1890ff' }"
+          >
+            <template #prefix>
+              <FileTextOutlined />
+            </template>
+          </a-statistic>
+        </a-card>
       </div>
       <div class="ui-gradient-wrap from-emerald-400/40 via-teal-400/30 to-green-400/40">
         <a-card class="ui-card ui-card-muted ui-card-hover stat-card">
-        <a-statistic
-          title="本月新增"
-          :value="stats.monthlyNew"
-          :value-style="{ color: '#52c41a' }"
-        >
-          <template #prefix>
-            <PlusCircleOutlined />
-          </template>
-        </a-statistic>
-      </a-card>
+          <a-statistic
+            title="本月新增"
+            :value="stats.monthlyNew"
+            :value-style="{ color: '#52c41a' }"
+          >
+            <template #prefix>
+              <PlusCircleOutlined />
+            </template>
+          </a-statistic>
+        </a-card>
       </div>
       <div class="ui-gradient-wrap from-amber-400/40 via-orange-400/30 to-yellow-400/40">
         <a-card class="ui-card ui-card-muted ui-card-hover stat-card">
-        <a-statistic
-          title="待审核"
-          :value="stats.pendingReview"
-          :value-style="{ color: '#faad14' }"
-        >
-          <template #prefix>
-            <ClockCircleOutlined />
-          </template>
-        </a-statistic>
-      </a-card>
+          <a-statistic
+            title="待审核"
+            :value="stats.pendingReview"
+            :value-style="{ color: '#faad14' }"
+          >
+            <template #prefix>
+              <ClockCircleOutlined />
+            </template>
+          </a-statistic>
+        </a-card>
       </div>
       <div class="ui-gradient-wrap from-violet-400/40 via-purple-400/30 to-fuchsia-400/40">
         <a-card class="ui-card ui-card-muted ui-card-hover stat-card">
-        <a-statistic
-          title="已关联质控点"
-          :value="stats.withQualityPoints"
-          :value-style="{ color: '#722ed1' }"
-        >
-          <template #prefix>
-            <CheckCircleOutlined />
-          </template>
-        </a-statistic>
-      </a-card>
+          <a-statistic
+            title="已关联质控点"
+            :value="stats.withQualityPoints"
+            :value-style="{ color: '#722ed1' }"
+          >
+            <template #prefix>
+              <CheckCircleOutlined />
+            </template>
+          </a-statistic>
+        </a-card>
       </div>
     </div>
 
     <!-- 筛选和搜索 -->
     <div class="ui-gradient-wrap from-sky-400/30 via-blue-400/20 to-indigo-400/30">
       <a-card class="ui-card ui-card-primary ui-card-hover filter-card">
-      <a-row :gutter="16">
-        <a-col :span="6">
-          <a-input-search
-            v-model:value="searchForm.recordName"
-            placeholder="搜索患者姓名"
-            @search="handleSearch"
-            @change="handleSearch"
-          />
-        </a-col>
-        <a-col :span="4">
-          <a-select
-            v-model:value="searchForm.department"
-            placeholder="出院科室"
-            allow-clear
-            @change="handleSearch"
-          >
-            <a-select-option value="">全部科室</a-select-option>
-            <a-select-option value="内科">内科</a-select-option>
-            <a-select-option value="外科">外科</a-select-option>
-            <a-select-option value="妇产科">妇产科</a-select-option>
-            <a-select-option value="儿科">儿科</a-select-option>
-            <a-select-option value="急诊科">急诊科</a-select-option>
-          </a-select>
-        </a-col>
-        <a-col :span="4">
-          <a-select
-            v-model:value="searchForm.diagnosis"
-            placeholder="主诊断"
-            allow-clear
-            @change="handleSearch"
-          >
-            <a-select-option value="">全部诊断</a-select-option>
-            <a-select-option value="高血压">高血压</a-select-option>
-            <a-select-option value="糖尿病">糖尿病</a-select-option>
-            <a-select-option value="冠心病">冠心病</a-select-option>
-            <a-select-option value="肺炎">肺炎</a-select-option>
-            <a-select-option value="阑尾炎">阑尾炎</a-select-option>
-          </a-select>
-        </a-col>
-        <a-col :span="4">
-          <a-select
-            v-model:value="searchForm.creator"
-            placeholder="创建人"
-            allow-clear
-            @change="handleSearch"
-          >
-            <a-select-option value="">全部创建人</a-select-option>
-            <a-select-option value="张医生">张医生</a-select-option>
-            <a-select-option value="李医生">李医生</a-select-option>
-            <a-select-option value="王医生">王医生</a-select-option>
-          </a-select>
-        </a-col>
-        <a-col :span="6">
-          <a-space>
-            <a-range-picker
-              v-model:value="searchForm.dateRange"
+        <a-row :gutter="16">
+          <a-col :span="6">
+            <a-input-search
+              v-model:value="searchForm.recordName"
+              placeholder="搜索患者姓名"
+              @search="handleSearch"
               @change="handleSearch"
             />
-            <a-button @click="handleReset">重置</a-button>
-          </a-space>
-        </a-col>
-      </a-row>
-    </a-card>
+          </a-col>
+          <a-col :span="4">
+            <a-select
+              v-model:value="searchForm.department"
+              placeholder="出院科室"
+              allow-clear
+              @change="handleSearch"
+            >
+              <a-select-option value="">
+                全部科室
+              </a-select-option>
+              <a-select-option value="内科">
+                内科
+              </a-select-option>
+              <a-select-option value="外科">
+                外科
+              </a-select-option>
+              <a-select-option value="妇产科">
+                妇产科
+              </a-select-option>
+              <a-select-option value="儿科">
+                儿科
+              </a-select-option>
+              <a-select-option value="急诊科">
+                急诊科
+              </a-select-option>
+            </a-select>
+          </a-col>
+          <a-col :span="4">
+            <a-select
+              v-model:value="searchForm.diagnosis"
+              placeholder="主诊断"
+              allow-clear
+              @change="handleSearch"
+            >
+              <a-select-option value="">
+                全部诊断
+              </a-select-option>
+              <a-select-option value="高血压">
+                高血压
+              </a-select-option>
+              <a-select-option value="糖尿病">
+                糖尿病
+              </a-select-option>
+              <a-select-option value="冠心病">
+                冠心病
+              </a-select-option>
+              <a-select-option value="肺炎">
+                肺炎
+              </a-select-option>
+              <a-select-option value="阑尾炎">
+                阑尾炎
+              </a-select-option>
+            </a-select>
+          </a-col>
+          <a-col :span="4">
+            <a-select
+              v-model:value="searchForm.creator"
+              placeholder="创建人"
+              allow-clear
+              @change="handleSearch"
+            >
+              <a-select-option value="">
+                全部创建人
+              </a-select-option>
+              <a-select-option value="张医生">
+                张医生
+              </a-select-option>
+              <a-select-option value="李医生">
+                李医生
+              </a-select-option>
+              <a-select-option value="王医生">
+                王医生
+              </a-select-option>
+            </a-select>
+          </a-col>
+          <a-col :span="6">
+            <a-space>
+              <a-range-picker
+                v-model:value="searchForm.dateRange"
+                @change="handleSearch"
+              />
+              <a-button @click="handleReset">
+                重置
+              </a-button>
+            </a-space>
+          </a-col>
+        </a-row>
+      </a-card>
     </div>
 
     <!-- 病历列表：卡片视图 + 表格视图 -->
     <div class="ui-gradient-wrap from-slate-400/30 via-gray-400/20 to-zinc-400/30">
       <a-card class="ui-card ui-card-muted ui-card-hover records-table-card">
-      <div class="table-header">
-        <div class="table-title">
-          <h3>病历列表</h3>
-          <span class="record-count">共 {{ pagination.total }} 条记录</span>
-        </div>
-        <div class="table-actions">
-          <a-button size="small" @click="handleRefresh">
-            <template #icon><ReloadOutlined /></template>
-            刷新
-          </a-button>
-        </div>
-      </div>
-
-      <!-- 卡片视图 -->
-      <div v-if="viewMode === 'card'" class="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-        <!-- 调试信息 -->
-        <div v-if="records.length === 0" class="col-span-full text-center p-8">
-          <div class="text-gray-500">
-            <p class="debug-info-title">
-              <BarChartOutlined class="mr-1" />
-              调试信息:
-            </p>
-            <p>记录数量: {{ records.length }}</p>
-            <p>加载状态: {{ loading ? '加载中...' : '已完成' }}</p>
-            <p>视图模式: {{ viewMode }}</p>
-            <p>分页总数: {{ pagination.total }}</p>
+        <div class="table-header">
+          <div class="table-title">
+            <h3>病历列表</h3>
+            <span class="record-count">共 {{ pagination.total }} 条记录</span>
+          </div>
+          <div class="table-actions">
+            <a-button
+              size="small"
+              @click="handleRefresh"
+            >
+              <template #icon>
+                <ReloadOutlined />
+              </template>
+              刷新
+            </a-button>
           </div>
         </div>
 
+        <!-- 卡片视图 -->
         <div
-          v-for="rec in records"
-          :key="rec.id"
-          class="record-card ui-card ui-card-muted ui-card-hover p-3 transition-colors transition-shadow duration-200 ease-out hover:bg-[#e8f4fd] hover:shadow-md hover:border-blue-200"
+          v-if="viewMode === 'card'"
+          class="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
         >
-          <div class="flex items-start justify-between">
-            <div>
-              <div class="text-xs text-gray-500">编号</div>
-              <div class="text-sm font-semibold text-gray-900 record-number-text">{{ rec.recordNumber }}</div>
+          <!-- 调试信息 -->
+          <div
+            v-if="records.length === 0"
+            class="col-span-full text-center p-8"
+          >
+            <div class="text-gray-500">
+              <p class="debug-info-title">
+                <BarChartOutlined class="mr-1" />
+                调试信息:
+              </p>
+              <p>记录数量: {{ records.length }}</p>
+              <p>加载状态: {{ loading ? '加载中...' : '已完成' }}</p>
+              <p>视图模式: {{ viewMode }}</p>
+              <p>分页总数: {{ pagination.total }}</p>
             </div>
-            <a-tag :color="rec.status === 'active' ? 'blue' : 'default'">{{ rec.status || '—' }}</a-tag>
           </div>
 
-          <div class="mt-2">
-            <div class="text-xs text-gray-500">患者姓名</div>
-            <div class="text-gray-800 font-medium patient-name-text">{{ rec.patientName || rec.recordName }}</div>
-          </div>
-
-          <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-            <div>科室：<span class="text-gray-800">{{ rec.department || '—' }}</span></div>
-            <div>文书：<span class="text-gray-800">{{ rec.documentsCount ?? 0 }}</span> 份</div>
-            <div class="col-span-2 truncate">主诊断：<span class="text-gray-800">{{ rec.primaryDiagnosis || '—' }}</span></div>
-          </div>
-
-          <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
-            <div>
-              创建：{{ formatDateTime(rec.createdAt) }}
+          <div
+            v-for="rec in records"
+            :key="rec.id"
+            class="record-card ui-card ui-card-muted ui-card-hover p-3 transition-colors transition-shadow duration-200 ease-out hover:bg-[#e8f4fd] hover:shadow-md hover:border-blue-200"
+          >
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-xs text-gray-500">
+                  编号
+                </div>
+                <div class="text-sm font-semibold text-gray-900 record-number-text">
+                  {{ rec.recordNumber }}
+                </div>
+              </div>
+              <a-tag :color="rec.status === 'active' ? 'blue' : 'default'">
+                {{ rec.status || '—' }}
+              </a-tag>
             </div>
-            <div class="flex items-center gap-2">
-              <a-button type="link" size="small" class="p-0" @click="handleViewDetail(rec.id)">详情</a-button>
-              <a-divider type="vertical" />
-              <a-button type="link" size="small" class="p-0" @click="handleCopy(rec.id)">复制</a-button>
-              <a-divider type="vertical" />
-              <a-popconfirm title="确定要删除这条病历吗？" ok-text="确定" cancel-text="取消" @confirm="handleDelete(rec.id)">
-                <a-button type="link" size="small" danger class="p-0">删除</a-button>
-              </a-popconfirm>
+
+            <div class="mt-2">
+              <div class="text-xs text-gray-500">
+                患者姓名
+              </div>
+              <div class="text-gray-800 font-medium patient-name-text">
+                {{ rec.patientName || rec.recordName }}
+              </div>
+            </div>
+
+            <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+              <div>科室：<span class="text-gray-800">{{ rec.department || '—' }}</span></div>
+              <div>文书：<span class="text-gray-800">{{ rec.documentsCount ?? 0 }}</span> 份</div>
+              <div class="col-span-2 truncate">
+                主诊断：<span class="text-gray-800">{{ rec.primaryDiagnosis || '—' }}</span>
+              </div>
+            </div>
+
+            <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
+              <div>
+                创建：{{ formatDateTime(rec.createdAt) }}
+              </div>
+              <div class="flex items-center gap-2">
+                <a-button
+                  type="link"
+                  size="small"
+                  class="p-0"
+                  @click="handleViewDetail(rec.id)"
+                >
+                  详情
+                </a-button>
+                <a-divider type="vertical" />
+                <a-button
+                  type="link"
+                  size="small"
+                  class="p-0"
+                  @click="handleCopy(rec.id)"
+                >
+                  复制
+                </a-button>
+                <a-divider type="vertical" />
+                <a-popconfirm
+                  title="确定要删除这条病历吗？"
+                  ok-text="确定"
+                  cancel-text="取消"
+                  @confirm="handleDelete(rec.id)"
+                >
+                  <a-button
+                    type="link"
+                    size="small"
+                    danger
+                    class="p-0"
+                  >
+                    删除
+                  </a-button>
+                </a-popconfirm>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 表格视图 -->
-      <a-table
-        v-else
-        :columns="columns"
-        :data-source="records"
-        :loading="loading"
-        :pagination="pagination"
-        :row-selection="rowSelection"
-        size="middle"
-        @change="handleTableChange"
-      >
-        <template #recordNumber="{ text }">
-          <span class="record-number">{{ text }}</span>
-        </template>
-        <template #patientName="{ record }">
-          <span class="patient-name">{{ record.patientName || record.recordName || '未知' }}</span>
-        </template>
-        <template #qualityPoints="{ record }">
-          <a-button type="link" size="small" @click="showQualityPointsModal(record)">
-            查看质控点 ({{ record.qualityPointIds?.length || 0 }})
-          </a-button>
-        </template>
-        <template #createdAt="{ text }">
-          <span>{{ formatDateTime(text) }}</span>
-        </template>
-        <template #action="{ record }">
-          <a-space size="small">
-            <a-button type="link" size="small" @click="handleViewDetail(record.id)">详情</a-button>
-            <a-button type="link" size="small" @click="handleCopy(record.id)">复制</a-button>
-            <a-popconfirm title="确定要删除这条病历吗？" ok-text="确定" cancel-text="取消" @confirm="handleDelete(record.id)">
-              <a-button type="link" size="small" danger>删除</a-button>
-            </a-popconfirm>
-          </a-space>
-        </template>
-      </a-table>
-    </a-card>
+        <!-- 表格视图 -->
+        <a-table
+          v-else
+          :columns="columns"
+          :data-source="records"
+          :loading="loading"
+          :pagination="pagination"
+          :row-selection="rowSelection"
+          size="middle"
+          @change="handleTableChange"
+        >
+          <template #recordNumber="{ text }">
+            <span class="record-number">{{ text }}</span>
+          </template>
+          <template #patientName="{ record }">
+            <span class="patient-name">{{ record.patientName || record.recordName || '未知' }}</span>
+          </template>
+          <template #qualityPoints="{ record }">
+            <a-button
+              type="link"
+              size="small"
+              @click="showQualityPointsModal(record)"
+            >
+              查看质控点 ({{ record.qualityPointIds?.length || 0 }})
+            </a-button>
+          </template>
+          <template #createdAt="{ text }">
+            <span>{{ formatDateTime(text) }}</span>
+          </template>
+          <template #action="{ record }">
+            <a-space size="small">
+              <a-button
+                type="link"
+                size="small"
+                @click="handleViewDetail(record.id)"
+              >
+                详情
+              </a-button>
+              <a-button
+                type="link"
+                size="small"
+                @click="handleCopy(record.id)"
+              >
+                复制
+              </a-button>
+              <a-popconfirm
+                title="确定要删除这条病历吗？"
+                ok-text="确定"
+                cancel-text="取消"
+                @confirm="handleDelete(record.id)"
+              >
+                <a-button
+                  type="link"
+                  size="small"
+                  danger
+                >
+                  删除
+                </a-button>
+              </a-popconfirm>
+            </a-space>
+          </template>
+        </a-table>
+      </a-card>
     </div>
 
     <!-- 质控点详情弹窗 -->
@@ -277,7 +402,10 @@
         <a-divider />
         <div class="quality-points-list">
           <h4>应用的质控点：</h4>
-          <div v-if="qualityPointsData.length === 0" class="no-data">
+          <div
+            v-if="qualityPointsData.length === 0"
+            class="no-data"
+          >
             暂无关联的质控点
           </div>
           <div v-else>
@@ -306,8 +434,6 @@
         </div>
       </div>
     </a-modal>
-
-
   </div>
 </template>
 
@@ -328,7 +454,7 @@ import {
   ToolOutlined
 } from '@ant-design/icons-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
-import dayjs from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 // 添加API配置 - 支持外部IP访问
 const getApiBaseUrl = () => {
   // 开发环境使用Vite代理，生产环境使用完整URL
@@ -347,13 +473,67 @@ console.log('🌐 病历列表页面使用API地址:', API_BASE_URL)
 const router = useRouter()
 const authStore = useAuthStore()
 
+interface MedicalRecordRow {
+  id: string
+  recordNumber: string
+  recordName: string
+  patientName: string
+  department: string
+  primaryDiagnosis: string
+  majorSurgery: string
+  qualityPointIds: string[]
+  createdBy: string
+  lastModifiedBy: string
+  createdAt: string
+  status: string
+  importMethod: string
+  aiConfidence: number
+  documentsCount: number
+}
+
+interface QualityPointItem {
+  id: string
+  name: string
+  category: string
+  severity: string
+  appliedAt: string
+}
+
+interface ApiRecordItem {
+  id?: string
+  record_number?: string
+  record_name?: string
+  patient_info?: {
+    name?: string
+  }
+  department?: string
+  primary_diagnosis?: string
+  major_surgery?: string
+  created_by?: string
+  updated_by?: string
+  created_at?: string
+  status?: string
+  import_method?: string
+  ai_confidence_score?: number
+  document_count?: number
+  documents?: unknown[]
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 // 响应式数据
 const loading = ref(false)
-const records = ref([])
+const records = ref<MedicalRecordRow[]>([])
 const selectedRowKeys = ref<string[]>([])
 const qualityPointsModalVisible = ref(false)
-const selectedRecord = ref(null)
-const qualityPointsData = ref([])
+const selectedRecord = ref<MedicalRecordRow | null>(null)
+const qualityPointsData = ref<QualityPointItem[]>([])
 
 // 统计数据
 const stats = reactive({
@@ -369,7 +549,7 @@ const searchForm = reactive({
   department: '',
   diagnosis: '',
   creator: '',
-  dateRange: null
+  dateRange: null as [Dayjs, Dayjs] | null
 })
 
 // 分页配置
@@ -543,7 +723,7 @@ const loadRecords = async () => {
     const apiUrl = `${API_BASE_URL}/api/records?${params.toString()}`
     console.log('📡 API调用URL:', apiUrl)
 
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     }
 
@@ -592,9 +772,9 @@ const loadRecords = async () => {
     console.log(`📋 获取到 ${items.length} 条记录`)
 
     // 转换数据格式以适配现有UI - 适配medical_records表结构
-    records.value = items.map((record: any) => ({
-      id: record.id,
-      recordNumber: record.record_number || record.id,
+    records.value = (items as ApiRecordItem[]).map((record) => ({
+      id: record.id || '',
+      recordNumber: record.record_number || record.id || '',
       recordName: record.record_name || `${record.patient_info?.name || '未知患者'}的病历记录`,
       patientName: record.patient_info?.name || '未知患者',
       department: record.department || '未知科室',
@@ -603,8 +783,8 @@ const loadRecords = async () => {
       qualityPointIds: [], // 暂时为空，后续可以从关联表获取
       createdBy: record.created_by || '系统',
       lastModifiedBy: record.updated_by || record.created_by || '系统',
-      createdAt: record.created_at,
-      status: record.status,
+      createdAt: record.created_at || '',
+      status: record.status || '',
       importMethod: record.import_method || 'smart_import',
       aiConfidence: record.ai_confidence_score || 0,
       documentsCount: record.document_count || (Array.isArray(record.documents) ? record.documents.length : 0)
@@ -621,13 +801,13 @@ const loadRecords = async () => {
       paginationTotal: pagination.total,
       loading: loading.value
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('❌ 加载病历列表失败:', error)
     console.error('错误详情:', {
-      message: error.message,
-      stack: error.stack
+      message: getErrorMessage(error),
+      stack: error instanceof Error ? error.stack : undefined
     })
-    message.error(`加载病历列表失败: ${error.message}`)
+    message.error(`加载病历列表失败: ${getErrorMessage(error)}`)
 
     // 如果Supabase调用失败，使用模拟数据作为后备
     const mockData = [
@@ -677,20 +857,21 @@ const loadStats = async () => {
 
     if (response.ok) {
       const result = await response.json()
-      const allRecords = result.data || []
+      const allRecords: Array<{ created_at?: string; status?: string; record_type?: string }> =
+        (Array.isArray(result.data?.items) ? result.data.items : Array.isArray(result.data) ? result.data : [])
 
       // 计算统计数据
       const totalRecords = result.total || allRecords.length
       const currentMonth = new Date().getMonth()
       const currentYear = new Date().getFullYear()
 
-      const monthlyNew = allRecords.filter(record => {
-        const createdDate = new Date(record.created_at)
+      const monthlyNew = allRecords.filter((record) => {
+        const createdDate = new Date(record.created_at || '')
         return createdDate.getMonth() === currentMonth && createdDate.getFullYear() === currentYear
       }).length
 
-      const pendingReview = allRecords.filter(record => record.status === 'pending').length
-      const withQualityPoints = allRecords.filter(record => record.record_type === 'LLM解析结果').length
+      const pendingReview = allRecords.filter((record) => record.status === 'pending').length
+      const withQualityPoints = allRecords.filter((record) => record.record_type === 'LLM解析结果').length
 
       Object.assign(stats, {
         totalRecords,
@@ -816,7 +997,7 @@ const handleTableChange: TableProps['onChange'] = (pag: any,  filters: any, sort
 
 
 
-const showQualityPointsModal = async (record) => {
+const showQualityPointsModal = async (record: MedicalRecordRow) => {
   selectedRecord.value = record
   qualityPointsModalVisible.value = true
 
@@ -1116,4 +1297,3 @@ const showQualityPointsModal = async (record) => {
   line-height: 1.1 !important;
 }
 </style>
-

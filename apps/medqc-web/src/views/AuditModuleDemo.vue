@@ -15,11 +15,17 @@
       
       <div class="demo-actions">
         <a-space>
-          <a-button @click="initializeDemoData" :loading="initializing">
+          <a-button
+            :loading="initializing"
+            @click="initializeDemoData"
+          >
             <DatabaseOutlined />
             初始化演示数据
           </a-button>
-          <a-button @click="resetDemo" type="dashed">
+          <a-button
+            type="dashed"
+            @click="resetDemo"
+          >
             <ReloadOutlined />
             重置演示
           </a-button>
@@ -29,9 +35,16 @@
 
     <!-- 功能演示区域 -->
     <div class="demo-content">
-      <a-tabs v-model:activeKey="activeTab" size="large" class="demo-tabs">
+      <a-tabs
+        v-model:active-key="activeTab"
+        size="large"
+        class="demo-tabs"
+      >
         <!-- 审核任务管理演示 -->
-        <a-tab-pane key="task-management" tab="审核任务管理">
+        <a-tab-pane
+          key="task-management"
+          tab="审核任务管理"
+        >
           <template #tab>
             <span>
               <ProjectOutlined />
@@ -52,15 +65,18 @@
             <a-card class="demo-card">
               <AuditTaskList
                 :tasks="demoTasks"
-                @task-selected="handleTaskSelected"
                 demo-mode
+                @task-selected="handleTaskSelected"
               />
             </a-card>
           </div>
         </a-tab-pane>
 
         <!-- 多级审核演示 -->
-        <a-tab-pane key="multi-level-audit" tab="多级审核">
+        <a-tab-pane
+          key="multi-level-audit"
+          tab="多级审核"
+        >
           <template #tab>
             <span>
               <TeamOutlined />
@@ -87,7 +103,10 @@
               </a-select>
             </div>
             
-            <a-card class="demo-card" v-if="selectedTaskItem">
+            <a-card
+              v-if="selectedTaskItem"
+              class="demo-card"
+            >
               <MultiLevelAuditTabs
                 :task-item-id="selectedTaskItem"
                 :task-item="getCurrentTaskItem()"
@@ -99,12 +118,18 @@
         </a-tab-pane>
 
         <!-- 消息通知演示 -->
-        <a-tab-pane key="notifications" tab="消息通知">
+        <a-tab-pane
+          key="notifications"
+          tab="消息通知"
+        >
           <template #tab>
             <span>
               <BellOutlined />
               消息通知
-              <a-badge :count="demoNotificationCount" :offset="[10, -5]" />
+              <a-badge
+                :count="demoNotificationCount"
+                :offset="[10, -5]"
+              />
             </span>
           </template>
           
@@ -130,7 +155,10 @@
         </a-tab-pane>
 
         <!-- AI辅助功能演示 -->
-        <a-tab-pane key="ai-assistance" tab="AI辅助">
+        <a-tab-pane
+          key="ai-assistance"
+          tab="AI辅助"
+        >
           <template #tab>
             <span>
               <RobotOutlined />
@@ -156,7 +184,10 @@
         </a-tab-pane>
 
         <!-- 系统集成演示 -->
-        <a-tab-pane key="integration" tab="系统集成">
+        <a-tab-pane
+          key="integration"
+          tab="系统集成"
+        >
           <template #tab>
             <span>
               <ApiOutlined />
@@ -185,8 +216,14 @@
 
     <!-- 演示状态面板 -->
     <div class="demo-status">
-      <a-card title="演示状态" size="small">
-        <a-descriptions :column="2" size="small">
+      <a-card
+        title="演示状态"
+        size="small"
+      >
+        <a-descriptions
+          :column="2"
+          size="small"
+        >
           <a-descriptions-item label="演示任务数">
             {{ demoTasks.length }}
           </a-descriptions-item>
@@ -205,11 +242,17 @@
         
         <div class="status-actions">
           <a-space>
-            <a-button @click="exportDemoData" size="small">
+            <a-button
+              size="small"
+              @click="exportDemoData"
+            >
               <DownloadOutlined />
               导出演示数据
             </a-button>
-            <a-button @click="viewDemoLogs" size="small">
+            <a-button
+              size="small"
+              @click="viewDemoLogs"
+            >
               <FileTextOutlined />
               查看日志
             </a-button>
@@ -263,6 +306,9 @@ const getCurrentTaskItem = () => {
   return demoTaskItems.value.find(item => item.id === selectedTaskItem.value)
 }
 
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
+
 // 方法
 const initializeDemoData = async () => {
   try {
@@ -283,7 +329,7 @@ const initializeDemoData = async () => {
     
   } catch (error) {
     message.destroy()
-    message.error(`初始化失败: ${error.message}`)
+    message.error(`初始化失败: ${getErrorMessage(error)}`)
   } finally {
     initializing.value = false
   }
@@ -499,16 +545,19 @@ const handleDefectsDetected = (defects: unknown[]) => {
   message.success(`AI检测到 ${defects.length} 个潜在缺陷`)
 }
 
-const handleMessageGenerated = (message) => {
+const handleMessageGenerated = (generatedMessage: unknown) => {
+  void generatedMessage
   aiAnalysisCount.value++
   message.success('智能消息生成成功')
 }
 
-const handleIntegrationTested = (result) => {
+const handleIntegrationTested = (result: unknown) => {
+  void result
   message.success('LLM集成测试完成')
 }
 
-const handleRealtimeTested = (result) => {
+const handleRealtimeTested = (result: unknown) => {
+  void result
   message.success('实时功能测试完成')
 }
 

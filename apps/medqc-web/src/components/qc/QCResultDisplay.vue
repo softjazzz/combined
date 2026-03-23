@@ -12,7 +12,10 @@
 
             <!-- 评分圆环 -->
             <div class="relative inline-flex items-center justify-center w-32 h-32 mb-6">
-              <svg class="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
+              <svg
+                class="w-32 h-32 transform -rotate-90"
+                viewBox="0 0 100 100"
+              >
                 <circle
                   cx="50"
                   cy="50"
@@ -29,8 +32,8 @@
                   stroke="currentColor"
                   stroke-width="6"
                   fill="none"
-                  :stroke-dasharray="`${(result.overall_score / 100) * 251.2} 251.2`"
-                  :class="getScoreCircleColor(result.overall_score)"
+                  :stroke-dasharray="`${(((result.overall_score ?? 0) / 100) * 251.2)} 251.2`"
+                  :class="getScoreCircleColor(result.overall_score ?? 0)"
                   class="transition-all duration-2000 ease-out score-circle"
                 />
               </svg>
@@ -38,11 +41,13 @@
                 <div class="text-center">
                   <div 
                     class="text-3xl font-bold mb-1"
-                    :class="getScoreColor(result.overall_score)"
+                    :class="getScoreColor(result.overall_score ?? 0)"
                   >
-                    {{ result.overall_score }}
+                    {{ result.overall_score ?? 0 }}
                   </div>
-                  <div class="text-sm text-slate-400">分</div>
+                  <div class="text-sm text-slate-400">
+                    分
+                  </div>
                 </div>
               </div>
             </div>
@@ -50,31 +55,41 @@
             <!-- 等级标签 -->
             <div class="mb-6">
               <a-tag 
-                :color="getGradeColor(result.overall_grade)" 
+                :color="getGradeColor(result.overall_grade ?? '')" 
                 size="large"
                 class="px-6 py-2 text-lg font-bold grade-tag"
               >
-                {{ result.overall_grade }}级质控
+                {{ result.overall_grade ?? '-' }}级质控
               </a-tag>
             </div>
 
             <!-- 评分说明 -->
             <div class="text-sm text-slate-400 space-y-2">
-              <div class="font-medium">{{ getScoreDescription(result.overall_score) }}</div>
+              <div class="font-medium">
+                {{ getScoreDescription(result.overall_score ?? 0) }}
+              </div>
               <div class="text-xs">
-                分析时间：{{ formatDate(result.analysis_date) }}
+                分析时间：{{ formatDate(result.analysis_date ?? '') }}
               </div>
             </div>
 
             <!-- 快速统计 -->
             <div class="mt-6 grid grid-cols-2 gap-4">
               <div class="text-center p-3 rounded-lg bg-slate-700/30">
-                <div class="text-lg font-bold text-red-400">{{ criticalIssuesCount }}</div>
-                <div class="text-xs text-slate-400">严重问题</div>
+                <div class="text-lg font-bold text-red-400">
+                  {{ criticalIssuesCount }}
+                </div>
+                <div class="text-xs text-slate-400">
+                  严重问题
+                </div>
               </div>
               <div class="text-center p-3 rounded-lg bg-slate-700/30">
-                <div class="text-lg font-bold text-amber-400">{{ totalIssuesCount }}</div>
-                <div class="text-xs text-slate-400">总问题数</div>
+                <div class="text-lg font-bold text-amber-400">
+                  {{ totalIssuesCount }}
+                </div>
+                <div class="text-xs text-slate-400">
+                  总问题数
+                </div>
               </div>
             </div>
           </div>
@@ -88,20 +103,28 @@
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-slate-100 flex items-center gap-2">
               <ExclamationCircleOutlined class="text-amber-400" />
-              发现的问题 ({{ result.issues.length }})
+              发现的问题 ({{ displayIssues.length }})
             </h3>
             <div class="flex items-center gap-2">
               <a-select
                 v-model:value="issueFilter"
                 size="small"
                 style="width: 120px"
-                @change="filterIssues"
                 class="filter-select"
+                @change="filterIssues"
               >
-                <a-select-option value="all">全部问题</a-select-option>
-                <a-select-option value="critical">严重</a-select-option>
-                <a-select-option value="major">重要</a-select-option>
-                <a-select-option value="minor">轻微</a-select-option>
+                <a-select-option value="all">
+                  全部问题
+                </a-select-option>
+                <a-select-option value="critical">
+                  严重
+                </a-select-option>
+                <a-select-option value="major">
+                  重要
+                </a-select-option>
+                <a-select-option value="minor">
+                  轻微
+                </a-select-option>
               </a-select>
             </div>
           </div>
@@ -123,7 +146,9 @@
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-2">
-                    <h4 class="font-medium text-slate-100 truncate">{{ issue.rule_name }}</h4>
+                    <h4 class="font-medium text-slate-100 truncate">
+                      {{ issue.rule_name }}
+                    </h4>
                     <a-tag 
                       :color="getSeverityColor(issue.severity)" 
                       size="small"
@@ -132,7 +157,9 @@
                       {{ getSeverityLabel(issue.severity) }}
                     </a-tag>
                   </div>
-                  <p class="text-sm text-slate-300 mb-2">{{ issue.description }}</p>
+                  <p class="text-sm text-slate-300 mb-2">
+                    {{ issue.description }}
+                  </p>
                   <div class="flex items-center gap-4 text-xs text-slate-400">
                     <span class="flex items-center gap-1">
                       <TagOutlined />
@@ -144,19 +171,28 @@
                     </span>
                   </div>
                   <div class="mt-2 p-2 rounded bg-blue-500/10 border border-blue-500/20">
-                    <div class="text-xs text-blue-200 font-medium mb-1">建议：</div>
-                    <div class="text-xs text-blue-300">{{ issue.suggestion }}</div>
+                    <div class="text-xs text-blue-200 font-medium mb-1">
+                      建议：
+                    </div>
+                    <div class="text-xs text-blue-300">
+                      {{ issue.suggestion }}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div v-if="filteredIssues.length === 0" class="text-center py-8">
+          <div
+            v-if="filteredIssues.length === 0"
+            class="text-center py-8"
+          >
             <div class="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
               <CheckCircleOutlined class="text-emerald-400 text-2xl" />
             </div>
-            <div class="text-slate-400">{{ issueFilter === 'all' ? '未发现质控问题' : '该级别无问题' }}</div>
+            <div class="text-slate-400">
+              {{ issueFilter === 'all' ? '未发现质控问题' : '该级别无问题' }}
+            </div>
           </div>
         </div>
 
@@ -164,7 +200,7 @@
         <div class="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6">
           <h3 class="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
             <BulbOutlined class="text-yellow-400" />
-            改进建议 ({{ result.suggestions.length }})
+            改进建议 ({{ displaySuggestions.length }})
           </h3>
 
           <div class="space-y-3">
@@ -182,7 +218,9 @@
                 </div>
                 <div class="flex-1">
                   <div class="flex items-center gap-2 mb-2">
-                    <h4 class="font-medium text-slate-100">{{ suggestion.title }}</h4>
+                    <h4 class="font-medium text-slate-100">
+                      {{ suggestion.title }}
+                    </h4>
                     <a-tag 
                       :color="getPriorityColor(suggestion.priority)" 
                       size="small"
@@ -194,9 +232,19 @@
                     v-if="suggestion.steps.length > 0"
                     class="text-sm text-slate-300 mb-2 list-decimal list-inside space-y-1 marker:text-amber-400"
                   >
-                    <li v-for="(step, index) in suggestion.steps" :key="index">{{ step }}</li>
+                    <li
+                      v-for="(step, index) in suggestion.steps"
+                      :key="index"
+                    >
+                      {{ step }}
+                    </li>
                   </ol>
-                  <p v-else class="text-sm text-slate-300 mb-2">{{ suggestion.description }}</p>
+                  <p
+                    v-else
+                    class="text-sm text-slate-300 mb-2"
+                  >
+                    {{ suggestion.description }}
+                  </p>
                   <div class="text-xs text-yellow-400 flex items-center gap-1">
                     <TagOutlined />
                     {{ suggestion.category }}
@@ -206,11 +254,16 @@
             </div>
           </div>
 
-          <div v-if="result.suggestions.length === 0" class="text-center py-8">
+          <div
+            v-if="displaySuggestions.length === 0"
+            class="text-center py-8"
+          >
             <div class="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
               <CheckCircleOutlined class="text-emerald-400 text-2xl" />
             </div>
-            <div class="text-slate-400">暂无改进建议</div>
+            <div class="text-slate-400">
+              暂无改进建议
+            </div>
           </div>
         </div>
 
@@ -223,7 +276,7 @@
 
           <div class="space-y-3">
             <div
-              v-for="ruleResult in result.rule_results"
+              v-for="ruleResult in ruleResults"
               :key="ruleResult.rule_id"
               class="p-4 rounded-lg border border-slate-600/30 bg-slate-700/20"
             >
@@ -232,7 +285,7 @@
                   <div 
                     class="w-4 h-4 rounded-full"
                     :class="ruleResult.passed ? 'bg-emerald-400' : 'bg-red-400'"
-                  ></div>
+                  />
                   <span class="font-medium text-slate-100">{{ ruleResult.rule_name }}</span>
                 </div>
                 <div class="flex items-center gap-2">
@@ -250,7 +303,9 @@
                   </a-tag>
                 </div>
               </div>
-              <p class="text-sm text-slate-400">{{ ruleResult.details }}</p>
+              <p class="text-sm text-slate-400">
+                {{ ruleResult.details }}
+              </p>
             </div>
           </div>
         </div>
@@ -272,7 +327,7 @@ import {
   TagOutlined,
   EnvironmentOutlined
 } from '@ant-design/icons-vue'
-import type { QCResult, QCIssue } from '@/types'
+import type { QCIssue, QCSuggestion } from '@/types'
 import { structureSuggestions } from '@/utils/suggestionFormatter'
 
 interface RuleResultViewModel {
@@ -283,14 +338,16 @@ interface RuleResultViewModel {
   details?: string
 }
 
-type QCResultViewModel = Omit<QCResult, 'issues' | 'suggestions'> & {
+type QCResultViewModel = {
   overall_score?: number
   overall_grade?: string
   analysis_date?: string
-  issues: QCIssue[]
-  suggestions: string[]
-  rule_results: RuleResultViewModel[]
+  issues?: Array<Omit<QCIssue, 'severity'> & { category?: string; severity: QCIssue['severity'] | 'major' | 'minor' }>
+  suggestions?: Array<QCSuggestion | string>
+  rule_results?: RuleResultViewModel[]
+  [key: string]: unknown
 }
+type DisplayIssue = NonNullable<QCResultViewModel['issues']>[number]
 
 // Props
 interface Props {
@@ -301,27 +358,42 @@ const props = defineProps<Props>()
 
 // Emits
 const emit = defineEmits<{
-  'highlight-issue': [issue: QCIssue]
+  'highlight-issue': [issue: DisplayIssue]
 }>()
 
 // 状态
 const issueFilter = ref('all')
+const displayIssues = computed(() => props.result.issues ?? [])
+const displaySuggestions = computed<QCSuggestion[]>(() =>
+  (props.result.suggestions ?? []).map((item, index) =>
+    typeof item === 'string'
+      ? {
+          id: `suggestion-${index}`,
+          category: '通用建议',
+          title: '改进建议',
+          description: item,
+          priority: 'medium',
+        }
+      : item
+  )
+)
 
 // 计算属性
 const criticalIssuesCount = computed(() => 
-  props.result.issues.filter(issue => issue.severity === 'critical' || issue.severity === 'major').length
+  displayIssues.value.filter(issue => issue.severity === 'critical' || issue.severity === 'high' || issue.severity === 'major').length
 )
 
-const totalIssuesCount = computed(() => props.result.issues.length)
+const totalIssuesCount = computed(() => displayIssues.value.length)
 
 const filteredIssues = computed(() => {
   if (issueFilter.value === 'all') {
-    return props.result.issues
+    return displayIssues.value
   }
-  return props.result.issues.filter(issue => issue.severity === issueFilter.value)
+  return displayIssues.value.filter(issue => issue.severity === issueFilter.value)
 })
 
-const structuredSuggestions = computed(() => structureSuggestions(props.result.suggestions))
+const structuredSuggestions = computed(() => structureSuggestions(displaySuggestions.value))
+const ruleResults = computed(() => props.result.rule_results ?? [])
 
 // 方法
 const filterIssues = () => {

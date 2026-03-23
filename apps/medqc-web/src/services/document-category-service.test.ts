@@ -39,7 +39,12 @@ const mockRulesData = [
 /**
  * 模拟统计逻辑（从修复后的代码复制）
  */
-function simulateStats(data: unknown[]): Record<string, number> {
+interface RuleCategoryRow {
+  primary_document_category?: string
+  document_categories?: string[]
+}
+
+function simulateStats(data: RuleCategoryRow[]): Record<string, number> {
   const CANONICAL_CATEGORIES = new Set([
     'admission_record', 'progress_note', 'discharge_record',
     'operation_record', 'examination_report', 'consent_form'
@@ -64,7 +69,7 @@ function simulateStats(data: unknown[]): Record<string, number> {
     stats[category] = 0
   })
 
-  data?.forEach(rule => {
+  data?.forEach((rule: RuleCategoryRow) => {
     const primaryCategory = rule.primary_document_category
     const documentCategories = rule.document_categories || []
     

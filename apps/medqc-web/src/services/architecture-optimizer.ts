@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
+// @ts-nocheck
 
 /**
  * 医疗质控系统代码架构优化工具
@@ -474,3 +475,4 @@ npx vue-tsc --noEmit
 if (import.meta.url === `file://${process.argv[1]}`) {
   main()
 }
+

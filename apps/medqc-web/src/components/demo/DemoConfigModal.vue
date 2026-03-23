@@ -88,8 +88,8 @@
 
       <!-- 通知间隔 -->
       <a-form-item
-        label="通知间隔（秒）"
         v-if="formData.autoNotifications"
+        label="通知间隔（秒）"
       >
         <a-input-number
           v-model:value="formData.notificationInterval"
@@ -117,8 +117,8 @@
 
       <!-- 状态过期时间 -->
       <a-form-item
-        label="状态过期（小时）"
         v-if="formData.persistState"
+        label="状态过期（小时）"
       >
         <a-input-number
           v-model:value="formData.stateExpiryHours"
@@ -139,8 +139,15 @@
           <ReloadOutlined />
           恢复默认
         </a-button>
-        <a-button @click="handleCancel">取消</a-button>
-        <a-button type="primary" @click="handleOk">确定</a-button>
+        <a-button @click="handleCancel">
+          取消
+        </a-button>
+        <a-button
+          type="primary"
+          @click="handleOk"
+        >
+          确定
+        </a-button>
       </a-space>
     </template>
   </a-modal>

@@ -1,31 +1,50 @@
 <template>
   <div class="classification-version-manager">
-    <a-card title="医疗文书分类算法版本管理" class="mb-4">
+    <a-card
+      title="医疗文书分类算法版本管理"
+      class="mb-4"
+    >
       <template #extra>
-        <a-button @click="refreshVersionInfo" :loading="loading">
-          <template #icon><ReloadOutlined /></template>
+        <a-button
+          :loading="loading"
+          @click="refreshVersionInfo"
+        >
+          <template #icon>
+            <ReloadOutlined />
+          </template>
           刷新
         </a-button>
       </template>
 
       <!-- 当前版本信息 -->
-      <a-descriptions title="当前版本信息" :column="2" bordered class="mb-4">
+      <a-descriptions
+        title="当前版本信息"
+        :column="2"
+        bordered
+        class="mb-4"
+      >
         <a-descriptions-item label="当前版本">
           <a-tag :color="getVersionColor(versionInfo.current_version)">
             {{ versionInfo.current_version_name }}
           </a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="回退版本">
-          <a-tag color="orange">{{ versionInfo.fallback_version_name }}</a-tag>
+          <a-tag color="orange">
+            {{ versionInfo.fallback_version_name }}
+          </a-tag>
         </a-descriptions-item>
       </a-descriptions>
 
       <!-- 版本切换 -->
-      <a-card title="版本切换" size="small" class="mb-4">
+      <a-card
+        title="版本切换"
+        size="small"
+        class="mb-4"
+      >
         <a-radio-group 
           v-model:value="selectedVersion" 
-          @change="onVersionChange"
           :disabled="switching"
+          @change="onVersionChange"
         >
           <a-space direction="vertical">
             <a-radio 
@@ -36,11 +55,17 @@
               <div class="version-option">
                 <div class="version-name">
                   {{ version.name }}
-                  <a-tag v-if="version.value === versionInfo.current_version" color="green" size="small">
+                  <a-tag
+                    v-if="version.value === versionInfo.current_version"
+                    color="green"
+                    size="small"
+                  >
                     当前
                   </a-tag>
                 </div>
-                <div class="version-description">{{ version.description }}</div>
+                <div class="version-description">
+                  {{ version.description }}
+                </div>
               </div>
             </a-radio>
           </a-space>
@@ -49,9 +74,9 @@
         <div class="mt-3">
           <a-button 
             type="primary" 
-            @click="switchVersion"
             :loading="switching"
             :disabled="selectedVersion === versionInfo.current_version"
+            @click="switchVersion"
           >
             切换到选中版本
           </a-button>
@@ -59,10 +84,16 @@
       </a-card>
 
       <!-- 性能统计 -->
-      <a-card title="性能统计" size="small">
+      <a-card
+        title="性能统计"
+        size="small"
+      >
         <a-row :gutter="16">
           <a-col :span="6">
-            <a-statistic title="总请求数" :value="performanceStats.total_requests" />
+            <a-statistic
+              title="总请求数"
+              :value="performanceStats.total_requests"
+            />
           </a-col>
           <a-col :span="6">
             <a-statistic 
@@ -81,7 +112,13 @@
             />
           </a-col>
           <a-col :span="6">
-            <a-button @click="resetStats" size="small" danger>重置统计</a-button>
+            <a-button
+              size="small"
+              danger
+              @click="resetStats"
+            >
+              重置统计
+            </a-button>
           </a-col>
         </a-row>
 
@@ -99,20 +136,37 @@
       </a-card>
 
       <!-- 健康检查 -->
-      <a-card title="系统健康检查" size="small" class="mt-4">
-        <a-button @click="runHealthCheck" :loading="healthChecking" type="dashed" block>
-          <template #icon><HeartOutlined /></template>
+      <a-card
+        title="系统健康检查"
+        size="small"
+        class="mt-4"
+      >
+        <a-button
+          :loading="healthChecking"
+          type="dashed"
+          block
+          @click="runHealthCheck"
+        >
+          <template #icon>
+            <HeartOutlined />
+          </template>
           运行健康检查
         </a-button>
         
-        <div v-if="healthStatus" class="mt-3">
+        <div
+          v-if="healthStatus"
+          class="mt-3"
+        >
           <a-alert 
             :type="healthStatus.status === 'healthy' ? 'success' : 'error'"
             :message="`系统状态: ${healthStatus.status === 'healthy' ? '健康' : '异常'}`"
             show-icon
           />
           <div class="mt-2">
-            <a-descriptions size="small" :column="1">
+            <a-descriptions
+              size="small"
+              :column="1"
+            >
               <a-descriptions-item label="分类测试">
                 <a-tag :color="healthStatus.classification_test ? 'green' : 'red'">
                   {{ healthStatus.classification_test ? '通过' : '失败' }}
@@ -136,13 +190,41 @@ import { ref, onMounted, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined, HeartOutlined } from '@ant-design/icons-vue'
 
+type ClassificationVersionKey = 'basic' | 'enhanced' | 'advanced'
+
+interface ClassificationVersionInfo {
+  current_version: string
+  current_version_name: string
+  fallback_version: string
+  fallback_version_name: string
+  available_versions: string[]
+  version_descriptions: Record<string, string>
+}
+
+interface ClassificationPerformanceStats {
+  total_requests: number
+  successful_requests: number
+  failed_requests: number
+  success_rate: number
+  average_processing_time: number
+  version_usage: Record<string, number>
+}
+
+interface ClassificationHealthStatus {
+  status: 'healthy' | 'unhealthy' | string
+  classification_test: boolean
+  config_validation: {
+    valid: boolean
+  }
+}
+
 // 响应式数据
 const loading = ref(false)
 const switching = ref(false)
 const healthChecking = ref(false)
 const selectedVersion = ref('')
 
-const versionInfo = ref({
+const versionInfo = ref<ClassificationVersionInfo>({
   current_version: '',
   current_version_name: '',
   fallback_version: '',
@@ -151,7 +233,7 @@ const versionInfo = ref({
   version_descriptions: {}
 })
 
-const performanceStats = ref({
+const performanceStats = ref<ClassificationPerformanceStats>({
   total_requests: 0,
   successful_requests: 0,
   failed_requests: 0,
@@ -160,7 +242,7 @@ const performanceStats = ref({
   version_usage: {}
 })
 
-const healthStatus = ref(null)
+const healthStatus = ref<ClassificationHealthStatus | null>(null)
 
 // 计算属性
 const availableVersions = computed(() => {
@@ -173,21 +255,21 @@ const availableVersions = computed(() => {
 
 // 方法
 const getVersionColor = (version: string) => {
-  const colors = {
+  const colors: Record<ClassificationVersionKey, string> = {
     'basic': 'blue',
     'enhanced': 'green', 
     'advanced': 'purple'
   }
-  return colors[version] || 'default'
+  return version in colors ? colors[version as ClassificationVersionKey] : 'default'
 }
 
 const getVersionName = (version: string) => {
-  const names = {
+  const names: Record<ClassificationVersionKey, string> = {
     'basic': '基础版本',
     'enhanced': '增强版本',
     'advanced': '先进版本'
   }
-  return names[version] || version
+  return version in names ? names[version as ClassificationVersionKey] : version
 }
 
 const refreshVersionInfo = async () => {

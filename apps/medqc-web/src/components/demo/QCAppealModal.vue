@@ -7,11 +7,18 @@
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
-    <div v-if="notification" class="appeal-modal-content">
+    <div
+      v-if="notification"
+      class="appeal-modal-content"
+    >
       <!-- 通知信息摘要 -->
       <div class="notification-summary">
         <h4>申诉的通知信息</h4>
-        <a-descriptions :column="1" bordered size="small">
+        <a-descriptions
+          :column="1"
+          bordered
+          size="small"
+        >
           <a-descriptions-item label="通知标题">
             {{ notification.title }}
           </a-descriptions-item>
@@ -34,16 +41,32 @@
           :rules="formRules"
           layout="vertical"
         >
-          <a-form-item label="申诉类型" name="appealType" required>
+          <a-form-item
+            label="申诉类型"
+            name="appealType"
+            required
+          >
             <a-radio-group v-model:value="formData.appealType">
-              <a-radio value="quality_dispute">质量争议</a-radio>
-              <a-radio value="rule_challenge">规则质疑</a-radio>
-              <a-radio value="data_correction">数据纠正</a-radio>
-              <a-radio value="process_appeal">流程申诉</a-radio>
+              <a-radio value="quality_dispute">
+                质量争议
+              </a-radio>
+              <a-radio value="rule_challenge">
+                规则质疑
+              </a-radio>
+              <a-radio value="data_correction">
+                数据纠正
+              </a-radio>
+              <a-radio value="process_appeal">
+                流程申诉
+              </a-radio>
             </a-radio-group>
           </a-form-item>
 
-          <a-form-item label="申诉理由" name="reason" required>
+          <a-form-item
+            label="申诉理由"
+            name="reason"
+            required
+          >
             <a-select
               v-model:value="formData.reason"
               placeholder="请选择申诉理由"
@@ -73,25 +96,37 @@
             </a-select>
           </a-form-item>
 
-          <a-form-item label="优先级" name="priority" required>
+          <a-form-item
+            label="优先级"
+            name="priority"
+            required
+          >
             <a-select
               v-model:value="formData.priority"
               placeholder="请选择申诉优先级"
             >
               <a-select-option value="low">
-                <a-tag color="green">低优先级</a-tag>
+                <a-tag color="green">
+                  低优先级
+                </a-tag>
                 - 一般性问题，不影响诊疗
               </a-select-option>
               <a-select-option value="medium">
-                <a-tag color="orange">中优先级</a-tag>
+                <a-tag color="orange">
+                  中优先级
+                </a-tag>
                 - 可能影响质量评估
               </a-select-option>
               <a-select-option value="high">
-                <a-tag color="red">高优先级</a-tag>
+                <a-tag color="red">
+                  高优先级
+                </a-tag>
                 - 严重影响诊疗决策
               </a-select-option>
               <a-select-option value="urgent">
-                <a-tag color="purple">紧急</a-tag>
+                <a-tag color="purple">
+                  紧急
+                </a-tag>
                 - 需要立即处理
               </a-select-option>
             </a-select>
@@ -109,7 +144,11 @@
             />
           </a-form-item>
           
-          <a-form-item label="详细描述" name="description" required>
+          <a-form-item
+            label="详细描述"
+            name="description"
+            required
+          >
             <a-textarea 
               v-model:value="formData.description"
               placeholder="请详细描述申诉的具体内容，包括相关证据和理由"
@@ -137,7 +176,10 @@
             </div>
           </a-form-item>
           
-          <a-form-item label="联系方式" name="contact">
+          <a-form-item
+            label="联系方式"
+            name="contact"
+          >
             <a-input 
               v-model:value="formData.contact"
               placeholder="请提供联系电话或邮箱（可选）"

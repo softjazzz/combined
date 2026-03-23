@@ -4,8 +4,8 @@
     <a-button 
       type="link" 
       size="small" 
-      @click="showEvidence = !showEvidence"
       class="evidence-trigger"
+      @click="showEvidence = !showEvidence"
     >
       <template #icon>
         <EyeOutlined v-if="!showEvidence" />
@@ -16,8 +16,8 @@
 
     <!-- 佐证依据内容 -->
     <a-collapse
-      v-model:activeKey="activeKey"
       v-if="showEvidence"
+      v-model:active-key="activeKey"
       class="evidence-collapse mt-3"
       ghost
     >
@@ -29,7 +29,6 @@
           </span>
         </template>
         <div class="evidence-content">
-          
           <!-- 评估结论摘要 -->
           <div class="evidence-summary mb-4">
             <div class="flex items-center mb-2">
@@ -94,10 +93,12 @@
                   <a-button 
                     type="link" 
                     size="small" 
-                    @click="highlightInOriginal(quote.text)"
                     class="text-xs"
+                    @click="highlightInOriginal(quote.text)"
                   >
-                    <template #icon><AimOutlined /></template>
+                    <template #icon>
+                      <AimOutlined />
+                    </template>
                     定位原文
                   </a-button>
                 </div>
@@ -105,7 +106,10 @@
                   <blockquote class="text-sm text-gray-800 italic leading-relaxed">
                     "{{ quote.text }}"
                   </blockquote>
-                  <div v-if="quote.explanation" class="quote-explanation mt-2 pt-2 border-t border-yellow-200">
+                  <div
+                    v-if="quote.explanation"
+                    class="quote-explanation mt-2 pt-2 border-t border-yellow-200"
+                  >
                     <p class="text-xs text-gray-600">
                       <strong>说明:</strong> {{ quote.explanation }}
                     </p>
@@ -114,9 +118,14 @@
               </div>
               
               <!-- 无证据时的提示 -->
-              <div v-if="parsedEvidence.length === 0" class="no-evidence text-center py-4">
+              <div
+                v-if="parsedEvidence.length === 0"
+                class="no-evidence text-center py-4"
+              >
                 <InboxOutlined class="text-gray-400 text-2xl mb-2" />
-                <p class="text-sm text-gray-500">暂无具体支撑证据</p>
+                <p class="text-sm text-gray-500">
+                  暂无具体支撑证据
+                </p>
               </div>
             </div>
           </div>
@@ -135,21 +144,27 @@
           </div>
 
           <!-- 改进建议 (仅不合规时显示) -->
-          <div v-if="!evidence.is_compliant && evidence.suggestions" class="evidence-suggestions mt-4">
+          <div
+            v-if="!evidence.is_compliant && evidence.suggestions"
+            class="evidence-suggestions mt-4"
+          >
             <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center">
               <BulbOutlined class="mr-1" />
               改进建议
             </h4>
             <div class="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r">
               <ul class="text-sm text-gray-700 space-y-1">
-                <li v-for="(suggestion, index) in evidence.suggestions" :key="index" class="flex items-start">
+                <li
+                  v-for="(suggestion, index) in evidence.suggestions"
+                  :key="index"
+                  class="flex items-start"
+                >
                   <span class="text-orange-500 mr-2">•</span>
                   <span>{{ suggestion }}</span>
                 </li>
               </ul>
             </div>
           </div>
-
         </div>
       </a-collapse-panel>
     </a-collapse>

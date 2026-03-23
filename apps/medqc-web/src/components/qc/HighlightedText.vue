@@ -1,7 +1,10 @@
 <template>
   <div class="highlighted-text-container">
     <!-- 高亮控制工具栏 -->
-    <div v-if="highlights.length > 0" class="highlight-toolbar mb-3">
+    <div
+      v-if="highlights.length > 0"
+      class="highlight-toolbar mb-3"
+    >
       <div class="flex items-center justify-between bg-blue-50 p-2 rounded-lg">
         <div class="flex items-center space-x-2">
           <HighlightOutlined class="text-blue-600" />
@@ -13,10 +16,12 @@
           <a-button 
             type="link" 
             size="small" 
-            @click="navigateHighlight(-1)"
             :disabled="highlights.length === 0"
+            @click="navigateHighlight(-1)"
           >
-            <template #icon><UpOutlined /></template>
+            <template #icon>
+              <UpOutlined />
+            </template>
             上一个
           </a-button>
           <span class="text-xs text-gray-600">
@@ -25,10 +30,12 @@
           <a-button 
             type="link" 
             size="small" 
-            @click="navigateHighlight(1)"
             :disabled="highlights.length === 0"
+            @click="navigateHighlight(1)"
           >
-            <template #icon><DownOutlined /></template>
+            <template #icon>
+              <DownOutlined />
+            </template>
             下一个
           </a-button>
           <a-button 
@@ -36,7 +43,9 @@
             size="small" 
             @click="clearHighlights"
           >
-            <template #icon><CloseOutlined /></template>
+            <template #icon>
+              <CloseOutlined />
+            </template>
             清除
           </a-button>
         </div>
@@ -48,7 +57,7 @@
       ref="textContainer"
       class="highlighted-text-content"
       v-html="highlightedContent"
-    ></div>
+    />
   </div>
 </template>
 

@@ -30,13 +30,13 @@
         <button 
           v-for="tab in filterTabs" 
           :key="tab.value"
-          @click="currentFilter = tab.value"
           class="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors"
           :class="[
             currentFilter === tab.value 
               ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20' 
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
           ]"
+          @click="currentFilter = tab.value"
         >
           {{ tab.label }}
         </button>
@@ -48,19 +48,19 @@
       <div 
         v-for="record in filteredRecords" 
         :key="record.id"
-        @click="$emit('select', record.id)"
         class="group relative rounded-xl p-3 cursor-pointer transition-all border"
         :class="[
           selectedId === record.id 
             ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800/50 shadow-sm' 
             : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm dark:bg-slate-800/50 dark:border-slate-700/50 dark:hover:border-slate-600'
         ]"
+        @click="$emit('select', record.id)"
       >
         <!-- Selection indicator -->
         <div 
           v-if="selectedId === record.id"
           class="absolute left-0 top-3 bottom-3 w-1 bg-blue-500 rounded-r-full"
-        ></div>
+        />
 
         <div class="flex justify-between items-start mb-2">
           <div class="flex items-center gap-2">
@@ -106,11 +106,16 @@
       </div>
       
       <!-- Empty state -->
-      <div v-if="filteredRecords.length === 0" class="py-12 flex flex-col items-center justify-center text-center">
+      <div
+        v-if="filteredRecords.length === 0"
+        class="py-12 flex flex-col items-center justify-center text-center"
+      >
         <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3 dark:bg-slate-800">
           <InboxOutlined class="text-slate-400 text-xl" />
         </div>
-        <p class="text-sm text-slate-500 dark:text-slate-400">无匹配病案</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          无匹配病案
+        </p>
       </div>
     </div>
   </div>

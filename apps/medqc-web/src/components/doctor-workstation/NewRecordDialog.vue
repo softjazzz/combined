@@ -1,14 +1,23 @@
 <template>
-  <div class="new-record-overlay" @click="handleOverlayClick">
-    <div class="new-record-modal" @click.stop>
+  <div
+    class="new-record-overlay"
+    @click="handleOverlayClick"
+  >
+    <div
+      class="new-record-modal"
+      @click.stop
+    >
       <!-- 模态框头部 -->
       <div class="modal-header">
         <h3 class="modal-title">
-          <i class="fas fa-plus-circle"></i>
+          <i class="fas fa-plus-circle" />
           新建病历
         </h3>
-        <button class="close-btn" @click="$emit('close')">
-          <i class="fas fa-times"></i>
+        <button
+          class="close-btn"
+          @click="$emit('close')"
+        >
+          <i class="fas fa-times" />
         </button>
       </div>
 
@@ -18,13 +27,16 @@
           <!-- 患者基本信息 -->
           <div class="form-section">
             <h4 class="section-title">
-              <i class="fas fa-user"></i>
+              <i class="fas fa-user" />
               患者基本信息
             </h4>
             
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="patient_name">
+                <label
+                  class="form-label"
+                  for="patient_name"
+                >
                   患者姓名 <span class="required">*</span>
                 </label>
                 <input
@@ -34,11 +46,14 @@
                   class="form-input"
                   placeholder="请输入患者姓名"
                   required
-                />
+                >
               </div>
               
               <div class="form-group">
-                <label class="form-label" for="patient_age">
+                <label
+                  class="form-label"
+                  for="patient_age"
+                >
                   年龄 <span class="required">*</span>
                 </label>
                 <input
@@ -50,11 +65,14 @@
                   min="0"
                   max="150"
                   required
-                />
+                >
               </div>
               
               <div class="form-group">
-                <label class="form-label" for="patient_gender">
+                <label
+                  class="form-label"
+                  for="patient_gender"
+                >
                   性别 <span class="required">*</span>
                 </label>
                 <select
@@ -63,10 +81,18 @@
                   class="form-select"
                   required
                 >
-                  <option value="">请选择</option>
-                  <option value="M">男</option>
-                  <option value="F">女</option>
-                  <option value="U">未知</option>
+                  <option value="">
+                    请选择
+                  </option>
+                  <option value="M">
+                    男
+                  </option>
+                  <option value="F">
+                    女
+                  </option>
+                  <option value="U">
+                    未知
+                  </option>
                 </select>
               </div>
             </div>
@@ -75,13 +101,16 @@
           <!-- 就诊信息 -->
           <div class="form-section">
             <h4 class="section-title">
-              <i class="fas fa-hospital"></i>
+              <i class="fas fa-hospital" />
               就诊信息
             </h4>
             
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="department">
+                <label
+                  class="form-label"
+                  for="department"
+                >
                   科室 <span class="required">*</span>
                 </label>
                 <select
@@ -90,15 +119,24 @@
                   class="form-select"
                   required
                 >
-                  <option value="">请选择科室</option>
-                  <option v-for="dept in departments" :key="dept" :value="dept">
+                  <option value="">
+                    请选择科室
+                  </option>
+                  <option
+                    v-for="dept in departments"
+                    :key="dept"
+                    :value="dept"
+                  >
                     {{ dept }}
                   </option>
                 </select>
               </div>
               
               <div class="form-group">
-                <label class="form-label" for="record_type">
+                <label
+                  class="form-label"
+                  for="record_type"
+                >
                   病历类型 <span class="required">*</span>
                 </label>
                 <select
@@ -107,15 +145,26 @@
                   class="form-select"
                   required
                 >
-                  <option value="">请选择类型</option>
-                  <option value="inpatient">住院</option>
-                  <option value="outpatient">门诊</option>
-                  <option value="emergency">急诊</option>
+                  <option value="">
+                    请选择类型
+                  </option>
+                  <option value="inpatient">
+                    住院
+                  </option>
+                  <option value="outpatient">
+                    门诊
+                  </option>
+                  <option value="emergency">
+                    急诊
+                  </option>
                 </select>
               </div>
               
               <div class="form-group">
-                <label class="form-label" for="admission_date">
+                <label
+                  class="form-label"
+                  for="admission_date"
+                >
                   入院日期 <span class="required">*</span>
                 </label>
                 <input
@@ -125,7 +174,7 @@
                   class="form-input"
                   :max="today"
                   required
-                />
+                >
               </div>
             </div>
           </div>
@@ -133,7 +182,7 @@
           <!-- 快速模板选择 -->
           <div class="form-section">
             <h4 class="section-title">
-              <i class="fas fa-file-medical"></i>
+              <i class="fas fa-file-medical" />
               快速模板（可选）
             </h4>
             
@@ -148,7 +197,7 @@
                   type="radio"
                   :value="template.id"
                   class="template-radio"
-                />
+                >
                 <div class="template-card">
                   <div class="template-name">{{ template.template_name }}</div>
                   <div class="template-description">{{ template.category }}</div>
@@ -161,17 +210,21 @@
 
       <!-- 模态框底部 -->
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" @click="$emit('close')">
-          <i class="fas fa-times"></i>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          @click="$emit('close')"
+        >
+          <i class="fas fa-times" />
           取消
         </button>
         <button
           type="button"
           class="btn btn-primary"
-          @click="handleSubmit"
           :disabled="!isFormValid"
+          @click="handleSubmit"
         >
-          <i class="fas fa-plus"></i>
+          <i class="fas fa-plus" />
           创建病历
         </button>
       </div>

@@ -1,6 +1,9 @@
 <template>
   <div class="qc-analysis-panel">
-    <a-card title="AI质控分析" class="mb-6">
+    <a-card
+      title="AI质控分析"
+      class="mb-6"
+    >
       <template #extra>
         <a-space>
           <a-select 
@@ -8,16 +11,22 @@
             style="width: 120px"
             :disabled="analyzing"
           >
-            <a-select-option value="comprehensive">全面分析</a-select-option>
-            <a-select-option value="focused">重点分析</a-select-option>
-            <a-select-option value="quick">快速分析</a-select-option>
+            <a-select-option value="comprehensive">
+              全面分析
+            </a-select-option>
+            <a-select-option value="focused">
+              重点分析
+            </a-select-option>
+            <a-select-option value="quick">
+              快速分析
+            </a-select-option>
           </a-select>
           
           <a-button 
             type="primary" 
             :loading="analyzing"
-            @click="startAnalysis"
             :disabled="!recordContent"
+            @click="startAnalysis"
           >
             <template #icon>
               <PlayCircleOutlined />
@@ -28,7 +37,10 @@
       </template>
 
       <!-- 分析进度 -->
-      <div v-if="analyzing" class="analysis-progress mb-6">
+      <div
+        v-if="analyzing"
+        class="analysis-progress mb-6"
+      >
         <a-alert 
           message="AI质控分析进行中..." 
           description="正在使用阿里云百炼平台基于四川省住院病历质量评定标准进行专业分析，请稍候"
@@ -43,9 +55,15 @@
       </div>
 
       <!-- 分析结果 -->
-      <div v-if="analysisResult && !analyzing" class="analysis-result">
+      <div
+        v-if="analysisResult && !analyzing"
+        class="analysis-result"
+      >
         <!-- 总体评价 -->
-        <a-row :gutter="16" class="mb-6">
+        <a-row
+          :gutter="16"
+          class="mb-6"
+        >
           <a-col :span="8">
             <a-statistic
               title="总评分"
@@ -70,15 +88,23 @@
         </a-row>
 
         <!-- 总体评价 -->
-        <a-card title="总体评价" class="mb-4" size="small">
+        <a-card
+          title="总体评价"
+          class="mb-4"
+          size="small"
+        >
           <p>{{ analysisResult.summary.overall_assessment }}</p>
         </a-card>
 
         <!-- 各项评分 -->
-        <a-card title="各项评分详情" class="mb-4" size="small">
+        <a-card
+          title="各项评分详情"
+          class="mb-4"
+          size="small"
+        >
           <a-table
             :columns="scoreColumns"
-            :dataSource="analysisResult.item_scores"
+            :data-source="analysisResult.item_scores"
             :pagination="false"
             size="small"
             :scroll="{ x: 800 }"
@@ -102,10 +128,15 @@
         </a-card>
 
         <!-- 问题列表 -->
-        <a-card title="发现的问题" class="mb-4" size="small" v-if="analysisResult.issues.length > 0">
+        <a-card
+          v-if="analysisResult.issues.length > 0"
+          title="发现的问题"
+          class="mb-4"
+          size="small"
+        >
           <a-table
             :columns="issueColumns"
-            :dataSource="analysisResult.issues"
+            :data-source="analysisResult.issues"
             :pagination="false"
             size="small"
           >
@@ -126,19 +157,37 @@
 
         <!-- 优点和建议 -->
         <a-row :gutter="16">
-          <a-col :span="12" v-if="analysisResult.strengths.length > 0">
-            <a-card title="优点" size="small">
+          <a-col
+            v-if="analysisResult.strengths.length > 0"
+            :span="12"
+          >
+            <a-card
+              title="优点"
+              size="small"
+            >
               <ul class="list-disc list-inside">
-                <li v-for="strength in analysisResult.strengths" :key="strength">
+                <li
+                  v-for="strength in analysisResult.strengths"
+                  :key="strength"
+                >
                   {{ strength }}
                 </li>
               </ul>
             </a-card>
           </a-col>
-          <a-col :span="12" v-if="analysisResult.recommendations.length > 0">
-            <a-card title="改进建议" size="small">
+          <a-col
+            v-if="analysisResult.recommendations.length > 0"
+            :span="12"
+          >
+            <a-card
+              title="改进建议"
+              size="small"
+            >
               <ul class="list-disc list-inside">
-                <li v-for="recommendation in analysisResult.recommendations" :key="recommendation">
+                <li
+                  v-for="recommendation in analysisResult.recommendations"
+                  :key="recommendation"
+                >
                   {{ recommendation }}
                 </li>
               </ul>
@@ -148,10 +197,17 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="!analysisResult && !analyzing" class="empty-state text-center py-8">
+      <div
+        v-if="!analysisResult && !analyzing"
+        class="empty-state text-center py-8"
+      >
         <FileSearchOutlined class="text-6xl text-gray-400 mb-4" />
-        <h3 class="text-lg font-medium text-gray-600 mb-2">暂无质控分析结果</h3>
-        <p class="text-gray-400">点击"开始分析"按钮进行AI质控分析</p>
+        <h3 class="text-lg font-medium text-gray-600 mb-2">
+          暂无质控分析结果
+        </h3>
+        <p class="text-gray-400">
+          点击"开始分析"按钮进行AI质控分析
+        </p>
       </div>
     </a-card>
   </div>
@@ -491,7 +547,6 @@ const startAnalysis = async () => {
     
     // 降级到模拟数据作为备用
     analysisResult.value = {
-      recordId: props.recordId,
       summary: {
         total_score: 75,
         grade: '乙级',
@@ -505,9 +560,6 @@ const startAnalysis = async () => {
           code: 'API_ERROR',
           description: 'AI分析服务暂时不可用',
           severity: 'critical',
-          itemId: 'basic',
-          deduction: 10,
-          location: '系统',
           suggestion: '请检查网络连接或稍后重试'
         }
       ],

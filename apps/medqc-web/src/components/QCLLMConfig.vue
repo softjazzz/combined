@@ -1,22 +1,39 @@
 <template>
   <div class="qc-llm-config">
-    <a-card title="质控LLM配置" :bordered="false">
+    <a-card
+      title="质控LLM配置"
+      :bordered="false"
+    >
       <template #extra>
         <a-space>
-          <a-button @click="refreshConfigs" :loading="loading">
-            <template #icon><ReloadOutlined /></template>
+          <a-button
+            :loading="loading"
+            @click="refreshConfigs"
+          >
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             刷新
           </a-button>
-        <a-button @click="showImportModal = true">
-          <template #icon><ImportOutlined /></template>
-          导入配置
-        </a-button>
-        <a-button @click="exportConfigs">
-          <template #icon><ExportOutlined /></template>
-          导出配置
-        </a-button>
-          <a-button type="primary" @click="showAddConfig">
-            <template #icon><PlusOutlined /></template>
+          <a-button @click="showImportModal = true">
+            <template #icon>
+              <ImportOutlined />
+            </template>
+            导入配置
+          </a-button>
+          <a-button @click="exportConfigs">
+            <template #icon>
+              <ExportOutlined />
+            </template>
+            导出配置
+          </a-button>
+          <a-button
+            type="primary"
+            @click="showAddConfig"
+          >
+            <template #icon>
+              <PlusOutlined />
+            </template>
             添加配置
           </a-button>
         </a-space>
@@ -39,8 +56,12 @@
           
           <template v-if="column.key === 'provider'">
             <div>
-              <div class="provider-name">{{ record.provider_name }}</div>
-              <div class="model-name">{{ record.model_name }}</div>
+              <div class="provider-name">
+                {{ record.provider_name }}
+              </div>
+              <div class="model-name">
+                {{ record.model_name }}
+              </div>
             </div>
           </template>
           
@@ -52,17 +73,26 @@
           
           <template v-if="column.key === 'actions'">
             <a-space>
-              <a-button size="small" @click="testConfig(record)">
+              <a-button
+                size="small"
+                @click="testConfig(record)"
+              >
                 测试
               </a-button>
-              <a-button size="small" @click="editConfig(record)">
+              <a-button
+                size="small"
+                @click="editConfig(record)"
+              >
                 编辑
               </a-button>
               <a-popconfirm
                 title="确定要删除这个配置吗？"
                 @confirm="deleteConfig(record)"
               >
-                <a-button size="small" danger>
+                <a-button
+                  size="small"
+                  danger
+                >
                   删除
                 </a-button>
               </a-popconfirm>
@@ -86,15 +116,30 @@
         :rules="configFormRules"
         layout="vertical"
       >
-        <a-form-item label="配置名称" name="config_name">
-          <a-select v-model:value="configFormData.config_name" placeholder="选择配置类型">
-            <a-select-option value="qc_analysis">质控分析</a-select-option>
-            <a-select-option value="extraction">文档提取</a-select-option>
-            <a-select-option value="default">默认配置</a-select-option>
+        <a-form-item
+          label="配置名称"
+          name="config_name"
+        >
+          <a-select
+            v-model:value="configFormData.config_name"
+            placeholder="选择配置类型"
+          >
+            <a-select-option value="qc_analysis">
+              质控分析
+            </a-select-option>
+            <a-select-option value="extraction">
+              文档提取
+            </a-select-option>
+            <a-select-option value="default">
+              默认配置
+            </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="LLM提供商" name="provider_id">
+        <a-form-item
+          label="LLM提供商"
+          name="provider_id"
+        >
           <a-select 
             v-model:value="configFormData.provider_id" 
             placeholder="选择LLM提供商"
@@ -110,8 +155,14 @@
           </a-select>
         </a-form-item>
 
-        <a-form-item label="模型" name="model_id">
-          <a-select v-model:value="configFormData.model_id" placeholder="选择模型">
+        <a-form-item
+          label="模型"
+          name="model_id"
+        >
+          <a-select
+            v-model:value="configFormData.model_id"
+            placeholder="选择模型"
+          >
             <a-select-option 
               v-for="model in availableModels" 
               :key="model.id" 
@@ -119,20 +170,28 @@
             >
               <div>
                 <div>{{ model.model_name }}</div>
-                <div style="font-size: 12px; color: #666;">{{ model.description }}</div>
+                <div style="font-size: 12px; color: #666;">
+                  {{ model.description }}
+                </div>
               </div>
             </a-select-option>
           </a-select>
         </a-form-item>
 
-        <a-form-item label="API密钥" name="api_key">
+        <a-form-item
+          label="API密钥"
+          name="api_key"
+        >
           <a-input-password 
             v-model:value="configFormData.api_key" 
             placeholder="输入API密钥"
           />
         </a-form-item>
 
-        <a-form-item label="自定义端点" name="custom_endpoint">
+        <a-form-item
+          label="自定义端点"
+          name="custom_endpoint"
+        >
           <a-input 
             v-model:value="configFormData.custom_endpoint" 
             placeholder="可选：自定义API端点"
@@ -142,7 +201,7 @@
         <a-form-item label="自定义参数">
           <a-textarea 
             v-model:value="customParametersText"
-            placeholder='可选：JSON格式的自定义参数，如 {"temperature": 0.1}'
+            placeholder="可选：JSON格式的自定义参数，如 {&quot;temperature&quot;: 0.1}"
             :rows="3"
           />
         </a-form-item>
@@ -162,15 +221,24 @@
           :title="testResult.success ? '测试成功' : '测试失败'"
           :sub-title="testResult.message"
         >
-          <template #extra v-if="testResult.details">
-            <a-descriptions size="small" :column="1">
+          <template
+            v-if="testResult.details"
+            #extra
+          >
+            <a-descriptions
+              size="small"
+              :column="1"
+            >
               <a-descriptions-item label="响应时间">
                 {{ testResult.details.responseTime }}ms
               </a-descriptions-item>
               <a-descriptions-item label="模型">
                 {{ testResult.details.model }}
               </a-descriptions-item>
-              <a-descriptions-item label="Token使用" v-if="testResult.details.tokenUsage">
+              <a-descriptions-item
+                v-if="testResult.details.tokenUsage"
+                label="Token使用"
+              >
                 {{ testResult.details.tokenUsage }}
               </a-descriptions-item>
             </a-descriptions>
@@ -189,7 +257,7 @@
     >
       <div class="import-config-container">
         <a-upload-dragger
-          v-model:fileList="importFileList"
+          v-model:file-list="importFileList"
           :before-upload="handleImportFile"
           accept=".json"
           :multiple="false"
@@ -197,7 +265,9 @@
           <p class="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
-          <p class="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p class="ant-upload-text">
+            点击或拖拽文件到此区域上传
+          </p>
           <p class="ant-upload-hint">
             支持JSON格式的配置文件
           </p>
@@ -207,11 +277,13 @@
           <a-space>
             <a-button
               type="primary"
-              @click="importConfigs"
               :loading="importing"
               :disabled="!importData"
+              @click="importConfigs"
             >
-              <template #icon><ImportOutlined /></template>
+              <template #icon>
+                <ImportOutlined />
+              </template>
               导入配置
             </a-button>
             <a-button @click="cancelImport">
@@ -221,10 +293,13 @@
         </div>
 
         <!-- 导入预览 -->
-        <div v-if="importData" class="import-preview">
+        <div
+          v-if="importData"
+          class="import-preview"
+        >
           <h4>配置预览</h4>
           <a-table
-            :dataSource="importData"
+            :data-source="importData"
             :columns="previewColumns"
             size="small"
             :pagination="false"
@@ -238,6 +313,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { UploadFile } from 'ant-design-vue'
 import {
   ReloadOutlined,
   PlusOutlined,
@@ -247,21 +323,80 @@ import {
   InboxOutlined
 } from '@ant-design/icons-vue'
 
+type ConfigName = 'qc_analysis' | 'extraction' | 'default'
+
+interface LLMConfig {
+  config_id: string
+  config_name: string
+  provider_id: string
+  provider_name: string
+  model_id: string
+  model_name: string
+  base_endpoint?: string
+  custom_endpoint?: string
+  custom_parameters?: Record<string, unknown>
+  is_active?: boolean
+}
+
+interface LLMProvider {
+  id: string
+  provider_name: string
+}
+
+interface LLMModel {
+  id: string
+  provider_id: string
+  model_name: string
+  description?: string
+}
+
+interface TestResultDetails {
+  responseTime?: number
+  model?: string
+  tokenUsage?: number
+}
+
+interface TestResultData {
+  success: boolean
+  message: string
+  details?: TestResultDetails
+  response_time?: number
+  response?: unknown
+  error?: string
+}
+
+interface ImportConfigItem {
+  config_name: string
+  provider_name: string
+  model_name: string
+  custom_endpoint?: string
+  custom_parameters?: Record<string, unknown>
+  is_active?: boolean
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
+
 // 响应式数据
 const loading = ref(false)
-const configs = ref([])
-const providers = ref([])
-const models = ref([])
+const configs = ref<LLMConfig[]>([])
+const providers = ref<LLMProvider[]>([])
+const models = ref<LLMModel[]>([])
 const configModalVisible = ref(false)
 const testModalVisible = ref(false)
-const editingConfig = ref(null)
-const testResult = ref(null)
+const editingConfig = ref<LLMConfig | null>(null)
+const testResult = ref<TestResultData | null>(null)
 
 // 导入导出相关状态
 const showImportModal = ref(false)
 const importing = ref(false)
-const importFileList = ref([])
-const importData = ref(null)
+const importFileList = ref<UploadFile[]>([])
+const importData = ref<ImportConfigItem[] | null>(null)
 
 // 测试相关状态
 const showTestModal = ref(false)
@@ -320,7 +455,7 @@ const previewColumns = [
     title: '状态',
     dataIndex: 'is_active',
     key: 'is_active',
-    customRender: ({ text }) => text ? '启用' : '禁用'
+    customRender: ({ text }: { text: boolean }) => text ? '启用' : '禁用'
   }
 ]
 
@@ -331,7 +466,7 @@ const configFormData = reactive({
   model_id: '',
   api_key: '',
   custom_endpoint: '',
-  custom_parameters: {}
+  custom_parameters: {} as Record<string, unknown>
 })
 
 const customParametersText = ref('')
@@ -351,22 +486,22 @@ const availableModels = computed(() => {
 })
 
 // 方法
-const getConfigTypeColor = (configName) => {
+const getConfigTypeColor = (configName: string) => {
   const colors = {
     'qc_analysis': 'blue',
     'extraction': 'green',
     'default': 'orange'
-  }
-  return colors[configName] || 'default'
+  } as const
+  return colors[configName as ConfigName] || 'default'
 }
 
-const getConfigTypeName = (configName) => {
+const getConfigTypeName = (configName: string) => {
   const names = {
     'qc_analysis': '质控分析',
     'extraction': '文档提取',
     'default': '默认配置'
-  }
-  return names[configName] || configName
+  } as const
+  return names[configName as ConfigName] || configName
 }
 
 const refreshConfigs = async () => {
@@ -375,8 +510,8 @@ const refreshConfigs = async () => {
     const response = await fetch('/api/qc/llm-configs')
     const data = await response.json()
     configs.value = data.configs || []
-  } catch (error) {
-    message.error('获取配置失败: ' + error.message)
+  } catch (error: unknown) {
+    message.error(`获取配置失败: ${getErrorMessage(error)}`)
   } finally {
     loading.value = false
   }
@@ -408,7 +543,7 @@ const showAddConfig = () => {
   configModalVisible.value = true
 }
 
-const editConfig = (config) => {
+const editConfig = (config: LLMConfig) => {
   editingConfig.value = config
   configFormData.config_name = config.config_name
   configFormData.provider_id = config.provider_id
@@ -420,9 +555,11 @@ const editConfig = (config) => {
 }
 
 const resetForm = () => {
-  Object.keys(configFormData).forEach(key => {
-    configFormData[key] = ''
-  })
+  configFormData.config_name = ''
+  configFormData.provider_id = ''
+  configFormData.model_id = ''
+  configFormData.api_key = ''
+  configFormData.custom_endpoint = ''
   configFormData.custom_parameters = {}
   customParametersText.value = ''
 }
@@ -464,7 +601,7 @@ const saveConfig = async () => {
       message.error(error.detail || '保存失败')
     }
   } catch (error) {
-    message.error('保存失败: ' + error.message)
+    message.error(`保存失败: ${getErrorMessage(error)}`)
   }
 }
 
@@ -473,12 +610,12 @@ const cancelEdit = () => {
   resetForm()
 }
 
-const testConfig = async (config) => {
+const testConfig = async (config: LLMConfig) => {
   editingConfig.value = config
   showTestModal.value = true
 }
 
-const deleteConfig = async (config) => {
+const deleteConfig = async (config: LLMConfig) => {
   try {
     const response = await fetch(`/api/qc/llm-configs/${config.config_id}`, {
       method: 'DELETE'
@@ -491,15 +628,15 @@ const deleteConfig = async (config) => {
       const error = await response.json()
       message.error(error.detail || '删除失败')
     }
-  } catch (error) {
-    message.error('删除失败: ' + error.message)
+  } catch (error: unknown) {
+    message.error(`删除失败: ${getErrorMessage(error)}`)
   }
 }
 
 // 导出配置
 const exportConfigs = () => {
   try {
-    const exportData = configs.value.map(config => ({
+    const exportData: ImportConfigItem[] = configs.value.map(config => ({
       config_name: config.config_name,
       provider_name: config.provider_name,
       model_name: config.model_name,
@@ -521,27 +658,28 @@ const exportConfigs = () => {
     URL.revokeObjectURL(url)
 
     message.success('配置导出成功')
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('导出失败:', error)
-    message.error(`导出失败: ${error.message}`)
+    message.error(`导出失败: ${getErrorMessage(error)}`)
   }
 }
 
 // 处理导入文件
-const handleImportFile = (file) => {
+const handleImportFile = (file: File) => {
   const reader = new FileReader()
-  reader.onload = (e) => {
+  reader.onload = (e: ProgressEvent<FileReader>) => {
     try {
-      const data = JSON.parse(e.target.result)
+      const raw = e.target?.result
+      const data = JSON.parse(typeof raw === 'string' ? raw : '')
       if (Array.isArray(data)) {
-        importData.value = data
+        importData.value = data as ImportConfigItem[]
         message.success('文件解析成功')
       } else {
         throw new Error('文件格式不正确，应为配置数组')
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('文件解析失败:', error)
-      message.error(`文件解析失败: ${error.message}`)
+      message.error(`文件解析失败: ${getErrorMessage(error)}`)
     }
   }
   reader.readAsText(file)
@@ -581,9 +719,9 @@ const importConfigs = async () => {
     cancelImport()
     refreshConfigs()
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('导入失败:', error)
-    message.error(`导入失败: ${error.message}`)
+    message.error(`导入失败: ${getErrorMessage(error)}`)
   } finally {
     importing.value = false
   }
@@ -600,6 +738,10 @@ const cancelImport = () => {
 const runConfigTest = async () => {
   if (!testPrompt.value.trim()) {
     message.error('请输入测试提示词')
+    return
+  }
+  if (!editingConfig.value?.config_id) {
+    message.error('请先选择要测试的配置')
     return
   }
 
@@ -632,6 +774,7 @@ const runConfigTest = async () => {
 
     testResult.value = {
       success: true,
+      message: '测试成功',
       response_time: responseTime,
       response: result.response,
       details: result.details
@@ -641,12 +784,13 @@ const runConfigTest = async () => {
     showTestModal.value = false
     testModalVisible.value = true
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('测试失败:', error)
     testResult.value = {
       success: false,
       response_time: 0,
-      error: error.message
+      message: getErrorMessage(error),
+      error: getErrorMessage(error)
     }
 
     showTestModal.value = false

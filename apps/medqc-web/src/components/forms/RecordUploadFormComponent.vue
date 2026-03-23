@@ -9,8 +9,8 @@
         <a-button 
           v-if="hasContent" 
           type="text" 
-          @click="resetForm"
           class="text-gray-500"
+          @click="resetForm"
         >
           <template #icon>
             <ReloadOutlined />
@@ -24,8 +24,8 @@
         :model="formData"
         :rules="formRules"
         layout="vertical"
-        @finish="handleSubmit"
         class="space-y-6"
+        @finish="handleSubmit"
       >
         <!-- 患者基本信息 -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -65,9 +65,15 @@
               placeholder="请选择性别"
               class="h-10"
             >
-              <a-select-option value="M">男</a-select-option>
-              <a-select-option value="F">女</a-select-option>
-              <a-select-option value="U">未知</a-select-option>
+              <a-select-option value="M">
+                男
+              </a-select-option>
+              <a-select-option value="F">
+                女
+              </a-select-option>
+              <a-select-option value="U">
+                未知
+              </a-select-option>
             </a-select>
           </a-form-item>
         </div>
@@ -131,7 +137,9 @@
 
         <!-- 病案内容输入 -->
         <div class="bg-gray-50 rounded-lg p-6">
-          <h3 class="text-lg font-semibold mb-4 text-gray-800">病案内容</h3>
+          <h3 class="text-lg font-semibold mb-4 text-gray-800">
+            病案内容
+          </h3>
           
           <!-- 输入方式切换 -->
           <a-radio-group 
@@ -139,8 +147,12 @@
             button-style="solid"
             class="mb-4"
           >
-            <a-radio-button value="text">手动输入</a-radio-button>
-            <a-radio-button value="file">文件上传</a-radio-button>
+            <a-radio-button value="text">
+              手动输入
+            </a-radio-button>
+            <a-radio-button value="file">
+              文件上传
+            </a-radio-button>
           </a-radio-group>
 
           <!-- 手动输入 -->
@@ -165,9 +177,9 @@
             <a-upload-dragger
               :file-list="fileList"
               :before-upload="handleBeforeUpload"
-              @remove="handleFileRemove"
               :multiple="false"
               class="!bg-white border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors"
+              @remove="handleFileRemove"
             >
               <div class="p-8">
                 <p class="ant-upload-drag-icon">
@@ -183,7 +195,10 @@
             </a-upload-dragger>
 
             <!-- 文件内容预览 -->
-            <div v-if="fileContent" class="mt-4">
+            <div
+              v-if="fileContent"
+              class="mt-4"
+            >
               <a-divider orientation="left">
                 <span class="text-gray-600">文件内容预览</span>
               </a-divider>
@@ -197,8 +212,8 @@
         <!-- 提交按钮 -->
         <div class="flex justify-end space-x-4 pt-6 border-t">
           <a-button 
-            @click="resetForm"
             size="large"
+            @click="resetForm"
           >
             取消
           </a-button>
@@ -255,6 +270,7 @@ interface Emits {
 }
 
 const emit = defineEmits<Emits>()
+const getErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)
 
 // 响应式数据
 const formRef = ref<FormInstance>()
@@ -423,7 +439,7 @@ ${medicalInfo.patient_name ? `\n🏥 提取的医疗信息:
     fileContent.value = `📄 PDF文件解析失败: ${file.name}
 文件大小: ${formatFileSize(file.size)}
 
-❌ 解析错误: ${error.message}
+❌ 解析错误: ${getErrorMessage(error)}
 
 💡 提示：
 1. 请确保PDF文件没有密码保护
@@ -432,7 +448,7 @@ ${medicalInfo.patient_name ? `\n🏥 提取的医疗信息:
 
 文件仍可提交，系统将在后台重试解析。`
     
-    message.error(`PDF解析失败: ${error.message}`)
+    message.error(`PDF解析失败: ${getErrorMessage(error)}`)
   }
 }
 

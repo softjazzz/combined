@@ -30,6 +30,9 @@ export const FILE_TYPES = {
     displayName: 'Text'
   }
 } as const
+type FileTypeKey = keyof typeof FILE_TYPES
+type FileTypeConfig = (typeof FILE_TYPES)[FileTypeKey]
+const FILE_TYPE_ENTRIES = Object.entries(FILE_TYPES) as Array<[FileTypeKey, FileTypeConfig]>
 
 // 文件验证结果接口
 export interface FileValidationResult {
@@ -79,9 +82,11 @@ export function detectFileType(file: File): keyof typeof FILE_TYPES | null {
   const extension = getFileExtension(file.name)
   const mimeType = file.type.toLowerCase()
 
-  for (const [type, config] of Object.entries(FILE_TYPES)) {
-    if (config.extensions.includes(extension) || config.mimeTypes.includes(mimeType)) {
-      return type as keyof typeof FILE_TYPES
+  for (const [type, config] of FILE_TYPE_ENTRIES) {
+    const extensions = config.extensions as readonly string[]
+    const mimeTypes = config.mimeTypes as readonly string[]
+    if (extensions.includes(extension) || mimeTypes.includes(mimeType)) {
+      return type
     }
   }
 
@@ -249,14 +254,15 @@ export function getFileInfo(file: File): FileInfo {
  * 获取文件图标类名
  */
 export function getFileIcon(file: File | string): string {
-  let fileType: keyof typeof FILE_TYPES | null
+  let fileType: keyof typeof FILE_TYPES | null = null
 
   if (typeof file === 'string') {
     // 如果传入的是文件名或扩展名
     const extension = file.includes('.') ? getFileExtension(file) : file.toLowerCase()
-    for (const [type, config] of Object.entries(FILE_TYPES)) {
-      if (config.extensions.includes(extension)) {
-        fileType = type as keyof typeof FILE_TYPES
+    for (const [type, config] of FILE_TYPE_ENTRIES) {
+      const extensions = config.extensions as readonly string[]
+      if (extensions.includes(extension)) {
+        fileType = type
         break
       }
     }
@@ -271,13 +277,14 @@ export function getFileIcon(file: File | string): string {
  * 获取文件类型显示名称
  */
 export function getFileTypeDisplayName(file: File | string): string {
-  let fileType: keyof typeof FILE_TYPES | null
+  let fileType: keyof typeof FILE_TYPES | null = null
 
   if (typeof file === 'string') {
     const extension = file.includes('.') ? getFileExtension(file) : file.toLowerCase()
-    for (const [type, config] of Object.entries(FILE_TYPES)) {
-      if (config.extensions.includes(extension)) {
-        fileType = type as keyof typeof FILE_TYPES
+    for (const [type, config] of FILE_TYPE_ENTRIES) {
+      const extensions = config.extensions as readonly string[]
+      if (extensions.includes(extension)) {
+        fileType = type
         break
       }
     }
@@ -292,7 +299,7 @@ export function getFileTypeDisplayName(file: File | string): string {
  * 读取文本文件内容
  */
 export function readTextFile(file: File): Promise<string> {
-  return new Promise((resolve: unknown,  reject: unknown) => {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     
     reader.onload = (e) => {
@@ -311,7 +318,7 @@ export function readTextFile(file: File): Promise<string> {
  * 读取文件为ArrayBuffer
  */
 export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-  return new Promise((resolve: unknown,  reject: unknown) => {
+  return new Promise<ArrayBuffer>((resolve, reject) => {
     const reader = new FileReader()
     
     reader.onload = (e) => {
@@ -330,7 +337,7 @@ export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
  * 读取文件为Base64
  */
 export function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve: unknown,  reject: unknown) => {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     
     reader.onload = (e) => {

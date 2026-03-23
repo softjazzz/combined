@@ -7,8 +7,7 @@
           质控规则管理
           <span
             class="px-2 py-1 rounded text-xs font-normal bg-blue-50 text-blue-600 border border-blue-100"
-            >v2.4</span
-          >
+          >v2.4</span>
         </h2>
       </div>
       <div class="flex items-center gap-3 mt-4 sm:mt-0">
@@ -50,8 +49,7 @@
           <span
             v-if="activeTab === 'coding'"
             class="ml-2 bg-emerald-100 text-emerald-600 py-0.5 px-2 rounded-full text-xs font-bold"
-            >18</span
-          >
+          >18</span>
         </a>
         <a
           href="#"
@@ -68,8 +66,7 @@
           <span
             v-if="activeTab === 'semantic'"
             class="ml-2 bg-blue-100 text-blue-600 py-0.5 px-2 rounded-full text-xs font-bold"
-            >179</span
-          >
+          >179</span>
         </a>
         <a
           href="#"
@@ -129,7 +126,10 @@
     <!-- 标签页内容 -->
     <div class="tab-content">
       <!-- 传统质控规则标签页 -->
-      <div v-if="activeTab === 'traditional'" class="space-y-8">
+      <div
+        v-if="activeTab === 'traditional'"
+        class="space-y-8"
+      >
         <!-- 统计卡片 -->
         <RuleStatsCards :statistics="statistics" />
 
@@ -145,16 +145,22 @@
               placeholder="搜索规则编号、名称..."
               class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm placeholder-slate-400 hover:border-slate-300"
               @input="handleSearch"
-            />
+            >
           </div>
           <div class="flex gap-3 w-full sm:w-auto">
             <a-dropdown>
               <template #overlay>
                 <a-menu>
-                  <a-menu-item key="import" @click="importRules">
+                  <a-menu-item
+                    key="import"
+                    @click="importRules"
+                  >
                     <ImportOutlined /> 导入规则
                   </a-menu-item>
-                  <a-menu-item key="export" @click="exportRules">
+                  <a-menu-item
+                    key="export"
+                    @click="exportRules"
+                  >
                     <ExportOutlined /> 导出规则
                   </a-menu-item>
                 </a-menu>
@@ -214,10 +220,18 @@
                 class="w-full"
                 @change="handleFilter"
               >
-                <a-select-option value="completeness"> 完整性 </a-select-option>
-                <a-select-option value="consistency"> 一致性 </a-select-option>
-                <a-select-option value="rationality"> 合理性 </a-select-option>
-                <a-select-option value="timeliness"> 及时性 </a-select-option>
+                <a-select-option value="completeness">
+                  完整性
+                </a-select-option>
+                <a-select-option value="consistency">
+                  一致性
+                </a-select-option>
+                <a-select-option value="rationality">
+                  合理性
+                </a-select-option>
+                <a-select-option value="timeliness">
+                  及时性
+                </a-select-option>
               </a-select>
             </div>
             <div>
@@ -228,9 +242,15 @@
                 class="w-full"
                 @change="handleFilter"
               >
-                <a-select-option value="critical"> 严重 </a-select-option>
-                <a-select-option value="major"> 重要 </a-select-option>
-                <a-select-option value="minor"> 轻微 </a-select-option>
+                <a-select-option value="critical">
+                  严重
+                </a-select-option>
+                <a-select-option value="major">
+                  重要
+                </a-select-option>
+                <a-select-option value="minor">
+                  轻微
+                </a-select-option>
               </a-select>
             </div>
             <div>
@@ -241,8 +261,12 @@
                 class="w-full"
                 @change="handleFilter"
               >
-                <a-select-option value="active"> 激活 </a-select-option>
-                <a-select-option value="inactive"> 停用 </a-select-option>
+                <a-select-option value="active">
+                  激活
+                </a-select-option>
+                <a-select-option value="inactive">
+                  停用
+                </a-select-option>
               </a-select>
             </div>
           </div>
@@ -281,9 +305,7 @@
               <CheckSquareOutlined class="text-blue-600 text-lg" />
             </div>
             <div>
-              <span class="text-blue-900 font-bold text-base block"
-                >已选择 {{ selectedRowKeys.length }} 条规则</span
-              >
+              <span class="text-blue-900 font-bold text-base block">已选择 {{ selectedRowKeys.length }} 条规则</span>
               <span class="text-blue-600/80 text-xs">您可以对选中的规则进行批量操作</span>
             </div>
           </div>
@@ -405,7 +427,12 @@
               </template>
 
               <template v-else-if="column.key === 'max_score'">
-                <a-tag v-if="record.max_score === 0" color="red"> 单否 </a-tag>
+                <a-tag
+                  v-if="record.max_score === 0"
+                  color="red"
+                >
+                  单否
+                </a-tag>
                 <span v-else>{{ record.max_score }}分</span>
               </template>
 
@@ -435,7 +462,10 @@
                       </template>
                     </a-button>
                   </a-tooltip>
-                  <a-popconfirm title="确定要删除这条规则吗？" @confirm="deleteRule(record)">
+                  <a-popconfirm
+                    title="确定要删除这条规则吗？"
+                    @confirm="deleteRule(record)"
+                  >
                     <a-tooltip title="删除规则">
                       <a-button
                         type="text"
@@ -498,11 +528,26 @@
       @ok="handleModalOk"
       @cancel="handleModalCancel"
     >
-      <div v-if="isCustomRule" class="mb-4">
-        <a-steps size="small" :current="customStepCurrent">
-          <a-step title="选择文书" :status="customStepStatuses[0]" />
-          <a-step title="填写质控点" :status="customStepStatuses[1]" />
-          <a-step title="生成Prompt" :status="customStepStatuses[2]" />
+      <div
+        v-if="isCustomRule"
+        class="mb-4"
+      >
+        <a-steps
+          size="small"
+          :current="customStepCurrent"
+        >
+          <a-step
+            title="选择文书"
+            :status="customStepStatuses[0]"
+          />
+          <a-step
+            title="填写质控点"
+            :status="customStepStatuses[1]"
+          />
+          <a-step
+            title="生成Prompt"
+            :status="customStepStatuses[2]"
+          />
         </a-steps>
         <a-alert
           type="info"
@@ -511,28 +556,48 @@
           message="先选择病历文书类型，再填写质控点内容，最后一键生成Prompt即可保存。"
         />
       </div>
-      <a-form ref="formRef" :model="formData" :rules="formRules" layout="vertical">
+      <a-form
+        ref="formRef"
+        :model="formData"
+        :rules="formRules"
+        layout="vertical"
+      >
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="规则编码" name="rule_code">
+            <a-form-item
+              label="规则编码"
+              name="rule_code"
+            >
               <a-input
                 v-model:value="formData.rule_code"
                 :placeholder="isCustomRule ? '系统自动生成' : '如: 1.1.1'"
                 :disabled="isCustomRule"
               />
-              <template v-if="isCustomRule" #extra>
+              <template
+                v-if="isCustomRule"
+                #extra
+              >
                 <span class="text-gray-500 text-xs">选择文书后将自动生成规则编号</span>
               </template>
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="规则名称" name="name">
-              <a-input v-model:value="formData.name" placeholder="输入规则名称" />
+            <a-form-item
+              label="规则名称"
+              name="name"
+            >
+              <a-input
+                v-model:value="formData.name"
+                placeholder="输入规则名称"
+              />
             </a-form-item>
           </a-col>
         </a-row>
 
-        <a-form-item label="质控点内容" name="description">
+        <a-form-item
+          label="质控点内容"
+          name="description"
+        >
           <a-textarea
             v-model:value="formData.description"
             placeholder="详细描述规则内容和检查要点"
@@ -542,7 +607,10 @@
 
         <a-row :gutter="16">
           <a-col :span="24">
-            <a-form-item label="病历文书类型" name="primary_document_category">
+            <a-form-item
+              label="病历文书类型"
+              name="primary_document_category"
+            >
               <a-select
                 v-model:value="formData.primary_document_category"
                 placeholder="请选择文书类别"
@@ -562,30 +630,68 @@
 
         <a-row :gutter="16">
           <a-col :span="8">
-            <a-form-item label="分类" name="category">
-              <a-select v-model:value="formData.category" placeholder="选择分类">
-                <a-select-option value="completeness"> 完整性 </a-select-option>
-                <a-select-option value="consistency"> 一致性 </a-select-option>
-                <a-select-option value="rationality"> 合理性 </a-select-option>
-                <a-select-option value="timeliness"> 及时性 </a-select-option>
+            <a-form-item
+              label="分类"
+              name="category"
+            >
+              <a-select
+                v-model:value="formData.category"
+                placeholder="选择分类"
+              >
+                <a-select-option value="completeness">
+                  完整性
+                </a-select-option>
+                <a-select-option value="consistency">
+                  一致性
+                </a-select-option>
+                <a-select-option value="rationality">
+                  合理性
+                </a-select-option>
+                <a-select-option value="timeliness">
+                  及时性
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="严重程度" name="severity">
-              <a-select v-model:value="formData.severity" placeholder="选择严重程度">
-                <a-select-option value="critical"> 严重 </a-select-option>
-                <a-select-option value="major"> 重要 </a-select-option>
-                <a-select-option value="minor"> 轻微 </a-select-option>
+            <a-form-item
+              label="严重程度"
+              name="severity"
+            >
+              <a-select
+                v-model:value="formData.severity"
+                placeholder="选择严重程度"
+              >
+                <a-select-option value="critical">
+                  严重
+                </a-select-option>
+                <a-select-option value="major">
+                  重要
+                </a-select-option>
+                <a-select-option value="minor">
+                  轻微
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="规则类型" name="rule_type">
-              <a-select v-model:value="formData.rule_type" placeholder="选择规则类型">
-                <a-select-option value="logical"> 逻辑规则 </a-select-option>
-                <a-select-option value="semantic"> 语义规则 </a-select-option>
-                <a-select-option value="hybrid"> 混合规则 </a-select-option>
+            <a-form-item
+              label="规则类型"
+              name="rule_type"
+            >
+              <a-select
+                v-model:value="formData.rule_type"
+                placeholder="选择规则类型"
+              >
+                <a-select-option value="logical">
+                  逻辑规则
+                </a-select-option>
+                <a-select-option value="semantic">
+                  语义规则
+                </a-select-option>
+                <a-select-option value="hybrid">
+                  混合规则
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -593,7 +699,10 @@
 
         <a-row :gutter="16">
           <a-col :span="8">
-            <a-form-item label="最大扣分" name="max_score">
+            <a-form-item
+              label="最大扣分"
+              name="max_score"
+            >
               <a-input-number
                 v-model:value="formData.max_score"
                 :min="0"
@@ -604,7 +713,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="权重" name="weight">
+            <a-form-item
+              label="权重"
+              name="weight"
+            >
               <a-input-number
                 v-model:value="formData.weight"
                 :min="0.1"
@@ -616,7 +728,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="状态" name="is_active">
+            <a-form-item
+              label="状态"
+              name="is_active"
+            >
               <a-switch
                 v-model:checked="formData.is_active"
                 checked-children="激活"
@@ -626,7 +741,10 @@
           </a-col>
         </a-row>
 
-        <a-form-item label="检查逻辑配置" name="check_logic">
+        <a-form-item
+          label="检查逻辑配置"
+          name="check_logic"
+        >
           <a-textarea
             v-model:value="checkLogicText"
             placeholder="JSON格式的检查逻辑配置"
@@ -634,7 +752,10 @@
           />
         </a-form-item>
 
-        <a-form-item label="提示模板" name="prompt_template">
+        <a-form-item
+          label="提示模板"
+          name="prompt_template"
+        >
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm text-gray-500">生成后可根据需要微调Prompt模板</span>
             <a-button
@@ -643,7 +764,7 @@
               :loading="promptGenerating"
               :disabled="
                 !formData.primary_document_category ||
-                !(formData.description && formData.description.trim())
+                  !(formData.description && formData.description.trim())
               "
               @click="handleAutoGeneratePrompt"
             >
@@ -670,7 +791,9 @@
     >
       <template #extra>
         <a-space>
-          <a-button @click="llmSettingsVisible = false"> 关闭 </a-button>
+          <a-button @click="llmSettingsVisible = false">
+            关闭
+          </a-button>
         </a-space>
       </template>
       <LLMApiConfig />
@@ -685,13 +808,22 @@
     />
 
     <!-- 规则导入模态框 -->
-    <RuleImportModal v-model:open="importModalOpen" @imported="handleImported" />
+    <RuleImportModal
+      v-model:open="importModalOpen"
+      @imported="handleImported"
+    />
 
     <!-- 规则测试抽屉 -->
-    <RuleTestDrawer v-model:open="testDrawerOpen" :rule="testRule_target" />
+    <RuleTestDrawer
+      v-model:open="testDrawerOpen"
+      :rule="testRule_target"
+    />
 
     <!-- AI 智能创建规则抽屉 -->
-    <AIRuleCreatorDrawer v-model:visible="showAICreator" @saved="onAIRuleSaved" />
+    <AIRuleCreatorDrawer
+      v-model:visible="showAICreator"
+      @saved="onAIRuleSaved"
+    />
   </div>
 </template>
 

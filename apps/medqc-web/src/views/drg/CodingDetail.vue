@@ -3,15 +3,22 @@
     <a-page-header
       :title="`编码详情`"
       sub-title="DRG/DIP 智能编码工作台"
-      @back="() => $router.back()"
       style="padding: 16px 32px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);"
+      @back="() => $router.back()"
     >
       <template #extra>
         <a-space>
-          <a-button @click="handleValidate" :loading="validating">
+          <a-button
+            :loading="validating"
+            @click="handleValidate"
+          >
             校验编码
           </a-button>
-          <a-button type="primary" @click="handleSave" :loading="saving">
+          <a-button
+            type="primary"
+            :loading="saving"
+            @click="handleSave"
+          >
             保存并提交
           </a-button>
         </a-space>
@@ -20,10 +27,20 @@
 
     <div class="content-wrapper">
       <a-spin :spinning="loading">
-        <a-row :gutter="24" style="height: calc(100vh - 120px)">
+        <a-row
+          :gutter="24"
+          style="height: calc(100vh - 120px)"
+        >
           <!-- 左侧：患者病案信息与历史 (30%) -->
-          <a-col :span="8" style="height: 100%">
-            <a-card title="患者病案信息与历史" :bordered="false" class="full-height-card patient-card">
+          <a-col
+            :span="8"
+            style="height: 100%"
+          >
+            <a-card
+              title="患者病案信息与历史"
+              :bordered="false"
+              class="full-height-card patient-card"
+            >
               <div class="patient-info-section">
                 <div class="info-row">
                   <span class="label">患者姓名:</span>
@@ -54,7 +71,9 @@
               <a-divider style="margin: 16px 0" />
 
               <div class="history-summary">
-                <div class="section-title">病史摘要</div>
+                <div class="section-title">
+                  病史摘要
+                </div>
                 <ul class="history-list">
                   <li>既往高血压史5年，2型糖尿病史3年，此次因胸痛入院。</li>
                   <li>既往冠心病史曾植入支架入院胸痛，化验均为胸痛入院。</li>
@@ -64,85 +83,139 @@
               </div>
 
               <div class="card-bottom-action">
-                <a-button block size="large">查看完整病历</a-button>
+                <a-button
+                  block
+                  size="large"
+                >
+                  查看完整病历
+                </a-button>
               </div>
             </a-card>
           </a-col>
 
           <!-- 右侧：DRG 编码修正与 AI 分析 (70%) -->
-          <a-col :span="16" style="height: 100%; overflow-y: auto; padding-right: 8px;">
-            <div class="right-panel-header">DRG 编码修正与 AI 分析</div>
+          <a-col
+            :span="16"
+            style="height: 100%; overflow-y: auto; padding-right: 8px;"
+          >
+            <div class="right-panel-header">
+              DRG 编码修正与 AI 分析
+            </div>
 
             <!-- 主诊断 -->
-            <a-card :bordered="false" class="premium-card mb-4" :bodyStyle="{ padding: '0' }">
-               <div class="section-header">
-                 <span>主要诊断 (Primary Diagnosis)</span>
-                 <span class="ai-confidence-label">AI 置信分度</span>
-               </div>
-               <div class="diagnosis-row primary-row">
-                 <div class="code-content">
-                   <span class="code-label">ICD-10:</span>
-                   <ICDCodeSearch
-                      v-model:value="caseFrontPage!.primary_diagnosis_code"
-                      v-model:name="caseFrontPage!.primary_diagnosis_name"
-                      category="diagnosis"
-                      placeholder="搜索诊断编码"
-                      variant="borderless"
-                      class="custom-input"
-                      v-if="caseFrontPage"
-                    />
-                 </div>
-                 <div class="actions">
-                    <a-tag color="#10b981" class="confidence-tag">95%</a-tag>
-                    <a-space size="small" class="action-links">
-                      <a><EditOutlined /> 编辑</a>
-                      <a><DeleteOutlined /> 删除</a>
-                      <a><FileTextOutlined /> AI详情</a>
-                    </a-space>
-                 </div>
-               </div>
+            <a-card
+              :bordered="false"
+              class="premium-card mb-4"
+              :body-style="{ padding: '0' }"
+            >
+              <div class="section-header">
+                <span>主要诊断 (Primary Diagnosis)</span>
+                <span class="ai-confidence-label">AI 置信分度</span>
+              </div>
+              <div class="diagnosis-row primary-row">
+                <div class="code-content">
+                  <span class="code-label">ICD-10:</span>
+                  <ICDCodeSearch
+                    v-if="caseFrontPage"
+                    v-model:value="caseFrontPage!.primary_diagnosis_code"
+                    v-model:name="caseFrontPage!.primary_diagnosis_name"
+                    category="diagnosis"
+                    placeholder="搜索诊断编码"
+                    variant="borderless"
+                    class="custom-input"
+                  />
+                </div>
+                <div class="actions">
+                  <a-tag
+                    color="#10b981"
+                    class="confidence-tag"
+                  >
+                    95%
+                  </a-tag>
+                  <a-space
+                    size="small"
+                    class="action-links"
+                  >
+                    <a><EditOutlined /> 编辑</a>
+                    <a><DeleteOutlined /> 删除</a>
+                    <a><FileTextOutlined /> AI详情</a>
+                  </a-space>
+                </div>
+              </div>
             </a-card>
 
             <!-- 次诊断 -->
-            <a-card :bordered="false" class="premium-card mb-4" :bodyStyle="{ padding: '0' }">
-               <div class="section-header">
-                 <span>次要诊断 (Secondary Diagnoses)</span>
-                 <span class="ai-confidence-label">AI 置信分度</span>
-               </div>
+            <a-card
+              :bordered="false"
+              class="premium-card mb-4"
+              :body-style="{ padding: '0' }"
+            >
+              <div class="section-header">
+                <span>次要诊断 (Secondary Diagnoses)</span>
+                <span class="ai-confidence-label">AI 置信分度</span>
+              </div>
                
-               <div class="diagnosis-list">
-                 <div v-for="(item, index) in secondaryDiagnoses" :key="index" class="diagnosis-row secondary-row">
-                   <div class="row-index">{{ index + 1 }}.</div>
-                   <div class="code-content">
-                     <ICDCodeSearch
-                        v-model:value="item.code"
-                        v-model:name="item.name"
-                        category="diagnosis"
-                        variant="borderless"
-                        class="custom-input"
-                      />
-                   </div>
-                   <div class="actions">
-                      <a-tag :color="getConfidenceColor(index)" class="confidence-tag">{{ getConfidenceScore(index) }}%</a-tag>
-                      <a-space size="small" class="action-links">
-                        <a><EditOutlined /> 编辑</a>
-                        <a class="danger-text" @click="removeSecondaryDiagnosis(index)"><DeleteOutlined /> 删除</a>
-                        <a><FileTextOutlined /> AI详情</a>
-                      </a-space>
-                   </div>
-                 </div>
-               </div>
+              <div class="diagnosis-list">
+                <div
+                  v-for="(item, index) in secondaryDiagnoses"
+                  :key="index"
+                  class="diagnosis-row secondary-row"
+                >
+                  <div class="row-index">
+                    {{ index + 1 }}.
+                  </div>
+                  <div class="code-content">
+                    <ICDCodeSearch
+                      v-model:value="item.code"
+                      v-model:name="item.name"
+                      category="diagnosis"
+                      variant="borderless"
+                      class="custom-input"
+                    />
+                  </div>
+                  <div class="actions">
+                    <a-tag
+                      :color="getConfidenceColor(index)"
+                      class="confidence-tag"
+                    >
+                      {{ getConfidenceScore(index) }}%
+                    </a-tag>
+                    <a-space
+                      size="small"
+                      class="action-links"
+                    >
+                      <a><EditOutlined /> 编辑</a>
+                      <a
+                        class="danger-text"
+                        @click="removeSecondaryDiagnosis(index)"
+                      ><DeleteOutlined /> 删除</a>
+                      <a><FileTextOutlined /> AI详情</a>
+                    </a-space>
+                  </div>
+                </div>
+              </div>
 
-               <div class="add-btn-wrapper">
-                 <a-button type="dashed" block class="add-btn" @click="addSecondaryDiagnosis">
-                   添加次要诊断
-                 </a-button>
-               </div>
+              <div class="add-btn-wrapper">
+                <a-button
+                  type="dashed"
+                  block
+                  class="add-btn"
+                  @click="addSecondaryDiagnosis"
+                >
+                  添加次要诊断
+                </a-button>
+              </div>
             </a-card>
 
             <!-- AI 验证与 DRG 分组结果 -->
-            <a-card :bordered="false" class="premium-card" :bodyStyle="{ padding: '24px' }">
-              <div class="section-header-simple">AI 验证与 DRG 分组结果</div>
+            <a-card
+              :bordered="false"
+              class="premium-card"
+              :body-style="{ padding: '24px' }"
+            >
+              <div class="section-header-simple">
+                AI 验证与 DRG 分组结果
+              </div>
               
               <div class="drg-result-banner">
                 <div class="drg-info">
@@ -156,18 +229,31 @@
               </div>
 
               <div class="ai-analysis-box">
-                <div class="box-title">AI 分析理由</div>
+                <div class="box-title">
+                  AI 分析理由
+                </div>
                 <div class="box-content">
                   主诊断与手术操作（冠脉支架植入术）高度匹配，次要并发症对分组影响显著。建议确认当前编码。
                 </div>
               </div>
 
               <div class="footer-actions">
-                <a-button type="primary" size="large" class="submit-btn" @click="handleSave">保存并提交</a-button>
-                <a-button size="large" @click="handleValidate">重新分析</a-button>
+                <a-button
+                  type="primary"
+                  size="large"
+                  class="submit-btn"
+                  @click="handleSave"
+                >
+                  保存并提交
+                </a-button>
+                <a-button
+                  size="large"
+                  @click="handleValidate"
+                >
+                  重新分析
+                </a-button>
               </div>
             </a-card>
-
           </a-col>
         </a-row>
       </a-spin>

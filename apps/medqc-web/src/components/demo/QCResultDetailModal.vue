@@ -4,10 +4,13 @@
     title="质控分析详细报告"
     :width="'90%'"
     :footer="null"
-    :destroyOnClose="true"
+    :destroy-on-close="true"
     class="qc-result-detail-modal"
   >
-    <div class="modal-content" v-if="result">
+    <div
+      v-if="result"
+      class="modal-content"
+    >
       <!-- 总体评分区域 -->
       <div class="summary-section">
         <a-row :gutter="24">
@@ -48,9 +51,16 @@
       <a-divider />
 
       <!-- 分析步骤 -->
-      <div class="steps-section" v-if="analysisSteps && analysisSteps.length > 0">
+      <div
+        v-if="analysisSteps && analysisSteps.length > 0"
+        class="steps-section"
+      >
         <h3>分析步骤</h3>
-        <a-steps :current="getCurrentStepIndex()" direction="vertical" size="small">
+        <a-steps
+          :current="getCurrentStepIndex()"
+          direction="vertical"
+          size="small"
+        >
           <a-step 
             v-for="step in analysisSteps" 
             :key="step.id"
@@ -71,12 +81,19 @@
       <a-divider v-if="analysisSteps && analysisSteps.length > 0" />
 
       <!-- 发现的问题 -->
-      <div class="issues-section" v-if="result.issues.length > 0">
+      <div
+        v-if="result.issues.length > 0"
+        class="issues-section"
+      >
         <h3>
           <ExclamationCircleOutlined style="color: #cf1322; margin-right: 8px" />
           发现的问题 ({{ result.issues.length }})
         </h3>
-        <a-list :data-source="result.issues" size="default" :bordered="true">
+        <a-list
+          :data-source="result.issues"
+          size="default"
+          :bordered="true"
+        >
           <template #renderItem="{ item, index }">
             <a-list-item>
               <a-list-item-meta>
@@ -94,17 +111,26 @@
                       <span class="label">问题说明：</span>
                       <span class="content">{{ item.description }}</span>
                     </div>
-                    <div v-if="item.evidence" class="detail-row evidence-row">
+                    <div
+                      v-if="item.evidence"
+                      class="detail-row evidence-row"
+                    >
                       <span class="label">原文证据：</span>
                       <div class="evidence-content">
                         <blockquote>{{ item.evidence }}</blockquote>
                       </div>
                     </div>
-                    <div v-if="item.location" class="detail-row">
+                    <div
+                      v-if="item.location"
+                      class="detail-row"
+                    >
                       <span class="label">问题定位：</span>
                       <span class="content">{{ item.location }}</span>
                     </div>
-                    <div v-if="item.suggestion" class="detail-row suggestion-row">
+                    <div
+                      v-if="item.suggestion"
+                      class="detail-row suggestion-row"
+                    >
                       <span class="label">整改建议：</span>
                       <span class="content suggestion-text">{{ item.suggestion }}</span>
                     </div>
@@ -119,12 +145,18 @@
       <a-divider v-if="result.issues.length > 0" />
 
       <!-- 规则明细 -->
-      <div class="rules-section" v-if="result.ruleResults && result.ruleResults.length > 0">
+      <div
+        v-if="result.ruleResults && result.ruleResults.length > 0"
+        class="rules-section"
+      >
         <h3>
           <FileTextOutlined style="margin-right: 8px" />
           规则明细 ({{ result.ruleResults.length }})
         </h3>
-        <a-collapse v-model:activeKey="activeRuleKeys" :bordered="false">
+        <a-collapse
+          v-model:active-key="activeRuleKeys"
+          :bordered="false"
+        >
           <a-collapse-panel 
             v-for="(item, index) in result.ruleResults" 
             :key="index"
@@ -136,33 +168,55 @@
               </a-tag>
             </template>
             <div class="rule-detail">
-              <a-descriptions :column="2" size="small" bordered>
-                <a-descriptions-item label="规则ID">{{ item.ruleId || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="执行时间">{{ item.executionTime.toFixed(2) }}ms</a-descriptions-item>
+              <a-descriptions
+                :column="2"
+                size="small"
+                bordered
+              >
+                <a-descriptions-item label="规则ID">
+                  {{ item.ruleId || '-' }}
+                </a-descriptions-item>
+                <a-descriptions-item label="执行时间">
+                  {{ item.executionTime.toFixed(2) }}ms
+                </a-descriptions-item>
                 <a-descriptions-item label="得分">
                   <span :style="{ color: item.passed ? '#52c41a' : '#cf1322', fontWeight: 'bold' }">
                     {{ item.score }}/{{ item.maxScore }}
                   </span>
                 </a-descriptions-item>
-                <a-descriptions-item label="置信度">{{ (item.confidence * 100).toFixed(0) }}%</a-descriptions-item>
+                <a-descriptions-item label="置信度">
+                  {{ (item.confidence * 100).toFixed(0) }}%
+                </a-descriptions-item>
               </a-descriptions>
               
               <div class="rule-content">
                 <div class="detail-row">
                   <span class="label">详细说明：</span>
-                  <span class="content" :class="{ 'text-danger': !item.passed }">{{ item.details || '（无详细描述）' }}</span>
+                  <span
+                    class="content"
+                    :class="{ 'text-danger': !item.passed }"
+                  >{{ item.details || '（无详细描述）' }}</span>
                 </div>
-                <div v-if="!item.passed && item.evidence" class="detail-row evidence-row">
+                <div
+                  v-if="!item.passed && item.evidence"
+                  class="detail-row evidence-row"
+                >
                   <span class="label">原文证据：</span>
                   <div class="evidence-content">
                     <blockquote>{{ item.evidence }}</blockquote>
                   </div>
                 </div>
-                <div v-if="!item.passed && item.location" class="detail-row">
+                <div
+                  v-if="!item.passed && item.location"
+                  class="detail-row"
+                >
                   <span class="label">问题定位：</span>
                   <span class="content">{{ item.location }}</span>
                 </div>
-                <div v-if="!item.passed && item.suggestion" class="detail-row suggestion-row">
+                <div
+                  v-if="!item.passed && item.suggestion"
+                  class="detail-row suggestion-row"
+                >
                   <span class="label">整改建议：</span>
                   <span class="content suggestion-text">{{ item.suggestion }}</span>
                 </div>
@@ -175,12 +229,19 @@
       <a-divider v-if="result.suggestions.length > 0" />
 
       <!-- 改进建议 -->
-      <div class="suggestions-section" v-if="structuredSuggestions.length > 0">
+      <div
+        v-if="structuredSuggestions.length > 0"
+        class="suggestions-section"
+      >
         <h3>
           <BulbOutlined style="color: #1890ff; margin-right: 8px" />
           改进建议 ({{ structuredSuggestions.length }})
         </h3>
-        <a-list :data-source="structuredSuggestions" size="default" :bordered="true">
+        <a-list
+          :data-source="structuredSuggestions"
+          size="default"
+          :bordered="true"
+        >
           <template #renderItem="{ item, index }">
             <a-list-item>
               <a-list-item-meta>
@@ -194,7 +255,12 @@
                 </template>
                 <template #description>
                   <ol class="list-decimal list-inside space-y-1 text-sm text-gray-700">
-                    <li v-for="(step, i) in item.steps" :key="i">{{ step }}</li>
+                    <li
+                      v-for="(step, i) in item.steps"
+                      :key="i"
+                    >
+                      {{ step }}
+                    </li>
                   </ol>
                 </template>
               </a-list-item-meta>
@@ -205,24 +271,53 @@
 
       <!-- 元数据信息 -->
       <a-divider v-if="result.metadata" />
-      <div class="metadata-section" v-if="result.metadata">
+      <div
+        v-if="result.metadata"
+        class="metadata-section"
+      >
         <h3>分析元数据</h3>
-        <a-descriptions :column="3" size="small" bordered>
-          <a-descriptions-item label="分析版本">{{ result.metadata.analysisVersion }}</a-descriptions-item>
-          <a-descriptions-item label="模型版本">{{ result.metadata.modelVersion }}</a-descriptions-item>
-          <a-descriptions-item label="引擎">{{ result.metadata.engine || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="处理时间">{{ result.metadata.processingTime.toFixed(2) }}ms</a-descriptions-item>
-          <a-descriptions-item label="应用规则数">{{ result.metadata.rulesApplied }}</a-descriptions-item>
-          <a-descriptions-item label="总体置信度">{{ (result.metadata.confidence * 100).toFixed(0) }}%</a-descriptions-item>
-          <a-descriptions-item label="分析时间" :span="3">{{ formatDate(result.analysisDate) }}</a-descriptions-item>
+        <a-descriptions
+          :column="3"
+          size="small"
+          bordered
+        >
+          <a-descriptions-item label="分析版本">
+            {{ result.metadata.analysisVersion }}
+          </a-descriptions-item>
+          <a-descriptions-item label="模型版本">
+            {{ result.metadata.modelVersion }}
+          </a-descriptions-item>
+          <a-descriptions-item label="引擎">
+            {{ result.metadata.engine || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="处理时间">
+            {{ result.metadata.processingTime.toFixed(2) }}ms
+          </a-descriptions-item>
+          <a-descriptions-item label="应用规则数">
+            {{ result.metadata.rulesApplied }}
+          </a-descriptions-item>
+          <a-descriptions-item label="总体置信度">
+            {{ (result.metadata.confidence * 100).toFixed(0) }}%
+          </a-descriptions-item>
+          <a-descriptions-item
+            label="分析时间"
+            :span="3"
+          >
+            {{ formatDate(result.analysisDate) }}
+          </a-descriptions-item>
         </a-descriptions>
       </div>
     </div>
 
     <template #footer>
       <a-space>
-        <a-button @click="handleClose">关闭</a-button>
-        <a-button type="primary" @click="handleExport">
+        <a-button @click="handleClose">
+          关闭
+        </a-button>
+        <a-button
+          type="primary"
+          @click="handleExport"
+        >
           <DownloadOutlined />
           导出报告
         </a-button>

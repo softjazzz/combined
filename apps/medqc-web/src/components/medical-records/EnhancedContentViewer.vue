@@ -8,9 +8,18 @@
           {{ title }}
         </h3>
         <div class="content-stats">
-          <a-tag color="blue">{{ contentStats.characters }} 字符</a-tag>
-          <a-tag color="green">{{ contentStats.lines }} 行</a-tag>
-          <a-tag color="orange" v-if="contentStats.words">{{ contentStats.words }} 词</a-tag>
+          <a-tag color="blue">
+            {{ contentStats.characters }} 字符
+          </a-tag>
+          <a-tag color="green">
+            {{ contentStats.lines }} 行
+          </a-tag>
+          <a-tag
+            v-if="contentStats.words"
+            color="orange"
+          >
+            {{ contentStats.words }} 词
+          </a-tag>
         </div>
       </div>
       <div class="header-actions">
@@ -18,9 +27,9 @@
           v-model:value="searchKeyword"
           placeholder="搜索内容..."
           style="width: 250px"
+          allow-clear
           @search="handleSearch"
           @change="handleSearchChange"
-          allow-clear
         >
           <template #prefix>
             <SearchOutlined />
@@ -30,7 +39,7 @@
           v-if="props.enableSummaryToggle"
           :options="[{label:'全文', value:'full'},{label:'摘要', value:'summary'}]"
           :value="showSummary ? 'summary' : 'full'"
-          @change="(v: unknown)=>{ showSummary.value = (v==='summary') }"
+          @change="(v: unknown)=>{ showSummary = (v==='summary') }"
         />
         <a-button-group>
           <a-tooltip title="全屏查看">
@@ -71,11 +80,17 @@
                   />
                 </a-menu-item>
                 <a-menu-divider />
-                <a-menu-item key="wordWrap" @click="toggleWordWrap">
+                <a-menu-item
+                  key="wordWrap"
+                  @click="toggleWordWrap"
+                >
                   <CheckOutlined v-if="wordWrap" />
                   自动换行
                 </a-menu-item>
-                <a-menu-item key="showLineNumbers" @click="toggleLineNumbers">
+                <a-menu-item
+                  key="showLineNumbers"
+                  @click="toggleLineNumbers"
+                >
                   <CheckOutlined v-if="showLineNumbers" />
                   显示行号
                 </a-menu-item>
@@ -87,7 +102,10 @@
     </div>
 
     <!-- 搜索结果导航 -->
-    <div v-if="searchResults.length > 0" class="search-navigation">
+    <div
+      v-if="searchResults.length > 0"
+      class="search-navigation"
+    >
       <div class="search-info">
         找到 <strong>{{ searchResults.length }}</strong> 个匹配项
         <span v-if="currentSearchIndex >= 0">
@@ -96,14 +114,23 @@
       </div>
       <div class="search-controls">
         <a-button-group size="small">
-          <a-button @click="previousMatch" :disabled="searchResults.length === 0">
+          <a-button
+            :disabled="searchResults.length === 0"
+            @click="previousMatch"
+          >
             <UpOutlined />
           </a-button>
-          <a-button @click="nextMatch" :disabled="searchResults.length === 0">
+          <a-button
+            :disabled="searchResults.length === 0"
+            @click="nextMatch"
+          >
             <DownOutlined />
           </a-button>
         </a-button-group>
-        <a-button size="small" @click="clearSearch">
+        <a-button
+          size="small"
+          @click="clearSearch"
+        >
           <CloseOutlined />
         </a-button>
       </div>
@@ -132,14 +159,23 @@
           class="content-line"
           :class="{ 'highlight-line': line.hasMatch }"
         >
-          <span v-if="showLineNumbers" class="line-number">{{ index + 1 }}</span>
-          <span class="line-content" v-html="line.content"></span>
+          <span
+            v-if="showLineNumbers"
+            class="line-number"
+          >{{ index + 1 }}</span>
+          <span
+            class="line-content"
+            v-html="line.content"
+          />
         </div>
       </div>
     </div>
 
     <!-- 快速导航 -->
-    <div v-if="contentSections.length > 0" class="content-navigation">
+    <div
+      v-if="contentSections.length > 0"
+      class="content-navigation"
+    >
       <div class="nav-header">
         <BookOutlined />
         <span>快速导航</span>
@@ -150,8 +186,8 @@
           :key="section.id"
           type="text"
           size="small"
-          @click="scrollToSection(section.line)"
           class="nav-section-btn"
+          @click="scrollToSection(section.line)"
         >
           {{ section.title }}
         </a-button>

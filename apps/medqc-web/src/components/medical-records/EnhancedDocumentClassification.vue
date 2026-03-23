@@ -7,17 +7,28 @@
         <h3>文档分类</h3>
         <div class="header-actions">
           <a-tooltip :title="'隐藏侧栏'">
-            <a-button type="text" size="small" @click="$emit('toggle-sidebar')">
+            <a-button
+              type="text"
+              size="small"
+              @click="$emit('toggle-sidebar')"
+            >
               隐藏侧栏
             </a-button>
           </a-tooltip>
           <a-tooltip title="刷新分类">
-            <a-button type="text" size="small" @click="refreshClassification">
+            <a-button
+              type="text"
+              size="small"
+              @click="refreshClassification"
+            >
               <ReloadOutlined />
             </a-button>
           </a-tooltip>
           <a-dropdown>
-            <a-button type="text" size="small">
+            <a-button
+              type="text"
+              size="small"
+            >
               <FilterOutlined />
             </a-button>
             <template #overlay>
@@ -47,31 +58,50 @@
         <!-- 分类统计 -->
         <div class="classification-stats">
           <div class="stat-item">
-            <div class="stat-number">{{ totalDocuments }}</div>
-            <div class="stat-label">总文档数</div>
+            <div class="stat-number">
+              {{ totalDocuments }}
+            </div>
+            <div class="stat-label">
+              总文档数
+            </div>
           </div>
           <div class="stat-item">
-            <div class="stat-number">{{ classificationStats.aiClassified }}</div>
-            <div class="stat-label">AI分类</div>
+            <div class="stat-number">
+              {{ classificationStats.aiClassified }}
+            </div>
+            <div class="stat-label">
+              AI分类
+            </div>
           </div>
           <div class="stat-item">
-            <div class="stat-number">{{ classificationStats.categories }}</div>
-            <div class="stat-label">分类类型</div>
+            <div class="stat-number">
+              {{ classificationStats.categories }}
+            </div>
+            <div class="stat-label">
+              分类类型
+            </div>
           </div>
           <div class="stat-item">
-            <div class="stat-number">{{ Math.round(classificationStats.avgConfidence * 100) }}%</div>
-            <div class="stat-label">平均置信度</div>
+            <div class="stat-number">
+              {{ Math.round(classificationStats.avgConfidence * 100) }}%
+            </div>
+            <div class="stat-label">
+              平均置信度
+            </div>
           </div>
         </div>
 
         <!-- 分类方法信息 -->
-        <div v-if="classificationResult" class="classification-method">
+        <div
+          v-if="classificationResult"
+          class="classification-method"
+        >
           <div class="method-info">
-            <a-tag :color="getMethodColor(classificationResult.method)">
-              {{ getMethodText(classificationResult.method) }}
+            <a-tag :color="getMethodColor(classificationResult.method || '')">
+              {{ getMethodText(classificationResult.method || '') }}
             </a-tag>
             <span class="method-description">
-              {{ getMethodDescription(classificationResult.method) }}
+              {{ getMethodDescription(classificationResult.method || '') }}
             </span>
           </div>
         </div>
@@ -116,20 +146,23 @@
             v-model:value="searchKeyword"
             placeholder="搜索文档..."
             style="width: 100%"
-            @search="handleSearch"
             allow-clear
+            @search="handleSearch"
           />
         </div>
 
         <!-- 树形视图 -->
-        <div v-if="viewMode === 'tree'" class="tree-view">
+        <div
+          v-if="viewMode === 'tree'"
+          class="tree-view"
+        >
           <a-tree
             :tree-data="documentTreeData"
             :expanded-keys="expandedKeys"
             :selected-keys="selectedKeys"
+            show-icon
             @expand="onExpand"
             @select="onSelect"
-            show-icon
           >
             <template #icon="{ dataRef }">
               <FolderOutlined v-if="dataRef.isCategory" />
@@ -160,7 +193,10 @@
         </div>
 
         <!-- 网格视图 -->
-        <div v-if="viewMode === 'grid'" class="grid-view">
+        <div
+          v-if="viewMode === 'grid'"
+          class="grid-view"
+        >
           <div class="document-grid">
             <div
               v-for="document in filteredDocuments"
@@ -173,36 +209,49 @@
                 <FileTextOutlined />
               </div>
               <div class="card-content">
-                <div class="document-title">{{ document.title || '未命名文档' }}</div>
-                <div class="document-type">{{ document.type || '未分类' }}</div>
-              <div class="document-meta">
-                <a-tag 
-                  size="small" 
-                  :color="getConfidenceColor(document.confidence)"
-                >
-                  {{ Math.round((document.confidence || 0) * 100) }}%
-                </a-tag>
-                <a-tag 
-                  v-if="document.ai_classified" 
-                  size="small" 
-                  color="green"
-                >
-                  AI分类
-                </a-tag>
-                <a-tag size="small" :color="getContentState(document).color">
-                  {{ getContentState(document).label }}
-                </a-tag>
-                <span class="doc-length" v-if="getContentState(document).length > 0">
-                  {{ getContentState(document).length }}字
-                </span>
+                <div class="document-title">
+                  {{ document.title || '未命名文档' }}
+                </div>
+                <div class="document-type">
+                  {{ document.type || '未分类' }}
+                </div>
+                <div class="document-meta">
+                  <a-tag 
+                    size="small" 
+                    :color="getConfidenceColor(document.confidence)"
+                  >
+                    {{ Math.round((document.confidence || 0) * 100) }}%
+                  </a-tag>
+                  <a-tag 
+                    v-if="document.ai_classified" 
+                    size="small" 
+                    color="green"
+                  >
+                    AI分类
+                  </a-tag>
+                  <a-tag
+                    size="small"
+                    :color="getContentState(document).color"
+                  >
+                    {{ getContentState(document).label }}
+                  </a-tag>
+                  <span
+                    v-if="getContentState(document).length > 0"
+                    class="doc-length"
+                  >
+                    {{ getContentState(document).length }}字
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        </div>
 
         <!-- 列表视图 -->
-        <div v-if="viewMode === 'list'" class="list-view">
+        <div
+          v-if="viewMode === 'list'"
+          class="list-view"
+        >
           <a-list
             :data-source="filteredDocuments"
             item-layout="horizontal"
@@ -236,10 +285,17 @@
                         >
                           AI分类
                         </a-tag>
-                        <a-tag size="small" :color="getContentState(item).color">
+                        <a-tag
+                          size="small"
+                          :color="getContentState(item).color"
+                        >
                           {{ getContentState(item).label }}
                         </a-tag>
-                        <a-tag size="small" color="default" v-if="getContentState(item).length > 0">
+                        <a-tag
+                          v-if="getContentState(item).length > 0"
+                          size="small"
+                          color="default"
+                        >
                           {{ getContentState(item).length }}字
                         </a-tag>
                       </div>
@@ -248,17 +304,28 @@
                   <template #description>
                     <div class="list-item-description">
                       <span class="document-type">{{ item.type || '未分类' }}</span>
-                      <span class="document-size" v-if="item.content">
+                      <span
+                        v-if="item.content"
+                        class="document-size"
+                      >
                         {{ item.content.length }} 字符
                       </span>
                     </div>
                   </template>
                 </a-list-item-meta>
                 <template #actions>
-                  <a-button type="text" size="small" @click.stop="viewDocument(item)">
+                  <a-button
+                    type="text"
+                    size="small"
+                    @click.stop="viewDocument(item)"
+                  >
                     <EyeOutlined />
                   </a-button>
-                  <a-button type="text" size="small" @click.stop="editDocument(item)">
+                  <a-button
+                    type="text"
+                    size="small"
+                    @click.stop="editDocument(item)"
+                  >
                     <EditOutlined />
                   </a-button>
                 </template>
@@ -277,15 +344,24 @@
       </div>
       <div class="card-content">
         <div class="action-buttons">
-          <a-button block @click="reclassifyAll">
+          <a-button
+            block
+            @click="reclassifyAll"
+          >
             <ReloadOutlined />
             重新分类
           </a-button>
-          <a-button block @click="exportClassification">
+          <a-button
+            block
+            @click="exportClassification"
+          >
             <ExportOutlined />
             导出分类
           </a-button>
-          <a-button block @click="validateClassification">
+          <a-button
+            block
+            @click="validateClassification"
+          >
             <CheckCircleOutlined />
             验证分类
           </a-button>
@@ -319,7 +395,10 @@ import {
 // Props
 interface Props {
   documents: any[]
-  classificationResult?: Record<string, unknown>
+  classificationResult?: {
+    method?: string
+    [key: string]: unknown
+  }
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -335,6 +414,7 @@ const emit = defineEmits<{
   'reclassify': []
   'export': []
   'validate': []
+  'toggle-sidebar': []
 }>()
 
 // 响应式状态

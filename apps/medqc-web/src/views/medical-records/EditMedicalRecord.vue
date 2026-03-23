@@ -3,22 +3,32 @@
     <!-- 面包屑导航 -->
     <a-breadcrumb class="breadcrumb">
       <a-breadcrumb-item>
-        <router-link to="/dashboard/medical-records">测试病历管理</router-link>
+        <router-link to="/dashboard/medical-records">
+          测试病历管理
+        </router-link>
       </a-breadcrumb-item>
       <a-breadcrumb-item>编辑病历</a-breadcrumb-item>
     </a-breadcrumb>
 
     <!-- 页面标题 -->
     <div class="page-header">
-      <h1 class="page-title">编辑病历</h1>
+      <h1 class="page-title">
+        编辑病历
+      </h1>
       <div class="record-info">
         <span class="record-number">{{ formData.recordNumber }}</span>
       </div>
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <a-spin size="large" tip="加载病历数据中..." />
+    <div
+      v-if="loading"
+      class="loading-container"
+    >
+      <a-spin
+        size="large"
+        tip="加载病历数据中..."
+      />
     </div>
 
     <!-- 表单内容 -->
@@ -31,10 +41,16 @@
       @finish="handleSubmit"
     >
       <!-- 病历基本信息 -->
-      <a-card title="病历基本信息" class="form-card">
+      <a-card
+        title="病历基本信息"
+        class="form-card"
+      >
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="病历编号" name="recordNumber">
+            <a-form-item
+              label="病历编号"
+              name="recordNumber"
+            >
               <a-input 
                 v-model:value="formData.recordNumber" 
                 disabled
@@ -42,7 +58,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="病历名称" name="recordName">
+            <a-form-item
+              label="病历名称"
+              name="recordName"
+            >
               <a-input 
                 v-model:value="formData.recordName" 
                 placeholder="请输入病历名称"
@@ -53,10 +72,16 @@
       </a-card>
 
       <!-- 患者信息 -->
-      <a-card title="患者信息" class="form-card">
+      <a-card
+        title="患者信息"
+        class="form-card"
+      >
         <a-row :gutter="16">
           <a-col :span="8">
-            <a-form-item label="患者姓名" name="patientName">
+            <a-form-item
+              label="患者姓名"
+              name="patientName"
+            >
               <a-input
                 v-model:value="formData.patientName"
                 placeholder="请输入患者姓名"
@@ -64,7 +89,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="年龄" name="patientAge">
+            <a-form-item
+              label="年龄"
+              name="patientAge"
+            >
               <a-input-number
                 v-model:value="formData.patientAge"
                 placeholder="请输入年龄"
@@ -75,14 +103,23 @@
             </a-form-item>
           </a-col>
           <a-col :span="8">
-            <a-form-item label="性别" name="patientGender">
+            <a-form-item
+              label="性别"
+              name="patientGender"
+            >
               <a-select
                 v-model:value="formData.patientGender"
                 placeholder="请选择性别"
               >
-                <a-select-option value="男">男</a-select-option>
-                <a-select-option value="女">女</a-select-option>
-                <a-select-option value="未知">未知</a-select-option>
+                <a-select-option value="男">
+                  男
+                </a-select-option>
+                <a-select-option value="女">
+                  女
+                </a-select-option>
+                <a-select-option value="未知">
+                  未知
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -90,37 +127,74 @@
       </a-card>
 
       <!-- 诊断信息 -->
-      <a-card title="诊断信息" class="form-card">
+      <a-card
+        title="诊断信息"
+        class="form-card"
+      >
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="出院科室" name="department">
+            <a-form-item
+              label="出院科室"
+              name="department"
+            >
               <a-select
                 v-model:value="formData.department"
                 placeholder="请选择出院科室"
               >
-                <a-select-option value="内科">内科</a-select-option>
-                <a-select-option value="外科">外科</a-select-option>
-                <a-select-option value="外一科">外一科</a-select-option>
-                <a-select-option value="外二科">外二科</a-select-option>
-                <a-select-option value="妇产科">妇产科</a-select-option>
-                <a-select-option value="儿科">儿科</a-select-option>
-                <a-select-option value="急诊科">急诊科</a-select-option>
-                <a-select-option value="骨科">骨科</a-select-option>
-                <a-select-option value="神经科">神经科</a-select-option>
-                <a-select-option value="心内科">心内科</a-select-option>
-                <a-select-option value="内科">内科</a-select-option>
+                <a-select-option value="内科">
+                  内科
+                </a-select-option>
+                <a-select-option value="外科">
+                  外科
+                </a-select-option>
+                <a-select-option value="外一科">
+                  外一科
+                </a-select-option>
+                <a-select-option value="外二科">
+                  外二科
+                </a-select-option>
+                <a-select-option value="妇产科">
+                  妇产科
+                </a-select-option>
+                <a-select-option value="儿科">
+                  儿科
+                </a-select-option>
+                <a-select-option value="急诊科">
+                  急诊科
+                </a-select-option>
+                <a-select-option value="骨科">
+                  骨科
+                </a-select-option>
+                <a-select-option value="神经科">
+                  神经科
+                </a-select-option>
+                <a-select-option value="心内科">
+                  心内科
+                </a-select-option>
+                <a-select-option value="内科">
+                  内科
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="状态" name="status">
+            <a-form-item
+              label="状态"
+              name="status"
+            >
               <a-select
                 v-model:value="formData.status"
                 placeholder="请选择状态"
               >
-                <a-select-option value="draft">草稿</a-select-option>
-                <a-select-option value="active">活跃</a-select-option>
-                <a-select-option value="archived">已归档</a-select-option>
+                <a-select-option value="draft">
+                  草稿
+                </a-select-option>
+                <a-select-option value="active">
+                  活跃
+                </a-select-option>
+                <a-select-option value="archived">
+                  已归档
+                </a-select-option>
               </a-select>
             </a-form-item>
           </a-col>
@@ -128,7 +202,10 @@
 
         <a-row :gutter="16">
           <a-col :span="24">
-            <a-form-item label="主诊断" name="primaryDiagnosis">
+            <a-form-item
+              label="主诊断"
+              name="primaryDiagnosis"
+            >
               <a-input
                 v-model:value="formData.primaryDiagnosis"
                 placeholder="请输入主诊断"
@@ -139,21 +216,26 @@
 
         <a-row :gutter="16">
           <a-col :span="24">
-            <a-form-item label="次要诊断" name="secondaryDiagnosis">
+            <a-form-item
+              label="次要诊断"
+              name="secondaryDiagnosis"
+            >
               <a-select
                 v-model:value="formData.secondaryDiagnosis"
                 mode="tags"
                 placeholder="请输入次要诊断（可多个）"
                 style="width: 100%"
-              >
-              </a-select>
+              />
             </a-form-item>
           </a-col>
         </a-row>
 
         <a-row :gutter="16">
           <a-col :span="24">
-            <a-form-item label="主要手术及操作" name="majorSurgery">
+            <a-form-item
+              label="主要手术及操作"
+              name="majorSurgery"
+            >
               <a-textarea
                 v-model:value="formData.majorSurgery"
                 placeholder="请输入主要手术及操作（可选）"
@@ -165,12 +247,21 @@
       </a-card>
 
       <!-- 文书信息 -->
-      <a-card title="文书信息" class="form-card">
-        <div v-if="formData.documents.length === 0" class="no-documents">
+      <a-card
+        title="文书信息"
+        class="form-card"
+      >
+        <div
+          v-if="formData.documents.length === 0"
+          class="no-documents"
+        >
           <a-empty description="暂无文书，请添加文书信息" />
         </div>
         
-        <div v-else class="documents-list">
+        <div
+          v-else
+          class="documents-list"
+        >
           <div 
             v-for="(document, index) in formData.documents" 
             :key="document.id"
@@ -190,57 +281,119 @@
             
             <a-row :gutter="16">
               <a-col :span="8">
-                <a-form-item :name="['documents', index, 'type']" label="文书类型">
+                <a-form-item
+                  :name="['documents', index, 'type']"
+                  label="文书类型"
+                >
                   <a-select 
                     v-model:value="document.type" 
                     placeholder="请选择文书类型"
                   >
                     <!-- 标准六大类文书分类 -->
                     <a-select-optgroup label="入院记录">
-                      <a-select-option value="admission_record">入院记录</a-select-option>
-                      <a-select-option value="admission_record_24h_in">24小时内入院记录</a-select-option>
-                      <a-select-option value="admission_diagnosis">入院诊断</a-select-option>
+                      <a-select-option value="admission_record">
+                        入院记录
+                      </a-select-option>
+                      <a-select-option value="admission_record_24h_in">
+                        24小时内入院记录
+                      </a-select-option>
+                      <a-select-option value="admission_diagnosis">
+                        入院诊断
+                      </a-select-option>
                     </a-select-optgroup>
                     <a-select-optgroup label="病程记录">
-                      <a-select-option value="first_progress_note">首次病程记录</a-select-option>
-                      <a-select-option value="daily_progress_note">日常病程记录</a-select-option>
-                      <a-select-option value="attending_progress">上级医师查房记录</a-select-option>
-                      <a-select-option value="consultation_record">疑难病例讨论记录</a-select-option>
-                      <a-select-option value="handover_record">交接班记录</a-select-option>
-                      <a-select-option value="transfer_record">转科记录</a-select-option>
-                      <a-select-option value="stage_summary">阶段小结</a-select-option>
+                      <a-select-option value="first_progress_note">
+                        首次病程记录
+                      </a-select-option>
+                      <a-select-option value="daily_progress_note">
+                        日常病程记录
+                      </a-select-option>
+                      <a-select-option value="attending_progress">
+                        上级医师查房记录
+                      </a-select-option>
+                      <a-select-option value="consultation_record">
+                        疑难病例讨论记录
+                      </a-select-option>
+                      <a-select-option value="handover_record">
+                        交接班记录
+                      </a-select-option>
+                      <a-select-option value="transfer_record">
+                        转科记录
+                      </a-select-option>
+                      <a-select-option value="stage_summary">
+                        阶段小结
+                      </a-select-option>
                     </a-select-optgroup>
                     <a-select-optgroup label="出院记录">
-                      <a-select-option value="discharge_record">出院记录</a-select-option>
-                      <a-select-option value="admission_record_24h_out">24小时内出院记录</a-select-option>
-                      <a-select-option value="death_record">死亡记录</a-select-option>
-                      <a-select-option value="death_case_discussion">死亡病例讨论</a-select-option>
+                      <a-select-option value="discharge_record">
+                        出院记录
+                      </a-select-option>
+                      <a-select-option value="admission_record_24h_out">
+                        24小时内出院记录
+                      </a-select-option>
+                      <a-select-option value="death_record">
+                        死亡记录
+                      </a-select-option>
+                      <a-select-option value="death_case_discussion">
+                        死亡病例讨论
+                      </a-select-option>
                     </a-select-optgroup>
                     <a-select-optgroup label="手术相关记录">
-                      <a-select-option value="preoperative_summary">术前小结</a-select-option>
-                      <a-select-option value="preoperative_discussion">术前讨论</a-select-option>
-                      <a-select-option value="operation_record">手术记录</a-select-option>
-                      <a-select-option value="postoperative_first_note">术后首次病程记录</a-select-option>
-                      <a-select-option value="anesthesia_record">麻醉记录</a-select-option>
+                      <a-select-option value="preoperative_summary">
+                        术前小结
+                      </a-select-option>
+                      <a-select-option value="preoperative_discussion">
+                        术前讨论
+                      </a-select-option>
+                      <a-select-option value="operation_record">
+                        手术记录
+                      </a-select-option>
+                      <a-select-option value="postoperative_first_note">
+                        术后首次病程记录
+                      </a-select-option>
+                      <a-select-option value="anesthesia_record">
+                        麻醉记录
+                      </a-select-option>
                     </a-select-optgroup>
                     <a-select-optgroup label="辅助检查">
-                      <a-select-option value="imaging_report">影像检查报告</a-select-option>
-                      <a-select-option value="lab_report">检验报告</a-select-option>
-                      <a-select-option value="pathology_report">病理报告</a-select-option>
-                      <a-select-option value="other_examination">其他检查</a-select-option>
+                      <a-select-option value="imaging_report">
+                        影像检查报告
+                      </a-select-option>
+                      <a-select-option value="lab_report">
+                        检验报告
+                      </a-select-option>
+                      <a-select-option value="pathology_report">
+                        病理报告
+                      </a-select-option>
+                      <a-select-option value="other_examination">
+                        其他检查
+                      </a-select-option>
                     </a-select-optgroup>
                     <a-select-optgroup label="知情同意书">
-                      <a-select-option value="surgery_consent">手术同意书</a-select-option>
-                      <a-select-option value="anesthesia_consent">麻醉同意书</a-select-option>
-                      <a-select-option value="blood_transfusion_consent">输血同意书</a-select-option>
-                      <a-select-option value="special_examination_consent">特殊检查同意书</a-select-option>
-                      <a-select-option value="critical_illness_notice">病危(重)通知书</a-select-option>
+                      <a-select-option value="surgery_consent">
+                        手术同意书
+                      </a-select-option>
+                      <a-select-option value="anesthesia_consent">
+                        麻醉同意书
+                      </a-select-option>
+                      <a-select-option value="blood_transfusion_consent">
+                        输血同意书
+                      </a-select-option>
+                      <a-select-option value="special_examination_consent">
+                        特殊检查同意书
+                      </a-select-option>
+                      <a-select-option value="critical_illness_notice">
+                        病危(重)通知书
+                      </a-select-option>
                     </a-select-optgroup>
                   </a-select>
                 </a-form-item>
               </a-col>
               <a-col :span="16">
-                <a-form-item :name="['documents', index, 'title']" label="文书标题">
+                <a-form-item
+                  :name="['documents', index, 'title']"
+                  label="文书标题"
+                >
                   <a-input 
                     v-model:value="document.title" 
                     placeholder="请输入文书标题"
@@ -249,7 +402,10 @@
               </a-col>
             </a-row>
             
-            <a-form-item :name="['documents', index, 'content']" label="文书内容">
+            <a-form-item
+              :name="['documents', index, 'content']"
+              label="文书内容"
+            >
               <a-textarea 
                 v-model:value="document.content" 
                 placeholder="请输入文书内容"
@@ -261,16 +417,25 @@
       </a-card>
 
       <!-- 修改历史 -->
-      <a-card title="修改历史" class="form-card">
+      <a-card
+        title="修改历史"
+        class="form-card"
+      >
         <div class="history-list">
           <div 
             v-for="(history, index) in modificationHistory" 
             :key="index"
             class="history-item"
           >
-            <div class="history-time">{{ formatDateTime(history.timestamp) }}</div>
-            <div class="history-user">{{ history.user }}</div>
-            <div class="history-action">{{ history.action }}</div>
+            <div class="history-time">
+              {{ formatDateTime(history.timestamp) }}
+            </div>
+            <div class="history-user">
+              {{ history.user }}
+            </div>
+            <div class="history-action">
+              {{ history.action }}
+            </div>
           </div>
         </div>
       </a-card>
@@ -282,14 +447,18 @@
             type="dashed" 
             @click="addDocument"
           >
-            <template #icon><PlusOutlined /></template>
+            <template #icon>
+              <PlusOutlined />
+            </template>
             新建文书
           </a-button>
         </div>
         
         <div class="right-actions">
           <a-space>
-            <a-button @click="handleCancel">取消</a-button>
+            <a-button @click="handleCancel">
+              取消
+            </a-button>
             <a-button 
               type="primary" 
               html-type="submit"
@@ -319,6 +488,24 @@ interface EditableDocument {
   title?: string
   name?: string
   content?: string
+}
+interface EditableFormData {
+  recordNumber: string
+  recordName: string
+  patientName: string
+  patientAge: number | null
+  patientGender: string
+  department: string
+  primaryDiagnosis: string
+  secondaryDiagnosis: string[]
+  majorSurgery: string
+  status: 'draft' | 'active' | 'archived'
+  documents: Array<{
+    id: string
+    type: string
+    title: string
+    content: string
+  }>
 }
 
 interface RecordPayload {
@@ -361,7 +548,7 @@ const submitting = ref(false)
 const originalData = ref<RecordPayload | null>(null) // 用于并发编辑检测
 
 // 表单数据
-const formData = reactive({ recordNumber: '',
+const formData = reactive<EditableFormData>({ recordNumber: '',
   recordName: '',
   patientName: '',
   patientAge: null as number | null,
@@ -468,8 +655,8 @@ const loadRecordData = async () => { try {
     console.log('加载的病历数据:', record)
 
     // 转换数据格式以适配表单 - 适配medical_records表结构
-    const formattedData = {
-      recordNumber: record.record_number || record.id,
+    const formattedData: EditableFormData = {
+      recordNumber: record.record_number || record.id || '',
       recordName: `${record.patient_name}的病历记录`,
       patientName: record.patient_name || '',
       patientAge: record.patient_age || null,
@@ -478,7 +665,7 @@ const loadRecordData = async () => { try {
       primaryDiagnosis: record.diagnosis_primary || record.primary_diagnosis || '',
       secondaryDiagnosis: record.diagnosis_secondary || record.secondary_diagnosis || [],
       majorSurgery: record.major_surgery || '',
-      status: record.status || 'completed',
+      status: (record.status === 'draft' || record.status === 'archived' ? record.status : 'active'),
       documents: []
     }
 
@@ -859,4 +1046,3 @@ const handleCancel = () => {
   font-size: 12px !important;
 }
 </style>
-

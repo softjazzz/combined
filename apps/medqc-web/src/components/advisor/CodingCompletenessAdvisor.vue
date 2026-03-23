@@ -6,24 +6,31 @@
         <h3>
           <span class="icon">🤖</span> 编码完整性顾问
         </h3>
-        <p class="subtitle">基于 AI 分析病历原文，发现潜在的编码遗漏与优化机会</p>
+        <p class="subtitle">
+          基于 AI 分析病历原文，发现潜在的编码遗漏与优化机会
+        </p>
       </div>
       <div class="action-section">
         <button 
-          @click="startAnalysis" 
-          :disabled="loading"
+          :disabled="loading" 
           class="btn-analyze"
           :class="{ 'analyzing': loading }"
+          @click="startAnalysis"
         >
-          <span v-if="loading" class="spinner"></span>
+          <span
+            v-if="loading"
+            class="spinner"
+          />
           {{ loading ? '智能分析中...' : '开始全面分析' }}
         </button>
       </div>
     </div>
 
     <!-- Content Area -->
-    <div v-if="result" class="advisor-content">
-      
+    <div
+      v-if="result"
+      class="advisor-content"
+    >
       <!-- Layer A: Clinical Entities -->
       <div class="section-panel entities-panel">
         <div class="panel-header">
@@ -32,8 +39,13 @@
         </div>
         <div class="entities-grid">
           <!-- Diagnoses -->
-          <div class="entity-group" v-if="result.structure_extraction.explicit_diagnoses.length">
-            <h5 class="group-title">明确诊断</h5>
+          <div
+            v-if="result.structure_extraction.explicit_diagnoses.length"
+            class="entity-group"
+          >
+            <h5 class="group-title">
+              明确诊断
+            </h5>
             <div class="tags">
               <div 
                 v-for="(item, idx) in result.structure_extraction.explicit_diagnoses" 
@@ -47,8 +59,13 @@
           </div>
           
           <!-- Indicators -->
-          <div class="entity-group" v-if="result.structure_extraction.clinical_indicators.length">
-            <h5 class="group-title">异常指标</h5>
+          <div
+            v-if="result.structure_extraction.clinical_indicators.length"
+            class="entity-group"
+          >
+            <h5 class="group-title">
+              异常指标
+            </h5>
             <div class="tags">
               <div 
                 v-for="(item, idx) in result.structure_extraction.clinical_indicators" 
@@ -79,10 +96,16 @@
             <!-- Card Header -->
             <div class="card-header">
               <div class="suggestion-type">
-                <span class="type-icon" v-if="suggestion.action === 'add_code'">➕</span>
+                <span
+                  v-if="suggestion.action === 'add_code'"
+                  class="type-icon"
+                >➕</span>
                 <span class="type-label">{{ getActionLabel(suggestion.action) }}</span>
               </div>
-              <div class="risk-badge" :class="suggestion.risk_level">
+              <div
+                class="risk-badge"
+                :class="suggestion.risk_level"
+              >
                 {{ getRiskLabel(suggestion.risk_level) }}
               </div>
             </div>
@@ -96,9 +119,14 @@
               </div>
               
               <div class="evidence-box">
-                <div class="evidence-title">依据:</div>
+                <div class="evidence-title">
+                  依据:
+                </div>
                 <ul>
-                  <li v-for="(point, pIdx) in suggestion.justification_points" :key="pIdx">
+                  <li
+                    v-for="(point, pIdx) in suggestion.justification_points"
+                    :key="pIdx"
+                  >
                     {{ point }}
                   </li>
                 </ul>
@@ -108,19 +136,28 @@
             <!-- Card Footer / Action -->
             <div class="card-footer">
               <div class="confidence">
-                 AI 置信度: {{ (suggestion.confidence * 100).toFixed(0) }}%
+                AI 置信度: {{ (suggestion.confidence * 100).toFixed(0) }}%
               </div>
-              <button class="btn-accept" @click="handleAccept(suggestion)">采纳建议</button>
+              <button
+                class="btn-accept"
+                @click="handleAccept(suggestion)"
+              >
+                采纳建议
+              </button>
             </div>
           </div>
         </div>
       </div>
-
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="!loading" class="empty-state">
-      <div class="empty-icon">📊</div>
+    <div
+      v-else-if="!loading"
+      class="empty-state"
+    >
+      <div class="empty-icon">
+        📊
+      </div>
       <p>暂无分析结果，请点击上方按钮开始分析</p>
     </div>
   </div>

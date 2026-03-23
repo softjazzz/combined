@@ -2,11 +2,12 @@
   <div class="custom-rules-manager">
     <!-- 1. 核心数据卡片区 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      
       <!-- 卡片 1: 复杂度分布 (环形图) -->
       <div class="stats-card relative overflow-hidden flex flex-col">
         <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">规则复杂度分布</h3>
+          <h3 class="stats-title">
+            规则复杂度分布
+          </h3>
           <PieChartOutlined class="stats-icon" />
         </div>
         <div class="flex items-center flex-1">
@@ -16,7 +17,7 @@
             :style="complexityConicGradient"
           >
             <!-- 镂空遮罩 -->
-            <div class="absolute w-20 h-20 bg-white rounded-full shadow-inner"></div>
+            <div class="absolute w-20 h-20 bg-white rounded-full shadow-inner" />
             <!-- 中心文字 -->
             <div class="absolute flex flex-col items-center justify-center z-10">
               <span class="text-2xl font-bold text-slate-700 leading-none">{{ customStats.total_rules }}</span>
@@ -25,15 +26,15 @@
           </div>
           <div class="space-y-3 text-sm flex-1">
             <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-red-400 mr-2"></span>高复杂度</span>
+              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-red-400 mr-2" />高复杂度</span>
               <span class="font-bold text-slate-700 group-hover:text-red-500 transition-colors">{{ customStats.complexity_distribution?.['高复杂度'] || 0 }}</span>
             </div>
             <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2"></span>中复杂度</span>
+              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2" />中复杂度</span>
               <span class="font-bold text-slate-700 group-hover:text-amber-500 transition-colors">{{ customStats.complexity_distribution?.['中复杂度'] || 0 }}</span>
             </div>
             <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>低复杂度</span>
+              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2" />低复杂度</span>
               <span class="font-bold text-slate-700 group-hover:text-emerald-500 transition-colors">{{ customStats.complexity_distribution?.['低复杂度'] || 0 }}</span>
             </div>
           </div>
@@ -43,58 +44,83 @@
       <!-- 卡片 2: 缺陷级别 (进度条) -->
       <div class="stats-card flex flex-col">
         <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">缺陷级别分布</h3>
+          <h3 class="stats-title">
+            缺陷级别分布
+          </h3>
           <AlertOutlined class="stats-icon" />
-              </div>
+        </div>
         <div class="space-y-5 flex-1 justify-center flex flex-col">
           <div>
             <div class="flex justify-between text-xs mb-1.5">
               <span class="text-slate-500 font-medium">严重缺陷 (阻断)</span>
               <span class="text-red-500 font-bold">{{ customStats.defect_level_distribution?.['严重缺陷'] || 0 }}</span>
-              </div>
-            <div class="w-full bg-slate-100 rounded-full h-2">
-              <div class="bg-red-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(239,68,68,0.2)]" :style="{ width: getPercentage(customStats.defect_level_distribution?.['严重缺陷']) + '%' }"></div>
-              </div>
             </div>
+            <div class="w-full bg-slate-100 rounded-full h-2">
+              <div
+                class="bg-red-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(239,68,68,0.2)]"
+                :style="{ width: getPercentage(customStats.defect_level_distribution?.['严重缺陷']) + '%' }"
+              />
+            </div>
+          </div>
           <div>
             <div class="flex justify-between text-xs mb-1.5">
               <span class="text-slate-500 font-medium">一般缺陷 (警告)</span>
               <span class="text-orange-400 font-bold">{{ customStats.defect_level_distribution?.['一般缺陷'] || 0 }}</span>
-              </div>
+            </div>
             <div class="w-full bg-slate-100 rounded-full h-2">
-              <div class="bg-orange-400 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(251,191,36,0.2)]" :style="{ width: getPercentage(customStats.defect_level_distribution?.['一般缺陷']) + '%' }"></div>
-              </div>
-              </div>
+              <div
+                class="bg-orange-400 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(251,191,36,0.2)]"
+                :style="{ width: getPercentage(customStats.defect_level_distribution?.['一般缺陷']) + '%' }"
+              />
+            </div>
+          </div>
           <div>
             <div class="flex justify-between text-xs mb-1.5">
               <span class="text-slate-500 font-medium">轻微缺陷 (提示)</span>
               <span class="text-emerald-500 font-bold">{{ customStats.defect_level_distribution?.['轻微缺陷'] || 0 }}</span>
             </div>
             <div class="w-full bg-slate-100 rounded-full h-2">
-              <div class="bg-emerald-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(16,185,129,0.2)]" :style="{ width: getPercentage(customStats.defect_level_distribution?.['轻微缺陷']) + '%' }"></div>
-              </div>
-              </div>
-              </div>
+              <div
+                class="bg-emerald-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(16,185,129,0.2)]"
+                :style="{ width: getPercentage(customStats.defect_level_distribution?.['轻微缺陷']) + '%' }"
+              />
             </div>
+          </div>
+        </div>
+      </div>
 
       <!-- 卡片 3: 规则分类 (网格) -->
       <div class="stats-card flex flex-col">
         <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">规则分类统计</h3>
+          <h3 class="stats-title">
+            规则分类统计
+          </h3>
           <AppstoreOutlined class="stats-icon" />
         </div>
         <div class="grid grid-cols-3 gap-3 mt-2 flex-1">
           <div class="stat-grid-item bg-blue-50/50 border-blue-100 text-blue-600">
-            <div class="text-xl font-bold mb-1">{{ getCategoryCount('入院记录') }}</div>
-            <div class="text-[10px] font-medium opacity-70">入院记录</div>
+            <div class="text-xl font-bold mb-1">
+              {{ getCategoryCount('入院记录') }}
+            </div>
+            <div class="text-[10px] font-medium opacity-70">
+              入院记录
+            </div>
           </div>
           <div class="stat-grid-item bg-cyan-50/50 border-cyan-100 text-cyan-600">
-            <div class="text-xl font-bold mb-1">{{ getCategoryCount('病程记录') }}</div>
-            <div class="text-[10px] font-medium opacity-70">病程记录</div>
+            <div class="text-xl font-bold mb-1">
+              {{ getCategoryCount('病程记录') }}
+            </div>
+            <div class="text-[10px] font-medium opacity-70">
+              病程记录
+            </div>
           </div>
           <div class="stat-grid-item bg-purple-50/50 border-purple-100 text-purple-600">
-            <div class="text-xl font-bold mb-1">{{ getCategoryCount('手术记录') }}</div>
-            <div class="text-[10px] font-medium opacity-70">手术记录</div>
+            <div class="text-xl font-bold mb-1">
+              {{ getCategoryCount('手术记录') }}
+            </div>
+            <div class="text-[10px] font-medium opacity-70">
+              手术记录
+            </div>
           </div>
         </div>
       </div>
@@ -110,11 +136,17 @@
       </div>
       
       <div class="flex gap-3 w-full sm:w-auto justify-end">
-        <button class="modern-btn-ghost" @click="showRuleDocModal = true">
+        <button
+          class="modern-btn-ghost"
+          @click="showRuleDocModal = true"
+        >
           <FileTextOutlined />
           <span class="hidden sm:inline ml-1">规则说明</span>
         </button>
-        <button class="modern-btn-primary" @click="goToBatchTest">
+        <button
+          class="modern-btn-primary"
+          @click="goToBatchTest"
+        >
           <PlayCircleOutlined class="mr-1" />
           开始质控评估
         </button>
@@ -124,7 +156,7 @@
     <!-- 3. 数据表格 -->
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
       <a-table
-        :dataSource="customRules"
+        :data-source="customRules"
         :columns="customColumns"
         :loading="loading"
         :pagination="tablePagination"
@@ -134,61 +166,69 @@
       >
         <template #bodyCell="{ column, record }">
           <!-- 编号列：Mono字体 + 浅色背景 -->
-            <template v-if="column.key === 'rule_id'">
+          <template v-if="column.key === 'rule_id'">
             <div class="py-2">
               <span class="font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs font-semibold select-all border border-blue-100">
                 {{ getDisplayId(record) }}
               </span>
             </div>
-            </template>
+          </template>
 
           <!-- 规则名称 -->
-            <template v-if="column.key === 'name'">
+          <template v-if="column.key === 'name'">
             <div class="py-3 pr-4">
               <a-tooltip :title="record.description">
-                <div class="text-blue-600 hover:text-blue-700 font-semibold mb-1.5 text-sm leading-snug cursor-pointer">{{ record.name }}</div>
+                <div class="text-blue-600 hover:text-blue-700 font-semibold mb-1.5 text-sm leading-snug cursor-pointer">
+                  {{ record.name }}
+                </div>
               </a-tooltip>
             </div>
-            </template>
+          </template>
 
           <!-- 复杂度 -->
-            <template v-if="column.key === 'complexity'">
+          <template v-if="column.key === 'complexity'">
             <span 
               class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold"
               :class="getComplexityClass(record.complexity)"
             >
-                {{ record.complexity }}
+              {{ record.complexity }}
             </span>
-            </template>
+          </template>
 
           <!-- 缺陷级别 -->
-            <template v-if="column.key === 'defect_level'">
-             <span 
+          <template v-if="column.key === 'defect_level'">
+            <span 
               class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold"
               :class="getDefectLevelClass(record.defect_level)"
             >
-                {{ getSeverityZh(record.defect_level) }}
+              {{ getSeverityZh(record.defect_level) }}
             </span>
-            </template>
+          </template>
 
           <!-- 分类 -->
-            <template v-if="column.key === 'category'">
+          <template v-if="column.key === 'category'">
             <span class="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                {{ getCategoryZh(record.category) }}
+              {{ getCategoryZh(record.category) }}
             </span>
-            </template>
+          </template>
 
           <!-- 操作列 -->
-            <template v-if="column.key === 'actions'">
+          <template v-if="column.key === 'actions'">
             <div class="flex items-center justify-end gap-3">
-              <button class="icon-btn text-slate-500 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 font-medium px-3 py-1 h-7 text-xs rounded-md" @click="viewSichuanRuleDetail(record)">
-                  详情
+              <button
+                class="icon-btn text-slate-500 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 font-medium px-3 py-1 h-7 text-xs rounded-md"
+                @click="viewSichuanRuleDetail(record)"
+              >
+                详情
               </button>
-              <button class="table-action-btn" @click="startQCWithRule(record)">
-                  质控评估
+              <button
+                class="table-action-btn"
+                @click="startQCWithRule(record)"
+              >
+                质控评估
               </button>
             </div>
-            </template>
+          </template>
         </template>
       </a-table>
     </div>
@@ -204,26 +244,43 @@
       centered
       class="modern-modal"
     >
-      <div v-if="selectedRule" class="rule-detail p-2">
+      <div
+        v-if="selectedRule"
+        class="rule-detail p-2"
+      >
         <div class="bg-slate-50 p-5 rounded-xl mb-6 border border-slate-100">
           <div class="flex justify-between items-start mb-3">
-            <h3 class="text-lg font-bold text-slate-800">{{ selectedRule.name }}</h3>
+            <h3 class="text-lg font-bold text-slate-800">
+              {{ selectedRule.name }}
+            </h3>
             <span class="font-mono text-blue-600 bg-white px-2 py-1 rounded border border-blue-100 text-xs">{{ selectedRule.rule_id }}</span>
           </div>
-          <p class="text-slate-600 text-sm leading-relaxed">{{ selectedRule.description }}</p>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            {{ selectedRule.description }}
+          </p>
         </div>
 
-        <a-descriptions :column="2" size="small" class="mb-6">
-          <a-descriptions-item label="分类">{{ getCategoryZh(selectedRule.category) }}</a-descriptions-item>
+        <a-descriptions
+          :column="2"
+          size="small"
+          class="mb-6"
+        >
+          <a-descriptions-item label="分类">
+            {{ getCategoryZh(selectedRule.category) }}
+          </a-descriptions-item>
           <a-descriptions-item label="复杂度">
-             <span :class="['px-2 py-0.5 rounded-md text-xs', getComplexityClass(selectedRule.complexity)]">{{ selectedRule.complexity }}</span>
+            <span :class="['px-2 py-0.5 rounded-md text-xs', getComplexityClass(selectedRule.complexity)]">{{ selectedRule.complexity }}</span>
           </a-descriptions-item>
           <a-descriptions-item label="缺陷级别">
-             <span :class="['px-2 py-0.5 rounded-md text-xs', getDefectLevelClass(selectedRule.defect_level)]">{{ getSeverityZh(selectedRule.defect_level) }}</span>
+            <span :class="['px-2 py-0.5 rounded-md text-xs', getDefectLevelClass(selectedRule.defect_level)]">{{ getSeverityZh(selectedRule.defect_level) }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="扣分">{{ selectedRule.score_deduction || 0 }}分</a-descriptions-item>
+          <a-descriptions-item label="扣分">
+            {{ selectedRule.score_deduction || 0 }}分
+          </a-descriptions-item>
           <a-descriptions-item label="需要RAG">
-            <a-tag :color="selectedRule.requires_rag ? 'green' : 'default'">{{ selectedRule.requires_rag ? '是' : '否' }}</a-tag>
+            <a-tag :color="selectedRule.requires_rag ? 'green' : 'default'">
+              {{ selectedRule.requires_rag ? '是' : '否' }}
+            </a-tag>
           </a-descriptions-item>
         </a-descriptions>
 
@@ -233,11 +290,15 @@
               <CheckCircleOutlined class="text-blue-500" /> 检查要点
             </h4>
             <ul class="bg-blue-50/50 rounded-lg p-4 space-y-2 border border-blue-100/50">
-              <li v-for="(point, index) in selectedRule.check_points" :key="index" class="text-sm text-slate-700 flex items-start gap-2">
+              <li
+                v-for="(point, index) in selectedRule.check_points"
+                :key="index"
+                class="text-sm text-slate-700 flex items-start gap-2"
+              >
                 <span class="bg-blue-100 text-blue-600 rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">{{ index + 1 }}</span>
                 <span>{{ point }}</span>
-            </li>
-          </ul>
+              </li>
+            </ul>
           </div>
         </template>
 
@@ -250,26 +311,53 @@
                 <span class="text-[10px] font-normal bg-amber-50 text-amber-600 px-2 py-0.5 rounded border border-amber-100">Admin</span>
               </h4>
               <div class="flex gap-2">
-                <a-button v-if="!isEditingPrompt" type="link" size="small" @click="startEditPrompt">编辑</a-button>
+                <a-button
+                  v-if="!isEditingPrompt"
+                  type="link"
+                  size="small"
+                  @click="startEditPrompt"
+                >
+                  编辑
+                </a-button>
                 <template v-else>
-                  <a-button type="primary" size="small" @click="savePrompt">保存</a-button>
-                  <a-button size="small" @click="cancelEditPrompt">取消</a-button>
-                  <a-button size="small" danger @click="resetToDefault">恢复默认</a-button>
+                  <a-button
+                    type="primary"
+                    size="small"
+                    @click="savePrompt"
+                  >
+                    保存
+                  </a-button>
+                  <a-button
+                    size="small"
+                    @click="cancelEditPrompt"
+                  >
+                    取消
+                  </a-button>
+                  <a-button
+                    size="small"
+                    danger
+                    @click="resetToDefault"
+                  >
+                    恢复默认
+                  </a-button>
                 </template>
               </div>
-              </div>
+            </div>
 
-            <div v-if="!isEditingPrompt" class="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar border border-slate-800">
+            <div
+              v-if="!isEditingPrompt"
+              class="bg-slate-900 text-slate-300 p-4 rounded-lg text-xs font-mono whitespace-pre-wrap max-h-64 overflow-y-auto custom-scrollbar border border-slate-800"
+            >
               {{ currentPrompt || '// 暂无自定义提示词' }}
-              </div>
-              <a-textarea
-                v-else
-                v-model:value="editingPrompt"
+            </div>
+            <a-textarea
+              v-else
+              v-model:value="editingPrompt"
               :rows="10"
               class="font-mono text-xs bg-white border-slate-200 rounded-lg"
               placeholder="输入自定义 Prompt..."
-              />
-            </div>
+            />
+          </div>
         </template>
       </div>
     </a-modal>
@@ -283,17 +371,17 @@
       class="modern-modal"
     >
       <a-table
-        :dataSource="ruleDocRows"
+        :data-source="ruleDocRows"
         :columns="ruleDocColumns"
         class="modern-table"
         :pagination="{
           pageSize: 10,
           showSizeChanger: true,
           pageSizeOptions: ['10', '20', '33', '50'],
-          showTotal: (total) => `共 ${total} 条质控点`
+          showTotal: (total: number) => `共 ${total} 条质控点`
         }"
         size="small"
-        rowKey="rule_id"
+        row-key="rule_id"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_id'">
@@ -303,10 +391,14 @@
             <span class="font-semibold text-slate-700">{{ record.name }}</span>
           </template>
           <template v-else-if="column.key === 'description'">
-            <div class="text-slate-500 text-xs">{{ record.description }}</div>
+            <div class="text-slate-500 text-xs">
+              {{ record.description }}
+            </div>
           </template>
           <template v-else-if="column.key === 'check_points'">
-            <div class="text-slate-600 text-xs">{{ record.check_points || '-' }}</div>
+            <div class="text-slate-600 text-xs">
+              {{ record.check_points || '-' }}
+            </div>
           </template>
         </template>
       </a-table>
@@ -325,9 +417,18 @@
         <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
           <PlayCircleOutlined class="text-3xl" />
         </div>
-        <h3 class="text-lg font-bold text-slate-800 mb-2">功能指引</h3>
-        <p class="text-slate-500 mb-6">请前往质控评估页面进行完整的四川省住院病历质控评估</p>
-        <a-button type="primary" size="large" @click="showQCEvaluation = false" class="modern-btn-primary px-8">
+        <h3 class="text-lg font-bold text-slate-800 mb-2">
+          功能指引
+        </h3>
+        <p class="text-slate-500 mb-6">
+          请前往质控评估页面进行完整的四川省住院病历质控评估
+        </p>
+        <a-button
+          type="primary"
+          size="large"
+          class="modern-btn-primary px-8"
+          @click="showQCEvaluation = false"
+        >
           前往质控评估页面
         </a-button>
       </div>
@@ -340,26 +441,37 @@
       width="900px"
       :footer="null"
       centered
-      :destroyOnClose="true"
+      :destroy-on-close="true"
       class="modern-modal rule-test-modal"
     >
-      <div v-if="testingRule" class="rule-test-container p-2">
+      <div
+        v-if="testingRule"
+        class="rule-test-container p-2"
+      >
         <!-- 规则信息展示区 -->
         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-4">
           <div class="flex justify-between items-start mb-2">
-            <h3 class="font-bold text-slate-800 text-lg">{{ testingRule.name }}</h3>
+            <h3 class="font-bold text-slate-800 text-lg">
+              {{ testingRule.name }}
+            </h3>
             <div class="flex gap-2">
               <span :class="['px-2 py-1 rounded text-xs font-medium', getDefectLevelClass(testingRule.defect_level)]">{{ testingRule.defect_level }}</span>
               <span :class="['px-2 py-1 rounded text-xs font-medium', getComplexityClass(testingRule.complexity)]">{{ testingRule.complexity }}</span>
-              </div>
-              </div>
-          <p class="text-sm text-slate-600 mb-3">{{ testingRule.description }}</p>
+            </div>
+          </div>
+          <p class="text-sm text-slate-600 mb-3">
+            {{ testingRule.description }}
+          </p>
           <div class="flex flex-wrap gap-2">
-            <span v-for="doc in testingRule.applicable_documents" :key="doc" class="bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-xs">
+            <span
+              v-for="doc in testingRule.applicable_documents"
+              :key="doc"
+              class="bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-xs"
+            >
               {{ getDocTypeZh(doc) || doc }}
-                </span>
-              </div>
-              </div>
+            </span>
+          </div>
+        </div>
 
         <!-- 病历输入区 -->
         <div class="mb-4 border border-slate-200 rounded-xl overflow-hidden">
@@ -380,8 +492,8 @@
               >
                 正例
               </button>
-                  </div>
-                    </div>
+            </div>
+          </div>
           <div class="p-4 bg-white relative">
             <a-textarea
               v-model:value="testMedicalText"
@@ -390,15 +502,30 @@
               class="w-full text-sm border-0 focus:shadow-none p-0 resize-none"
             />
             <!-- AI加载遮罩 -->
-            <div v-if="showAILoadingMask" class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-10">
-                <a-spin size="large" />
-              <div class="mt-3 text-blue-600 font-medium">AI 正在分析中...</div>
+            <div
+              v-if="showAILoadingMask"
+              class="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-10"
+            >
+              <a-spin size="large" />
+              <div class="mt-3 text-blue-600 font-medium">
+                AI 正在分析中...
               </div>
             </div>
+          </div>
           <div class="bg-slate-50 px-4 py-3 border-t border-slate-200 flex justify-end">
-             <button class="modern-btn-primary px-6 py-1.5" :disabled="testLoading" @click="executeRuleTest">
-              <ThunderboltOutlined v-if="!testLoading" class="mr-2" />
-              <ReloadOutlined v-else class="mr-2 animate-spin" />
+            <button
+              class="modern-btn-primary px-6 py-1.5"
+              :disabled="testLoading"
+              @click="executeRuleTest"
+            >
+              <ThunderboltOutlined
+                v-if="!testLoading"
+                class="mr-2"
+              />
+              <ReloadOutlined
+                v-else
+                class="mr-2 animate-spin"
+              />
               {{ testLoading ? '测试中...' : '开始测试' }}
             </button>
           </div>
@@ -406,14 +533,22 @@
 
         <!-- 结果展示区 -->
         <transition name="fade">
-          <div v-if="testResult" class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md">
+          <div
+            v-if="testResult"
+            class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md"
+          >
             <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h4 class="font-bold text-slate-700">测试结果</h4>
+              <h4 class="font-bold text-slate-700">
+                测试结果
+              </h4>
               <div class="flex items-center gap-3">
                 <span class="text-xs text-slate-500 font-medium">置信度</span>
                 <div class="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div class="h-full bg-blue-500 rounded-full" :style="{ width: (testResult.confidence * 100) + '%' }"></div>
-          </div>
+                  <div
+                    class="h-full bg-blue-500 rounded-full"
+                    :style="{ width: (testResult.confidence * 100) + '%' }"
+                  />
+                </div>
                 <span class="text-sm font-bold text-blue-600">{{ Math.round(testResult.confidence * 100) }}%</span>
               </div>
             </div>
@@ -424,18 +559,32 @@
                   class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm"
                   :class="testResult.is_compliant ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'"
                 >
-                  <CheckCircleFilled v-if="testResult.is_compliant" class="text-2xl" />
-                  <ExclamationCircleFilled v-else class="text-2xl" />
+                  <CheckCircleFilled
+                    v-if="testResult.is_compliant"
+                    class="text-2xl"
+                  />
+                  <ExclamationCircleFilled
+                    v-else
+                    class="text-2xl"
+                  />
                 </div>
                 <div>
-                  <div class="font-bold text-lg mb-1" :class="testResult.is_compliant ? 'text-emerald-700' : 'text-red-700'">
+                  <div
+                    class="font-bold text-lg mb-1"
+                    :class="testResult.is_compliant ? 'text-emerald-700' : 'text-red-700'"
+                  >
                     {{ testResult.is_compliant ? '符合规则要求' : '不符合规则要求' }}
-                        </div>
-                  <p class="text-sm text-slate-600 leading-relaxed">{{ testResult.findings }}</p>
+                  </div>
+                  <p class="text-sm text-slate-600 leading-relaxed">
+                    {{ testResult.findings }}
+                  </p>
                 </div>
               </div>
 
-              <div v-if="testResult.evidence" class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100">
+              <div
+                v-if="testResult.evidence"
+                class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100"
+              >
                 <div class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1">
                   <SearchOutlined /> 证据引用
                 </div>
@@ -444,16 +593,18 @@
                 </div>
               </div>
 
-              <div v-if="testResult.suggestion" class="flex gap-3 items-start text-sm bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100">
+              <div
+                v-if="testResult.suggestion"
+                class="flex gap-3 items-start text-sm bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100"
+              >
                 <InfoCircleFilled class="mt-0.5 flex-shrink-0 text-blue-600" />
                 <span class="font-medium">{{ testResult.suggestion }}</span>
-                </div>
-                </div>
               </div>
+            </div>
+          </div>
         </transition>
       </div>
     </a-modal>
-
   </div>
 </template>
 
@@ -803,7 +954,7 @@ const savePrompt = () => { message.info('请修改 JSON 文件以保存提示词
 const resetToDefault = () => { message.info('请修改 JSON 文件以恢复默认'); isEditingPrompt.value = false }
 
 onMounted(() => {
-  ApiService.getCurrentUser().then(res => { if(res.success) currentUser.value = res.data })
+  ApiService.getCurrentUser().then(res => { if(res.success) currentUser.value = res.data || null })
   initCustomRules()
 })
 </script>

@@ -1,35 +1,66 @@
 <template>
   <div class="document-category-editor">
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container">
-      <a-skeleton :loading="true" active>
+    <div
+      v-if="loading"
+      class="loading-container"
+    >
+      <a-skeleton
+        :loading="true"
+        active
+      >
         <a-skeleton-paragraph :rows="5" />
       </a-skeleton>
     </div>
 
     <!-- 编辑界面 -->
-    <div v-else-if="documentData.categories.length > 0" class="editor-container">
+    <div
+      v-else-if="documentData.categories.length > 0"
+      class="editor-container"
+    >
       <!-- 操作栏 -->
       <div class="editor-toolbar">
         <div class="toolbar-left">
-          <a-button type="primary" @click="saveAllChanges" :loading="saving">
-            <template #icon><SaveOutlined /></template>
+          <a-button
+            type="primary"
+            :loading="saving"
+            @click="saveAllChanges"
+          >
+            <template #icon>
+              <SaveOutlined />
+            </template>
             保存所有更改
           </a-button>
           <a-button @click="resetAllChanges">
-            <template #icon><ReloadOutlined /></template>
+            <template #icon>
+              <ReloadOutlined />
+            </template>
             重置更改
           </a-button>
         </div>
         <div class="toolbar-right">
-          <a-tag v-if="hasChanges" color="orange">有未保存的更改</a-tag>
-          <a-tag v-else color="green">所有更改已保存</a-tag>
+          <a-tag
+            v-if="hasChanges"
+            color="orange"
+          >
+            有未保存的更改
+          </a-tag>
+          <a-tag
+            v-else
+            color="green"
+          >
+            所有更改已保存
+          </a-tag>
         </div>
       </div>
 
       <!-- 分类编辑器 -->
       <div class="categories-editor">
-        <a-tabs v-model:activeKey="activeTab" type="card" class="category-tabs">
+        <a-tabs
+          v-model:active-key="activeTab"
+          type="card"
+          class="category-tabs"
+        >
           <a-tab-pane
             v-for="category in documentData.categories"
             :key="category.category_code"
@@ -38,13 +69,24 @@
             <div class="category-editor-content">
               <!-- 分类信息 -->
               <div class="category-info-panel">
-                <a-card :bordered="false" class="info-card">
+                <a-card
+                  :bordered="false"
+                  class="info-card"
+                >
                   <div class="category-summary">
                     <h3>{{ category.category_name }}</h3>
-                    <p class="category-description">{{ category.category_description }}</p>
+                    <p class="category-description">
+                      {{ category.category_description }}
+                    </p>
                     <div class="category-stats">
-                      <a-statistic title="文档数量" :value="category.document_count" />
-                      <a-statistic title="已修改" :value="getModifiedCount(category.category_code)" />
+                      <a-statistic
+                        title="文档数量"
+                        :value="category.document_count"
+                      />
+                      <a-statistic
+                        title="已修改"
+                        :value="getModifiedCount(category.category_code)"
+                      />
                     </div>
                   </div>
                 </a-card>
@@ -57,7 +99,10 @@
                   :key="document.id"
                   class="document-editor-item"
                 >
-                  <a-card hoverable class="document-editor-card">
+                  <a-card
+                    hoverable
+                    class="document-editor-card"
+                  >
                     <!-- 文档头部 -->
                     <div class="document-editor-header">
                       <div class="document-title-editor">
@@ -74,6 +119,7 @@
                       </div>
                       <div class="document-meta-editor">
                         <a-select
+                          v-if="document.type_info"
                           v-model:value="document.type_info.type_code"
                           placeholder="选择文档类型"
                           class="type-selector"
@@ -162,29 +208,35 @@
 
                           <div class="qc-panel-content">
                             <!-- 质控状态和评分 -->
-                            <div v-if="getDocumentQCResult(document.id)" class="qc-summary">
+                            <div
+                              v-if="getDocumentQCResult(document.id)"
+                              class="qc-summary"
+                            >
                               <div class="qc-score-display">
                                 <a-statistic
                                   title="质控评分"
-                                  :value="getDocumentQCResult(document.id).qc_score"
+                                  :value="getDocumentQCResult(document.id)?.qc_score"
                                   suffix="/100"
                                   :value-style="{
-                                    color: getQCScoreColor(getDocumentQCResult(document.id).qc_score),
+                                    color: getQCScoreColor(getDocumentQCResult(document.id)?.qc_score),
                                     fontSize: '16px',
                                     fontWeight: 'bold'
                                   }"
                                 />
                                 <a-tag
-                                  :color="getQCStatusColor(getDocumentQCResult(document.id).qc_status)"
+                                  :color="getQCStatusColor(getDocumentQCResult(document.id)?.qc_status)"
                                   class="qc-status-display"
                                 >
-                                  {{ getQCStatusText(getDocumentQCResult(document.id).qc_status) }}
+                                  {{ getQCStatusText(getDocumentQCResult(document.id)?.qc_status) }}
                                 </a-tag>
                               </div>
                             </div>
 
                             <!-- 分析中状态 -->
-                            <div v-else-if="analyzingDocuments.has(document.id)" class="qc-analyzing">
+                            <div
+                              v-else-if="analyzingDocuments.has(document.id)"
+                              class="qc-analyzing"
+                            >
                               <a-spin>
                                 <div class="analyzing-text">
                                   <LoadingOutlined />
@@ -205,7 +257,9 @@
                         class="summary-input"
                         @input="markAsModified(document.id)"
                       >
-                        <template #addonBefore>摘要</template>
+                        <template #addonBefore>
+                          摘要
+                        </template>
                       </a-input>
                     </div>
 
@@ -215,8 +269,8 @@
                         <a-button
                           size="small"
                           type="primary"
-                          @click="saveDocument(document)"
                           :loading="isSaving(document.id)"
+                          @click="saveDocument(document)"
                         >
                           保存
                         </a-button>
@@ -233,7 +287,9 @@
                           :loading="analyzingDocuments.has(document.id)"
                           @click="analyzeDocument(document)"
                         >
-                          <template #icon><ThunderboltOutlined /></template>
+                          <template #icon>
+                            <ThunderboltOutlined />
+                          </template>
                           质控分析
                         </a-button>
                       </div>
@@ -265,7 +321,9 @@
                     class="add-document-btn"
                     @click="addNewDocument(category.category_code)"
                   >
-                    <template #icon><PlusOutlined /></template>
+                    <template #icon>
+                      <PlusOutlined />
+                    </template>
                     添加新文档
                   </a-button>
                 </div>
@@ -277,7 +335,10 @@
     </div>
 
     <!-- 空状态 -->
-    <div v-else class="empty-state">
+    <div
+      v-else
+      class="empty-state"
+    >
       <a-empty description="暂无文档数据" />
     </div>
   </div>
@@ -451,7 +512,7 @@ const toggleContentExpand = (documentId: string) => {
 
 const formatContent = (document: DocumentItem) => {
   // 简单的内容格式化
-  document.content = document.content
+  document.content = String(document.content || '')
     .replace(/\n\s*\n/g, '\n\n') // 规范化换行
     .replace(/^\s+|\s+$/g, '') // 去除首尾空白
   markAsModified(document.id)
@@ -622,10 +683,10 @@ const addNewDocument = (categoryCode: string) => {
     sort_order: category.documents.length,
     status: 'active',
     qc_status: 'pending',
-    qc_score: null,
+    qc_score: undefined,
     metadata: {},
     type_info: {
-      type_id: null,
+      type_id: undefined,
       type_code: '',
       type_name: '请选择类型',
       type_description: ''
@@ -690,7 +751,8 @@ const getQCStatusColor = (status?: string) => {
     'pending': 'default',
     'analyzing': 'blue'
   }
-  return statusColors[status] || 'default'
+  if (!status) return 'default'
+  return statusColors[status as keyof typeof statusColors] || 'default'
 }
 
 const getQCStatusText = (status?: string) => {
@@ -701,7 +763,8 @@ const getQCStatusText = (status?: string) => {
     'pending': '待质控',
     'analyzing': '分析中'
   }
-  return statusTexts[status] || '未知状态'
+  if (!status) return '未知状态'
+  return statusTexts[status as keyof typeof statusTexts] || '未知状态'
 }
 
 // 实时质控相关方法
@@ -748,7 +811,7 @@ const showQCPanel = (documentId: string) => {
   return qcPanelVisible.value.has(documentId) || analyzingDocuments.value.has(documentId)
 }
 
-const hideQCPanel = (documentId) => {
+const hideQCPanel = (documentId: string) => {
   qcPanelVisible.value.delete(documentId)
   qcResults.value.delete(documentId)
 }
@@ -783,7 +846,8 @@ const getIssueSeverityColor = (severity?: string) => {
     'minor': 'yellow',
     'info': 'blue'
   }
-  return colors[severity] || 'default'
+  if (!severity) return 'default'
+  return colors[severity as keyof typeof colors] || 'default'
 }
 
 const getIssueSeverityText = (severity?: string) => {
@@ -793,12 +857,15 @@ const getIssueSeverityText = (severity?: string) => {
     'minor': '轻微',
     'info': '提示'
   }
-  return texts[severity] || severity
+  if (!severity) return '未知'
+  return texts[severity as keyof typeof texts] || severity
 }
 
-const highlightIssue = (document, issue) => {
+const highlightIssue = (document: DocumentItem, issue: unknown) => {
   // TODO: 实现问题定位功能
-  const text = issue?.message ? String(issue.message) : '未提供问题描述'
+  const text = typeof issue === 'object' && issue && 'message' in issue
+    ? String((issue as { message?: unknown }).message || '未提供问题描述')
+    : '未提供问题描述'
   message.info(`定位到问题: ${text}`)
 }
 

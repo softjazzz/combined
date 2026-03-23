@@ -25,9 +25,15 @@ export function useWorkstationBridge(selectedRecord: Ref<MedicalRecord | null>) 
     // 当选中的病历变化时，重置 demoCase
     watch(selectedRecord, (newRecord) => {
         if (newRecord) {
+            const patientName = (newRecord as unknown as { patient_name?: string; patientName?: string }).patient_name
+                || (newRecord as unknown as { patientName?: string }).patientName
+                || '未知患者'
+            const department = (newRecord as unknown as { department?: string; deptName?: string }).department
+                || (newRecord as unknown as { deptName?: string }).deptName
+                || '未知科室'
             demoCase.value = {
                 case_id: newRecord.visitId,
-                description: `${newRecord.patientName} - ${newRecord.deptName}`,
+                description: `${patientName} - ${department}`,
                 medical_text: buildMedicalText(newRecord),
                 frontpage: null,
                 insurance_claim: null,
@@ -38,7 +44,7 @@ export function useWorkstationBridge(selectedRecord: Ref<MedicalRecord | null>) 
     }, { immediate: true })
 
     // ===== 复用 useMedicalTextExtraction =====
-    const { extracting, extractStructuredData } = useMedicalTextExtraction({
+    const { extracting, extractionProgress, extractionStatus, extractStructuredData } = useMedicalTextExtraction({
         demoCase,
         onStartExtract: () => {
             console.log('[workstation-bridge] AI 提取开始')
@@ -98,6 +104,8 @@ export function useWorkstationBridge(selectedRecord: Ref<MedicalRecord | null>) 
         // 首页提取
         demoCase,
         extracting,
+        extractionProgress,
+        extractionStatus,
         extractStructuredData,
         frontpage,
         hasMedicalText,

@@ -9,7 +9,7 @@
     <div 
       class="virtual-list-spacer"
       :style="{ height: totalHeight + 'px' }"
-    ></div>
+    />
     
     <!-- 可视区域内的实际元素 -->
     <div 
@@ -28,7 +28,10 @@
         class="virtual-list-item"
         :style="{ height: itemHeight + 'px' }"
       >
-        <slot :item="item.data" :index="item.index"></slot>
+        <slot
+          :item="item.data"
+          :index="item.index"
+        />
       </div>
     </div>
     

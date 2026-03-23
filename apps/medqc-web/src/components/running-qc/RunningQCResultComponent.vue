@@ -1,7 +1,10 @@
 <template>
   <div class="running-qc-result">
     <!-- 概览信息 -->
-    <a-card title="质控概览" class="mb-4">
+    <a-card
+      title="质控概览"
+      class="mb-4"
+    >
       <a-row :gutter="24">
         <a-col :span="6">
           <a-statistic
@@ -36,7 +39,11 @@
     </a-card>
     
     <!-- 实时问题 -->
-    <a-card title="实时质控问题" class="mb-4" v-if="result.realTimeIssues.length > 0">
+    <a-card
+      v-if="result.realTimeIssues.length > 0"
+      title="实时质控问题"
+      class="mb-4"
+    >
       <a-list
         :data-source="result.realTimeIssues"
         item-layout="horizontal"
@@ -50,8 +57,18 @@
                     {{ getSeverityText(item.severity) }}
                   </a-tag>
                   <span>{{ item.qualityPointName }}</span>
-                  <a-tag v-if="item.isUrgent" color="red">紧急</a-tag>
-                  <a-tag v-if="item.requiresImmediateAction" color="orange">需立即处理</a-tag>
+                  <a-tag
+                    v-if="item.isUrgent"
+                    color="red"
+                  >
+                    紧急
+                  </a-tag>
+                  <a-tag
+                    v-if="item.requiresImmediateAction"
+                    color="orange"
+                  >
+                    需立即处理
+                  </a-tag>
                 </a-space>
               </template>
               <template #description>
@@ -76,7 +93,11 @@
     </a-card>
     
     <!-- 科室特定问题 -->
-    <a-card title="科室特定问题" class="mb-4" v-if="result.departmentSpecificIssues.length > 0">
+    <a-card
+      v-if="result.departmentSpecificIssues.length > 0"
+      title="科室特定问题"
+      class="mb-4"
+    >
       <a-list
         :data-source="result.departmentSpecificIssues"
         item-layout="horizontal"
@@ -87,7 +108,12 @@
               <template #title>
                 <a-space>
                   <span>{{ item.qualityPointName }}</span>
-                  <a-tag v-if="item.isEffectiveToDoctor" color="blue">医生端生效</a-tag>
+                  <a-tag
+                    v-if="item.isEffectiveToDoctor"
+                    color="blue"
+                  >
+                    医生端生效
+                  </a-tag>
                 </a-space>
               </template>
               <template #description>
@@ -105,7 +131,11 @@
     </a-card>
     
     <!-- 时效性检查 -->
-    <a-card title="时效性检查" class="mb-4" v-if="result.timelinessChecks.length > 0">
+    <a-card
+      v-if="result.timelinessChecks.length > 0"
+      title="时效性检查"
+      class="mb-4"
+    >
       <a-list
         :data-source="result.timelinessChecks"
         item-layout="horizontal"
@@ -116,18 +146,34 @@
               <template #title>
                 <a-space>
                   <span>{{ getCheckTypeText(item.checkType) }}</span>
-                  <a-tag v-if="item.isOverdue" color="red">已超时</a-tag>
-                  <a-tag v-else color="green">正常</a-tag>
+                  <a-tag
+                    v-if="item.isOverdue"
+                    color="red"
+                  >
+                    已超时
+                  </a-tag>
+                  <a-tag
+                    v-else
+                    color="green"
+                  >
+                    正常
+                  </a-tag>
                 </a-space>
               </template>
               <template #description>
                 <div class="mb-2">
                   <strong>预期时间：</strong>{{ formatTime(item.expectedTime) }}
-                  <span v-if="item.actualTime" class="ml-4">
+                  <span
+                    v-if="item.actualTime"
+                    class="ml-4"
+                  >
                     <strong>实际时间：</strong>{{ formatTime(item.actualTime) }}
                   </span>
                 </div>
-                <div v-if="item.isOverdue" class="mb-2">
+                <div
+                  v-if="item.isOverdue"
+                  class="mb-2"
+                >
                   <strong>超时时长：</strong>{{ item.overdueHours }}小时
                 </div>
                 <div>
@@ -141,7 +187,11 @@
     </a-card>
     
     <!-- 改进建议 -->
-    <a-card title="改进建议" class="mb-4" v-if="result.recommendations.length > 0">
+    <a-card
+      v-if="result.recommendations.length > 0"
+      title="改进建议"
+      class="mb-4"
+    >
       <a-list
         :data-source="result.recommendations"
         size="small"
@@ -157,22 +207,50 @@
     </a-card>
     
     <!-- 分析信息 -->
-    <a-card title="分析信息" class="mb-4">
-      <a-descriptions :column="2" size="small">
-        <a-descriptions-item label="病历ID">{{ result.recordId }}</a-descriptions-item>
-        <a-descriptions-item label="患者ID">{{ result.patientId }}</a-descriptions-item>
-        <a-descriptions-item label="分析类型">{{ getAnalysisTypeText(result.analysisType) }}</a-descriptions-item>
-        <a-descriptions-item label="分析时间">{{ formatTime(result.analysisTime) }}</a-descriptions-item>
-        <a-descriptions-item label="总体评估" :span="2">{{ result.summary.overallAssessment }}</a-descriptions-item>
+    <a-card
+      title="分析信息"
+      class="mb-4"
+    >
+      <a-descriptions
+        :column="2"
+        size="small"
+      >
+        <a-descriptions-item label="病历ID">
+          {{ result.recordId }}
+        </a-descriptions-item>
+        <a-descriptions-item label="患者ID">
+          {{ result.patientId }}
+        </a-descriptions-item>
+        <a-descriptions-item label="分析类型">
+          {{ getAnalysisTypeText(result.analysisType) }}
+        </a-descriptions-item>
+        <a-descriptions-item label="分析时间">
+          {{ formatTime(result.analysisTime) }}
+        </a-descriptions-item>
+        <a-descriptions-item
+          label="总体评估"
+          :span="2"
+        >
+          {{ result.summary.overallAssessment }}
+        </a-descriptions-item>
       </a-descriptions>
     </a-card>
     
     <!-- 操作按钮 -->
     <div class="text-center">
       <a-space>
-        <a-button @click="$emit('close')">关闭</a-button>
-        <a-button type="primary" @click="exportReport">导出报告</a-button>
-        <a-button @click="scheduleRecheck">安排复查</a-button>
+        <a-button @click="$emit('close')">
+          关闭
+        </a-button>
+        <a-button
+          type="primary"
+          @click="exportReport"
+        >
+          导出报告
+        </a-button>
+        <a-button @click="scheduleRecheck">
+          安排复查
+        </a-button>
       </a-space>
     </div>
   </div>

@@ -4,9 +4,9 @@
       ref="formRef"
       :model="formData"
       :rules="formRules"
-      @finish="handleSubmit"
       layout="vertical"
       size="large"
+      @finish="handleSubmit"
     >
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- 左侧：患者基本信息 -->
@@ -19,7 +19,10 @@
           </div>
 
           <!-- 患者姓名 -->
-          <a-form-item name="patient_name" class="mb-4">
+          <a-form-item
+            name="patient_name"
+            class="mb-4"
+          >
             <label class="block text-sm font-medium text-slate-300 mb-2">患者姓名</label>
             <a-input
               v-model:value="formData.patient_name"
@@ -30,7 +33,10 @@
 
           <!-- 年龄和性别 -->
           <div class="grid grid-cols-2 gap-4">
-            <a-form-item name="patient_age" class="mb-4">
+            <a-form-item
+              name="patient_age"
+              class="mb-4"
+            >
               <label class="block text-sm font-medium text-slate-300 mb-2">年龄</label>
               <a-input-number
                 v-model:value="formData.patient_age"
@@ -41,7 +47,10 @@
               />
             </a-form-item>
 
-            <a-form-item name="patient_gender" class="mb-4">
+            <a-form-item
+              name="patient_gender"
+              class="mb-4"
+            >
               <label class="block text-sm font-medium text-slate-300 mb-2">性别</label>
               <a-select
                 v-model:value="formData.patient_gender"
@@ -50,19 +59,25 @@
               >
                 <a-select-option value="M">
                   <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded bg-blue-500 flex items-center justify-center text-white text-xs">♂</div>
+                    <div class="w-4 h-4 rounded bg-blue-500 flex items-center justify-center text-white text-xs">
+                      ♂
+                    </div>
                     男性
                   </div>
                 </a-select-option>
                 <a-select-option value="F">
                   <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded bg-pink-500 flex items-center justify-center text-white text-xs">♀</div>
+                    <div class="w-4 h-4 rounded bg-pink-500 flex items-center justify-center text-white text-xs">
+                      ♀
+                    </div>
                     女性
                   </div>
                 </a-select-option>
                 <a-select-option value="U">
                   <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded bg-gray-500 flex items-center justify-center text-white text-xs">?</div>
+                    <div class="w-4 h-4 rounded bg-gray-500 flex items-center justify-center text-white text-xs">
+                      ?
+                    </div>
                     未知
                   </div>
                 </a-select-option>
@@ -71,7 +86,10 @@
           </div>
 
           <!-- 科室 -->
-          <a-form-item name="department" class="mb-4">
+          <a-form-item
+            name="department"
+            class="mb-4"
+          >
             <label class="block text-sm font-medium text-slate-300 mb-2">科室</label>
             <a-select
               v-model:value="formData.department"
@@ -92,7 +110,10 @@
 
           <!-- 入院时间和记录类型 -->
           <div class="grid grid-cols-2 gap-4">
-            <a-form-item name="admission_date" class="mb-4">
+            <a-form-item
+              name="admission_date"
+              class="mb-4"
+            >
               <label class="block text-sm font-medium text-slate-300 mb-2">入院时间</label>
               <a-date-picker
                 v-model:value="formData.admission_date"
@@ -102,7 +123,10 @@
               />
             </a-form-item>
 
-            <a-form-item name="record_type" class="mb-4">
+            <a-form-item
+              name="record_type"
+              class="mb-4"
+            >
               <label class="block text-sm font-medium text-slate-300 mb-2">记录类型</label>
               <a-select
                 v-model:value="formData.record_type"
@@ -111,19 +135,19 @@
               >
                 <a-select-option value="inpatient">
                   <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded bg-blue-500"></div>
+                    <div class="w-4 h-4 rounded bg-blue-500" />
                     住院记录
                   </div>
                 </a-select-option>
                 <a-select-option value="outpatient">
                   <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded bg-green-500"></div>
+                    <div class="w-4 h-4 rounded bg-green-500" />
                     门诊记录
                   </div>
                 </a-select-option>
                 <a-select-option value="emergency">
                   <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 rounded bg-red-500"></div>
+                    <div class="w-4 h-4 rounded bg-red-500" />
                     急诊记录
                   </div>
                 </a-select-option>
@@ -142,7 +166,10 @@
           </div>
 
           <!-- 文件上传区域 -->
-          <a-form-item name="file" class="mb-4">
+          <a-form-item
+            name="file"
+            class="mb-4"
+          >
             <label class="block text-sm font-medium text-slate-300 mb-2">病案文件（可选）</label>
             <a-upload-dragger
               v-model:file-list="fileList"
@@ -156,7 +183,9 @@
                 <div class="mb-4">
                   <CloudUploadOutlined class="text-4xl text-cyan-400" />
                 </div>
-                <div class="text-lg text-slate-200 mb-2">点击或拖拽文件到此区域上传</div>
+                <div class="text-lg text-slate-200 mb-2">
+                  点击或拖拽文件到此区域上传
+                </div>
                 <div class="text-sm text-slate-400">
                   支持 PDF、Word、TXT 格式，文件大小不超过 10MB
                 </div>
@@ -165,7 +194,10 @@
           </a-form-item>
 
           <!-- 上传进度 -->
-          <div v-if="uploadProgress.show" class="mb-4">
+          <div
+            v-if="uploadProgress.show"
+            class="mb-4"
+          >
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm text-slate-300">上传进度</span>
               <span class="text-sm text-slate-400">{{ uploadProgress.percentage }}%</span>
@@ -181,7 +213,10 @@
 
       <!-- 病案内容 -->
       <div class="mt-6">
-        <a-form-item name="content" class="mb-6">
+        <a-form-item
+          name="content"
+          class="mb-6"
+        >
           <label class="block text-sm font-medium text-slate-300 mb-2">
             病案内容
             <span class="text-red-400 ml-1">*</span>
@@ -201,8 +236,8 @@
       <div class="flex justify-end gap-4 pt-6 border-t border-slate-700/50">
         <a-button
           size="large"
-          @click="handleCancel"
           class="h-12 px-8 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20"
+          @click="handleCancel"
         >
           取消
         </a-button>
@@ -214,7 +249,10 @@
           size="large"
           class="h-12 px-8 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 border-none font-semibold shadow-lg hover:shadow-xl"
         >
-          <SaveOutlined v-if="!loading" class="mr-2" />
+          <SaveOutlined
+            v-if="!loading"
+            class="mr-2"
+          />
           {{ isEdit ? '更新记录' : '创建记录' }}
         </a-button>
       </div>
@@ -232,8 +270,8 @@ import {
   CloudUploadOutlined,
   SaveOutlined
 } from '@ant-design/icons-vue'
-import type { FormInstance, UploadRequestOption } from 'ant-design-vue'
-import type { MedicalRecord, CreateMedicalRecordRequest } from '@/types'
+import type { FormInstance } from 'ant-design-vue'
+import type { MedicalRecord, CreateMedicalRecordRequest } from '@/types/medical-records'
 import { DEPARTMENTS } from '@/types/medical-records'
 
 type RecordFormModel = MedicalRecord & {
@@ -242,6 +280,12 @@ type RecordFormModel = MedicalRecord & {
   record_type?: 'inpatient' | 'outpatient' | 'emergency'
   file_url?: string
   file_name?: string
+}
+interface UploadRequestOption {
+  file: File | Blob
+  onProgress?: (event: { percent: number }) => void
+  onSuccess?: (response: string) => void
+  onError?: (error: Error) => void
 }
 
 const getErrorMessage = (error: unknown): string => {

@@ -4,14 +4,22 @@
     <div class="detail-header">
       <div class="header-content">
         <div class="header-left">
-          <a-button type="text" @click="$emit('back')" class="back-btn">
+          <a-button
+            type="text"
+            class="back-btn"
+            @click="$emit('back')"
+          >
             <ArrowLeftOutlined />
             返回
           </a-button>
           <div class="title-section">
-            <h1 class="record-title">{{ record.record_name || '医疗记录详情' }}</h1>
+            <h1 class="record-title">
+              {{ record.record_name || '医疗记录详情' }}
+            </h1>
             <div class="record-meta">
-              <a-tag :color="getStatusColor(record.status)">{{ getStatusText(record.status) }}</a-tag>
+              <a-tag :color="getStatusColor(record.status)">
+                {{ getStatusText(record.status) }}
+              </a-tag>
               <span class="record-id">ID: {{ record.record_number }}</span>
               <span class="update-time">更新于 {{ formatDateTime(record.updated_at) }}</span>
             </div>
@@ -27,7 +35,10 @@
               <ExportOutlined />
               导出
             </a-button>
-            <a-button @click="handleDelete" danger>
+            <a-button
+              danger
+              @click="handleDelete"
+            >
               <DeleteOutlined />
               删除
             </a-button>
@@ -42,7 +53,7 @@
         <!-- 左侧：原始内容展示区域 -->
         <div class="content-main">
           <EnhancedContentViewer 
-            :content="record.content || record.raw_text"
+            :content="record.content || record.raw_text || ''"
             :title="'病历原始内容'"
             @search="handleContentSearch"
             @highlight="handleContentHighlight"
@@ -98,15 +109,25 @@
                 <label>主要诊断</label>
                 <span class="diagnosis-value primary">{{ record.primary_diagnosis || '未填写' }}</span>
               </div>
-              <div class="diagnosis-item" v-if="record.secondary_diagnosis && record.secondary_diagnosis.length > 0">
+              <div
+                v-if="record.secondary_diagnosis && record.secondary_diagnosis.length > 0"
+                class="diagnosis-item"
+              >
                 <label>次要诊断</label>
                 <div class="secondary-diagnoses">
-                  <a-tag v-for="(diagnosis, index) in record.secondary_diagnosis" :key="index" color="blue">
+                  <a-tag
+                    v-for="(diagnosis, index) in record.secondary_diagnosis"
+                    :key="index"
+                    color="blue"
+                  >
                     {{ diagnosis }}
                   </a-tag>
                 </div>
               </div>
-              <div class="diagnosis-item" v-if="record.major_surgery">
+              <div
+                v-if="record.major_surgery"
+                class="diagnosis-item"
+              >
                 <label>主要手术</label>
                 <span class="diagnosis-value">{{ record.major_surgery }}</span>
               </div>
@@ -210,7 +231,7 @@ const getStatusColor = (status?: string) => {
     'failed': 'error',
     'reviewing': 'warning'
   }
-  return colors[status] || 'default'
+  return status ? (colors[status] || 'default') : 'default'
 }
 
 const getStatusText = (status?: string) => {
@@ -220,7 +241,7 @@ const getStatusText = (status?: string) => {
     'failed': '失败',
     'reviewing': '审核中'
   }
-  return texts[status] || status
+  return status ? (texts[status] || status) : '未知'
 }
 
 const formatDateTime = (dateStr: string | undefined) => {

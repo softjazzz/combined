@@ -1,6 +1,9 @@
 <template>
   <div class="qc-result-tab">
-    <div v-if="!props.activeTab" class="qc-result-tab__tabs">
+    <div
+      v-if="!props.activeTab"
+      class="qc-result-tab__tabs"
+    >
       <button
         v-for="tab in qcTabs"
         :key="tab.key"
@@ -8,48 +11,97 @@
         :class="['qc-result-tab__tab', { 'qc-result-tab__tab--active': currentTab === tab.key }]"
         @click="internalTab = tab.key"
       >
-        <component :is="tab.icon" class="qc-result-tab__tab-icon" />
+        <component
+          :is="tab.icon"
+          class="qc-result-tab__tab-icon"
+        />
         <span>{{ tab.label }}</span>
-        <span v-if="getTabCount(tab.key) > 0" class="qc-result-tab__tab-badge">{{ getTabCount(tab.key) }}</span>
+        <span
+          v-if="getTabCount(tab.key) > 0"
+          class="qc-result-tab__tab-badge"
+        >{{ getTabCount(tab.key) }}</span>
       </button>
     </div>
 
     <div class="qc-result-tab__body custom-scrollbar">
       <div class="qc-overview">
         <div>
-          <div class="qc-overview__eyebrow">当前质控</div>
-          <div class="qc-overview__title">{{ currentTabConfig.label }}</div>
-          <div class="qc-overview__desc">{{ currentTabConfig.desc }}</div>
+          <div class="qc-overview__eyebrow">
+            当前质控
+          </div>
+          <div class="qc-overview__title">
+            {{ currentTabConfig.label }}
+          </div>
+          <div class="qc-overview__desc">
+            {{ currentTabConfig.desc }}
+          </div>
         </div>
-        <div v-if="!isTabEmpty || totalIssueCount > 0" class="qc-overview__status">
+        <div
+          v-if="!isTabEmpty || totalIssueCount > 0"
+          class="qc-overview__status"
+        >
           <span class="qc-overview__status-label">{{ currentIssues.length > 0 ? '当前问题' : '当前状态' }}</span>
           <strong class="qc-overview__status-value">{{ currentIssues.length > 0 ? currentIssues.length : '待分析' }}</strong>
         </div>
       </div>
 
       <template v-if="isTabEmpty">
-        <div v-if="!isTabLoading" class="qc-start">
+        <div
+          v-if="!isTabLoading"
+          class="qc-start"
+        >
           <div class="qc-start__icon-wrap">
-            <component :is="currentTabConfig.icon" class="qc-start__icon" />
+            <component
+              :is="currentTabConfig.icon"
+              class="qc-start__icon"
+            />
           </div>
-          <div class="qc-start__title">{{ currentTabConfig.label }}</div>
-          <div class="qc-start__desc">{{ currentTabConfig.desc }}</div>
-          <a-button type="primary" size="small" class="qc-start__btn" @click="startCurrentTab">
-            <template #icon><ThunderboltOutlined /></template>
+          <div class="qc-start__title">
+            {{ currentTabConfig.label }}
+          </div>
+          <div class="qc-start__desc">
+            {{ currentTabConfig.desc }}
+          </div>
+          <a-button
+            type="primary"
+            size="small"
+            class="qc-start__btn"
+            @click="startCurrentTab"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
             开始分析
           </a-button>
         </div>
-        <div v-else class="qc-start">
+        <div
+          v-else
+          class="qc-start"
+        >
           <a-spin />
-          <div class="qc-start__title" style="margin-top: 16px;">正在分析...</div>
-          <div class="qc-start__desc">{{ currentTabConfig.loadingHint }}</div>
+          <div
+            class="qc-start__title"
+            style="margin-top: 16px;"
+          >
+            正在分析...
+          </div>
+          <div class="qc-start__desc">
+            {{ currentTabConfig.loadingHint }}
+          </div>
         </div>
       </template>
 
       <template v-else-if="currentIssues.length > 0">
-        <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="qc-group">
+        <section
+          v-for="(group, gIdx) in groupedIssues"
+          :key="gIdx"
+          class="qc-group"
+        >
           <header class="qc-group__header">
-            <span class="qc-group__dot" :style="{ background: severityColor(group.severity) }"></span>
+            <span
+              class="qc-group__dot"
+              :style="{ background: severityColor(group.severity) }"
+            />
             <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
           </header>
 
@@ -60,62 +112,154 @@
           >
             <div class="qc-issue__content">
               <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{ severityLabel(issue.severity) }}</span>
-              <p class="qc-issue__desc" @click="locateIssue(issue)" title="定位到相关字段">
+              <p
+                class="qc-issue__desc"
+                title="定位到相关字段"
+                @click="locateIssue(issue)"
+              >
                 {{ issue.description }}
               </p>
             </div>
 
-            <div v-if="issue.suggestion" class="qc-issue__ai-suggestion">
+            <div
+              v-if="issue.suggestion"
+              class="qc-issue__ai-suggestion"
+            >
               <div class="qc-issue__ai-label">
                 <ThunderboltOutlined class="qc-issue__ai-icon" />
                 <span>AI 修正建议</span>
               </div>
-              <p class="qc-issue__ai-text">{{ issue.suggestion }}</p>
+              <p class="qc-issue__ai-text">
+                {{ issue.suggestion }}
+              </p>
             </div>
 
             <div class="qc-issue__action-bar">
               <div class="qc-issue__action-group">
-                <button type="button" class="qc-issue__ghost-btn" @click="locateIssue(issue)">
-                  <svg class="qc-issue__btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                <button
+                  type="button"
+                  class="qc-issue__ghost-btn"
+                  @click="locateIssue(issue)"
+                >
+                  <svg
+                    class="qc-issue__btn-icon"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  ><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  /><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  /></svg>
                   定位字段
                 </button>
-                <button type="button" class="qc-issue__ghost-btn" @click="$emit('jump-evidence', issue)">
-                  <svg class="qc-issue__btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <button
+                  type="button"
+                  class="qc-issue__ghost-btn"
+                  @click="$emit('jump-evidence', issue)"
+                >
+                  <svg
+                    class="qc-issue__btn-icon"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  ><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  /></svg>
                   文书依据
                 </button>
-                <a-dropdown v-if="issue.id" :trigger="['click']">
-                  <button type="button" class="qc-issue__ghost-btn">操作 <DownOutlined /></button>
+                <a-dropdown
+                  v-if="issue.id"
+                  :trigger="['click']"
+                >
+                  <button
+                    type="button"
+                    class="qc-issue__ghost-btn"
+                  >
+                    操作 <DownOutlined />
+                  </button>
                   <template #overlay>
                     <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                      <a-menu-item key="urge"><SendOutlined /> 催办</a-menu-item>
-                      <a-menu-item key="mark_remediated"><EditOutlined /> 标记已整改</a-menu-item>
+                      <a-menu-item key="urge">
+                        <SendOutlined /> 催办
+                      </a-menu-item>
+                      <a-menu-item key="mark_remediated">
+                        <EditOutlined /> 标记已整改
+                      </a-menu-item>
                       <a-menu-divider />
-                      <a-menu-item key="approve"><CheckOutlined style="color: #52c41a" /> 审核通过</a-menu-item>
-                      <a-menu-item key="reject"><CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑</a-menu-item>
+                      <a-menu-item key="approve">
+                        <CheckOutlined style="color: #52c41a" /> 审核通过
+                      </a-menu-item>
+                      <a-menu-item key="reject">
+                        <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
+                      </a-menu-item>
                     </a-menu>
                   </template>
                 </a-dropdown>
               </div>
-              <button type="button" class="qc-issue__ghost-btn qc-issue__ghost-btn--muted" @click="dismissIssue(issue)">忽略</button>
+              <button
+                type="button"
+                class="qc-issue__ghost-btn qc-issue__ghost-btn--muted"
+                @click="dismissIssue(issue)"
+              >
+                忽略
+              </button>
             </div>
           </article>
         </section>
       </template>
 
-      <div v-else class="qc-empty">
-        <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a;" />
-        <div class="qc-empty__title">未发现质控问题</div>
-        <a-button type="link" size="small" @click="startCurrentTab" style="margin-top: 8px;"><ReloadOutlined /> 重新分析</a-button>
+      <div
+        v-else
+        class="qc-empty"
+      >
+        <CheckCircleOutlined
+          class="qc-empty__icon"
+          style="color: #52c41a;"
+        />
+        <div class="qc-empty__title">
+          未发现质控问题
+        </div>
+        <a-button
+          type="link"
+          size="small"
+          style="margin-top: 8px;"
+          @click="startCurrentTab"
+        >
+          <ReloadOutlined /> 重新分析
+        </a-button>
       </div>
     </div>
 
-    <footer v-if="totalIssueCount > 0" class="qc-result-tab__footer">
+    <footer
+      v-if="totalIssueCount > 0"
+      class="qc-result-tab__footer"
+    >
       <span>共 <strong>{{ totalIssueCount }}</strong> 个问题</span>
       <div class="qc-result-tab__footer-actions">
-        <a-button type="link" size="small" @click="startCurrentTab" :loading="isTabLoading">
+        <a-button
+          type="link"
+          size="small"
+          :loading="isTabLoading"
+          @click="startCurrentTab"
+        >
           <ReloadOutlined /> 刷新
         </a-button>
-        <a-button type="link" size="small" @click="handleExportDefects" :loading="exporting">
+        <a-button
+          type="link"
+          size="small"
+          :loading="exporting"
+          @click="handleExportDefects"
+        >
           <DownloadOutlined /> 导出
         </a-button>
       </div>
@@ -323,7 +467,7 @@ async function handleDefectAction(action: string, issue: QCIssue) {
         break
       }
       case 'approve': {
-        const res = await approveDefect(issue.id, { comment: '审核通过' })
+        const res = await approveDefect(issue.id, '审核通过')
         if (res.success) {
           issue.dismissed = true
           emit('issues-change', issues.value.slice())
@@ -358,8 +502,7 @@ async function handleExportDefects() {
   exporting.value = true
   try {
     const res = await exportDefects({ format: 'xlsx' })
-    if (res.success && res.data?.download_url) {
-      window.open(res.data.download_url, '_blank')
+    if (res.success) {
       message.success('导出成功')
     } else {
       message.info('导出功能开发中')

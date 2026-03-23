@@ -6,7 +6,10 @@
         <UserOutlined />
         <span>患者信息</span>
       </div>
-      <div class="patient-card" v-if="patient">
+      <div
+        v-if="patient"
+        class="patient-card"
+      >
         <div class="patient-basic">
           <h4>{{ patient.patient_info?.name || patient.record_name || '未知患者' }}</h4>
           <div class="patient-details">
@@ -37,7 +40,11 @@
           </div>
         </div>
       </div>
-      <a-empty v-else description="患者信息加载中..." :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+      <a-empty
+        v-else
+        description="患者信息加载中..."
+        :image="Empty.PRESENTED_IMAGE_SIMPLE"
+      />
     </div>
 
     <!-- 文档统计 -->
@@ -48,26 +55,45 @@
       </div>
       <div class="stats-grid">
         <div class="stat-item">
-          <div class="stat-number">{{ docStats.total }}</div>
-          <div class="stat-label">总文档数</div>
+          <div class="stat-number">
+            {{ docStats.total }}
+          </div>
+          <div class="stat-label">
+            总文档数
+          </div>
         </div>
         <div class="stat-item">
-          <div class="stat-number">{{ docStats.categories }}</div>
-          <div class="stat-label">分类数</div>
+          <div class="stat-number">
+            {{ docStats.categories }}
+          </div>
+          <div class="stat-label">
+            分类数
+          </div>
         </div>
         <div class="stat-item">
-          <div class="stat-number">{{ docStats.aiClassified }}</div>
-          <div class="stat-label">AI分类</div>
+          <div class="stat-number">
+            {{ docStats.aiClassified }}
+          </div>
+          <div class="stat-label">
+            AI分类
+          </div>
         </div>
         <div class="stat-item">
-          <div class="stat-number">{{ docStats.avgConfidence }}%</div>
-          <div class="stat-label">平均置信度</div>
+          <div class="stat-number">
+            {{ docStats.avgConfidence }}%
+          </div>
+          <div class="stat-label">
+            平均置信度
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 分类分布 -->
-    <div class="aside-section" v-if="categoryStats.length > 0">
+    <div
+      v-if="categoryStats.length > 0"
+      class="aside-section"
+    >
       <div class="section-header">
         <PieChartOutlined />
         <span>分类分布</span>
@@ -86,7 +112,7 @@
             <div 
               class="category-progress"
               :style="{ width: category.percentage + '%' }"
-            ></div>
+            />
           </div>
         </div>
       </div>
@@ -116,15 +142,27 @@
         <span>快速操作</span>
       </div>
       <div class="quick-actions">
-        <a-button block @click="exportDocs" :loading="exporting">
+        <a-button
+          block
+          :loading="exporting"
+          @click="exportDocs"
+        >
           <DownloadOutlined />
           导出文档
         </a-button>
-        <a-button block @click="generateReport" :loading="generating">
+        <a-button
+          block
+          :loading="generating"
+          @click="generateReport"
+        >
           <FileTextOutlined />
           生成报告
         </a-button>
-        <a-button block @click="qualityCheck" :loading="checking">
+        <a-button
+          block
+          :loading="checking"
+          @click="qualityCheck"
+        >
           <CheckCircleOutlined />
           质量检查
         </a-button>

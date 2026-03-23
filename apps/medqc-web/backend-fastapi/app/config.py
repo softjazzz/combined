@@ -4,6 +4,7 @@
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 
 
@@ -45,6 +46,23 @@ class Settings(BaseSettings):
     DEMO_MODE: bool = False
     DEMO_SEED: int = 20250101
     DEMO_SIZE: int = 200
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def normalize_debug(cls, value):
+        """
+        兼容常见环境值：release/production 视为 False，
+        debug/development 视为 True，避免设置文件导致启动失败。
+        """
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            truthy = {"1", "true", "yes", "on", "debug", "dev", "development"}
+            falsy = {"0", "false", "no", "off", "release", "prod", "production"}
+            if normalized in truthy:
+                return True
+            if normalized in falsy:
+                return False
+        return value
 
     class Config:
         env_file = ".env"

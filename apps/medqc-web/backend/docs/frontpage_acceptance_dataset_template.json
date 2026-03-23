@@ -5,7 +5,10 @@
     "medical_text": "请替换为完整病历文本，建议包含入院记录、出院记录、手术记录等。",
     "expected": {
       "main_diagnosis_text": "冠状动脉粥样硬化性心脏病",
-      "main_icd": "I25.101"
+      "main_icd": "I25.101",
+      "missing_diagnoses": ["不稳定型心绞痛"],
+      "missing_procedures": ["经皮冠状动脉支架植入术"],
+      "main_diagnosis_inappropriate": false
     }
   },
   {
@@ -14,8 +17,10 @@
     "medical_text": "请替换为另一份病历文本。",
     "expected": {
       "main_diagnosis_text": "2型糖尿病",
-      "main_icd": "E11.900"
+      "main_icd": "E11.900",
+      "missing_diagnoses": [],
+      "missing_procedures": [],
+      "main_diagnosis_inappropriate": false
     }
   }
 ]
-

@@ -1,8 +1,14 @@
 <template>
   <div class="batch-rule-test-embed">
     <!-- 加载提示覆盖层 -->
-    <div v-if="loading" class="loading-container">
-      <a-spin size="large" tip="加载中..." />
+    <div
+      v-if="loading"
+      class="loading-container"
+    >
+      <a-spin
+        size="large"
+        tip="加载中..."
+      />
     </div>
 
     <!-- 始终渲染 iframe，避免因为 v-if 导致 onload 永远不触发 -->

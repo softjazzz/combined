@@ -2,9 +2,16 @@
   <div class="notification-manager">
     <!-- 顶部操作栏 -->
     <div class="manager-header">
-      <a-space direction="vertical" :size="12" style="width: 100%">
+      <a-space
+        direction="vertical"
+        :size="12"
+        style="width: 100%"
+      >
         <!-- 筛选器 -->
-        <a-space wrap :size="8">
+        <a-space
+          wrap
+          :size="8"
+        >
           <a-select
             v-model:value="filters.type"
             placeholder="类型"
@@ -12,7 +19,9 @@
             size="small"
             allow-clear
           >
-            <a-select-option value="">全部</a-select-option>
+            <a-select-option value="">
+              全部
+            </a-select-option>
             <a-select-option value="error">
               <CloseCircleOutlined style="color: #ff4d4f" />
               错误
@@ -34,11 +43,21 @@
             size="small"
             allow-clear
           >
-            <a-select-option value="">全部</a-select-option>
-            <a-select-option value="critical">严重</a-select-option>
-            <a-select-option value="high">较重</a-select-option>
-            <a-select-option value="medium">中等</a-select-option>
-            <a-select-option value="low">轻微</a-select-option>
+            <a-select-option value="">
+              全部
+            </a-select-option>
+            <a-select-option value="critical">
+              严重
+            </a-select-option>
+            <a-select-option value="high">
+              较重
+            </a-select-option>
+            <a-select-option value="medium">
+              中等
+            </a-select-option>
+            <a-select-option value="low">
+              轻微
+            </a-select-option>
           </a-select>
 
           <a-select
@@ -48,13 +67,25 @@
             size="small"
             allow-clear
           >
-            <a-select-option value="">全部</a-select-option>
-            <a-select-option value="pending">待处理</a-select-option>
-            <a-select-option value="confirmed">已确认</a-select-option>
-            <a-select-option value="ignored">已忽略</a-select-option>
+            <a-select-option value="">
+              全部
+            </a-select-option>
+            <a-select-option value="pending">
+              待处理
+            </a-select-option>
+            <a-select-option value="confirmed">
+              已确认
+            </a-select-option>
+            <a-select-option value="ignored">
+              已忽略
+            </a-select-option>
           </a-select>
 
-          <a-button size="small" :icon="h(ReloadOutlined)" @click="handleRefresh">
+          <a-button
+            size="small"
+            :icon="h(ReloadOutlined)"
+            @click="handleRefresh"
+          >
             刷新
           </a-button>
         </a-space>
@@ -69,13 +100,23 @@
         >
           <template #action>
             <a-space :size="8">
-              <a-button size="small" @click="handleBatchMarkRead">
+              <a-button
+                size="small"
+                @click="handleBatchMarkRead"
+              >
                 标记已读
               </a-button>
-              <a-button size="small" @click="handleBatchIgnore">
+              <a-button
+                size="small"
+                @click="handleBatchIgnore"
+              >
                 批量忽略
               </a-button>
-              <a-button size="small" danger @click="handleBatchDelete">
+              <a-button
+                size="small"
+                danger
+                @click="handleBatchDelete"
+              >
                 批量删除
               </a-button>
             </a-space>
@@ -112,9 +153,13 @@
         >
           <template #actions>
             <a-dropdown>
-              <a-button type="text" size="small" :icon="h(MoreOutlined)" />
+              <a-button
+                type="text"
+                size="small"
+                :icon="h(MoreOutlined)"
+              />
               <template #overlay>
-                <a-menu @click="({ key }) => handleAction(key, item)">
+                <a-menu @click="(info: MenuInfo) => handleAction(String(info.key), item)">
                   <a-menu-item key="view">
                     <EyeOutlined />
                     查看详情
@@ -132,7 +177,10 @@
                     <EyeInvisibleOutlined />
                     忽略
                   </a-menu-item>
-                  <a-menu-item key="delete" danger>
+                  <a-menu-item
+                    key="delete"
+                    danger
+                  >
                     <DeleteOutlined />
                     删除
                   </a-menu-item>
@@ -145,10 +193,13 @@
             <template #avatar>
               <a-checkbox
                 :checked="selectedIds.includes(item.id)"
-                @change="(e) => handleSelectChange(e, item.id)"
+                @change="handleSelectChange($event, item.id)"
                 @click.stop
               />
-              <a-badge :dot="!item.isRead" :offset="[-5, 5]">
+              <a-badge
+                :dot="!item.isRead"
+                :offset="[-5, 5]"
+              >
                 <a-avatar :style="{ backgroundColor: getTypeColor(item.type) }">
                   <template #icon>
                     <component :is="getTypeIcon(item.type)" />
@@ -160,14 +211,21 @@
             <template #title>
               <a-space>
                 <span :class="{ 'font-bold': !item.isRead }">{{ item.title }}</span>
-                <a-tag :color="getSeverityColor(item.severity)" size="small">
+                <a-tag
+                  :color="getSeverityColor(item.severity)"
+                  size="small"
+                >
                   {{ getSeverityLabel(item.severity) }}
                 </a-tag>
               </a-space>
             </template>
 
             <template #description>
-              <a-space direction="vertical" :size="4" style="width: 100%">
+              <a-space
+                direction="vertical"
+                :size="4"
+                style="width: 100%"
+              >
                 <div class="notification-meta">
                   <UserOutlined />
                   {{ item.recordInfo?.patientName || '未知患者' }}
@@ -191,7 +249,10 @@
       description="暂无通知"
       :image="Empty.PRESENTED_IMAGE_SIMPLE"
     >
-      <a-button type="primary" @click="handleSimulate">
+      <a-button
+        type="primary"
+        @click="handleSimulate"
+      >
         模拟生成通知
       </a-button>
     </a-empty>
@@ -201,6 +262,8 @@
 <script setup lang="ts">
 import { h, ref, computed } from 'vue'
 import { message, Empty } from 'ant-design-vue'
+import type { CheckboxChangeEvent } from 'ant-design-vue/es/checkbox/interface'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useQCDemoStore } from '@/stores/qcDemo'
 import type { QCNotification } from '@/types/quality-control'
 import {
@@ -313,7 +376,7 @@ const formatTime = (timestamp: Date | string) => {
 }
 
 // 事件处理
-const handleSelectChange = (e: any, id: string) => {
+const handleSelectChange = (e: CheckboxChangeEvent, id: string) => {
   if (e.target.checked) {
     selectedIds.value.push(id)
   } else {
@@ -404,4 +467,3 @@ const handleSimulate = () => {
   }
 }
 </style>
-

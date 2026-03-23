@@ -10,8 +10,67 @@ from typing import Optional
 from datetime import date
 
 from ..database.repository import get_repository
+from ..services.frontpage_settings import load_frontpage_settings, should_include_demo_records
 
 router = APIRouter(prefix="/api/medical-records", tags=["病案数据"])
+
+
+def _build_demo_workstation_records() -> list[dict]:
+    """演示病历数据（独立于 mr 正式表）。"""
+    return [
+        {
+            "id": "V-ZS-001",
+            "visitId": "V-ZS-001",
+            "instituteId": "DEMO",
+            "patientId": "P-ZS-001",
+            "bedNo": "",
+            "name": "Zhang San",
+            "sex": "男",
+            "age": 58,
+            "insurance": "演示数据",
+            "department": "Cardiology",
+            "admissionDate": "",
+            "dischargeDate": "",
+            "days": 12,
+            "doctor": "",
+            "status": "pending",
+            "cdmFrontpageEmpty": True,
+            "isDemoRecord": True,
+        },
+        {
+            "id": "V-LM-001",
+            "visitId": "V-LM-001",
+            "instituteId": "DEMO",
+            "patientId": "P-LM-001",
+            "bedNo": "",
+            "name": "李明",
+            "sex": "男",
+            "age": 35,
+            "insurance": "演示数据",
+            "department": "外二科（肛肠外科）",
+            "admissionDate": "03-29",
+            "dischargeDate": "",
+            "days": 0,
+            "doctor": "",
+            "status": "pending",
+            "cdmFrontpageEmpty": True,
+            "isDemoRecord": True,
+        },
+    ]
+
+
+def _filter_demo_records(records: list[dict], dept: Optional[str], keyword: Optional[str]) -> list[dict]:
+    out = records
+    if dept:
+        out = [item for item in out if (item.get("department") or "") == dept]
+    if keyword:
+        kw = keyword.strip().lower()
+        out = [
+            item for item in out
+            if kw in str(item.get("name") or "").lower()
+            or kw in str(item.get("id") or "").lower()
+        ]
+    return out
 
 
 # ==================== 患者/病案列表 ====================
@@ -351,6 +410,13 @@ async def get_workstation_data(
     from sqlalchemy import func
 
     with Session(engine) as session:
+        settings, _ = load_frontpage_settings()
+        real_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
+        demo_candidates = _build_demo_workstation_records()
+        demo_filtered = _filter_demo_records(demo_candidates, dept=dept, keyword=keyword)
+        include_demo = should_include_demo_records(settings, int(real_total_count))
+        visible_demos = demo_filtered if include_demo else []
+
         # 1. 构建基础查询：以病案首页主表为工作台主数据源（避免列表缩水）
         q = session.query(MedicalRecordFrontpage)
         if dept:
@@ -366,16 +432,33 @@ async def get_workstation_data(
                 MedicalRecordFrontpage.inpat_no.like(kw)
             )
 
-        # 总条数（分页用）
-        total_count = q.count()
-
-        # 分页查询
+        total_real_filtered = q.count()
         offset = (page - 1) * page_size
-        records = q.order_by(
-            MedicalRecordFrontpage.admission_datetime.desc()
-        ).offset(offset).limit(page_size).all()
+        demo_count = len(visible_demos)
 
-        # 2. 批量查床号（仅当前页的记录）
+        # 2. 合并分页：演示病历优先展示，真实数据接续
+        demo_page: list[dict] = []
+        real_offset = offset
+        real_limit = page_size
+        if demo_count > 0:
+            demo_start = min(offset, demo_count)
+            demo_end = min(offset + page_size, demo_count)
+            if demo_end > demo_start:
+                demo_page = visible_demos[demo_start:demo_end]
+            consumed = len(demo_page)
+            real_limit = max(page_size - consumed, 0)
+            real_offset = max(offset - demo_count, 0)
+
+        records = []
+        if real_limit > 0:
+            records = (
+                q.order_by(MedicalRecordFrontpage.admission_datetime.desc())
+                .offset(real_offset)
+                .limit(real_limit)
+                .all()
+            )
+
+        # 3. 批量查床号（仅当前页的真实记录）
         pids = [(r.patient_id, r.visit_id) for r in records]
         bed_map = {}
         if pids:
@@ -389,13 +472,13 @@ async def get_workstation_data(
             for b in beds:
                 bed_map[(b.patient_id, b.visit_id)] = b.bed_no
 
-        # 3. 科室统计（全量，不受分页影响）
+        # 4. 科室统计（全量，不受分页影响）
         dept_stats = session.query(
             MedicalRecordFrontpage.discharge_dept_name,
             func.count().label("total"),
         ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
 
-        # 4. 批量查病案质控状态（仅当前页）
+        # 5. 批量查病案质控状态（仅当前页真实记录）
         visit_ids = [r.visit_id for r in records]
         status_map = {}
         if visit_ids:
@@ -415,9 +498,13 @@ async def get_workstation_data(
 
         departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
         dept_warning_counts = {}
+        dept_total_map = {}
+        for d in dept_stats:
+            dept_name = d.discharge_dept_name or ""
+            dept_total_map[dept_name] = int(d.total)
 
-        # 5. 组装响应（不含诊断，诊断在详情页展示）
-        items = []
+        # 6. 组装真实记录响应（不含诊断，诊断在详情页展示）
+        real_items = []
         for r in records:
             key = (r.patient_id, r.visit_id)
 
@@ -445,7 +532,7 @@ async def get_workstation_data(
                 dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
                 departments[0]["warningCount"] += 1
 
-            items.append({
+            real_items.append({
                 "id": r.visit_id,
                 "instituteId": r.institute_id,
                 "patientId": r.patient_id,
@@ -463,9 +550,26 @@ async def get_workstation_data(
                 "cdmFrontpageEmpty": cdm_frontpage_empty,
             })
 
+        # 将当前策略可见的 demo 病历计入科室统计
+        for demo in visible_demos:
+            dept_name = demo.get("department") or ""
+            dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + 1
+
         for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
             dept_name = d.discharge_dept_name or ""
-            departments.append({"name": dept_name, "total": d.total, "warningCount": dept_warning_counts.get(dept_name, 0)})
+            departments.append({"name": dept_name, "total": dept_total_map.get(dept_name, d.total), "warningCount": dept_warning_counts.get(dept_name, 0)})
+
+        # 新增仅由 demo 贡献的科室
+        for dept_name, total in sorted(dept_total_map.items(), key=lambda x: x[1], reverse=True):
+            if not dept_name:
+                continue
+            if any(item["name"] == dept_name for item in departments):
+                continue
+            departments.append({"name": dept_name, "total": total, "warningCount": 0})
+
+        total_count = total_real_filtered + demo_count
+        departments[0]["total"] = total_count
+        items = demo_page + real_items
 
     return {
         "departments": departments,

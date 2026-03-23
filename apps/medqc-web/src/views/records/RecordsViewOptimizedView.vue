@@ -8,9 +8,17 @@
           <p>智能化病案质控分析平台</p>
         </div>
         <div class="header-stats">
-          <div class="stat-card" v-for="stat in stats" :key="stat.key">
-            <div class="stat-value">{{ stat.value }}</div>
-            <div class="stat-label">{{ stat.label }}</div>
+          <div
+            v-for="stat in stats"
+            :key="stat.key"
+            class="stat-card"
+          >
+            <div class="stat-value">
+              {{ stat.value }}
+            </div>
+            <div class="stat-label">
+              {{ stat.label }}
+            </div>
           </div>
         </div>
       </div>
@@ -21,19 +29,23 @@
       <div class="toolbar-left">
         <a-button 
           type="primary" 
-          @click="showUploadModal = true"
           :loading="uploading"
+          @click="showUploadModal = true"
         >
-          <template #icon><PlusOutlined /></template>
+          <template #icon>
+            <PlusOutlined />
+          </template>
           上传病案
         </a-button>
         
         <a-button 
-          @click="handleBatchAnalysis"
           :disabled="selectedRecords.length === 0"
           :loading="batchAnalyzing"
+          @click="handleBatchAnalysis"
         >
-          <template #icon><ThunderboltOutlined /></template>
+          <template #icon>
+            <ThunderboltOutlined />
+          </template>
           批量分析
         </a-button>
       </div>
@@ -43,8 +55,8 @@
           v-model:value="searchKeyword"
           placeholder="搜索患者姓名、科室..."
           style="width: 250px"
-          @search="handleSearch"
           allow-clear
+          @search="handleSearch"
         />
         
         <a-select
@@ -53,11 +65,21 @@
           style="width: 120px"
           allow-clear
         >
-          <a-select-option value="">全部</a-select-option>
-          <a-select-option value="pending">待分析</a-select-option>
-          <a-select-option value="analyzing">分析中</a-select-option>
-          <a-select-option value="completed">已完成</a-select-option>
-          <a-select-option value="failed">失败</a-select-option>
+          <a-select-option value="">
+            全部
+          </a-select-option>
+          <a-select-option value="pending">
+            待分析
+          </a-select-option>
+          <a-select-option value="analyzing">
+            分析中
+          </a-select-option>
+          <a-select-option value="completed">
+            已完成
+          </a-select-option>
+          <a-select-option value="failed">
+            失败
+          </a-select-option>
         </a-select>
         
         <a-select
@@ -66,8 +88,14 @@
           style="width: 120px"
           allow-clear
         >
-          <a-select-option value="">全部科室</a-select-option>
-          <a-select-option v-for="dept in departments" :key="dept" :value="dept">
+          <a-select-option value="">
+            全部科室
+          </a-select-option>
+          <a-select-option
+            v-for="dept in departments"
+            :key="dept"
+            :value="dept"
+          >
             {{ dept }}
           </a-select-option>
         </a-select>
@@ -95,12 +123,15 @@
         :load-more="loadMore"
         key-field="id"
       >
-        <template #default="{ item: record, index }">
-          <div class="record-item" :class="{ 'record-selected': isSelected(record) }">
+        <template #default="{ item: record }">
+          <div
+            class="record-item"
+            :class="{ 'record-selected': isSelected(toRecordItem(record)) }"
+          >
             <div class="record-checkbox">
               <a-checkbox
-                :checked="isSelected(record)"
-                @change="(e) => handleRecordSelect(record, e.target.checked)"
+                :checked="isSelected(toRecordItem(record))"
+                @change="handleRecordCheckboxChange(toRecordItem(record), $event)"
               />
             </div>
             
@@ -109,25 +140,25 @@
                 :src="getPatientAvatar(record)"
                 :width="60"
                 :height="60"
-                :alt="record.patient_name"
+                :alt="getRecordPatientName(record)"
                 fit="cover"
                 :show-skeleton="true"
-                :fallback="getDefaultAvatar(record.patient_gender)"
+                :fallback="getDefaultAvatar(getRecordGender(record))"
               />
             </div>
             
             <div class="record-content">
               <div class="record-header">
                 <div class="record-title">
-                  <h3>{{ record.patient_name }}</h3>
-                  <a-tag :color="getGenderColor(record.patient_gender)">
-                    {{ record.patient_gender }}
+                  <h3>{{ getRecordPatientName(record) }}</h3>
+                  <a-tag :color="getGenderColor(getRecordGender(record))">
+                    {{ getRecordGender(record) }}
                   </a-tag>
-                  <a-tag>{{ record.patient_age }}岁</a-tag>
+                  <a-tag>{{ getRecordAge(record) }}岁</a-tag>
                 </div>
                 <div class="record-status">
-                  <a-tag :color="getStatusColor(record.status)">
-                    {{ getStatusText(record.status) }}
+                  <a-tag :color="getStatusColor(getRecordStatus(record))">
+                    {{ getStatusText(getRecordStatus(record)) }}
                   </a-tag>
                 </div>
               </div>
@@ -135,38 +166,38 @@
               <div class="record-info">
                 <div class="info-item">
                   <span class="info-label">科室:</span>
-                  <span class="info-value">{{ record.department }}</span>
+                  <span class="info-value">{{ getRecordDepartment(record) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">入院日期:</span>
-                  <span class="info-value">{{ formatDate(record.admission_date) }}</span>
+                  <span class="info-value">{{ formatDate(getRecordAdmissionDate(record)) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">病案类型:</span>
-                  <span class="info-value">{{ record.record_type }}</span>
+                  <span class="info-value">{{ getRecordType(record) }}</span>
                 </div>
               </div>
               
               <div class="record-footer">
                 <div class="record-time">
-                  创建于 {{ formatDateTime(record.created_at) }}
+                  创建于 {{ formatDateTime(getRecordCreatedAt(record)) }}
                 </div>
                 <div class="record-actions">
                   <a-space size="small">
                     <a-button 
                       size="small" 
-                      @click="viewRecord(record)"
+                      @click="viewRecord(toRecordItem(record))"
                     >
                       查看
                     </a-button>
                     <a-button 
                       size="small" 
                       type="primary"
-                      @click="analyzeRecord(record)"
-                      :loading="analyzingRecords.includes(record.id)"
-                      :disabled="record.status === 'analyzing'"
+                      :loading="analyzingRecords.includes(getRecordId(record))"
+                      :disabled="getRecordStatus(record) === 'analyzing'"
+                      @click="analyzeRecord(toRecordItem(record))"
                     >
-                      {{ record.status === 'completed' ? '重新分析' : '分析' }}
+                      {{ getRecordStatus(record) === 'completed' ? '重新分析' : '分析' }}
                     </a-button>
                     <a-dropdown>
                       <a-button size="small">
@@ -174,12 +205,23 @@
                         <DownOutlined />
                       </a-button>
                       <template #overlay>
-                        <a-menu @click="({ key   }) => handleRecordAction(key, record)">
-                          <a-menu-item key="edit">编辑</a-menu-item>
-                          <a-menu-item key="download">下载</a-menu-item>
-                          <a-menu-item key="history">分析历史</a-menu-item>
+                        <a-menu @click="handleRecordMenuClick($event, toRecordItem(record))">
+                          <a-menu-item key="edit">
+                            编辑
+                          </a-menu-item>
+                          <a-menu-item key="download">
+                            下载
+                          </a-menu-item>
+                          <a-menu-item key="history">
+                            分析历史
+                          </a-menu-item>
                           <a-menu-divider />
-                          <a-menu-item key="delete" danger>删除</a-menu-item>
+                          <a-menu-item
+                            key="delete"
+                            danger
+                          >
+                            删除
+                          </a-menu-item>
                         </a-menu>
                       </template>
                     </a-dropdown>
@@ -201,9 +243,9 @@
       :destroy-on-close="true"
     >
       <RecordUploadFormComponent 
+        :loading="uploading"
         @submit="handleRecordSubmit"
         @cancel="showUploadModal = false"
-        :loading="uploading"
       />
     </a-modal>
 
@@ -225,15 +267,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import AnalysisOutlined from '@ant-design/icons-vue'
 import {
   PlusOutlined,
   ThunderboltOutlined,
   DownOutlined,
   DeleteOutlined,
-  AnalysisOutlined,
   ExportOutlined
 } from '@ant-design/icons-vue'
 
@@ -247,6 +289,7 @@ import QCResultDisplay from '@/components/qc/QCResultDisplay.vue'
 // API导入
 import { getMedicalRecords, createMedicalRecord, deleteMedicalRecord } from '@/api/medical-records'
 import { analyzeRecord as analyzeRecordAPI, batchAnalyzeRecords } from '@/api/qc-analysis-optimized'
+import type { CreateMedicalRecordRequest, MedicalRecordStatus } from '@/types/medical-records'
 
 // 工具函数导入
 import { formatDate, formatDateTime } from '@/utils/date'
@@ -257,7 +300,7 @@ interface RecordItem {
   patient_name?: string
   patient_gender?: string
   patient_age?: number | string
-  status?: 'pending' | 'analyzing' | 'completed' | 'failed' | string
+  status?: MedicalRecordStatus | string
   department?: string
   admission_date?: string
   record_type?: string
@@ -268,6 +311,58 @@ interface RecordItem {
 interface BatchActionItem {
   key: string
 }
+interface BatchActionConfig {
+  key: string
+  label: string
+  shortLabel?: string
+  icon?: Component
+  type?: 'primary' | 'default' | 'dashed' | 'link' | 'text'
+  danger?: boolean
+  requireConfirm?: boolean
+  confirmTitle?: string
+  confirmContent?: string
+  minSelection?: number
+  maxSelection?: number
+  validator?: (items: unknown[]) => boolean | string
+}
+type LooseRecord = Record<string, unknown>
+
+const RECORD_STATUS_LIST: MedicalRecordStatus[] = ['pending', 'analyzing', 'completed', 'failed']
+
+const getStringValue = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback
+
+const getRecordId = (record: LooseRecord): string => getStringValue(record.id, '')
+
+const getRecordStatus = (record: LooseRecord): MedicalRecordStatus | string => {
+  const status = getStringValue(record.status, '')
+  return RECORD_STATUS_LIST.includes(status as MedicalRecordStatus) ? status : status || 'pending'
+}
+
+const getRecordPatientName = (record: LooseRecord): string => getStringValue(record.patient_name, '')
+const getRecordGender = (record: LooseRecord): string => getStringValue(record.patient_gender, '未知')
+const getRecordDepartment = (record: LooseRecord): string => getStringValue(record.department, '-')
+const getRecordAdmissionDate = (record: LooseRecord): string => getStringValue(record.admission_date, '')
+const getRecordType = (record: LooseRecord): string => getStringValue(record.record_type, '-')
+const getRecordCreatedAt = (record: LooseRecord): string => getStringValue(record.created_at, '')
+const getRecordAge = (record: LooseRecord): number | string =>
+  typeof record.patient_age === 'number' || typeof record.patient_age === 'string'
+    ? record.patient_age
+    : '-'
+
+const toRecordItem = (record: LooseRecord): RecordItem => ({
+  ...record,
+  id: getRecordId(record),
+  patient_name: getRecordPatientName(record),
+  patient_gender: getRecordGender(record),
+  patient_age: getRecordAge(record),
+  status: getRecordStatus(record),
+  department: getRecordDepartment(record),
+  admission_date: getRecordAdmissionDate(record),
+  record_type: getRecordType(record),
+  created_at: getRecordCreatedAt(record),
+  content: getStringValue(record.content, '')
+})
 
 // 响应式数据
 const router = useRouter()
@@ -285,13 +380,13 @@ const pageSize = ref(20)
 
 // 筛选和搜索
 const searchKeyword = ref('')
-const statusFilter = ref('')
+const statusFilter = ref<MedicalRecordStatus | ''>('')
 const departmentFilter = ref('')
 
 // 模态框状态
 const showUploadModal = ref(false)
 const showAnalysisModal = ref(false)
-const currentAnalysisResult = ref(null)
+const currentAnalysisResult = ref<any>(null)
 
 // 统计数据
 const stats = computed(() => [
@@ -335,7 +430,7 @@ const filteredRecords = computed(() => {
 })
 
 // 批量操作配置
-const batchActions = computed(() => [
+const batchActions = computed<BatchActionConfig[]>(() => [
   {
     key: 'analyze',
     label: '批量分析',
@@ -344,8 +439,10 @@ const batchActions = computed(() => [
     type: 'primary',
     minSelection: 1,
     maxSelection: 10,
-    validator: (items: RecordItem[]) => {
-      const analyzingCount = items.filter(item => item.status === 'analyzing').length
+    validator: (items: unknown[]) => {
+      const analyzingCount = items
+        .map(item => toRecordItem(item as LooseRecord))
+        .filter(item => item.status === 'analyzing').length
       if (analyzingCount > 0) {
         return '选中的病案中包含正在分析的记录'
       }
@@ -370,8 +467,10 @@ const batchActions = computed(() => [
     confirmTitle: '确认删除',
     confirmContent: '删除后无法恢复，确定要删除选中的病案吗？',
     minSelection: 1,
-    validator: (items: RecordItem[]) => {
-      const analyzingCount = items.filter(item => item.status === 'analyzing').length
+    validator: (items: unknown[]) => {
+      const analyzingCount = items
+        .map(item => toRecordItem(item as LooseRecord))
+        .filter(item => item.status === 'analyzing').length
       if (analyzingCount > 0) {
         return '无法删除正在分析的病案'
       }
@@ -385,11 +484,10 @@ const loadRecords = async (page = 1, append = false) => {
   try {
     loading.value = true
     const response = await getMedicalRecords({
-      page,
-      pageSize: pageSize.value,
+      limit: pageSize.value,
+      offset: (page - 1) * pageSize.value,
       status: statusFilter.value || undefined,
-      department: departmentFilter.value || undefined,
-      search: searchKeyword.value || undefined
+      department: departmentFilter.value || undefined
     })
 
     if (response.success && response.data) {
@@ -425,7 +523,7 @@ const handleSearch = () => {
   loadRecords(1, false)
 }
 
-const handleRecordSubmit = async (formData: FormData) => {
+const handleRecordSubmit = async (formData: CreateMedicalRecordRequest) => {
   try {
     uploading.value = true
     const response = await createMedicalRecord(formData)
@@ -451,7 +549,7 @@ const analyzeRecord = async (record: RecordItem) => {
 
     const response = await analyzeRecordAPI({
       recordId: record.id,
-      content: record.content,
+      content: record.content || '',
       options: {
         analysisMode: 'comprehensive',
         enableCache: true,
@@ -492,7 +590,7 @@ const handleBatchAnalysis = async () => {
     const response = await batchAnalyzeRecords({
       records: selectedRecords.value.map(record => ({
         recordId: record.id,
-        content: record.content,
+        content: record.content || '',
         priority: 'normal'
       })),
       options: {
@@ -544,15 +642,16 @@ const handleSelectAll = (selected: boolean) => {
   }
 }
 
-const handleBatchAction = async (action: BatchActionItem, items: RecordItem[]) => {
+const handleBatchAction = async (action: BatchActionItem, items: unknown[]) => {
+  const normalizedItems = items.map(item => toRecordItem(item as LooseRecord))
   switch (action.key) {
     case 'analyze':
       await handleBatchAnalysis()
       break
     case 'export':
-      await handleBatchExport(items)
+      await handleBatchExport(normalizedItems)
       break
-    case 'delete': await handleBatchDelete(items)
+    case 'delete': await handleBatchDelete(normalizedItems)
       break
   }
 }
@@ -600,6 +699,17 @@ const handleRecordAction = async (action: string, record: RecordItem) => {
   }
 }
 
+const handleRecordCheckboxChange = (
+  record: RecordItem,
+  event: { target: { checked: boolean } }
+) => {
+  handleRecordSelect(record, !!event.target.checked)
+}
+
+const handleRecordMenuClick = (info: { key: string | number }, record: RecordItem) => {
+  handleRecordAction(String(info.key), record)
+}
+
 const handleDeleteRecord = async (record: RecordItem) => {
   try {
     const response = await deleteMedicalRecord(record.id)
@@ -619,7 +729,7 @@ const isSelected = (record: RecordItem) => {
   return selectedRecords.value.some(r => r.id === record.id)
 }
 
-const getPatientAvatar = (record: RecordItem) => {
+const getPatientAvatar = (record: LooseRecord) => {
   // 返回患者头像URL，这里使用占位符
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${record.patient_name}`
 }

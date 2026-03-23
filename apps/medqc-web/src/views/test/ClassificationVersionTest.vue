@@ -1,15 +1,35 @@
 <template>
   <div class="classification-version-test p-6">
-    <a-card title="分类算法版本管理测试" class="mb-4">
-      <a-space direction="vertical" size="large" style="width: 100%">
-        
+    <a-card
+      title="分类算法版本管理测试"
+      class="mb-4"
+    >
+      <a-space
+        direction="vertical"
+        size="large"
+        style="width: 100%"
+      >
         <!-- 版本信息测试 -->
-        <a-card title="版本信息测试" size="small">
-          <a-button @click="testVersionInfo" :loading="testing.versionInfo">
+        <a-card
+          title="版本信息测试"
+          size="small"
+        >
+          <a-button
+            :loading="testing.versionInfo"
+            @click="testVersionInfo"
+          >
             测试版本信息API
           </a-button>
-          <div v-if="results.versionInfo" class="mt-3">
-            <a-descriptions title="版本信息" :column="2" bordered size="small">
+          <div
+            v-if="results.versionInfo"
+            class="mt-3"
+          >
+            <a-descriptions
+              title="版本信息"
+              :column="2"
+              bordered
+              size="small"
+            >
               <a-descriptions-item label="当前版本">
                 {{ results.versionInfo.current_version_name }}
               </a-descriptions-item>
@@ -21,14 +41,26 @@
         </a-card>
 
         <!-- 性能统计测试 -->
-        <a-card title="性能统计测试" size="small">
-          <a-button @click="testPerformanceStats" :loading="testing.performanceStats">
+        <a-card
+          title="性能统计测试"
+          size="small"
+        >
+          <a-button
+            :loading="testing.performanceStats"
+            @click="testPerformanceStats"
+          >
             测试性能统计API
           </a-button>
-          <div v-if="results.performanceStats" class="mt-3">
+          <div
+            v-if="results.performanceStats"
+            class="mt-3"
+          >
             <a-row :gutter="16">
               <a-col :span="6">
-                <a-statistic title="总请求数" :value="results.performanceStats.total_requests" />
+                <a-statistic
+                  title="总请求数"
+                  :value="results.performanceStats.total_requests"
+                />
               </a-col>
               <a-col :span="6">
                 <a-statistic 
@@ -46,18 +78,30 @@
                 />
               </a-col>
               <a-col :span="6">
-                <a-statistic title="当前版本" :value="results.performanceStats.current_version" />
+                <a-statistic
+                  title="当前版本"
+                  :value="results.performanceStats.current_version"
+                />
               </a-col>
             </a-row>
           </div>
         </a-card>
 
         <!-- 健康检查测试 -->
-        <a-card title="健康检查测试" size="small">
-          <a-button @click="testHealthCheck" :loading="testing.healthCheck">
+        <a-card
+          title="健康检查测试"
+          size="small"
+        >
+          <a-button
+            :loading="testing.healthCheck"
+            @click="testHealthCheck"
+          >
             测试健康检查API
           </a-button>
-          <div v-if="results.healthCheck" class="mt-3">
+          <div
+            v-if="results.healthCheck"
+            class="mt-3"
+          >
             <a-alert 
               :type="results.healthCheck.status === 'healthy' ? 'success' : 'error'"
               :message="`系统状态: ${results.healthCheck.status}`"
@@ -67,18 +111,33 @@
         </a-card>
 
         <!-- 分类测试 -->
-        <a-card title="分类功能测试" size="small">
+        <a-card
+          title="分类功能测试"
+          size="small"
+        >
           <a-textarea 
             v-model:value="testText" 
             placeholder="输入测试文本..."
             :rows="4"
             class="mb-3"
           />
-          <a-button @click="testClassification" :loading="testing.classification" type="primary">
+          <a-button
+            :loading="testing.classification"
+            type="primary"
+            @click="testClassification"
+          >
             测试分类功能
           </a-button>
-          <div v-if="results.classification" class="mt-3">
-            <a-descriptions title="分类结果" :column="1" bordered size="small">
+          <div
+            v-if="results.classification"
+            class="mt-3"
+          >
+            <a-descriptions
+              title="分类结果"
+              :column="1"
+              bordered
+              size="small"
+            >
               <a-descriptions-item label="识别文书数">
                 {{ results.classification.total_documents }}
               </a-descriptions-item>
@@ -93,14 +152,26 @@
               </a-descriptions-item>
             </a-descriptions>
             
-            <div v-if="results.classification.documents?.length > 0" class="mt-3">
+            <div
+              v-if="results.classification.documents?.length > 0"
+              class="mt-3"
+            >
               <h4>识别的文书：</h4>
-              <a-list size="small" bordered>
-                <a-list-item v-for="doc in results.classification.documents" :key="doc.title">
+              <a-list
+                size="small"
+                bordered
+              >
+                <a-list-item
+                  v-for="doc in results.classification.documents"
+                  :key="doc.title"
+                >
                   <a-list-item-meta>
                     <template #title>
                       {{ doc.title }}
-                      <a-tag :color="getConfidenceColor(doc.confidence)" class="ml-2">
+                      <a-tag
+                        :color="getConfidenceColor(doc.confidence)"
+                        class="ml-2"
+                      >
                         {{ Math.round(doc.confidence * 100) }}%
                       </a-tag>
                     </template>
@@ -115,21 +186,37 @@
         </a-card>
 
         <!-- 版本切换测试 -->
-        <a-card title="版本切换测试" size="small">
+        <a-card
+          title="版本切换测试"
+          size="small"
+        >
           <a-select 
             v-model:value="selectedTestVersion" 
             placeholder="选择要切换的版本"
             style="width: 200px"
             class="mr-3"
           >
-            <a-select-option value="basic">基础版本</a-select-option>
-            <a-select-option value="enhanced">增强版本</a-select-option>
-            <a-select-option value="advanced">先进版本</a-select-option>
+            <a-select-option value="basic">
+              基础版本
+            </a-select-option>
+            <a-select-option value="enhanced">
+              增强版本
+            </a-select-option>
+            <a-select-option value="advanced">
+              先进版本
+            </a-select-option>
           </a-select>
-          <a-button @click="testVersionSwitch" :loading="testing.versionSwitch" type="primary">
+          <a-button
+            :loading="testing.versionSwitch"
+            type="primary"
+            @click="testVersionSwitch"
+          >
             测试版本切换
           </a-button>
-          <div v-if="results.versionSwitch" class="mt-3">
+          <div
+            v-if="results.versionSwitch"
+            class="mt-3"
+          >
             <a-alert 
               :type="results.versionSwitch.success ? 'success' : 'error'"
               :message="results.versionSwitch.message"
@@ -139,17 +226,29 @@
         </a-card>
 
         <!-- 测试日志 -->
-        <a-card title="测试日志" size="small">
-          <a-button @click="clearLogs" size="small" class="mb-3">清空日志</a-button>
+        <a-card
+          title="测试日志"
+          size="small"
+        >
+          <a-button
+            size="small"
+            class="mb-3"
+            @click="clearLogs"
+          >
+            清空日志
+          </a-button>
           <div class="test-logs">
-            <div v-for="(log, index) in testLogs" :key="index" class="log-entry">
+            <div
+              v-for="(log, index) in testLogs"
+              :key="index"
+              class="log-entry"
+            >
               <span class="log-time">{{ log.time }}</span>
               <span :class="['log-level', `log-${log.level}`]">{{ log.level.toUpperCase() }}</span>
               <span class="log-message">{{ log.message }}</span>
             </div>
           </div>
         </a-card>
-
       </a-space>
     </a-card>
   </div>
@@ -158,6 +257,57 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { message } from 'ant-design-vue'
+
+interface VersionInfoResult {
+  current_version_name: string
+  fallback_version_name: string
+}
+
+interface PerformanceStatsResult {
+  total_requests: number
+  success_rate: number
+  average_processing_time: number
+  current_version: string
+}
+
+interface HealthCheckResult {
+  status: string
+}
+
+interface ClassificationDocument {
+  title: string
+  confidence: number
+  summary?: string
+}
+
+interface ClassificationResult {
+  total_documents: number
+  statistics?: {
+    averageConfidence?: number
+  }
+  processing_time: number
+  algorithm_version: string
+  documents: ClassificationDocument[]
+}
+
+interface VersionSwitchResult {
+  success: boolean
+  message: string
+}
+
+interface TestLogItem {
+  time: string
+  level: string
+  message: string
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message || '未知错误')
+  }
+  return '未知错误'
+}
 
 // 响应式数据
 const testing = reactive({
@@ -169,11 +319,11 @@ const testing = reactive({
 })
 
 const results = reactive({
-  versionInfo: null,
-  performanceStats: null,
-  healthCheck: null,
-  classification: null,
-  versionSwitch: null
+  versionInfo: null as VersionInfoResult | null,
+  performanceStats: null as PerformanceStatsResult | null,
+  healthCheck: null as HealthCheckResult | null,
+  classification: null as ClassificationResult | null,
+  versionSwitch: null as VersionSwitchResult | null
 })
 
 const testText = ref(`患者张伟，44岁男性，因肛旁肿物疼痛2+天入院。
@@ -194,7 +344,7 @@ CT检查显示肛瘘并肛周脓肿。
 手术经过：手术顺利完成...`)
 
 const selectedTestVersion = ref('advanced')
-const testLogs = ref([])
+const testLogs = ref<TestLogItem[]>([])
 
 // 方法
 const addLog = (level: string, message: string) => {
@@ -231,8 +381,8 @@ const testVersionInfo = async () => {
     } else {
       throw new Error(`HTTP ${response.status}`)
     }
-  } catch (error) {
-    addLog('error', `版本信息API测试失败: ${error.message}`)
+  } catch (error: unknown) {
+    addLog('error', `版本信息API测试失败: ${getErrorMessage(error)}`)
     message.error('版本信息获取失败')
   } finally {
     testing.versionInfo = false
@@ -252,8 +402,8 @@ const testPerformanceStats = async () => {
     } else {
       throw new Error(`HTTP ${response.status}`)
     }
-  } catch (error) {
-    addLog('error', `性能统计API测试失败: ${error.message}`)
+  } catch (error: unknown) {
+    addLog('error', `性能统计API测试失败: ${getErrorMessage(error)}`)
     message.error('性能统计获取失败')
   } finally {
     testing.performanceStats = false
@@ -268,13 +418,14 @@ const testHealthCheck = async () => {
     const response = await fetch('/api/enhanced-classification/health')
     if (response.ok) {
       results.healthCheck = await response.json()
-      addLog('success', `健康检查完成，状态: ${results.healthCheck.status}`)
+      const healthCheck = results.healthCheck
+      addLog('success', `健康检查完成，状态: ${healthCheck?.status || 'unknown'}`)
       message.success('健康检查完成')
     } else {
       throw new Error(`HTTP ${response.status}`)
     }
-  } catch (error) {
-    addLog('error', `健康检查API测试失败: ${error.message}`)
+  } catch (error: unknown) {
+    addLog('error', `健康检查API测试失败: ${getErrorMessage(error)}`)
     message.error('健康检查失败')
   } finally {
     testing.healthCheck = false
@@ -304,13 +455,14 @@ const testClassification = async () => {
     
     if (response.ok) {
       results.classification = await response.json()
-      addLog('success', `分类测试成功，识别${results.classification.total_documents}个文书`)
+      const classification = results.classification
+      addLog('success', `分类测试成功，识别${classification?.total_documents || 0}个文书`)
       message.success('分类测试成功')
     } else {
       throw new Error(`HTTP ${response.status}`)
     }
-  } catch (error) {
-    addLog('error', `分类功能测试失败: ${error.message}`)
+  } catch (error: unknown) {
+    addLog('error', `分类功能测试失败: ${getErrorMessage(error)}`)
     message.error('分类测试失败')
   } finally {
     testing.classification = false
@@ -335,17 +487,18 @@ const testVersionSwitch = async () => {
     
     if (response.ok) {
       results.versionSwitch = await response.json()
-      addLog('success', `版本切换测试完成: ${results.versionSwitch.message}`)
-      if (results.versionSwitch.success) {
+      const versionSwitch = results.versionSwitch
+      addLog('success', `版本切换测试完成: ${versionSwitch?.message || ''}`)
+      if (versionSwitch?.success) {
         message.success('版本切换成功')
       } else {
-        message.error(results.versionSwitch.message)
+        message.error(versionSwitch?.message || '版本切换失败')
       }
     } else {
       throw new Error(`HTTP ${response.status}`)
     }
-  } catch (error) {
-    addLog('error', `版本切换测试失败: ${error.message}`)
+  } catch (error: unknown) {
+    addLog('error', `版本切换测试失败: ${getErrorMessage(error)}`)
     message.error('版本切换测试失败')
   } finally {
     testing.versionSwitch = false

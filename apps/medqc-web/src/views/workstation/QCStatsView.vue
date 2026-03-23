@@ -7,21 +7,42 @@
         质控统计分析
       </h2>
       <div class="header-actions">
-        <a-segmented v-model:value="timePeriod" :options="timePeriods" size="small" />
+        <a-segmented
+          v-model:value="timePeriod"
+          :options="timePeriods"
+          size="small"
+        />
       </div>
     </div>
 
     <!-- 关键指标 -->
     <div class="kpi-grid">
-      <div v-for="kpi in kpiData" :key="kpi.label" class="kpi-card" :style="{ borderTopColor: kpi.color }">
+      <div
+        v-for="kpi in kpiData"
+        :key="kpi.label"
+        class="kpi-card"
+        :style="{ borderTopColor: kpi.color }"
+      >
         <div class="kpi-header">
           <span class="kpi-label">{{ kpi.label }}</span>
-          <component :is="kpi.icon" :style="{ color: kpi.color }" />
+          <component
+            :is="kpi.icon"
+            :style="{ color: kpi.color }"
+          />
         </div>
-        <div class="kpi-value">{{ kpi.value }}</div>
-        <div class="kpi-sub">{{ kpi.subLabel }}: {{ kpi.subValue }}</div>
+        <div class="kpi-value">
+          {{ kpi.value }}
+        </div>
+        <div class="kpi-sub">
+          {{ kpi.subLabel }}: {{ kpi.subValue }}
+        </div>
         <div class="kpi-progress">
-          <a-progress :percent="kpi.percent" :stroke-color="kpi.color" :show-info="false" size="small" />
+          <a-progress
+            :percent="kpi.percent"
+            :stroke-color="kpi.color"
+            :show-info="false"
+            size="small"
+          />
           <span class="kpi-target">目标: {{ kpi.target }}</span>
         </div>
       </div>
@@ -31,12 +52,21 @@
     <div class="chart-grid">
       <!-- 质控趋势 -->
       <div class="chart-card">
-        <div class="chart-title">每日质控量趋势（近 14 天）</div>
+        <div class="chart-title">
+          每日质控量趋势（近 14 天）
+        </div>
         <div class="chart-body">
           <div class="bar-chart">
-            <div v-for="(bar, idx) in trendData" :key="idx" class="bar-group">
+            <div
+              v-for="(bar, idx) in trendData"
+              :key="idx"
+              class="bar-group"
+            >
               <div class="bar-wrapper">
-                <div class="bar" :style="{ height: bar.height + '%', background: '#1677ff' }">
+                <div
+                  class="bar"
+                  :style="{ height: bar.height + '%', background: '#1677ff' }"
+                >
                   <span class="bar-value">{{ bar.value }}</span>
                 </div>
               </div>
@@ -48,14 +78,25 @@
 
       <!-- 科室分布 -->
       <div class="chart-card">
-        <div class="chart-title">科室质控问题分布</div>
+        <div class="chart-title">
+          科室质控问题分布
+        </div>
         <div class="chart-body">
-          <div v-for="dept in deptDistribution" :key="dept.name" class="dist-item">
+          <div
+            v-for="dept in deptDistribution"
+            :key="dept.name"
+            class="dist-item"
+          >
             <div class="dist-header">
               <span>{{ dept.name }}</span>
               <span>{{ dept.count }} 个问题（{{ dept.percent }}%）</span>
             </div>
-            <a-progress :percent="dept.percent" :stroke-color="dept.color" :show-info="false" size="small" />
+            <a-progress
+              :percent="dept.percent"
+              :stroke-color="dept.color"
+              :show-info="false"
+              size="small"
+            />
           </div>
         </div>
       </div>
@@ -65,27 +106,60 @@
     <div class="chart-grid">
       <!-- 问题类型 -->
       <div class="chart-card">
-        <div class="chart-title">问题类型 Top 5</div>
+        <div class="chart-title">
+          问题类型 Top 5
+        </div>
         <div class="chart-body">
-          <div v-for="(item, idx) in topIssues" :key="item.name" class="top-item">
-            <div class="top-rank" :class="idx < 3 ? 'hot' : ''">{{ idx + 1 }}</div>
-            <div class="top-info">
-              <div class="top-name">{{ item.name }}</div>
-              <a-progress :percent="item.percent" :stroke-color="idx < 3 ? '#ff4d4f' : '#faad14'" size="small" style="width: 200px" />
+          <div
+            v-for="(item, idx) in topIssues"
+            :key="item.name"
+            class="top-item"
+          >
+            <div
+              class="top-rank"
+              :class="idx < 3 ? 'hot' : ''"
+            >
+              {{ idx + 1 }}
             </div>
-            <div class="top-count">{{ item.count }} 次</div>
+            <div class="top-info">
+              <div class="top-name">
+                {{ item.name }}
+              </div>
+              <a-progress
+                :percent="item.percent"
+                :stroke-color="idx < 3 ? '#ff4d4f' : '#faad14'"
+                size="small"
+                style="width: 200px"
+              />
+            </div>
+            <div class="top-count">
+              {{ item.count }} 次
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 首页填充率 -->
       <div class="chart-card">
-        <div class="chart-title">病案首页 AI 提取质量</div>
+        <div class="chart-title">
+          病案首页 AI 提取质量
+        </div>
         <div class="chart-body">
           <div class="quality-grid">
-            <div v-for="q in qualityMetrics" :key="q.label" class="quality-item">
-              <a-progress type="circle" :percent="q.value" :width="80" :stroke-color="q.value >= 90 ? '#52c41a' : q.value >= 80 ? '#faad14' : '#ff4d4f'" />
-              <div class="quality-label">{{ q.label }}</div>
+            <div
+              v-for="q in qualityMetrics"
+              :key="q.label"
+              class="quality-item"
+            >
+              <a-progress
+                type="circle"
+                :percent="q.value"
+                :width="80"
+                :stroke-color="q.value >= 90 ? '#52c41a' : q.value >= 80 ? '#faad14' : '#ff4d4f'"
+              />
+              <div class="quality-label">
+                {{ q.label }}
+              </div>
             </div>
           </div>
         </div>

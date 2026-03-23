@@ -1,40 +1,101 @@
 <template>
   <div class="rectification-list">
-    <a-page-header title="整改任务" sub-title="我的整改任务管理" class="bg-white mb-4 shadow-sm" />
+    <a-page-header
+      title="整改任务"
+      sub-title="我的整改任务管理"
+      class="bg-white mb-4 shadow-sm"
+    />
 
     <div class="px-6 pb-6">
-      <a-card :bordered="false" class="shadow-sm">
-        <a-tabs v-model:activeKey="activeTab" @change="handleTabChange">
-          <a-tab-pane key="my-tasks" tab="我的任务" />
-          <a-tab-pane key="all" tab="所有任务" v-if="hasAdminPermission" />
+      <a-card
+        :bordered="false"
+        class="shadow-sm"
+      >
+        <a-tabs
+          v-model:active-key="activeTab"
+          @change="handleTabChange"
+        >
+          <a-tab-pane
+            key="my-tasks"
+            tab="我的任务"
+          />
+          <a-tab-pane
+            v-if="hasAdminPermission"
+            key="all"
+            tab="所有任务"
+          />
         </a-tabs>
         
         <!-- 筛选区域 -->
-        <a-form layout="inline" class="mb-4">
-           <a-form-item label="状态">
-             <a-select v-model:value="filters.status" placeholder="全部状态" allowClear style="width: 120px" @change="handleSearch">
-                <a-select-option v-for="opt in TASK_STATUS_OPTIONS" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </a-select-option>
-              </a-select>
-           </a-form-item>
-           <a-form-item label="严重程度">
-             <a-select v-model:value="filters.severity" placeholder="全部" allowClear style="width: 120px" @change="handleSearch">
-               <a-select-option v-for="opt in TASK_SEVERITY_OPTIONS" :key="opt.value" :value="opt.value">
-                 {{ opt.label }}
-               </a-select-option>
-             </a-select>
-           </a-form-item>
-           <a-form-item v-if="activeTab === 'all'" label="指派人">
-               <a-input v-model:value="filters.assigneeId" placeholder="指派人ID/姓名" />
-           </a-form-item>
-           <a-form-item>
-               <a-checkbox v-model:checked="filters.overdueOnly" @change="handleSearch">仅显示逾期</a-checkbox>
-           </a-form-item>
-           <a-form-item>
-             <a-button type="primary" @click="handleSearch">查询</a-button>
-             <a-button class="ml-2" @click="resetFilters">重置</a-button>
-           </a-form-item>
+        <a-form
+          layout="inline"
+          class="mb-4"
+        >
+          <a-form-item label="状态">
+            <a-select
+              v-model:value="filters.status"
+              placeholder="全部状态"
+              allow-clear
+              style="width: 120px"
+              @change="handleSearch"
+            >
+              <a-select-option
+                v-for="opt in TASK_STATUS_OPTIONS"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item label="严重程度">
+            <a-select
+              v-model:value="filters.severity"
+              placeholder="全部"
+              allow-clear
+              style="width: 120px"
+              @change="handleSearch"
+            >
+              <a-select-option
+                v-for="opt in TASK_SEVERITY_OPTIONS"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item
+            v-if="activeTab === 'all'"
+            label="指派人"
+          >
+            <a-input
+              v-model:value="filters.assigneeId"
+              placeholder="指派人ID/姓名"
+            />
+          </a-form-item>
+          <a-form-item>
+            <a-checkbox
+              v-model:checked="filters.overdueOnly"
+              @change="handleSearch"
+            >
+              仅显示逾期
+            </a-checkbox>
+          </a-form-item>
+          <a-form-item>
+            <a-button
+              type="primary"
+              @click="handleSearch"
+            >
+              查询
+            </a-button>
+            <a-button
+              class="ml-2"
+              @click="resetFilters"
+            >
+              重置
+            </a-button>
+          </a-form-item>
         </a-form>
 
         <!-- 任务列表 -->
@@ -43,8 +104,8 @@
           :data-source="tasks"
           :loading="loading"
           :pagination="pagination"
-          @change="handleTableChange"
           row-key="id"
+          @change="handleTableChange"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'status'">
@@ -53,42 +114,55 @@
               </a-tag>
             </template>
             <template v-if="column.key === 'severity'">
-                <a-tag :color="getTaskSeverityInfo(record.severity).color">
-                    {{ getTaskSeverityInfo(record.severity).label }}
-                </a-tag>
+              <a-tag :color="getTaskSeverityInfo(record.severity).color">
+                {{ getTaskSeverityInfo(record.severity).label }}
+              </a-tag>
             </template>
             <template v-if="column.key === 'dueDate'">
-                <span :class="{'text-red-500 font-bold': isTaskOverdue(record), 'text-gray-500': !isTaskOverdue(record)}">
-                    {{ formatDate(record.dueDate) }}
-                </span>
-                 <a-tag v-if="isTaskOverdue(record)" color="red" class="ml-1">逾期</a-tag>
+              <span :class="{'text-red-500 font-bold': isTaskOverdue(record), 'text-gray-500': !isTaskOverdue(record)}">
+                {{ formatDate(record.dueDate) }}
+              </span>
+              <a-tag
+                v-if="isTaskOverdue(record)"
+                color="red"
+                class="ml-1"
+              >
+                逾期
+              </a-tag>
             </template>
-             <template v-if="column.key === 'timeInfo'">
-                <div class="text-xs text-gray-500">
-                    <div>创建: {{ formatDate(record.createdAt) }}</div>
-                    <div v-if="record.completedAt">完成: {{ formatDate(record.completedAt) }}</div>
-                 </div>
+            <template v-if="column.key === 'timeInfo'">
+              <div class="text-xs text-gray-500">
+                <div>创建: {{ formatDate(record.createdAt) }}</div>
+                <div v-if="record.completedAt">
+                  完成: {{ formatDate(record.completedAt) }}
+                </div>
+              </div>
             </template>
             <template v-if="column.key === 'action'">
               <a-space>
                 <a-button 
-                    v-if="canSubmit(record)" 
-                    type="primary" 
-                    size="small" 
-                    @click="openSubmitModal(record)"
+                  v-if="canSubmit(record)" 
+                  type="primary" 
+                  size="small" 
+                  @click="openSubmitModal(record)"
                 >
                   整改
                 </a-button>
                 <a-button 
-                    v-if="canReview(record)" 
-                    type="primary" 
-                    ghost 
-                    size="small" 
-                    @click="openReviewModal(record)"
+                  v-if="canReview(record)" 
+                  type="primary" 
+                  ghost 
+                  size="small" 
+                  @click="openReviewModal(record)"
                 >
                   验收
                 </a-button>
-                 <a-button size="small" @click="viewDetail(record)">详情</a-button>
+                <a-button
+                  size="small"
+                  @click="viewDetail(record)"
+                >
+                  详情
+                </a-button>
               </a-space>
             </template>
           </template>
@@ -98,15 +172,15 @@
 
     <!-- Modals -->
     <RectificationForm
-        v-model:visible="showSubmitModal"
-        :task="currentTask"
-        @success="refresh"
+      v-model:visible="showSubmitModal"
+      :task="currentTask"
+      @success="refresh"
     />
 
     <RectificationReviewModal
-        v-model:visible="showReviewModal"
-        :task="currentTask"
-        @success="refresh"
+      v-model:visible="showReviewModal"
+      :task="currentTask"
+      @success="refresh"
     />
   </div>
 </template>

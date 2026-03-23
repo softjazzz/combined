@@ -6,7 +6,9 @@
         <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
           <ArrowLeftOutlined class="text-lg" />
         </button>
-        <h2 class="text-xl font-semibold text-slate-800 dark:text-white">付费监测</h2>
+        <h2 class="text-xl font-semibold text-slate-800 dark:text-white">
+          付费监测
+        </h2>
         <span class="text-sm text-slate-400">DRG/DIP 付费预测与盈亏分析</span>
       </div>
       <a-dropdown>
@@ -39,7 +41,9 @@
     <!-- Summary Cards -->
     <div class="grid grid-cols-4 gap-4 mb-4">
       <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">本月总费用</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+          本月总费用
+        </div>
         <div class="flex items-baseline gap-1">
           <DollarOutlined class="text-blue-500 text-lg" />
           <span class="text-2xl font-bold text-slate-800 dark:text-white">{{ formatWan(overview.actualCost) }}</span>
@@ -48,7 +52,9 @@
       </div>
 
       <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">预计医保支付</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+          预计医保支付
+        </div>
         <div class="flex items-baseline gap-1">
           <PayCircleOutlined class="text-green-500 text-lg" />
           <span class="text-2xl font-bold text-slate-800 dark:text-white">{{ formatWan(overview.payment) }}</span>
@@ -57,10 +63,15 @@
       </div>
 
       <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">预计盈亏</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+          预计盈亏
+        </div>
         <div class="flex items-baseline gap-1">
           <RiseOutlined class="text-green-500 text-lg" />
-          <span :class="overview.profit >= 0 ? 'text-green-600' : 'text-red-600'" class="text-2xl font-bold">
+          <span
+            :class="overview.profit >= 0 ? 'text-green-600' : 'text-red-600'"
+            class="text-2xl font-bold"
+          >
             {{ formatWanSigned(overview.profit) }}
           </span>
           <span class="text-sm text-slate-400">万元</span>
@@ -68,7 +79,9 @@
       </div>
 
       <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">亏损病例</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+          亏损病例
+        </div>
         <div class="flex items-baseline gap-1">
           <FallOutlined class="text-red-500 text-lg" />
           <span class="text-2xl font-bold text-red-600">{{ overview.lossCases }}</span>
@@ -81,10 +94,16 @@
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
         <div class="flex items-start justify-between gap-4 mb-3">
           <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">医保支付率自动核算</div>
-            <div class="text-sm text-slate-700 dark:text-slate-200">整体口径 = 预计医保支付 / 实际费用</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+              医保支付率自动核算
+            </div>
+            <div class="text-sm text-slate-700 dark:text-slate-200">
+              整体口径 = 预计医保支付 / 实际费用
+            </div>
           </div>
-          <a-tag color="processing">总体</a-tag>
+          <a-tag color="processing">
+            总体
+          </a-tag>
         </div>
         <div class="flex items-baseline gap-2 mb-2">
           <span class="text-3xl font-bold text-slate-800 dark:text-white">{{ overview.paymentRate.toFixed(1) }}%</span>
@@ -101,13 +120,27 @@
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
         <div class="flex items-start justify-between gap-4 mb-3">
           <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">科室支付率筛选</div>
-            <div class="text-sm text-slate-700 dark:text-slate-200">切换科室后自动重算支付率与盈亏</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+              科室支付率筛选
+            </div>
+            <div class="text-sm text-slate-700 dark:text-slate-200">
+              切换科室后自动重算支付率与盈亏
+            </div>
           </div>
-          <a-tag color="blue">{{ selectedDeptLabel }}</a-tag>
+          <a-tag color="blue">
+            {{ selectedDeptLabel }}
+          </a-tag>
         </div>
-        <a-select v-model:value="deptFilter" class="w-full mb-3" size="small">
-          <a-select-option v-for="option in paymentMonitoringDeptOptions" :key="option.value" :value="option.value">
+        <a-select
+          v-model:value="deptFilter"
+          class="w-full mb-3"
+          size="small"
+        >
+          <a-select-option
+            v-for="option in paymentMonitoringDeptOptions"
+            :key="option.value"
+            :value="option.value"
+          >
             {{ option.label }}
           </a-select-option>
         </a-select>
@@ -126,10 +159,16 @@
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
         <div class="flex items-start justify-between gap-4 mb-3">
           <div>
-            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">实时模拟分组与费用控制提示</div>
-            <div class="text-sm text-slate-700 dark:text-slate-200">按成本消耗率分组，支付率单独核算</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+              实时模拟分组与费用控制提示
+            </div>
+            <div class="text-sm text-slate-700 dark:text-slate-200">
+              按成本消耗率分组，支付率单独核算
+            </div>
           </div>
-          <a-tag :color="activeGroupRule ? activeGroupRule.color : 'processing'">{{ selectedGroupLabel }}</a-tag>
+          <a-tag :color="activeGroupRule ? activeGroupRule.color : 'processing'">
+            {{ selectedGroupLabel }}
+          </a-tag>
         </div>
         <div class="grid grid-cols-3 gap-2">
           <div
@@ -141,11 +180,20 @@
               : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-700/30'"
           >
             <div class="flex items-center justify-between gap-2 mb-1">
-              <a-tag :color="rule.color" class="m-0">{{ rule.title }}</a-tag>
+              <a-tag
+                :color="rule.color"
+                class="m-0"
+              >
+                {{ rule.title }}
+              </a-tag>
               <span class="text-xs text-slate-400">{{ getGroupCaseCount(rule.groupType) }} 例</span>
             </div>
-            <div class="text-xs text-slate-500 dark:text-slate-400 leading-5">{{ rule.trigger }}</div>
-            <div class="mt-1 text-xs text-slate-500 dark:text-slate-300 leading-5">{{ rule.suggestion }}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 leading-5">
+              {{ rule.trigger }}
+            </div>
+            <div class="mt-1 text-xs text-slate-500 dark:text-slate-300 leading-5">
+              {{ rule.suggestion }}
+            </div>
           </div>
         </div>
       </div>
@@ -156,23 +204,41 @@
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
         <div class="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">付费趋势 (近30日)</h3>
-            <p class="text-xs text-slate-400 mt-1">实际费用、医保支付与支付率同屏展示</p>
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              付费趋势 (近30日)
+            </h3>
+            <p class="text-xs text-slate-400 mt-1">
+              实际费用、医保支付与支付率同屏展示
+            </p>
           </div>
-          <a-tag color="blue">静态可重复数据</a-tag>
+          <a-tag color="blue">
+            静态可重复数据
+          </a-tag>
         </div>
-        <div ref="paymentTrendRef" class="h-64"></div>
+        <div
+          ref="paymentTrendRef"
+          class="h-64"
+        />
       </div>
 
       <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
         <div class="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">DRG 分组分布 (按当前筛选)</h3>
-            <p class="text-xs text-slate-400 mt-1">分组结果随科室、组别和状态联动更新</p>
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              DRG 分组分布 (按当前筛选)
+            </h3>
+            <p class="text-xs text-slate-400 mt-1">
+              分组结果随科室、组别和状态联动更新
+            </p>
           </div>
-          <a-tag :color="getGroupTagColor(groupFilter)">当前：{{ selectedGroupLabel }}</a-tag>
+          <a-tag :color="getGroupTagColor(groupFilter)">
+            当前：{{ selectedGroupLabel }}
+          </a-tag>
         </div>
-        <div ref="drgDistributionRef" class="h-64"></div>
+        <div
+          ref="drgDistributionRef"
+          class="h-64"
+        />
       </div>
     </div>
 
@@ -180,15 +246,32 @@
     <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
       <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">付费明细</h3>
-          <div class="text-xs text-slate-400 mt-1">按科室、组别和状态联动筛选</div>
+          <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            付费明细
+          </h3>
+          <div class="text-xs text-slate-400 mt-1">
+            按科室、组别和状态联动筛选
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <a-segmented v-model:value="groupFilter" :options="paymentMonitoringGroupOptions" />
-          <a-select v-model:value="statusFilter" class="w-32" size="small">
-            <a-select-option value="all">全部状态</a-select-option>
-            <a-select-option value="profit">盈余</a-select-option>
-            <a-select-option value="loss">亏损</a-select-option>
+          <a-segmented
+            v-model:value="groupFilter"
+            :options="paymentMonitoringGroupOptions"
+          />
+          <a-select
+            v-model:value="statusFilter"
+            class="w-32"
+            size="small"
+          >
+            <a-select-option value="all">
+              全部状态
+            </a-select-option>
+            <a-select-option value="profit">
+              盈余
+            </a-select-option>
+            <a-select-option value="loss">
+              亏损
+            </a-select-option>
           </a-select>
         </div>
       </div>
@@ -196,14 +279,30 @@
         <table class="w-full text-sm min-w-[1100px]">
           <thead class="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300">
             <tr>
-              <th class="px-4 py-3 text-left font-medium">病案号</th>
-              <th class="px-4 py-3 text-left font-medium">科室</th>
-              <th class="px-4 py-3 text-left font-medium">DRG分组</th>
-              <th class="px-4 py-3 text-left font-medium">实际费用</th>
-              <th class="px-4 py-3 text-left font-medium">医保支付</th>
-              <th class="px-4 py-3 text-left font-medium">医保支付率</th>
-              <th class="px-4 py-3 text-left font-medium">盈亏</th>
-              <th class="px-4 py-3 text-left font-medium">监测分组</th>
+              <th class="px-4 py-3 text-left font-medium">
+                病案号
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                科室
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                DRG分组
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                实际费用
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                医保支付
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                医保支付率
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                盈亏
+              </th>
+              <th class="px-4 py-3 text-left font-medium">
+                监测分组
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -212,11 +311,21 @@
               :key="item.id"
               class="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30"
             >
-              <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ item.caseNo }}</td>
-              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ item.deptName }}</td>
-              <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{{ item.drg }}</td>
-              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">¥{{ item.actualCost.toLocaleString() }}</td>
-              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">¥{{ item.payment.toLocaleString() }}</td>
+              <td class="px-4 py-3 text-slate-700 dark:text-slate-300">
+                {{ item.caseNo }}
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">
+                {{ item.deptName }}
+              </td>
+              <td class="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
+                {{ item.drg }}
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">
+                ¥{{ item.actualCost.toLocaleString() }}
+              </td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-400">
+                ¥{{ item.payment.toLocaleString() }}
+              </td>
               <td class="px-4 py-3">
                 <div class="flex flex-col">
                   <span :class="calcPaymentRate(item) >= 100 ? 'text-green-600' : calcPaymentRate(item) >= 90 ? 'text-blue-600' : 'text-red-600'">
@@ -237,7 +346,12 @@
               </td>
             </tr>
             <tr v-if="!filteredRows.length">
-              <td colspan="8" class="px-4 py-10 text-center text-slate-400">当前筛选下暂无数据</td>
+              <td
+                colspan="8"
+                class="px-4 py-10 text-center text-slate-400"
+              >
+                当前筛选下暂无数据
+              </td>
             </tr>
           </tbody>
         </table>

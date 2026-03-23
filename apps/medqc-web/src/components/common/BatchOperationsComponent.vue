@@ -28,7 +28,10 @@
             :size="isMobile ? 'small' : 'middle'"
             @click="handleAction(action)"
           >
-            <template #icon v-if="action.icon">
+            <template
+              v-if="action.icon"
+              #icon
+            >
               <component :is="action.icon" />
             </template>
             {{ isMobile ? action.shortLabel || action.label : action.label }}
@@ -64,7 +67,10 @@
         </template>
       </a-progress>
       
-      <div class="progress-details" v-if="progressDetails">
+      <div
+        v-if="progressDetails"
+        class="progress-details"
+      >
         <div class="progress-stats">
           <span class="stat-item">
             <span class="stat-label">成功:</span>
@@ -98,7 +104,10 @@
           >
             <template #extra>
               <a-space>
-                <a-button type="primary" @click="showResultModal = false">
+                <a-button
+                  type="primary"
+                  @click="showResultModal = false"
+                >
                   确定
                 </a-button>
                 <a-button 
@@ -112,9 +121,15 @@
           </a-result>
         </div>
         
-        <div v-if="resultDetails.length > 0" class="result-details">
+        <div
+          v-if="resultDetails.length > 0"
+          class="result-details"
+        >
           <a-collapse>
-            <a-collapse-panel key="details" header="详细结果">
+            <a-collapse-panel
+              key="details"
+              header="详细结果"
+            >
               <div class="result-list">
                 <div
                   v-for="(result, index) in resultDetails"
@@ -123,8 +138,13 @@
                   :class="{ 'result-error': result.error }"
                 >
                   <div class="result-item-content">
-                    <div class="result-item-title">{{ result.title }}</div>
-                    <div v-if="result.error" class="result-item-error">
+                    <div class="result-item-title">
+                      {{ result.title }}
+                    </div>
+                    <div
+                      v-if="result.error"
+                      class="result-item-error"
+                    >
                       {{ result.error }}
                     </div>
                   </div>
@@ -148,6 +168,7 @@ import { ref, computed, watch } from 'vue'
 import type { Component } from 'vue'
 import { CloseOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+import type { CheckboxChangeEvent } from 'ant-design-vue/es/checkbox/interface'
 
 // 批量操作定义
 interface BatchAction {
@@ -245,8 +266,15 @@ const availableActions = computed(() =>
   })
 )
 
+const getItemDisplay = (item: unknown, index: number): string => {
+  if (item && typeof item === 'object' && 'id' in item) {
+    return String((item as { id?: unknown }).id ?? index + 1)
+  }
+  return String(index + 1)
+}
+
 // 方法
-const handleSelectAll = (e) => {
+const handleSelectAll = (e: CheckboxChangeEvent) => {
   emit('select-all', e.target.checked)
 }
 
@@ -327,12 +355,12 @@ const executeBatchOperation = async (action: BatchAction, items: unknown[]) => {
         
         successCount++
         results.push({
-          title: `项目 ${item.id || index + 1}`,
+          title: `项目 ${getItemDisplay(item, index)}`,
         })
       } catch (error) {
         failedCount++
         results.push({
-          title: `项目 ${item.id || index + 1}`,
+          title: `项目 ${getItemDisplay(item, index)}`,
           error: error instanceof Error ? error.message : '处理失败'
         })
       }
@@ -398,7 +426,7 @@ const showResults = (successCount: number, failedCount: number, details: ResultD
 }
 
 const showConfirm = (action: BatchAction): Promise<boolean> => {
-  return new Promise((resolve: unknown) => {
+  return new Promise((resolve) => {
     // 这里应该显示确认对话框
     // 简化实现，直接返回 true
     resolve(true)

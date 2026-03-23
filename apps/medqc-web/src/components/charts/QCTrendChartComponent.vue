@@ -4,10 +4,20 @@
     <div class="chart-controls mb-4">
       <div class="flex justify-between items-center">
         <div class="flex items-center space-x-4">
-          <a-radio-group v-model:value="chartType" button-style="solid" size="small">
-            <a-radio-button value="line">趋势图</a-radio-button>
-            <a-radio-button value="bar">柱状图</a-radio-button>
-            <a-radio-button value="area">面积图</a-radio-button>
+          <a-radio-group
+            v-model:value="chartType"
+            button-style="solid"
+            size="small"
+          >
+            <a-radio-button value="line">
+              趋势图
+            </a-radio-button>
+            <a-radio-button value="bar">
+              柱状图
+            </a-radio-button>
+            <a-radio-button value="area">
+              面积图
+            </a-radio-button>
           </a-radio-group>
           
           <a-select 
@@ -16,10 +26,18 @@
             size="small"
             @change="handleMetricChange"
           >
-            <a-select-option value="all">全部指标</a-select-option>
-            <a-select-option value="count">病案数量</a-select-option>
-            <a-select-option value="score">平均评分</a-select-option>
-            <a-select-option value="pass_rate">通过率</a-select-option>
+            <a-select-option value="all">
+              全部指标
+            </a-select-option>
+            <a-select-option value="count">
+              病案数量
+            </a-select-option>
+            <a-select-option value="score">
+              平均评分
+            </a-select-option>
+            <a-select-option value="pass_rate">
+              通过率
+            </a-select-option>
           </a-select>
         </div>
         
@@ -56,24 +74,49 @@
     </div>
 
     <!-- 图表容器 -->
-    <div class="chart-container" :style="{ height: props.height + 'px' }">
-      <div v-if="loading" class="chart-loading">
+    <div
+      class="chart-container"
+      :style="{ height: props.height + 'px' }"
+    >
+      <div
+        v-if="loading"
+        class="chart-loading"
+      >
         <a-spin size="large" />
-        <p class="mt-4 text-gray-500">正在加载数据...</p>
+        <p class="mt-4 text-gray-500">
+          正在加载数据...
+        </p>
       </div>
       
-      <div v-else-if="error" class="chart-error">
+      <div
+        v-else-if="error"
+        class="chart-error"
+      >
         <ExclamationCircleOutlined class="text-4xl text-red-500 mb-4" />
-        <p class="text-gray-600 mb-4">{{ error }}</p>
-        <a-button type="primary" @click="refreshData">重新加载</a-button>
+        <p class="text-gray-600 mb-4">
+          {{ error }}
+        </p>
+        <a-button
+          type="primary"
+          @click="refreshData"
+        >
+          重新加载
+        </a-button>
       </div>
       
-      <div v-else class="chart-content">
+      <div
+        v-else
+        class="chart-content"
+      >
         <!-- 简化的图表展示 -->
         <div class="chart-display">
           <div class="chart-header mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">质控趋势分析</h3>
-            <p class="text-sm text-gray-600">{{ getDateRange() }}</p>
+            <h3 class="text-lg font-semibold text-gray-800">
+              质控趋势分析
+            </h3>
+            <p class="text-sm text-gray-600">
+              {{ getDateRange() }}
+            </p>
           </div>
           
           <!-- 数据可视化 -->
@@ -95,7 +138,7 @@
                       backgroundColor: '#1890ff'
                     }"
                     :title="`${item.date}: ${item.count}个病案`"
-                  ></div>
+                  />
                   
                   <!-- 评分柱状图 -->
                   <div 
@@ -106,7 +149,7 @@
                       backgroundColor: '#52c41a'
                     }"
                     :title="`${item.date}: ${item.score}分`"
-                  ></div>
+                  />
                   
                   <!-- 通过率柱状图 -->
                   <div 
@@ -117,7 +160,7 @@
                       backgroundColor: '#faad14'
                     }"
                     :title="`${item.date}: ${item.pass_rate}%`"
-                  ></div>
+                  />
                 </div>
                 
                 <div class="bar-label">
@@ -128,8 +171,15 @@
           </div>
           
           <!-- 趋势线图 -->
-          <div v-if="chartType === 'line'" class="trend-lines">
-            <svg width="100%" height="100" class="trend-svg">
+          <div
+            v-if="chartType === 'line'"
+            class="trend-lines"
+          >
+            <svg
+              width="100%"
+              height="100"
+              class="trend-svg"
+            >
               <!-- 病案数量趋势线 -->
               <polyline
                 v-if="selectedMetric === 'all' || selectedMetric === 'count'"
@@ -165,11 +215,15 @@
     <!-- 图表说明 -->
     <div class="chart-legend mt-4">
       <div class="flex flex-wrap gap-4 text-sm">
-        <div v-for="item in legendItems" :key="item.name" class="flex items-center">
+        <div
+          v-for="item in legendItems"
+          :key="item.name"
+          class="flex items-center"
+        >
           <div 
             class="w-3 h-3 rounded-full mr-2"
             :style="{ backgroundColor: item.color }"
-          ></div>
+          />
           <span class="text-gray-600">{{ item.name }}</span>
           <span class="ml-2 font-medium">{{ item.value }}</span>
         </div>

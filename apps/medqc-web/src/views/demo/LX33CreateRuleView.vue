@@ -3,11 +3,17 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-left">
-        <a-button type="text" @click="() => router.push('/demo/lx33')" class="back-btn">
-          <template #icon><LeftOutlined /></template>
+        <a-button
+          type="text"
+          class="back-btn"
+          @click="() => router.push('/demo/lx33')"
+        >
+          <template #icon>
+            <LeftOutlined />
+          </template>
           返回规则列表
         </a-button>
-        <div class="header-divider"></div>
+        <div class="header-divider" />
         <h1 class="page-title">
           <RobotOutlined class="title-icon" />
           AI智能创建质控规则
@@ -26,7 +32,7 @@
         <span><BulbOutlined /> 请用自然语言描述您的质控需求，AI 将自动生成完整的规则草案</span>
       </template>
       <template #description>
-        示例：检查入院记录是否记录了患者的过敏史，包括药物过敏与食物过敏。如无过敏史需明确写明。<br />
+        示例：检查入院记录是否记录了患者的过敏史，包括药物过敏与食物过敏。如无过敏史需明确写明。<br>
         <a @click="showExamples = true">查看更多示例</a>
       </template>
     </a-alert>
@@ -35,11 +41,17 @@
     <div class="content-grid">
       <!-- 左侧：需求输入表单 -->
       <div class="form-panel">
-        <a-card :bordered="false" class="input-card">
+        <a-card
+          :bordered="false"
+          class="input-card"
+        >
           <template #title>
             <span><EditOutlined /> 描述您的质控需求</span>
           </template>
-          <a-form :model="formData" layout="vertical">
+          <a-form
+            :model="formData"
+            layout="vertical"
+          >
             <a-form-item
               label="需求描述"
               required
@@ -59,30 +71,61 @@
             <a-row :gutter="12">
               <a-col :span="8">
                 <a-form-item label="适用文书">
-                  <a-select v-model:value="formData.documentType" size="large">
-                    <a-select-option value="入院记录">入院记录</a-select-option>
-                    <a-select-option value="首次病程记录">首次病程记录</a-select-option>
-                    <a-select-option value="病程记录">病程记录</a-select-option>
-                    <a-select-option value="手术记录">手术记录</a-select-option>
-                    <a-select-option value="出院记录">出院记录</a-select-option>
+                  <a-select
+                    v-model:value="formData.documentType"
+                    size="large"
+                  >
+                    <a-select-option value="入院记录">
+                      入院记录
+                    </a-select-option>
+                    <a-select-option value="首次病程记录">
+                      首次病程记录
+                    </a-select-option>
+                    <a-select-option value="病程记录">
+                      病程记录
+                    </a-select-option>
+                    <a-select-option value="手术记录">
+                      手术记录
+                    </a-select-option>
+                    <a-select-option value="出院记录">
+                      出院记录
+                    </a-select-option>
                   </a-select>
                 </a-form-item>
               </a-col>
               <a-col :span="8">
                 <a-form-item label="缺陷级别">
-                  <a-select v-model:value="formData.defectLevel" size="large">
-                    <a-select-option value="严重缺陷">严重缺陷</a-select-option>
-                    <a-select-option value="一般缺陷">一般缺陷</a-select-option>
-                    <a-select-option value="提示性缺陷">提示性缺陷</a-select-option>
+                  <a-select
+                    v-model:value="formData.defectLevel"
+                    size="large"
+                  >
+                    <a-select-option value="严重缺陷">
+                      严重缺陷
+                    </a-select-option>
+                    <a-select-option value="一般缺陷">
+                      一般缺陷
+                    </a-select-option>
+                    <a-select-option value="提示性缺陷">
+                      提示性缺陷
+                    </a-select-option>
                   </a-select>
                 </a-form-item>
               </a-col>
               <a-col :span="8">
                 <a-form-item label="复杂度">
-                  <a-select v-model:value="formData.complexity" size="large">
-                    <a-select-option value="低复杂度">低复杂度</a-select-option>
-                    <a-select-option value="中复杂度">中复杂度</a-select-option>
-                    <a-select-option value="高复杂度">高复杂度</a-select-option>
+                  <a-select
+                    v-model:value="formData.complexity"
+                    size="large"
+                  >
+                    <a-select-option value="低复杂度">
+                      低复杂度
+                    </a-select-option>
+                    <a-select-option value="中复杂度">
+                      中复杂度
+                    </a-select-option>
+                    <a-select-option value="高复杂度">
+                      高复杂度
+                    </a-select-option>
                   </a-select>
                 </a-form-item>
               </a-col>
@@ -96,15 +139,18 @@
                   :loading="generating"
                   :disabled="!canGenerate"
                   :title="requirementTooShort ? `需求描述至少需要 ${MIN_REQUIREMENT_LENGTH} 个字` : ''"
-                  @click="handleGenerate"
                   class="generate-btn"
+                  @click="handleGenerate"
                 >
                   <template #icon>
                     <ThunderboltOutlined />
                   </template>
                   AI智能生成
                 </a-button>
-                <a-button size="large" @click="showExamples = true">
+                <a-button
+                  size="large"
+                  @click="showExamples = true"
+                >
                   查看示例需求
                 </a-button>
               </a-space>
@@ -116,11 +162,17 @@
       <!-- 右侧：生成进度和规则预览 -->
       <div class="preview-panel">
         <!-- 生成进度提示 -->
-        <a-card v-if="generating" :bordered="false" class="generating-card">
+        <a-card
+          v-if="generating"
+          :bordered="false"
+          class="generating-card"
+        >
           <div class="generating-content">
             <a-spin size="large">
               <template #tip>
-                <div class="generating-tip">{{ generatingTip }}</div>
+                <div class="generating-tip">
+                  {{ generatingTip }}
+                </div>
               </template>
             </a-spin>
           </div>
@@ -136,7 +188,11 @@
         />
 
         <!-- 空状态 -->
-        <a-card v-if="!generating && !generatedRule" :bordered="false" class="empty-state-card">
+        <a-card
+          v-if="!generating && !generatedRule"
+          :bordered="false"
+          class="empty-state-card"
+        >
           <a-empty
             description="填写需求描述后，点击 AI智能生成 按钮，系统将自动生成质控规则"
           >

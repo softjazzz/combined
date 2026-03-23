@@ -9,7 +9,11 @@
       <div class="navbar-left">
         <!-- Logo -->
         <div class="logo">
-          <svg class="logo-icon" viewBox="0 0 24 24" fill="currentColor">
+          <svg
+            class="logo-icon"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
             <path d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3ZM10 17H8V13H5V11H8V7H10V11H13V13H10V17ZM19 19H12V17H15V13H19V19Z" />
           </svg>
           <div class="brand-info">
@@ -34,29 +38,37 @@
           <DownOutlined class="arrow" />
         </div>
         
-        <div class="divider"></div>
+        <div class="divider" />
         
         <div class="user-profile">
-          <a-avatar size="small" style="background-color: #1890ff">李</a-avatar>
+          <a-avatar
+            size="small"
+            style="background-color: #1890ff"
+          >
+            李
+          </a-avatar>
           <span class="username">李医生</span>
           <DownOutlined class="arrow" />
         </div>
         
         <div class="system-actions">
-           <SettingOutlined class="action-icon" />
-           <LogoutOutlined class="action-icon" />
+          <SettingOutlined class="action-icon" />
+          <LogoutOutlined class="action-icon" />
         </div>
       </div>
     </header>
 
     <!-- Patient Info Banner -->
-    <div class="patient-banner" v-if="store.currentCase">
+    <div
+      v-if="store.currentCase"
+      class="patient-banner"
+    >
       <div class="patient-basic">
         <span class="name">{{ store.currentCase.patientInfo.name }}</span>
         <div class="tags">
-           <span class="tag-item">{{ store.currentCase.patientInfo.gender }}</span>
-           <span class="tag-item">{{ store.currentCase.patientInfo.age }}岁</span>
-           <span class="tag-item highlight">ID: {{ store.currentCase.patientInfo.patientId }}</span>
+          <span class="tag-item">{{ store.currentCase.patientInfo.gender }}</span>
+          <span class="tag-item">{{ store.currentCase.patientInfo.age }}岁</span>
+          <span class="tag-item highlight">ID: {{ store.currentCase.patientInfo.idNumber || '-' }}</span>
         </div>
       </div>
       
@@ -80,9 +92,13 @@
       </div>
       
       <div class="banner-actions">
-         <a-button type="primary" size="small" ghost>
-           切换患者
-         </a-button>
+        <a-button
+          type="primary"
+          size="small"
+          ghost
+        >
+          切换患者
+        </a-button>
       </div>
     </div>
 
