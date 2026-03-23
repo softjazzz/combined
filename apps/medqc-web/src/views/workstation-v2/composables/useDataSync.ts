@@ -12,6 +12,7 @@ import {
   type SyncRunLogItem as SyncRunHistoryItem,
   type SyncSource,
   type SyncStatistics,
+  type SyncTemplate,
   type SyncTier,
 } from '@/api/sync'
 
@@ -47,6 +48,7 @@ export interface PgConnectionForm {
 
 export interface SyncPolicyForm {
   enabled: boolean
+  target_departments: string[]
   discharge_stable_days: number
   lookback_minutes: number
   rescan_recent_days: number
@@ -127,6 +129,7 @@ function createInitialState() {
 
     policyForm: {
       enabled: false,
+      target_departments: ['*'],
       discharge_stable_days: 3,
       lookback_minutes: 10,
       rescan_recent_days: 7,
@@ -163,6 +166,15 @@ function createInitialState() {
     isSyncing: false,
     mappingsLoading: false,
     runsLoading: false,
+    templatesLoading: false,
+    templateApplying: false,
+    departmentsLoading: false,
+
+    syncTemplates: [] as SyncTemplate[],
+    selectedTemplateId: 'hospital_standard' as SyncTemplate['id'],
+    selectedTemplateDepartments: [] as string[],
+    showAdvancedPolicy: false,
+    availableDepartments: [] as string[],
 
     currentRunLog: [] as SyncRuntimeLogItem[],
   }
@@ -188,6 +200,10 @@ function patchMongoForms(payload: MongoConnectionConfig) {
   globalSyncState.mongoConnectionForm.connect_timeout_ms = payload.connect_timeout_ms || 5000
 
   globalSyncState.policyForm.enabled = payload.enabled ?? false
+  globalSyncState.policyForm.target_departments =
+    Array.isArray(payload.target_departments) && payload.target_departments.length > 0
+      ? payload.target_departments
+      : ['*']
   globalSyncState.policyForm.discharge_stable_days = payload.discharge_stable_days ?? 3
   globalSyncState.policyForm.lookback_minutes = payload.lookback_minutes ?? 10
   globalSyncState.policyForm.rescan_recent_days = payload.rescan_recent_days ?? 7
@@ -272,6 +288,36 @@ async function loadMappings() {
     console.error('加载字段映射失败:', error)
   } finally {
     globalSyncState.mappingsLoading = false
+  }
+}
+
+async function loadTemplates() {
+  globalSyncState.templatesLoading = true
+  try {
+    const resp = await syncApi.getTemplates()
+    globalSyncState.syncTemplates = Array.isArray(resp.items) ? resp.items : []
+    if (
+      !globalSyncState.syncTemplates.some((item) => item.id === globalSyncState.selectedTemplateId)
+    ) {
+      globalSyncState.selectedTemplateId = 'hospital_standard'
+    }
+  } catch (error) {
+    console.error('加载同步模板失败:', error)
+    globalSyncState.syncTemplates = []
+  } finally {
+    globalSyncState.templatesLoading = false
+  }
+}
+
+async function loadDepartments() {
+  globalSyncState.departmentsLoading = true
+  try {
+    globalSyncState.availableDepartments = await syncApi.getDepartments()
+  } catch (error) {
+    console.error('加载科室列表失败:', error)
+    globalSyncState.availableDepartments = []
+  } finally {
+    globalSyncState.departmentsLoading = false
   }
 }
 
@@ -398,8 +444,21 @@ async function savePgConnection() {
 async function savePolicy() {
   globalSyncState.isSavingPolicy = true
   try {
+    const departments = Array.isArray(globalSyncState.policyForm.target_departments)
+      ? [
+          ...new Set(
+            globalSyncState.policyForm.target_departments
+              .map((item) => String(item || '').trim())
+              .filter(Boolean),
+          ),
+        ]
+      : []
+    const safeDepartments =
+      departments.length === 0 || departments.includes('*') ? ['*'] : departments
+
     await syncApi.updateMongoConfig({
       enabled: globalSyncState.policyForm.enabled,
+      target_departments: safeDepartments,
       discharge_stable_days: globalSyncState.policyForm.discharge_stable_days,
       lookback_minutes: globalSyncState.policyForm.lookback_minutes,
       rescan_recent_days: globalSyncState.policyForm.rescan_recent_days,
@@ -419,6 +478,34 @@ async function savePolicy() {
     throw error
   } finally {
     globalSyncState.isSavingPolicy = false
+  }
+}
+
+async function applyTemplate() {
+  globalSyncState.templateApplying = true
+  try {
+    const resp = await syncApi.applyTemplate({
+      template_id: globalSyncState.selectedTemplateId,
+      departments:
+        globalSyncState.selectedTemplateDepartments.length > 0
+          ? globalSyncState.selectedTemplateDepartments
+          : undefined,
+    })
+    pushLog('success', `模板已应用：${resp.template_id}`)
+    await loadMongoConfig()
+    await loadStatusAndStats()
+    try {
+      await runPreflight('mongo')
+    } catch {
+      // 模板应用后预检失败仅记录日志，不中断主流程
+    }
+    return resp
+  } catch (error: any) {
+    const errMsg = error?.response?.data?.detail || error?.message || '未知错误'
+    pushLog('error', `模板应用失败：${errMsg}`)
+    throw error
+  } finally {
+    globalSyncState.templateApplying = false
   }
 }
 
@@ -508,6 +595,8 @@ async function initialize() {
       loadStatusAndStats(),
       loadMappings(),
       loadRunHistory(),
+      loadTemplates(),
+      loadDepartments(),
     ])
     pushLog('info', '数据同步控制台已加载')
   } catch (error: any) {
@@ -560,6 +649,9 @@ export function useDataSync() {
     clearLogs,
     loadMappings,
     loadRunHistory: refreshRunHistory,
+    applyTemplate,
+    loadTemplates,
+    loadDepartments,
     resetState,
   }
 }

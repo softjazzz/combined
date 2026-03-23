@@ -250,3 +250,58 @@ class TestSyncRouter:
         assert body["limit"] == 20
         assert body["items"][0]["source"] == "mongo"
         assert body["items"][0]["tier"] == "tier2"
+
+    def test_get_templates_permissions(self, client):
+        _override_user(client, ["qc_manager"])
+        resp_manager = client.get("/api/v1/sync/templates")
+        assert resp_manager.status_code == 200
+
+        _override_user(client, ["doctor"])
+        resp_doctor = client.get("/api/v1/sync/templates")
+        assert resp_doctor.status_code == 403
+
+    def test_apply_template_success(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        saved_holder = {}
+
+        monkeypatch.setattr("app.services.etl_config.load_mongo_config", lambda: MongoSyncConfig())
+
+        def _fake_save_mongo_config(cfg):
+            saved_holder["value"] = asdict(cfg)
+            return asdict(cfg)
+
+        monkeypatch.setattr("app.services.etl_config.save_mongo_config", _fake_save_mongo_config)
+
+        resp = client.post(
+            "/api/v1/sync/templates/apply",
+            json={
+                "template_id": "single_department_focus",
+                "departments": ["心内科"],
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["template_id"] == "single_department_focus"
+        assert saved_holder["value"]["target_departments"] == ["心内科"]
+
+    def test_apply_template_validation(self, client):
+        _override_user(client, ["admin"])
+
+        resp_empty = client.post(
+            "/api/v1/sync/templates/apply",
+            json={
+                "template_id": "multi_department_joint",
+                "departments": [],
+            },
+        )
+        assert resp_empty.status_code == 422
+
+        resp_mixed_star = client.post(
+            "/api/v1/sync/templates/apply",
+            json={
+                "template_id": "multi_department_joint",
+                "departments": ["*", "心内科"],
+            },
+        )
+        assert resp_mixed_star.status_code == 422

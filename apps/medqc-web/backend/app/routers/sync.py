@@ -126,6 +126,11 @@ class PreflightRequest(BaseModel):
     tables: Optional[list[str]] = None
 
 
+class SyncTemplateApplyRequest(BaseModel):
+    template_id: Literal["hospital_standard", "single_department_focus", "multi_department_joint", "night_low_impact"]
+    departments: Optional[list[str]] = None
+
+
 def _utc_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -532,3 +537,39 @@ async def get_sync_runs(
     from ..services.sync_run_history import list_sync_run_records
 
     return list_sync_run_records(source=source, tier=tier, limit=limit)
+
+
+@router.get("/templates")
+async def get_sync_templates(_: dict = Depends(require_sync_read_access)):
+    """获取同步模板目录"""
+    from ..services.sync_templates import list_sync_templates
+
+    return {"items": list_sync_templates()}
+
+
+@router.post("/templates/apply")
+async def apply_sync_template(
+    req: SyncTemplateApplyRequest,
+    _: dict = Depends(require_sync_write_access),
+):
+    """应用同步模板（仅 admin）"""
+    from ..services.etl_config import load_mongo_config, save_mongo_config
+    from ..services.sync_templates import build_template_overrides
+
+    config = load_mongo_config()
+    try:
+        overrides = build_template_overrides(
+            template_id=req.template_id,
+            departments=req.departments,
+            current_config=config,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    for key, value in overrides.items():
+        if hasattr(config, key):
+            setattr(config, key, value)
+
+    saved = save_mongo_config(config)
+    saved["mongo_uri_display"] = _mask_mongo_uri(str(saved.get("mongo_uri") or ""))
+    return {"success": True, "template_id": req.template_id, "config": saved}

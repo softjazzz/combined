@@ -19,6 +19,7 @@ export interface MongoConnectionConfig {
   inter_request_delay_ms?: number
   night_window_start?: string
   night_window_end?: string
+  target_departments?: string[]
   enabled?: boolean
 }
 
@@ -107,6 +108,20 @@ export interface SyncRunsResponse {
   items: SyncRunLogItem[]
   total: number
   limit: number
+}
+
+export interface SyncTemplate {
+  id:
+    | 'hospital_standard'
+    | 'single_department_focus'
+    | 'multi_department_joint'
+    | 'night_low_impact'
+  name: string
+  description: string
+  risk_tip: string
+  requires_departments: boolean
+  allow_multi_departments: boolean
+  defaults: Partial<MongoConnectionConfig>
 }
 
 export const syncApi = {
@@ -199,5 +214,23 @@ export const syncApi = {
   }): Promise<SyncRunsResponse> {
     const response = await http.get('/api/v1/sync/runs', { params })
     return response.data
+  },
+
+  async getTemplates(): Promise<{ items: SyncTemplate[] }> {
+    const response = await http.get('/api/v1/sync/templates')
+    return response.data
+  },
+
+  async applyTemplate(payload: {
+    template_id: SyncTemplate['id']
+    departments?: string[]
+  }): Promise<{ success: boolean; template_id: string; config: MongoConnectionConfig }> {
+    const response = await http.post('/api/v1/sync/templates/apply', payload)
+    return response.data
+  },
+
+  async getDepartments(): Promise<string[]> {
+    const response = await http.get('/api/medical-records/departments')
+    return Array.isArray(response.data) ? response.data : []
   },
 }

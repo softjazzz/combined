@@ -264,6 +264,25 @@ def acquire_visits(session: Session, status: str, limit: int) -> List:
 _table_columns_cache: Dict[str, set] = {}
 
 
+def _normalize_target_departments(raw_departments: Any) -> Optional[list[str]]:
+    """标准化目标科室：返回 None 表示不过滤。"""
+    if not isinstance(raw_departments, list):
+        return None
+
+    cleaned: list[str] = []
+    seen = set()
+    for dep in raw_departments:
+        name = str(dep or "").strip()
+        if not name or name in seen:
+            continue
+        cleaned.append(name)
+        seen.add(name)
+
+    if not cleaned or "*" in cleaned:
+        return None
+    return cleaned
+
+
 def _get_table_columns(session: Session, table_name: str) -> set:
     """获取表的列名（带缓存）"""
     if table_name in _table_columns_cache:
@@ -357,6 +376,7 @@ def run_tier1_discover(connector: MongoConnector, config) -> Dict:
         config = load_mongo_config()
 
     stable_cutoff = datetime.utcnow() - timedelta(days=config.discharge_stable_days)
+    target_departments = _normalize_target_departments(getattr(config, "target_departments", None))
 
     db = connector.get_db()
     session = SessionLocal()
@@ -378,6 +398,8 @@ def run_tier1_discover(connector: MongoConnector, config) -> Dict:
         query_filter = {
             "discharge_datetime": {"$ne": None, "$lt": stable_cutoff},
         }
+        if target_departments:
+            query_filter["discharge_dept_name"] = {"$in": target_departments}
         if safe_cursor:
             query_filter["update_time"] = {"$gte": safe_cursor}
 
@@ -402,6 +424,8 @@ def run_tier1_discover(connector: MongoConnector, config) -> Dict:
                 "discharge_datetime": {"$ne": None},
                 "update_time": {"$gte": rescan_cutoff},
             }
+            if target_departments:
+                rescan_filter["discharge_dept_name"] = {"$in": target_departments}
             rescan_results = list(
                 db["mr"].find(rescan_filter, projection)
                 .sort([("update_time", 1), ("_id", 1)])
