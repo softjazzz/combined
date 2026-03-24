@@ -1,5 +1,7 @@
 <template>
-  <section class="rounded-2xl border border-slate-200/70 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)] overflow-hidden">
+  <section
+    class="rounded-2xl border border-slate-200/70 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)] overflow-hidden"
+  >
     <div class="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="text-[14px] font-semibold text-slate-800">
@@ -121,7 +123,11 @@ const emit = defineEmits<{
 
 const rowSelection = computed(() => ({
   selectedRowKeys: props.selectedRowKeys,
-  onChange: (keys: (string | number)[]) => emit('update:selectedRowKeys', keys.map((k) => String(k))),
+  onChange: (keys: (string | number)[]) =>
+    emit(
+      'update:selectedRowKeys',
+      keys.map((k) => String(k)),
+    ),
 }))
 
 const columns = [

@@ -1,5 +1,7 @@
 <template>
-  <section class="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+  <section
+    class="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
+  >
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h3 class="text-[18px] font-bold tracking-tight text-slate-900">

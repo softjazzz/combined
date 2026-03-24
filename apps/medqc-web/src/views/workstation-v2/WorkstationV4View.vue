@@ -362,10 +362,14 @@
                       v-else-if="concatText"
                       class="medical-record-document mx-auto max-w-[116ch] px-3 py-0.5"
                     >
-                      <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-slate-200/80 bg-white/82 px-3 py-2">
+                      <div
+                        class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-slate-200/80 bg-white/82 px-3 py-2"
+                      >
                         <div class="text-[12px] font-semibold text-slate-500">
-                          已加载 <span class="font-mono text-slate-700">{{ concatSections.length }}</span> 段文书，
-                          共 <span class="font-mono text-slate-700">{{ concatTotalChars }}</span> 字
+                          已加载
+                          <span class="font-mono text-slate-700">{{ concatSections.length }}</span>
+                          段文书， 共
+                          <span class="font-mono text-slate-700">{{ concatTotalChars }}</span> 字
                         </div>
                         <a-button
                           size="small"
@@ -404,7 +408,8 @@
                         <div
                           :class="[
                             'medical-record-document__content-wrap',
-                            !isConcatSectionExpanded(idx) && 'medical-record-document__content-wrap--collapsed',
+                            !isConcatSectionExpanded(idx) &&
+                              'medical-record-document__content-wrap--collapsed',
                           ]"
                         >
                           <pre
@@ -1598,7 +1603,7 @@ const DEMO_HOME_NAME_MAP: Record<string, string> = {
 
 const listRecords = computed(() => {
   const sourceRecords = currentStageFilter.value
-    ? (stageQueues.value[currentStageFilter.value] || [])
+    ? stageQueues.value[currentStageFilter.value] || []
     : filteredRecords.value
   const demoIdsInView = new Set(
     sourceRecords
@@ -1691,8 +1696,7 @@ function priorityReason(record: PatientRecord) {
   const days = record.days || 0
   const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
   const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
-  if (isDischarged && cdmFrontpageEmpty)
-    return '已出院，首页资料还未完善，建议优先处理'
+  if (isDischarged && cdmFrontpageEmpty) return '已出院，首页资料还未完善，建议优先处理'
   if (isDischarged && days >= 8)
     return '\u5df2\u51fa\u9662\uff0c\u5efa\u8bae\u5c3d\u5feb\u5b8c\u6210\u5355\u6848\u5904\u7406'
   if (!isDischarged)
@@ -1748,7 +1752,9 @@ const priorityGroups = computed<PriorityGroup[]>(() => {
 
 const priorityCardsFiltered = computed(() => {
   if (activePriorityGroup.value === 'all') return priorityCards.value.slice(0, 8)
-  return priorityCards.value.filter((card) => card.riskType === activePriorityGroup.value).slice(0, 8)
+  return priorityCards.value
+    .filter((card) => card.riskType === activePriorityGroup.value)
+    .slice(0, 8)
 })
 
 const workbenchRows = computed<WorkbenchRow[]>(() =>
@@ -1908,8 +1914,8 @@ const concatTotalChars = computed(() =>
 )
 const allConcatSectionsExpanded = computed(
   () =>
-    concatSections.value.length > 0
-    && concatSections.value.every((_, index) => expandedConcatSectionIndexes.value.has(index)),
+    concatSections.value.length > 0 &&
+    concatSections.value.every((_, index) => expandedConcatSectionIndexes.value.has(index)),
 )
 
 function isConcatSectionExpanded(index: number) {
