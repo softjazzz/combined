@@ -465,6 +465,10 @@ export async function getAnalysisData(params: {
   startDate: string
   endDate: string
   filterId?: string // 科室ID/医生ID等
+  sessionId?: string
+  batchId?: string
+  department?: string
+  doctor?: string
 }): Promise<AnalysisDataResponse> {
   if (USE_MOCK_DATA) {
     return Promise.resolve(mockAnalysisData(params.dimension))
@@ -476,9 +480,61 @@ export async function getAnalysisData(params: {
     end_date: params.endDate,
   })
   if (params.filterId) qs.set('filter_id', params.filterId)
+  if (params.sessionId) qs.set('session_id', params.sessionId)
+  if (params.batchId) qs.set('batch_id', params.batchId)
+  if (params.department) qs.set('department', params.department)
+  if (params.doctor) qs.set('doctor', params.doctor)
 
   const response = await fetch(`${API_V1_PREFIX}/drg/analysis?${qs.toString()}`)
-  return response.json()
+  const data = await response.json()
+  return data.data ?? data
+}
+
+export async function exportAnalysisData(params: {
+  format: 'excel' | 'pdf' | 'docx'
+  dimension: AnalysisDimension
+  startDate: string
+  endDate: string
+  filterId?: string
+  sessionId?: string
+  batchId?: string
+  department?: string
+  doctor?: string
+  versionId?: string
+}): Promise<{ blob: Blob; fileName: string }> {
+  if (USE_MOCK_DATA && params.format === 'docx') {
+    throw new Error('Mock 模式暂不支持 DOCX 导出，请切换真实 API')
+  }
+
+  if (USE_MOCK_DATA) {
+    return Promise.reject(new Error('Mock 模式请使用前端本地导出'))
+  }
+
+  const qs = new URLSearchParams({
+    dimension: params.dimension,
+    start_date: params.startDate,
+    end_date: params.endDate,
+  })
+  if (params.filterId) qs.set('filter_id', params.filterId)
+  if (params.sessionId) qs.set('session_id', params.sessionId)
+  if (params.batchId) qs.set('batch_id', params.batchId)
+  if (params.department) qs.set('department', params.department)
+  if (params.doctor) qs.set('doctor', params.doctor)
+  if (params.versionId) qs.set('version_id', params.versionId)
+
+  const response = await fetch(
+    `${API_V1_PREFIX}/drg/analysis/export/${params.format}?${qs.toString()}`,
+  )
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `导出失败: ${response.status}`)
+  }
+
+  const disposition = response.headers.get('content-disposition') || ''
+  const matched = disposition.match(/filename=([^;]+)/i)
+  const fileName = matched?.[1]?.replace(/["']/g, '') || `drg-analysis.${params.format}`
+  const blob = await response.blob()
+  return { blob, fileName }
 }
 
 // ==================== 分组器配置中心 API（6.2.2） ====================
@@ -942,6 +998,7 @@ export const drgApi = {
 
   // 统计分析
   getAnalysisData,
+  exportAnalysisData,
 
   // 6.2.2 分组器本地化配置
   getGrouperConfigCurrent,

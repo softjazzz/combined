@@ -60,6 +60,9 @@
                     <a-menu-item key="pdf">
                       <FilePdfOutlined /> 导出 PDF 报告
                     </a-menu-item>
+                    <a-menu-item key="docx">
+                      <FileWordOutlined /> 导出 DOCX 报告
+                    </a-menu-item>
                   </a-menu>
                 </template>
                 <a-button :loading="exporting">
@@ -144,6 +147,42 @@
         </a-col>
       </a-row>
 
+      <a-row
+        :gutter="16"
+        style="margin-bottom: 16px"
+      >
+        <a-col :span="8">
+          <a-card :loading="loading">
+            <a-statistic
+              title="低风险组死亡率"
+              :value="statistics.lowRiskMortalityRate"
+              :precision="2"
+              suffix="%"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="8">
+          <a-card :loading="loading">
+            <a-statistic
+              title="时间消耗指数"
+              :value="statistics.timeConsumptionIndex"
+              :precision="3"
+            />
+          </a-card>
+        </a-col>
+        <a-col :span="8">
+          <a-card :loading="loading">
+            <a-statistic
+              title="医保盈亏"
+              :value="statistics.insuranceProfitLoss"
+              :precision="2"
+              suffix="元"
+              :value-style="{ color: statistics.insuranceProfitLoss >= 0 ? '#3f8600' : '#cf1322' }"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
+
       <!-- 图表区域 -->
       <a-row
         :gutter="16"
@@ -198,6 +237,27 @@
             autoresize
           />
         </div>
+      </a-card>
+
+      <a-card
+        title="分析结论（可追溯）"
+        :bordered="false"
+        style="margin-bottom: 16px"
+        :loading="loading"
+      >
+        <a-empty
+          v-if="conclusions.length === 0"
+          description="暂无分析结论"
+        />
+        <a-list
+          v-else
+          size="small"
+          :data-source="conclusions"
+        >
+          <template #renderItem="{ item }">
+            <a-list-item>{{ item }}</a-list-item>
+          </template>
+        </a-list>
       </a-card>
 
       <!-- 医生绩效对比 (仅在医生维度显示) -->
@@ -297,8 +357,10 @@ import {
   DownOutlined,
   FileExcelOutlined,
   FilePdfOutlined,
+  FileWordOutlined,
 } from '@ant-design/icons-vue'
-import { exportToExcel, exportComprehensiveReport, type ExportFormat } from '@/utils/export'
+import { saveAs } from 'file-saver'
+import { exportComprehensiveReport } from '@/utils/export'
 
 // ECharts imports
 import { use } from 'echarts/core'
@@ -353,10 +415,14 @@ const statistics = reactive({
   totalProfit: 0,
   avgCostRate: 0,
   drgGroupCount: 0,
+  lowRiskMortalityRate: 0,
+  timeConsumptionIndex: 0,
+  insuranceProfitLoss: 0,
 })
 
 /** 表格数据 */
 const tableData = ref<AnalysisTableItem[]>([])
+const conclusions = ref<string[]>([])
 
 /** 图表配置 */
 const drgDistributionOption = ref<EChartsOption>({})
@@ -430,6 +496,8 @@ const dynamicColumns = computed(() => {
 // ================== 导出逻辑 ==================
 
 const exporting = ref(false)
+type ExportFormat = 'excel' | 'pdf' | 'docx'
+const useMockData = (import.meta as any).env?.VITE_USE_DRG_MOCK !== 'false'
 
 const dimensionLabelMap: Record<string, string> = {
   hospital: '全院概览',
@@ -452,6 +520,23 @@ const handleExport = async (format: ExportFormat = 'excel') => {
 
   exporting.value = true
   try {
+    if (!useMockData) {
+      const { blob, fileName } = await drgApi.exportAnalysisData({
+        format,
+        dimension: dimension.value,
+        startDate: dateRange.value[0].format(dateFormat),
+        endDate: dateRange.value[1].format(dateFormat),
+      })
+      saveAs(blob, fileName)
+      message.success(`${format.toUpperCase()} 导出成功`)
+      return
+    }
+
+    if (format === 'docx') {
+      message.warning('Mock 模式不支持 DOCX，请切换真实 API 后导出')
+      return
+    }
+
     const dateStr = dateRange.value.map((d: any) => d.format('YYYYMMDD')).join('-')
     const title = 'DRG Analysis Report'
 
@@ -483,7 +568,7 @@ const handleExport = async (format: ExportFormat = 'excel') => {
         tableData: tableData.value,
         tableHeaders,
       },
-      format,
+      format as 'excel' | 'pdf',
     )
 
     message.success(`${format.toUpperCase()} 导出成功`)
@@ -533,35 +618,53 @@ const updateCostCompositionChart = (data: { name: string; value: number }[]) => 
   }
 }
 
-const updateTrendChart = (trends: { cost: any[]; cmi: any[] }) => {
+const updateTrendChart = (trends: {
+  cost: any[]
+  cmi: any[]
+  time?: any[]
+  profit_loss?: any[]
+}) => {
   const dates = trends.cost.map((i) => i.date)
+  const hasProfit = Array.isArray(trends.profit_loss) && trends.profit_loss.length > 0
+  const series: any[] = [
+    {
+      name: '费用消耗指数',
+      type: 'line',
+      data: trends.cost.map((i) => i.value),
+      smooth: true,
+      markLine: { data: [{ yAxis: 1, name: '基准线' }] },
+    },
+    {
+      name: 'CMI值',
+      type: 'line',
+      yAxisIndex: 1,
+      data: trends.cmi.map((i) => i.value),
+      smooth: true,
+      itemStyle: { color: '#faad14' },
+    },
+  ]
+  if (hasProfit) {
+    series.push({
+      name: '医保盈亏',
+      type: 'line',
+      yAxisIndex: 2,
+      data: (trends.profit_loss || []).map((i: any) => i.value),
+      smooth: true,
+      itemStyle: { color: '#10b981' },
+    })
+  }
 
   costRateTrendOption.value = {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['费用消耗指数', 'CMI值'] },
+    legend: { data: hasProfit ? ['费用消耗指数', 'CMI值', '医保盈亏'] : ['费用消耗指数', 'CMI值'] },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', boundaryGap: false, data: dates },
     yAxis: [
       { type: 'value', name: '费用消耗指数', min: 0.5, max: 1.5 },
       { type: 'value', name: 'CMI值', min: 0 },
+      { type: 'value', name: '医保盈亏', position: 'right', offset: 70 },
     ],
-    series: [
-      {
-        name: '费用消耗指数',
-        type: 'line',
-        data: trends.cost.map((i) => i.value),
-        smooth: true,
-        markLine: { data: [{ yAxis: 1, name: '基准线' }] },
-      },
-      {
-        name: 'CMI值',
-        type: 'line',
-        yAxisIndex: 1,
-        data: trends.cmi.map((i) => i.value),
-        smooth: true,
-        itemStyle: { color: '#faad14' },
-      },
-    ],
+    series,
   }
 }
 
@@ -678,6 +781,10 @@ const loadAnalysisData = async () => {
     statistics.totalProfit = res.overview.totalProfit
     statistics.avgCostRate = res.overview.avgCostRate * 100 // 转百分比
     statistics.drgGroupCount = res.overview.drgGroupCount
+    statistics.lowRiskMortalityRate = res.overview.lowRiskMortalityRate ?? 0
+    statistics.timeConsumptionIndex = res.overview.timeConsumptionIndex ?? 0
+    statistics.insuranceProfitLoss =
+      res.overview.insuranceProfitLoss ?? res.overview.totalProfit ?? 0
 
     // 更新图表
     updateDRGDistributionChart(res.distribution.drg)
@@ -686,6 +793,7 @@ const loadAnalysisData = async () => {
 
     // 更新表格
     tableData.value = res.tableData
+    conclusions.value = res.conclusions || []
 
     // 如果是医生维度，更新医生对比图表
     if (dimension.value === 'doctor' && res.tableData.length > 0) {
