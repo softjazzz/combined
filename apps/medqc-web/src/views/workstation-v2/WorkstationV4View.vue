@@ -130,309 +130,53 @@
 
         <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
           <div class="mx-auto w-full max-w-[1440px]">
-            <section
-              v-if="priorityRecords.length > 0"
-              class="mb-6"
+            <PriorityLane
+              v-model:active-group="activePriorityGroup"
+              class="mb-4"
+              :groups="priorityGroups"
+              :cards="priorityCardsFiltered"
+              :readonly="isStageQueueMode"
+              @open-record="handlePriorityOpen"
+              @defer-record="handlePriorityDefer"
+            />
+
+            <BatchTablePanel
+              :rows="workbenchRows"
+              :selected-row-keys="selectedWorkbenchKeys"
+              :summary-text="tableSummaryText"
+              :loading="loading"
+              @update:selected-row-keys="selectedWorkbenchKeys = $event"
+              @open-record="handleRowOpen"
+              @batch-extract="handleBatchExtract"
+              @batch-defer="handleBatchDefer"
+              @batch-assign="handleBatchAssign"
+              @clear-filters="handleClearFilters"
+            />
+
+            <div
+              v-if="listRecords.length === 0"
+              class="mt-4 flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center"
             >
-              <div class="mb-4 flex items-end justify-between">
-                <div>
-                  <h3
-                    class="flex items-center gap-2.5 text-[20px] font-black tracking-[-0.03em] text-slate-900"
-                  >
-                    <span class="relative flex h-2.5 w-2.5">
-                      <span
-                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"
-                      />
-                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-                    </span>
-                    高优预警
-                    <span
-                      class="rounded-full bg-red-50 px-2.5 py-0.5 text-[12px] font-bold text-red-600 border border-red-100/50"
-                    >
-                      {{ priorityRecords.length }}
-                    </span>
-                  </h3>
-                  <div class="mt-1 text-[13px] text-slate-500 font-medium">
-                    建议优先处理这批临近超期病案
-                  </div>
-                </div>
+              <InboxOutlined class="mb-3 text-[36px] text-slate-200" />
+              <div class="text-[13px] font-medium text-slate-400">
+                {{ stageEmptyText }}
               </div>
+            </div>
 
-              <div class="grid grid-cols-1 gap-4 xl:grid-cols-4">
-                <article
-                  v-for="record in priorityRecords"
-                  :key="record.id"
-                  class="group relative flex flex-col justify-between cursor-pointer rounded-2xl border border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(252,253,255,1)_100%)] shadow-[0_6px_24px_-8px_rgba(15,23,42,0.06)] transition-all duration-300 hover:border-blue-300/60 hover:shadow-[0_14px_30px_-8px_rgba(37,99,235,0.15)] hover:-translate-y-1 overflow-hidden"
-                  @click="openRecord(record)"
-                >
-                  <!-- Main Body -->
-                  <div class="px-5 pt-5 pb-4">
-                    <!-- Patient & ID Row -->
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="flex items-center gap-2.5 min-w-0">
-                        <h4
-                          class="truncate text-[19px] font-black tracking-tight text-slate-900 leading-none"
-                        >
-                          {{ record.name || '\u672a\u77e5\u60a3\u8005' }}
-                        </h4>
-                        <span
-                          class="shrink-0 rounded-md bg-slate-100/80 px-1.5 py-[3px] text-[11px] font-mono font-bold tracking-tight text-slate-500"
-                        >
-                          {{ record.id }}
-                        </span>
-                      </div>
-
-                      <!-- Urgency Duration -->
-                      <div class="shrink-0">
-                        <span
-                          class="inline-flex items-center rounded-lg bg-[linear-gradient(180deg,rgba(254,242,242,1),rgba(254,226,226,0.6))] px-2.5 py-0.5 text-[11.5px] font-black tracking-wider text-red-600 ring-1 ring-inset ring-red-200/80 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.15)]"
-                        >
-                          {{ stayText(record.days) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <!-- Metadata Row -->
-                    <div
-                      class="mt-3.5 flex items-center gap-2 text-[12.5px] font-medium text-slate-500"
-                    >
-                      <div class="flex items-center gap-1.5 min-w-0">
-                        <svg
-                          class="w-3.5 h-3.5 shrink-0 text-slate-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          stroke-width="2"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                          />
-                        </svg>
-                        <span class="truncate">{{
-                          record.department || '\u672a\u5206\u79d1\u5ba4'
-                        }}</span>
-                      </div>
-                      <div class="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
-                      <div class="font-mono text-[11.5px] text-slate-400 opacity-90 shrink-0">
-                        {{ dateRange(record) }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Footer Block -->
-                  <div class="bg-slate-50/80 border-t border-slate-100 px-5 py-3">
-                    <div class="flex items-start gap-2.5">
-                      <div
-                        class="mt-[1px] flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full bg-orange-100/80 text-orange-500"
-                      >
-                        <svg
-                          class="w-3 h-3"
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                          />
-                        </svg>
-                      </div>
-                      <span
-                        class="text-[12.5px] font-bold leading-snug tracking-[-0.01em] text-slate-700"
-                      >
-                        {{ priorityReason(record) }}
-                      </span>
-                    </div>
-                  </div>
-                </article>
-              </div>
-            </section>
-
-            <section
-              class="rounded-[16px] border border-slate-200/60 bg-white shadow-[0_6px_20px_-4px_rgba(15,23,42,0.03)] overflow-hidden"
+            <div
+              v-if="serverTotalPages > 1"
+              class="mt-3 flex justify-center rounded-xl border border-slate-200/70 bg-white px-5 py-3"
             >
-              <!-- Table Header Bar -->
-              <div
-                class="flex items-center justify-between border-b border-slate-100 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-50/80 px-5 py-3.5"
-              >
-                <div class="flex items-center gap-3">
-                  <h3
-                    class="flex items-center gap-2.5 text-[17px] font-bold tracking-tight text-slate-800"
-                  >
-                    {{ stageMeta.tableTitle }}
-                    <span
-                      class="rounded bg-slate-200/60 px-2.5 py-0.5 text-[11.5px] font-mono font-bold text-slate-600 shadow-sm"
-                    >
-                      {{ listRecords.length }}
-                    </span>
-                  </h3>
-                  <div class="h-4 w-px bg-slate-200" />
-                  <div class="text-[12.5px] font-medium text-slate-500">
-                    {{ stageMeta.tableDesc }}
-                  </div>
-                </div>
-                <div
-                  v-if="isStageQueueMode"
-                  class="flex items-center gap-2"
-                >
-                  <a-button
-                    size="small"
-                    class="!rounded-md !h-7 !px-3.5 !text-[12.5px] !font-medium"
-                    @click="handleStageBatchAction"
-                  >
-                    {{ stageMeta.batchActionText }}
-                  </a-button>
-                  <a-button
-                    size="small"
-                    type="primary"
-                    class="!rounded-md !h-7 !px-4 !text-[12.5px] !font-bold !shadow-sm"
-                    :disabled="listRecords.length === 0"
-                    @click="handleStageContinueAction"
-                  >
-                    继续处理
-                  </a-button>
-                </div>
-              </div>
-
-              <!-- Empty State -->
-              <div
-                v-if="listRecords.length === 0"
-                class="flex min-h-[300px] flex-col items-center justify-center px-5 py-10 text-center"
-              >
-                <InboxOutlined class="mb-4 text-[42px] text-slate-200" />
-                <div class="text-[13px] font-medium text-slate-400">
-                  {{ stageEmptyText }}
-                </div>
-              </div>
-
-              <!-- Data Table -->
-              <div
-                v-else
-                class="overflow-x-auto"
-              >
-                <table class="min-w-full border-collapse">
-                  <thead class="bg-slate-50/50 border-b border-slate-100/80">
-                    <tr>
-                      <th
-                        class="px-6 py-3.5 text-left text-[13.5px] font-bold tracking-wide text-slate-500 w-[35%]"
-                      >
-                        患者信息
-                      </th>
-                      <th
-                        class="py-3.5 text-center text-[13.5px] font-bold tracking-wide text-slate-500 w-[25%]"
-                      >
-                        科室
-                      </th>
-                      <th
-                        class="py-3.5 text-center text-[13.5px] font-bold tracking-wide text-slate-500 w-[25%]"
-                      >
-                        阶段状态
-                      </th>
-                      <th
-                        class="py-3.5 text-center text-[13.5px] font-bold tracking-wide text-slate-500 w-[15%]"
-                      >
-                        操作
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-100/60">
-                    <tr
-                      v-for="record in listRecords"
-                      :key="record.id"
-                      :class="[
-                        'group cursor-pointer transition-all duration-200 hover:bg-slate-50/80',
-                        isPriorityRecord(record.id) ? 'bg-orange-50/10' : '',
-                      ]"
-                      @click="openRecord(record)"
-                    >
-                      <!-- Column 1: Patient Anchor -->
-                      <td class="px-6 py-3.5">
-                        <div class="flex flex-col gap-1">
-                          <div class="text-[15px] font-bold text-slate-800 tracking-tight">
-                            {{ record.name || '\u672a\u77e5\u60a3\u8005' }}
-                          </div>
-                          <div class="text-[12.5px] font-mono font-medium text-slate-400">
-                            {{ record.id }}
-                          </div>
-                        </div>
-                      </td>
-
-                      <!-- Column 2: Department -->
-                      <td class="px-6 py-3.5 text-center">
-                        <div
-                          class="inline-flex items-center justify-center gap-1.5 rounded-md text-[13.5px] font-medium text-slate-600 bg-slate-50 px-2.5 py-1.5"
-                        >
-                          <svg
-                            class="w-4 h-4 text-slate-400"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            stroke-width="2"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                            />
-                          </svg>
-                          {{ record.department || '\u672a\u5206\u79d1\u5ba4' }}
-                        </div>
-                      </td>
-
-                      <!-- Column 3: Status Dot -->
-                      <td class="px-6 py-3.5 text-center">
-                        <div class="inline-flex items-center justify-center gap-2">
-                          <span
-                            class="h-2 w-2 rounded-full"
-                            :class="[
-                              stageStatusClass.includes('sky')
-                                ? 'bg-sky-400'
-                                : stageStatusClass.includes('emerald')
-                                  ? 'bg-emerald-400'
-                                  : stageStatusClass.includes('amber')
-                                    ? 'bg-amber-400'
-                                    : 'bg-slate-300',
-                            ]"
-                          />
-                          <span class="text-[13.5px] font-medium text-slate-600">
-                            {{ stageStatusText }}
-                          </span>
-                        </div>
-                      </td>
-
-                      <!-- Column 4: Hover Action -->
-                      <td class="py-3.5 text-center">
-                        <div class="flex items-center justify-center">
-                          <a-button
-                            size="small"
-                            type="link"
-                            class="!px-0 !h-auto !text-[13.5px] !font-bold text-blue-500 opacity-80 group-hover:opacity-100 transition-opacity duration-200"
-                            @click.stop="handleStageRecordAction(record)"
-                          >
-                            {{ stageMeta.singleActionText }} →
-                          </a-button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div
-                v-if="serverTotalPages > 1"
-                class="flex justify-center border-t border-slate-200/70 px-5 py-4"
-              >
-                <a-pagination
-                  :current="currentPage"
-                  :total="serverTotal"
-                  :page-size="50"
-                  size="small"
-                  show-quick-jumper
-                  :show-total="(value: number) => `\u5171 ${value} \u4f8b`"
-                  @change="handlePageChange"
-                />
-              </div>
-            </section>
+              <a-pagination
+                :current="currentPage"
+                :total="serverTotal"
+                :page-size="50"
+                size="small"
+                show-quick-jumper
+                :show-total="(value: number) => `共 ${value} 例`"
+                @change="handlePageChange"
+              />
+            </div>
           </div>
         </div>
       </main>
@@ -466,6 +210,7 @@
             :record="selectedRecord"
             :documents="documentsList"
             :documents-loading="documentsLoading"
+            :active-doc-type="activeDocType"
             @preview-doc="openDocPreview"
           />
 
@@ -615,8 +360,21 @@
                     </div>
                     <div
                       v-else-if="concatText"
-                      class="medical-record-document mx-auto max-w-[124ch] px-3 py-0.5"
+                      class="medical-record-document mx-auto max-w-[116ch] px-3 py-0.5"
                     >
+                      <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-slate-200/80 bg-white/82 px-3 py-2">
+                        <div class="text-[12px] font-semibold text-slate-500">
+                          已加载 <span class="font-mono text-slate-700">{{ concatSections.length }}</span> 段文书，
+                          共 <span class="font-mono text-slate-700">{{ concatTotalChars }}</span> 字
+                        </div>
+                        <a-button
+                          size="small"
+                          class="!rounded-full !border-slate-200/80 !bg-white !text-slate-700"
+                          @click="toggleExpandAllSections"
+                        >
+                          {{ allConcatSectionsExpanded ? '收起全文' : '展开全文' }}
+                        </a-button>
+                      </div>
                       <div
                         class="mb-4 flex items-center gap-2 rounded-[10px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-xs text-blue-700"
                       >
@@ -626,17 +384,33 @@
                       <div
                         v-for="(section, idx) in concatSections"
                         :key="idx"
-                        class="mb-7"
+                        class="mb-5 rounded-[12px] border border-slate-200/75 bg-white/68 p-3 transition-all"
                       >
-                        <div class="mb-3 flex items-center gap-2 pb-1">
-                          <FileTextOutlined class="text-blue-400" />
-                          <h3 class="m-0 text-[16px] font-bold text-slate-800 dark:text-white">
-                            {{ section.title }}
-                          </h3>
+                        <button
+                          class="mb-2 flex w-full items-center justify-between gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
+                          @click="toggleConcatSection(idx)"
+                        >
+                          <span class="flex items-center gap-2">
+                            <FileTextOutlined class="text-blue-400" />
+                            <h3 class="m-0 text-[15px] font-bold text-slate-800 dark:text-white">
+                              {{ section.title }}
+                            </h3>
+                          </span>
+                          <span class="text-[11px] font-semibold text-blue-600">
+                            {{ isConcatSectionExpanded(idx) ? '收起' : '展开' }}
+                          </span>
+                        </button>
+                        <div class="h-px bg-slate-100 mb-2" />
+                        <div
+                          :class="[
+                            'medical-record-document__content-wrap',
+                            !isConcatSectionExpanded(idx) && 'medical-record-document__content-wrap--collapsed',
+                          ]"
+                        >
+                          <pre
+                            class="medical-record-document__content m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.05] text-slate-700 dark:text-slate-300"
+                          >{{ section.content }}</pre>
                         </div>
-                        <pre
-                          class="m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.15] text-slate-700 dark:text-slate-300"
-                        >{{ section.content }}</pre>
                       </div>
                     </div>
                     <div
@@ -1650,6 +1424,8 @@ import FrontpageRulesOverview from './components/FrontpageRulesOverview.vue'
 import SettlementRulesOverview from './components/SettlementRulesOverview.vue'
 import DetailHeader from './components/DetailHeader.vue'
 import DetailSidebar from './components/DetailSidebar.vue'
+import PriorityLane from './components/workbench/PriorityLane.vue'
+import BatchTablePanel from './components/workbench/BatchTablePanel.vue'
 import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
 import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
 import { useWorkstationSession } from './composables/useWorkstationSession'
@@ -1658,6 +1434,8 @@ import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
 import type { PatientRecord, DocItem, FrontpageFocusTarget, QCIssueLike } from './types'
+import type { PriorityCard, PriorityGroup } from './components/workbench/PriorityLane.vue'
+import type { WorkbenchRow } from './components/workbench/BatchTablePanel.vue'
 import type {
   WorkstationLaunchAction,
   WorkstationLaunchContext,
@@ -1810,10 +1588,43 @@ const stageEmptyText = computed(() => {
   return '当前筛选条件下暂无病历数据'
 })
 
+const DEMO_HOME_RECORD_ORDER = ['V-ZS-001', 'V-LM-001']
+const DEMO_HOME_RECORD_ORDER_MAP = new Map(DEMO_HOME_RECORD_ORDER.map((id, index) => [id, index]))
+const DEMO_HOME_RECORD_ID_SET = new Set(DEMO_HOME_RECORD_ORDER)
+const DEMO_HOME_NAME_MAP: Record<string, string> = {
+  'V-ZS-001': '张三',
+  'V-LM-001': '李明',
+}
+
 const listRecords = computed(() => {
-  if (!currentStageFilter.value) return filteredRecords.value
-  return stageQueues.value[currentStageFilter.value] || []
+  const sourceRecords = currentStageFilter.value
+    ? (stageQueues.value[currentStageFilter.value] || [])
+    : filteredRecords.value
+  const demoIdsInView = new Set(
+    sourceRecords
+      .filter((record) => record.isDemoRecord && DEMO_HOME_RECORD_ID_SET.has(record.id))
+      .map((record) => record.id),
+  )
+  if (!demoIdsInView.size) return sourceRecords
+  return sourceRecords.filter((record) => {
+    if (!demoIdsInView.has(record.id)) return true
+    return record.isDemoRecord === true
+  })
 })
+
+function isDemoRecord(record: PatientRecord): boolean {
+  return record.isDemoRecord === true
+}
+
+function displayRecordName(record: PatientRecord): string {
+  const rawName = String(record.name || '').trim()
+  if (isDemoRecord(record)) {
+    const normalized = rawName.replace(/\s+/g, '')
+    if (normalized.length >= 2 && normalized.length <= 3) return normalized
+    return DEMO_HOME_NAME_MAP[record.id] || normalized || '演示患者'
+  }
+  return rawName || '未知患者'
+}
 
 function hasAdmissionRecord(record: PatientRecord): boolean {
   return (
@@ -1849,34 +1660,8 @@ async function handleStageRecordAction(record: PatientRecord) {
   await executeLaunchAction(ctx, record)
 }
 
-async function handleStageContinueAction() {
-  const first = listRecords.value[0]
-  if (!first) {
-    message.warning('当前队列暂无可处理病历')
-    return
-  }
-  await handleStageRecordAction(first)
-}
-
-function handleStageBatchAction() {
-  if (!listRecords.value.length) {
-    message.warning('当前队列暂无可批量处理病历')
-    return
-  }
-  message.info('批量任务接口尚未接入，当前版本先支持按队列逐条处理。')
-}
-
-const priorityRecords = computed(() => {
-  return [...listRecords.value].sort((a, b) => priorityScore(b) - priorityScore(a)).slice(0, 4)
-})
-
-const priorityRecordIdSet = computed(
-  () => new Set(priorityRecords.value.map((record) => record.id)),
-)
-
-function isPriorityRecord(recordId: string) {
-  return priorityRecordIdSet.value.has(recordId)
-}
+const activePriorityGroup = ref('all')
+const selectedWorkbenchKeys = ref<string[]>([])
 
 function priorityScore(record: PatientRecord) {
   let score = 0
@@ -1893,12 +1678,21 @@ function priorityScore(record: PatientRecord) {
   return score
 }
 
+function riskTypeOf(record: PatientRecord): string {
+  if (isDemoRecord(record)) return 'demo'
+  const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
+  if (isDischarged && Boolean(record.cdmFrontpageEmpty)) return 'incomplete'
+  if (isDischarged && (record.days || 0) >= 8) return 'timeout'
+  if (record.status === 'warning' || record.status === 'has_defects') return 'ai_failed'
+  return 'normal'
+}
+
 function priorityReason(record: PatientRecord) {
   const days = record.days || 0
   const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
   const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
   if (isDischarged && cdmFrontpageEmpty)
-    return '\u5df2\u51fa\u9662\u4f46 CDM \u75c5\u6848\u9996\u9875\u4e3a\u7a7a\uff0c\u9700\u4f18\u5148\u751f\u6210\u7528\u4e8e\u4e0a\u62a5/\u533b\u4fdd\u63d0\u4ea4'
+    return '已出院，首页资料还未完善，建议优先处理'
   if (isDischarged && days >= 8)
     return '\u5df2\u51fa\u9662\uff0c\u5efa\u8bae\u5c3d\u5feb\u5b8c\u6210\u5355\u6848\u5904\u7406'
   if (!isDischarged)
@@ -1906,32 +1700,73 @@ function priorityReason(record: PatientRecord) {
   return '\u53ef\u76f4\u63a5\u8fdb\u5165\u8be6\u60c5\u9875\u8fdb\u884c\u590d\u6838'
 }
 
-function priorityCardClass(record: PatientRecord) {
-  const days = record.days || 0
-  const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
-  const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
-  if (isDischarged && cdmFrontpageEmpty) {
-    return 'border-blue-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(239,246,255,0.94))] shadow-[0_12px_24px_rgba(37,99,235,0.08)] hover:-translate-y-1'
+const priorityCards = computed<PriorityCard[]>(() => {
+  const pinnedDemoRecords = [...listRecords.value]
+    .filter((record) => isDemoRecord(record) && DEMO_HOME_RECORD_ID_SET.has(record.id))
+    .sort(
+      (a, b) =>
+        (DEMO_HOME_RECORD_ORDER_MAP.get(a.id) ?? 99) - (DEMO_HOME_RECORD_ORDER_MAP.get(b.id) ?? 99),
+    )
+  const pinnedSet = new Set(pinnedDemoRecords.map((record) => record.id))
+  const rankedNormalRecords = [...listRecords.value]
+    .filter((record) => !pinnedSet.has(record.id))
+    .sort((a, b) => priorityScore(b) - priorityScore(a))
+  return [...pinnedDemoRecords, ...rankedNormalRecords].map((record) => ({
+    id: record.id,
+    patientName: displayRecordName(record),
+    visitId: record.id,
+    department: record.department || '未分科室',
+    hospitalDays: Number(record.days || 0),
+    riskType: riskTypeOf(record),
+    riskText: priorityReason(record),
+    isDemo: isDemoRecord(record),
+    updatedAt: record.dischargeDate || record.admissionDate || '',
+  }))
+})
+
+const priorityGroups = computed<PriorityGroup[]>(() => {
+  const counters = {
+    all: priorityCards.value.length,
+    timeout: 0,
+    incomplete: 0,
+    ai_failed: 0,
+    demo: 0,
   }
-  if (!isDischarged && days >= 8) {
-    return 'border-sky-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(240,249,255,0.94))] shadow-[0_12px_24px_rgba(14,165,233,0.08)] hover:-translate-y-1'
-  }
-  return 'border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_12px_24px_rgba(15,23,42,0.045)] hover:-translate-y-1'
-}
+  priorityCards.value.forEach((card) => {
+    if (card.riskType in counters) {
+      counters[card.riskType as keyof typeof counters] += 1
+    }
+  })
+  return [
+    { key: 'all', label: '全部', count: counters.all },
+    { key: 'timeout', label: '超时风险', count: counters.timeout },
+    { key: 'incomplete', label: '资料不全', count: counters.incomplete },
+    { key: 'ai_failed', label: 'AI抽取失败', count: counters.ai_failed },
+    { key: 'demo', label: 'Demo演示', count: counters.demo },
+  ]
+})
 
-function stayText(days?: number) {
-  return `\u4f4f\u9662 ${days || 0} \u5929`
-}
+const priorityCardsFiltered = computed(() => {
+  if (activePriorityGroup.value === 'all') return priorityCards.value.slice(0, 8)
+  return priorityCards.value.filter((card) => card.riskType === activePriorityGroup.value).slice(0, 8)
+})
 
-function stayTextTone(days?: number) {
-  if (!days || days <= 7) return 'text-slate-500'
-  if (days <= 14) return 'text-blue-600'
-  return 'text-indigo-600'
-}
+const workbenchRows = computed<WorkbenchRow[]>(() =>
+  listRecords.value.map((record) => ({
+    id: record.id,
+    patientName: displayRecordName(record),
+    visitId: record.id,
+    department: record.department || '未分科室',
+    stageStatus: stageStatusText.value,
+    riskReason: priorityReason(record),
+    updatedAt: record.dischargeDate || record.admissionDate || '-',
+    isDemo: isDemoRecord(record),
+  })),
+)
 
-function dateRange(record: PatientRecord) {
-  return `${record.admissionDate || '--'} -> ${record.dischargeDate || '--'}`
-}
+const tableSummaryText = computed(() => {
+  return `当前筛选：${activeDept.value} / ${hospFilter.value} / ${stageMeta.value.tableTitle}`
+})
 
 // ========== 质控规则 Tab ==========
 const rulesSubTab = ref<'coding' | 'frontpage' | 'settlement'>('coding')
@@ -2034,6 +1869,7 @@ const documentsLoading = ref(false)
 const docDrawerVisible = ref(false)
 const docDrawerTitle = ref('')
 const docDrawerContent = ref('')
+const activeDocType = ref<string>('')
 
 // ========== 详情主 Tab ==========
 const detailMainTab = ref('records') // records | frontpage | settlement
@@ -2066,6 +1902,37 @@ const concatSections = computed(() => {
 
   return sections
 })
+const expandedConcatSectionIndexes = ref<Set<number>>(new Set())
+const concatTotalChars = computed(() =>
+  concatSections.value.reduce((sum, section) => sum + (section.content?.length || 0), 0),
+)
+const allConcatSectionsExpanded = computed(
+  () =>
+    concatSections.value.length > 0
+    && concatSections.value.every((_, index) => expandedConcatSectionIndexes.value.has(index)),
+)
+
+function isConcatSectionExpanded(index: number) {
+  return expandedConcatSectionIndexes.value.has(index)
+}
+
+function toggleConcatSection(index: number) {
+  const next = new Set(expandedConcatSectionIndexes.value)
+  if (next.has(index)) {
+    next.delete(index)
+  } else {
+    next.add(index)
+  }
+  expandedConcatSectionIndexes.value = next
+}
+
+function toggleExpandAllSections() {
+  if (allConcatSectionsExpanded.value) {
+    expandedConcatSectionIndexes.value = new Set()
+    return
+  }
+  expandedConcatSectionIndexes.value = new Set(concatSections.value.map((_, index) => index))
+}
 
 // ========== 结算清单 ==========
 const settlementData = ref<any>(null)
@@ -2259,6 +2126,7 @@ async function loadDocuments(visitId: string) {
 }
 
 function openDocPreview(doc: DocItem) {
+  activeDocType.value = doc.type || ''
   docDrawerTitle.value = doc.label
   docDrawerContent.value = doc.content || '暂无内容'
   docDrawerVisible.value = true
@@ -2336,13 +2204,18 @@ function getModuleStatus(m: string): 'done' | 'active' | 'pending' {
   return 'pending'
 }
 
-// 生成完成后自动切到“首页预览/打印” tab
+// 生成完成后延迟 5 秒自动切到“首页预览/打印” tab，让用户有时间查看提取结果
+let autoJumpTimer: ReturnType<typeof setTimeout> | null = null
+
 watch(frontpageGenerating, (generating, wasGenerating) => {
   if (wasGenerating && !generating && frontpageDraft.value) {
-    // 延迟一帧确保 DOM 已更新
-    nextTick(() => {
-      frontpageTab.value = defaultPreviewTab.value
-    })
+    if (autoJumpTimer) clearTimeout(autoJumpTimer)
+    autoJumpTimer = setTimeout(() => {
+      // 只有当前还在提取结果页时才自动跳转，避免覆盖用户的手动切换行为
+      if (frontpageTab.value === 'fields') {
+        frontpageTab.value = defaultPreviewTab.value
+      }
+    }, 5000)
   }
 })
 
@@ -2369,6 +2242,8 @@ watch(selectedId, (newId) => {
   assistIssues.value = []
   suggestionDrawerVisible.value = false
   docDrawerVisible.value = false
+  activeDocType.value = ''
+  expandedConcatSectionIndexes.value = new Set()
   settlementQcReport.value = null
   detailMainTab.value = 'records'
   emrRenderState.value = newId ? 'loading' : 'idle'
@@ -2386,6 +2261,16 @@ watch(selectedId, (newId) => {
     concatText.value = ''
     settlementData.value = null
     frontpageSheetData.value = null
+  }
+})
+
+watch(concatSections, (sections) => {
+  if (!sections.length) {
+    expandedConcatSectionIndexes.value = new Set()
+    return
+  }
+  if (!expandedConcatSectionIndexes.value.size) {
+    expandedConcatSectionIndexes.value = new Set([0])
   }
 })
 
@@ -2475,6 +2360,48 @@ function openRecord(record: PatientRecord) {
     delete nextQuery.stage
     router.replace({ path: route.path, query: nextQuery })
   }
+}
+
+function findRecordById(recordId: string): PatientRecord | undefined {
+  return listRecords.value.find((item) => item.id === recordId)
+}
+
+function handlePriorityOpen(recordId: string) {
+  const record = findRecordById(recordId)
+  if (!record) return
+  handleStageRecordAction(record)
+}
+
+function handlePriorityDefer(recordId: string) {
+  message.info(`已将 ${recordId} 标记为稍后处理`)
+}
+
+function handleRowOpen(recordId: string) {
+  const record = findRecordById(recordId)
+  if (!record) return
+  handleStageRecordAction(record)
+}
+
+function handleBatchExtract(keys: string[]) {
+  if (!keys.length) return
+  message.info(`已加入批量抽取队列：${keys.length} 条`)
+}
+
+function handleBatchDefer(keys: string[]) {
+  if (!keys.length) return
+  message.info(`已批量标记稍后：${keys.length} 条`)
+}
+
+function handleBatchAssign(keys: string[]) {
+  if (!keys.length) return
+  message.info(`批量分派功能准备中，已选择 ${keys.length} 条`)
+}
+
+function handleClearFilters() {
+  activeDept.value = '全部科室'
+  searchText.value = ''
+  hospFilter.value = 'all'
+  selectedWorkbenchKeys.value = []
 }
 
 // 快捷翻页
@@ -2676,6 +2603,7 @@ function handleJumpEvidenceFromQC(issue: QCIssueLike) {
     message.warning('暂无可跳转的文书依据')
     return
   }
+  activeDocType.value = doc.type || ''
   docDrawerTitle.value = `依据文书：${doc.label}`
   docDrawerContent.value = findEvidenceSnippet(issue, doc.content) || doc.content || '暂无内容'
   docDrawerVisible.value = true
@@ -2782,5 +2710,28 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 .detail-main-tabs .ant-tabs-tabpane {
   height: 100%;
   overflow-y: auto;
+}
+
+.medical-record-document__content-wrap {
+  position: relative;
+}
+
+.medical-record-document__content-wrap--collapsed {
+  max-height: 13.5rem;
+  overflow: hidden;
+}
+
+.medical-record-document__content-wrap--collapsed::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.95));
+}
+
+.medical-record-document__content {
+  letter-spacing: 0.01em;
 }
 </style>
