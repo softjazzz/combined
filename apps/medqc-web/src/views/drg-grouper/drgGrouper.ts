@@ -1,4 +1,12 @@
-import { CC, CCE, MCC, SS_VALID, group_record } from './sichuan2024Grouper'
+type SichuanDrgEngine = typeof import('./sichuan2024Grouper')
+let drgEnginePromise: Promise<SichuanDrgEngine> | null = null
+
+async function loadDrgEngine() {
+  if (!drgEnginePromise) {
+    drgEnginePromise = import('./sichuan2024Grouper')
+  }
+  return drgEnginePromise
+}
 
 export interface GrouperInput {
   gender: string
@@ -78,11 +86,12 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
   }
 
   try {
-    const cce = getPrimaryCce(zdList)
-    const { mccList, ccList } = collectComplications(zdList, cce)
-    const ssValidList = collectValidProcedures(ssList)
+    const engine = await loadDrgEngine()
+    const cce = getPrimaryCce(engine, zdList)
+    const { mccList, ccList } = collectComplications(engine, zdList, cce)
+    const ssValidList = collectValidProcedures(engine, ssList)
 
-    const raw = group_record({
+    const raw = engine.group_record({
       Index: 'WEB',
       gender: input.gender,
       age: Number.isFinite(input.age) ? Number(input.age) : 0,
@@ -172,31 +181,41 @@ function hasOwn(dict: unknown, key: string): boolean {
   return !!dict && Object.prototype.hasOwnProperty.call(dict, key)
 }
 
-function getPrimaryCce(zdList: string[]): string {
+function getPrimaryCce(engine: SichuanDrgEngine, zdList: string[]): string {
   const primary = zdList[0]
-  if (!primary || !hasOwn(CCE, primary)) return ''
-  return String((CCE as Record<string, string>)[primary] ?? '')
+  if (!primary || !hasOwn(engine.CCE, primary)) return ''
+  return String((engine.CCE as Record<string, string>)[primary] ?? '')
 }
 
-function collectComplications(zdList: string[], cce: string): { mccList: string[]; ccList: string[] } {
+function collectComplications(
+  engine: SichuanDrgEngine,
+  zdList: string[],
+  cce: string,
+): { mccList: string[]; ccList: string[] } {
   const mccList: string[] = []
   const ccList: string[] = []
 
   for (const zd of zdList) {
-    if (hasOwn(MCC, zd) && (cce.length === 0 || String((MCC as Record<string, string>)[zd]) !== cce)) {
+    if (
+      hasOwn(engine.MCC, zd)
+      && (cce.length === 0 || String((engine.MCC as Record<string, string>)[zd]) !== cce)
+    ) {
       mccList.push(zd)
       continue
     }
-    if (hasOwn(CC, zd) && (cce.length === 0 || String((CC as Record<string, string>)[zd]) !== cce)) {
+    if (
+      hasOwn(engine.CC, zd)
+      && (cce.length === 0 || String((engine.CC as Record<string, string>)[zd]) !== cce)
+    ) {
       ccList.push(zd)
     }
   }
   return { mccList, ccList }
 }
 
-function collectValidProcedures(ssList: string[]): string[] {
-  if (!Array.isArray(SS_VALID)) return []
-  return ssList.filter(ss => (SS_VALID as string[]).includes(ss))
+function collectValidProcedures(engine: SichuanDrgEngine, ssList: string[]): string[] {
+  if (!Array.isArray(engine.SS_VALID)) return []
+  return ssList.filter(ss => (engine.SS_VALID as string[]).includes(ss))
 }
 
 function normalizeMessages(raw: OpenDrgResult): string[] {
@@ -226,12 +245,6 @@ function normalizeDrg(drg: string | undefined): string | undefined {
 
 /** 获取可用的分组方案列表 */
 export function getAvailableSchemes() {
-  try {
-    // Touch once to fail fast if extracted module is broken.
-    void group_record
-  } catch {
-    // Keep API stable even if extraction failed.
-  }
   return [
     { key: 'sichuan_2024', label: 'CHS-DRG 2.0（四川）', drgs: 794, adrgs: 252 },
   ]

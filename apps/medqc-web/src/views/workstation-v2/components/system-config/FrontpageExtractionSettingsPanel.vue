@@ -215,10 +215,10 @@ const form = reactive<FrontpageExtractionSettings>({
   llm_backfill_enabled: true,
   allow_force_llm_regenerate: true,
   include_demo_records: true,
-  auto_hide_demo_when_real_data: true,
+  auto_hide_demo_when_real_data: false,
   demo_hide_threshold: 1,
   stream_progress_enabled: true,
-  default_preview_tab: 'fields',
+  default_preview_tab: 'preview',
 })
 
 const isAdmin = computed(() => authStore.userRoles.includes('admin'))

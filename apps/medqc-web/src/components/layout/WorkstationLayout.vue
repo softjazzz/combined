@@ -363,7 +363,10 @@
             name="fade"
             mode="out-in"
           >
-            <component :is="Component" />
+            <component
+              :is="Component"
+              :key="route.fullPath"
+            />
           </transition>
         </router-view>
       </a-layout-content>
@@ -444,7 +447,25 @@ const roleLabel = computed(() => {
 })
 
 // 方法
-const handleMenuSelect = ({ key }: { key: string }) => {
+async function navigateTo(path: string, query?: Record<string, string>) {
+  try {
+    if (query) {
+      await router.push({ path, query })
+      return
+    }
+    await router.push(path)
+  } catch (error) {
+    console.warn('[WorkstationLayout] router.push failed, fallback to location.assign', error)
+    if (query) {
+      const queryString = new URLSearchParams(query).toString()
+      window.location.assign(queryString ? `${path}?${queryString}` : path)
+      return
+    }
+    window.location.assign(path)
+  }
+}
+
+const handleMenuSelect = async ({ key }: { key: string }) => {
   const keyStr = String(key)
   if (keyStr.startsWith('ws-stage-')) return
   if (keyStr.includes('?')) {
@@ -452,14 +473,14 @@ const handleMenuSelect = ({ key }: { key: string }) => {
     const params = new URLSearchParams(queryStr)
     const query: Record<string, string> = {}
     params.forEach((v, k) => { query[k] = v })
-    router.push({ path, query })
+    await navigateTo(path, query)
   } else {
-    router.push(keyStr)
+    await navigateTo(keyStr)
   }
 }
 
 function goStageMenu(stage: 'frontpage_generate' | 'frontpage_qc' | 'settlement_qc') {
-  router.push({ path: '/workstation-v4', query: { stage } })
+  navigateTo('/workstation-v4', { stage })
 }
 
 const handleLogout = async () => {

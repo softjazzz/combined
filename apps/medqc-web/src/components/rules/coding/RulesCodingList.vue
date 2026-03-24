@@ -4,6 +4,17 @@
       class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5"
     >
       <a-space>
+        <a-select
+          v-if="documentTypeOptions.length > 0"
+          mode="multiple"
+          allow-clear
+          :value="documentTypeSet"
+          :max-tag-count="1"
+          style="width: 260px"
+          :placeholder="documentTypePlaceholder"
+          :options="documentTypeOptions"
+          @update:value="emit('update:documentTypeSet', ($event || []) as string[])"
+        />
         <a-segmented
           :value="viewMode"
           :options="viewOptions"
@@ -30,6 +41,7 @@
     <a-table
       :data-source="items"
       :loading="loading"
+      :size="viewMode === 'compact' ? 'small' : 'middle'"
       :pagination="{
         current: pagination.current,
         pageSize: pagination.pageSize,
@@ -49,7 +61,10 @@
           <div class="font-semibold text-slate-900">
             {{ record.name }}
           </div>
-          <div class="text-[12px] text-slate-500 mt-0.5">
+          <div
+            v-if="viewMode !== 'compact'"
+            class="text-[12px] text-slate-500 mt-0.5"
+          >
             {{ record.conditionSummary }}
           </div>
         </template>
@@ -138,6 +153,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { RuleListItem } from './types'
 
 const props = defineProps<{
@@ -149,6 +165,9 @@ const props = defineProps<{
   statusFilter: 'all' | 'published' | 'draft' | 'disabled'
   pagination: { current: number; pageSize: number; total: number }
   readonly: boolean
+  documentTypeSet?: string[]
+  documentTypeOptions?: Array<{ label: string; value: string }>
+  documentTypePlaceholder?: string
 }>()
 
 const emit = defineEmits<{
@@ -156,11 +175,16 @@ const emit = defineEmits<{
   'update:viewMode': [value: 'list' | 'compact']
   'update:sortBy': [value: 'updated_at' | 'hit_rate' | 'risk']
   'update:statusFilter': [value: 'all' | 'published' | 'draft' | 'disabled']
+  'update:documentTypeSet': [value: string[]]
   'duplicate-rule': [payload: { id: string }]
   'disable-rule': [payload: { id: string }]
   'delete-rule': [payload: { id: string }]
   'page-change': [payload: { current: number; pageSize: number }]
 }>()
+
+const documentTypeOptions = computed(() => props.documentTypeOptions || [])
+const documentTypeSet = computed(() => props.documentTypeSet || [])
+const documentTypePlaceholder = computed(() => props.documentTypePlaceholder || '病历文书类型')
 
 const viewOptions = [
   { label: '列表', value: 'list' },
@@ -179,7 +203,9 @@ const statusOptions = [
 ]
 
 function rowClassName(record: RuleListItem) {
-  return record.id === props.selectedRuleId ? 'bg-blue-50/60' : ''
+  const selected = record.id === props.selectedRuleId ? 'bg-blue-50/60' : ''
+  const compact = props.viewMode === 'compact' ? 'rules-list-compact-row' : ''
+  return `${selected} ${compact}`.trim()
 }
 
 function onTableChange(pagination: any) {
@@ -189,3 +215,10 @@ function onTableChange(pagination: any) {
   })
 }
 </script>
+
+<style scoped>
+:deep(.rules-list-compact-row td) {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+</style>

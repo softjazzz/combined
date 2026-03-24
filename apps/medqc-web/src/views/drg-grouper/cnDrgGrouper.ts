@@ -2,13 +2,22 @@
  * CN-DRG 2023 绩效监测版 分组器包装
  * 与 drgGrouper.ts 接口完全相同，底层使用 cnDrg2023Grouper.js 引擎
  */
-import { CC, CCE, MCC, SS_VALID, group_record } from './cnDrg2023Grouper'
 import { CN_DRG_INFO } from './cnDrg2023Data'
 import type { GrouperInput, GrouperResult } from './drgGrouper'
 import { getMdcName } from './drgGrouper'
 
 export { getMdcName }
 export type { GrouperInput, GrouperResult }
+
+type CnDrgEngine = typeof import('./cnDrg2023Grouper')
+let cnDrgEnginePromise: Promise<CnDrgEngine> | null = null
+
+async function loadCnDrgEngine() {
+  if (!cnDrgEnginePromise) {
+    cnDrgEnginePromise = import('./cnDrg2023Grouper')
+  }
+  return cnDrgEnginePromise
+}
 
 interface OpenDrgResult {
   status?: string
@@ -27,11 +36,12 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
   }
 
   try {
-    const cce = getPrimaryCce(zdList)
-    const { mccList, ccList } = collectComplications(zdList, cce)
-    const ssValidList = collectValidProcedures(ssList)
+    const engine = await loadCnDrgEngine()
+    const cce = getPrimaryCce(engine, zdList)
+    const { mccList, ccList } = collectComplications(engine, zdList, cce)
+    const ssValidList = collectValidProcedures(engine, ssList)
 
-    const raw = group_record({
+    const raw = engine.group_record({
       Index: 'WEB',
       gender: input.gender,
       age: Number.isFinite(input.age) ? Number(input.age) : 0,
@@ -117,27 +127,33 @@ function normalizeCodeList(list: string[] | undefined): string[] {
 function hasOwn(dict: unknown, key: string): boolean {
   return !!dict && Object.prototype.hasOwnProperty.call(dict, key)
 }
-function getPrimaryCce(zdList: string[]): string {
+function getPrimaryCce(engine: CnDrgEngine, zdList: string[]): string {
   const primary = zdList[0]
-  if (!primary || !hasOwn(CCE, primary)) return ''
-  return String((CCE as Record<string, string>)[primary] ?? '')
+  if (!primary || !hasOwn(engine.CCE, primary)) return ''
+  return String((engine.CCE as Record<string, string>)[primary] ?? '')
 }
-function collectComplications(zdList: string[], cce: string) {
+function collectComplications(engine: CnDrgEngine, zdList: string[], cce: string) {
   const mccList: string[] = []
   const ccList: string[] = []
   for (const zd of zdList) {
-    if (hasOwn(MCC, zd) && (cce.length === 0 || String((MCC as Record<string, string>)[zd]) !== cce)) {
+    if (
+      hasOwn(engine.MCC, zd)
+      && (cce.length === 0 || String((engine.MCC as Record<string, string>)[zd]) !== cce)
+    ) {
       mccList.push(zd); continue
     }
-    if (hasOwn(CC, zd) && (cce.length === 0 || String((CC as Record<string, string>)[zd]) !== cce)) {
+    if (
+      hasOwn(engine.CC, zd)
+      && (cce.length === 0 || String((engine.CC as Record<string, string>)[zd]) !== cce)
+    ) {
       ccList.push(zd)
     }
   }
   return { mccList, ccList }
 }
-function collectValidProcedures(ssList: string[]): string[] {
-  if (!Array.isArray(SS_VALID)) return []
-  return ssList.filter(ss => (SS_VALID as string[]).includes(ss))
+function collectValidProcedures(engine: CnDrgEngine, ssList: string[]): string[] {
+  if (!Array.isArray(engine.SS_VALID)) return []
+  return ssList.filter(ss => (engine.SS_VALID as string[]).includes(ss))
 }
 function normalizeMessages(raw: OpenDrgResult): string[] {
   if (!Array.isArray(raw.messages)) return []

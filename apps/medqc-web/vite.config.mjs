@@ -6,12 +6,84 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const backendTarget = 'http://localhost:8001'
+const normalizeId = (id) => id.replace(/\\/g, '/')
+
+function createManualChunks(id) {
+  const normalizedId = normalizeId(id)
+
+  if (
+    normalizedId.includes('/src/views/drg-grouper/sichuan2024Grouper.js')
+    || normalizedId.includes('/src/views/drg-grouper/cnDrg2023Grouper.js')
+  ) {
+    return 'grouper-engines'
+  }
+
+  if (normalizedId.includes('node_modules')) {
+    if (
+      normalizedId.includes('/node_modules/vue/')
+      || normalizedId.includes('/node_modules/@vue/')
+      || normalizedId.includes('/node_modules/vue-router/')
+      || normalizedId.includes('/node_modules/pinia/')
+    ) {
+      return 'vendor-core'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/ant-design-vue/')
+      || normalizedId.includes('/node_modules/@ant-design/icons-vue/')
+    ) {
+      return 'vendor-antd'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/echarts/')
+      || normalizedId.includes('/node_modules/vue-echarts/')
+    ) {
+      return 'vendor-echarts'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/xlsx/')
+      || normalizedId.includes('/node_modules/jspdf/')
+      || normalizedId.includes('/node_modules/jspdf-autotable/')
+      || normalizedId.includes('/node_modules/html2canvas/')
+    ) {
+      return 'vendor-export'
+    }
+  }
+
+  return undefined
+}
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [vue()],
-  // 避免 node_modules/.vite 在 Windows 下被权限/锁文件影响，统一落到项目可写目录
-  cacheDir: '.tmp/vite-cache',
+export default defineConfig(async () => {
+  const plugins = [vue()]
+  const shouldVisualize = process.env.ANALYZE_VISUALIZER === '1'
+
+  if (shouldVisualize) {
+    try {
+      const { visualizer } = await import('rollup-plugin-visualizer')
+      plugins.push(
+        visualizer({
+          filename: resolve(__dirname, 'docs/acceptance/build-visualizer.html'),
+          template: 'treemap',
+          gzipSize: true,
+          brotliSize: true,
+          open: false,
+        })
+      )
+    } catch (error) {
+      console.warn(
+        '[build-analyze] ANALYZE_VISUALIZER=1 but rollup-plugin-visualizer is unavailable:',
+        error?.message || error
+      )
+    }
+  }
+
+  return {
+  plugins,
+  // 使用 Vite 默认缓存目录，避免自定义 .tmp 缓存目录出现间歇性 EPERM/lstat
+  cacheDir: 'node_modules/.vite',
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -51,7 +123,14 @@ export default defineConfig({
     hmr: {
       host: '127.0.0.1',
       clientPort: 3000,
-      overlay: true // 显示错误覆盖层
+      overlay: false // 关闭错误覆盖层，避免 esbuild 偶发异常导致白屏
+    },
+    warmup: {
+      clientFiles: [
+        './src/main.ts',
+        './src/App.vue',
+        './src/router/index.ts',
+      ]
     },
     strictPort: true, // 端口被占用时报错，不自动切换
 
@@ -92,7 +171,6 @@ export default defineConfig({
         // 不需要rewrite，因为前端代码已经使用 /api/v1/* 路径
       }
     },
-    // warmup 已移除：会在启动时触发 transform 管道，可能阻塞 HTTP 响应
   },
   build: {
     target: 'es2015',
@@ -103,13 +181,23 @@ export default defineConfig({
       output: {
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
-        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]'
+        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+        manualChunks: createManualChunks,
       }
     }
   },
   optimizeDeps: {
-    // 仓库根目录存在大量测试 html，限制预扫描入口，避免启动阶段卡死
-    entries: ['index.html']
+    entries: ['index.html'],
+    // 预构建重量级依赖，首次加载不再逐个 transform
+    include: [
+      'vue',
+      'vue-router',
+      'pinia',
+      'ant-design-vue',
+      'axios',
+      '@ant-design/icons-vue',
+      'crypto-js',
+    ]
   },
   worker: {
     format: 'es'
@@ -118,4 +206,5 @@ export default defineConfig({
     __VUE_OPTIONS_API__: true,
     __VUE_PROD_DEVTOOLS__: false
   }
+}
 })

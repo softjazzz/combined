@@ -1351,25 +1351,6 @@
               </h2>
             </div>
             <div class="flex flex-col items-end gap-3">
-              <nav
-                class="inline-flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/78 p-1"
-              >
-                <a
-                  v-for="tab in rulesSubTabs"
-                  :key="tab.key"
-                  href="#"
-                  :class="[
-                    rulesSubTab === tab.key
-                      ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]'
-                      : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-800',
-                    'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-all',
-                  ]"
-                  @click.prevent="rulesSubTab = tab.key"
-                >
-                  <component :is="tab.icon" />
-                  {{ tab.label }}
-                </a>
-              </nav>
               <button
                 class="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-500 transition-all hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_8px_18px_rgba(37,99,235,0.08)]"
                 @click="viewMode = 'list'"
@@ -1776,11 +1757,6 @@ const tableSummaryText = computed(() => {
 
 // ========== 质控规则 Tab ==========
 const rulesSubTab = ref<'coding' | 'frontpage' | 'settlement'>('coding')
-const rulesSubTabs = [
-  { key: 'coding' as const, label: '编码质控规则', icon: MedicineBoxOutlined },
-  { key: 'frontpage' as const, label: '首页质控规则', icon: FileSearchOutlined },
-  { key: 'settlement' as const, label: '结算清单质控规则', icon: SafetyCertificateOutlined },
-]
 const rulesSubTabTitle = computed(() => {
   const map: Record<string, string> = {
     coding: '编码质控规则管理',

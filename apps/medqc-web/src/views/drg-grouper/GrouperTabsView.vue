@@ -96,10 +96,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import DrgGrouperView from './DrgGrouperView.vue'
-import CnDrgGrouperView from './CnDrgGrouperView.vue'
-import DipGrouperView from './DipGrouperView.vue'
+import { defineAsyncComponent, ref } from 'vue'
+
+const DrgGrouperView = defineAsyncComponent(() => import('./DrgGrouperView.vue'))
+const CnDrgGrouperView = defineAsyncComponent(() => import('./CnDrgGrouperView.vue'))
+const DipGrouperView = defineAsyncComponent(() => import('./DipGrouperView.vue'))
 
 const tabs = [
   {
@@ -127,4 +128,3 @@ const tabs = [
 
 const activeTab = ref('drg')
 </script>
-

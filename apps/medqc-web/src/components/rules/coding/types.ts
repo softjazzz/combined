@@ -1,9 +1,4 @@
-export type RuleTypeValue =
-  | 'all'
-  | 'main_diagnosis'
-  | 'other_diagnosis'
-  | 'main_procedure'
-  | 'other_procedure'
+export type RuleTypeValue = string
 
 export type RuleStatus = 'published' | 'draft' | 'disabled'
 export type RuleRiskLevel = 'high' | 'medium' | 'low'

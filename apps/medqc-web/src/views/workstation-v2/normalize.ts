@@ -111,6 +111,7 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     frontpageDraftUpdatedAt: pickString(source, ['frontpageDraftUpdatedAt', 'frontpage_draft_updated_at', 'draft_updated_at']) || undefined,
     hasFrontpageOfficial,
     hasSettlementOfficial,
+    isDemoRecord: asBoolean(source.isDemoRecord ?? source.is_demo_record),
     diagnosis: pickString(source, ['diagnosis', 'main_diagnosis', 'primary_diagnosis', 'discharge_main_diagnosis_text']),
     diagnosisCode: pickString(source, ['diagnosisCode', 'diagnosis_code', 'main_diagnosis_code']),
     doctor: pickString(source, ['doctor', 'doctor_name', 'attending_doctor']),

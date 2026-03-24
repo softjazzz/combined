@@ -1,10 +1,15 @@
 <template>
   <div class="h-full flex flex-col bg-white overflow-hidden">
     <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
-      <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
-        同步调优策略
-      </h2>
-      <a-tooltip :title="isReadonly ? '仅 admin 可保存' : '应用同步策略修改'">
+      <div>
+        <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
+          同步调优策略
+        </h2>
+        <p class="text-[11px] text-slate-500 mt-1">
+          建议先选模板，一键应用后再微调参数。
+        </p>
+      </div>
+      <a-tooltip :title="isReadonly ? '仅 admin 可保存' : '保存高级参数修改'">
         <a-button
           size="small"
           type="primary"
@@ -18,9 +23,28 @@
     </div>
 
     <div class="p-5 flex-1 overflow-y-auto custom-scrollbar space-y-5">
-      <div class="rounded border border-blue-200 bg-blue-50 p-3 space-y-3">
+      <div class="template-block rounded border border-blue-200 bg-blue-50 p-3 space-y-3">
         <div class="text-[12px] font-semibold text-slate-800">
           抽取模板（推荐）
+        </div>
+
+        <div class="template-grid">
+          <button
+            v-for="item in state.syncTemplates"
+            :key="item.id"
+            type="button"
+            class="template-card"
+            :class="{ active: item.id === state.selectedTemplateId }"
+            :disabled="isReadonly"
+            @click="handleTemplateCardClick(item.id)"
+          >
+            <div class="template-name">
+              {{ item.name }}
+            </div>
+            <div class="template-desc">
+              {{ item.description }}
+            </div>
+          </button>
         </div>
 
         <a-select
@@ -64,21 +88,31 @@
             :options="departmentOptions"
             :loading="state.departmentsLoading"
             :disabled="isReadonly"
+            :not-found-content="departmentNotFoundText"
             placeholder="请选择科室"
             style="width: 100%"
             @update:value="handleSingleDepartmentChange"
           />
+
+          <a-alert
+            v-if="showDepartmentGuide"
+            type="warning"
+            class="mt-2"
+            show-icon
+            message="暂无可选科室"
+            description="请先检查 Mongo 连接配置（mongo_uri / mongo_database）并确认 mr.discharge_dept_name 有真实数据。"
+          />
         </div>
 
-        <a-button
-          type="primary"
-          block
-          :disabled="isReadonly"
-          :loading="state.templateApplying"
+        <button
+          class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
+          :class="isReadonly || state.templateApplying ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100' : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'"
+          :disabled="isReadonly || state.templateApplying"
           @click="handleApplyTemplate"
         >
-          一键应用模板
-        </a-button>
+          <span v-if="state.templateApplying">应用中...</span>
+          <span v-else>一键应用模板</span>
+        </button>
       </div>
 
       <div class="rounded border border-slate-200 bg-slate-50 p-3">
@@ -137,6 +171,7 @@
               :options="departmentFilterOptions"
               :max-tag-count="3"
               style="width: 220px"
+              @change="handlePolicyDepartmentChange"
             />
           </div>
 
@@ -316,6 +351,17 @@ const departmentFilterOptions = computed(() => [
   ...departmentOptions.value,
 ])
 
+const showDepartmentGuide = computed(() => {
+  if (!currentTemplate.value?.requires_departments) {
+    return false
+  }
+  return !state.departmentsLoading && state.availableDepartments.length === 0
+})
+
+const departmentNotFoundText = computed(() =>
+  state.departmentsLoading ? '加载科室中...' : '暂无科室数据',
+)
+
 const handleSave = async () => {
   try {
     await savePolicy()
@@ -326,6 +372,18 @@ const handleSave = async () => {
 }
 
 const handleApplyTemplate = async () => {
+  const requiresDepartments = Boolean(currentTemplate.value?.requires_departments)
+  if (requiresDepartments && state.selectedTemplateDepartments.length === 0) {
+    message.warning('当前模板要求选择科室，请先选择后再应用')
+    return
+  }
+  if (
+    state.selectedTemplateDepartments.includes('*') &&
+    state.selectedTemplateDepartments.length > 1
+  ) {
+    message.warning('科室列表不允许同时包含 * 和具体科室')
+    return
+  }
   try {
     await applyTemplate()
     message.success('模板应用成功')
@@ -342,4 +400,72 @@ const handleSingleDepartmentChange = (value: string) => {
 const handleTemplateChange = () => {
   state.selectedTemplateDepartments = []
 }
+
+const handleTemplateCardClick = (templateId: string) => {
+  state.selectedTemplateId = templateId as typeof state.selectedTemplateId
+  state.selectedTemplateDepartments = []
+}
+
+const handlePolicyDepartmentChange = (value: string[]) => {
+  const cleaned = [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))]
+  if (cleaned.includes('*') && cleaned.length > 1) {
+    state.policyForm.target_departments = ['*']
+    message.warning('已自动修正：* 不能与具体科室同时选择')
+    return
+  }
+  state.policyForm.target_departments = cleaned.length === 0 ? ['*'] : cleaned
+}
 </script>
+
+<style scoped>
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.template-card {
+  text-align: left;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.template-card:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+
+.template-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.2);
+}
+
+.template-card:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.template-name {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.template-desc {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #64748b;
+}
+
+@media (max-width: 1366px) {
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

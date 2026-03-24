@@ -3,8 +3,14 @@
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 class="text-[24px] font-black tracking-tight text-slate-900">
-          编码质控规则管理
+          {{ title }}
         </h2>
+        <div
+          v-if="subtitle"
+          class="mt-1 text-[12px] text-slate-500"
+        >
+          {{ subtitle }}
+        </div>
         <div class="mt-1 flex items-center gap-2 text-[12px] text-slate-500">
           <span>规则集版本：{{ versionLabel }}</span>
           <a-tag
@@ -20,26 +26,26 @@
           :disabled="readonly"
           @click="emit('create-rule')"
         >
-          新建规则
+          {{ createButtonText }}
         </a-button>
         <a-button
           :disabled="readonly"
           @click="emit('import-template')"
         >
-          导入模板
+          {{ importButtonText }}
         </a-button>
         <a-button
           :loading="loading"
           @click="emit('run-preflight')"
         >
-          运行预检
+          {{ preflightButtonText }}
         </a-button>
         <a-button
           type="primary"
           :disabled="readonly"
           @click="emit('publish')"
         >
-          发布变更
+          {{ publishButtonText }}
         </a-button>
       </a-space>
     </div>
@@ -48,20 +54,35 @@
       :value="searchKeyword"
       class="mt-3"
       allow-clear
-      placeholder="搜索规则名/编码/条件关键词"
+      :placeholder="searchPlaceholder"
       @update:value="emit('update:searchKeyword', String($event || ''))"
     />
   </section>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
+  title?: string
+  subtitle?: string
   versionLabel: string
   searchKeyword: string
   loading: boolean
   hasPendingChanges: boolean
   readonly: boolean
-}>()
+  searchPlaceholder?: string
+  createButtonText?: string
+  importButtonText?: string
+  preflightButtonText?: string
+  publishButtonText?: string
+}>(), {
+  title: '编码质控规则管理',
+  subtitle: '',
+  searchPlaceholder: '搜索规则名/编码/条件关键词',
+  createButtonText: '新建规则',
+  importButtonText: '导入模板',
+  preflightButtonText: '运行预检',
+  publishButtonText: '发布变更',
+})
 
 const emit = defineEmits<{
   'update:searchKeyword': [value: string]

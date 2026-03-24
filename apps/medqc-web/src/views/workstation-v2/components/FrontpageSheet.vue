@@ -204,7 +204,14 @@
                 v-if="row.left.name && isSystemRecommendedDiagnosis(row.left.name)"
                 class="fp-recommend-tag"
               >
-                更适合作为主要诊断（系统推荐）
+                {{ mainRecommendationLabel }}
+              </span>
+              <span
+                v-if="row.left.name && isMainDiagnosisName(row.left.name) && mainDiagnosisRowAlert"
+                class="fp-main-alert-pill"
+                :class="formatSeverityClass(mainDiagnosisRowAlert.severity)"
+              >
+                {{ formatFindingSeverityLabel(mainDiagnosisRowAlert.severity) }}·{{ formatFindingTypeLabel(mainDiagnosisRowAlert.type) }}
               </span>
               <button
                 v-if="row.left.name && isMainDiagnosisName(row.left.name)"
@@ -214,6 +221,13 @@
                 @click="openDiagnosisEvidence(row.left.name)"
               >
                 证据
+                <span
+                  v-if="totalRiskCount > 0"
+                  class="fp-evidence-count"
+                  :class="formatSeverityClass(topAlert?.severity)"
+                >
+                  {{ totalRiskCount }}
+                </span>
               </button>
             </div>
           </td>
@@ -231,7 +245,14 @@
                 v-if="row.right.name && isSystemRecommendedDiagnosis(row.right.name)"
                 class="fp-recommend-tag"
               >
-                更适合作为主要诊断（系统推荐）
+                {{ mainRecommendationLabel }}
+              </span>
+              <span
+                v-if="row.right.name && isMainDiagnosisName(row.right.name) && mainDiagnosisRowAlert"
+                class="fp-main-alert-pill"
+                :class="formatSeverityClass(mainDiagnosisRowAlert.severity)"
+              >
+                {{ formatFindingSeverityLabel(mainDiagnosisRowAlert.severity) }}·{{ formatFindingTypeLabel(mainDiagnosisRowAlert.type) }}
               </span>
               <button
                 v-if="row.right.name && isMainDiagnosisName(row.right.name)"
@@ -241,6 +262,13 @@
                 @click="openDiagnosisEvidence(row.right.name)"
               >
                 证据
+                <span
+                  v-if="totalRiskCount > 0"
+                  class="fp-evidence-count"
+                  :class="formatSeverityClass(topAlert?.severity)"
+                >
+                  {{ totalRiskCount }}
+                </span>
               </button>
             </div>
           </td>
@@ -408,6 +436,21 @@
         </tr>
       </table>
 
+      <!-- ===== 费用信息（CDM mr_cost） ===== -->
+      <div class="fp-sec-hd">
+        费用信息
+      </div>
+      <table class="fp-tbl">
+        <tr>
+          <td style="width:50%">
+            住院总费用<u class="fill">{{ d.costs.total_cost }}</u>
+          </td>
+          <td style="width:50%">
+            自付金额<u class="fill">{{ d.costs.self_paid }}</u>
+          </td>
+        </tr>
+      </table>
+
       <!-- ===== 签名区 ===== -->
       <div class="fp-sec-hd">
         签名
@@ -451,9 +494,17 @@
           v-for="chip in riskChipItems"
           :key="chip.key"
           class="fp-risk-chip"
+          :class="formatSeverityClass(chip.severity)"
         >
-          {{ chip.label }} {{ chip.count }}
+          {{ formatFindingSeverityLabel(chip.severity) }}·{{ chip.label }} {{ chip.count }}
         </span>
+      </div>
+      <div
+        v-if="topAlert?.summary"
+        class="fp-alert-summary"
+        :class="formatSeverityClass(topAlert.severity)"
+      >
+        {{ topAlert.summary }}
       </div>
       <div class="fp-evidence-list">
         <button
@@ -464,6 +515,13 @@
         >
           <span class="fp-evidence-btn-name">{{ mainDiagnosisName }}</span>
           <span class="fp-evidence-btn-tag">LLM证据</span>
+          <span
+            v-if="totalRiskCount > 0"
+            class="fp-evidence-count"
+            :class="formatSeverityClass(topAlert?.severity)"
+          >
+            {{ totalRiskCount }}
+          </span>
         </button>
       </div>
     </section>
@@ -479,74 +537,130 @@
             主诊断 LLM 证据
           </div>
           <template v-if="mainDiagnosisLlmEvidence || codingAuditLlmEvidence">
-            <div class="evidence-block">
+            <div
+              class="evidence-hero"
+              :class="formatSeverityClass(topAlert?.severity)"
+            >
+              <div class="evidence-hero__left">
+                <span class="evidence-hero__badge">{{ formatFindingSeverityLabel(topAlert?.severity) }}</span>
+                <strong class="evidence-hero__title">{{ formatFindingTypeLabel(topAlert?.type) }}</strong>
+              </div>
+              <div class="evidence-hero__summary">
+                {{ topAlert?.summary || codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
+              </div>
+              <div class="evidence-hero__meta">
+                <span>置信度 {{ llmConfidenceText }}</span>
+                <span>问题 {{ totalRiskCount }} 项</span>
+              </div>
+            </div>
+
+            <section class="evidence-block">
               <div class="evidence-block-title">
-                LLM主诊断结论
+                主诊断决策
               </div>
-              <div class="evidence-meta">
-                医生填写主诊断：{{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
-              </div>
-              <div class="evidence-meta">
-                LLM推荐主诊断：
-                <span class="evidence-recommend-main">{{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}</span>
-                <span
-                  v-if="llmDiffersFromClinician"
-                  class="evidence-recommend-label"
-                >
-                  更适合作为主要诊断（系统推荐）
-                </span>
-              </div>
-              <div class="evidence-meta">
-                置信度：{{ llmConfidenceText }}
+              <div class="evidence-decision-grid">
+                <div class="evidence-decision-col">
+                  <div class="evidence-meta">
+                    医生填写主诊断
+                  </div>
+                  <div class="evidence-decision-main">
+                    {{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
+                  </div>
+                </div>
+                <div class="evidence-decision-col">
+                  <div class="evidence-meta">
+                    系统推荐主诊断
+                  </div>
+                  <div class="evidence-decision-main">
+                    {{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}
+                    <span
+                      v-if="llmDiffersFromClinician"
+                      class="evidence-recommend-label"
+                    >
+                      {{ mainRecommendationLabel }}
+                    </span>
+                  </div>
+                </div>
               </div>
               <div class="evidence-logic">
                 {{ mainDiagnosisLlmEvidence?.conclusion || 'LLM已完成主诊断语义裁决。' }}
               </div>
-              <div class="evidence-logic">
+              <div
+                v-if="mainRecommendationSummary"
+                class="evidence-logic"
+              >
+                {{ mainRecommendationSummary }}
+              </div>
+              <button
+                v-if="mainDiagnosisLlmEvidence?.reasoning_summary"
+                type="button"
+                class="evidence-toggle-btn"
+                @click="toggleReasoningSummary"
+              >
+                {{ reasoningSummaryExpanded ? '收起推理摘要' : '查看推理摘要' }}
+              </button>
+              <div
+                v-if="reasoningSummaryExpanded"
+                class="evidence-collapsed-snippet"
+              >
                 {{ mainDiagnosisLlmEvidence?.reasoning_summary || 'LLM推理摘要暂不可用。' }}
               </div>
-            </div>
+            </section>
 
-            <div class="evidence-block">
+            <section class="evidence-block">
               <div class="evidence-block-title">
                 审核风险（Top3）
               </div>
               <div
-                v-if="!codingAuditLlmEvidence"
+                v-if="riskTimelineItems.length === 0"
                 class="evidence-logic"
               >
-                LLM审核暂不可用
-              </div>
-              <div
-                v-else-if="topAuditFindings.length === 0"
-                class="evidence-logic"
-              >
-                {{ codingAuditLlmEvidence.summary || '当前未识别到高风险审核项。' }}
+                {{ codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
               </div>
               <template v-else>
                 <div
-                  v-for="(finding, idx) in topAuditFindings"
-                  :key="`risk-${idx}`"
+                  v-for="(risk, idx) in riskTimelineItems"
+                  :key="`risk-timeline-${idx}`"
                   class="evidence-risk-card"
                 >
                   <div class="evidence-risk-head">
-                    <span class="evidence-risk-type">{{ formatFindingTypeLabel(finding.type) }}</span>
-                    <span class="evidence-risk-severity">{{ formatFindingSeverityLabel(finding.severity) }}</span>
+                    <span class="evidence-risk-type">{{ formatFindingTypeLabel(risk.type) }}（{{ formatFindingSeverityLabel(risk.severity) }}）</span>
+                    <span
+                      class="evidence-risk-severity"
+                      :class="formatSeverityClass(risk.severity)"
+                    >
+                      {{ risk.count }} 项
+                    </span>
                   </div>
                   <div class="evidence-key-reason">
-                    建议：{{ finding.llm_recommendation || '建议人工复核。' }}
+                    建议：{{ risk.llm_recommendation || '建议人工复核。' }}
                   </div>
-                  <div class="evidence-key-meta">
-                    原填写：{{ finding.clinician_text || '-' }}
+                  <div
+                    v-if="!isRiskDetailExpanded(idx)"
+                    class="evidence-collapsed-snippet"
+                  >
+                    {{ risk.shortSummary }}
                   </div>
-                  <div class="evidence-key-meta">
-                    理由：{{ finding.reason || '-' }}
-                  </div>
+                  <button
+                    type="button"
+                    class="evidence-toggle-btn"
+                    @click="toggleRiskDetail(idx)"
+                  >
+                    {{ isRiskDetailExpanded(idx) ? '收起详情' : '展开详情' }}
+                  </button>
+                  <template v-if="isRiskDetailExpanded(idx)">
+                    <div class="evidence-key-meta">
+                      原填写：{{ risk.clinician_text || '-' }}
+                    </div>
+                    <div class="evidence-key-meta">
+                      理由：{{ risk.reason || '-' }}
+                    </div>
+                  </template>
                 </div>
               </template>
-            </div>
+            </section>
 
-            <div class="evidence-block">
+            <section class="evidence-block">
               <div class="evidence-block-title">
                 关键证据
               </div>
@@ -554,45 +668,57 @@
                 {{ codingAuditLlmEvidence?.summary || 'LLM审核暂不可用' }}
               </div>
               <div
-                v-if="!codingAuditLlmEvidence"
-                class="evidence-logic"
-              >
-                LLM审核暂不可用
-              </div>
-              <div
-                v-else-if="topAuditEvidenceGroups.length === 0"
+                v-if="keyEvidenceGroups.length === 0"
                 class="evidence-logic"
               >
                 暂无可展示的关键证据。
               </div>
               <template v-else>
                 <div
-                  v-for="(group, idx) in topAuditEvidenceGroups"
-                  :key="`group-${idx}`"
+                  v-for="(group, idx) in keyEvidenceGroups"
+                  :key="`key-group-${idx}`"
                   class="evidence-key-card"
                 >
                   <div class="evidence-risk-head">
                     <span class="evidence-risk-type">{{ formatFindingTypeLabel(group.type) }}</span>
                     <span class="evidence-key-meta">{{ group.llm_recommendation || '建议人工复核' }}</span>
                   </div>
-                  <div
-                    v-for="(line, evIdx) in group.evidence"
-                    :key="`group-${idx}-ev-${evIdx}`"
-                    class="evidence-audit-quote"
-                  >
-                    <div class="evidence-quote">
-                      {{ line.quote || '-' }}
-                    </div>
-                    <div class="evidence-key-meta">
-                      来源：{{ line.source || '病历原文' }}
-                    </div>
-                    <div class="evidence-key-reason">
-                      支持理由：{{ line.why_it_supports || '-' }}
-                    </div>
+                  <div class="evidence-key-meta">
+                    证据条数：{{ group.evidence.length }}
                   </div>
+                  <div
+                    v-if="!isEvidenceGroupExpanded(idx)"
+                    class="evidence-collapsed-snippet"
+                  >
+                    {{ buildEvidenceGroupCollapsedText(group.evidence) }}
+                  </div>
+                  <button
+                    type="button"
+                    class="evidence-toggle-btn"
+                    @click="toggleEvidenceGroup(idx)"
+                  >
+                    {{ isEvidenceGroupExpanded(idx) ? '收起证据详情' : '查看更多证据' }}
+                  </button>
+                  <template v-if="isEvidenceGroupExpanded(idx)">
+                    <div
+                      v-for="(line, evIdx) in group.evidence"
+                      :key="`group-${idx}-ev-${evIdx}`"
+                      class="evidence-audit-quote"
+                    >
+                      <div class="evidence-quote">
+                        {{ line.quote || '-' }}
+                      </div>
+                      <div class="evidence-key-meta">
+                        来源：{{ line.source || '病历原文' }}
+                      </div>
+                      <div class="evidence-key-reason">
+                        支持理由：{{ line.why_it_supports || '-' }}
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </template>
-            </div>
+            </section>
           </template>
           <div
             v-else
@@ -622,7 +748,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 interface DiagnosisItem {
   diagnosis_type?: string
@@ -641,6 +767,10 @@ interface MainDiagnosisLLMEvidence {
   clinician_main_diagnosis?: string
   llm_recommended_main_diagnosis?: string
   is_consistent_with_clinician?: boolean
+  recommended_main_diagnosis_action?: 'promote_existing' | 'refine_current' | 'keep'
+  recommended_main_diagnosis_source?: 'other_diagnosis' | 'llm_refinement' | 'none'
+  recommended_main_diagnosis_source_other_index?: number
+  recommendation_summary?: string
   confidence?: number
   conclusion?: string
   key_evidence?: MainDiagnosisKeyEvidence[]
@@ -676,6 +806,12 @@ interface CodingAuditLLMEvidence {
   confidence?: number
   counts?: Partial<Record<AuditFindingType, number>>
   findings?: CodingAuditFinding[]
+  top_alert?: {
+    type?: AuditFindingType
+    severity?: AuditFindingSeverity
+    summary?: string
+    count?: number
+  } | null
 }
 
 const props = defineProps<{
@@ -731,7 +867,7 @@ const d = computed(() => {
       patient_name: basic.name || '',
       gender: basic.sex || '',
       birth_date: basic.birthday || '',
-      age_years: basic.age || '',
+      age_years: basic.age || basic.age_year || '',
       id_number: basic.id_card_no || '',
       marital_status: basic.marital_status || '',
       nationality: basic.nationality || '中国',
@@ -748,7 +884,7 @@ const d = computed(() => {
     hospitalization: {
       hospital_name: basic.institute_county_desc || '',
       organization_code: basic.institute_code || '',
-      medical_record_no: basic.document_id || '',
+      medical_record_no: basic.mr_no || basic.document_id || '',
       admission_times_in_hospital: basic.visit_cnt || '',
       payment_method_text: basic.medical_payment_method || '',
       admission_way_text: basic.admission_route || '',
@@ -794,7 +930,7 @@ const d = computed(() => {
     other_medical_info: {
       pathology_text: otherSrc.pathology_text || '',
       pathology_icd: otherSrc.pathology_icd || '',
-      pathology_no: otherSrc.pathology_no || '',
+      pathology_no: otherSrc.pathology_no || basic.pathology_id || '',
       injury_poison_cause_text: otherSrc.injury_poison_cause_text || '',
       injury_poison_cause_icd: otherSrc.injury_poison_cause_icd || '',
       drug_allergy_flag: otherSrc.drug_allergy_flag || basic.allergy_sign || '',
@@ -940,15 +1076,51 @@ const riskSeverityOrder: Record<string, number> = {
 }
 
 const riskChipItems = computed(() => {
-  const counts = codingAuditLlmEvidence.value?.counts
-  if (!counts || typeof counts !== 'object') return []
-  const list = [
-    { key: 'diagnosis_missing', label: '漏写诊断', count: Number(counts.diagnosis_missing || 0) },
-    { key: 'procedure_missing', label: '漏写手术', count: Number(counts.procedure_missing || 0) },
-    { key: 'diagnosis_inappropriate', label: '主诊断不当', count: Number(counts.diagnosis_inappropriate || 0) },
-    { key: 'diagnosis_insufficient_evidence', label: '依据不足', count: Number(counts.diagnosis_insufficient_evidence || 0) },
-  ]
-  return list.filter((item) => item.count > 0)
+  const rows = codingAuditLlmEvidence.value?.findings
+  const metrics = new Map<AuditFindingType, { count: number; severity: AuditFindingSeverity }>()
+  if (Array.isArray(rows)) {
+    rows.forEach((item) => {
+      const key = String(item?.type || '').toLowerCase() as AuditFindingType
+      if (!key) return
+      const severity = String(item?.severity || 'medium').toLowerCase() as AuditFindingSeverity
+      const prev = metrics.get(key)
+      if (!prev) {
+        metrics.set(key, { count: 1, severity })
+        return
+      }
+      const nextSeverity = (riskSeverityOrder[severity] || 0) > (riskSeverityOrder[prev.severity] || 0)
+        ? severity
+        : prev.severity
+      metrics.set(key, { count: prev.count + 1, severity: nextSeverity })
+    })
+  }
+  if (!metrics.size) {
+    const counts = codingAuditLlmEvidence.value?.counts
+    if (!counts || typeof counts !== 'object') return []
+    const fallbackSeverity: Record<AuditFindingType, AuditFindingSeverity> = {
+      diagnosis_inappropriate: 'medium',
+      diagnosis_missing: 'medium',
+      procedure_missing: 'medium',
+      diagnosis_insufficient_evidence: 'low',
+    }
+    ;(['diagnosis_missing', 'procedure_missing', 'diagnosis_inappropriate', 'diagnosis_insufficient_evidence'] as AuditFindingType[])
+      .forEach((key) => {
+        const count = Number(counts[key] || 0)
+        if (count > 0) metrics.set(key, { count, severity: fallbackSeverity[key] })
+      })
+  }
+  return Array.from(metrics.entries())
+    .map(([key, val]) => ({
+      key,
+      label: formatFindingTypeLabel(key),
+      count: val.count,
+      severity: val.severity,
+    }))
+    .sort((a, b) => {
+      const severityDelta = (riskSeverityOrder[b.severity] || 0) - (riskSeverityOrder[a.severity] || 0)
+      if (severityDelta !== 0) return severityDelta
+      return (riskTypeOrder[a.key] || 99) - (riskTypeOrder[b.key] || 99)
+    })
 })
 
 const topAuditFindings = computed<CodingAuditFinding[]>(() => {
@@ -970,19 +1142,113 @@ const topAuditFindings = computed<CodingAuditFinding[]>(() => {
     .slice(0, 3)
 })
 
-const topAuditEvidenceGroups = computed(() => {
-  return topAuditFindings.value
-    .map((finding) => {
-      const evidence = Array.isArray(finding.evidence)
-        ? finding.evidence.filter((line) => line && typeof line === 'object')
-        : []
-      return {
-        type: String(finding.type || ''),
-        llm_recommendation: String(finding.llm_recommendation || '').trim(),
-        evidence: evidence.slice(0, 2)
-      }
+const riskTimelineItems = computed(() => {
+  const rows = topAuditFindings.value
+  if (!rows.length) return []
+  const grouped = new Map<string, {
+    type: string
+    severity: AuditFindingSeverity
+    llm_recommendation: string
+    reason: string
+    clinician_text: string
+    count: number
+    shortSummary: string
+    evidence: CodingAuditEvidenceLine[]
+  }>()
+  rows.forEach((finding) => {
+    const type = String(finding.type || '').toLowerCase()
+    const recommendation = String(finding.llm_recommendation || '').trim()
+    const key = `${type}|${recommendation}`
+    const severity = String(finding.severity || 'medium').toLowerCase() as AuditFindingSeverity
+    const reason = String(finding.reason || '').trim()
+    const clinicianText = String(finding.clinician_text || '').trim()
+    const evidence = Array.isArray(finding.evidence)
+      ? finding.evidence.filter((line) => line && typeof line === 'object')
+      : []
+    const shortSummary = clipText(reason || clinicianText || recommendation || '建议人工复核。', 88)
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        type,
+        severity,
+        llm_recommendation: recommendation,
+        reason,
+        clinician_text: clinicianText,
+        count: 1,
+        shortSummary,
+        evidence: evidence.slice(0, 2),
+      })
+      return
+    }
+    const prev = grouped.get(key)!
+    const nextSeverity = (riskSeverityOrder[severity] || 0) > (riskSeverityOrder[prev.severity] || 0)
+      ? severity
+      : prev.severity
+    grouped.set(key, {
+      ...prev,
+      severity: nextSeverity,
+      count: prev.count + 1,
+      reason: prev.reason || reason,
+      clinician_text: prev.clinician_text || clinicianText,
+      shortSummary: prev.shortSummary || shortSummary,
+      evidence: prev.evidence.length ? prev.evidence : evidence.slice(0, 2),
     })
+  })
+  return Array.from(grouped.values())
+    .sort((a, b) => {
+      const severityDelta = (riskSeverityOrder[b.severity] || 0) - (riskSeverityOrder[a.severity] || 0)
+      if (severityDelta !== 0) return severityDelta
+      return (riskTypeOrder[a.type] || 99) - (riskTypeOrder[b.type] || 99)
+    })
+    .slice(0, 3)
+})
+
+const keyEvidenceGroups = computed(() => {
+  return riskTimelineItems.value
+    .map((item) => ({
+      type: item.type,
+      llm_recommendation: item.llm_recommendation,
+      evidence: item.evidence.slice(0, 2),
+    }))
     .filter((group) => group.evidence.length > 0)
+})
+
+const topAlert = computed(() => {
+  const payload = codingAuditLlmEvidence.value?.top_alert
+  if (payload && typeof payload === 'object') {
+    return {
+      type: String(payload.type || '').toLowerCase() as AuditFindingType,
+      severity: String(payload.severity || 'medium').toLowerCase() as AuditFindingSeverity,
+      summary: String(payload.summary || '').trim(),
+      count: Number(payload.count || 0),
+    }
+  }
+  const first = topAuditFindings.value[0]
+  if (!first) return null
+  const fallbackType = String(first.type || '').toLowerCase() as AuditFindingType
+  return {
+    type: fallbackType,
+    severity: String(first.severity || 'medium').toLowerCase() as AuditFindingSeverity,
+    summary: String(first.llm_recommendation || first.reason || '').trim(),
+    count: topAuditFindings.value.filter((x) => String(x.type || '').toLowerCase() === fallbackType).length || 1,
+  }
+})
+
+const totalRiskCount = computed(() => {
+  const counts = codingAuditLlmEvidence.value?.counts
+  if (counts && typeof counts === 'object') {
+    return Object.values(counts).reduce((acc, val) => acc + Number(val || 0), 0)
+  }
+  return topAuditFindings.value.length
+})
+
+const mainDiagnosisRowAlert = computed(() => {
+  const alert = topAlert.value
+  if (!alert || !alert.type) return null
+  return {
+    type: alert.type,
+    severity: alert.severity || 'medium',
+    summary: alert.summary || '',
+  }
 })
 
 const canOpenMainEvidence = computed(() => !!mainDiagnosisName.value)
@@ -1021,6 +1287,31 @@ const llmConfidenceText = computed(() => {
   return `${Math.round(value * 100)}%`
 })
 
+const mainRecommendationSummary = computed(() => {
+  const ev = mainDiagnosisLlmEvidence.value
+  if (!ev || !llmDiffersFromClinician.value) return ''
+  const explicit = String(ev.recommendation_summary || '').trim()
+  if (explicit) return explicit
+  const recommended = String(ev.llm_recommended_main_diagnosis || '').trim()
+  if (!recommended) return ''
+  const action = String(ev.recommended_main_diagnosis_action || '').trim()
+  if (action === 'promote_existing') {
+    const idx = Number(ev.recommended_main_diagnosis_source_other_index || 0)
+    return idx > 0
+      ? `建议改为现有诊断：${recommended}（来自其他诊断第${idx}条）。`
+      : `建议改为现有诊断：${recommended}。`
+  }
+  return `建议细化主诊断为：${recommended}。`
+})
+
+const mainRecommendationLabel = computed(() => {
+  const ev = mainDiagnosisLlmEvidence.value
+  const action = String(ev?.recommended_main_diagnosis_action || '').trim()
+  if (action === 'promote_existing') return '建议提升为主诊断'
+  if (action === 'refine_current') return '建议细化主诊断'
+  return '更适合作为主要诊断（系统推荐）'
+})
+
 function formatFindingTypeLabel(type: unknown): string {
   const key = String(type || '').toLowerCase()
   if (key === 'diagnosis_missing') return '漏写诊断'
@@ -1038,13 +1329,59 @@ function formatFindingSeverityLabel(severity: unknown): string {
   return '待复核'
 }
 
+function formatSeverityClass(severity: unknown): string {
+  const key = String(severity || '').toLowerCase()
+  if (key === 'high') return 'is-high'
+  if (key === 'medium') return 'is-medium'
+  return 'is-low'
+}
+
 const evidencePanel = reactive<{ visible: boolean; diagnosisName: string }>({
   visible: false,
   diagnosisName: '',
 })
+const reasoningSummaryExpanded = ref(false)
+const expandedRiskDetails = ref<Record<number, boolean>>({})
+const expandedEvidenceGroups = ref<Record<number, boolean>>({})
+
+function clipText(text: unknown, maxLength = 70): string {
+  const value = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!value) return '暂无摘要'
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength)}...`
+}
+
+function buildEvidenceGroupCollapsedText(lines: CodingAuditEvidenceLine[]): string {
+  if (!Array.isArray(lines) || !lines.length) return '暂无关键证据摘要'
+  const firstLine = lines[0]
+  return clipText(firstLine.quote || firstLine.why_it_supports || '', 84)
+}
+
+function toggleReasoningSummary() {
+  reasoningSummaryExpanded.value = !reasoningSummaryExpanded.value
+}
+
+function toggleRiskDetail(index: number) {
+  expandedRiskDetails.value[index] = !expandedRiskDetails.value[index]
+}
+
+function isRiskDetailExpanded(index: number): boolean {
+  return !!expandedRiskDetails.value[index]
+}
+
+function toggleEvidenceGroup(index: number) {
+  expandedEvidenceGroups.value[index] = !expandedEvidenceGroups.value[index]
+}
+
+function isEvidenceGroupExpanded(index: number): boolean {
+  return !!expandedEvidenceGroups.value[index]
+}
 
 function openDiagnosisEvidence(name: string) {
   if (!isMainDiagnosisName(name)) return
+  reasoningSummaryExpanded.value = false
+  expandedRiskDetails.value = {}
+  expandedEvidenceGroups.value = {}
   evidencePanel.diagnosisName = name
   evidencePanel.visible = true
 }
@@ -1235,12 +1572,15 @@ u.fill {
 .fp-diag-cell {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .fp-diag-text {
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 100%;
+  min-width: 100%;
+  line-height: 1.35;
+  word-break: break-word;
 }
 .fp-recommend-tag {
   flex-shrink: 0;
@@ -1253,9 +1593,9 @@ u.fill {
   color: #1d4ed8;
   font-size: 11px;
   line-height: 1.2;
-  white-space: normal;
+  white-space: nowrap;
   text-align: center;
-  max-width: 150px;
+  max-width: 100%;
 }
 .fp-inline-evidence {
   margin-left: 0;
@@ -1271,9 +1611,34 @@ u.fill {
   line-height: 1;
   padding: 2px 7px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .fp-inline-evidence:hover {
   background: #dbeafe;
+}
+.fp-main-alert-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.fp-evidence-count {
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 /* 数据行最小高度 */
@@ -1322,6 +1687,28 @@ u.fill {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.3;
+}
+.fp-alert-summary {
+  margin-bottom: 10px;
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.is-high {
+  border-color: #fca5a5 !important;
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+.is-medium {
+  border-color: #fdba74 !important;
+  background: #fff7ed !important;
+  color: #c2410c !important;
+}
+.is-low {
+  border-color: #93c5fd !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
 }
 
 .fp-evidence-list {
@@ -1394,6 +1781,45 @@ u.fill {
   margin-bottom: 8px;
   overflow: visible;
 }
+.evidence-hero {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.evidence-hero__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.evidence-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.evidence-hero__title {
+  font-size: 14px;
+}
+.evidence-hero__summary {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #0f172a;
+}
+.evidence-hero__meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #475569;
+}
 
 .evidence-meta {
   font-size: 14px;
@@ -1414,6 +1840,23 @@ u.fill {
   font-weight: 700;
   color: #1e3a8a;
   margin-bottom: 8px;
+}
+.evidence-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.evidence-decision-col {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+}
+.evidence-decision-main {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.5;
 }
 
 .evidence-quote,
@@ -1474,11 +1917,22 @@ u.fill {
   color: #0f172a;
   line-height: 1.6;
 }
+.evidence-collapsed-snippet {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px dashed #bfdbfe;
+  background: #f8fbff;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .evidence-risk-card {
   border: 1px solid #d7e7ff;
   background: #fff;
   border-radius: 10px;
   padding: 10px;
+  border-left-width: 4px;
 }
 .evidence-risk-card + .evidence-risk-card {
   margin-top: 8px;
@@ -1543,7 +1997,7 @@ u.fill {
   color: #9a3412;
 }
 .evidence-toggle-btn {
-  margin-bottom: 8px;
+  margin-top: 8px;
   border: 1px solid #cbd5e1;
   background: #fff;
   border-radius: 8px;
@@ -1615,6 +2069,12 @@ u.fill {
   height: 34px;
   font-size: 14px;
   cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .evidence-decision-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 打印样式 */

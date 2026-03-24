@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col bg-white overflow-hidden">
+  <div class="h-full flex flex-col bg-white overflow-hidden run-panel">
     <div
       class="px-5 py-3 border-b border-slate-100 bg-white flex justify-between items-center shrink-0"
     >
@@ -22,7 +22,7 @@
       </div>
     </div>
 
-    <div class="px-5 py-2 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2">
+    <div class="px-5 py-2 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2 view-switch">
       <button
         class="px-2 py-1 rounded text-[11px] transition-colors"
         :class="
@@ -49,7 +49,7 @@
 
     <div
       v-if="state.isSyncing"
-      class="px-5 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0"
+      class="px-5 py-2.5 bg-slate-50 border-b border-slate-100 shrink-0 sync-banner"
     >
       <div class="flex items-center justify-between">
         <span class="text-[11px] font-medium text-slate-700">同步任务执行中...</span>
@@ -59,14 +59,25 @@
 
     <div
       v-if="state.preflightResult"
-      class="px-5 py-3 border-b border-slate-100 shrink-0"
+      class="px-5 py-3 border-b border-slate-100 shrink-0 preflight-block"
     >
       <div class="text-[12px] font-semibold text-slate-800">
         预检结果：{{ state.preflightResult.executable ? '通过' : '未通过' }}
       </div>
-      <div class="text-[11px] text-slate-500 mt-1">
+      <div class="text-[11px] text-slate-500 mt-1 flex items-center">
         预计影响 {{ state.preflightResult.estimated_impact }} 条，风险等级
-        {{ state.preflightResult.risk_level }}
+        <a-tag
+          :color="
+            state.preflightResult.risk_level === 'high'
+              ? 'red'
+              : state.preflightResult.risk_level === 'medium'
+                ? 'orange'
+                : 'green'
+          "
+          class="ml-1"
+        >
+          {{ state.preflightResult.risk_level }}
+        </a-tag>
       </div>
       <div
         v-if="state.preflightResult.blockers?.length"
@@ -115,16 +126,16 @@
       v-else
       class="flex-1 flex flex-col min-h-0"
     >
-      <div class="px-5 py-2 border-b border-slate-100 flex items-center gap-2">
+      <div class="px-5 py-2 border-b border-slate-100 flex items-center gap-2 history-toolbar">
         <a-select
-          v-model:value="historySource"
+          v-model:value="state.runHistorySourceFilter"
           size="small"
           style="width: 110px"
           :options="sourceOptions"
           @change="handleFilterChange"
         />
         <a-select
-          v-model:value="historyTier"
+          v-model:value="state.runHistoryTierFilter"
           size="small"
           style="width: 110px"
           :options="tierOptions"
@@ -196,8 +207,6 @@ import { useDataSync } from '../../composables/useDataSync'
 const { state, clearLogs, loadRunHistory } = useDataSync()
 
 const activeView = ref<'realtime' | 'history'>('realtime')
-const historySource = ref<'all' | 'mongo' | 'pg'>('all')
-const historyTier = ref<'all' | 'tier1' | 'tier2' | 'tier3'>('all')
 
 const sourceOptions = [
   { label: '全部来源', value: 'all' },
@@ -214,17 +223,17 @@ const tierOptions = [
 
 async function handleRefreshHistory() {
   try {
-    await loadRunHistory({
-      source: historySource.value,
-      tier: historyTier.value,
-    })
+    await loadRunHistory()
   } catch {
     message.error('刷新运行历史失败')
   }
 }
 
 async function handleFilterChange() {
-  await handleRefreshHistory()
+  await loadRunHistory({
+    source: state.runHistorySourceFilter,
+    tier: state.runHistoryTierFilter,
+  })
 }
 
 function formatTime(value?: string): string {
@@ -262,3 +271,25 @@ function statusClass(status: string): string {
   return 'text-slate-500'
 }
 </script>
+
+<style scoped>
+.run-panel {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.view-switch {
+  background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.sync-banner {
+  border-left: 3px solid #2563eb;
+}
+
+.preflight-block {
+  background: #f8fafc;
+}
+
+.history-toolbar {
+  background: #f8fafc;
+}
+</style>

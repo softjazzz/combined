@@ -21,12 +21,27 @@ const report = {
 function runStep(name, command, args, cwd) {
   const startedAt = Date.now()
   try {
-    const result = spawnSync(command, args, {
+    let result = spawnSync(command, args, {
       cwd,
       encoding: 'utf8',
-      stdio: 'pipe'
+      stdio: 'pipe',
     })
+    if (
+      process.platform === 'win32'
+      && result.error
+      && result.error.code === 'ENOENT'
+    ) {
+      result = spawnSync(command, args, {
+        cwd,
+        encoding: 'utf8',
+        stdio: 'pipe',
+        shell: true,
+      })
+    }
     const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim()
+    if (result.error) {
+      throw new Error(String(result.error?.message || result.error))
+    }
     if (result.status !== 0) {
       throw new Error(output || `${command} exited with code ${result.status}`)
     }

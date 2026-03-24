@@ -33,12 +33,12 @@ class FrontpageExtractionSettings(BaseModel):
 
     # 演示数据策略
     include_demo_records: bool = Field(default_factory=lambda: not _is_production_env())
-    auto_hide_demo_when_real_data: bool = True
+    auto_hide_demo_when_real_data: bool = False
     demo_hide_threshold: int = Field(default=1, ge=0, le=100000)
 
     # 运行体验策略
     stream_progress_enabled: bool = True
-    default_preview_tab: str = Field(default="fields", pattern="^(fields|preview)$")
+    default_preview_tab: str = Field(default="preview", pattern="^(fields|preview)$")
 
 
 def load_frontpage_settings() -> tuple[FrontpageExtractionSettings, str]:
@@ -97,4 +97,3 @@ def resolve_force_llm(requested_force_llm: bool, settings: FrontpageExtractionSe
     if not settings.allow_force_llm_regenerate:
         return False
     return True
-

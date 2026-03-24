@@ -1,0 +1,242 @@
+[
+  {
+    "id": "syncrun-1b78dc08fece",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T13:05:41+00:00",
+    "finished_at": "2026-03-24T13:05:41+00:00",
+    "duration_ms": 61,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-5a87ca5a999f",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:57:43+00:00",
+    "finished_at": "2026-03-24T07:57:44+00:00",
+    "duration_ms": 270,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-9a61e9beec41",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:57:14+00:00",
+    "finished_at": "2026-03-24T07:57:15+00:00",
+    "duration_ms": 250,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-3064e98b0eb0",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:56:25+00:00",
+    "finished_at": "2026-03-24T07:56:25+00:00",
+    "duration_ms": 256,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-b7dd95a8bc85",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:56:24+00:00",
+    "finished_at": "2026-03-24T07:56:24+00:00",
+    "duration_ms": 244,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-d03e31bb9bd2",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:54:21+00:00",
+    "finished_at": "2026-03-24T07:54:21+00:00",
+    "duration_ms": 489,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-b7ade7866b15",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:49:13+00:00",
+    "finished_at": "2026-03-24T07:49:13+00:00",
+    "duration_ms": 258,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-a5d95f1a1a69",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:48:39+00:00",
+    "finished_at": "2026-03-24T07:48:39+00:00",
+    "duration_ms": 277,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-cd4a6355fa3c",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:47:32+00:00",
+    "finished_at": "2026-03-24T07:47:33+00:00",
+    "duration_ms": 657,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-14b47c91e0ca",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:45:57+00:00",
+    "finished_at": "2026-03-24T07:45:58+00:00",
+    "duration_ms": 1264,
+    "total_records": 1,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-790b81603d56",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-24T07:43:53+00:00",
+    "finished_at": "2026-03-24T07:43:53+00:00",
+    "duration_ms": 109,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  },
+  {
+    "id": "syncrun-dcbee458f882",
+    "source": "mongo",
+    "tier": "all",
+    "tables": [],
+    "status": "success",
+    "started_at": "2026-03-23T14:43:14+00:00",
+    "finished_at": "2026-03-23T14:43:14+00:00",
+    "duration_ms": 53,
+    "total_records": 0,
+    "error": null,
+    "operator": {
+      "id": "admin-001",
+      "email": "admin@medqc.com",
+      "roles": [
+        "admin",
+        "qc_manager"
+      ]
+    }
+  }
+]

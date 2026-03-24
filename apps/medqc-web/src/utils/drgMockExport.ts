@@ -1,6 +1,28 @@
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+type XLSXModule = typeof import('xlsx')
+type JsPdfCtor = typeof import('jspdf').default
+type AutoTableFn = typeof import('jspdf-autotable').default
+
+let xlsxModulePromise: Promise<XLSXModule> | null = null
+let pdfDepsPromise: Promise<{ jsPDF: JsPdfCtor; autoTable: AutoTableFn }> | null = null
+
+function loadXlsxModule() {
+  if (!xlsxModulePromise) {
+    xlsxModulePromise = import('xlsx')
+  }
+  return xlsxModulePromise
+}
+
+function loadPdfDeps() {
+  if (!pdfDepsPromise) {
+    pdfDepsPromise = Promise.all([import('jspdf'), import('jspdf-autotable')]).then(
+      ([jspdfModule, autoTableModule]) => ({
+        jsPDF: jspdfModule.default,
+        autoTable: autoTableModule.default,
+      })
+    )
+  }
+  return pdfDepsPromise
+}
 
 export type DrgExportFormat = 'excel' | 'pdf' | 'word'
 
@@ -39,69 +61,80 @@ function escapeHtml(value: string) {
 }
 
 function exportExcel(payload: DrgMockExportPayload) {
-  const wb = XLSX.utils.book_new()
-  const summaryRows: Array<Array<string>> = [['项目', '值']]
-  summaryRows.push(...payload.meta.map(([k, v]) => [k, v]))
-  if (payload.kpis?.length) {
-    summaryRows.push(['', ''])
-    summaryRows.push(...payload.kpis.map(([k, v]) => [k, v]))
-  }
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows)
-  XLSX.utils.book_append_sheet(wb, summarySheet, '概览')
+  void (async () => {
+    const XLSX = await loadXlsxModule()
+    const wb = XLSX.utils.book_new()
+    const summaryRows: Array<Array<string>> = [['项目', '值']]
+    summaryRows.push(...payload.meta.map(([k, v]) => [k, v]))
+    if (payload.kpis?.length) {
+      summaryRows.push(['', ''])
+      summaryRows.push(...payload.kpis.map(([k, v]) => [k, v]))
+    }
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows)
+    XLSX.utils.book_append_sheet(wb, summarySheet, '概览')
 
-  payload.sections?.forEach((section, index) => {
-    const sheet = XLSX.utils.aoa_to_sheet([section.columns, ...section.rows])
-    XLSX.utils.book_append_sheet(wb, sheet, `${index + 1}-${section.title}`.slice(0, 31))
-  })
+    payload.sections?.forEach((section, index) => {
+      const sheet = XLSX.utils.aoa_to_sheet([section.columns, ...section.rows])
+      XLSX.utils.book_append_sheet(wb, sheet, `${index + 1}-${section.title}`.slice(0, 31))
+    })
 
-  const arrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([arrayBuffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    const arrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([arrayBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    })
+    downloadBlob(`${payload.filenameBase}.xlsx`, blob)
+  })().catch((error) => {
+    console.error('[drgMockExport:excel] failed', error)
   })
-  downloadBlob(`${payload.filenameBase}.xlsx`, blob)
+  
 }
 
 function exportPdf(payload: DrgMockExportPayload) {
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  doc.setFontSize(14)
-  doc.text(payload.title, 40, 44)
-  doc.setFontSize(10)
+  void (async () => {
+    const { jsPDF, autoTable } = await loadPdfDeps()
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    doc.setFontSize(14)
+    doc.text(payload.title, 40, 44)
+    doc.setFontSize(10)
 
-  const metaRows = payload.meta.map(([k, v]) => [k, v])
-  autoTable(doc, {
-    startY: 58,
-    head: [['项目', '值']],
-    body: metaRows,
-    styles: { fontSize: 9 }
-  })
-
-  if (payload.kpis?.length) {
+    const metaRows = payload.meta.map(([k, v]) => [k, v])
     autoTable(doc, {
-      startY: (doc as any).lastAutoTable.finalY + 12,
-      head: [['指标', '值']],
-      body: payload.kpis.map(([k, v]) => [k, v]),
+      startY: 58,
+      head: [['项目', '值']],
+      body: metaRows,
       styles: { fontSize: 9 }
     })
-  }
 
-  payload.sections?.forEach((section) => {
-    autoTable(doc, {
-      startY: (doc as any).lastAutoTable.finalY + 14,
-      head: [section.columns],
-      body: section.rows,
-      styles: { fontSize: 8 },
-      didDrawPage: (data) => {
-        if (data.cursor) {
-          doc.setFontSize(11)
-          doc.text(section.title, 40, data.cursor.y - 8)
-          doc.setFontSize(10)
+    if (payload.kpis?.length) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 12,
+        head: [['指标', '值']],
+        body: payload.kpis.map(([k, v]) => [k, v]),
+        styles: { fontSize: 9 }
+      })
+    }
+
+    payload.sections?.forEach((section) => {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 14,
+        head: [section.columns],
+        body: section.rows,
+        styles: { fontSize: 8 },
+        didDrawPage: (data) => {
+          if (data.cursor) {
+            doc.setFontSize(11)
+            doc.text(section.title, 40, data.cursor.y - 8)
+            doc.setFontSize(10)
+          }
         }
-      }
+      })
     })
-  })
 
-  const blob = doc.output('blob')
-  downloadBlob(`${payload.filenameBase}.pdf`, blob)
+    const blob = doc.output('blob')
+    downloadBlob(`${payload.filenameBase}.pdf`, blob)
+  })().catch((error) => {
+    console.error('[drgMockExport:pdf] failed', error)
+  })
 }
 
 function exportWord(payload: DrgMockExportPayload) {

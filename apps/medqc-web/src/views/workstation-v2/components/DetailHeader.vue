@@ -110,7 +110,7 @@
           type="primary"
           :loading="generating"
           :disabled="!canGenerate && !hasDraft"
-          class="!h-9 !rounded-full !border !border-blue-500 !bg-[linear-gradient(135deg,#2563eb,#1d4ed8)] !px-5 !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)] transition-shadow duration-300 hover:!shadow-[0_12px_22px_rgba(37,99,235,0.22)]"
+          class="!h-9 !rounded-full !border !border-blue-500 !bg-[linear-gradient(135deg,#2563eb,#1d4ed8)] !px-5 !font-bold !text-white hover:!text-white active:!text-white disabled:!text-white/75 !shadow-[0_8px_18px_rgba(37,99,235,0.16)] transition-shadow duration-300 hover:!shadow-[0_12px_22px_rgba(37,99,235,0.22)]"
           @click="$emit('generate-frontpage')"
         >
           <template #icon>

@@ -41,7 +41,7 @@ def test_demo_decision_matrix():
 def test_workstation_demo_filtering():
     demos = _build_demo_workstation_records()
     assert len(demos) >= 2
-    assert len(_filter_demo_records(demos, dept="Cardiology", keyword=None)) == 1
+    assert len(_filter_demo_records(demos, dept="心内科", keyword=None)) == 1
     assert len(_filter_demo_records(demos, dept=None, keyword="V-LM-001")) == 1
     assert len(_filter_demo_records(demos, dept="不存在科室", keyword=None)) == 0
 

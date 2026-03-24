@@ -18,6 +18,7 @@ export interface PatientRecord {
   frontpageDraftUpdatedAt?: string
   hasFrontpageOfficial?: boolean
   hasSettlementOfficial?: boolean
+  isDemoRecord?: boolean
   diagnosis: string
   diagnosisCode: string
   doctor: string

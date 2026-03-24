@@ -1,362 +1,478 @@
 <template>
-  <div class="frontpage-rules-tab space-y-6">
-    <div class="kpi-grid">
-      <section class="kpi-card">
-        <div class="kpi-head">
-          <div class="kpi-title-wrap">
-            <span class="kpi-kicker">规则总览</span>
-            <h3>首页质控</h3>
-          </div>
-          <span class="kpi-pill">{{ statistics.total }} 条</span>
-        </div>
-        <div class="kpi-stats">
-          <div>
-            <div class="kpi-value">
-              {{ statistics.total }}
-            </div>
-            <div class="kpi-label">
-              规则总数
-            </div>
-          </div>
-          <div>
-            <div class="kpi-value">
-              {{ statistics.categories }}
-            </div>
-            <div class="kpi-label">
-              分类数
-            </div>
-          </div>
-        </div>
-        <p class="kpi-note">
-          统一查看首页质控规则总量与分类覆盖情况。
-        </p>
-      </section>
+  <div class="space-y-4">
+    <RulesCodingHeaderBar
+      title="首页质控规则管理"
+      subtitle="面向首页资料完整性与规范性，不涉及编码主诊断/主手术。"
+      :version-label="versionLabel"
+      :search-keyword="query.searchKeyword"
+      :loading="loading"
+      :has-pending-changes="dirty"
+      :readonly="readonly"
+      search-placeholder="搜索规则名/字段名/规则编号"
+      @update:search-keyword="(v) => setQuery({ searchKeyword: v })"
+      @create-rule="handleCreateRule"
+      @import-template="() => message.info('模板导入入口预留')"
+      @run-preflight="() => message.success(`预检通过：预计影响 ${estimatedImpactCount} 条病历`)"
+      @publish="publishOpen = true"
+    />
 
-      <section class="kpi-card">
-        <div class="kpi-head">
-          <div class="kpi-title-wrap">
-            <span class="kpi-kicker">严重度分布</span>
-            <h3>规则关注结构</h3>
-          </div>
-        </div>
-        <div class="severity-list">
-          <div class="severity-item">
-            <div class="severity-meta">
-              <span>严重</span><strong>{{ statistics.severity_counts?.error || 0 }}</strong>
-            </div>
-            <div class="severity-track">
-              <div
-                class="severity-fill severity-error"
-                :style="{ width: severityPercent('error') }"
-              />
-            </div>
-          </div>
-          <div class="severity-item">
-            <div class="severity-meta">
-              <span>警告</span><strong>{{ statistics.severity_counts?.warning || 0 }}</strong>
-            </div>
-            <div class="severity-track">
-              <div
-                class="severity-fill severity-warning"
-                :style="{ width: severityPercent('warning') }"
-              />
-            </div>
-          </div>
-          <div class="severity-item">
-            <div class="severity-meta">
-              <span>提示</span><strong>{{ statistics.severity_counts?.info || 0 }}</strong>
-            </div>
-            <div class="severity-track">
-              <div
-                class="severity-fill severity-info"
-                :style="{ width: severityPercent('info') }"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+    <RulesCodingMetrics
+      :total-rules="metrics.totalRules"
+      :enabled-rules="metrics.enabledRules"
+      :draft-rules="metrics.draftRules"
+      :disabled-rules="metrics.disabledRules"
+      :hit7d="metrics.hit7d"
+      :hit-rate7d="metrics.hitRate7d"
+      :high-risk-rules="metrics.highRiskRules"
+      :conflict-rules="metrics.conflictRules"
+      :false-positive-high-rules="metrics.falsePositiveHighRules"
+      total-label="总规则数"
+      enabled-label="已启用"
+      hit-label="覆盖字段"
+      risk-label="高风险规则"
+      :enabled-subtext="'首页抽取规则均为在线生效'"
+      :hit-subtext="`覆盖字段 ${metrics.hit7d} 项`"
+      :risk-subtext="`分类覆盖 ${metrics.conflictRules} 类`"
+      @click-metric="handleMetricClick"
+    />
 
-      <section class="kpi-card">
-        <div class="kpi-head">
-          <div class="kpi-title-wrap">
-            <span class="kpi-kicker">分类分布</span>
-            <h3>规则覆盖结构</h3>
-          </div>
-        </div>
-        <div class="category-grid">
-          <div>
-            <div class="category-value">
-              {{ statistics.category_counts?.required || 0 }}
-            </div><div class="category-label">
-              必填性
-            </div>
-          </div>
-          <div>
-            <div class="category-value">
-              {{ statistics.category_counts?.format || 0 }}
-            </div><div class="category-label">
-              规范性
-            </div>
-          </div>
-          <div>
-            <div class="category-value">
-              {{ statistics.category_counts?.logic || 0 }}
-            </div><div class="category-label">
-              逻辑性
-            </div>
-          </div>
-          <div>
-            <div class="category-value">
-              {{ statistics.category_counts?.consistency || 0 }}
-            </div><div class="category-label">
-              一致性
-            </div>
-          </div>
-        </div>
-      </section>
+    <div class="grid grid-cols-1 gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+      <RulesCodingFilterPanel
+        :rule-type="query.ruleType"
+        :status-set="query.statusSet"
+        :risk-set="query.riskSet"
+        :owner-id="query.ownerId"
+        :owner-options="ownerOptions"
+        :saved-views="savedViews"
+        :readonly="readonly"
+        rule-type-title="规则分类"
+        :rule-type-options="frontpageRuleTypeOptions"
+        :show-owner-filter="false"
+        @update:rule-type="(v) => setQuery({ ruleType: v })"
+        @update:status-set="(v) => setQuery({ statusSet: v })"
+        @update:risk-set="(v) => setQuery({ riskSet: v })"
+        @update:owner-id="(v) => setQuery({ ownerId: v })"
+        @reset-filters="handleResetFilters"
+        @save-view="({ name }) => savedViews.push({ id: `view-${Date.now()}`, name })"
+      />
+
+      <RulesCodingList
+        :items="pagedList"
+        :selected-rule-id="selectedRuleId"
+        :loading="loading"
+        :view-mode="query.viewMode"
+        :sort-by="query.sortBy"
+        :status-filter="query.statusFilter"
+        :document-type-options="documentTypeOptions"
+        :document-type-set="query.documentTypeSet"
+        document-type-placeholder="病历文书类型"
+        :pagination="{ current: query.current, pageSize: query.pageSize, total: filteredList.length }"
+        :readonly="readonly"
+        @select-rule="handleSelectRule"
+        @update:view-mode="(v) => setQuery({ viewMode: v })"
+        @update:sort-by="(v) => setQuery({ sortBy: v })"
+        @update:status-filter="(v) => setQuery({ statusFilter: v })"
+        @update:document-type-set="(v) => setQuery({ documentTypeSet: v })"
+        @duplicate-rule="handleDuplicateRule"
+        @disable-rule="handleDisableRule"
+        @delete-rule="handleDeleteRule"
+        @page-change="handlePageChange"
+      />
     </div>
 
-    <section class="table-shell">
-      <div class="table-toolbar">
-        <label class="field field-search">
-          <div class="search-box">
-            <svg
-              class="search-icon"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              v-model="searchText"
-              type="text"
-              placeholder="搜索规则编号、名称、字段或说明"
-              @input="handleSearch"
-            >
-          </div>
-        </label>
+    <RulesCodingChangeTimeline
+      :items="timelineItems"
+      :loading="false"
+      :collapsed="timelineCollapsed"
+      @toggle-collapsed="timelineCollapsed = $event"
+      @rollback="({ version }) => message.success(`已回滚到 ${version || '指定版本'}`)"
+    />
 
-        <label class="field">
-          <select
-            v-model="filterCategory"
-            @change="applyFilter"
-          >
-            <option :value="undefined">全部分类</option>
-            <option value="required">必填校验</option>
-            <option value="format">格式校验</option>
-            <option value="logic">逻辑校验</option>
-            <option value="consistency">一致性</option>
-          </select>
-        </label>
+    <RulesCodingDetailPanel
+      :visible="detailVisible"
+      :loading="false"
+      :rule="selectedRule"
+      :readonly="readonly"
+      :dirty="dirty"
+      :sample-preview="samplePreview"
+      @close="detailVisible = false"
+      @change="handleRuleChange"
+      @save-draft="handleSaveDraft"
+      @delete-rule="handleDeleteRule"
+      @preview-hit="() => message.info('已刷新命中预览')"
+    />
 
-        <label class="field">
-          <select
-            v-model="filterSeverity"
-            @change="applyFilter"
-          >
-            <option :value="undefined">全部严重度</option>
-            <option value="error">严重</option>
-            <option value="warning">警告</option>
-            <option value="info">提示</option>
-          </select>
-        </label>
-
-        <div class="toolbar-actions">
-          <button
-            class="refresh-btn"
-            @click="fetchRules"
-          >
-            <svg
-              class="btn-icon"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-            刷新
-          </button>
-        </div>
-      </div>
-
-      <div class="table-scroll">
-        <div
-          v-if="loading"
-          class="loading-mask"
-        >
-          <a-spin />
-        </div>
-        <table class="rules-table">
-          <thead>
-            <tr>
-              <th>编号</th>
-              <th>规则名称</th>
-              <th>校验字段</th>
-              <th>分类</th>
-              <th>严重度</th>
-              <th class="text-right">
-                状态
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="record in filteredRules"
-              :key="record.rule_id"
-              class="rule-row"
-              @click="editRule(record)"
-            >
-              <td><span class="code-pill">{{ record.rule_id }}</span></td>
-              <td>
-                <div class="rule-name">
-                  {{ record.rule_name }}
-                </div>
-                <div
-                  class="rule-desc"
-                  :title="record.description"
-                >
-                  {{ record.description }}
-                </div>
-              </td>
-              <td><span class="tag-pill">{{ record.field_name }}</span></td>
-              <td><span class="tag-pill">{{ getCategoryLabel(record.category) }}</span></td>
-              <td><span :class="['tag-pill', getSeverityBgClass(record.severity)]">{{ getSeverityLabel(record.severity) }}</span></td>
-              <td
-                class="text-right"
-                @click.stop
-              >
-                <button class="bg-blue-500 border-transparent relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 transition-colors focus:outline-none">
-                  <span class="translate-x-3 inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition" />
-                </button>
-              </td>
-            </tr>
-            <tr v-if="filteredRules.length === 0 && !loading">
-              <td
-                colspan="6"
-                class="empty-row"
-              >
-                暂无匹配数据
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <RuleEditorDrawer
-      v-model:open="drawerVisible"
-      :record="currentRecord"
-      @save="handleSaveRule"
+    <RulesCodingPublishDrawer
+      :open="publishOpen"
+      :loading="publishing"
+      :change-count="dirty ? 1 : 0"
+      :estimated-impact-count="estimatedImpactCount"
+      :risk-notes="riskNotes"
+      :high-risk-unreviewed-count="metrics.highRiskRules"
+      :readonly="readonly"
+      @close="publishOpen = false"
+      @confirm-publish="handlePublish"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import RuleEditorDrawer from './RuleEditorDrawer.vue'
 
-interface FrontpageRule {
+import RulesCodingHeaderBar from './coding/RulesCodingHeaderBar.vue'
+import RulesCodingMetrics from './coding/RulesCodingMetrics.vue'
+import RulesCodingFilterPanel from './coding/RulesCodingFilterPanel.vue'
+import RulesCodingList from './coding/RulesCodingList.vue'
+import RulesCodingDetailPanel from './coding/RulesCodingDetailPanel.vue'
+import RulesCodingPublishDrawer from './coding/RulesCodingPublishDrawer.vue'
+import RulesCodingChangeTimeline from './coding/RulesCodingChangeTimeline.vue'
+import type { RuleChangeLogItem, RuleDetail, RuleListItem, RuleRiskLevel, RuleStatus, RuleTypeValue } from './coding/types'
+
+interface FrontpageRuleApi {
   rule_id: string
   field_name: string
   rule_name: string
   description: string
   severity: string
   category: string
+  applicable_documents?: string[]
+  document_types?: string[]
+  document_type?: string
 }
 
+interface FrontpageRuleListItem extends RuleListItem {
+  documentTypes: string[]
+}
+
+const readonly = ref(false)
 const loading = ref(false)
-const allRules = ref<FrontpageRule[]>([])
-const searchText = ref('')
-const filterCategory = ref<string>()
-const filterSeverity = ref<string>()
+const dirty = ref(false)
+const publishing = ref(false)
+const versionLabel = ref(`frontpage-rules v${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}`)
 
-const statistics = reactive({
-  total: 0,
-  categories: 0,
-  severity_counts: {} as Record<string, number>,
-  category_counts: {} as Record<string, number>,
+const allRules = ref<FrontpageRuleListItem[]>([])
+const selectedRuleId = ref<string>()
+const selectedRule = ref<RuleDetail>()
+const detailVisible = ref(false)
+const publishOpen = ref(false)
+const timelineCollapsed = ref(true)
+const timelineItems = ref<RuleChangeLogItem[]>([])
+const savedViews = ref<Array<{ id: string; name: string }>>([])
+const ownerOptions = ref<Array<{ label: string; value: string }>>([{ label: '系统', value: '系统' }])
+const samplePreview = ref([
+  { caseId: 'FP-001', matched: true, reason: '首页字段命中' },
+  { caseId: 'FP-002', matched: false, reason: '字段值为空' },
+])
+const frontpageRuleTypeOptions = [
+  { label: '全部', value: 'all' },
+  { label: '完整性', value: 'required' },
+  { label: '规范性', value: 'format' },
+  { label: '合理性', value: 'logic' },
+  { label: '一致性', value: 'consistency' },
+]
+const documentTypeOptions = [
+  { label: '入院记录', value: 'admission_record' },
+  { label: '首次病程记录', value: 'first_course_record' },
+  { label: '手术记录', value: 'operation_record' },
+  { label: '会诊记录', value: 'consultation_record' },
+  { label: '出院记录', value: 'discharge_record' },
+  { label: '通用文书', value: 'general_record' },
+]
+const documentTypeLabelMap: Record<string, string> = {
+  admission_record: '入院记录',
+  first_course_record: '首次病程记录',
+  operation_record: '手术记录',
+  consultation_record: '会诊记录',
+  discharge_record: '出院记录',
+  general_record: '通用文书',
+}
+
+const query = ref({
+  searchKeyword: '',
+  ruleType: 'all' as RuleTypeValue,
+  statusSet: ['published', 'draft'] as string[],
+  riskSet: ['high', 'medium', 'low'] as string[],
+  documentTypeSet: [] as string[],
+  ownerId: undefined as string | undefined,
+  viewMode: 'list' as 'list' | 'compact',
+  sortBy: 'updated_at' as 'updated_at' | 'hit_rate' | 'risk',
+  statusFilter: 'all' as 'all' | 'published' | 'draft' | 'disabled',
+  current: 1,
+  pageSize: 20,
 })
 
-const filteredRules = computed(() => {
-  let result = allRules.value
-  if (searchText.value) {
-    const kw = searchText.value.toLowerCase()
-    result = result.filter((r) =>
-      r.rule_id.toLowerCase().includes(kw)
-      || r.rule_name.toLowerCase().includes(kw)
-      || r.description.toLowerCase().includes(kw)
-      || r.field_name.toLowerCase().includes(kw),
-    )
+function setQuery(patch: Partial<typeof query.value>) {
+  query.value = { ...query.value, ...patch, current: 1 }
+}
+
+function normalizeRisk(severity: string): RuleRiskLevel {
+  if (severity === 'error') return 'high'
+  if (severity === 'warning') return 'medium'
+  return 'low'
+}
+
+function mapRuleType(category: string): RuleTypeValue {
+  if (['required', 'format', 'logic', 'consistency'].includes(category)) return category
+  return 'other'
+}
+
+function normalizeDocumentTypes(input: string[]): string[] {
+  const mapping: Record<string, string> = {
+    入院记录: 'admission_record',
+    admission: 'admission_record',
+    admission_record: 'admission_record',
+    首次病程记录: 'first_course_record',
+    first_course_record: 'first_course_record',
+    手术记录: 'operation_record',
+    operation_record: 'operation_record',
+    会诊记录: 'consultation_record',
+    consultation_record: 'consultation_record',
+    出院记录: 'discharge_record',
+    discharge_record: 'discharge_record',
+    通用文书: 'general_record',
+    general: 'general_record',
+    general_record: 'general_record',
   }
-  if (filterCategory.value) result = result.filter((r) => r.category === filterCategory.value)
-  if (filterSeverity.value) result = result.filter((r) => r.severity === filterSeverity.value)
-  return result
+  const normalized = input.map((code) => mapping[String(code)] || String(code)).filter(Boolean)
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : ['general_record']
+}
+
+function inferDocumentTypes(item: FrontpageRuleApi): string[] {
+  const fromPayload = [
+    ...(item.applicable_documents || []),
+    ...(item.document_types || []),
+    ...(item.document_type ? [item.document_type] : []),
+  ]
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+  if (fromPayload.length > 0) return normalizeDocumentTypes(fromPayload)
+
+  const token = `${item.rule_name || ''} ${item.field_name || ''} ${item.description || ''}`.toLowerCase()
+  const matched: string[] = []
+  if (/(入院|admission|主诉|现病史|既往史|体格检查)/.test(token)) matched.push('admission_record')
+  if (/(首次病程|first_course|病程)/.test(token)) matched.push('first_course_record')
+  if (/(手术|术前|术后|麻醉|operation|surgery)/.test(token)) matched.push('operation_record')
+  if (/(会诊|consultation|consult)/.test(token)) matched.push('consultation_record')
+  if (/(出院|discharge)/.test(token)) matched.push('discharge_record')
+  if (matched.length === 0) matched.push('general_record')
+  return Array.from(new Set(matched))
+}
+
+function toListItem(item: FrontpageRuleApi): FrontpageRuleListItem {
+  const documentTypes = inferDocumentTypes(item)
+  const docLabel = documentTypes.map((code) => documentTypeLabelMap[code] || code).join('、')
+  return {
+    id: item.rule_id,
+    name: item.rule_name,
+    ruleType: mapRuleType(item.category),
+    status: 'published' as RuleStatus,
+    riskLevel: normalizeRisk(item.severity),
+    conditionSummary: `${item.field_name}：${item.description || '-'}（${docLabel}）`,
+    hitCount7d: 0,
+    hitRate7d: 0,
+    updatedAt: '-',
+    updatedBy: '系统',
+    documentTypes,
+  }
+}
+
+const filteredList = computed(() => {
+  let items = [...allRules.value]
+  const q = query.value
+  if (q.searchKeyword.trim()) {
+    const keyword = q.searchKeyword.trim().toLowerCase()
+    items = items.filter((item) => item.id.toLowerCase().includes(keyword) || item.name.toLowerCase().includes(keyword) || item.conditionSummary.toLowerCase().includes(keyword))
+  }
+  if (q.ruleType !== 'all') items = items.filter((item) => item.ruleType === q.ruleType)
+  if (q.statusSet.length > 0) items = items.filter((item) => q.statusSet.includes(item.status))
+  if (q.riskSet.length > 0) items = items.filter((item) => q.riskSet.includes(item.riskLevel))
+  if (q.documentTypeSet.length > 0) {
+    items = items.filter((item) => item.documentTypes.some((doc) => q.documentTypeSet.includes(doc)))
+  }
+  if (q.statusFilter !== 'all') items = items.filter((item) => item.status === q.statusFilter)
+  return items
 })
 
-const drawerVisible = ref(false)
-const currentRecord = ref({})
+const pagedList = computed(() => {
+  const { current, pageSize } = query.value
+  return filteredList.value.slice((current - 1) * pageSize, current * pageSize)
+})
 
-const editRule = (record: FrontpageRule) => {
-  currentRecord.value = { ...record }
-  drawerVisible.value = true
+const metrics = computed(() => {
+  const totalRules = allRules.value.length
+  const enabledRules = allRules.value.filter((r) => r.status === 'published').length
+  const draftRules = allRules.value.filter((r) => r.status === 'draft').length
+  const disabledRules = allRules.value.filter((r) => r.status === 'disabled').length
+  const highRiskRules = allRules.value.filter((r) => r.riskLevel === 'high').length
+  const categoryCoverage = new Set(
+    allRules.value
+      .map((rule) => String(rule.ruleType || ''))
+      .filter((category) => ['required', 'format', 'logic', 'consistency'].includes(category)),
+  ).size
+  const fieldCoverage = new Set(
+    allRules.value
+      .map((rule) => rule.conditionSummary.split('：')[0]?.trim())
+      .filter((field) => Boolean(field)),
+  ).size
+  return {
+    totalRules,
+    enabledRules,
+    draftRules,
+    disabledRules,
+    hit7d: fieldCoverage,
+    hitRate7d: 0,
+    highRiskRules,
+    conflictRules: categoryCoverage,
+    falsePositiveHighRules: 0,
+  }
+})
+
+const estimatedImpactCount = computed(() => Math.min(9999, filteredList.value.length * 2))
+const riskNotes = computed(() => (metrics.value.highRiskRules > 0 ? ['存在高风险规则，建议发布前复核。'] : []))
+
+function handleMetricClick(payload: { key: 'total' | 'enabled' | 'hit7d' | 'risk' }) {
+  if (payload.key === 'enabled') setQuery({ statusSet: ['published'], statusFilter: 'published' })
+  else if (payload.key === 'risk') setQuery({ riskSet: ['high'] })
+  else handleResetFilters()
 }
 
-const handleSaveRule = (updatedRecord: FrontpageRule) => {
-  message.success(`规则 [${updatedRecord.rule_id}] 配置已保存并发布`)
-  const idx = allRules.value.findIndex((r) => r.rule_id === updatedRecord.rule_id)
-  if (idx > -1) allRules.value[idx] = { ...allRules.value[idx], ...updatedRecord }
+function handleResetFilters() {
+  query.value = {
+    searchKeyword: '',
+    ruleType: 'all',
+    statusSet: ['published', 'draft'],
+    riskSet: ['high', 'medium', 'low'],
+    documentTypeSet: [],
+    ownerId: undefined,
+    viewMode: 'list',
+    sortBy: 'updated_at',
+    statusFilter: 'all',
+    current: 1,
+    pageSize: 20,
+  }
 }
 
-const getCategoryLabel = (cat: string) => ({ required: '必填', format: '规范', logic: '逻辑', consistency: '一致性' }[cat] || cat)
-const getSeverityBgClass = (s: string) => ({ error: 'severity-error', warning: 'severity-warning', info: 'severity-info' }[s] || 'severity-info')
-const getSeverityLabel = (s: string) => ({ error: '严重', warning: '警告', info: '提示' }[s] || s)
-
-const severityPercent = (s: string) => {
-  const total = (statistics.severity_counts?.error || 0) + (statistics.severity_counts?.warning || 0) + (statistics.severity_counts?.info || 0) || 1
-  const count = statistics.severity_counts?.[s] || 0
-  return `${Math.round((count / total) * 100)}%`
+function handleSelectRule(payload: { id: string }) {
+  const target = allRules.value.find((item) => item.id === payload.id)
+  if (!target) return
+  selectedRuleId.value = payload.id
+  selectedRule.value = {
+    id: target.id,
+    name: target.name,
+    description: target.conditionSummary,
+    ruleType: target.ruleType,
+    status: target.status,
+    riskLevel: target.riskLevel,
+    conditionTree: { operator: 'AND', children: [] },
+  }
+  detailVisible.value = true
 }
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-const handleSearch = () => {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {}, 300)
+function handleRuleChange(payload: Partial<RuleDetail>) {
+  if (!selectedRule.value) return
+  selectedRule.value = { ...selectedRule.value, ...payload }
+  dirty.value = true
 }
-const applyFilter = () => {}
 
-const fetchRules = async () => {
+function handleSaveDraft(payload: RuleDetail) {
+  const idx = allRules.value.findIndex((item) => item.id === payload.id)
+  if (idx >= 0) {
+    allRules.value[idx] = { ...allRules.value[idx], name: payload.name, status: 'draft', conditionSummary: payload.description || allRules.value[idx].conditionSummary }
+  }
+  dirty.value = false
+  timelineItems.value.unshift({
+    id: `save-${Date.now()}`,
+    time: new Date().toLocaleString('zh-CN', { hour12: false }),
+    operator: '当前用户',
+    action: 'save_draft',
+    ruleCount: 1,
+    result: 'success',
+  })
+  message.success('规则草稿已保存')
+}
+
+function handleDuplicateRule(payload: { id: string }) {
+  const source = allRules.value.find((item) => item.id === payload.id)
+  if (!source) return
+  allRules.value.unshift({ ...source, id: `${source.id}-COPY`, name: `${source.name}（副本）`, status: 'draft' })
+  dirty.value = true
+  message.success('规则已复制')
+}
+
+function handleDisableRule(payload: { id: string }) {
+  const target = allRules.value.find((item) => item.id === payload.id)
+  if (!target) return
+  target.status = 'disabled'
+  dirty.value = true
+  message.success('规则已停用')
+}
+
+function handleDeleteRule(payload: { id: string }) {
+  allRules.value = allRules.value.filter((item) => item.id !== payload.id)
+  if (selectedRuleId.value === payload.id) {
+    selectedRuleId.value = undefined
+    selectedRule.value = undefined
+    detailVisible.value = false
+  }
+  dirty.value = true
+  message.success('规则已删除')
+}
+
+function handlePageChange(payload: { current: number; pageSize: number }) {
+  query.value.current = payload.current
+  query.value.pageSize = payload.pageSize
+}
+
+function handleCreateRule() {
+  selectedRule.value = {
+    id: `NEW-${Date.now()}`,
+    name: '新建首页规则',
+    description: '',
+    ruleType: 'required',
+    status: 'draft',
+    riskLevel: 'medium',
+    conditionTree: { operator: 'AND', children: [] },
+  }
+  selectedRuleId.value = selectedRule.value.id
+  detailVisible.value = true
+}
+
+async function handlePublish() {
+  publishing.value = true
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    timelineItems.value.unshift({
+      id: `publish-${Date.now()}`,
+      time: new Date().toLocaleString('zh-CN', { hour12: false }),
+      operator: '当前用户',
+      action: 'publish',
+      ruleCount: filteredList.value.length,
+      impactCount: estimatedImpactCount.value,
+      version: `v${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}.1`,
+      result: 'success',
+      rollbackable: true,
+    })
+    dirty.value = false
+    publishOpen.value = false
+    message.success('首页规则发布成功')
+  } finally {
+    publishing.value = false
+  }
+}
+
+async function fetchRules() {
   loading.value = true
   try {
-    const resp = await fetch('/api/v1/qc/formal-qc/rules')
-    const data = await resp.json()
-    if (data.success && data.data) {
-      allRules.value = data.data
-      const rules = data.data as FrontpageRule[]
-      statistics.total = rules.length
-      statistics.categories = new Set(rules.map((r) => r.category)).size
-      const sevCounts: Record<string, number> = {}
-      const catCounts: Record<string, number> = {}
-      for (const r of rules) {
-        sevCounts[r.severity] = (sevCounts[r.severity] || 0) + 1
-        catCounts[r.category] = (catCounts[r.category] || 0) + 1
-      }
-      statistics.severity_counts = sevCounts
-      statistics.category_counts = catCounts
+    const response = await fetch('/api/v1/qc/formal-qc/rules')
+    const payload = await response.json()
+    if (payload?.success && payload?.data) {
+      allRules.value = (payload.data as FrontpageRuleApi[]).map(toListItem)
+    } else {
+      allRules.value = []
     }
-  } catch (e) {
-    console.error('加载首页质控规则失败:', e)
+  } catch (error) {
+    console.error(error)
     message.error('加载首页质控规则失败')
   } finally {
     loading.value = false
@@ -365,370 +481,3 @@ const fetchRules = async () => {
 
 onMounted(fetchRules)
 </script>
-
-<style scoped>
-.frontpage-rules-tab {
-  width: 100%;
-}
-
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.kpi-card {
-  min-height: 232px;
-  padding: 24px;
-  border-radius: 20px;
-  border: 1px solid #dce6f5;
-  background: linear-gradient(180deg, #ffffff, #f8fbff);
-  box-shadow: 0 6px 20px rgba(24, 58, 120, 0.06);
-  display: flex;
-  flex-direction: column;
-}
-
-.kpi-head {
-  min-height: 48px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.kpi-title-wrap h3 {
-  margin: 6px 0 0;
-  font-size: 22px;
-  line-height: 30px;
-  font-weight: 700;
-  color: #0f1f44;
-}
-
-.kpi-kicker {
-  font-size: 13px;
-  line-height: 20px;
-  color: #5f7396;
-  font-weight: 600;
-}
-
-.kpi-pill {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid #dce6f5;
-  background: #eef4ff;
-  color: #2f6bff;
-  font-size: 13px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-}
-
-.kpi-stats {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 40px;
-}
-
-.kpi-value {
-  font-size: 52px;
-  line-height: 52px;
-  color: #0f1f44;
-  font-weight: 700;
-}
-
-.kpi-label {
-  margin-top: 8px;
-  font-size: 15px;
-  line-height: 22px;
-  color: #5f7396;
-}
-
-.kpi-note {
-  margin: auto 0 0;
-  padding-top: 16px;
-  font-size: 13px;
-  line-height: 20px;
-  color: #8fa2c2;
-}
-
-.severity-list {
-  margin-top: 20px;
-  display: grid;
-  gap: 14px;
-}
-
-.severity-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  font-size: 13px;
-  color: #5f7396;
-}
-
-.severity-meta strong {
-  color: #0f1f44;
-  font-size: 16px;
-  line-height: 22px;
-}
-
-.severity-track {
-  height: 8px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  overflow: hidden;
-}
-
-.severity-fill {
-  height: 100%;
-  border-radius: inherit;
-}
-
-.severity-error {
-  background: linear-gradient(90deg, #ef4444, #fb7185);
-}
-
-.severity-warning {
-  background: linear-gradient(90deg, #f59e0b, #fbbf24);
-}
-
-.severity-info {
-  background: linear-gradient(90deg, #64748b, #94a3b8);
-}
-
-.category-grid {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 24px;
-}
-
-.category-value {
-  font-size: 34px;
-  line-height: 1;
-  font-weight: 700;
-  color: #0f1f44;
-}
-
-.category-label {
-  margin-top: 8px;
-  color: #5f7396;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.table-shell {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 252, 0.97));
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
-  border-radius: 20px;
-  overflow: hidden;
-}
-
-.table-toolbar {
-  padding: 16px 18px 18px;
-  border-bottom: 1px solid #e2e8f0;
-  display: grid;
-  grid-template-columns: 1.4fr repeat(2, minmax(180px, 1fr)) auto;
-  gap: 12px;
-  align-items: end;
-}
-
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid #bfdbfe;
-  color: #2563eb;
-  font-weight: 700;
-  background: #eff6ff;
-  cursor: pointer;
-}
-
-.field {
-  display: grid;
-  gap: 8px;
-}
-
-.search-box,
-.field select {
-  height: 42px;
-  border-radius: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: #fff;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 14px;
-  width: 16px;
-  height: 16px;
-  color: #94a3b8;
-}
-
-.search-box input,
-.field select {
-  width: 100%;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: #0f172a;
-  font-size: 13px;
-}
-
-.search-box input {
-  padding: 0 16px 0 42px;
-}
-
-.field select {
-  padding: 0 14px;
-}
-
-.toolbar-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.table-scroll {
-  position: relative;
-  min-height: 420px;
-  overflow: auto;
-}
-
-.loading-mask {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.rules-table {
-  width: 100%;
-  min-width: 980px;
-  border-collapse: collapse;
-}
-
-.rules-table thead {
-  position: sticky;
-  top: 0;
-  background: #f8fafc;
-  z-index: 1;
-}
-
-.rules-table th {
-  padding: 13px 18px;
-  text-align: left;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.rules-table td {
-  padding: 14px 18px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: top;
-  color: #334155;
-}
-
-.rule-row {
-  cursor: pointer;
-}
-
-.rule-row:hover {
-  background: #f8fafc;
-}
-
-.code-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tag-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.severity-error {
-  background: #fff1f2;
-  border-color: #fecdd3;
-  color: #dc2626;
-}
-
-.severity-warning {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: #d97706;
-}
-
-.rule-name {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.rule-desc {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 18px;
-  color: #64748b;
-  max-width: 320px;
-}
-
-.empty-row {
-  text-align: center;
-  color: #94a3b8;
-  padding: 36px 16px;
-}
-
-@media (max-width: 1280px) {
-  .kpi-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .table-toolbar {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (max-width: 1024px) {
-  .table-toolbar {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

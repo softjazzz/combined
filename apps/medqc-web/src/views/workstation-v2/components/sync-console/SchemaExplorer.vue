@@ -24,26 +24,26 @@
           v-model="searchText"
           type="text"
           placeholder="搜索表或字段"
-          class="w-[180px] pl-8 pr-3 py-[5px] text-[12px] bg-slate-50 border border-slate-200 rounded-[6px] focus:bg-white focus:border-[#1890FF] focus:ring-1 focus:ring-[#1890FF] outline-none transition-colors text-slate-700 placeholder:text-slate-400 leading-tight"
+          class="w-[200px] pl-[32px] pr-3 py-1.5 text-[12px] bg-slate-100/60 border border-transparent rounded-[8px] focus:bg-white focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 focus:shadow-sm outline-none transition-all duration-200 text-slate-700 placeholder:text-slate-400 leading-tight"
         >
       </div>
     </div>
 
     <div class="flex-1 flex overflow-hidden min-h-0">
-      <div class="w-[220px] shrink-0 border-r border-slate-100/80 bg-slate-50/30 flex flex-col">
-        <div class="px-3 py-2 text-[11px] text-slate-500 border-b border-slate-100">
+      <div class="w-[230px] shrink-0 border-r border-[#E5E7EB]/60 bg-slate-50/40 flex flex-col">
+        <div class="px-4 py-2.5 text-[11px] font-medium tracking-wide text-slate-400 border-b border-slate-100">
           表数量：{{ filteredTables.length }}
         </div>
         <div class="flex-1 overflow-y-auto custom-scrollbar p-3">
-          <div class="space-y-1">
+          <div class="space-y-0.5">
             <button
               v-for="table in filteredTables"
               :key="table.name"
-              class="w-full text-left px-3 py-1.5 rounded-[6px] text-[12px] font-mono transition-colors"
+              class="w-full text-left px-3 py-1.5 rounded-lg text-[13px] font-mono transition-all duration-200 block truncate"
               :class="
                 selectedTable?.name === table.name
-                  ? 'bg-white text-[#1890FF] border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]'
-                  : 'hover:bg-slate-100 text-slate-600'
+                  ? 'bg-blue-50/80 text-blue-600 font-semibold shadow-sm'
+                  : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-800'
               "
               @click="handleSelectTable(table.name)"
             >
@@ -54,24 +54,24 @@
       </div>
 
       <div class="flex-1 flex flex-col min-w-0 bg-white">
-        <div class="flex border-b border-slate-100/80 px-6 pt-2">
+        <div class="flex border-b border-slate-100/80 px-7 pt-2">
           <button
-            class="px-3 py-2.5 border-b-[2px] text-[12px] mr-4 transition-colors"
+            class="px-2 py-3 border-b-[2px] text-[13px] mr-6 transition-all"
             :class="
               activeView === 'schema'
-                ? 'border-[#1890FF] font-bold text-[#1890FF]'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-[#1677FF] font-semibold text-[#1677FF]'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             "
             @click="activeView = 'schema'"
           >
             表结构 (Schema)
           </button>
           <button
-            class="px-3 py-2.5 border-b-[2px] text-[12px] transition-colors"
+            class="px-2 py-3 border-b-[2px] text-[13px] transition-all"
             :class="
               activeView === 'sample'
-                ? 'border-[#1890FF] font-bold text-[#1890FF]'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-[#1677FF] font-semibold text-[#1677FF]'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             "
             @click="activeView = 'sample'"
           >
@@ -97,39 +97,42 @@
               v-if="activeView === 'schema'"
               class="w-full text-left border-collapse"
             >
-              <thead class="bg-white sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
+              <thead class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
                 <tr class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                  <th class="px-6 py-3 w-[35%] font-medium">
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">
                     字段名
                   </th>
-                  <th class="px-6 py-3 w-[25%] font-medium">
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">
                     系统类型
                   </th>
-                  <th class="px-6 py-3 w-[15%] text-center font-medium">
+                  <th class="px-5 py-3 text-center font-medium whitespace-nowrap">
                     Null
                   </th>
-                  <th class="px-6 py-3 w-[25%] font-medium">
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">
                     约束
                   </th>
                 </tr>
               </thead>
-              <tbody class="font-mono text-[12px] text-slate-700">
+              <tbody class="font-mono text-[13px] text-slate-700">
                 <tr
                   v-for="col in selectedTable.columns"
                   :key="col.name"
-                  class="hover:bg-slate-50/60 transition-colors border-b border-slate-100/50"
+                  class="hover:bg-blue-50/30 transition-colors border-b border-slate-100/60"
                 >
-                  <td class="px-6 py-3.5 font-semibold text-slate-900">
+                  <td class="px-5 py-3.5 font-semibold text-slate-900 whitespace-nowrap">
                     {{ col.name }}
                   </td>
-                  <td class="px-6 py-3.5 text-slate-500">
+                  <td class="px-5 py-3.5 text-slate-500 whitespace-nowrap">
                     {{ col.type }}
                   </td>
-                  <td class="px-6 py-3.5 text-center text-slate-400">
+                  <td class="px-5 py-3.5 text-center text-slate-400 whitespace-nowrap">
                     {{ col.nullable ? 'Yes' : 'No' }}
                   </td>
-                  <td class="px-6 py-3.5 text-slate-500">
-                    <span v-if="col.primary_key">PK</span>
+                  <td class="px-5 py-3.5 text-slate-500 whitespace-nowrap">
+                    <span
+                      v-if="col.primary_key"
+                      class="text-amber-500 font-bold bg-amber-50 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap"
+                    >PK</span>
                     <span v-else>-</span>
                   </td>
                 </tr>
@@ -153,29 +156,29 @@
                 v-else
                 class="w-full text-left border-collapse"
               >
-                <thead class="bg-white sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
+                <thead class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
                   <tr class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
                     <th
                       v-for="col in sampleColumns"
                       :key="col"
-                      class="px-4 py-3 font-medium"
+                      class="px-6 py-3 font-medium whitespace-nowrap"
                     >
                       {{ col }}
                     </th>
                   </tr>
                 </thead>
-                <tbody class="font-mono text-[12px] text-slate-700">
+                <tbody class="text-[13px] text-slate-700">
                   <tr
                     v-for="(row, idx) in sampleRows"
                     :key="idx"
-                    class="hover:bg-slate-50/60 transition-colors border-b border-slate-100/50"
+                    class="hover:bg-blue-50/30 transition-colors border-b border-slate-100/60"
                   >
                     <td
                       v-for="col in sampleColumns"
                       :key="col"
-                      class="px-4 py-2.5"
+                      class="px-6 py-3 whitespace-nowrap text-slate-600"
                     >
-                      {{ renderCell(row[col]) }}
+                      <span class="font-mono text-[12px]">{{ renderCell(row[col]) }}</span>
                     </td>
                   </tr>
                 </tbody>

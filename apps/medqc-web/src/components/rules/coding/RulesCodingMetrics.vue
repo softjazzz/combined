@@ -6,7 +6,7 @@
       @click="emit('click-metric', { key: 'total' })"
     >
       <div class="text-[12px] text-slate-500">
-        总规则数
+        {{ totalLabel }}
       </div>
       <div class="mt-1 text-[24px] font-bold text-slate-900">
         {{ totalRules }}
@@ -18,13 +18,13 @@
       @click="emit('click-metric', { key: 'enabled' })"
     >
       <div class="text-[12px] text-slate-500">
-        启用中
+        {{ enabledLabel }}
       </div>
       <div class="mt-1 text-[24px] font-bold text-blue-700">
         {{ enabledRules }}
       </div>
       <div class="text-[11px] text-slate-500">
-        草稿 {{ draftRules }} · 停用 {{ disabledRules }}
+        {{ enabledSubtext || `草稿 ${draftRules} · 停用 ${disabledRules}` }}
       </div>
     </a-card>
     <a-card
@@ -33,13 +33,13 @@
       @click="emit('click-metric', { key: 'hit7d' })"
     >
       <div class="text-[12px] text-slate-500">
-        近7天命中
+        {{ hitLabel }}
       </div>
       <div class="mt-1 text-[24px] font-bold text-slate-900">
         {{ hit7d }}
       </div>
       <div class="text-[11px] text-slate-500">
-        命中率 {{ hitRate7d.toFixed(1) }}%
+        {{ hitSubtext || `命中率 ${hitRate7d.toFixed(1)}%` }}
       </div>
     </a-card>
     <a-card
@@ -48,20 +48,20 @@
       @click="emit('click-metric', { key: 'risk' })"
     >
       <div class="text-[12px] text-slate-500">
-        高风险规则
+        {{ riskLabel }}
       </div>
       <div class="mt-1 text-[24px] font-bold text-red-600">
         {{ highRiskRules }}
       </div>
       <div class="text-[11px] text-slate-500">
-        冲突 {{ conflictRules }} · 误报高 {{ falsePositiveHighRules }}
+        {{ riskSubtext || `冲突 ${conflictRules} · 误报高 ${falsePositiveHighRules}` }}
       </div>
     </a-card>
   </section>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   totalRules: number
   enabledRules: number
   draftRules: number
@@ -71,7 +71,22 @@ defineProps<{
   highRiskRules: number
   conflictRules: number
   falsePositiveHighRules: number
-}>()
+  totalLabel?: string
+  enabledLabel?: string
+  hitLabel?: string
+  riskLabel?: string
+  enabledSubtext?: string
+  hitSubtext?: string
+  riskSubtext?: string
+}>(), {
+  totalLabel: '总规则数',
+  enabledLabel: '启用中',
+  hitLabel: '近7天命中',
+  riskLabel: '高风险规则',
+  enabledSubtext: '',
+  hitSubtext: '',
+  riskSubtext: '',
+})
 
 const emit = defineEmits<{
   'click-metric': [payload: { key: 'total' | 'enabled' | 'hit7d' | 'risk' }]

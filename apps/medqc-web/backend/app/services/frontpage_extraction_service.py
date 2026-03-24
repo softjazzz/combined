@@ -607,6 +607,8 @@ MAIN_AND_AUDIT_LLM_EVIDENCE_PROMPT = """你是一位资深病案编码审核专�
 【任务目标】
 1. 输出主诊断解释（main_diagnosis_llm）：
    - 医生填写主诊断 vs LLM推荐主诊断
+   - 推荐策略：优先从“系统诊断列表中的其他诊断”中选择更适合作为主诊断的候选；
+     仅在无合适候选时，才建议“细化当前主诊断”
    - 一句话结论 + 置信度 + 最多3条关键证据
 2. 输出编码审核风险（coding_audit_llm）：
    - 识别4类风险：diagnosis_missing / procedure_missing / diagnosis_inappropriate / diagnosis_insufficient_evidence
@@ -639,6 +641,10 @@ MAIN_AND_AUDIT_LLM_EVIDENCE_PROMPT = """你是一位资深病案编码审核专�
     "clinician_main_diagnosis": "医生填写主诊断",
     "llm_recommended_main_diagnosis": "LLM推荐主诊断",
     "is_consistent_with_clinician": true,
+    "recommended_main_diagnosis_action": "promote_existing/refine_current/keep",
+    "recommended_main_diagnosis_source": "other_diagnosis/llm_refinement/none",
+    "recommended_main_diagnosis_source_other_index": 2,
+    "recommendation_summary": "建议改为现有诊断：XXX（来自其他诊断第N条）",
     "confidence": 0.86,
     "conclusion": "一句话结论",
     "key_evidence": [
@@ -3403,6 +3409,7 @@ class FrontPageExtractionService:
         result: Optional[Dict[str, Any]],
         clinician_main: str,
         fallback_main: str,
+        system_other_diagnoses: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         if not isinstance(result, dict):
             return None
@@ -3411,12 +3418,26 @@ class FrontPageExtractionService:
         if not recommended:
             return None
 
-        consistent = result.get("is_consistent_with_clinician")
-        if not isinstance(consistent, bool):
-            consistent = (
-                self._diagnosis_canonical_key(recommended)
-                == self._diagnosis_canonical_key(clinician_main or fallback_main)
-            )
+        source_other_index: Optional[int] = None
+        recommendation_action = "keep"
+        recommendation_source = "none"
+        preferred_other, preferred_idx = self._pick_preferred_main_from_others(
+            recommended=recommended,
+            clinician_main=clinician_main or fallback_main,
+            other_diagnoses=system_other_diagnoses or [],
+        )
+        if preferred_other:
+            recommended = preferred_other
+            source_other_index = preferred_idx + 1 if preferred_idx >= 0 else None
+            recommendation_action = "promote_existing"
+            recommendation_source = "other_diagnosis"
+
+        clinician_key = self._diagnosis_canonical_key(clinician_main or fallback_main)
+        recommended_key = self._diagnosis_canonical_key(recommended)
+        consistent = bool(clinician_key and recommended_key and clinician_key == recommended_key)
+        if not consistent and recommendation_action == "keep":
+            recommendation_action = "refine_current"
+            recommendation_source = "llm_refinement"
 
         confidence_raw = result.get("confidence")
         try:
@@ -3460,14 +3481,131 @@ class FrontPageExtractionService:
         if not reasoning_summary:
             reasoning_summary = "LLM 已结合候选诊断、关键治疗及病程证据完成主诊断语义推理。"
 
+        recommendation_summary = str(result.get("recommendation_summary") or "").strip()
+        if not recommendation_summary and not consistent:
+            if recommendation_action == "promote_existing" and source_other_index:
+                recommendation_summary = (
+                    f"建议改为现有诊断：{recommended}（来自其他诊断第{source_other_index}条）。"
+                )
+            elif recommendation_action == "promote_existing":
+                recommendation_summary = f"建议改为现有诊断：{recommended}。"
+            else:
+                recommendation_summary = f"建议细化主诊断为：{recommended}。"
+
         return {
             "clinician_main_diagnosis": clinician_main or fallback_main,
             "llm_recommended_main_diagnosis": recommended,
             "is_consistent_with_clinician": bool(consistent),
+            "recommended_main_diagnosis_action": recommendation_action,
+            "recommended_main_diagnosis_source": recommendation_source,
+            "recommended_main_diagnosis_source_other_index": source_other_index,
+            "recommendation_summary": recommendation_summary,
             "confidence": round(confidence, 2),
             "conclusion": conclusion,
             "key_evidence": key_evidence,
             "reasoning_summary": reasoning_summary,
+        }
+
+    def _pick_preferred_main_from_others(
+        self,
+        recommended: str,
+        clinician_main: str,
+        other_diagnoses: List[str],
+    ) -> Tuple[str, int]:
+        rec_key = self._diagnosis_canonical_key(recommended)
+        clinician_key = self._diagnosis_canonical_key(clinician_main)
+        if not rec_key or not isinstance(other_diagnoses, list):
+            return "", -1
+
+        acute_terms = ("不稳定", "急性", "危重", "重症", "梗死", "出血", "衰竭")
+        candidates: List[Tuple[int, float, str, int]] = []
+        for idx, raw in enumerate(other_diagnoses):
+            text = self._normalize_diag_text(raw)
+            key = self._diagnosis_canonical_key(text)
+            if not text or not key:
+                continue
+            if key == clinician_key:
+                continue
+            if key == rec_key or key in rec_key or rec_key in key:
+                score = 4
+                if clinician_key and key != clinician_key:
+                    score += 3
+                if any(term in text for term in acute_terms):
+                    score += 1
+                candidates.append((score, len(key) / 100.0, text, idx))
+
+        if not candidates:
+            return "", -1
+        candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        best = candidates[0]
+        return best[2], best[3]
+
+    def _normalize_finding_severity(
+        self,
+        finding_type: str,
+        severity: str,
+        clinician_text: str,
+        llm_recommendation: str,
+    ) -> str:
+        current = str(severity or "medium").strip().lower()
+        if current not in {"high", "medium", "low"}:
+            current = "medium"
+
+        if finding_type == "diagnosis_inappropriate":
+            if (
+                self._diagnosis_canonical_key(clinician_text)
+                and self._diagnosis_canonical_key(llm_recommendation)
+                and self._diagnosis_canonical_key(clinician_text)
+                != self._diagnosis_canonical_key(llm_recommendation)
+            ):
+                return "high"
+            if current == "low":
+                return "medium"
+        elif finding_type in {"diagnosis_missing", "procedure_missing"} and current == "low":
+            return "medium"
+        return current
+
+    def _build_top_alert(
+        self, findings: List[Dict[str, Any]], counts: Dict[str, int], summary: str
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(findings, list) or not findings:
+            return None
+
+        severity_weight = {"high": 3, "medium": 2, "low": 1}
+        type_weight = {
+            "diagnosis_inappropriate": 4,
+            "diagnosis_missing": 3,
+            "procedure_missing": 2,
+            "diagnosis_insufficient_evidence": 1,
+        }
+        top = sorted(
+            findings,
+            key=lambda item: (
+                severity_weight.get(str(item.get("severity") or "").lower(), 0),
+                type_weight.get(str(item.get("type") or "").lower(), 0),
+            ),
+            reverse=True,
+        )[0]
+        alert_type = str(top.get("type") or "").strip().lower()
+        if not alert_type:
+            return None
+        alert_severity = str(top.get("severity") or "medium").strip().lower()
+        if alert_severity not in {"high", "medium", "low"}:
+            alert_severity = "medium"
+        same_type_count = max(
+            1, int(counts.get(alert_type, 0) or 0) or sum(1 for x in findings if x.get("type") == alert_type)
+        )
+        alert_summary = (
+            str(top.get("llm_recommendation") or "").strip()
+            or str(top.get("reason") or "").strip()
+            or str(summary or "").strip()
+            or "建议人工复核。"
+        )
+        return {
+            "type": alert_type,
+            "severity": alert_severity,
+            "summary": alert_summary,
+            "count": same_type_count,
         }
 
     def _extract_clinician_procedures_for_audit(
@@ -3541,10 +3679,16 @@ class FrontPageExtractionService:
                 if f_type not in allowed_types:
                     continue
                 severity = str(item.get("severity") or "medium").strip().lower()
-                if severity not in allowed_severity:
-                    severity = "medium"
                 clinician_text = str(item.get("clinician_text") or "").strip()
                 llm_recommendation = str(item.get("llm_recommendation") or "").strip()
+                severity = self._normalize_finding_severity(
+                    finding_type=f_type,
+                    severity=severity,
+                    clinician_text=clinician_text,
+                    llm_recommendation=llm_recommendation,
+                )
+                if severity not in allowed_severity:
+                    severity = "medium"
                 finding_key = (
                     f_type,
                     self._diagnosis_canonical_key(clinician_text),
@@ -3624,12 +3768,15 @@ class FrontPageExtractionService:
             else:
                 summary = "当前未识别到明确编码审核风险。"
 
+        top_alert = self._build_top_alert(findings=findings, counts=counts, summary=summary)
+
         return {
             "version": str(result.get("version") or "v1"),
             "summary": summary,
             "confidence": round(confidence, 2),
             "counts": counts,
             "findings": findings,
+            "top_alert": top_alert,
         }
 
     async def _build_main_and_audit_llm_evidence(
@@ -3733,6 +3880,7 @@ class FrontPageExtractionService:
             main_result if isinstance(main_result, dict) else None,
             clinician_main=clinician_main,
             fallback_main=system_main,
+            system_other_diagnoses=system_others,
         )
         normalized_audit = self._normalize_coding_audit_llm_payload(
             audit_result if isinstance(audit_result, dict) else None

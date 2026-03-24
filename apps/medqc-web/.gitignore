@@ -122,6 +122,9 @@ kag_integration/
 kag_schemas/
 kag_services/
 semantic_rules_engine/
+backend/data/vector/
+*.faiss
+*.npy
 
 # Supabase
 supabase/.branches

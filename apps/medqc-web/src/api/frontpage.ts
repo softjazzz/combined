@@ -24,6 +24,10 @@ export interface MainDiagnosisLLMEvidence {
     clinician_main_diagnosis?: string
     llm_recommended_main_diagnosis?: string
     is_consistent_with_clinician?: boolean
+    recommended_main_diagnosis_action?: 'promote_existing' | 'refine_current' | 'keep'
+    recommended_main_diagnosis_source?: 'other_diagnosis' | 'llm_refinement' | 'none'
+    recommended_main_diagnosis_source_other_index?: number
+    recommendation_summary?: string
     confidence?: number
     conclusion?: string
     key_evidence?: MainDiagnosisKeyEvidence[]
@@ -51,6 +55,12 @@ export interface CodingAuditLLMEvidence {
     confidence?: number
     counts?: Partial<Record<AuditFindingType, number>>
     findings?: CodingAuditFinding[]
+    top_alert?: {
+        type?: AuditFindingType
+        severity?: AuditFindingSeverity
+        summary?: string
+        count?: number
+    } | null
 }
 
 export interface FrontPageEvidence {

@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-03-24T07:42:54.313Z",
+  "base_url": "http://127.0.0.1:8001",
+  "scope": "6.3.1",
+  "checks": [
+    {
+      "name": "分析接口可用性",
+      "passed": false,
+      "detail": "HTTP 500: {\"success\":false,\"error\":\"Invalid comparison between dtype=datetime64[ns, UTC] and Timestamp\",\"code\":\"HTTP_500\",\"trace_id\":\"5d888c2e-077f-4ad6-b4c9-149ed2cbe8f0\"}",
+      "evidence": "http://127.0.0.1:8001/api/v1/drg/analysis?dimension=hospital&start_date=2026-01-01&end_date=2026-03-24"
+    }
+  ],
+  "artifacts": {},
+  "overall": "failed"
+}

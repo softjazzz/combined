@@ -53,12 +53,13 @@
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">连接 URI（留空表示保持不变）</label>
-          <a-textarea
-            v-model:value="state.mongoConnectionForm.mongo_uri"
-            :rows="3"
+          <label class="text-[12px] text-slate-600 block mb-1">连接 URI（留空表示保持不变）</label>
+          <textarea
+            v-model="state.mongoConnectionForm.mongo_uri"
+            rows="3"
             :disabled="isReadonly"
             placeholder="mongodb://user:pass@host:27017/db"
+            class="w-full px-3 py-2 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-400 custom-scrollbar resize-none"
           />
           <div class="text-[11px] text-slate-400 mt-1">
             当前配置：{{ state.mongoConfigRaw.mongo_uri_display || '未配置' }}
@@ -66,44 +67,48 @@
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">数据库名</label>
-          <a-input
-            v-model:value="state.mongoConnectionForm.mongo_database"
+          <label class="text-[12px] text-slate-600 block mb-1">数据库名</label>
+          <input
+            v-model="state.mongoConnectionForm.mongo_database"
+            type="text"
             :disabled="isReadonly"
-          />
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">读偏好</label>
+          <label class="text-[12px] text-slate-600 block mb-1">读偏好</label>
           <a-select
             v-model:value="state.mongoConnectionForm.read_preference"
             :disabled="isReadonly"
             style="width: 100%"
+            class="rounded-[8px]"
             :options="readPreferenceOptions"
           />
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">连接超时 (ms)</label>
-          <a-input-number
-            v-model:value="state.mongoConnectionForm.connect_timeout_ms"
-            :disabled="isReadonly"
+          <label class="text-[12px] text-slate-600 block mb-1">连接超时 (ms)</label>
+          <input
+            v-model="state.mongoConnectionForm.connect_timeout_ms"
+            type="number"
             :min="1000"
             :max="60000"
-            style="width: 100%"
-          />
+            :disabled="isReadonly"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
         </div>
 
         <div class="pt-2">
-          <a-button
-            type="primary"
-            block
-            :disabled="isReadonly"
-            :loading="state.isSavingMongoConnection"
+          <button
+            class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
+            :class="isReadonly || state.isSavingMongoConnection ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100' : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'"
+            :disabled="isReadonly || state.isSavingMongoConnection"
             @click="handleSaveMongo"
           >
-            保存并测试
-          </a-button>
+            <span v-if="state.isSavingMongoConnection">保存中...</span>
+            <span v-else>保存并测试</span>
+          </button>
         </div>
       </div>
 
@@ -121,61 +126,70 @@
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">主机地址</label>
-          <a-input
-            v-model:value="state.pgConnectionForm.remote_host"
+          <label class="text-[12px] text-slate-600 block mb-1">主机地址</label>
+          <input
+            v-model="state.pgConnectionForm.remote_host"
+            type="text"
             :disabled="isReadonly"
-          />
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">端口</label>
-          <a-input-number
-            v-model:value="state.pgConnectionForm.remote_port"
-            :disabled="isReadonly"
+          <label class="text-[12px] text-slate-600 block mb-1">端口</label>
+          <input
+            v-model="state.pgConnectionForm.remote_port"
+            type="number"
             :min="1"
             :max="65535"
-            style="width: 100%"
-          />
+            :disabled="isReadonly"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">数据库名</label>
-          <a-input
-            v-model:value="state.pgConnectionForm.remote_database"
+          <label class="text-[12px] text-slate-600 block mb-1">数据库名</label>
+          <input
+            v-model="state.pgConnectionForm.remote_database"
+            type="text"
             :disabled="isReadonly"
-          />
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">用户名</label>
-          <a-input
-            v-model:value="state.pgConnectionForm.remote_username"
+          <label class="text-[12px] text-slate-600 block mb-1">用户名</label>
+          <input
+            v-model="state.pgConnectionForm.remote_username"
+            type="text"
             :disabled="isReadonly"
-          />
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
         </div>
 
         <div>
-          <label class="text-[12px] text-slate-600">密码（留空保持不变）</label>
-          <a-input-password
-            v-model:value="state.pgConnectionForm.remote_password"
+          <label class="text-[12px] text-slate-600 block mb-1">密码（留空保持不变）</label>
+          <input
+            v-model="state.pgConnectionForm.remote_password"
+            type="password"
             :disabled="isReadonly"
-          />
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
           <div class="text-[11px] text-slate-400 mt-1">
             当前密码状态：{{ state.pgConnectionForm.remote_password_set ? '已设置' : '未设置' }}
           </div>
         </div>
 
         <div class="pt-2">
-          <a-button
-            type="primary"
-            block
-            :disabled="isReadonly"
-            :loading="state.isSavingPgConnection"
+          <button
+            class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
+            :class="isReadonly || state.isSavingPgConnection ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100' : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'"
+            :disabled="isReadonly || state.isSavingPgConnection"
             @click="handleSavePg"
           >
-            保存配置
-          </a-button>
+            <span v-if="state.isSavingPgConnection">保存中...</span>
+            <span v-else>保存配置</span>
+          </button>
         </div>
       </div>
 

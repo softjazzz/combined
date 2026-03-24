@@ -25,7 +25,7 @@
   "night_window_start": "22:00",
   "night_window_end": "06:00",
   "target_departments": [
-    "*"
+    "呼吸内科"
   ],
   "enabled": true
 }

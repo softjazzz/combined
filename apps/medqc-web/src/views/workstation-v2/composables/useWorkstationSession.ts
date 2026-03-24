@@ -5,7 +5,7 @@ type ViewMode = 'list' | 'detail' | 'rules'
 type AssistTabKey = 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message'
 
 interface PersistedState {
-  frontpageTab: 'fields' | 'preview'
+  frontpageTab: 'fields' | 'preview' | 'official'
   assistPanelVisible: boolean
   assistTab: AssistTabKey
   icdDrawerVisible: boolean
@@ -22,7 +22,12 @@ function loadState(): PersistedState {
     if (!raw) throw new Error('missing')
     const parsed = JSON.parse(raw) as PersistedState
     return {
-      frontpageTab: parsed.frontpageTab === 'preview' ? 'preview' : 'fields',
+      frontpageTab:
+        parsed.frontpageTab === 'preview'
+          ? 'preview'
+          : parsed.frontpageTab === 'official'
+            ? 'official'
+            : 'fields',
       assistPanelVisible: !!parsed.assistPanelVisible,
       assistTab: VALID_ASSIST_TABS.includes(parsed.assistTab) ? parsed.assistTab : 'form',
       icdDrawerVisible: !!parsed.icdDrawerVisible,
@@ -47,7 +52,7 @@ export function useWorkstationSession() {
   const viewMode = ref<ViewMode>('list')
   const selectedId = ref<string | null>(null)
 
-  const frontpageTab = ref<'fields' | 'preview'>(state.frontpageTab)
+  const frontpageTab = ref<'fields' | 'preview' | 'official'>(state.frontpageTab)
   const assistPanelVisible = ref(state.assistPanelVisible)
   const assistTab = ref<AssistTabKey>(state.assistTab)
   const icdDrawerVisible = ref(state.icdDrawerVisible)

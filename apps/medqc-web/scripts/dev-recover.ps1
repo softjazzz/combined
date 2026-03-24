@@ -3,7 +3,8 @@ param(
   [switch]$BackendOnly,
   [int]$FrontendPort = 3000,
   [int]$BackendPort = 8001,
-  [string]$PythonExe = "C:\Users\Coldplay\AppData\Local\Programs\Python\Python310\python.exe"
+  [string]$PythonExe = "C:\Python310\python.exe",
+  [switch]$NoDistFallback
 )
 
 $ErrorActionPreference = "Continue"
@@ -72,6 +73,36 @@ function Stop-FrontendNodeProcesses([string]$projectRoot, [int]$port) {
   } catch {
     Write-Warning "  scan stale vite process failed: $($_.Exception.Message)"
   }
+}
+
+function Start-DistFrontend([string]$projectRoot, [int]$port, [string]$logFile) {
+  if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "dist\index.html"))) {
+    Write-Warning "  dist fallback unavailable: dist/index.html missing"
+    return $false
+  }
+  Stop-FrontendNodeProcesses $projectRoot $port
+  $pySpaEntry = Join-Path $projectRoot "scripts\serve_dist_spa.py"
+  $nodeSpaEntry = Join-Path $projectRoot "scripts\serve-dist-spa.mjs"
+  $pyPath = Resolve-PythonExecutable $PythonExe
+  if ($pyPath -and (Test-Path -LiteralPath $pySpaEntry)) {
+    if ($pyPath -like "py *") {
+      $cmd = "set HTTP_PROXY=&& set HTTPS_PROXY=&& set ALL_PROXY=&& set NO_PROXY=localhost,127.0.0.1&& $pyPath scripts\\serve_dist_spa.py --host 127.0.0.1 --port $port --dir dist > `"$logFile`" 2>&1"
+      Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $cmd -WorkingDirectory $projectRoot | Out-Null
+    } else {
+      Start-Process -FilePath $pyPath -ArgumentList "scripts/serve_dist_spa.py --host 127.0.0.1 --port $port --dir dist" -WorkingDirectory $projectRoot -RedirectStandardOutput $logFile -RedirectStandardError $logFile | Out-Null
+    }
+  } elseif (Test-Path -LiteralPath $nodeSpaEntry) {
+    $cmd = "set HTTP_PROXY=&& set HTTPS_PROXY=&& set ALL_PROXY=&& set NO_PROXY=localhost,127.0.0.1&& set PORT=$port&& node scripts\\serve-dist-spa.mjs > `"$logFile`" 2>&1"
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $cmd -WorkingDirectory $projectRoot | Out-Null
+  } else {
+    Write-Warning "  dist fallback unavailable: no spa server script found"
+    return $false
+  }
+  if (Wait-HttpOk "http://127.0.0.1:$port" 20) {
+    Write-Host "  frontend fallback ok: http://127.0.0.1:$port (dist mode)" -ForegroundColor Green
+    return $true
+  }
+  return $false
 }
 
 function Wait-HttpOk([string]$url, [int]$timeoutSec = 25) {
@@ -287,7 +318,24 @@ if ($runFrontend) {
   if ($frontendReady) {
     Write-Host "  frontend ok: http://127.0.0.1:$FrontendPort" -ForegroundColor Green
   } else {
-    Write-Warning "  frontend unstable. see log: $frontendLog"
+    $isEsbuildEperm = $false
+    try {
+      if (Test-Path $frontendLog) {
+        $logText = Get-Content $frontendLog -Raw -ErrorAction SilentlyContinue
+        if ($logText -match "spawn EPERM" -or $logText -match "vite:esbuild") {
+          $isEsbuildEperm = $true
+        }
+      }
+    } catch {}
+
+    if (-not $NoDistFallback -and $isEsbuildEperm) {
+      Write-Warning "  detected esbuild spawn EPERM, try dist fallback..."
+      if (-not (Start-DistFrontend $root $FrontendPort $frontendLog)) {
+        Write-Warning "  frontend fallback failed. see log: $frontendLog"
+      }
+    } else {
+      Write-Warning "  frontend unstable. see log: $frontendLog"
+    }
   }
 }
 
@@ -310,7 +358,7 @@ if ($runBackend) {
     }
 
     $backendDir = Join-Path $root "backend"
-    $arg = "-m uvicorn app.main:app --host 0.0.0.0 --port $BackendPort --reload"
+    $arg = "-m uvicorn app.main:app --host 0.0.0.0 --port $BackendPort"
     $backendErrLog = [System.IO.Path]::ChangeExtension($backendLog, ".err.log")
     if ($resolvedPython -like "py *") {
       $cmd = "$resolvedPython $arg > `"$backendLog`" 2> `"$backendErrLog`""
@@ -322,7 +370,36 @@ if ($runBackend) {
     if (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 35) {
       Write-Host "  backend ok: http://127.0.0.1:$BackendPort/docs" -ForegroundColor Green
     } else {
-      Write-Warning "  backend not ready. see log: $backendLog"
+      $fallbackWithoutReload = $false
+      if (Test-Path $backendErrLog) {
+        try {
+          $backendErrText = Get-Content $backendErrLog -Raw -ErrorAction SilentlyContinue
+          if ($backendErrText -match "PermissionError:\s*\[WinError 5\]" -or $backendErrText -match "CreateNamedPipe") {
+            $fallbackWithoutReload = $true
+          }
+        } catch {}
+      }
+
+      if ($fallbackWithoutReload) {
+        Write-Warning "  detected Windows reload permission issue, retry backend without --reload..."
+        Stop-PortProcess $BackendPort
+
+        $arg = "-m uvicorn app.main:app --host 0.0.0.0 --port $BackendPort"
+        if ($resolvedPython -like "py *") {
+          $cmd = "$resolvedPython $arg > `"$backendLog`" 2> `"$backendErrLog`""
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $cmd -WorkingDirectory $backendDir | Out-Null
+        } else {
+          Start-Process -FilePath $resolvedPython -ArgumentList $arg -WorkingDirectory $backendDir -RedirectStandardOutput $backendLog -RedirectStandardError $backendErrLog | Out-Null
+        }
+
+        if (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 35) {
+          Write-Host "  backend ok: http://127.0.0.1:$BackendPort/docs (no-reload mode)" -ForegroundColor Green
+        } else {
+          Write-Warning "  backend not ready. see log: $backendLog"
+        }
+      } else {
+        Write-Warning "  backend not ready. see log: $backendLog"
+      }
     }
   }
 }

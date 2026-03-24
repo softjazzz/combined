@@ -95,7 +95,7 @@
                   v-for="(preview, pi) in module.entry.preview"
                   :key="pi"
                   class="max-w-[220px] truncate rounded-full border border-slate-200/80 bg-white px-2.5 py-0.5 text-[11px] leading-5 text-slate-600"
-                >{{ preview }}</span>
+                >{{ preview.label }}: {{ preview.value }}</span>
               </div>
               <div
                 v-else
@@ -109,87 +109,120 @@
       </div>
     </div>
 
-    <div v-else-if="draft">
+    <div v-else>
       <div class="frontpage-workspace-panel__tabs-shell">
         <a-tabs
           class="frontpage-workspace-panel__tabs"
           :active-key="frontpageTab"
           size="small"
           @update:active-key="onTabChange"
+          @change="onTabChange"
         >
           <a-tab-pane
             key="fields"
             tab="提取结果"
           >
-            <div class="mb-3 flex flex-wrap items-center gap-2.5 rounded-[16px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.03)]">
-              <div class="flex h-7 w-7 items-center justify-center rounded-[10px] bg-blue-500/95 shadow-[0_6px_14px_rgba(37,99,235,0.1)]">
-                <CheckCircleOutlined class="text-sm text-white" />
-              </div>
-              <div class="flex-1">
-                <div class="text-[13px] font-bold text-slate-800">
-                  病案首页提取完成
+            <template v-if="draft">
+              <div class="mb-3 flex flex-wrap items-center gap-2.5 rounded-[16px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.03)]">
+                <div class="flex h-7 w-7 items-center justify-center rounded-[10px] bg-blue-500/95 shadow-[0_6px_14px_rgba(37,99,235,0.1)]">
+                  <CheckCircleOutlined class="text-sm text-white" />
                 </div>
-                <div class="mt-0.5 text-xs text-slate-400">
-                  已从病历中提取 {{ completedCount }} 个模块的结构化字段信息
-                </div>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <a-button
-                  size="small"
-                  class="!rounded-full !border-slate-200/80 !bg-white !shadow-none"
-                  @click="$emit('export-frontpage', 'health')"
-                >
-                  <template #icon>
-                    <DownloadOutlined />
-                  </template>
-                  导出
-                </a-button>
-                <a-button
-                  size="small"
-                  type="primary"
-                  class="!rounded-full !shadow-[0_6px_14px_rgba(37,99,235,0.14)]"
-                  @click="$emit('save-frontpage')"
-                >
-                  <template #icon>
-                    <SaveOutlined />
-                  </template>
-                  保存到数据库
-                </a-button>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              <div
-                v-for="module in moduleCards"
-                :key="module.key"
-                class="rounded-[14px] border border-slate-200/80 bg-white/86 px-3 py-2.5 shadow-[0_4px_12px_rgba(15,23,42,0.02)]"
-              >
-                <div class="mb-1.5 flex items-center gap-2">
-                  <div class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-blue-500/95">
-                    <CheckCircleOutlined class="text-[10px] text-white" />
+                <div class="flex-1">
+                  <div class="text-[13px] font-bold text-slate-800">
+                    病案首页提取完成
                   </div>
-                  <span class="text-[13px] font-medium text-slate-700">{{ module.label }}</span>
-                  <span
-                    v-if="module.entry?.timestamp"
-                    class="text-[10px] tabular-nums text-slate-400"
+                  <div class="mt-0.5 text-xs text-slate-400">
+                    已从病历中提取 {{ completedCount }} 个模块的结构化字段信息
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <a-button
+                    size="small"
+                    class="!rounded-full !border-slate-200/80 !bg-white !shadow-none"
+                    @click="$emit('export-frontpage', 'health')"
                   >
-                    {{ (module.entry.timestamp / 1000).toFixed(1) }}s
-                  </span>
-                  <span
-                    v-if="!module.entry?.preview?.length"
-                    class="text-[10px] italic text-slate-400"
-                  >未提取到数据</span>
+                    <template #icon>
+                      <DownloadOutlined />
+                    </template>
+                    导出
+                  </a-button>
+                  <a-button
+                    size="small"
+                    type="primary"
+                    class="!rounded-full !shadow-[0_6px_14px_rgba(37,99,235,0.14)]"
+                    @click="$emit('save-frontpage')"
+                  >
+                    <template #icon>
+                      <SaveOutlined />
+                    </template>
+                    保存到数据库
+                  </a-button>
                 </div>
+              </div>
+
+              <div class="columns-1 xl:columns-2 gap-3 space-y-3 pb-2 pt-1">
                 <div
-                  v-if="module.entry?.preview?.length"
-                  class="flex flex-wrap gap-1.5 pl-6"
+                  v-for="module in moduleCards"
+                  :key="module.key"
+                  class="break-inside-avoid rounded-[16px] border border-slate-200/70 bg-white px-4 py-3.5 shadow-[0_2px_10px_rgba(15,23,42,0.02)] transition-shadow hover:shadow-[0_6px_16px_rgba(15,23,42,0.04)]"
                 >
-                  <span
-                    v-for="(preview, pi) in module.entry.preview"
-                    :key="pi"
-                    class="max-w-[260px] truncate rounded-md border border-slate-200/80 bg-white px-2 py-0.5 text-[11px] leading-5 text-slate-600"
-                  >{{ preview }}</span>
+                  <div class="mb-3 flex items-center gap-2.5 border-b border-slate-100/80 pb-2.5">
+                    <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                      <CheckCircleOutlined class="text-[11px] text-blue-600" />
+                    </div>
+                    <span class="text-[14px] font-semibold tracking-wide text-slate-800">{{ module.label }}</span>
+                    <span
+                      v-if="module.entry?.timestamp"
+                      class="ml-auto rounded-full bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-400"
+                    >
+                      {{ (module.entry.timestamp / 1000).toFixed(1) }}s
+                    </span>
+                    <span
+                      v-if="!module.entry?.preview?.length"
+                      class="ml-auto text-[11px] italic text-slate-400"
+                    >未提取到数据</span>
+                  </div>
+                
+                  <div
+                    v-if="module.entry?.preview?.length"
+                    class="flex flex-col gap-3"
+                  >
+                    <div
+                      v-for="(preview, pi) in module.entry.preview"
+                      :key="pi"
+                      class="text-[13px] leading-relaxed"
+                    >
+                      <template v-if="preview.isLongText">
+                        <div class="mb-1 text-[11px] font-medium tracking-wide text-slate-400">
+                          {{ preview.label }}
+                        </div>
+                        <div class="rounded-lg bg-slate-50/80 px-3 py-2 text-[13px] text-slate-700">
+                          {{ preview.value }}
+                        </div>
+                      </template>
+                      <template v-else>
+                        <div class="flex items-start justify-between">
+                          <span class="w-24 shrink-0 text-[12px] text-slate-400">{{ preview.label }}</span>
+                          <span class="text-right text-[13px] font-medium text-slate-800">{{ preview.value }}</span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </template>
+            <div
+              v-else
+              class="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-slate-200 bg-slate-50/65 py-14 text-slate-300"
+            >
+              <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-slate-200 bg-white">
+                <FileTextOutlined class="text-2xl" />
+              </div>
+              <div class="mb-1 text-sm font-medium text-slate-500">
+                尚未生成 AI 首页草稿
+              </div>
+              <div class="text-xs text-slate-400">
+                可点击右上角“AI 生成首页”生成草稿；系统首页请查看“系统首页”标签。
               </div>
             </div>
           </a-tab-pane>
@@ -198,6 +231,9 @@
             key="preview"
             tab="首页预览/打印"
           >
+            <div class="mb-3 rounded-[12px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-[12px] text-blue-700">
+              当前来源：LLM 抽取草稿（用于编辑、打印与对照）
+            </div>
             <FrontpageSheet
               v-if="draftSheetData"
               :data="draftSheetData"
@@ -215,6 +251,9 @@
             key="official"
             tab="系统首页"
           >
+            <div class="mb-3 rounded-[12px] border border-emerald-100/80 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-700">
+              当前来源：官方首页（CDM/数据表，Mongo 同步入库）
+            </div>
             <div
               v-if="sheetLoading"
               class="flex items-center justify-center py-12"
@@ -228,44 +267,18 @@
             />
             <div
               v-else
-              class="py-12 text-center text-slate-400"
+              class="space-y-3"
             >
-              暂无数据库首页数据
+              <div class="rounded-[12px] border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-500">
+                系统首页暂无数据，以下展示官方首页空表样式（数据表当前为空或尚未同步）。
+              </div>
+              <FrontpageSheet
+                :data="officialEmptySheetData"
+                :post-processing="false"
+              />
             </div>
           </a-tab-pane>
         </a-tabs>
-      </div>
-    </div>
-
-    <div v-else>
-      <div
-        v-if="sheetLoading"
-        class="flex flex-col items-center py-20"
-      >
-        <a-spin size="large" />
-        <div class="mt-4 text-sm text-slate-400">
-          加载病案首页数据中...
-        </div>
-      </div>
-      <div v-else-if="sheetData">
-        <FrontpageSheet
-          :data="sheetData"
-          :post-processing="false"
-        />
-      </div>
-      <div
-        v-else
-        class="flex flex-col items-center justify-center rounded-[20px] border border-dashed border-slate-200 bg-slate-50/65 py-20 text-slate-300"
-      >
-        <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-slate-200 bg-white">
-          <FileTextOutlined class="text-3xl" />
-        </div>
-        <div class="mb-1 text-sm font-medium text-slate-500">
-          暂无病案首页数据
-        </div>
-        <div class="text-xs text-slate-400">
-          可点击右上角“AI 生成首页”按钮，从病历中自动提取生成
-        </div>
       </div>
     </div>
   </div>
@@ -286,7 +299,7 @@ import FrontpageSheet from './FrontpageSheet.vue'
 type ModuleStatus = 'done' | 'active' | 'pending'
 
 interface ModuleEntry {
-  preview?: string[]
+  preview?: { label: string; value: string; isLongText?: boolean }[]
   timestamp?: number
 }
 
@@ -301,7 +314,7 @@ const props = defineProps<{
   generating: boolean
   postProcessing: boolean
   draft: any
-  frontpageTab: 'fields' | 'preview'
+  frontpageTab: 'fields' | 'preview' | 'official'
   moduleCards: ModuleCard[]
   completedCount: number
   totalCount: number
@@ -310,7 +323,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'update:frontpageTab': [value: 'fields' | 'preview']
+  'update:frontpageTab': [value: 'fields' | 'preview' | 'official']
   'export-frontpage': [format: 'health' | 'insurance' | 'settlement']
   'save-frontpage': []
 }>()
@@ -319,6 +332,15 @@ const progressPercent = computed(() => {
   if (!props.totalCount) return 0
   return Math.round((props.completedCount / props.totalCount) * 100)
 })
+
+const officialEmptySheetData = computed(() => ({
+  basic: {},
+  diagnoses: [],
+  surgeries: [],
+  cost: {},
+  evidence: {},
+  other_medical_info: {},
+}))
 
 /** 将 AI 抽取的 draft 转换为 FrontpageSheet 所需的格式 */
 const draftSheetData = computed(() => {
@@ -418,7 +440,15 @@ const draftSheetData = computed(() => {
 })
 
 function onTabChange(tab: string) {
-  emit('update:frontpageTab', tab === 'preview' ? 'preview' : 'fields')
+  if (tab === 'preview') {
+    emit('update:frontpageTab', 'preview')
+    return
+  }
+  if (tab === 'official') {
+    emit('update:frontpageTab', 'official')
+    return
+  }
+  emit('update:frontpageTab', 'fields')
 }
 
 function moduleCardClass(status: ModuleStatus) {
