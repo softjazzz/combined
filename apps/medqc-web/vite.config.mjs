@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import Components from 'unplugin-vue-components/vite'
+import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -7,6 +9,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const backendTarget = 'http://localhost:8001'
 const normalizeId = (id) => id.replace(/\\/g, '/')
+const cliPortArgIndex = process.argv.findIndex((arg) => arg === '--port')
+const cliPort = cliPortArgIndex >= 0 ? Number(process.argv[cliPortArgIndex + 1]) : NaN
+const devServerPort = Number.isFinite(cliPort) ? cliPort : 3000
+const devServerHost = process.env.VITE_DEV_HOST || '127.0.0.1'
+const publicHmrHost = process.env.VITE_HMR_HOST || undefined
+const publicHmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || devServerPort)
 
 function createManualChunks(id) {
   const normalizedId = normalizeId(id)
@@ -56,8 +64,19 @@ function createManualChunks(id) {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => {
-  const plugins = [vue()]
+export default defineConfig(async ({ command }) => {
+  const plugins = [
+    vue(),
+    Components({
+      dts: 'src/components.d.ts',
+      resolvers: [
+        AntDesignVueResolver({
+          importStyle: false,
+          resolveIcons: true,
+        }),
+      ],
+    }),
+  ]
   const shouldVisualize = process.env.ANALYZE_VISUALIZER === '1'
 
   if (shouldVisualize) {
@@ -80,22 +99,28 @@ export default defineConfig(async () => {
     }
   }
 
+  const runtimeStylePath = resolve(
+    __dirname,
+    command === 'serve' ? 'src/styles/index.prebuilt.css' : 'src/styles/index.css'
+  )
+
   return {
   plugins,
   // 使用 Vite 默认缓存目录，避免自定义 .tmp 缓存目录出现间歇性 EPERM/lstat
   cacheDir: 'node_modules/.vite',
   resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-      '@/components': resolve(__dirname, 'src/components'),
-      '@/views': resolve(__dirname, 'src/views'),
-      '@/stores': resolve(__dirname, 'src/stores'),
-      '@/utils': resolve(__dirname, 'src/utils'),
-      '@/types': resolve(__dirname, 'src/types'),
-      '@/lib': resolve(__dirname, 'src/lib'),
-      '@/assets': resolve(__dirname, 'src/assets'),
-      '@/styles': resolve(__dirname, 'src/styles')
-    }
+    alias: [
+      { find: '@/styles/runtime.css', replacement: runtimeStylePath },
+      { find: '@', replacement: resolve(__dirname, 'src') },
+      { find: '@/components', replacement: resolve(__dirname, 'src/components') },
+      { find: '@/views', replacement: resolve(__dirname, 'src/views') },
+      { find: '@/stores', replacement: resolve(__dirname, 'src/stores') },
+      { find: '@/utils', replacement: resolve(__dirname, 'src/utils') },
+      { find: '@/types', replacement: resolve(__dirname, 'src/types') },
+      { find: '@/lib', replacement: resolve(__dirname, 'src/lib') },
+      { find: '@/assets', replacement: resolve(__dirname, 'src/assets') },
+      { find: '@/styles', replacement: resolve(__dirname, 'src/styles') },
+    ]
   },
   css: {
     preprocessorOptions: {
@@ -107,7 +132,7 @@ export default defineConfig(async () => {
   },
   server: {
     port: 3000,
-    host: '127.0.0.1', // 仅本机访问，避免 Clash/TUN 网卡干扰
+    host: devServerHost,
     open: false, // 不自动打开浏览器
     cors: true, // 启用CORS
     watch: {
@@ -121,16 +146,10 @@ export default defineConfig(async () => {
     },
     // https: false, // 开发环境使用HTTP，如需HTTPS可设为true
     hmr: {
-      host: '127.0.0.1',
-      clientPort: 3000,
+      protocol: 'ws',
+      host: publicHmrHost,
+      clientPort: publicHmrClientPort,
       overlay: false // 关闭错误覆盖层，避免 esbuild 偶发异常导致白屏
-    },
-    warmup: {
-      clientFiles: [
-        './src/main.ts',
-        './src/App.vue',
-        './src/router/index.ts',
-      ]
     },
     strictPort: true, // 端口被占用时报错，不自动切换
 
@@ -188,15 +207,11 @@ export default defineConfig(async () => {
   },
   optimizeDeps: {
     entries: ['index.html'],
-    // 预构建重量级依赖，首次加载不再逐个 transform
+    // 仅保留核心依赖预构建，避免 dev 首个请求前做过量依赖优化
     include: [
       'vue',
       'vue-router',
       'pinia',
-      'ant-design-vue',
-      'axios',
-      '@ant-design/icons-vue',
-      'crypto-js',
     ]
   },
   worker: {

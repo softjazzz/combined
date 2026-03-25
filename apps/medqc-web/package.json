@@ -4,7 +4,11 @@
   "description": "病案质控系统 - 基于AI的医疗病案质量控制平台",
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.mjs --configLoader native",
+    "predev": "node scripts/run-predev.mjs",
+    "dev": "vite --config vite.config.mjs",
+    "cache:clean": "node scripts/reset-vite-cache.mjs",
+    "dev:force": "npm run cache:clean && npm run styles:prebuild && vite --force --config vite.config.mjs",
+    "styles:prebuild": "tailwindcss -i ./src/styles/index.css -o ./src/styles/index.prebuilt.css --minify",
     "build": "vite build --config vite.config.mjs --configLoader native",
     "build:profile": "node scripts/build-profile.mjs --runs=3",
     "build:analyze": "node scripts/build-profile.mjs --runs=1 --visualize",
@@ -95,6 +99,7 @@
     "tailwindcss": "^3.4.16",
     "tsx": "^4.20.3",
     "typescript": "~5.7.2",
+    "unplugin-vue-components": "^32.0.0",
     "vite": "^6.0.5",
     "vitest": "^2.1.8",
     "vue-tsc": "^2.2.0"

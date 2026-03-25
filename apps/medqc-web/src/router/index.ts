@@ -1,8 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-
-import LLMParseResultView from '@/views/medical-records/LLMParseResultView.vue'
 
 // 路由配置
 const routes: RouteRecordRaw[] = [
@@ -433,7 +430,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'llm-result',
         name: 'LLMParseResult',
-        component: LLMParseResultView,
+        component: () => import('@/views/medical-records/LLMParseResultView.vue'),
         meta: { title: 'LLM解析结果', icon: 'FileTextOutlined', hidden: true },
       },
 
@@ -1054,9 +1051,22 @@ const router = createRouter({
   },
 })
 
+type AuthStoreFactory = (typeof import('@/stores/auth'))['useAuthStore']
+
+let authStoreLoader: Promise<AuthStoreFactory> | null = null
+
+async function getAuthStore() {
+  if (!authStoreLoader) {
+    authStoreLoader = import('@/stores/auth').then((module) => module.useAuthStore)
+  }
+
+  const useAuthStore = await authStoreLoader
+  return useAuthStore()
+}
+
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
-  const authStore = useAuthStore()
+  const authStore = await getAuthStore()
   const isWorkstationRoute = to.path.startsWith('/workstation-v4')
   const isWorkstationLogin = to.name === 'WorkstationV4Login'
 

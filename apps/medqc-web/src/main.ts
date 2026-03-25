@@ -1,17 +1,13 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import Antd from 'ant-design-vue'
 // 图标由各组件按需 import，不再全量全局注册（原 793 个图标会导致请求风暴）
 
 import App from './App.vue'
 import router from './router'
 
 // 导入样式 - 调整顺序以确保Tailwind样式优先级
-import './styles/index.css'
+import '@/styles/runtime.css'
 import 'ant-design-vue/dist/reset.css'
-
-// 导入错误处理
-import errorHandler from './utils/error-handler'
 
 // 创建应用实例
 const app = createApp(App)
@@ -23,13 +19,22 @@ app.use(pinia)
 // 配置路由
 app.use(router)
 
-// 配置Ant Design Vue
-app.use(Antd)
+let errorHandlerLoader: Promise<typeof import('./utils/error-handler')> | null = null
+
+function loadErrorHandler() {
+  if (!errorHandlerLoader) {
+    errorHandlerLoader = import('./utils/error-handler')
+  }
+
+  return errorHandlerLoader
+}
 
 // 全局错误处理
 app.config.errorHandler = (err, vm: unknown, info: unknown) => {
   console.error('Global error:', err, vm, info)
-  errorHandler.handleError(err)
+  void loadErrorHandler().then(({ default: errorHandler }) => {
+    errorHandler.handleError(err)
+  })
 }
 
 // 全局属性

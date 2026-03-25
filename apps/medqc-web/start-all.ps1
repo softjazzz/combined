@@ -17,6 +17,7 @@ $frontendLog = Join-Path $tmpDir "frontend-$FrontendMode-$FrontendPort.log"
 $frontendErrLog = Join-Path $tmpDir "frontend-$FrontendMode-$FrontendPort.err.log"
 $backendLog = Join-Path $tmpDir "backend-$BackendPort.log"
 $backendErrLog = Join-Path $tmpDir "backend-$BackendPort.err.log"
+$frontendModeExplicit = $PSBoundParameters.ContainsKey("FrontendMode")
 
 function Write-Step([string]$msg) {
   Write-Host "==> $msg" -ForegroundColor Cyan
@@ -65,6 +66,63 @@ function Wait-HttpOk([string]$url, [int]$timeoutSec = 30) {
   return $false
 }
 
+function Test-HttpOk([string]$url, [int]$timeoutSec = 3) {
+  try {
+    $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $timeoutSec
+    return ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500)
+  } catch {
+    return $false
+  }
+}
+
+function Test-ViteDevClient([int]$port, [int]$timeoutSec = 3) {
+  $devClientUrl = "http://127.0.0.1:$port/@vite/client"
+  try {
+    $resp = Invoke-WebRequest -Uri $devClientUrl -UseBasicParsing -TimeoutSec $timeoutSec
+    if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 500) {
+      return $false
+    }
+
+    $contentType = ""
+    if ($resp.Headers -and $resp.Headers["Content-Type"]) {
+      $contentType = String($resp.Headers["Content-Type"])
+    }
+
+    $body = ""
+    if ($null -ne $resp.Content) {
+      $body = String($resp.Content)
+    }
+
+    if ($contentType -match "text/html") {
+      return $false
+    }
+
+    return ($body -match "createHotContext" -or $body -match "__HMR_PROTOCOL__" -or $body -match "WebSocket")
+  } catch {
+    return $false
+  }
+}
+
+function Wait-FrontendHealthy([string]$mode, [int]$port, [int]$timeoutSec = 30) {
+  $rootUrl = "http://127.0.0.1:$port/"
+  $deadline = (Get-Date).AddSeconds($timeoutSec)
+
+  while ((Get-Date) -lt $deadline) {
+    if ($mode -eq "dev") {
+      if (Test-ViteDevClient $port 3) {
+        return $true
+      }
+    } else {
+      if (Test-HttpOk $rootUrl 3) {
+        return $true
+      }
+    }
+    Start-Sleep -Milliseconds 700
+  }
+
+  return $false
+}
+
 function Resolve-PythonExecutable([string]$preferred) {
   if ($preferred -and (Test-Path -LiteralPath $preferred)) {
     return $preferred
@@ -74,6 +132,33 @@ function Resolve-PythonExecutable([string]$preferred) {
     return $python.Source
   }
   return $null
+}
+
+function Remove-FileIfPossible([string]$path) {
+  if (-not (Test-Path -LiteralPath $path)) {
+    return
+  }
+  try {
+    Remove-Item -LiteralPath $path -Force
+  } catch {
+    Write-Warning "  skip removing locked file: $path"
+  }
+}
+
+function Start-NpmCommand([string[]]$arguments, [string]$workingDirectory, [string]$log, [string]$errLog) {
+  $escaped = ($arguments | ForEach-Object {
+    if ($_ -match '\s') {
+      '"' + $_.Replace('"', '\"') + '"'
+    } else {
+      $_
+    }
+  }) -join ' '
+
+  Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c", "npm.cmd $escaped" `
+    -WorkingDirectory $workingDirectory `
+    -RedirectStandardOutput $log `
+    -RedirectStandardError $errLog | Out-Null
 }
 
 function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$pythonExe, [string]$log, [string]$errLog) {
@@ -131,8 +216,8 @@ if ($BackendReload) {
 }
 
 if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 2)) {
-  if (Test-Path -LiteralPath $backendLog) { Remove-Item -LiteralPath $backendLog -Force }
-  if (Test-Path -LiteralPath $backendErrLog) { Remove-Item -LiteralPath $backendErrLog -Force }
+  Remove-FileIfPossible $backendLog
+  Remove-FileIfPossible $backendErrLog
 
   Start-Process -FilePath $PythonExe `
     -ArgumentList $backendArgs `
@@ -151,14 +236,14 @@ if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 40)) {
 Write-Host "  backend ok: http://127.0.0.1:$BackendPort/docs" -ForegroundColor Green
 
 Write-Step "Start frontend ($FrontendMode, $FrontendPort)"
-if (Test-Path -LiteralPath $frontendLog) { Remove-Item -LiteralPath $frontendLog -Force }
-if (Test-Path -LiteralPath $frontendErrLog) { Remove-Item -LiteralPath $frontendErrLog -Force }
 
 if ($FrontendMode -eq "dist") {
-  if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 2)) {
+  if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 2)) {
+    Remove-FileIfPossible $frontendLog
+    Remove-FileIfPossible $frontendErrLog
     Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog | Out-Null
   } else {
-    Write-Host "  frontend already running on $FrontendPort, skip start"
+    Write-Host "  frontend already running on $FrontendPort (dist/python), skip start"
   }
 } elseif ($FrontendMode -eq "preview") {
   $frontendArgs = @("run", "preview", "--", "--host", "127.0.0.1", "--port", "$FrontendPort", "--strictPort")
@@ -167,20 +252,27 @@ if ($FrontendMode -eq "dist") {
 }
 
 if ($FrontendMode -ne "dist") {
-  if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 2)) {
-    Start-Process -FilePath "npm.cmd" `
-      -ArgumentList $frontendArgs `
-      -WorkingDirectory $root `
-      -RedirectStandardOutput $frontendLog `
-      -RedirectStandardError $frontendErrLog | Out-Null
+  $frontendRootAlive = Test-HttpOk "http://127.0.0.1:$FrontendPort/" 2
+  $frontendHealthy = Wait-FrontendHealthy $FrontendMode $FrontendPort 2
+
+  if (-not $frontendHealthy -and $frontendRootAlive -and $NoKill) {
+    Write-Host "frontend port $FrontendPort is occupied by a non-$FrontendMode server. rerun without -NoKill or change -FrontendPort." -ForegroundColor Red
+    Write-Host "requested mode: $FrontendMode" -ForegroundColor Yellow
+    exit 1
+  }
+
+  if (-not $frontendHealthy) {
+    Remove-FileIfPossible $frontendLog
+    Remove-FileIfPossible $frontendErrLog
+    Start-NpmCommand -arguments $frontendArgs -workingDirectory $root -log $frontendLog -errLog $frontendErrLog
   } else {
-    Write-Host "  frontend already running on $FrontendPort, skip start"
+    Write-Host "  frontend already running on $FrontendPort ($FrontendMode), skip start"
   }
 }
 
-if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 40)) {
+if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 40)) {
   $fallbackTriggered = $false
-  if (-not $NoFrontendFallback -and $FrontendMode -ne "dist") {
+  if (-not $NoFrontendFallback -and $FrontendMode -eq "preview" -and -not $frontendModeExplicit) {
     $needFallback = $true
     try {
       if (Test-Path -LiteralPath $frontendErrLog) {
@@ -197,14 +289,20 @@ if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 40)) {
     }
   }
   if (-not $fallbackTriggered) {
-    Write-Host "frontend failed to become healthy: http://127.0.0.1:$FrontendPort/" -ForegroundColor Red
+    if ($FrontendMode -eq "dev") {
+      Write-Host "frontend failed to become healthy: http://127.0.0.1:$FrontendPort/@vite/client" -ForegroundColor Red
+    } else {
+      Write-Host "frontend failed to become healthy: http://127.0.0.1:$FrontendPort/" -ForegroundColor Red
+    }
     Write-Host "check log: $frontendLog" -ForegroundColor Yellow
     Write-Host "check err: $frontendErrLog" -ForegroundColor Yellow
     exit 1
   }
 }
-if ($FrontendMode -ne "dist") {
-  Write-Host "  frontend ok: http://127.0.0.1:$FrontendPort/" -ForegroundColor Green
+if ($FrontendMode -eq "dev") {
+  Write-Host "  frontend ok (dev + HMR): http://127.0.0.1:$FrontendPort/" -ForegroundColor Green
+} elseif ($FrontendMode -eq "preview") {
+  Write-Host "  frontend ok (preview): http://127.0.0.1:$FrontendPort/" -ForegroundColor Green
 }
 
 Write-Host ""
