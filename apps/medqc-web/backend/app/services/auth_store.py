@@ -287,7 +287,7 @@ def create_user(
     existing = find_user_by_account(normalized_username)
     if existing is not None:
         raise ValueError("用户名已被占用")
-    if normalized_phone and persistent_auth_ready:
+    if normalized_phone:
         existing = find_user_by_account(normalized_phone)
         if existing is not None:
             raise ValueError("手机号已被占用")
@@ -331,9 +331,10 @@ def create_user(
             payload = _orm_user_to_dict(orm_user)
             payload["bio"] = bio or ""
             payload["avatar"] = ""
-        except Exception:
+        except Exception as exc:
             session.rollback()
-            logger.warning("Auth DB create failed; fallback to memory store", exc_info=True)
+            logger.error("Auth DB create failed in persistent mode", exc_info=True)
+            raise ValueError("创建用户失败，请稍后重试") from exc
         finally:
             session.close()
 
@@ -378,11 +379,13 @@ def update_user_profile(
     bio: str | None = None,
 ) -> dict[str, Any] | None:
     updated_payload: dict[str, Any] | None = None
+    persistent_auth_ready = False
 
     if SessionLocal is not None:
         session = SessionLocal()
         try:
-            if not _supports_persistent_auth(session):
+            persistent_auth_ready = _supports_persistent_auth(session)
+            if not persistent_auth_ready:
                 raise RuntimeError("sys_users persistent auth schema is not ready")
             user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
             if user is not None:
@@ -401,11 +404,22 @@ def update_user_profile(
                 session.commit()
                 session.refresh(user)
                 updated_payload = _orm_user_to_dict(user)
+        except ValueError:
+            session.rollback()
+            raise
         except Exception:
             session.rollback()
-            logger.warning("Auth DB profile update failed; fallback to memory store", exc_info=True)
+            logger.warning("Auth DB profile update failed", exc_info=True)
+            if persistent_auth_ready:
+                raise ValueError("资料更新失败，请稍后重试")
         finally:
             session.close()
+
+    if persistent_auth_ready:
+        if updated_payload is not None and bio is not None:
+            updated_payload["bio"] = bio
+            _sync_memory_user(updated_payload)
+        return updated_payload
 
     for email, raw_user in users_db.items():
         if str(raw_user.get("id") or "").strip() == str(user_id or "").strip():
@@ -430,11 +444,13 @@ def update_user_profile(
 
 def update_user_password(*, user_id: str, password_hash: str) -> dict[str, Any] | None:
     updated_payload: dict[str, Any] | None = None
+    persistent_auth_ready = False
 
     if SessionLocal is not None:
         session = SessionLocal()
         try:
-            if not _supports_persistent_auth(session):
+            persistent_auth_ready = _supports_persistent_auth(session)
+            if not persistent_auth_ready:
                 return None
             user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
             if user is not None:
@@ -444,9 +460,16 @@ def update_user_password(*, user_id: str, password_hash: str) -> dict[str, Any] 
                 updated_payload = _orm_user_to_dict(user)
         except Exception:
             session.rollback()
-            logger.warning("Auth DB password update failed; fallback to memory store", exc_info=True)
+            logger.warning("Auth DB password update failed", exc_info=True)
+            if persistent_auth_ready:
+                raise ValueError("密码更新失败，请稍后重试")
         finally:
             session.close()
+
+    if persistent_auth_ready:
+        if updated_payload is not None:
+            _sync_memory_user(updated_payload)
+        return updated_payload
 
     for email, raw_user in users_db.items():
         if str(raw_user.get("id") or "").strip() == str(user_id or "").strip():

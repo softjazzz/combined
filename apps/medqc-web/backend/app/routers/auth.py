@@ -159,10 +159,13 @@ async def update_password(    request: Request,
     user = current_user
     if current_password and not verify_password(current_password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码错误")
-    updated_user = update_user_password(
-        user_id=str(user.get("id") or ""),
-        password_hash=get_password_hash(new_password),
-    )
+    try:
+        updated_user = update_user_password(
+            user_id=str(user.get("id") or ""),
+            password_hash=get_password_hash(new_password),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
     if updated_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return success_response(data={}, message="密码修改成功", trace_id=get_trace_id(request))
@@ -268,10 +271,13 @@ async def reset_password(
     user = resolve_auth_store_user_by_subject(email)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的重置令牌")
-    updated_user = update_user_password(
-        user_id=str(user.get("id") or ""),
-        password_hash=get_password_hash(password_value),
-    )
+    try:
+        updated_user = update_user_password(
+            user_id=str(user.get("id") or ""),
+            password_hash=get_password_hash(password_value),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
     if updated_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的重置令牌")
     logger.info("auth.reset_password.success email=%s", email)

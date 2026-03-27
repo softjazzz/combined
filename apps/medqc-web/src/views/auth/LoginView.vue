@@ -69,17 +69,17 @@ const handleForgotPassword = () => {
 
 const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
   const demoAccounts = {
-    admin: { email: 'admin@medqc.com', password: 'admin888' },
-    qc_manager: { email: 'qc@medqc.com', password: 'qc123456' },
-    doctor: { email: 'doctor@medqc.com', password: 'doctor123' },
+    admin: { account: 'admin@medqc.com', password: 'admin888' },
+    qc_manager: { account: 'qc@medqc.com', password: 'qc123456' },
+    doctor: { account: 'doctor@medqc.com', password: 'doctor123' },
   } as const
 
-  const account = demoAccounts[role]
+  const credentials = demoAccounts[role]
 
   // 直接调用登录处理函数
   await handleLogin({
-    account: account.email,
-    password: account.password,
+    account: credentials.account,
+    password: credentials.password,
     role: role,
   })
 }

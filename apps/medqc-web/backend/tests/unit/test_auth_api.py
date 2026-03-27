@@ -11,7 +11,8 @@ from tests.conftest import assert_response_success, assert_response_error
 
 
 def _unique_phone() -> str:
-    return f"139{uuid.uuid4().hex[:8]}"[:11]
+    digits = ''.join(str((ord(ch) % 10)) for ch in uuid.uuid4().hex[:8])
+    return f"139{digits}"[:11]
 
 
 @pytest.mark.unit
@@ -44,6 +45,51 @@ class TestAuthAPI:
         assert "access_token" in data
         assert "refresh_token" in data
         assert data["token_type"] == "bearer"
+
+    def test_login_success_with_username(self, client):
+        """测试用户名登录成功（兼容 account 语义）。"""
+        username = f"user_{uuid.uuid4().hex[:8]}"
+        register_data = {
+            "email": f"{username}@example.com",
+            "username": username,
+            "password": "Test123456!",
+            "display_name": "用户名登录用户",
+            "department": "测试部门",
+            "role": "doctor",
+            "phone": _unique_phone(),
+        }
+        client.post("/api/v1/auth/register", json=register_data)
+
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"account": username, "password": register_data["password"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+
+    def test_login_success_with_phone(self, client):
+        """测试手机号登录成功（同账号备用标识）。"""
+        phone = _unique_phone()
+        register_data = {
+            "email": f"phone_{uuid.uuid4().hex[:8]}@example.com",
+            "password": "PhonePass123!",
+            "display_name": "手机号登录用户",
+            "department": "测试部门",
+            "role": "doctor",
+            "phone": phone,
+        }
+        client.post("/api/v1/auth/register", json=register_data)
+
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"account": phone, "password": register_data["password"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
 
     def test_login_invalid_email(self, client):
         """测试登录 - 无效邮箱"""
@@ -228,7 +274,7 @@ class TestAuthAPI:
         update_data = {
             "display_name": "新用户名",
             "department": "新部门",
-            "phone": "13900139000",
+            "phone": _unique_phone(),
             "bio": "新的个人简介"
         }
         response = client.put(
@@ -241,7 +287,7 @@ class TestAuthAPI:
         data = response.json()
         assert data["display_name"] == "新用户名"
         assert data["department"] == "新部门"
-        assert data["phone"] == "13900139000"
+        assert data["phone"] == update_data["phone"]
         assert data["bio"] == "新的个人简介"
 
     def test_update_profile_partial(self, client):

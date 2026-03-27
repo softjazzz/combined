@@ -417,7 +417,7 @@ export class ApiService {
         account,
         role: credentials.role,
         roleType: typeof credentials.role,
-        fullCredentials: payload,
+        hasPassword: Boolean(credentials.password),
       })
 
       const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', payload)

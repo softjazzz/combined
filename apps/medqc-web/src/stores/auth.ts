@@ -225,15 +225,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 重置密码（模拟）
-  const resetPassword = async (_email: string) => {
+  // 忘记密码
+  const resetPassword = async (email: string) => {
     try {
       loading.value = true
-
-      // 模拟重置密码逻辑
-      message.info('密码重置邮件已发送（模拟）')
-
-      return { success: true }
+      const response = await ApiService.forgotPassword(email)
+      if (response.success) {
+        message.success(response.message || '重置密码邮件已发送')
+        return { success: true }
+      }
+      return { success: false, error: response.error || '重置密码失败' }
     } catch (error) {
       console.error('重置密码失败:', error)
       return { success: false, error: error instanceof Error ? error.message : '重置密码失败' }
@@ -242,15 +243,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 更新密码（模拟）
-  const updatePassword = async (_password: string) => {
+  // 更新密码
+  const updatePassword = async (password: string, currentPassword?: string) => {
     try {
       loading.value = true
-
-      // 模拟更新密码逻辑
-      message.success('密码更新成功（模拟）')
-
-      return { success: true }
+      const response = await ApiService.updatePassword(password, currentPassword)
+      if (response.success) {
+        message.success(response.message || '密码更新成功')
+        return { success: true }
+      }
+      return { success: false, error: response.error || '更新密码失败' }
     } catch (error) {
       console.error('更新密码失败:', error)
       return { success: false, error: error instanceof Error ? error.message : '更新密码失败' }
@@ -259,19 +261,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 更新用户档案（模拟）
+  // 更新用户档案
   const updateProfile = async (updates: Partial<User>) => {
     try {
       loading.value = true
-
-      if (user.value) {
-        // 更新本地用户信息
-        user.value = { ...user.value, ...updates }
-        localStorage.setItem('auth_user', JSON.stringify(user.value))
-        message.success('用户信息更新成功')
+      const response = await ApiService.updateProfile(updates)
+      if (response.success && response.data) {
+        user.value = response.data
+        localStorage.setItem('auth_user', JSON.stringify(response.data))
+        localStorage.setItem('medqc_user', JSON.stringify(response.data))
+        message.success(response.message || '用户信息更新成功')
+        return { success: true }
       }
-
-      return { success: true }
+      return { success: false, error: response.error || '更新档案失败' }
     } catch (error) {
       console.error('更新档案失败:', error)
       return { success: false, error: error instanceof Error ? error.message : '更新档案失败' }
