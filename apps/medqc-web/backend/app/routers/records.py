@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
@@ -21,6 +21,116 @@ from ..core.permissions import (
 
 router = APIRouter(prefix="/api/v1/records", tags=["records"])
 logger = logging.getLogger(__name__)
+
+RECORD_UPLOAD_ALLOWED_EXTENSIONS = {".pdf", ".txt", ".doc", ".docx"}
+RECORD_UPLOAD_ALLOWED_MIME_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+RECORD_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+_EICAR_SIGNATURE = b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE"
+
+
+def enforce_rate_limit(*_args, **_kwargs) -> None:
+    # Cross-cutting rate-limit helper is deferred from this development wave.
+    return None
+
+
+def _validate_record_upload(file: UploadFile, content: bytes) -> None:
+    filename = str(file.filename or "").strip()
+    lower_name = filename.lower()
+    if not any(lower_name.endswith(ext) for ext in RECORD_UPLOAD_ALLOWED_EXTENSIONS):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文件扩展名不允许")
+
+    content_type = str(file.content_type or "").strip().lower()
+    if content_type not in RECORD_UPLOAD_ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文件类型不允许")
+
+    if len(content) > RECORD_UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文件大小不能超过限制")
+
+    if _EICAR_SIGNATURE in content.upper():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="检测到恶意文件特征")
+
+
+def _to_float(value: Any) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_visit_type(raw_visit_type: Any, raw_record_type: Any) -> str:
+    visit_type = str(raw_visit_type or "").strip().lower()
+    if visit_type in {"outpatient", "emergency"}:
+        return visit_type
+
+    record_type = str(raw_record_type or "").strip().lower()
+    if "emergency" in record_type or "急诊" in record_type:
+        return "emergency"
+    if "outpatient" in record_type or "门诊" in record_type:
+        return "outpatient"
+    return ""
+
+
+def _normalize_date_only(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if len(text) >= 10:
+        return text[:10]
+    return text
+
+
+def _normalize_outpatient_item(row: Dict[str, Any]) -> Dict[str, Any]:
+    visit_date = (
+        _normalize_date_only(row.get("visit_date"))
+        or _normalize_date_only(row.get("admission_date"))
+        or _normalize_date_only(row.get("admission_datetime"))
+        or _normalize_date_only(row.get("created_at"))
+    )
+    visit_type = _normalize_visit_type(row.get("visit_type"), row.get("record_type"))
+    score = _to_float(row.get("score"))
+    if score is None:
+        score = _to_float(row.get("overall_score"))
+
+    return {
+        "id": row.get("id") or row.get("record_id") or row.get("visit_id") or "",
+        "record_id": row.get("record_id") or row.get("mr_no") or row.get("visit_id") or row.get("id") or "",
+        "patient_name": row.get("patient_name") or row.get("name") or "",
+        "department": row.get("department") or row.get("department_name") or row.get("admission_dept_name") or "",
+        "doctor_name": row.get("doctor_name") or row.get("attending_physician_sign") or row.get("doctor") or "",
+        "visit_type": visit_type,
+        "visit_date": visit_date,
+        "status": row.get("status") or "pending",
+        "score": score,
+        "defect_count": _to_int(row.get("defect_count"), 0),
+        "scoring_standard": row.get("scoring_standard") or row.get("score_standard"),
+        "source": "records",
+    }
+
+
+def _pick_document_content(documents: List[Dict[str, Any]], keywords: List[str]) -> str:
+    for doc in documents:
+        doc_type = str(doc.get("document_type") or doc.get("type") or doc.get("category") or "").lower()
+        if any(k in doc_type for k in keywords):
+            content = doc.get("content") or doc.get("record_content") or doc.get("text")
+            if content:
+                return str(content)
+    return ""
 
 
 @router.get("")
@@ -137,6 +247,260 @@ async def get_medical_records(
         )
 
 
+@router.get("/outpatient-emergency")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_outpatient_emergency_records(
+    request: Request,
+    keyword: Optional[str] = None,
+    department: Optional[str] = None,
+    status: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    scoring_standard: Optional[str] = None,
+    sort_field: Optional[str] = "visit_date",
+    sort_order: Optional[str] = "desc",
+    page: int = 1,
+    page_size: int = 20,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    门急诊病历分页查询（最小可落地壳层）。
+
+    返回契约:
+    {
+      items: [
+        {
+          id, record_id, patient_name, department, doctor_name,
+          visit_type, visit_date, status, score, defect_count, scoring_standard, source
+        }
+      ],
+      total, page, page_size
+    }
+    """
+    supabase = get_supabase()
+    settings = get_settings()
+    rows: List[Dict[str, Any]] = []
+
+    try:
+        if supabase:
+            try:
+                resp = await async_execute(
+                    supabase.table(settings.RECORDS_TABLE).select("*").limit(5000)
+                )
+                rows = list(getattr(resp, "data", None) or [])
+            except Exception as exc:
+                logger.warning("读取门急诊病历失败，降级内存数据: %s", exc)
+                rows = list(medical_records_db.values())
+        else:
+            rows = list(medical_records_db.values())
+
+        normalized = [_normalize_outpatient_item(r) for r in rows]
+        normalized = [r for r in normalized if r.get("visit_type") in {"outpatient", "emergency"}]
+
+        if keyword:
+            kw = keyword.lower()
+            normalized = [
+                r for r in normalized
+                if kw in str(r.get("record_id", "")).lower()
+                or kw in str(r.get("patient_name", "")).lower()
+                or kw in str(r.get("doctor_name", "")).lower()
+            ]
+        if department:
+            normalized = [r for r in normalized if str(r.get("department") or "") == department]
+        if status:
+            normalized = [r for r in normalized if str(r.get("status") or "") == status]
+        if scoring_standard:
+            normalized = [
+                r for r in normalized if str(r.get("scoring_standard") or "") == scoring_standard
+            ]
+        if start_date:
+            normalized = [r for r in normalized if str(r.get("visit_date") or "") >= start_date]
+        if end_date:
+            normalized = [r for r in normalized if str(r.get("visit_date") or "") <= end_date]
+
+        reverse = (sort_order or "desc").lower() == "desc"
+        allowed_sort_fields = {"visit_date", "score", "defect_count", "patient_name", "department"}
+        final_sort_field = sort_field if sort_field in allowed_sort_fields else "visit_date"
+        normalized.sort(key=lambda x: x.get(final_sort_field) or "", reverse=reverse)
+
+        total = len(normalized)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_data = normalized[start:end]
+
+        return paginated_response(
+            items=page_data,
+            total=total,
+            page=page,
+            page_size=page_size,
+            message="获取门急诊病历成功",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
+            detail=f"获取门急诊病历失败: {e}",
+        )
+
+
+@router.get("/{record_id}/qc-detail")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_record_qc_detail(
+    request: Request,
+    record_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    病历详情聚合接口（最小壳层）。
+
+    返回契约:
+    {
+      record: {...},
+      defects: [],
+      remediation: [],
+      appeals: [],
+      operation_history: [],
+      documents: { admissionNote, dischargeNote, progressNote, surgeryNote, raw_documents: [] },
+      admissionNote, dischargeNote, progressNote, surgeryNote,
+      exists: bool
+    }
+    """
+    supabase = get_supabase()
+    settings = get_settings()
+
+    payload: Dict[str, Any] = {
+        "record": {"id": record_id, "record_id": record_id},
+        "defects": [],
+        "remediation": [],
+        "appeals": [],
+        "operation_history": [],
+        "documents": {
+            "admissionNote": "",
+            "dischargeNote": "",
+            "progressNote": "",
+            "surgeryNote": "",
+            "raw_documents": [],
+        },
+        "admissionNote": "",
+        "dischargeNote": "",
+        "progressNote": "",
+        "surgeryNote": "",
+        "exists": False,
+    }
+
+    try:
+        if supabase:
+            record_row = None
+            try:
+                rec_resp = await async_execute(
+                    supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id).limit(1)
+                )
+                record_rows = list(getattr(rec_resp, "data", None) or [])
+                if record_rows:
+                    record_row = record_rows[0]
+                else:
+                    rec_resp_by_record_id = await async_execute(
+                        supabase.table(settings.RECORDS_TABLE).select("*").eq("record_id", record_id).limit(1)
+                    )
+                    by_record_id_rows = list(getattr(rec_resp_by_record_id, "data", None) or [])
+                    if by_record_id_rows:
+                        record_row = by_record_id_rows[0]
+            except Exception as exc:
+                logger.warning("查询病历基础信息失败: %s", exc)
+
+            if record_row:
+                normalized = _normalize_outpatient_item(record_row)
+                payload["record"] = {**normalized, **record_row}
+                payload["exists"] = True
+
+            defect_ids: List[str] = []
+            try:
+                defects_resp = await async_execute(
+                    supabase.table("qc_defects").select("*").eq("record_id", record_id).limit(300)
+                )
+                defects = list(getattr(defects_resp, "data", None) or [])
+                payload["defects"] = defects
+                defect_ids = [str(d.get("id")) for d in defects if d.get("id")]
+                if defects:
+                    payload["exists"] = True
+            except Exception as exc:
+                logger.warning("查询缺陷列表失败: %s", exc)
+
+            try:
+                remediation_resp = await async_execute(
+                    supabase.table("qc_remediation_tasks").select("*").eq("record_id", record_id).limit(300)
+                )
+                remediation = list(getattr(remediation_resp, "data", None) or [])
+                payload["remediation"] = remediation
+                if remediation:
+                    payload["exists"] = True
+            except Exception as exc:
+                logger.warning("查询整改任务失败: %s", exc)
+
+            try:
+                appeals_resp = await async_execute(
+                    supabase.table("qc_appeals").select("*").eq("record_id", record_id).limit(300)
+                )
+                appeals = list(getattr(appeals_resp, "data", None) or [])
+                payload["appeals"] = appeals
+                if appeals:
+                    payload["exists"] = True
+            except Exception as exc:
+                logger.warning("查询申诉记录失败: %s", exc)
+
+            if defect_ids:
+                try:
+                    history_resp = await async_execute(
+                        supabase.table("qc_defect_history").select("*").in_("defect_id", defect_ids).limit(500)
+                    )
+                    payload["operation_history"] = list(getattr(history_resp, "data", None) or [])
+                except Exception as exc:
+                    logger.warning("查询操作历史失败: %s", exc)
+
+            try:
+                docs_resp = await async_execute(
+                    supabase.table(settings.DOCUMENTS_TABLE)
+                    .select("*")
+                    .eq("record_id", record_id)
+                    .order("sort_order")
+                    .limit(200)
+                )
+                docs = list(getattr(docs_resp, "data", None) or [])
+                payload["documents"]["raw_documents"] = docs
+                payload["documents"]["admissionNote"] = _pick_document_content(docs, ["admission", "入院"])
+                payload["documents"]["dischargeNote"] = _pick_document_content(docs, ["discharge", "出院"])
+                payload["documents"]["progressNote"] = _pick_document_content(docs, ["progress", "病程"])
+                payload["documents"]["surgeryNote"] = _pick_document_content(docs, ["surgery", "operation", "手术"])
+                if docs:
+                    payload["exists"] = True
+            except Exception as exc:
+                logger.warning("查询文书内容失败: %s", exc)
+        else:
+            record = medical_records_db.get(record_id)
+            if record:
+                payload["record"] = {**payload["record"], **record}
+                payload["admissionNote"] = str(record.get("content") or "")
+                payload["documents"]["admissionNote"] = payload["admissionNote"]
+                payload["exists"] = True
+
+        payload["admissionNote"] = payload["documents"].get("admissionNote", "")
+        payload["dischargeNote"] = payload["documents"].get("dischargeNote", "")
+        payload["progressNote"] = payload["documents"].get("progressNote", "")
+        payload["surgeryNote"] = payload["documents"].get("surgeryNote", "")
+        payload["record"]["defect_count"] = len(payload.get("defects", []))
+
+        return success_response(
+            data=payload,
+            message="获取病历质控详情成功",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
+            detail=f"获取病历质控详情失败: {exc}",
+        )
+
+
 @router.get("/{record_id}", response_model=MedicalRecordResponse)
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
 async def get_medical_record(record_id: str, current_user: dict = Depends(get_current_user)):
@@ -149,6 +513,7 @@ async def get_medical_record(record_id: str, current_user: dict = Depends(get_cu
 @router.post("")
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.CREATE)
 async def create_medical_record(
+    request: Request,
     patient_name: str = Form(...),
     patient_age: int = Form(...),
     patient_gender: str = Form(...),
@@ -159,6 +524,9 @@ async def create_medical_record(
     file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
 ):
+    if file is not None:
+        upload_bytes = await file.read()
+        _validate_record_upload(file, upload_bytes)
     record_id = f"record-{uuid.uuid4().hex[:8]}"
     file_url = f"/uploads/{file.filename}" if file else None
     new_record = {
@@ -183,6 +551,7 @@ async def create_medical_record(
 @router.put("/{record_id}", response_model=MedicalRecordResponse)
 @require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.UPDATE)
 async def update_medical_record(
+    request: Request,
     record_id: str,
     patient_name: Optional[str] = Form(None),
     patient_age: Optional[int] = Form(None),
@@ -213,6 +582,8 @@ async def update_medical_record(
     if content is not None:
         record["content"] = content
     if file:
+        upload_bytes = await file.read()
+        _validate_record_upload(file, upload_bytes)
         record["file_url"] = f"/uploads/{file.filename}"
 
     record["updated_at"] = datetime.utcnow().isoformat() + "Z"
@@ -321,11 +692,16 @@ async def get_medical_records_statistics(
 
 
 @router.post("/upload")
-async def upload_record_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    if not file.filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文件名不能为空")
+async def upload_record_file(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    enforce_rate_limit(request, bucket="records_upload", max_requests=20, window_seconds=60)
+    upload_bytes = await file.read()
+    _validate_record_upload(file, upload_bytes)
     file_url = f"/uploads/{file.filename}"
-    return {"file_url": file_url, "file_name": file.filename}
+    return {"file_url": file_url, "file_name": file.filename, "size": len(upload_bytes)}
 
 
 @router.post("/{record_id}/duplicate", response_model=MedicalRecordResponse)

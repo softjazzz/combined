@@ -69,6 +69,16 @@ const routes: RouteRecordRaw[] = [
       },
       // 病案质控相关路由
       {
+        path: 'records/outpatient-emergency',
+        name: 'OutpatientEmergencyRecords',
+        component: () => import('@/views/dashboard/records/OutpatientEmergencyRecordsView.vue'),
+        meta: {
+          title: '门急诊病历',
+          icon: 'MedicineBoxOutlined',
+          permission: ['admin', 'qc_manager'],
+        },
+      },
+      {
         path: 'records/running',
         name: 'RunningRecords',
         component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
@@ -934,6 +944,24 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Index',
         component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
         meta: { title: '工作台', permission: ['admin', 'qc_manager', 'doctor'] },
+      },
+      {
+        path: 'records/outpatient-emergency',
+        name: 'WorkstationV4OutpatientEmergencyRecords',
+        component: () => import('@/views/dashboard/records/OutpatientEmergencyRecordsView.vue'),
+        meta: { title: '门急诊病历', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'records/running',
+        name: 'WorkstationV4RunningRecords',
+        component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
+        meta: { title: '运行病历', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'records/final',
+        name: 'WorkstationV4FinalRecords',
+        component: () => import('@/views/dashboard/records/FinalRecordsView.vue'),
+        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'icd',

@@ -3,10 +3,34 @@ from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+DEFAULT_DEMO_USER_EMAILS = frozenset({
+    "admin@medqc.com",
+    "qc@medqc.com",
+    "doctor@medqc.com",
+})
+
+
+def assert_no_default_demo_users_in_production(env: str, user_store: dict | None = None) -> None:
+    """
+    Production guardrail:
+    reject startup when built-in demo users are still present.
+    """
+    if str(env or "").strip().lower() != "production":
+        return
+    store = user_store if user_store is not None else users_db
+    existing_default_users = sorted(DEFAULT_DEMO_USER_EMAILS.intersection(set(store.keys())))
+    if existing_default_users:
+        raise RuntimeError(
+            "Production startup blocked: default in-memory demo users are present. "
+            f"Please migrate auth users and remove demo accounts: {', '.join(existing_default_users)}"
+        )
+
+
 # In-memory users (migrated from legacy main_api.py)
 users_db = {
     "admin@medqc.com": {
         "id": "admin-001",
+        "username": "admin",
         "email": "admin@medqc.com",
         "display_name": "\u7cfb\u7edf\u7ba1\u7406\u5458",
         "department": "\u7cfb\u7edf\u7ba1\u7406\u90e8",
@@ -20,6 +44,7 @@ users_db = {
     },
     "qc@medqc.com": {
         "id": "qc-001",
+        "username": "qc_manager",
         "email": "qc@medqc.com",
         "display_name": "\u8d28\u63a7\u4e3b\u7ba1",
         "department": "\u8d28\u63a7\u79d1",
@@ -33,6 +58,7 @@ users_db = {
     },
     "doctor@medqc.com": {
         "id": "doctor-001",
+        "username": "doctor",
         "email": "doctor@medqc.com",
         "display_name": "\u4e34\u5e8a\u533b\u751f",
         "department": "\u5185\u79d1",

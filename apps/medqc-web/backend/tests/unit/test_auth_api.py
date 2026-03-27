@@ -10,6 +10,10 @@ import uuid
 from tests.conftest import assert_response_success, assert_response_error
 
 
+def _unique_phone() -> str:
+    return f"139{uuid.uuid4().hex[:8]}"[:11]
+
+
 @pytest.mark.unit
 @pytest.mark.api
 @pytest.mark.auth
@@ -94,7 +98,7 @@ class TestAuthAPI:
             "display_name": "新用户",
             "department": "新部门",
             "role": "doctor",
-            "phone": "13800138000",
+            "phone": _unique_phone(),
             "bio": "这是个人简介"
         }
         response = client.post("/api/v1/auth/register", json=register_data)
@@ -249,7 +253,7 @@ class TestAuthAPI:
             "password": "Password123!",
             "display_name": "原始用户名",
             "department": "原始部门",
-            "phone": "13800138000"
+            "phone": _unique_phone(),
         }
         client.post("/api/v1/auth/register", json=register_data)
 
@@ -273,7 +277,7 @@ class TestAuthAPI:
         data = response.json()
         assert data["display_name"] == "新用户名"
         assert data["department"] == "原始部门"  # 未更新
-        assert data["phone"] == "13800138000"  # 未更新
+        assert data["phone"] == register_data["phone"]  # 未更新
 
     def test_update_profile_no_token(self, client):
         """测试更新用户资料 - 未提供 token"""

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, model_validator
 from typing import Optional, List
 from ..core.settings import get_settings
 
@@ -8,6 +8,7 @@ settings = get_settings()
 
 class UserBase(BaseModel):
     email: EmailStr
+    username: Optional[str] = None
     display_name: str
     department: str
     phone: Optional[str] = None
@@ -36,10 +37,23 @@ class UserResponse(UserBase):
 
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra='ignore')  # 忽略额外字段
-    
-    email: EmailStr
+
+    # 新语义：统一登录标识（用户名/手机号）
+    account: Optional[str] = None
+    # 过渡兼容：保留 email 入参，内部映射到 account
+    email: Optional[EmailStr] = None
     password: str
     role: Optional[str] = None
+
+    @model_validator(mode="after")
+    def normalize_account(self):
+        account = str(self.account or "").strip()
+        if not account and self.email:
+            account = str(self.email).strip()
+        if not account:
+            raise ValueError("account 或 email 至少提供一个")
+        self.account = account
+        return self
 
 
 class LoginResponse(BaseModel):
@@ -47,4 +61,8 @@ class LoginResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 

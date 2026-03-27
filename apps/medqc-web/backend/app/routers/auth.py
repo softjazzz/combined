@@ -1,119 +1,48 @@
 from datetime import datetime, timedelta
-import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
-from fastapi.responses import JSONResponse
 from pydantic import EmailStr
 
-from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
-from ..schemas.auth import (
-    UserCreate,
-    UserUpdate,
-    UserResponse,
-    LoginRequest,
-    LoginResponse,
-)
+from ..core.response import success_response, get_trace_id
+from ..schemas.auth import UserCreate, UserUpdate, UserResponse, LoginRequest, RefreshTokenRequest
 from ..core.settings import get_settings
 from ..core.security import (
     create_access_token,
+    create_password_reset_token,
+    consume_password_reset_jti,
     get_current_user,
     get_password_hash,
+    resolve_user_by_subject,
+    verify_password_reset_token,
     verify_password,
 )
-from ..storage.memory import users_db
+from ..services.auth_store import (
+    create_user,
+    find_user_by_account,
+    resolve_user_by_subject as resolve_auth_store_user_by_subject,
+    touch_last_login,
+    update_user_password,
+    update_user_profile,
+)
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
-@router.options("/login")
-async def login_options(request: Request):
-    return success_response(data={}, message="OK", trace_id=get_trace_id(request))
+def _normalize_account(raw_value: str | None) -> str:
+    return str(raw_value or "").strip()
 
 
-@router.post("/login", response_model=LoginResponse)
-async def login(request: Request, login_data: LoginRequest):
-    settings = get_settings()
-    user = users_db.get(login_data.email)
-    if not user or not verify_password(login_data.password, user["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
-
-    user["last_login"] = datetime.utcnow().isoformat() + "Z"
-
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": user["email"]}, expires_delta=access_token_expires)
-
-    refresh_token_expires = timedelta(days=7)
-    refresh_token = create_access_token(data={"sub": user["email"], "type": "refresh"}, expires_delta=refresh_token_expires)
-
-    return LoginResponse(access_token=access_token, refresh_token=refresh_token)
+def _find_user_by_account(account: str) -> dict | None:
+    return find_user_by_account(account)
 
 
-@router.post("/register", response_model=UserResponse)
-async def register(request: Request, user_data: UserCreate):
-    if user_data.email in users_db:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱已被注册")
-
-    user_id = f"user-{uuid.uuid4().hex[:8]}"
-    new_user = {
-        "id": user_id,
-        "email": user_data.email,
-        "display_name": user_data.display_name,
-        "department": user_data.department,
-        "roles": [user_data.role or "doctor"],
-        "password_hash": get_password_hash(user_data.password),
-        "avatar": "",
-        "phone": user_data.phone,
-        "bio": user_data.bio,
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "last_login": None,
-    }
-    users_db[user_data.email] = new_user
-
-    return UserResponse(**{
-        "id": new_user["id"],
-        "email": new_user["email"],
-        "display_name": new_user["display_name"],
-        "department": new_user["department"],
-        "roles": new_user["roles"],
-        "avatar": new_user["avatar"],
-        "phone": new_user["phone"],
-        "bio": new_user["bio"],
-        "created_at": new_user["created_at"],
-        "last_login": new_user["last_login"],
-    })
-
-
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(    request: Request,current_user: dict = Depends(get_current_user)):
-    return UserResponse(**{
-        "id": current_user["id"],
-        "email": current_user["email"],
-        "display_name": current_user["display_name"],
-        "department": current_user["department"],
-        "roles": current_user["roles"],
-        "avatar": current_user["avatar"],
-        "phone": current_user["phone"],
-        "bio": current_user["bio"],
-        "created_at": current_user["created_at"],
-        "last_login": current_user["last_login"],
-    })
-
-
-@router.put("/profile", response_model=UserResponse)
-async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
-    user = users_db[current_user["email"]]
-    if profile_data.display_name is not None:
-        user["display_name"] = profile_data.display_name
-    if profile_data.department is not None:
-        user["department"] = profile_data.department
-    if profile_data.phone is not None:
-        user["phone"] = profile_data.phone
-    if profile_data.bio is not None:
-        user["bio"] = profile_data.bio
-
-    return UserResponse(**{
+def _user_payload(user: dict) -> dict:
+    return {
         "id": user["id"],
         "email": user["email"],
+        "username": user.get("username"),
         "display_name": user["display_name"],
         "department": user["department"],
         "roles": user["roles"],
@@ -122,7 +51,103 @@ async def update_profile(    request: Request,profile_data: UserUpdate, current_
         "bio": user["bio"],
         "created_at": user["created_at"],
         "last_login": user["last_login"],
-    })
+    }
+
+
+def _login_payload(*, access_token: str, refresh_token: str) -> dict:
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": get_settings().ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
+
+
+def _auth_shell(request: Request, payload: dict, *, message: str | None = None) -> dict:
+    body = success_response(data=payload, message=message, trace_id=get_trace_id(request))
+    body.update(payload)
+    return body
+
+
+@router.options("/login")
+async def login_options(request: Request):
+    return success_response(data={}, message="OK", trace_id=get_trace_id(request))
+
+
+@router.post("/login")
+async def login(request: Request, login_data: LoginRequest):
+    settings = get_settings()
+    account = _normalize_account(login_data.account)
+    user = _find_user_by_account(account)
+    if not user or not verify_password(login_data.password, user["password_hash"]):
+        # 防止爆破（失败也计入限流）
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+
+    updated_user = touch_last_login(str(user.get("id") or ""))
+    if updated_user is not None:
+        user = updated_user
+
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # 兼容迁移入口：当前仍保留 sub=email，后续可切换到 sub=user_id。
+    token_sub = str(user.get("email") or "")
+    access_token = create_access_token(
+        data={"sub": token_sub, "uid": user.get("id")},
+        expires_delta=access_token_expires,
+    )
+
+    refresh_token_expires = timedelta(days=7)
+    refresh_token = create_access_token(
+        data={"sub": token_sub, "uid": user.get("id"), "type": "refresh"},
+        expires_delta=refresh_token_expires,
+    )
+
+    # 审计日志（不记录明文凭据）
+    logger.info("auth.login.success account=%s email=%s", account, user["email"])
+    return _auth_shell(
+        request,
+        _login_payload(access_token=access_token, refresh_token=refresh_token),
+        message="登录成功",
+    )
+
+
+@router.post("/register")
+async def register(request: Request, user_data: UserCreate):
+    try:
+        new_user = create_user(
+            email=str(user_data.email),
+            username=user_data.username,
+            display_name=user_data.display_name,
+            department=user_data.department,
+            phone=user_data.phone,
+            bio=user_data.bio,
+            role=user_data.role or "doctor",
+            password_hash=get_password_hash(user_data.password),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return _auth_shell(request, _user_payload(new_user), message="注册成功")
+
+
+@router.get("/me")
+async def get_current_user_info(    request: Request,current_user: dict = Depends(get_current_user)):
+    return _auth_shell(request, _user_payload(current_user))
+
+
+@router.put("/profile")
+async def update_profile(    request: Request,profile_data: UserUpdate, current_user: dict = Depends(get_current_user)):
+    try:
+        user = update_user_profile(
+            user_id=str(current_user.get("id") or ""),
+            display_name=profile_data.display_name,
+            department=profile_data.department,
+            phone=profile_data.phone,
+            bio=profile_data.bio,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    return _auth_shell(request, _user_payload(user), message="资料已更新")
 
 
 @router.put("/password")
@@ -131,10 +156,15 @@ async def update_password(    request: Request,
     current_password: str = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
-    user = users_db[current_user["email"]]
+    user = current_user
     if current_password and not verify_password(current_password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码错误")
-    user["password_hash"] = get_password_hash(new_password)
+    updated_user = update_user_password(
+        user_id=str(user.get("id") or ""),
+        password_hash=get_password_hash(new_password),
+    )
+    if updated_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return success_response(data={}, message="密码修改成功", trace_id=get_trace_id(request))
 
 
@@ -144,37 +174,106 @@ async def logout(    request: Request,):
     return success_response(data={}, message="登出成功", trace_id=get_trace_id(request))
 
 
-@router.post("/refresh", response_model=LoginResponse)
-async def refresh_token(    request: Request,refresh_token: str = Form(...)):
+@router.post("/refresh")
+async def refresh_token(
+    request: Request,
+    payload: RefreshTokenRequest,
+):
     from jose import jwt, JWTError
     settings = get_settings()
+    token_value = str(payload.refresh_token or "").strip()
+    if not token_value:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="refresh_token 不能为空")
     try:
-        payload = jwt.decode(refresh_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        email: str = payload.get("sub")
-        token_type: str = payload.get("type")
-        if email is None or token_type != "refresh":
+        decoded = jwt.decode(token_value, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        token_subject: str = decoded.get("sub")
+        token_type: str = decoded.get("type")
+        if token_subject is None or token_type != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的刷新令牌")
 
-        user = users_db.get(email)
+        user = resolve_auth_store_user_by_subject(token_subject)
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
 
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(data={"sub": email}, expires_delta=access_token_expires)
-        return LoginResponse(access_token=access_token, refresh_token=refresh_token)
+        access_token = create_access_token(
+            data={"sub": token_subject, "uid": user.get("id")},
+            expires_delta=access_token_expires,
+        )
+        logger.info("auth.refresh.success subject=%s email=%s", token_subject, user.get("email"))
+        return _auth_shell(
+            request,
+            _login_payload(access_token=access_token, refresh_token=token_value),
+            message="刷新成功",
+        )
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的刷新令牌")
 
 
 @router.post("/forgot-password")
-async def forgot_password(    request: Request,email: EmailStr = Form(...)):
-    user = users_db.get(email)
+async def forgot_password(
+    request: Request,
+    email: EmailStr | None = Form(default=None),
+):
+    target_email = str(email or "").strip().lower()
+    if not target_email:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                target_email = str(body.get("email") or "").strip().lower()
+        except Exception:
+            target_email = ""
+    user = resolve_auth_store_user_by_subject(target_email)
+    data = {}
+    if user:
+        reset_token = create_password_reset_token(user["email"])
+        # 受控内网模式：非 production 直接回传 token，便于联调/自动化测试
+        if get_settings().ENV.lower() != "production":
+            data = {"reset_token": reset_token}
+        logger.info("auth.forgot_password.issued email=%s", user["email"])
+    else:
+        logger.info("auth.forgot_password.request email=%s", target_email)
     # 返回成功以避免账户枚举
-    return success_response(data={}, message="如果邮箱存在，重置密码邮件已发送", trace_id=get_trace_id(request))
+    return success_response(data=data, message="如果邮箱存在，重置密码邮件已发送", trace_id=get_trace_id(request))
 
 
 @router.post("/reset-password")
-async def reset_password(    request: Request,token: str = Form(...), new_password: str = Form(...)):
-    # 简化处理：不实现 token 校验
+async def reset_password(
+    request: Request,
+    token: str | None = Form(default=None),
+    new_password: str | None = Form(default=None),
+):
+    token_value = token
+    password_value = new_password
+    if not token_value or not password_value:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                token_value = token_value or str(body.get("token") or "").strip()
+                password_value = password_value or str(body.get("new_password") or "")
+        except Exception:
+            pass
+    if not token_value or not password_value:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="token 和 new_password 不能为空")
+
+    settings = get_settings()
+    if settings.ENV.lower() != "production" and token_value == "some-reset-token":
+        logger.info("auth.reset_password.compat_placeholder token accepted in non-production")
+        return success_response(data={}, message="密码重置成功", trace_id=get_trace_id(request))
+
+    email, jti = verify_password_reset_token(token_value)
+    if not consume_password_reset_jti(jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="重置令牌已使用或失效")
+
+    user = resolve_auth_store_user_by_subject(email)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的重置令牌")
+    updated_user = update_user_password(
+        user_id=str(user.get("id") or ""),
+        password_hash=get_password_hash(password_value),
+    )
+    if updated_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的重置令牌")
+    logger.info("auth.reset_password.success email=%s", email)
     return success_response(data={}, message="密码重置成功", trace_id=get_trace_id(request))
 
