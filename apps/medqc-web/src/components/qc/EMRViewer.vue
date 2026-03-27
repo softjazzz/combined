@@ -8,7 +8,9 @@
       v-if="!hideDocTabs && documents.length > 1"
       class="mb-5"
     >
-      <div class="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl border border-gray-100/50">
+      <div
+        class="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl border border-gray-100/50"
+      >
         <button
           v-for="doc in documents"
           :key="doc.id"
@@ -16,9 +18,12 @@
             'px-4 py-1.5 text-[13px] font-medium whitespace-nowrap rounded-lg transition-all duration-200',
             activeDocId === doc.id
               ? 'bg-white text-blue-700 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
-              : 'text-gray-500 hover:text-gray-700'
+              : 'text-gray-500 hover:text-gray-700',
           ]"
-          @click="activeDocId = doc.id; loadDocument(doc)"
+          @click="
+            activeDocId = doc.id
+            loadDocument(doc)
+          "
         >
           {{ doc.doc_name || doc.doc_type }}
         </button>
@@ -44,7 +49,6 @@
       v-html="renderedContent"
     />
 
-
     <!-- 空状态 -->
     <div
       v-else
@@ -62,7 +66,9 @@
       v-if="showAnnotationPanel && annotations.length > 0"
       class="annotation-panel fixed bottom-4 right-4 z-50 max-h-[26rem] w-72 overflow-hidden rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] shadow-[0_16px_34px_rgba(15,23,42,0.14)] backdrop-blur-xl"
     >
-      <div class="flex items-center justify-between border-b border-slate-200/80 bg-white/72 px-4 py-3">
+      <div
+        class="flex items-center justify-between border-b border-slate-200/80 bg-white/72 px-4 py-3"
+      >
         <span class="text-sm font-bold text-slate-700">缺陷标注 ({{ annotations.length }})</span>
         <button
           class="text-slate-400 transition-colors hover:text-slate-600"
@@ -77,7 +83,7 @@
           :key="ann.defect_id"
           :class="[
             'px-4 py-3 cursor-pointer transition-colors text-sm',
-            activeDefectId === ann.defect_id ? 'bg-blue-50/80' : 'hover:bg-slate-50/80'
+            activeDefectId === ann.defect_id ? 'bg-blue-50/80' : 'hover:bg-slate-50/80',
           ]"
           @click="handleAnnotationClick(ann)"
         >
@@ -85,12 +91,18 @@
             <span
               :class="[
                 'w-2 h-2 rounded-full',
-                ann.severity === 'critical' ? 'bg-blue-700' :
-                ann.severity === 'error' ? 'bg-blue-600' :
-                ann.severity === 'warning' ? 'bg-blue-500' : 'bg-blue-400'
+                ann.severity === 'critical'
+                  ? 'bg-blue-700'
+                  : ann.severity === 'error'
+                    ? 'bg-blue-600'
+                    : ann.severity === 'warning'
+                      ? 'bg-blue-500'
+                      : 'bg-blue-400',
               ]"
             />
-            <span class="font-medium text-slate-700 truncate">{{ ann.rule_name || ann.category }}</span>
+            <span class="font-medium text-slate-700 truncate">{{
+              ann.rule_name || ann.category
+            }}</span>
           </div>
           <p class="text-slate-500 text-xs line-clamp-2">
             {{ ann.description }}
@@ -118,18 +130,21 @@ import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 import { getAccessToken } from '@/utils/auth-token'
 
 // ============= Props =============
-const props = withDefaults(defineProps<{
-  recordId?: string
-  visitId?: string
-  patientId?: string
-  instituteId?: string
-  docType?: string
-  maxHeight?: number
-  hideDocTabs?: boolean  // 外部已有文书导航时，隐藏内部 Tab
-}>(), {
-  maxHeight: 600,
-  hideDocTabs: false,
-})
+const props = withDefaults(
+  defineProps<{
+    recordId?: string
+    visitId?: string
+    patientId?: string
+    instituteId?: string
+    docType?: string
+    maxHeight?: number
+    hideDocTabs?: boolean // 外部已有文书导航时，隐藏内部 Tab
+  }>(),
+  {
+    maxHeight: 600,
+    hideDocTabs: false,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'defect-click', defectId: string): void
@@ -151,7 +166,8 @@ const viewerRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
 
 // 高亮 composable
-const { activeDefectId, highlightDefects, scrollToDefect, onDefectClick, bindClickEvents } = useDefectHighlight()
+const { activeDefectId, highlightDefects, scrollToDefect, onDefectClick, bindClickEvents } =
+  useDefectHighlight()
 
 const effectiveRecordId = computed(() => props.recordId || props.visitId || '')
 const hasTripletContext = computed(() => !!(props.visitId && props.patientId && props.instituteId))
@@ -207,6 +223,28 @@ function getAuthHeaders(): Record<string, string> {
   }
 }
 
+function readEnvelopeMessage(result: unknown, fallbackMessage: string): string {
+  if (!result || typeof result !== 'object') return fallbackMessage
+
+  const envelope = result as {
+    message?: unknown
+    normalized?: {
+      message?: unknown
+    }
+  }
+
+  const normalizedMessage = envelope.normalized?.message
+  if (typeof normalizedMessage === 'string' && normalizedMessage.trim()) {
+    return normalizedMessage
+  }
+
+  if (typeof envelope.message === 'string' && envelope.message.trim()) {
+    return envelope.message
+  }
+
+  return fallbackMessage
+}
+
 async function fetchDocuments() {
   const url = buildUrl('documents')
   if (!url) {
@@ -235,7 +273,7 @@ async function fetchDocuments() {
         emit('error', 'no-documents')
       }
     } else {
-      emit('error', result?.message || 'load-documents-failed')
+      emit('error', readEnvelopeMessage(result, 'load-documents-failed'))
     }
   } catch (err) {
     console.error('获取文书列表失败:', err)
@@ -283,7 +321,7 @@ async function loadDocument(doc?: any) {
         }
       })
     } else {
-      emit('error', result?.message || 'load-document-failed')
+      emit('error', readEnvelopeMessage(result, 'load-document-failed'))
     }
   } catch (err) {
     console.error('加载文书内容失败:', err)
@@ -319,14 +357,14 @@ watch(
       resetViewerState()
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 </script>
 
 <style scoped>
 /* ============ 阅读区外壳 ============ */
 .emr-content {
-  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(252,253,255,0.98));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 253, 255, 0.98));
   border-radius: 10px;
   border: 1px solid rgba(226, 232, 240, 0.56);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.025);
@@ -347,7 +385,7 @@ watch(
 .emr-content :deep(.emr-section-title) {
   display: block;
   font-weight: 700;
-  color: #1e293b;     /* slate-900：比正文深，立刻抓住视线 */
+  color: #1e293b; /* slate-900：比正文深，立刻抓住视线 */
   font-size: 14px;
   margin-top: 1.15em;
   margin-bottom: 0.1em;
@@ -364,7 +402,9 @@ watch(
   cursor: help;
   border-bottom: 1.5px dashed;
   padding-bottom: 1px;
-  transition: background-color 0.15s, border-color 0.15s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 .emr-content :deep(.emr-defect--critical) {
   background-color: rgba(219, 234, 254, 0.82);
@@ -415,10 +455,18 @@ watch(
   padding-bottom: 7px;
   border-bottom: 1px solid #f1f5f9;
 }
-.emr-content :deep(.emr-defect-tip__header--critical) { color: #1d4ed8; }
-.emr-content :deep(.emr-defect-tip__header--error)    { color: #2563eb; }
-.emr-content :deep(.emr-defect-tip__header--warning)  { color: #3b82f6; }
-.emr-content :deep(.emr-defect-tip__header--info)     { color: #2563eb; }
+.emr-content :deep(.emr-defect-tip__header--critical) {
+  color: #1d4ed8;
+}
+.emr-content :deep(.emr-defect-tip__header--error) {
+  color: #2563eb;
+}
+.emr-content :deep(.emr-defect-tip__header--warning) {
+  color: #3b82f6;
+}
+.emr-content :deep(.emr-defect-tip__header--info) {
+  color: #2563eb;
+}
 .emr-content :deep(.emr-defect-tip__body) {
   font-size: 12.5px;
   line-height: 1.6;

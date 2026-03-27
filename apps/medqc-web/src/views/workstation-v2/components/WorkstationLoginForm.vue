@@ -20,7 +20,7 @@ const emit = defineEmits<{
 const showPassword = ref(false)
 
 const form = reactive<LoginRequest>({
-  email: '',
+  account: '',
   password: '',
   role: 'qc_manager',
   remember_me: true,
@@ -33,12 +33,12 @@ const roleOptions = [
 ]
 
 const canSubmit = computed(() => {
-  return !!form.email.trim() && !!form.password.trim() && !!form.role
+  return !!form.account.trim() && !!form.password.trim() && !!form.role
 })
 
 const validate = () => {
-  if (!form.email.trim()) {
-    message.warning('请输入用户名')
+  if (!form.account.trim()) {
+    message.warning('请输入用户名 / 手机号 / 邮箱')
     return false
   }
 
@@ -62,7 +62,7 @@ const validate = () => {
 
 const handleSubmit = () => {
   if (!validate()) return
-  emit('login', { ...form, email: form.email.trim(), password: form.password.trim() })
+  emit('login', { ...form, account: form.account.trim(), password: form.password.trim() })
 }
 </script>
 
@@ -72,14 +72,14 @@ const handleSubmit = () => {
     @submit.prevent="handleSubmit"
   >
     <div class="space-y-2">
-      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700">用户名</label>
+      <label class="text-[13px] font-bold tracking-[0.02em] text-slate-700">用户名 / 手机号 / 邮箱</label>
       <div class="group relative">
         <MailOutlined class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-slate-400 transition group-focus-within:text-sky-500" />
         <input
-          v-model="form.email"
+          v-model="form.account"
           type="text"
           autocomplete="username"
-          placeholder="请输入用户名"
+          placeholder="请输入用户名 / 手机号 / 邮箱"
           class="h-13 w-full rounded-2xl border-none bg-slate-100/70 px-12 py-3.5 text-[15px] font-medium tracking-[-0.01em] text-slate-800 outline-none transition-all placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-sky-500/20"
         >
       </div>

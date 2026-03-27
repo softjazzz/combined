@@ -47,20 +47,39 @@ export interface TestQCRuleResponse {
   raw?: unknown
 }
 
-type NormalizedResponse<T> = {
+type NormalizedResponse<T> =
+  | NormalizedSuccessResponse<T>
+  | NormalizedFailedResponse
+
+interface NormalizedSuccessResponse<T> {
   ok: true
   normalized: { success: boolean; data?: T; message?: string }
   raw: unknown
   status: number
-} | {
+}
+
+interface NormalizedFailedResponse {
   ok: false
   message: string
   raw?: unknown
   status?: number
 }
 
+function isNormalizedFailedResponse<T>(
+  response: NormalizedResponse<T>,
+): response is NormalizedFailedResponse {
+  return response.ok === false
+}
+
+function extractNormalizedMessage(raw: unknown, fallbackMessage: string): string {
+  return extractApiErrorMessageFromError(
+    { response: { data: raw } },
+    fallbackMessage,
+  )
+}
+
 async function requestNormalized<T = unknown>(
-  config: Parameters<typeof ApiService.requestRaw>[0]
+  config: Parameters<typeof ApiService.requestRaw>[0],
 ): Promise<NormalizedResponse<T>> {
   try {
     const response = await ApiService.requestRaw<T>(config)
@@ -68,14 +87,14 @@ async function requestNormalized<T = unknown>(
       ok: true,
       normalized: normalizeApiSuccess<T>(response.data),
       raw: response.data,
-      status: response.status
+      status: response.status,
     }
   } catch (error: any) {
     return {
       ok: false,
       message: extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
       raw: error?.response?.data,
-      status: error?.response?.status
+      status: error?.response?.status,
     }
   }
 }
@@ -88,15 +107,15 @@ export async function testQCRule(payload: TestQCRulePayload): Promise<TestQCRule
     const response = await requestNormalized<TestQCRuleData>({
       method: 'POST',
       url: '/api/v1/qc/sichuan/test-rule',
-      data: payload
+      data: payload,
     })
 
-    if (!response.ok) {
+    if (isNormalizedFailedResponse(response)) {
       return {
         success: false,
         message: response.message,
         status: response.status,
-        raw: response.raw
+        raw: response.raw,
       }
     }
 
@@ -104,9 +123,9 @@ export async function testQCRule(payload: TestQCRulePayload): Promise<TestQCRule
     if (!normalized.success) {
       return {
         success: false,
-        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '质控评估失败'),
+        message: extractNormalizedMessage(response.raw, '质控评估失败'),
         status: response.status,
-        raw: response.raw
+        raw: response.raw,
       }
     }
 
@@ -114,12 +133,12 @@ export async function testQCRule(payload: TestQCRulePayload): Promise<TestQCRule
       success: true,
       data: normalized.data as TestQCRuleData,
       message: normalized.message,
-      raw: response.raw
+      raw: response.raw,
     }
   } catch (error: any) {
     return {
       success: false,
-      message: error?.message || '网络异常或服务器不可用'
+      message: error?.message || '网络异常或服务器不可用',
     }
   }
 }
@@ -132,7 +151,7 @@ export interface BatchQCEvaluatePayload {
   document_type: string
   rule_ids: string[]
   persist?: boolean
-  prompt_mode?: string  // 提示词优化方案：current/plan_a/plan_b/plan_c
+  prompt_mode?: string // 提示词优化方案：current/plan_a/plan_b/plan_c
 }
 
 export interface BatchQCResult {
@@ -163,7 +182,7 @@ export interface BatchQCEvaluateResponse {
       not_applicable?: number
       overall_grade?: string
       critical_violations?: number
-      model?: string  // 使用的模型名称
+      model?: string // 使用的模型名称
     }
     evaluation_results?: BatchQCResult[]
     performance_metrics?: {
@@ -175,7 +194,7 @@ export interface BatchQCEvaluateResponse {
       token_savings_rate: number
       cost_savings: number
     }
-    prompt_mode?: string  // 提示词优化方案
+    prompt_mode?: string // 提示词优化方案
     llm_info?: {
       model?: string
       api_endpoint?: string
@@ -189,19 +208,21 @@ export interface BatchQCEvaluateResponse {
  * 批量质控评估（优化版提示词）
  * 一次性评估多个规则，节省80% Token使用量
  */
-export async function batchEvaluateQC(payload: BatchQCEvaluatePayload): Promise<BatchQCEvaluateResponse> {
+export async function batchEvaluateQC(
+  payload: BatchQCEvaluatePayload,
+): Promise<BatchQCEvaluateResponse> {
   try {
     const response = await requestNormalized<any>({
       method: 'POST',
       url: '/api/v1/qc/sichuan/evaluate',
-      data: payload
+      data: payload,
     })
 
-    if (!response.ok) {
+    if (isNormalizedFailedResponse(response)) {
       return {
         success: false,
         message: response.message,
-        status: response.status
+        status: response.status,
       }
     }
 
@@ -209,7 +230,7 @@ export async function batchEvaluateQC(payload: BatchQCEvaluatePayload): Promise<
     if (!normalized.success) {
       return {
         success: false,
-        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '质控评估失败'),
+        message: extractNormalizedMessage(response.raw, '质控评估失败'),
         status: response.status,
       }
     }
@@ -224,14 +245,14 @@ export async function batchEvaluateQC(payload: BatchQCEvaluatePayload): Promise<
         performance_metrics: payloadData.performance_metrics,
         optimization_metrics: payloadData.optimization_metrics,
         prompt_mode: payloadData.prompt_mode || payload.prompt_mode,
-        llm_info: payloadData.llm_info
+        llm_info: payloadData.llm_info,
       },
-      message: normalized.message
+      message: normalized.message,
     }
   } catch (error: any) {
     return {
       success: false,
-      message: error?.message || '网络异常或服务器不可用'
+      message: error?.message || '网络异常或服务器不可用',
     }
   }
 }
@@ -242,9 +263,9 @@ export interface QCHistoryRecord {
   id: string
   document_id: string
   document_type: string
-  mode: string  // 'optimized_batch' | 'sequential_batch'
-  prompt_mode?: string  // 'plan_a' | 'plan_b' | 'plan_c' | 'current'
-  model?: string  // 使用的模型名称
+  mode: string // 'optimized_batch' | 'sequential_batch'
+  prompt_mode?: string // 'plan_a' | 'plan_b' | 'plan_c' | 'current'
+  model?: string // 使用的模型名称
   compliance_rate: number
   issues_count: number
   total_rules: number
@@ -273,7 +294,7 @@ export interface QCHistoryDetailResponse {
     document_type: string
     mode: string
     prompt_mode?: string
-    model?: string  // 使用的模型名称
+    model?: string // 使用的模型名称
     rule_ids: string[]
     medical_text_length: number
     stats: Record<string, any>
@@ -307,18 +328,19 @@ export async function getQCHistoryList(params?: {
     if (params?.mode) queryParams.append('mode', params.mode)
     if (params?.start_date) queryParams.append('start_date', params.start_date)
     if (params?.end_date) queryParams.append('end_date', params.end_date)
-    if (params?.has_issues !== undefined) queryParams.append('has_issues', params.has_issues.toString())
+    if (params?.has_issues !== undefined)
+      queryParams.append('has_issues', params.has_issues.toString())
 
     const url = `/api/v1/qc/sichuan/results/history${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     const response = await requestNormalized<QCHistoryListResponse['data']>({
       method: 'GET',
-      url
+      url,
     })
 
-    if (!response.ok) {
+    if (isNormalizedFailedResponse(response)) {
       return {
         success: false,
-        message: response.message
+        message: response.message,
       }
     }
 
@@ -326,18 +348,18 @@ export async function getQCHistoryList(params?: {
     if (!normalized.success) {
       return {
         success: false,
-        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '获取质控历史失败'),
+        message: extractNormalizedMessage(response.raw, '获取质控历史失败'),
       }
     }
 
     return {
       success: true,
-      data: normalized.data
+      data: normalized.data,
     }
   } catch (error: any) {
     return {
       success: false,
-      message: error?.message || '网络异常或服务器不可用'
+      message: error?.message || '网络异常或服务器不可用',
     }
   }
 }
@@ -349,13 +371,13 @@ export async function getQCHistoryDetail(resultId: string): Promise<QCHistoryDet
   try {
     const response = await requestNormalized<QCHistoryDetailResponse['data']>({
       method: 'GET',
-      url: `/api/v1/qc/sichuan/results/${resultId}`
+      url: `/api/v1/qc/sichuan/results/${resultId}`,
     })
 
-    if (!response.ok) {
+    if (isNormalizedFailedResponse(response)) {
       return {
         success: false,
-        message: response.message
+        message: response.message,
       }
     }
 
@@ -363,18 +385,18 @@ export async function getQCHistoryDetail(resultId: string): Promise<QCHistoryDet
     if (!normalized.success) {
       return {
         success: false,
-        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '获取质控结果详情失败'),
+        message: extractNormalizedMessage(response.raw, '获取质控结果详情失败'),
       }
     }
 
     return {
       success: true,
-      data: normalized.data
+      data: normalized.data,
     }
   } catch (error: any) {
     return {
       success: false,
-      message: error?.message || '网络异常或服务器不可用'
+      message: error?.message || '网络异常或服务器不可用',
     }
   }
 }
@@ -386,13 +408,13 @@ export async function getLatestQCResult(): Promise<QCHistoryDetailResponse> {
   try {
     const response = await requestNormalized<QCHistoryDetailResponse['data']>({
       method: 'GET',
-      url: '/api/v1/qc/sichuan/results/latest'
+      url: '/api/v1/qc/sichuan/results/latest',
     })
 
-    if (!response.ok) {
+    if (isNormalizedFailedResponse(response)) {
       return {
         success: false,
-        message: response.message
+        message: response.message,
       }
     }
 
@@ -400,18 +422,18 @@ export async function getLatestQCResult(): Promise<QCHistoryDetailResponse> {
     if (!normalized.success) {
       return {
         success: false,
-        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '获取最新质控结果失败'),
+        message: extractNormalizedMessage(response.raw, '获取最新质控结果失败'),
       }
     }
 
     return {
       success: true,
-      data: normalized.data
+      data: normalized.data,
     }
   } catch (error: any) {
     return {
       success: false,
-      message: error?.message || '网络异常或服务器不可用'
+      message: error?.message || '网络异常或服务器不可用',
     }
   }
 }

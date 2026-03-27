@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { panelApi } from '@/api/panel'
 
+const fetchMock = vi.fn<{
+  (input: unknown, init?: unknown): Promise<Response>
+}>()
+
 function mockFetchResponse(payload: unknown, ok = true, status = 200, statusText = 'OK') {
-  vi.mocked(global.fetch).mockResolvedValueOnce({
+  fetchMock.mockResolvedValueOnce({
     ok,
     status,
     statusText,
@@ -13,6 +17,8 @@ function mockFetchResponse(payload: unknown, ok = true, status = 200, statusText
 
 describe('panelApi', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockReset()
     localStorage.clear()
   })
 
@@ -28,7 +34,7 @@ describe('panelApi', () => {
 
     expect(result.total_alerts).toBe(8)
     expect(result.severe_alerts).toBe(2)
-    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]).toMatchObject({
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       headers: expect.objectContaining({
         Authorization: 'Bearer token-123',
       }),
@@ -46,4 +52,3 @@ describe('panelApi', () => {
     await expect(panelApi.getMessageSummary()).rejects.toThrow('forbidden')
   })
 })
-

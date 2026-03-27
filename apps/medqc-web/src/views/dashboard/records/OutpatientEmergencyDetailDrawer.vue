@@ -8,9 +8,32 @@
     @close="$emit('close')"
   >
     <template #title>
-      <div class="flex items-center gap-3">
-        <span class="text-slate-900 font-semibold">门急诊病历质控详情</span>
-        <a-tag color="blue">{{ record?.visit_type || 'outpatient' }}</a-tag>
+      <div class="flex items-center justify-between gap-3 pr-4">
+        <div class="flex items-center gap-3">
+          <span class="text-slate-900 font-semibold">门急诊病历质控详情</span>
+          <a-tag color="blue">
+            {{ record?.visit_type || 'outpatient' }}
+          </a-tag>
+          <span class="text-xs text-slate-500">
+            {{ currentIndexDisplay }}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <a-button
+            size="small"
+            :disabled="!hasPrev"
+            @click="emit('navigate-prev')"
+          >
+            上一条
+          </a-button>
+          <a-button
+            size="small"
+            :disabled="!hasNext"
+            @click="emit('navigate-next')"
+          >
+            下一条
+          </a-button>
+        </div>
       </div>
     </template>
 
@@ -19,28 +42,57 @@
         <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
-              <p class="text-slate-400">病历号</p>
-              <p class="font-mono text-slate-800">{{ displayRecordId }}</p>
+              <p class="text-slate-400">
+                病历号
+              </p>
+              <p class="font-mono text-slate-800">
+                {{ displayRecordId }}
+              </p>
             </div>
             <div>
-              <p class="text-slate-400">患者</p>
-              <p class="text-slate-800">{{ record?.patient_name || '-' }}</p>
+              <p class="text-slate-400">
+                患者
+              </p>
+              <p class="text-slate-800">
+                {{ record?.patient_name || '-' }}
+              </p>
             </div>
             <div>
-              <p class="text-slate-400">科室</p>
-              <p class="text-slate-800">{{ record?.department || '-' }}</p>
+              <p class="text-slate-400">
+                科室
+              </p>
+              <p class="text-slate-800">
+                {{ record?.department || '-' }}
+              </p>
             </div>
             <div>
-              <p class="text-slate-400">状态</p>
-              <a-tag :color="statusColor">{{ statusText }}</a-tag>
+              <p class="text-slate-400">
+                状态
+              </p>
+              <a-tag :color="statusColor">
+                {{ statusText }}
+              </a-tag>
             </div>
           </div>
         </div>
 
-        <a-skeleton :loading="loading" active :paragraph="{ rows: 6 }">
-          <a-tabs v-model:activeKey="activeTab" class="detail-tabs">
-            <a-tab-pane key="defects" :tab="`缺陷(${defects.length})`">
-              <div v-if="defects.length" class="space-y-3">
+        <a-skeleton
+          :loading="loading"
+          active
+          :paragraph="{ rows: 6 }"
+        >
+          <a-tabs
+            v-model:active-key="activeTab"
+            class="detail-tabs"
+          >
+            <a-tab-pane
+              key="defects"
+              :tab="`缺陷(${defects.length})`"
+            >
+              <div
+                v-if="defects.length"
+                class="space-y-3"
+              >
                 <article
                   v-for="(defect, index) in defects"
                   :key="defect.id || `${index}`"
@@ -99,11 +151,20 @@
                   </p>
                 </article>
               </div>
-              <a-empty v-else description="暂无缺陷记录" />
+              <a-empty
+                v-else
+                description="暂无缺陷记录"
+              />
             </a-tab-pane>
 
-            <a-tab-pane key="remediation" :tab="`整改(${remediation.length})`">
-              <a-timeline v-if="remediation.length" class="px-2">
+            <a-tab-pane
+              key="remediation"
+              :tab="`整改(${remediation.length})`"
+            >
+              <a-timeline
+                v-if="remediation.length"
+                class="px-2"
+              >
                 <a-timeline-item
                   v-for="(item, index) in remediation"
                   :key="item.id || `${index}`"
@@ -117,10 +178,16 @@
                   </p>
                 </a-timeline-item>
               </a-timeline>
-              <a-empty v-else description="暂无整改任务" />
+              <a-empty
+                v-else
+                description="暂无整改任务"
+              />
             </a-tab-pane>
 
-            <a-tab-pane key="appeals" :tab="`申诉(${appeals.length})`">
+            <a-tab-pane
+              key="appeals"
+              :tab="`申诉(${appeals.length})`"
+            >
               <a-list
                 v-if="appeals.length"
                 size="small"
@@ -142,22 +209,36 @@
                   </a-list-item>
                 </template>
               </a-list>
-              <a-empty v-else description="暂无申诉记录" />
+              <a-empty
+                v-else
+                description="暂无申诉记录"
+              />
             </a-tab-pane>
 
-            <a-tab-pane key="history" :tab="`操作记录(${operationHistory.length})`">
-              <a-timeline v-if="operationHistory.length" class="px-2">
+            <a-tab-pane
+              key="history"
+              :tab="`操作记录(${operationHistory.length})`"
+            >
+              <a-timeline
+                v-if="operationHistory.length"
+                class="px-2"
+              >
                 <a-timeline-item
                   v-for="(item, index) in operationHistory"
                   :key="item.id || `${index}`"
                 >
-                  <p class="font-medium text-slate-800">{{ item.action || item.operation || '状态更新' }}</p>
+                  <p class="font-medium text-slate-800">
+                    {{ item.action || item.operation || '状态更新' }}
+                  </p>
                   <p class="text-xs text-slate-500">
                     {{ item.operator_name || item.operator_id || '系统' }} · {{ item.created_at || '-' }}
                   </p>
                 </a-timeline-item>
               </a-timeline>
-              <a-empty v-else description="暂无操作历史" />
+              <a-empty
+                v-else
+                description="暂无操作历史"
+              />
             </a-tab-pane>
           </a-tabs>
         </a-skeleton>
@@ -165,14 +246,18 @@
 
       <aside class="space-y-3">
         <div class="rounded-2xl border border-slate-200 bg-white p-3">
-          <h3 class="text-sm font-semibold text-slate-800 mb-2">文书预览</h3>
+          <h3 class="text-sm font-semibold text-slate-800 mb-2">
+            文书预览
+          </h3>
           <div class="space-y-2">
             <div
               v-for="item in documentPanels"
               :key="item.key"
               class="rounded-xl border border-slate-100 bg-slate-50 p-2.5"
             >
-              <p class="text-xs text-slate-500 mb-1">{{ item.label }}</p>
+              <p class="text-xs text-slate-500 mb-1">
+                {{ item.label }}
+              </p>
               <p class="text-xs leading-5 text-slate-700 line-clamp-5">
                 {{ item.preview || '暂无内容' }}
               </p>
@@ -194,11 +279,19 @@ interface DetailDrawerProps {
   record: AdminRecordItem | null
   detailData: Record<string, unknown> | null
   remediationEnabled?: boolean
+  hasPrev?: boolean
+  hasNext?: boolean
+  currentIndex?: number
+  totalCount?: number
 }
 
 const props = withDefaults(defineProps<DetailDrawerProps>(), {
   loading: false,
   remediationEnabled: false,
+  hasPrev: false,
+  hasNext: false,
+  currentIndex: 0,
+  totalCount: 0,
 })
 
 const emit = defineEmits<{
@@ -207,6 +300,8 @@ const emit = defineEmits<{
   (event: 'approve-defect', defectId: string): void
   (event: 'reject-defect', defectId: string): void
   (event: 'assign-remediation', defectId: string): void
+  (event: 'navigate-prev'): void
+  (event: 'navigate-next'): void
 }>()
 
 const activeTab = ref('defects')
@@ -242,6 +337,12 @@ const documents = computed<Record<string, any>>(() => {
 
 const statusText = computed(() => String(props.record?.status || 'pending'))
 const displayRecordId = computed(() => String(props.record?.record_id || props.record?.id || '-'))
+const currentIndexDisplay = computed(() => {
+  if (!props.totalCount) {
+    return '0/0'
+  }
+  return `${props.currentIndex || 0}/${props.totalCount}`
+})
 
 const statusColor = computed(() => {
   const map: Record<string, string> = {

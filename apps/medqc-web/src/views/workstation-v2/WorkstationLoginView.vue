@@ -21,18 +21,25 @@ const redirectTarget = computed(() => {
 const featurePills = ['首页生成', '编码校验', '证据溯源', 'DRG 预分组']
 
 const demoAccounts = [
-  { label: '功能演示账号', role: 'admin' as const, email: 'admin', password: 'admin888', badge: 'DEMO' },
+  {
+    label: '功能演示账号',
+    role: 'admin' as const,
+    account: 'admin',
+    password: 'admin888',
+    badge: 'DEMO',
+  },
 ]
 
 const handleLogin = async (loginData: LoginRequest) => {
   try {
     loading.value = true
     // 演示账号映射到后端真实管理员账号
-    const isDemoLogin = loginData.email?.trim() === 'admin' && loginData.password?.trim() === 'admin888'
-    const signInEmail = isDemoLogin ? 'admin@medqc.com' : loginData.email
+    const account = loginData.account?.trim() || ''
+    const isDemoLogin = account === 'admin' && loginData.password?.trim() === 'admin888'
+    const signInAccount = isDemoLogin ? 'admin@medqc.com' : account
     const signInPassword = isDemoLogin ? 'admin888' : loginData.password
     const role = isDemoLogin ? 'admin' : (typeof loginData.role === 'string' ? loginData.role : undefined)
-    const result = await authStore.signIn(signInEmail, signInPassword, role)
+    const result = await authStore.signIn(signInAccount, signInPassword, role)
 
     if (!result.success) {
       message.error(result.error || '登录失败，请检查账号密码')
@@ -55,7 +62,7 @@ const handleForgotPassword = () => {
 
 const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   await handleLogin({
-    email: account.email,
+    account: account.account,
     password: account.password,
     role: account.role,
     remember_me: true,
@@ -185,7 +192,7 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
                               {{ account.label }}
                             </div>
                             <div class="text-xs text-slate-500">
-                              {{ account.email }}
+                              {{ account.account }}
                             </div>
                           </div>
                         </div>

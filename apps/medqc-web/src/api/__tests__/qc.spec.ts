@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { batchEvaluateQC, getQCHistoryList, testQCRule } from '@/api/qc'
 
+const fetchMock = vi.fn<{
+  (input: unknown, init?: unknown): Promise<Response>
+}>()
+
 function mockFetchResponse(payload: unknown, ok = true, status = 200, statusText = 'OK') {
-  vi.mocked(global.fetch).mockResolvedValueOnce({
+  fetchMock.mockResolvedValueOnce({
     ok,
     status,
     statusText,
@@ -13,6 +17,8 @@ function mockFetchResponse(payload: unknown, ok = true, status = 200, statusText
 
 describe('qc api envelope compatibility', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockReset()
     localStorage.clear()
   })
 
@@ -28,7 +34,7 @@ describe('qc api envelope compatibility', () => {
 
     expect(result.success).toBe(true)
     expect(result.data?.rule_id).toBe('r1')
-    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]).toMatchObject({
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       headers: expect.objectContaining({
         Authorization: 'Bearer tk-qc',
       }),
@@ -69,4 +75,3 @@ describe('qc api envelope compatibility', () => {
     expect(result.message).toBe('history unavailable')
   })
 })
-

@@ -326,7 +326,7 @@ const testLogin = async () => {
   authTesting.login = true
   try {
     const response = await ApiService.login({
-      email: 'admin@medqc.com',
+      account: 'admin@medqc.com',
       password: 'admin123'
     })
     
