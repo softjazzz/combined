@@ -39,12 +39,12 @@ const handleLogin = async (loginData: LoginRequest) => {
     const role = typeof loginData.role === 'string' ? loginData.role : String(loginData.role ?? '')
 
     console.log('🚀 登录请求:', {
-      email: loginData.email,
+      account: loginData.account,
       role: role,
       roleType: typeof role,
     })
 
-    const result = await authStore.signIn(loginData.email, loginData.password, role)
+    const result = await authStore.signIn(loginData.account, loginData.password, role)
 
     if (result.success) {
       message.success('登录成功')
@@ -78,7 +78,7 @@ const handleDemoLogin = async (role: 'admin' | 'qc_manager' | 'doctor') => {
 
   // 直接调用登录处理函数
   await handleLogin({
-    email: account.email,
+    account: account.email,
     password: account.password,
     role: role,
   })

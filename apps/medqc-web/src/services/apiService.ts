@@ -127,7 +127,9 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    const { headers: traceHeaders, traceId } = ensureTraceHeaders(config.headers as Record<string, unknown>)
+    const { headers: traceHeaders, traceId } = ensureTraceHeaders(
+      config.headers as Record<string, unknown>,
+    )
     config.headers = traceHeaders
 
     if (API_DEBUG) {
@@ -196,9 +198,7 @@ apiClient.interceptors.response.use(
       // 复用正在进行的刷新请求
       if (!refreshPromise) {
         const inheritedTraceId =
-          extractTraceIdFromHeaders(originalRequest?.headers) ||
-          traceId ||
-          undefined
+          extractTraceIdFromHeaders(originalRequest?.headers) || traceId || undefined
         const { headers: refreshHeaders } = ensureTraceHeaders({}, inheritedTraceId)
         refreshPromise = axios
           .post(
@@ -287,9 +287,7 @@ apiClient.interceptors.response.use(
 // API服务类
 export class ApiService {
   // Generic HTTP helpers used by legacy/new modules.
-  static async requestRaw<T = unknown>(
-    config: AxiosRequestConfig,
-  ): Promise<AxiosResponse<T>> {
+  static async requestRaw<T = unknown>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return apiClient.request<T>(config)
   }
 
@@ -335,7 +333,10 @@ export class ApiService {
     } catch (error: any) {
       return {
         success: false,
-        error: extractApiErrorMessage(error?.response?.data, error?.message || 'GET request failed'),
+        error: extractApiErrorMessage(
+          error?.response?.data,
+          error?.message || 'GET request failed',
+        ),
         data: null as any,
       }
     }
@@ -352,7 +353,10 @@ export class ApiService {
     } catch (error: any) {
       return {
         success: false,
-        error: extractApiErrorMessage(error?.response?.data, error?.message || 'POST request failed'),
+        error: extractApiErrorMessage(
+          error?.response?.data,
+          error?.message || 'POST request failed',
+        ),
         data: null as any,
       }
     }
@@ -369,7 +373,10 @@ export class ApiService {
     } catch (error: any) {
       return {
         success: false,
-        error: extractApiErrorMessage(error?.response?.data, error?.message || 'PUT request failed'),
+        error: extractApiErrorMessage(
+          error?.response?.data,
+          error?.message || 'PUT request failed',
+        ),
         data: null as any,
       }
     }
@@ -385,7 +392,10 @@ export class ApiService {
     } catch (error: any) {
       return {
         success: false,
-        error: extractApiErrorMessage(error?.response?.data, error?.message || 'DELETE request failed'),
+        error: extractApiErrorMessage(
+          error?.response?.data,
+          error?.message || 'DELETE request failed',
+        ),
         data: null as any,
       }
     }
@@ -398,14 +408,19 @@ export class ApiService {
    */
   static async login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
+      const account = credentials.account || credentials.email || ''
+      const payload: LoginRequest = {
+        ...credentials,
+        account,
+      }
       console.log('🔐 ApiService.login 发送请求:', {
-        email: credentials.email,
+        account,
         role: credentials.role,
         roleType: typeof credentials.role,
-        fullCredentials: credentials,
+        fullCredentials: payload,
       })
 
-      const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials)
+      const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', payload)
       console.log('📡 ApiService.login 收到响应:', response.data)
 
       // 保存token

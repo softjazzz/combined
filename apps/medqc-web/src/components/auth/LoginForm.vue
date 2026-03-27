@@ -8,16 +8,16 @@
       size="large"
       @finish="handleLogin"
     >
-      <!-- 邮箱输入 -->
+      <!-- 登录标识输入 -->
       <a-form-item
-        name="email"
+        name="account"
         class="mb-5"
       >
-        <label class="block text-sm font-medium text-gray-700 mb-2">邮箱</label>
+        <label class="block text-sm font-medium text-gray-700 mb-2">用户名 / 手机号 / 邮箱</label>
         <div class="relative">
           <a-input
-            v-model:value="loginForm.email"
-            placeholder="请输入邮箱"
+            v-model:value="loginForm.account"
+            placeholder="请输入用户名、手机号或邮箱"
             class="h-12 rounded-lg border border-gray-300 text-gray-900 placeholder:text-gray-500 pl-11 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
           <div class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
@@ -49,7 +49,7 @@
         name="role"
         class="mb-6"
       >
-        <label class="block text-sm font-medium text-gray-700 mb-2">角色</label>
+        <label class="block text-sm font-medium text-gray-700 mb-2">角色（可选）</label>
         <a-select
           v-model:value="loginForm.role"
           placeholder="选择角色"
@@ -114,6 +114,9 @@
           忘记密码？
         </a>
       </div>
+      <p class="mb-5 text-xs text-slate-500">
+        手机号为同一账号的备用登录标识，忘记用户名时可直接使用手机号登录。
+      </p>
 
       <!-- 登录按钮 -->
       <a-button
@@ -171,7 +174,7 @@ const formRef = ref<FormInstance>()
 
 // Form data
 const loginForm = reactive<LoginRequest>({
-  email: '',
+  account: '',
   password: '',
   role: undefined,
   remember_me: false,
@@ -179,15 +182,13 @@ const loginForm = reactive<LoginRequest>({
 
 // Form validation rules
 const loginRules = {
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  account: [
+    { required: true, message: '请输入用户名、手机号或邮箱', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少6位字符', trigger: 'blur' },
   ],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
 
 // Handle login
@@ -206,10 +207,8 @@ const handleLogin = async () => {
 // Computed
 const isFormValid = computed(() => {
   return (
-    loginForm.email &&
+    loginForm.account &&
     loginForm.password &&
-    loginForm.role &&
-    loginForm.email.includes('@') &&
     loginForm.password.length >= 6
   )
 })
@@ -219,7 +218,7 @@ defineExpose({
   resetForm: () => {
     formRef.value?.resetFields()
     Object.assign(loginForm, {
-      email: '',
+      account: '',
       password: '',
       role: undefined,
       remember_me: false,

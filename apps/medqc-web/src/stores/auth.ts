@@ -102,13 +102,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 登录
-  const signIn = async (email: string, password: string, _role?: string) => {
+  const signIn = async (account: string, password: string, _role?: string) => {
     try {
       loading.value = true
 
       // 暂时不发送role参数，因为后端在role为None时工作正常
       const loginRequest: LoginRequest = {
-        email,
+        account,
         password,
         // role 参数暂时注释掉
       }
@@ -133,10 +133,11 @@ export const useAuthStore = defineStore('auth', () => {
           }
         } else {
           // 后端未提供用户详情时的兜底：至少返回邮箱
+          const fallbackEmail = account.includes('@') ? account : undefined
           const fallbackUser: User = {
             id: 'unknown',
-            email,
-            display_name: email,
+            email: fallbackEmail,
+            display_name: account,
             roles: ['user'],
             is_active: true,
           }

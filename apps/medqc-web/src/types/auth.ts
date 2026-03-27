@@ -94,7 +94,8 @@ export interface RolePermissions {
 
 // 登录请求
 export interface LoginRequest {
-  email: string
+  account: string
+  email?: string
   password: string
   role?: string  // 改为字符串类型，与后端API保持一致
   remember_me?: boolean
