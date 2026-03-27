@@ -47,6 +47,13 @@
             />
             <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
+          <a-button
+            type="primary"
+            class="!rounded-xl"
+            @click="handleSearch"
+          >
+            查询
+          </a-button>
 
           <a-select
             v-model:value="selectedDepartment"
@@ -90,16 +97,80 @@
             class="!rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400"
             :bordered="false"
           />
+
+          <a-button
+            class="!rounded-xl !border-slate-200"
+            @click="resetFilters"
+          >
+            重置
+          </a-button>
         </div>
 
-        <a-tooltip title="刷新数据">
+        <div class="flex items-center gap-2">
           <a-button
-            class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
-            @click="handleRefresh"
+            :disabled="!selectedRowKeys.length"
+            class="!rounded-xl"
+            @click="openFirstSelectedDetail"
           >
-            <ReloadOutlined :spin="loading" />
+            批量查看详情
           </a-button>
-        </a-tooltip>
+          <a-button
+            :disabled="!selectedRowKeys.length"
+            class="!rounded-xl"
+            @click="handleBatchUrge"
+          >
+            批量催办
+          </a-button>
+          <a-button
+            :disabled="!selectedRowKeys.length"
+            class="!rounded-xl"
+            @click="handleBatchApprove"
+          >
+            批量通过
+          </a-button>
+          <a-button
+            :disabled="!selectedRowKeys.length || !remediationAssignmentEnabled"
+            class="!rounded-xl"
+            @click="handleBatchAssignRemediation"
+          >
+            批量派发整改
+          </a-button>
+          <a-button
+            class="!rounded-xl"
+            @click="handleExportDefects"
+          >
+            导出缺陷
+          </a-button>
+          <a-tooltip title="刷新数据">
+            <a-button
+              class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
+              @click="handleRefresh"
+            >
+              <ReloadOutlined :spin="loading" />
+            </a-button>
+          </a-tooltip>
+        </div>
+      </div>
+
+      <div
+        v-if="!remediationAssignmentEnabled"
+        class="px-6 py-2 text-xs text-amber-700 bg-amber-50 border-b border-amber-100"
+      >
+        {{ remediationAssignmentHint }}
+      </div>
+
+      <div
+        v-if="selectedRowKeys.length"
+        class="px-6 py-2 bg-blue-50/60 border-b border-blue-100 text-sm text-slate-700 flex items-center justify-between"
+      >
+        <span>已选择 <span class="font-semibold text-blue-700">{{ selectedRowKeys.length }}</span> 条门急诊病历</span>
+        <a-button
+          type="link"
+          class="!px-0"
+          @click="selectedRowKeys = []"
+        >
+          清空选择
+        </a-button>
       </div>
 
       <div class="flex-1 overflow-hidden px-6 py-2">
@@ -129,14 +200,32 @@
               </a-tag>
             </template>
             <template v-if="column.key === 'actions'">
-              <a-button
-                type="link"
-                size="small"
-                class="!px-0"
-                @click="openDetail(record)"
-              >
-                质控详情
-              </a-button>
+              <div class="flex items-center gap-2">
+                <a-button
+                  type="link"
+                  size="small"
+                  class="!px-0"
+                  @click="openDetail(record)"
+                >
+                  质控详情
+                </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                  class="!px-0"
+                  @click="handleRecordUrge(record)"
+                >
+                  催办
+                </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                  class="!px-0"
+                  @click="handleRecordApprove(record)"
+                >
+                  通过
+                </a-button>
+              </div>
             </template>
           </template>
         </a-table>
@@ -148,7 +237,12 @@
       :loading="detailLoading"
       :record="detailRecord"
       :detail-data="detailData"
+      :remediation-enabled="remediationAssignmentEnabled"
       @close="detailVisible = false"
+      @urge-defect="handleUrgeDefect"
+      @approve-defect="handleApproveDefect"
+      @reject-defect="handleRejectDefect"
+      @assign-remediation="handleAssignRemediationForDefect"
     />
   </div>
 </template>
@@ -159,10 +253,16 @@ import { message } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import {
+  approveDefect,
+  batchDefectAction,
+  exportDefects,
+  getDefectList,
   getAdminOverview,
   getDepartmentList,
   getRecordDetail,
   getOutpatientEmergencyRecordList,
+  rejectDefect,
+  urgeDefect,
   type AdminOverviewStats,
   type AdminRecordItem,
 } from '@/api/qcAdmin'
@@ -201,10 +301,18 @@ const pagination = ref({
 
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value,
-  onChange: (keys: string[]) => {
-    selectedRowKeys.value = keys
+  onChange: (keys: Array<string | number>) => {
+    selectedRowKeys.value = keys.map((key) => String(key))
   },
 }))
+
+const remediationAssignmentEnabled = false
+const remediationAssignmentHint = '整改责任人策略待确认，当前暂不开放派发整改'
+
+const selectedRecords = computed(() => {
+  const keySet = new Set(selectedRowKeys.value)
+  return records.value.filter((record) => keySet.has(String(record.id)))
+})
 
 const columns = [
   { title: '病历号', dataIndex: 'record_id', key: 'recordNumber', width: 140 },
@@ -304,6 +412,17 @@ const handleSearch = () => {
   fetchRecords()
 }
 
+const resetFilters = () => {
+  searchKeyword.value = ''
+  selectedDepartment.value = undefined
+  selectedStatus.value = undefined
+  dateRange.value = []
+  pagination.value.current = 1
+  selectedRowKeys.value = []
+  fetchRecords()
+  loadOverview()
+}
+
 const handleRefresh = () => {
   fetchRecords()
   loadOverview()
@@ -337,6 +456,165 @@ const openDetail = async (record: AdminRecordItem) => {
   } finally {
     detailLoading.value = false
   }
+}
+
+const queryDefectIdsForRecord = async (record: AdminRecordItem): Promise<string[]> => {
+  const recordId = String(record.record_id || '').trim()
+  if (!recordId) {
+    return []
+  }
+  const res = await getDefectList({ record_id: recordId, page: 1, page_size: 200 })
+  if (!res.success || !res.data) {
+    return []
+  }
+  return (res.data.items || [])
+    .map((item) => String(item.id || '').trim())
+    .filter(Boolean)
+}
+
+const queryDefectIdsForSelectedRecords = async (): Promise<string[]> => {
+  const all = await Promise.all(selectedRecords.value.map((record) => queryDefectIdsForRecord(record)))
+  return Array.from(new Set(all.flat()))
+}
+
+const handleUrgeDefect = async (defectId: string) => {
+  const res = await urgeDefect(defectId, { message: '请尽快完成门急诊病历整改' })
+  if (res.success) {
+    message.success('催办成功')
+    return
+  }
+  message.error(res.message || '催办失败')
+}
+
+const handleApproveDefect = async (defectId: string) => {
+  const res = await approveDefect(defectId, '门急诊质控审核通过')
+  if (res.success) {
+    message.success('审核通过')
+    handleRefresh()
+    return
+  }
+  message.error(res.message || '审核通过失败')
+}
+
+const handleRejectDefect = async (defectId: string) => {
+  const res = await rejectDefect(defectId, {
+    reason: '门急诊病历证据不足，需补充说明',
+    suggestion: '请补充缺陷定位证据后重新提交',
+  })
+  if (res.success) {
+    message.success('已标记审核存疑')
+    handleRefresh()
+    return
+  }
+  message.error(res.message || '操作失败')
+}
+
+const handleAssignRemediationForDefect = async (defectId: string) => {
+  void defectId
+  message.warning(remediationAssignmentHint)
+}
+
+const handleRecordUrge = async (record: AdminRecordItem) => {
+  const defectIds = await queryDefectIdsForRecord(record)
+  if (!defectIds.length) {
+    message.warning('该病历暂无可催办缺陷')
+    return
+  }
+  const res = await batchDefectAction({
+    defect_ids: defectIds,
+    action: 'urge',
+    message: '请尽快完成门急诊病历整改',
+  })
+  if (res.success) {
+    message.success(`已催办 ${defectIds.length} 条缺陷`)
+    handleRefresh()
+    return
+  }
+  message.error(res.message || '催办失败')
+}
+
+const handleRecordApprove = async (record: AdminRecordItem) => {
+  const defectIds = await queryDefectIdsForRecord(record)
+  if (!defectIds.length) {
+    message.warning('该病历暂无可审核缺陷')
+    return
+  }
+  const res = await batchDefectAction({
+    defect_ids: defectIds,
+    action: 'approve',
+    message: '门急诊病历批量审核通过',
+  })
+  if (res.success) {
+    message.success(`已通过 ${defectIds.length} 条缺陷`)
+    handleRefresh()
+    return
+  }
+  message.error(res.message || '批量通过失败')
+}
+
+const openFirstSelectedDetail = async () => {
+  if (!selectedRecords.value.length) {
+    return
+  }
+  await openDetail(selectedRecords.value[0])
+}
+
+const handleBatchUrge = async () => {
+  const defectIds = await queryDefectIdsForSelectedRecords()
+  if (!defectIds.length) {
+    message.warning('所选病历暂无可催办缺陷')
+    return
+  }
+  const res = await batchDefectAction({
+    defect_ids: defectIds,
+    action: 'urge',
+    message: '请尽快完成门急诊病历整改',
+  })
+  if (res.success) {
+    message.success(`批量催办成功，共 ${defectIds.length} 条缺陷`)
+    selectedRowKeys.value = []
+    handleRefresh()
+    return
+  }
+  message.error(res.message || '批量催办失败')
+}
+
+const handleBatchApprove = async () => {
+  const defectIds = await queryDefectIdsForSelectedRecords()
+  if (!defectIds.length) {
+    message.warning('所选病历暂无可审核缺陷')
+    return
+  }
+  const res = await batchDefectAction({
+    defect_ids: defectIds,
+    action: 'approve',
+    message: '门急诊病历批量审核通过',
+  })
+  if (res.success) {
+    message.success(`批量通过成功，共 ${defectIds.length} 条缺陷`)
+    selectedRowKeys.value = []
+    handleRefresh()
+    return
+  }
+  message.error(res.message || '批量通过失败')
+}
+
+const handleBatchAssignRemediation = async () => {
+  message.warning(remediationAssignmentHint)
+}
+
+const handleExportDefects = async () => {
+  const res = await exportDefects({
+    department: selectedDepartment.value,
+    status: selectedStatus.value,
+    start_date: dateRange.value?.[0]?.format?.('YYYY-MM-DD'),
+    end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
+  })
+  if (res.success) {
+    message.success('缺陷导出成功')
+    return
+  }
+  message.error(res.message || '缺陷导出失败')
 }
 
 const handleTableChange = (pag: { current?: number; pageSize?: number }) => {

@@ -50,9 +50,49 @@
                     <p class="font-medium text-slate-800">
                       {{ defect.title || defect.defect_type || '缺陷项' }}
                     </p>
-                    <a-tag :color="severityColor(defect.severity)">
-                      {{ defect.severity || 'warning' }}
-                    </a-tag>
+                    <div class="flex items-center gap-2">
+                      <a-tag :color="severityColor(defect.severity)">
+                        {{ defect.severity || 'warning' }}
+                      </a-tag>
+                      <a-button
+                        v-if="defect.id"
+                        size="small"
+                        type="link"
+                        class="!px-1"
+                        @click="emit('urge-defect', String(defect.id))"
+                      >
+                        催办
+                      </a-button>
+                      <a-button
+                        v-if="defect.id"
+                        size="small"
+                        type="link"
+                        class="!px-1"
+                        @click="emit('approve-defect', String(defect.id))"
+                      >
+                        通过
+                      </a-button>
+                      <a-button
+                        v-if="defect.id"
+                        size="small"
+                        type="link"
+                        danger
+                        class="!px-1"
+                        @click="emit('reject-defect', String(defect.id))"
+                      >
+                        存疑
+                      </a-button>
+                      <a-button
+                        v-if="defect.id"
+                        size="small"
+                        type="link"
+                        class="!px-1"
+                        :disabled="!props.remediationEnabled"
+                        @click="emit('assign-remediation', String(defect.id))"
+                      >
+                        派发整改
+                      </a-button>
+                    </div>
                   </div>
                   <p class="mt-1 text-sm text-slate-600">
                     {{ defect.description || defect.defect_description || defect.comment || '暂无描述' }}
@@ -153,14 +193,20 @@ interface DetailDrawerProps {
   loading?: boolean
   record: AdminRecordItem | null
   detailData: Record<string, unknown> | null
+  remediationEnabled?: boolean
 }
 
 const props = withDefaults(defineProps<DetailDrawerProps>(), {
   loading: false,
+  remediationEnabled: false,
 })
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'close'): void
+  (event: 'urge-defect', defectId: string): void
+  (event: 'approve-defect', defectId: string): void
+  (event: 'reject-defect', defectId: string): void
+  (event: 'assign-remediation', defectId: string): void
 }>()
 
 const activeTab = ref('defects')
