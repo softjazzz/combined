@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Request
+from collections import defaultdict
+from datetime import date, datetime, timedelta
+from fastapi import APIRouter, HTTPException, Query, Request
 import logging
-from datetime import datetime
 from typing import List, Dict, Any
 import time
 import csv
@@ -8,10 +9,9 @@ import os
 from pydantic import BaseModel
 
 from ..core.audit import audit_event
-from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
+from ..core.response import success_response, get_trace_id, StatusCode
 from ..core.pagination import REPORT_SCAN_LIMIT
 from ..core.supabase_client import get_supabase, async_execute
-from ..core.settings import get_settings
 from ..services.sichuan_qc_service import SichuanQCService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,140 @@ _QC_SUMMARY_TTL_SECONDS = 10.0
 
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, str) and value.strip():
+        normalized = value.strip().replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+    return None
+
+
+def _calculate_pass_rate(passed: int, warning: int, failed: int, pending: int) -> float:
+    total = passed + warning + failed + pending
+    if total <= 0:
+        return 0.0
+    return round((passed / total) * 100, 1)
+
+
+def _init_trend_bucket(period: str, bucket_time: datetime) -> Dict[str, Any]:
+    if period == "quarter":
+        label = f"{bucket_time.year}-{bucket_time.month:02d}"
+    else:
+        label = bucket_time.strftime("%m-%d")
+    return {
+        "period": label,
+        "bucket_time": bucket_time,
+        "record_count": 0,
+        "score_total": 0.0,
+        "score_count": 0,
+        "passed": 0,
+        "warning": 0,
+        "failed": 0,
+        "pending": 0,
+    }
+
+
+def _build_trend_buckets(period: str) -> List[datetime]:
+    now = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "week":
+        return [now - timedelta(days=offset) for offset in range(6, -1, -1)]
+    if period == "month":
+        return [now - timedelta(days=offset) for offset in range(29, -1, -1)]
+    month_starts: List[datetime] = []
+    cursor = now.replace(day=1)
+    for _ in range(3):
+        month_starts.append(cursor)
+        cursor = (cursor.replace(day=1) - timedelta(days=1)).replace(day=1)
+    return list(reversed(month_starts))
+
+
+def _resolve_trend_bucket(period: str, analyzed_at: datetime) -> datetime:
+    analyzed_day = analyzed_at.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "quarter":
+        return analyzed_day.replace(day=1)
+    return analyzed_day
+
+
+async def _fetch_top_categories(sb) -> List[Dict[str, Any]]:
+    try:
+        defect_rows = await async_execute(
+            sb.table("qc_defects").select("category").limit(REPORT_SCAN_LIMIT)
+        )
+    except Exception as exc:
+        logger.warning(f"[reports] 查询 qc_defects 失败: {exc}")
+        return []
+
+    counts: Dict[str, int] = defaultdict(int)
+    for row in defect_rows.data or []:
+        category = (row.get("category") or "未分类").strip() if isinstance(row.get("category"), str) else "未分类"
+        counts[category or "未分类"] += 1
+
+    return [
+        {"category": category, "issue_count": count}
+        for category, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:6]
+    ]
+
+
+async def _fetch_trend_data(sb, period: str) -> List[Dict[str, Any]]:
+    trend_rows = await async_execute(
+        sb.table("qc_statistics_view")
+        .select(
+            "record_id,passed_count,warning_count,failed_count,pending_count,avg_qc_score,last_analyzed_time"
+        )
+        .limit(REPORT_SCAN_LIMIT)
+    )
+    rows = list(trend_rows.data or [])
+
+    buckets = {bucket: _init_trend_bucket(period, bucket) for bucket in _build_trend_buckets(period)}
+    if not buckets:
+        return []
+
+    for row in rows:
+        analyzed_at = _parse_datetime(row.get("last_analyzed_time"))
+        if analyzed_at is None:
+            continue
+
+        bucket_key = _resolve_trend_bucket(period, analyzed_at)
+        if bucket_key not in buckets:
+            continue
+
+        bucket = buckets[bucket_key]
+        bucket["record_count"] += 1
+        score = row.get("avg_qc_score")
+        if score is not None:
+            bucket["score_total"] += float(score or 0)
+            bucket["score_count"] += 1
+        bucket["passed"] += int(row.get("passed_count", 0) or 0)
+        bucket["warning"] += int(row.get("warning_count", 0) or 0)
+        bucket["failed"] += int(row.get("failed_count", 0) or 0)
+        bucket["pending"] += int(row.get("pending_count", 0) or 0)
+
+    data = []
+    for bucket_time in sorted(buckets.keys()):
+        bucket = buckets[bucket_time]
+        average_score = (
+            round(bucket["score_total"] / bucket["score_count"], 1) if bucket["score_count"] else 0.0
+        )
+        data.append(
+            {
+                "period": bucket["period"],
+                "record_count": bucket["record_count"],
+                "average_score": average_score,
+                "pass_rate": _calculate_pass_rate(
+                    bucket["passed"], bucket["warning"], bucket["failed"], bucket["pending"]
+                ),
+            }
+        )
+
+    return data
 
 
 @router.get("/qc/summary")
@@ -78,6 +212,10 @@ async def qc_summary(request: Request):
         except Exception as e:
             logger.warning(f"[reports] 查询 qc_rules 失败: {e}")
 
+        top_categories = await _fetch_top_categories(sb)
+    else:
+        top_categories = []
+
     qc_stats = SichuanQCService().stats()
 
     data = {
@@ -96,10 +234,40 @@ async def qc_summary(request: Request):
         },
         "top_categories": [],
     }
+    data["top_categories"] = top_categories
     # 缓存数据部分（不包含 success/trace_id）
     _QC_SUMMARY_CACHE = data
     _QC_SUMMARY_CACHE_TS = now
     return success_response(data=data, trace_id=get_trace_id(request))
+
+
+@router.get("/qc/trend")
+async def qc_trend(
+    request: Request,
+    period: str = Query("month", description="时间段: week | month | quarter"),
+):
+    if period not in {"week", "month", "quarter"}:
+        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail="invalid period")
+
+    sb = get_supabase()
+    if sb is None:
+        return success_response(
+            data={"period": period, "items": []},
+            message="Supabase 不可用，返回空趋势数据",
+            trace_id=get_trace_id(request),
+        )
+
+    try:
+        items = await _fetch_trend_data(sb, period)
+    except Exception as exc:
+        logger.warning(f"[reports] 查询 qc 趋势失败: {exc}")
+        items = []
+
+    return success_response(
+        data={"period": period, "items": items},
+        message="获取趋势数据成功",
+        trace_id=get_trace_id(request),
+    )
 
 
 class ExportRequest(BaseModel):

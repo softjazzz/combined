@@ -10,7 +10,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 from app.core.access_control import enforce_default_auth
@@ -54,10 +54,12 @@ class TestReportsAPI:
         # Mock 规则数据
         mock_rules_response = MagicMock()
         mock_rules_response.data = [{"id": f"rule-{i}"} for i in range(10)]
+        mock_defects_response = MagicMock()
+        mock_defects_response.data = []
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute") as mock_execute:
-                mock_execute.side_effect = [mock_view_response, mock_rules_response]
+                mock_execute.side_effect = [mock_view_response, mock_rules_response, mock_defects_response]
                 with patch("app.routers.reports.SichuanQCService") as mock_service:
                     mock_service.return_value.stats.return_value = {
                         "success_rate": 0.85,
@@ -187,8 +189,8 @@ class TestReportsAPI:
                     response = client.get("/api/v1/reports/qc/summary")
 
         assert response.status_code == 200
-        assert mock_supabase.table_calls == ["qc_statistics_view", "qc_rules"]
-        assert mock_supabase.query.limit_calls == [1000, 1000]
+        assert mock_supabase.table_calls == ["qc_statistics_view", "qc_rules", "qc_defects"]
+        assert mock_supabase.query.limit_calls == [1000, 1000, 1000]
 
 
 
@@ -327,4 +329,101 @@ class TestReportsAPI:
                     assert response.status_code == 200
                     data = response.json()
                     assert "trace_id" in data
+
+    @pytest.mark.asyncio
+    async def test_qc_summary_includes_top_categories(self, client):
+        """测试汇总返回真实问题分类统计。"""
+        from app.routers import reports as reports_module
+
+        reports_module._QC_SUMMARY_CACHE = None
+        reports_module._QC_SUMMARY_CACHE_TS = 0.0
+
+        mock_supabase = MagicMock()
+        mock_view_response = MagicMock()
+        mock_view_response.data = [
+            {
+                "record_id": "record-1",
+                "total_documents": 4,
+                "passed_count": 2,
+                "warning_count": 1,
+                "failed_count": 1,
+                "pending_count": 0,
+                "avg_qc_score": 88.5,
+                "last_analyzed_time": datetime.utcnow().isoformat(),
+            }
+        ]
+        mock_rules_response = MagicMock()
+        mock_rules_response.data = [{"id": "rule-1"}]
+        mock_defects_response = MagicMock()
+        mock_defects_response.data = [
+            {"category": "病程记录"},
+            {"category": "病程记录"},
+            {"category": "病案首页"},
+        ]
+
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute") as mock_execute:
+                mock_execute.side_effect = [
+                    mock_view_response,
+                    mock_rules_response,
+                    mock_defects_response,
+                ]
+                with patch("app.routers.reports.SichuanQCService") as mock_service:
+                    mock_service.return_value.stats.return_value = {
+                        "success_rate": 0.85,
+                        "avg_api_time": 1.2,
+                    }
+
+                    response = client.get("/api/v1/reports/qc/summary")
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["top_categories"] == [
+            {"category": "病程记录", "issue_count": 2},
+            {"category": "病案首页", "issue_count": 1},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_qc_trend_returns_bucketed_items(self, client):
+        """测试趋势接口返回按周期聚合的数据。"""
+        mock_supabase = MagicMock()
+        now = datetime.utcnow().replace(hour=10, minute=0, second=0, microsecond=0)
+        mock_trend_response = MagicMock()
+        mock_trend_response.data = [
+            {
+                "record_id": "record-1",
+                "passed_count": 3,
+                "warning_count": 1,
+                "failed_count": 0,
+                "pending_count": 0,
+                "avg_qc_score": 90,
+                "last_analyzed_time": now.isoformat(),
+            },
+            {
+                "record_id": "record-2",
+                "passed_count": 1,
+                "warning_count": 1,
+                "failed_count": 0,
+                "pending_count": 0,
+                "avg_qc_score": 80,
+                "last_analyzed_time": (now - timedelta(days=1)).isoformat(),
+            },
+        ]
+
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute", return_value=mock_trend_response):
+                response = client.get("/api/v1/reports/qc/trend?period=week")
+
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        assert payload["period"] == "week"
+        assert len(payload["items"]) == 7
+        assert any(item["record_count"] == 1 for item in payload["items"])
+        assert any(item["average_score"] == 90 for item in payload["items"])
+
+    @pytest.mark.asyncio
+    async def test_qc_trend_invalid_period(self, client):
+        """测试趋势接口参数校验。"""
+        response = client.get("/api/v1/reports/qc/trend?period=year")
+        assert response.status_code == 400
 
