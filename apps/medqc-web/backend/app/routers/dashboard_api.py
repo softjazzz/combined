@@ -37,6 +37,16 @@ RUNNING_STATUSES = {"running", "in_progress", "pending", "pending_review", "proc
 FINAL_STATUSES = {"final", "completed", "discharged", "archived", "已出院", "终末"}
 
 
+def _record_identity(record: Dict[str, Any]) -> str:
+    return str(
+        record.get("id")
+        or record.get("record_id")
+        or record.get("medical_record_id")
+        or record.get("visit_id")
+        or ""
+    ).strip()
+
+
 # ============================
 # 辅助函数：从内存或数据库聚合统计
 # ============================
@@ -86,21 +96,21 @@ def _record_matches_scene(record: Dict[str, Any], scene: DashboardScene) -> bool
     status = _safe_lower(record.get("status"))
 
     if scene == "outpatient_emergency":
-        # 说明：优先使用 record_type/visit_type；若当前数据行无该字段，则先不裁掉，避免误杀。
-        return not record_type or record_type in OUTPATIENT_EMERGENCY_TYPES
+        # 仅在明确识别为门急诊时归入本场景，避免与住院场景重叠。
+        return bool(record_type) and record_type in OUTPATIENT_EMERGENCY_TYPES
 
     if scene == "running":
         if record_type in OUTPATIENT_EMERGENCY_TYPES:
             return False
         if not status:
-            return True
+            return False
         return status in RUNNING_STATUSES
 
     if scene == "final":
         if record_type in OUTPATIENT_EMERGENCY_TYPES:
             return False
         if not status:
-            return True
+            return False
         return status in FINAL_STATUSES
 
     return True
@@ -138,9 +148,22 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
 
     # 2. 质控结果统计
     # 说明：当前 qc_results 未稳定绑定统一 scene 字段，暂以全量计算，待统一聚合视图后替换。
-    qc_query = sb.table('qc_results').select('id,overall_score,grade')
+    qc_query = sb.table('qc_results').select(
+        'id,record_id,medical_record_id,visit_id,overall_score,grade,record_type,visit_type,status'
+    )
     resp = await async_execute(qc_query)
     qc_results = list(getattr(resp, 'data', None) or [])
+    if scene != "all":
+        allowed_record_ids = {
+            _record_identity(r) for r in filtered_records if _record_identity(r)
+        }
+        if allowed_record_ids:
+            qc_results = [
+                qr for qr in qc_results
+                if _record_identity(qr) in allowed_record_ids
+            ]
+        else:
+            qc_results = [qr for qr in qc_results if _record_matches_scene(qr, scene)]
     total_qc = len(qc_results)
 
     grade_counts = {}
@@ -160,15 +183,24 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
 
     # 3. 申诉统计
     try:
-        appeal_query = sb.table('qc_appeals').select('id,status', count='exact')
+        appeal_query = sb.table('qc_appeals').select('id,status,record_id,medical_record_id,visit_id', count='exact')
         resp = await async_execute(appeal_query)
         appeals = list(getattr(resp, 'data', None) or [])
+        if scene != "all":
+            allowed_record_ids = {
+                _record_identity(r) for r in filtered_records if _record_identity(r)
+            }
+            if allowed_record_ids:
+                appeals = [
+                    a for a in appeals
+                    if _record_identity(a) in allowed_record_ids
+                ]
         appeal_status = {}
         for a in appeals:
             st = a.get('status', 'unknown')
             appeal_status[st] = appeal_status.get(st, 0) + 1
         stats['appeals'] = {
-            'total': getattr(resp, 'count', None) or len(appeals),
+            'total': len(appeals),
             'by_status': appeal_status,
         }
     except Exception:
@@ -176,15 +208,27 @@ async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
 
     # 4. 整改任务统计
     try:
-        remediation_query = sb.table('qc_remediation_tasks').select('id,status,severity', count='exact')
+        remediation_query = sb.table('qc_remediation_tasks').select(
+            'id,status,severity,record_id,medical_record_id,visit_id',
+            count='exact'
+        )
         resp = await async_execute(remediation_query)
         tasks = list(getattr(resp, 'data', None) or [])
+        if scene != "all":
+            allowed_record_ids = {
+                _record_identity(r) for r in filtered_records if _record_identity(r)
+            }
+            if allowed_record_ids:
+                tasks = [
+                    t for t in tasks
+                    if _record_identity(t) in allowed_record_ids
+                ]
         task_status = {}
         for t in tasks:
             st = t.get('status', 'unknown')
             task_status[st] = task_status.get(st, 0) + 1
         stats['remediation'] = {
-            'total': getattr(resp, 'count', None) or len(tasks),
+            'total': len(tasks),
             'by_status': task_status,
         }
     except Exception:
