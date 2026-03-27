@@ -108,8 +108,13 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
 
     return {
       status: success ? '分组成功' : '未入组',
-      mdc, adrg, drg, drgName, rw,
-      messages, qcMessages,
+      mdc,
+      adrg,
+      drg,
+      drgName,
+      rw,
+      messages,
+      qcMessages,
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
@@ -122,7 +127,7 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
 }
 
 function normalizeCodeList(list: string[] | undefined): string[] {
-  return (list ?? []).map(item => item.trim()).filter(Boolean)
+  return (list ?? []).map((item) => item.trim()).filter(Boolean)
 }
 function hasOwn(dict: unknown, key: string): boolean {
   return !!dict && Object.prototype.hasOwnProperty.call(dict, key)
@@ -137,14 +142,15 @@ function collectComplications(engine: CnDrgEngine, zdList: string[], cce: string
   const ccList: string[] = []
   for (const zd of zdList) {
     if (
-      hasOwn(engine.MCC, zd)
-      && (cce.length === 0 || String((engine.MCC as Record<string, string>)[zd]) !== cce)
+      hasOwn(engine.MCC, zd) &&
+      (cce.length === 0 || String((engine.MCC as Record<string, string>)[zd]) !== cce)
     ) {
-      mccList.push(zd); continue
+      mccList.push(zd)
+      continue
     }
     if (
-      hasOwn(engine.CC, zd)
-      && (cce.length === 0 || String((engine.CC as Record<string, string>)[zd]) !== cce)
+      hasOwn(engine.CC, zd) &&
+      (cce.length === 0 || String((engine.CC as Record<string, string>)[zd]) !== cce)
     ) {
       ccList.push(zd)
     }
@@ -153,11 +159,11 @@ function collectComplications(engine: CnDrgEngine, zdList: string[], cce: string
 }
 function collectValidProcedures(engine: CnDrgEngine, ssList: string[]): string[] {
   if (!Array.isArray(engine.SS_VALID)) return []
-  return ssList.filter(ss => (engine.SS_VALID as string[]).includes(ss))
+  return ssList.filter((ss) => (engine.SS_VALID as string[]).includes(ss))
 }
 function normalizeMessages(raw: OpenDrgResult): string[] {
   if (!Array.isArray(raw.messages)) return []
-  return raw.messages.map(m => String(m)).filter(Boolean)
+  return raw.messages.map((m) => String(m)).filter(Boolean)
 }
 function normalizeMdc(mdc: string | undefined): string | undefined {
   if (!mdc) return undefined

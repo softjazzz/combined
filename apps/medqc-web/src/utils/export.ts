@@ -18,7 +18,7 @@ function loadPdfDeps() {
       ([jspdfModule, autoTableModule]) => ({
         jsPDF: jspdfModule.default,
         autoTable: autoTableModule.default,
-      })
+      }),
     )
   }
   return pdfDepsPromise
@@ -41,7 +41,7 @@ export function exportToExcel<T extends Record<string, any>>(
   data: T[],
   fileName: string,
   sheetName: string = 'Sheet1',
-  headerMap?: Record<string, string>
+  headerMap?: Record<string, string>,
 ) {
   runExportTask('excel-single-sheet', async () => {
     const XLSX = await loadXlsxModule()
@@ -49,7 +49,7 @@ export function exportToExcel<T extends Record<string, any>>(
     // 1. 处理表头映射
     let exportData = data
     if (headerMap) {
-      exportData = data.map(item => {
+      exportData = data.map((item) => {
         const newItem: Record<string, any> = {}
         for (const key in headerMap) {
           if (Object.prototype.hasOwnProperty.call(item, key)) {
@@ -79,16 +79,16 @@ export function exportToExcel<T extends Record<string, any>>(
  */
 export function exportMultiSheetExcel(
   sheets: { name: string; data: Record<string, any>[]; headerMap?: Record<string, string> }[],
-  fileName: string
+  fileName: string,
 ) {
   runExportTask('excel-multi-sheet', async () => {
     const XLSX = await loadXlsxModule()
     const workBook = XLSX.utils.book_new()
 
-    sheets.forEach(sheet => {
+    sheets.forEach((sheet) => {
       let exportData = sheet.data
       if (sheet.headerMap) {
-        exportData = sheet.data.map(item => {
+        exportData = sheet.data.map((item) => {
           const newItem: Record<string, any> = {}
           for (const key in sheet.headerMap) {
             newItem[sheet.headerMap[key]] = item[key] ?? ''
@@ -131,7 +131,7 @@ export function exportToPDF(reportData: PDFReportData, fileName: string) {
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4'
+      format: 'a4',
     })
 
     // 添加中文字体支持 - 使用内置字体
@@ -167,7 +167,7 @@ export function exportToPDF(reportData: PDFReportData, fileName: string) {
       doc.text('Overview', 14, yPos)
       yPos += 6
 
-      const overviewRows = reportData.overview.map(item => [item.label, String(item.value)])
+      const overviewRows = reportData.overview.map((item) => [item.label, String(item.value)])
       autoTable(doc, {
         startY: yPos,
         head: [['Metric', 'Value']],
@@ -176,14 +176,14 @@ export function exportToPDF(reportData: PDFReportData, fileName: string) {
         headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: 'bold' },
         styles: { fontSize: 10, cellPadding: 3 },
         columnStyles: { 0: { fontStyle: 'bold' } },
-        margin: { left: 14, right: 14 }
+        margin: { left: 14, right: 14 },
       })
       yPos = (doc as any).lastAutoTable.finalY + 10
     }
 
     // 数据表格
     if (reportData.tables && reportData.tables.length > 0) {
-      reportData.tables.forEach(table => {
+      reportData.tables.forEach((table) => {
         // 检查是否需要新页
         if (yPos > 250) {
           doc.addPage()
@@ -198,11 +198,11 @@ export function exportToPDF(reportData: PDFReportData, fileName: string) {
         autoTable(doc, {
           startY: yPos,
           head: [table.headers],
-          body: table.rows.map(row => row.map(cell => String(cell))),
+          body: table.rows.map((row) => row.map((cell) => String(cell))),
           theme: 'striped',
           headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: 'bold' },
           styles: { fontSize: 9, cellPadding: 2.5 },
-          margin: { left: 14, right: 14 }
+          margin: { left: 14, right: 14 },
         })
         yPos = (doc as any).lastAutoTable.finalY + 10
       })
@@ -221,7 +221,7 @@ export function exportToPDF(reportData: PDFReportData, fileName: string) {
       yPos += 5
 
       doc.setFontSize(9)
-      reportData.notes.forEach(note => {
+      reportData.notes.forEach((note) => {
         doc.text(`• ${note}`, 18, yPos)
         yPos += 4
       })
@@ -261,50 +261,54 @@ export interface ComprehensiveReportConfig {
 /**
  * 导出综合分析报告
  */
-export function exportComprehensiveReport(
-  config: ComprehensiveReportConfig,
-  format: ExportFormat
-) {
+export function exportComprehensiveReport(config: ComprehensiveReportConfig, format: ExportFormat) {
   const timestamp = new Date().toLocaleString('zh-CN')
 
   if (format === 'excel') {
     // Excel: 多Sheet导出
     const headerMap: Record<string, string> = {}
-    config.tableHeaders.forEach(h => {
+    config.tableHeaders.forEach((h) => {
       headerMap[h.key] = h.label
     })
 
-    const overviewData = config.overview.map(item => ({
+    const overviewData = config.overview.map((item) => ({
       metric: item.label,
-      value: item.value
+      value: item.value,
     }))
 
-    exportMultiSheetExcel([
-      { name: 'Overview', data: overviewData, headerMap: { metric: 'Metric', value: 'Value' } },
-      { name: 'Detail Data', data: config.tableData, headerMap }
-    ], `${config.title}_${config.dateRange}`)
-
+    exportMultiSheetExcel(
+      [
+        { name: 'Overview', data: overviewData, headerMap: { metric: 'Metric', value: 'Value' } },
+        { name: 'Detail Data', data: config.tableData, headerMap },
+      ],
+      `${config.title}_${config.dateRange}`,
+    )
   } else if (format === 'pdf') {
     // PDF: 综合报告
-    const tableRows = config.tableData.map(row =>
-      config.tableHeaders.map(h => row[h.key] ?? '')
+    const tableRows = config.tableData.map((row) =>
+      config.tableHeaders.map((h) => row[h.key] ?? ''),
     )
 
-    exportToPDF({
-      title: config.title,
-      subtitle: `Analysis Period: ${config.dateRange} | Dimension: ${config.dimension}`,
-      generatedAt: timestamp,
-      overview: config.overview,
-      tables: [{
-        title: 'Detailed Analysis Data',
-        headers: config.tableHeaders.map(h => h.label),
-        rows: tableRows
-      }],
-      notes: [
-        'This report is auto-generated by MedQC DRG/DIP Analysis Platform.',
-        'Cost Rate > 1.0 indicates potential over-spending.',
-        'CMI (Case Mix Index) reflects case complexity.'
-      ]
-    }, `${config.title}_${config.dateRange}`)
+    exportToPDF(
+      {
+        title: config.title,
+        subtitle: `Analysis Period: ${config.dateRange} | Dimension: ${config.dimension}`,
+        generatedAt: timestamp,
+        overview: config.overview,
+        tables: [
+          {
+            title: 'Detailed Analysis Data',
+            headers: config.tableHeaders.map((h) => h.label),
+            rows: tableRows,
+          },
+        ],
+        notes: [
+          'This report is auto-generated by MedQC DRG/DIP Analysis Platform.',
+          'Cost Rate > 1.0 indicates potential over-spending.',
+          'CMI (Case Mix Index) reflects case complexity.',
+        ],
+      },
+      `${config.title}_${config.dateRange}`,
+    )
   }
 }

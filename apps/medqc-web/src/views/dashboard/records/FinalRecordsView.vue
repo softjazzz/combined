@@ -8,7 +8,7 @@
             总病历数
           </div>
           <div class="text-2xl font-bold text-blue-600 font-mono">
-            {{ overviewStats.total_records.toLocaleString() }}
+            {{ formatInteger(overviewStats.total_records) }}
           </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -22,7 +22,7 @@
             已归档
           </div>
           <div class="text-2xl font-bold text-emerald-600 font-mono">
-            {{ overviewStats.archived_count.toLocaleString() }}
+            {{ formatInteger(overviewStats.archived_count) }}
           </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -36,7 +36,7 @@
             待处理
           </div>
           <div class="text-2xl font-bold text-amber-600 font-mono">
-            {{ overviewStats.pending_count.toLocaleString() }}
+            {{ formatInteger(overviewStats.pending_count) }}
           </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -50,7 +50,7 @@
             质控通过率
           </div>
           <div class="text-2xl font-bold text-purple-600 font-mono">
-            {{ overviewStats.pass_rate.toFixed(1) }}%
+            {{ formatRate(overviewStats.pass_rate) }}%
           </div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -499,6 +499,19 @@ const getScoreColor = (score: number) => {
   return '#f43f5e' // rose-500
 }
 
+const toNumber = (value: unknown): number => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : 0
+}
+
+const formatInteger = (value: unknown): string => {
+  return Math.trunc(toNumber(value)).toLocaleString()
+}
+
+const formatRate = (value: unknown): string => {
+  return toNumber(value).toFixed(1)
+}
+
 // ============= 数据加载 =============
 
 /** 加载科室列表 */
@@ -517,7 +530,16 @@ const loadOverview = async () => {
     end_date: dateRange.value?.[1]?.format?.('YYYY-MM-DD'),
   })
   if (res.success && res.data) {
-    overviewStats.value = res.data
+    overviewStats.value = {
+      ...overviewStats.value,
+      ...res.data,
+      total_records: toNumber(res.data.total_records),
+      archived_count: toNumber(res.data.archived_count),
+      pending_count: toNumber(res.data.pending_count),
+      pass_rate: toNumber(res.data.pass_rate),
+      total_defects: toNumber(res.data.total_defects),
+      defects_by_severity: res.data.defects_by_severity || {},
+    }
   }
 }
 

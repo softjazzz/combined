@@ -6,19 +6,25 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 from ..services.settlement_service import get_settlement_service
+from ..core.security import require_roles
+from ..core.pagination import page_param, page_size_param
 
-router = APIRouter(prefix="/api/medical-records", tags=["结算清单"])
+router = APIRouter(
+    prefix="/api/medical-records",
+    tags=["结算清单"],
+    dependencies=[Depends(require_roles("admin", "qc_manager", "doctor", "reviewer"))],
+)
 
 
 @router.get("/settlement/list")
 async def list_settlements(
     dept: Optional[str] = Query(None, description="科室筛选"),
     keyword: Optional[str] = Query(None, description="搜索病案号/住院号"),
-    page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+    page: int = page_param(description="页码"),
+    page_size: int = page_size_param(description="每页条数"),
 ):
     """获取医保结算清单列表（分页）"""
     svc = get_settlement_service()
@@ -184,5 +190,3 @@ async def run_generated_settlement_qc(
         ],
         "settlement": draft,
     }
-
-

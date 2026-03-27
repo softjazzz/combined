@@ -11,7 +11,7 @@
 """
 
 import logging
-from typing import Optional
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request, Depends, Query
 
@@ -21,6 +21,17 @@ from ..core.security import get_current_user
 
 router = APIRouter(prefix="/api/v1/staff-ranking", tags=["staff-ranking"])
 logger = logging.getLogger(__name__)
+
+def _get_period_start(period: str) -> datetime | None:
+    now = datetime.now()
+    if period == "this_week":
+        return now - timedelta(days=now.weekday())
+    if period == "this_month":
+        return now.replace(day=1)
+    if period == "this_quarter":
+        quarter_start_month = ((now.month - 1) // 3) * 3 + 1
+        return now.replace(month=quarter_start_month, day=1)
+    return None
 
 
 @router.get("")
@@ -46,8 +57,26 @@ async def get_staff_ranking(
 
     try:
         # 从 v_qc_coder_ranking 视图读取
-        resp = await async_execute(sb.table('v_qc_coder_ranking').select('*'))
-        rows = list(getattr(resp, 'data', None) or [])
+        period_start = _get_period_start(period)
+        rows = []
+        period_filter_field = None
+
+        if period_start is not None:
+            # 兼容不同视图字段命名；若缺失时间列则回退到全量并显式返回标记。
+            for candidate in ("stat_date", "created_at", "updated_at", "date"):
+                try:
+                    resp = await async_execute(
+                        sb.table('v_qc_coder_ranking').select('*').gte(candidate, period_start.isoformat())
+                    )
+                    rows = list(getattr(resp, 'data', None) or [])
+                    period_filter_field = candidate
+                    break
+                except Exception:
+                    continue
+
+        if period_filter_field is None:
+            resp = await async_execute(sb.table('v_qc_coder_ranking').select('*'))
+            rows = list(getattr(resp, 'data', None) or [])
 
         # 合法排序字段
         valid_sort = {"qc_count", "recheck_count", "defect_found", "pass_rate", "avg_daily"}
@@ -72,6 +101,7 @@ async def get_staff_ranking(
                 "summary": summary,
                 "period": period,
                 "sort_by": sort_by,
+                "period_filter_field": period_filter_field,
             },
             trace_id=get_trace_id(request),
         )
@@ -84,6 +114,7 @@ async def get_staff_ranking(
                 "summary": {"total_qc": 0, "total_recheck": 0, "total_defects": 0, "avg_pass_rate": 0, "staff_count": 0},
                 "period": period,
                 "sort_by": sort_by,
+                "period_filter_field": None,
             },
             message=f"暂无排名数据: {str(e)}",
             trace_id=get_trace_id(request),

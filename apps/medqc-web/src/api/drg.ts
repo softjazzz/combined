@@ -15,6 +15,9 @@ import type {
   ValidationResult,
 } from '@/types/drg'
 import type { AnalysisDimension, AnalysisDataResponse } from '@/types/drg-analysis'
+import type { SettlementForm, SettlementBasicInfo } from '@/types/settlement'
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
 
 // Mock 数据导入（开发阶段使用）
 import {
@@ -90,6 +93,24 @@ const mockGrouperStore: {
   versions: [],
 }
 
+async function requestApi<T>(
+  config: Parameters<typeof ApiService.requestRaw>[0],
+): Promise<T> {
+  const response = await ApiService.requestRaw<T>(config)
+  return unwrapApiEnvelope<T>(response.data)
+}
+
+async function requestApiOrThrow<T>(
+  config: Parameters<typeof ApiService.requestRaw>[0],
+  fallback: string,
+): Promise<T> {
+  try {
+    return await requestApi<T>(config)
+  } catch (error) {
+    throw new Error(extractApiErrorMessageFromError(error, fallback))
+  }
+}
+
 // ==================== 病案首页相关 API ====================
 
 /**
@@ -100,8 +121,11 @@ export async function getCaseFrontPages(): Promise<CaseFrontPage[]> {
     return Promise.resolve(mockCaseFrontPages)
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/case-front-page`)
-  return response.json()
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/case-front-page`,
+  })
+  return data.data ?? data
 }
 
 /**
@@ -133,8 +157,11 @@ export async function getCaseFrontPageDetail(admissionId: string) {
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/case-front-page/${admissionId}`)
-  return response.json()
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/case-front-page/${admissionId}`,
+  })
+  return data.data ?? data
 }
 
 /**
@@ -150,12 +177,12 @@ export async function saveCaseFrontPage(data: Partial<CaseFrontPage>): Promise<C
     } as CaseFrontPage)
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/case-front-page`, {
+  const response = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    url: `${API_V1_PREFIX}/case-front-page`,
+    data,
   })
-  return response.json()
+  return response.data ?? response
 }
 
 // ==================== 编码辅助相关 API ====================
@@ -181,13 +208,12 @@ export async function suggestCoding(params: {
     return Promise.resolve({ candidates, total: candidates.length })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/coding/suggest`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/coding/suggest`,
+    data: params,
   })
-  const data = await response.json()
-  return data
+  return data.data ?? data
 }
 
 /**
@@ -216,12 +242,12 @@ export async function validateCoding(params: {
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/coding/validate`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/coding/validate`,
+    data: params,
   })
-  return response.json()
+  return data.data ?? data
 }
 
 /**
@@ -241,10 +267,16 @@ export async function searchICDCodes(params: {
     return Promise.resolve({ results: limited, total: limited.length })
   }
 
-  const response = await fetch(
-    `${API_V1_PREFIX}/coding/search?keyword=${encodeURIComponent(params.keyword)}&category=${params.category}&limit=${params.limit ?? 20}`,
-  )
-  return response.json()
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/coding/search`,
+    params: {
+      keyword: params.keyword,
+      category: params.category,
+      limit: params.limit ?? 20,
+    },
+  })
+  return data.data ?? data
 }
 
 // ==================== DRG 分组相关 API ====================
@@ -278,13 +310,12 @@ export async function predictDRGGrouping(params: {
     } as any)
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/predict`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/drg/predict`,
+    data: params,
   })
-  const data = await response.json()
-  return data.data
+  return data.data ?? data
 }
 
 /**
@@ -299,13 +330,12 @@ export async function predictDIPGrouping(
     // Or return a mock object
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/dip/predict`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/dip/predict`,
+    data: params,
   })
-  const data = await response.json()
-  return data.data
+  return data.data ?? data
 }
 
 /**
@@ -331,9 +361,11 @@ export async function getGroupingHistory(admissionId: string): Promise<DRGGroupi
     )
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/grouping/${admissionId}/history`)
-  const data = await response.json()
-  return data.history
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/grouping/${admissionId}/history`,
+  })
+  return data.history ?? data.data?.history ?? data.data ?? data
 }
 
 // ==================== 编码建议相关 API ====================
@@ -364,10 +396,12 @@ export async function getCodingSuggestions(params?: {
   if (params?.status) qs.set('status', params.status)
   if (typeof params?.limit === 'number') qs.set('limit', String(params.limit))
 
-  const response = await fetch(
-    `${API_V1_PREFIX}/drg/suggestions${qs.toString() ? `?${qs.toString()}` : ''}`,
-  )
-  return response.json()
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/suggestions`,
+    params: Object.fromEntries(qs.entries()),
+  })
+  return data.data ?? data
 }
 
 /**
@@ -383,15 +417,18 @@ export async function handleCodingSuggestion(params: {
     return Promise.resolve()
   }
 
-  await fetch(`${API_V1_PREFIX}/drg/suggestions/handle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      suggestion_id: params.suggestion_id,
-      action: params.action,
-      handled_by: params.handled_by || 'current_user',
-    }),
-  })
+  await requestApiOrThrow<void>(
+    {
+      method: 'POST',
+      url: `${API_V1_PREFIX}/drg/suggestions/handle`,
+      data: {
+        suggestion_id: params.suggestion_id,
+        action: params.action,
+        handled_by: params.handled_by || 'current_user',
+      },
+    },
+    '处理编码建议失败',
+  )
 }
 
 // ==================== 监控预警相关 API ====================
@@ -426,10 +463,12 @@ export async function getDRGAlerts(params?: {
   if (params?.status) qs.set('status', params.status)
   if (typeof params?.limit === 'number') qs.set('limit', String(params.limit))
 
-  const response = await fetch(
-    `${API_V1_PREFIX}/drg/alerts${qs.toString() ? `?${qs.toString()}` : ''}`,
-  )
-  return response.json()
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/alerts`,
+    params: Object.fromEntries(qs.entries()),
+  })
+  return data.data ?? data
 }
 
 export async function handleDRGAlert(params: {
@@ -442,20 +481,18 @@ export async function handleDRGAlert(params: {
     return Promise.resolve()
   }
 
-  const res = await fetch(`${API_V1_PREFIX}/drg/alerts/handle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      alert_id: params.alert_id,
-      action: params.action,
-      handled_by: params.handled_by || 'current_user',
-    }),
-  })
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `handleDRGAlert failed: ${res.status}`)
-  }
+  await requestApiOrThrow<void>(
+    {
+      method: 'POST',
+      url: `${API_V1_PREFIX}/drg/alerts/handle`,
+      data: {
+        alert_id: params.alert_id,
+        action: params.action,
+        handled_by: params.handled_by || 'current_user',
+      },
+    },
+    '处理预警失败',
+  )
 }
 
 // ==================== 统计分析 API ====================
@@ -485,8 +522,11 @@ export async function getAnalysisData(params: {
   if (params.department) qs.set('department', params.department)
   if (params.doctor) qs.set('doctor', params.doctor)
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/analysis?${qs.toString()}`)
-  const data = await response.json()
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/analysis`,
+    params: Object.fromEntries(qs.entries()),
+  })
   return data.data ?? data
 }
 
@@ -522,18 +562,15 @@ export async function exportAnalysisData(params: {
   if (params.doctor) qs.set('doctor', params.doctor)
   if (params.versionId) qs.set('version_id', params.versionId)
 
-  const response = await fetch(
-    `${API_V1_PREFIX}/drg/analysis/export/${params.format}?${qs.toString()}`,
+  const response = await ApiService.getRaw<Blob>(
+    `${API_V1_PREFIX}/drg/analysis/export/${params.format}`,
+    Object.fromEntries(qs.entries()),
+    { responseType: 'blob' },
   )
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || `导出失败: ${response.status}`)
-  }
-
-  const disposition = response.headers.get('content-disposition') || ''
+  const disposition = response.headers['content-disposition'] || ''
   const matched = disposition.match(/filename=([^;]+)/i)
   const fileName = matched?.[1]?.replace(/["']/g, '') || `drg-analysis.${params.format}`
-  const blob = await response.blob()
+  const blob = response.data
   return { blob, fileName }
 }
 
@@ -557,9 +594,11 @@ export async function getGrouperConfigCurrent(): Promise<{
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config/current`)
-  const data = await response.json()
-  return data.data
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/config/current`,
+  })
+  return data.data ?? data
 }
 
 export async function saveGrouperConfigDraft(params: {
@@ -580,13 +619,12 @@ export async function saveGrouperConfigDraft(params: {
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config`, {
+  const data = await requestApi<any>({
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/drg/config`,
+    data: params,
   })
-  const data = await response.json()
-  return data.data
+  return data.data ?? data
 }
 
 export async function publishGrouperConfig(params: { operator: string; change_summary: string }) {
@@ -607,13 +645,12 @@ export async function publishGrouperConfig(params: { operator: string; change_su
     return Promise.resolve(version)
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config/publish`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/drg/config/publish`,
+    data: params,
   })
-  const data = await response.json()
-  return data.data
+  return data.data ?? data
 }
 
 export async function listGrouperConfigVersions(): Promise<{
@@ -627,9 +664,11 @@ export async function listGrouperConfigVersions(): Promise<{
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config/versions`)
-  const data = await response.json()
-  return data.data
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/config/versions`,
+  })
+  return data.data ?? data
 }
 
 export async function getGrouperConfigVersionDetail(versionId: string) {
@@ -641,11 +680,11 @@ export async function getGrouperConfigVersionDetail(versionId: string) {
     return item
   }
 
-  const response = await fetch(
-    `${API_V1_PREFIX}/drg/config/versions/${encodeURIComponent(versionId)}`,
-  )
-  const data = await response.json()
-  return data.data
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/config/versions/${encodeURIComponent(versionId)}`,
+  })
+  return data.data ?? data
 }
 
 export async function rollbackGrouperConfig(params: {
@@ -669,13 +708,12 @@ export async function rollbackGrouperConfig(params: {
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config/rollback`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/drg/config/rollback`,
+    data: params,
   })
-  const data = await response.json()
-  return data.data
+  return data.data ?? data
 }
 
 export async function runGrouperConsistencyCheck(params: {
@@ -708,13 +746,12 @@ export async function runGrouperConsistencyCheck(params: {
     })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config/consistency-check`, {
+  const data = await requestApi<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    url: `${API_V1_PREFIX}/drg/config/consistency-check`,
+    data: params,
   })
-  const data = await response.json()
-  return data.data
+  return data.data ?? data
 }
 
 export async function listGrouperConfigAuditLogs(
@@ -731,14 +768,15 @@ export async function listGrouperConfigAuditLogs(
     return Promise.resolve({ items, total: items.length })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/drg/config/audit-logs?limit=${limit}`)
-  const data = await response.json()
-  return data.data
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/drg/config/audit-logs`,
+    params: { limit },
+  })
+  return data.data ?? data
 }
 
 // ==================== 医保结算清单 API ====================
-
-import type { SettlementForm, SettlementBasicInfo } from '@/types/settlement'
 
 /**
  * 根据病案号获取结算清单数据
@@ -753,12 +791,16 @@ export async function getSettlementForm(caseNumber: string): Promise<SettlementF
     return convertCaseFrontPageToSettlement(caseFrontPage)
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/settlement/${caseNumber}`)
-  if (!response.ok) {
-    if (response.status === 404) return null
-    throw new Error(`获取结算清单失败: ${response.status}`)
+  try {
+    const data = await requestApi<any>({
+      method: 'GET',
+      url: `${API_V1_PREFIX}/settlement/${caseNumber}`,
+    })
+    return data.data ?? data
+  } catch (error: any) {
+    if (error?.response?.status === 404) return null
+    throw new Error(extractApiErrorMessageFromError(error, '获取结算清单失败'))
   }
-  return response.json()
 }
 
 /**
@@ -772,12 +814,12 @@ export async function saveSettlementForm(
     return Promise.resolve({ success: true, message: '保存成功' })
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/settlement`, {
+  const response = await ApiService.requestRaw<any>({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    url: `${API_V1_PREFIX}/settlement`,
+    data,
   })
-  return response.json()
+  return response.data.data ?? response.data
 }
 
 /**
@@ -792,10 +834,11 @@ export async function generateSettlementFromCase(admissionId: string): Promise<S
     return convertCaseFrontPageToSettlement(caseFrontPage)
   }
 
-  const response = await fetch(`${API_V1_PREFIX}/settlement/generate/${admissionId}`, {
+  const response = await ApiService.requestRaw<any>({
     method: 'POST',
+    url: `${API_V1_PREFIX}/settlement/generate/${admissionId}`,
   })
-  return response.json()
+  return response.data.data ?? response.data
 }
 
 /**

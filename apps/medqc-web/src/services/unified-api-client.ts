@@ -13,6 +13,7 @@ import type {
   BatchAuditRequest,
   BatchAuditResult
 } from '@/types/audit-module'
+import { getAccessToken } from '@/utils/auth-token'
 
 // API响应包装类型
 interface APIResponse<T> {
@@ -62,8 +63,7 @@ class UnifiedAPIClient {
   }
 
   private getAuthToken(): string {
-    // 从localStorage或其他地方获取认证令牌
-    return localStorage.getItem('auth_token') || ''
+    return getAccessToken()
   }
 
   // ==================== 审核任务管理API ====================

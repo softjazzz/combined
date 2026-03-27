@@ -25,7 +25,10 @@ export interface CompletedModule {
   timestamp: number
 }
 
-function parseDownloadFilename(contentDisposition: string | null, fallback = 'frontpage_export.xlsx') {
+function parseDownloadFilename(
+  contentDisposition: string | null,
+  fallback = 'frontpage_export.xlsx',
+) {
   if (!contentDisposition) return fallback
   const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
   if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1])
@@ -55,7 +58,8 @@ export function useFrontpageDraft(
     try {
       const resp = await frontpageApi.getExtractionSettings()
       extractionSettings.value = resp.settings
-      defaultPreviewTab.value = resp.settings.default_preview_tab === 'fields' ? 'fields' : 'preview'
+      defaultPreviewTab.value =
+        resp.settings.default_preview_tab === 'fields' ? 'fields' : 'preview'
     } catch (error) {
       console.warn('读取首页抽取设置失败，使用默认策略', error)
       extractionSettings.value = null
@@ -88,10 +92,18 @@ export function useFrontpageDraft(
     addField('basic', '医疗机构名称', hosp.hospital_name)
     addField('admission', '入院日期', hosp.admission_datetime?.split(' ')[0] || '')
     addField('admission', '出院日期', hosp.discharge_datetime?.split(' ')[0] || '')
-    addField('admission', '住院天数', hosp.actual_hospital_days ? String(hosp.actual_hospital_days) : '')
+    addField(
+      'admission',
+      '住院天数',
+      hosp.actual_hospital_days ? String(hosp.actual_hospital_days) : '',
+    )
     addField('admission', '入院科室', hosp.admission_dept)
     addField('admission', '出院科室', hosp.discharge_dept)
-    addField('admission', '床号', selectedRecord.value?.bedNo ? `${selectedRecord.value.bedNo}床` : '')
+    addField(
+      'admission',
+      '床号',
+      selectedRecord.value?.bedNo ? `${selectedRecord.value.bedNo}床` : '',
+    )
 
     const diag = draft.diagnoses || {}
     addField('basic', '主要诊断', diag.discharge_main_diagnosis_text)
@@ -103,7 +115,10 @@ export function useFrontpageDraft(
   })
 
   /** 从 frontpage 数据中提取模块关键字段的预览 */
-  function getModulePreview(moduleName: string, fp: any): Array<{ label: string; value: string; isLongText?: boolean }> {
+  function getModulePreview(
+    moduleName: string,
+    fp: any,
+  ): Array<{ label: string; value: string; isLongText?: boolean }> {
     if (!fp) return []
     const previews: Array<{ label: string; value: string; isLongText?: boolean }> = []
     const add = (label: string, value: any, isLongText = false) => {
@@ -175,7 +190,10 @@ export function useFrontpageDraft(
         const o = fp.other_medical_info || {}
         add('ABO血型', o.abo_blood_type)
         add('Rh血型', o.rh_blood_type_text)
-        add('药物过敏', o.drug_allergy_flag === '2' ? '有' : o.drug_allergy_flag === '1' ? '无' : '')
+        add(
+          '药物过敏',
+          o.drug_allergy_flag === '2' ? '有' : o.drug_allergy_flag === '1' ? '无' : '',
+        )
         if (o.drug_allergy_drugs?.length) add('过敏药物', o.drug_allergy_drugs.join('、'), true)
         add('病理诊断', o.pathology_text, true)
         add('病理号', o.pathology_no)
@@ -293,7 +311,7 @@ export function useFrontpageDraft(
               frontpageModule.value = payload.module
               seenModules.add(payload.module)
               // 记录已完成的模块（去重，同一模块可能多次更新）
-              const existing = completedModules.value.findIndex(m => m.name === payload.module)
+              const existing = completedModules.value.findIndex((m) => m.name === payload.module)
               const entry: CompletedModule = {
                 name: payload.module,
                 label: MODULE_LABELS[payload.module] || payload.module,
@@ -402,7 +420,6 @@ export function useFrontpageDraft(
     }
   }
 
-
   function focusFrontpageSection(target: FrontpageFocusTarget) {
     if (frontpageFocusTarget.value === target) {
       frontpageFocusTarget.value = ''
@@ -451,10 +468,15 @@ export function useFrontpageDraft(
       }
       frontpageDraft.value.diagnoses = frontpageDraft.value.diagnoses || {}
       const diag = frontpageDraft.value.diagnoses
-      diag.discharge_other_icds = Array.isArray(diag.discharge_other_icds) ? diag.discharge_other_icds : []
-      diag.discharge_other_diagnoses_texts = Array.isArray(diag.discharge_other_diagnoses_texts) ? diag.discharge_other_diagnoses_texts : []
+      diag.discharge_other_icds = Array.isArray(diag.discharge_other_icds)
+        ? diag.discharge_other_icds
+        : []
+      diag.discharge_other_diagnoses_texts = Array.isArray(diag.discharge_other_diagnoses_texts)
+        ? diag.discharge_other_diagnoses_texts
+        : []
       while (diag.discharge_other_icds.length <= otherIdx) diag.discharge_other_icds.push('')
-      while (diag.discharge_other_diagnoses_texts.length <= otherIdx) diag.discharge_other_diagnoses_texts.push('')
+      while (diag.discharge_other_diagnoses_texts.length <= otherIdx)
+        diag.discharge_other_diagnoses_texts.push('')
       diag.discharge_other_icds[otherIdx] = detail.code
       if (!diag.discharge_other_diagnoses_texts[otherIdx]) {
         diag.discharge_other_diagnoses_texts[otherIdx] = detail.name
@@ -478,8 +500,12 @@ export function useFrontpageDraft(
       }
       frontpageDraft.value.procedures = frontpageDraft.value.procedures || {}
       const proc = frontpageDraft.value.procedures
-      proc.other_procedure_codes = Array.isArray(proc.other_procedure_codes) ? proc.other_procedure_codes : []
-      proc.other_procedure_texts = Array.isArray(proc.other_procedure_texts) ? proc.other_procedure_texts : []
+      proc.other_procedure_codes = Array.isArray(proc.other_procedure_codes)
+        ? proc.other_procedure_codes
+        : []
+      proc.other_procedure_texts = Array.isArray(proc.other_procedure_texts)
+        ? proc.other_procedure_texts
+        : []
       proc.other_procedures = Array.isArray(proc.other_procedures) ? proc.other_procedures : []
       while (proc.other_procedure_codes.length <= otherIdx) proc.other_procedure_codes.push('')
       while (proc.other_procedure_texts.length <= otherIdx) proc.other_procedure_texts.push('')
@@ -512,17 +538,19 @@ export function useFrontpageDraft(
       const [main, ...others] = diagItems
       frontpageDraft.value.diagnoses.discharge_main_diagnosis_text = main?.name || ''
       frontpageDraft.value.diagnoses.discharge_main_icd = main?.code || ''
-      frontpageDraft.value.diagnoses.discharge_other_diagnoses_texts = others.map(item => item?.name || '')
-      frontpageDraft.value.diagnoses.discharge_other_icds = others.map(item => item?.code || '')
+      frontpageDraft.value.diagnoses.discharge_other_diagnoses_texts = others.map(
+        (item) => item?.name || '',
+      )
+      frontpageDraft.value.diagnoses.discharge_other_icds = others.map((item) => item?.code || '')
     }
 
     if (procItems.length > 0) {
       const [main, ...others] = procItems
       frontpageDraft.value.procedures.main_procedure_text = main?.name || ''
       frontpageDraft.value.procedures.main_procedure_code = main?.code || ''
-      frontpageDraft.value.procedures.other_procedure_texts = others.map(item => item?.name || '')
-      frontpageDraft.value.procedures.other_procedure_codes = others.map(item => item?.code || '')
-      frontpageDraft.value.procedures.other_procedures = others.map(item => ({
+      frontpageDraft.value.procedures.other_procedure_texts = others.map((item) => item?.name || '')
+      frontpageDraft.value.procedures.other_procedure_codes = others.map((item) => item?.code || '')
+      frontpageDraft.value.procedures.other_procedures = others.map((item) => ({
         code: item?.code || '',
         name: item?.name || '',
       }))

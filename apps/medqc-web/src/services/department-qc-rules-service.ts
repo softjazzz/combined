@@ -6,6 +6,7 @@
 
 import axios, { AxiosInstance } from 'axios'
 import { message } from 'ant-design-vue'
+import { getAccessToken } from '@/utils/auth-token'
 
 // ============================================================================
 // 类型定义
@@ -161,7 +162,7 @@ export class DepartmentQCRulesService {
     // 请求拦截器：添加认证 token
     this.apiClient.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('medqc_access_token')
+        const token = getAccessToken()
         if (token) {
           config.headers.Authorization = `Bearer ${token}`
         }

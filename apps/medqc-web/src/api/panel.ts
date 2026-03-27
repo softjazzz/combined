@@ -5,6 +5,9 @@
  * 使用原生 fetch，与项目其他 API 模块保持一致。
  */
 
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
+
 const API_PREFIX = '/api/v1/panel'
 
 // ==================== 类型定义 ====================
@@ -107,14 +110,12 @@ export interface PostAnalysisReport {
 // ==================== 辅助函数 ====================
 
 async function fetchJson<T>(url: string): Promise<T> {
-    const response = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' }
-    })
-    if (!response.ok) {
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`)
+    try {
+        const response = await ApiService.getRaw<T>(url)
+        return unwrapApiEnvelope<T>(response.data)
+    } catch (error) {
+        throw new Error(extractApiErrorMessageFromError(error, 'API请求失败'))
     }
-    const result = await response.json()
-    return result?.data ?? result
 }
 
 // ==================== API 接口 ====================

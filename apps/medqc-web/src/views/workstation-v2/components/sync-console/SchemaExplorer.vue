@@ -31,7 +31,9 @@
 
     <div class="flex-1 flex overflow-hidden min-h-0">
       <div class="w-[230px] shrink-0 border-r border-[#E5E7EB]/60 bg-slate-50/40 flex flex-col">
-        <div class="px-4 py-2.5 text-[11px] font-medium tracking-wide text-slate-400 border-b border-slate-100">
+        <div
+          class="px-4 py-2.5 text-[11px] font-medium tracking-wide text-slate-400 border-b border-slate-100"
+        >
           表数量：{{ filteredTables.length }}
         </div>
         <div class="flex-1 overflow-y-auto custom-scrollbar p-3">
@@ -156,7 +158,9 @@
                 v-else
                 class="w-full text-left border-collapse"
               >
-                <thead class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
+                <thead
+                  class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]"
+                >
                   <tr class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
                     <th
                       v-for="col in sampleColumns"

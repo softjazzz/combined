@@ -239,11 +239,12 @@ const docTabs = [
 const currentDocContent = computed(() => {
   if (!recordDetail.value) return ''
   const d = recordDetail.value
+  const docs = d.documents || d.document_bundle || {}
   const tabMap: Record<string, string> = {
-    admission: d.admissionNote || d.admission_note || d.admission_record || '',
-    discharge: d.dischargeNote || d.discharge_note || d.discharge_record || d.discharge_summary || '',
-    progress: d.progressNote || d.progress_note || d.progress_record || d.course_record || '',
-    surgery: d.surgeryNote || d.surgery_note || d.surgery_record || d.operation_record || '',
+    admission: d.admissionNote || d.admission_note || d.admission_record || docs.admissionNote || docs.admission_note || '',
+    discharge: d.dischargeNote || d.discharge_note || d.discharge_record || d.discharge_summary || docs.dischargeNote || docs.discharge_note || '',
+    progress: d.progressNote || d.progress_note || d.progress_record || d.course_record || docs.progressNote || docs.progress_note || '',
+    surgery: d.surgeryNote || d.surgery_note || d.surgery_record || d.operation_record || docs.surgeryNote || docs.surgery_note || '',
   }
   return tabMap[activeDocTab.value] || ''
 })
@@ -331,6 +332,10 @@ const loadRecordDetail = async () => {
     const res = await getRecordDetail(props.record.record_id)
     if (res.success && res.data) {
       recordDetail.value = res.data
+      const inlineDefects = (res.data as any).defects
+      if (Array.isArray(inlineDefects)) {
+        defectList.value = inlineDefects
+      }
     }
   } catch {
     recordDetail.value = null

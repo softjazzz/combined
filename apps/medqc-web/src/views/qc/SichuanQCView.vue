@@ -873,6 +873,8 @@ import {
   MedicineBoxOutlined,
 } from '@ant-design/icons-vue'
 import type { UploadFile } from 'ant-design-vue'
+import { getAccessToken } from '@/utils/auth-token'
+import { extractApiData } from '@/utils/api-helpers'
 
 // 响应式数据
 import { useRoute } from 'vue-router'
@@ -1054,7 +1056,8 @@ const startEvaluation = async () => {
     })
 
     if (response.ok) {
-      evaluationResult.value = await response.json()
+      const rawResult = await response.json()
+      evaluationResult.value = extractApiData<any>(rawResult, '质控评估失败')
       message.success('质控评估完成！')
     } else {
       const error = await response.text()
@@ -1080,10 +1083,7 @@ const startEvaluationWithLinkedRecord = async () => {
     let content = documentContent.value
     let docIdToUse: string | undefined = undefined
     try {
-      const token =
-        localStorage.getItem('medqc_access_token') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('access_token')
+      const token = getAccessToken()
       // 统一使用后端兼容的公开详情接口 /api/medical-records/{id}
       const recResp = await fetch(`/api/medical-records/${linkedRecordId.value}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -1124,7 +1124,8 @@ const startEvaluationWithLinkedRecord = async () => {
     if (!resp.ok) {
       throw new Error(await resp.text())
     }
-    evaluationResult.value = await resp.json()
+    const rawResult = await resp.json()
+    evaluationResult.value = extractApiData<any>(rawResult, '质控评估失败')
     message.success('质控评估完成！')
   } catch (e: any) {
     message.error(`评估失败: ${e.message || e}`)
@@ -1159,7 +1160,8 @@ const loadRules = async () => {
       cache: 'no-store',
     })
     if (response.ok) {
-      const data = await response.json()
+      const rawData = await response.json()
+      const data = extractApiData<any>(rawData, '加载规则失败')
       rules.value = data.rules
       rulesStats.value = data
       message.success(`加载了 ${data.total_rules} 条四川省规则`)

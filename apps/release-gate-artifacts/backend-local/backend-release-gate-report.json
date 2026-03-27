@@ -1,0 +1,73 @@
+{
+  "summary": {
+    "total_gates": 6,
+    "passed_gates": 6,
+    "failed_gates": 0,
+    "all_passed": true
+  },
+  "gates": [
+    {
+      "name": "auth_guard",
+      "command": "C:\\Python310\\python.exe scripts/check_auth_guard.py",
+      "passed": true,
+      "duration_seconds": 0.09,
+      "metrics": {
+        "required_checks": 7,
+        "passed_checks": 7,
+        "coverage_ratio": 1.0
+      }
+    },
+    {
+      "name": "secret_hygiene",
+      "command": "C:\\Python310\\python.exe scripts/check_secret_hygiene.py",
+      "passed": true,
+      "duration_seconds": 0.88,
+      "metrics": {
+        "findings": 0
+      }
+    },
+    {
+      "name": "migration_roundtrip",
+      "command": "C:\\Python310\\python.exe scripts/check_migration_roundtrip.py",
+      "passed": true,
+      "duration_seconds": 3.98,
+      "metrics": {
+        "head_count": 1,
+        "head": "20260315_000002"
+      }
+    },
+    {
+      "name": "pytest_contract",
+      "command": "C:\\Python310\\python.exe -m pytest -q tests/unit/test_auth_sync_contract.py tests/unit/test_sync_router.py",
+      "passed": true,
+      "duration_seconds": 11.77,
+      "metrics": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "pytest_security_consistency",
+      "command": "C:\\Python310\\python.exe -m pytest -q tests/unit/test_security_hardening.py tests/unit/test_sync_consistency.py tests/unit/test_system_api.py",
+      "passed": true,
+      "duration_seconds": 12.18,
+      "metrics": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "pytest_integration_smoke",
+      "command": "C:\\Python310\\python.exe -m pytest -q tests/integration/test_release_gate_smoke.py",
+      "passed": true,
+      "duration_seconds": 9.28,
+      "metrics": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    }
+  ]
+}

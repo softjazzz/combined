@@ -202,7 +202,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
-import { frontpageApi, type FrontpageExtractionSettings, type FrontpageExtractionSettingsUpdate } from '@/api/frontpage'
+import {
+  frontpageApi,
+  type FrontpageExtractionSettings,
+  type FrontpageExtractionSettingsUpdate,
+} from '@/api/frontpage'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()

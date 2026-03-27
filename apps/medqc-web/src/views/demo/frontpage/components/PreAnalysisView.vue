@@ -173,13 +173,19 @@
           <div class="summary-list">
             <div class="summary-row">
               <span class="summary-row__label">主诊断</span>
-              <strong>{{ hasExtractedData && mainDiagnosis ? mainDiagnosis.text || mainDiagnosis.code || '已抽取' : '等待抽取' }}</strong>
+              <strong>{{
+                hasExtractedData && mainDiagnosis
+                  ? mainDiagnosis.text || mainDiagnosis.code || '已抽取'
+                  : '等待抽取'
+              }}</strong>
               <span class="summary-row__meta">编码 {{ mainDiagnosis?.code || '--' }}</span>
             </div>
             <div class="summary-row">
               <span class="summary-row__label">手术 / 操作</span>
               <strong>{{ procedures.length ? procedures[0].text || '已抽取' : '等待抽取' }}</strong>
-              <span class="summary-row__meta">{{ hasExtractedData ? `${procedures.length} 条` : '0 条' }}</span>
+              <span class="summary-row__meta">{{
+                hasExtractedData ? `${procedures.length} 条` : '0 条'
+              }}</span>
             </div>
           </div>
 
@@ -246,15 +252,21 @@
               </div>
               <div class="metric-card">
                 <span>预估费用</span>
-                <strong>{{ drgResult.payment !== '--' ? drgResult.payment?.toLocaleString() : '--' }}</strong>
+                <strong>{{
+                  drgResult.payment !== '--' ? drgResult.payment?.toLocaleString() : '--'
+                }}</strong>
               </div>
               <div class="metric-card">
                 <span>实际费用</span>
-                <strong>{{ drgResult.actual_cost !== '--' ? drgResult.actual_cost?.toLocaleString() : '--' }}</strong>
+                <strong>{{
+                  drgResult.actual_cost !== '--' ? drgResult.actual_cost?.toLocaleString() : '--'
+                }}</strong>
               </div>
               <div class="metric-card">
                 <span>盈亏情况</span>
-                <strong :class="profitClass">{{ drgResult.profit !== '--' ? drgResult.profit?.toLocaleString() : '--' }}</strong>
+                <strong :class="profitClass">{{
+                  drgResult.profit !== '--' ? drgResult.profit?.toLocaleString() : '--'
+                }}</strong>
               </div>
             </div>
           </div>
@@ -404,7 +416,9 @@ const secondaryDiagnoses = computed(() => {
     .slice(0, 5)
 })
 
-const diagnosisCount = computed(() => (mainDiagnosis.value ? 1 : 0) + secondaryDiagnoses.value.length)
+const diagnosisCount = computed(
+  () => (mainDiagnosis.value ? 1 : 0) + secondaryDiagnoses.value.length,
+)
 
 function firstNonEmptyString(...values: unknown[]): string {
   for (const value of values) {
@@ -415,9 +429,7 @@ function firstNonEmptyString(...values: unknown[]): string {
 
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean)
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
 }
 
 function extractProcedureTextsFromMedicalText(text: string): string[] {
@@ -467,7 +479,10 @@ function inferProcedureCodeFromText(text: string): string {
   return ''
 }
 
-function getNormalizedProcedures(data: any, sourceText: string): Array<{ code: string; text: string }> {
+function getNormalizedProcedures(
+  data: any,
+  sourceText: string,
+): Array<{ code: string; text: string }> {
   const procs = data?.procedures || data?.surgeries || data?.operation || {}
 
   const mainCode = firstNonEmptyString(
@@ -489,21 +504,22 @@ function getNormalizedProcedures(data: any, sourceText: string): Array<{ code: s
   )
 
   const otherCodes = normalizeStringArray(
-    procs?.other_procedure_codes
-      || procs?.other_surgery_icds
-      || procs?.other_surgery_codes
-      || procs?.other_operation_codes,
+    procs?.other_procedure_codes ||
+      procs?.other_surgery_icds ||
+      procs?.other_surgery_codes ||
+      procs?.other_operation_codes,
   )
   const otherTexts = normalizeStringArray(
-    procs?.other_procedure_texts
-      || procs?.other_procedures_texts
-      || procs?.other_surgery_texts
-      || procs?.other_operation_texts
-      || procs?.other_procedure_names,
+    procs?.other_procedure_texts ||
+      procs?.other_procedures_texts ||
+      procs?.other_surgery_texts ||
+      procs?.other_operation_texts ||
+      procs?.other_procedure_names,
   )
 
   const result: Array<{ code: string; text: string }> = []
-  if (mainText) result.push({ code: mainCode || inferProcedureCodeFromText(mainText), text: mainText })
+  if (mainText)
+    result.push({ code: mainCode || inferProcedureCodeFromText(mainText), text: mainText })
 
   otherTexts.forEach((text, idx) => {
     result.push({ code: otherCodes[idx] || inferProcedureCodeFromText(text), text })
@@ -511,7 +527,12 @@ function getNormalizedProcedures(data: any, sourceText: string): Array<{ code: s
 
   const otherProcObjects = Array.isArray(procs?.other_procedures) ? procs.other_procedures : []
   otherProcObjects.forEach((item: any) => {
-    const text = firstNonEmptyString(item?.text, item?.name, item?.surgery_name, item?.operation_name)
+    const text = firstNonEmptyString(
+      item?.text,
+      item?.name,
+      item?.surgery_name,
+      item?.operation_name,
+    )
     const code = firstNonEmptyString(item?.code, item?.icd, item?.icd9, item?.surgery_code)
     if (text) result.push({ code: code || inferProcedureCodeFromText(text), text })
   })
@@ -628,13 +649,16 @@ const handleDIPGrouping = async () => {
     const costs = extractedData.value.costs || {}
 
     const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || ''
-    const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
+    const secondaryDiagCodes =
+      diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
     const mainProcCode = proceduresData.main_procedure_code || ''
     const otherProcCodes = proceduresData.other_procedure_codes || []
 
     const zdList = [primaryDiagCode, ...secondaryDiagCodes].filter(Boolean)
     const fallbackProcCodes = procedures.value.map((item) => item.code).filter(Boolean)
-    const ssList = Array.from(new Set([mainProcCode, ...otherProcCodes, ...fallbackProcCodes].filter(Boolean)))
+    const ssList = Array.from(
+      new Set([mainProcCode, ...otherProcCodes, ...fallbackProcCodes].filter(Boolean)),
+    )
 
     const dipResult = localDipGrouping({ zdList, ssList })
 
@@ -689,13 +713,16 @@ const handleDRGGrouping = async () => {
     const costs = extractedData.value.costs || {}
 
     const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || ''
-    const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
+    const secondaryDiagCodes =
+      diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
     const mainProcCode = proceduresData.main_procedure_code || ''
     const otherProcCodes = proceduresData.other_procedure_codes || []
 
     const zdList = [primaryDiagCode, ...secondaryDiagCodes].filter(Boolean)
     const fallbackProcCodes = procedures.value.map((item) => item.code).filter(Boolean)
-    const ssList = Array.from(new Set([mainProcCode, ...otherProcCodes, ...fallbackProcCodes].filter(Boolean)))
+    const ssList = Array.from(
+      new Set([mainProcCode, ...otherProcCodes, ...fallbackProcCodes].filter(Boolean)),
+    )
 
     const drgGroupResult = await localDrgGrouping({
       gender: basicInfo.gender === '2' || basicInfo.gender_text === '女' ? '2' : '1',

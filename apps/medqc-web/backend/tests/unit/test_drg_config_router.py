@@ -3,6 +3,16 @@ from __future__ import annotations
 import pytest
 
 
+def _login(client, email: str = "admin@medqc.com", password: str = "admin888") -> str:
+    resp = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
+
+
+def _headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
 class _FakeDRGConfigStore:
     def __init__(self):
         self.current = {
@@ -122,13 +132,15 @@ class TestDRGConfigRouter:
     def test_config_lifecycle(self, client, monkeypatch):
         fake_store = _FakeDRGConfigStore()
         monkeypatch.setattr("app.routers.drg.get_drg_config_store", lambda: fake_store)
+        token = _login(client)
 
-        get_resp = client.get("/api/v1/drg/config/current")
+        get_resp = client.get("/api/v1/drg/config/current", headers=_headers(token))
         assert get_resp.status_code == 200
         assert get_resp.json()["success"] is True
 
         save_resp = client.put(
             "/api/v1/drg/config",
+            headers=_headers(token),
             json={
                 "operator": "qa-user",
                 "change_summary": "调整泸县分组参数",
@@ -151,21 +163,23 @@ class TestDRGConfigRouter:
 
         publish_resp = client.post(
             "/api/v1/drg/config/publish",
+            headers=_headers(token),
             json={"operator": "qa-user", "change_summary": "泸县发布"},
         )
         assert publish_resp.status_code == 200
         version_id = publish_resp.json()["data"]["version_id"]
 
-        versions_resp = client.get("/api/v1/drg/config/versions")
+        versions_resp = client.get("/api/v1/drg/config/versions", headers=_headers(token))
         assert versions_resp.status_code == 200
         assert versions_resp.json()["data"]["total"] >= 1
 
-        detail_resp = client.get(f"/api/v1/drg/config/versions/{version_id}")
+        detail_resp = client.get(f"/api/v1/drg/config/versions/{version_id}", headers=_headers(token))
         assert detail_resp.status_code == 200
         assert detail_resp.json()["data"]["version_id"] == version_id
 
         rollback_resp = client.post(
             "/api/v1/drg/config/rollback",
+            headers=_headers(token),
             json={
                 "version_id": version_id,
                 "operator": "qa-user",
@@ -178,9 +192,11 @@ class TestDRGConfigRouter:
     def test_consistency_check_contract(self, client, monkeypatch):
         fake_store = _FakeDRGConfigStore()
         monkeypatch.setattr("app.routers.drg.get_drg_config_store", lambda: fake_store)
+        token = _login(client)
 
         publish_resp = client.post(
             "/api/v1/drg/config/publish",
+            headers=_headers(token),
             json={"operator": "qa-user", "change_summary": "先发布一个版本"},
         )
         assert publish_resp.status_code == 200
@@ -188,6 +204,7 @@ class TestDRGConfigRouter:
 
         consistency_resp = client.post(
             "/api/v1/drg/config/consistency-check",
+            headers=_headers(token),
             json={
                 "operator": "qa-user",
                 "version_id": version_id,
@@ -203,3 +220,14 @@ class TestDRGConfigRouter:
         assert data["summary"]["valid_count"] == 2
         assert data["summary"]["matched_count"] == 1
         assert data["summary"]["consistency_rate"] == 50.0
+
+    def test_missing_version_returns_404(self, client, monkeypatch):
+        fake_store = _FakeDRGConfigStore()
+        monkeypatch.setattr("app.routers.drg.get_drg_config_store", lambda: fake_store)
+        token = _login(client)
+
+        resp = client.get("/api/v1/drg/config/versions/missing-version", headers=_headers(token))
+        assert resp.status_code == 404
+        body = resp.json()
+        message = body.get("detail") or body.get("error") or body.get("message")
+        assert message == "版本不存在"

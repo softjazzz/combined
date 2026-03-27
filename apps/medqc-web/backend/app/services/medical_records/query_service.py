@@ -1,0 +1,237 @@
+"""medical_records 域 - 查询服务。"""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any, Callable, Optional
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from ...database.connection import engine
+from ...database.repository import get_repository
+from ...database.models.cdm import AdmissionRecord, MedicalRecordFrontpage, QCResult
+from ...services.frontpage_settings import (
+    load_frontpage_settings,
+    should_include_demo_records,
+)
+from .shared import build_demo_workstation_records, filter_demo_records
+
+
+def _session_factory() -> Session:
+    return Session(engine)
+
+
+def list_medical_records(
+    dept: Optional[str] = None,
+    keyword: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, Any]:
+    repo = get_repository()
+    return repo.list_patients(
+        dept=dept,
+        keyword=keyword,
+        start_date=start_date,
+        end_date=end_date,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def get_stats(
+    dept: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> dict[str, Any]:
+    repo = get_repository()
+    return repo.get_stats(dept=dept, start_date=start_date, end_date=end_date)
+
+
+def get_departments() -> list[str]:
+    repo = get_repository()
+    return repo.list_departments()
+
+
+def _serialize_real_workstation_record(record, bed_map: dict[tuple[str, str], str], status_map: dict[str, dict]) -> dict[str, Any]:
+    key = (record.patient_id, record.visit_id)
+    qc_info = status_map.get(record.visit_id)
+    if qc_info is None:
+        record_status = "pending"
+    elif qc_info["has_error"]:
+        record_status = "has_defects"
+    else:
+        record_status = "completed"
+
+    dept_name = record.discharge_dept_name or record.admission_dept_name or ""
+    cdm_frontpage_empty = not any([
+        record.name,
+        record.mr_no,
+        record.admission_datetime,
+        record.discharge_datetime,
+        record.discharge_dept_name,
+        record.record_content,
+    ])
+
+    return {
+        "id": record.visit_id,
+        "instituteId": record.institute_id,
+        "patientId": record.patient_id,
+        "bedNo": bed_map.get(key, ""),
+        "name": record.name or "",
+        "sex": record.sex or "",
+        "age": int(record.age_year) if record.age_year else 0,
+        "insurance": record.insurance_type or "",
+        "department": dept_name,
+        "admissionDate": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
+        "dischargeDate": record.discharge_datetime.strftime("%m-%d") if record.discharge_datetime else "",
+        "days": int(record.hospital_duration) if record.hospital_duration else 0,
+        "doctor": record.attending_physician_sign or "",
+        "status": record_status,
+        "cdmFrontpageEmpty": cdm_frontpage_empty,
+    }
+
+
+def get_workstation_data(
+    dept: Optional[str] = None,
+    keyword: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    session_factory: Callable[[], Any] | None = None,
+    settings_loader: Callable[[], Any] = load_frontpage_settings,
+    demo_records_builder: Callable[[], list[dict]] = build_demo_workstation_records,
+    demo_filter: Callable[[list[dict], Optional[str], Optional[str]], list[dict]] = filter_demo_records,
+    demo_policy: Callable[[Any, int], bool] = should_include_demo_records,
+) -> dict[str, Any]:
+    session_factory = session_factory or _session_factory
+
+    with session_factory() as session:
+        settings, _ = settings_loader()
+        real_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage).scalar() or 0
+        demo_candidates = demo_records_builder()
+        demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
+        include_demo = demo_policy(settings, int(real_total_count))
+        visible_demos = demo_filtered if include_demo else []
+
+        q = session.query(MedicalRecordFrontpage)
+        if dept:
+            q = q.filter(
+                (MedicalRecordFrontpage.discharge_dept_name == dept) |
+                (MedicalRecordFrontpage.admission_dept_name == dept)
+            )
+        if keyword:
+            kw = f"%{keyword}%"
+            q = q.filter(
+                MedicalRecordFrontpage.name.like(kw) |
+                MedicalRecordFrontpage.mr_no.like(kw) |
+                MedicalRecordFrontpage.inpat_no.like(kw)
+            )
+
+        total_real_filtered = q.count()
+        offset = (page - 1) * page_size
+        demo_count = len(visible_demos)
+
+        demo_page: list[dict] = []
+        real_offset = offset
+        real_limit = page_size
+        if demo_count > 0:
+            demo_start = min(offset, demo_count)
+            demo_end = min(offset + page_size, demo_count)
+            if demo_end > demo_start:
+                demo_page = visible_demos[demo_start:demo_end]
+            consumed = len(demo_page)
+            real_limit = max(page_size - consumed, 0)
+            real_offset = max(offset - demo_count, 0)
+
+        records = []
+        if real_limit > 0:
+            records = (
+                q.order_by(MedicalRecordFrontpage.admission_datetime.desc())
+                .offset(real_offset)
+                .limit(real_limit)
+                .all()
+            )
+
+        bed_map: dict[tuple[str, str], str] = {}
+        if records:
+            beds = session.query(
+                AdmissionRecord.patient_id,
+                AdmissionRecord.visit_id,
+                AdmissionRecord.bed_no,
+            ).filter(
+                AdmissionRecord.visit_id.in_([r.visit_id for r in records])
+            ).all()
+            for b in beds:
+                bed_map[(b.patient_id, b.visit_id)] = b.bed_no
+
+        dept_stats = session.query(
+            MedicalRecordFrontpage.discharge_dept_name,
+            func.count().label("total"),
+        ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
+
+        visit_ids = [r.visit_id for r in records]
+        status_map: dict[str, dict] = {}
+        if visit_ids:
+            qc_results = session.query(
+                QCResult.visit_id,
+                QCResult.severity,
+                QCResult.status,
+            ).filter(
+                QCResult.visit_id.in_(visit_ids)
+            ).all()
+            for r in qc_results:
+                vid = r.visit_id
+                if vid not in status_map:
+                    status_map[vid] = {"has_error": False, "has_any": True}
+                if r.status == "open" and r.severity == "error":
+                    status_map[vid]["has_error"] = True
+
+        departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
+        dept_warning_counts: dict[str, int] = {}
+        dept_total_map: dict[str, int] = {}
+        for d in dept_stats:
+            dept_name = d.discharge_dept_name or ""
+            dept_total_map[dept_name] = int(d.total)
+
+        real_items = []
+        for record in records:
+            item = _serialize_real_workstation_record(record, bed_map, status_map)
+            dept_name = item["department"]
+            if item["status"] == "has_defects":
+                dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
+                departments[0]["warningCount"] += 1
+            real_items.append(item)
+
+        for demo in visible_demos:
+            dept_name = demo.get("department") or ""
+            dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + 1
+
+        for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
+            dept_name = d.discharge_dept_name or ""
+            departments.append({
+                "name": dept_name,
+                "total": dept_total_map.get(dept_name, d.total),
+                "warningCount": dept_warning_counts.get(dept_name, 0),
+            })
+
+        for dept_name, total in sorted(dept_total_map.items(), key=lambda x: x[1], reverse=True):
+            if not dept_name:
+                continue
+            if any(item["name"] == dept_name for item in departments):
+                continue
+            departments.append({"name": dept_name, "total": total, "warningCount": 0})
+
+        total_count = total_real_filtered + demo_count
+        departments[0]["total"] = total_count
+        items = demo_page + real_items
+
+    return {
+        "departments": departments,
+        "records": items,
+        "total": total_count,
+        "page": page,
+        "pageSize": page_size,
+        "totalPages": (total_count + page_size - 1) // page_size,
+    }

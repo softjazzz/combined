@@ -1,0 +1,40 @@
+{
+  "summary": {
+    "total_steps": 5,
+    "passed_steps": 5,
+    "failed_steps": 0,
+    "all_passed": true
+  },
+  "steps": [
+    {
+      "name": "frontend_encoding",
+      "command": "C:\\Users\\Coldplay\\AppData\\Roaming\\npm\\pnpm.cmd run check:encoding",
+      "passed": true,
+      "duration_seconds": 1.37
+    },
+    {
+      "name": "frontend_typecheck_release",
+      "command": "C:\\Users\\Coldplay\\AppData\\Roaming\\npm\\pnpm.cmd run type-check:release",
+      "passed": true,
+      "duration_seconds": 4.5
+    },
+    {
+      "name": "frontend_unit_tests_release",
+      "command": "C:\\Users\\Coldplay\\AppData\\Roaming\\npm\\pnpm.cmd run test:unit:release",
+      "passed": true,
+      "duration_seconds": 3.42
+    },
+    {
+      "name": "frontend_build",
+      "command": "C:\\Users\\Coldplay\\AppData\\Roaming\\npm\\pnpm.cmd run build",
+      "passed": true,
+      "duration_seconds": 42.26
+    },
+    {
+      "name": "backend_release_gate_runner",
+      "command": "C:\\Users\\Coldplay\\AppData\\Local\\Programs\\Python\\Python310\\python.exe scripts/release_gate_runner.py --out-dir ../../release-gate-artifacts/backend-preflight --gate-timeout 180",
+      "passed": true,
+      "duration_seconds": 37.46
+    }
+  ]
+}

@@ -1,22 +1,22 @@
 /**
  * QC分析API服务
- * 集成DeepSeek AI进行智能质控分析
+ * 通过后端代理进行智能质控分析
  */
 import { supabase, TABLES } from '../lib/supabase'
 import { updateMedicalRecord } from './medical-records'
+import { ApiService } from '@/services/apiService'
 import type { Database } from '../types/database'
 import type { QCAnalysisResult } from '../types/ai-service'
-import type { MedicalRecord } from '../types/medical-records'
-
-// 阿里云百炼DeepSeek V3配置
-const DEEPSEEK_CONFIG = {
-  apiKey: 'sk-f1fa15b00fb042a9a80943a40e142daf',
-  baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-  model: 'deepseek-v3',
-}
 
 type QCResultRow = Database['public']['Tables']['qc_results']['Row']
 type QCResultInsert = Database['public']['Tables']['qc_results']['Insert']
+type LLMProxyResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string
+    }
+  }>
+}
 
 /**
  * 分析单个医疗记录
@@ -219,36 +219,23 @@ ${content}
   const startTime = Date.now()
 
   try {
-    const response = await fetch(`${DEEPSEEK_CONFIG.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DEEPSEEK_CONFIG.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: DEEPSEEK_CONFIG.model,
-        messages: [
-          {
-            role: 'system',
-            content:
-              '你是一名专业的医疗质控专家，擅长分析病案质量并提供改进建议。请严格按照要求的JSON格式返回分析结果。',
-          },
-          {
-            role: 'user',
-            content: QC_ANALYSIS_PROMPT,
-          },
-        ],
-        max_tokens: 2000,
-        temperature: 0.1,
-      }),
+    const result = await callLLMProxy({
+      model: 'deepseek-v3',
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你是一名专业的医疗质控专家，擅长分析病案质量并提供改进建议。请严格按照要求的JSON格式返回分析结果。',
+        },
+        {
+          role: 'user',
+          content: QC_ANALYSIS_PROMPT,
+        },
+      ],
+      max_tokens: 2000,
+      temperature: 0.1,
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`DeepSeek API调用失败: ${response.status} ${errorText}`)
-    }
-
-    const result = (await response.json()) as any
     const aiResponse = result.choices?.[0]?.message?.content || ''
 
     // 解析JSON结果
@@ -287,8 +274,21 @@ ${content}
 
     return qcResult
   } catch (error) {
-    console.error('DeepSeek分析失败:', error)
+    console.error('质控分析失败:', error)
     throw new Error(`AI分析失败: ${error instanceof Error ? error.message : '未知错误'}`)
+  }
+}
+
+async function callLLMProxy(requestBody: Record<string, unknown>): Promise<LLMProxyResponse> {
+  try {
+    const response = await ApiService.postRaw<LLMProxyResponse>('/api/v1/llm/parse-text', {
+      requestBody,
+    })
+
+    return response.data
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误'
+    throw new Error(`代理分析调用失败: ${message}`)
   }
 }
 
@@ -424,44 +424,31 @@ export async function healthCheck(): Promise<{
   details?: Record<string, unknown>
 }> {
   try {
-    const response = await fetch(`${DEEPSEEK_CONFIG.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DEEPSEEK_CONFIG.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: DEEPSEEK_CONFIG.model,
-        messages: [
-          {
-            role: 'user',
-            content: '你好，请回复"连接正常"',
-          },
-        ],
-        max_tokens: 50,
-        temperature: 0,
-      }),
+    const result = await callLLMProxy({
+      model: 'deepseek-v3',
+      messages: [
+        {
+          role: 'user',
+          content: '你好，请回复"连接正常"',
+        },
+      ],
+      max_tokens: 50,
+      temperature: 0,
     })
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-
-    const result = (await response.json()) as any
     const content = result.choices?.[0]?.message?.content || ''
 
     return {
       status: 'ok',
-      message: 'DeepSeek API连接正常',
+      message: 'AI分析连接正常',
       details: {
-        model: DEEPSEEK_CONFIG.model,
+        model: 'deepseek-v3',
         response: content,
       },
     }
   } catch (error) {
     return {
       status: 'error',
-      message: 'DeepSeek API连接失败',
+      message: 'AI分析连接失败',
       details: {
         error: error instanceof Error ? error.message : '未知错误',
       },

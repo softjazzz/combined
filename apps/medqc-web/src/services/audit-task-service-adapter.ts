@@ -12,6 +12,7 @@ import type {
 } from '@/types/audit-module'
 
 import { unifiedAPIClient, type PaginatedResponse } from './unified-api-client'
+import { getAccessToken } from '@/utils/auth-token'
 
 const isObjectLike = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -104,7 +105,7 @@ export class AuditTaskServiceAdapter {
   }
 
   private getAuthToken(): string {
-    return localStorage.getItem('auth_token') || ''
+    return getAccessToken()
   }
 
   /**
@@ -668,4 +669,3 @@ export class AuditTaskServiceAdapter {
 
 // 导出单例实例
 export const auditTaskService = new AuditTaskServiceAdapter()
-

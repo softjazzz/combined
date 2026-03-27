@@ -12,6 +12,7 @@ import type {
 import { unifiedAPIClient, type PaginatedResponse } from './unified-api-client'
 import { useAuthStore } from '@/stores/auth'
 import { ApiService } from '@/services/apiService'
+import { getAccessToken } from '@/utils/auth-token'
 
 // WebSocket连接管理
 class WebSocketManager {
@@ -191,7 +192,7 @@ export class NotificationServiceAdapter {
   async initializeRealTime(userId: string, userType: string): Promise<void> {
     try {
       const authStore = useAuthStore()
-      const authToken = localStorage.getItem('auth_token') || ''
+      const authToken = getAccessToken()
 
       if (!authToken) {
         console.warn('未找到认证令牌，无法建立WebSocket连接')
@@ -492,5 +493,4 @@ export class NotificationServiceAdapter {
 
 // 导出单例实例
 export const notificationService = new NotificationServiceAdapter()
-
 

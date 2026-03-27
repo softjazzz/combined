@@ -1,5 +1,7 @@
 ﻿// @ts-nocheck
 import axios from 'axios'
+import { getAccessToken } from '@/utils/auth-token'
+import { attachTraceIdToError, ensureTraceHeaders, extractTraceIdFromResponse } from '@/utils/trace'
 
 export const http = axios.create({
   baseURL: '',
@@ -7,11 +9,21 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('medqc_access_token')
+  const token = getAccessToken()
   if (token) {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
   }
+  const { headers } = ensureTraceHeaders(config.headers as Record<string, unknown>)
+  config.headers = headers
   return config
 })
 
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const traceId = extractTraceIdFromResponse(error?.response) || extractTraceIdFromResponse(error)
+    attachTraceIdToError(error, traceId)
+    return Promise.reject(error)
+  },
+)

@@ -17,35 +17,25 @@
             </section>
 
             <div class="layout-main flex-1 flex gap-4 overflow-hidden min-h-0">
-              <div
-                class="zone zone-connection w-[24%] shrink-0 overflow-hidden flex flex-col"
-              >
+              <div class="zone zone-connection w-[24%] shrink-0 overflow-hidden flex flex-col">
                 <ConnectionStudio />
               </div>
 
-              <div
-                class="zone zone-schema flex-1 shrink-0 overflow-hidden flex flex-col"
-              >
+              <div class="zone zone-schema flex-1 shrink-0 overflow-hidden flex flex-col">
                 <SchemaExplorer />
               </div>
 
               <div class="w-[30%] shrink-0 flex flex-col gap-4 overflow-hidden right-stack">
-                <div
-                  class="zone zone-policy shrink-0 overflow-hidden flex flex-col"
-                >
+                <div class="zone zone-policy shrink-0 overflow-hidden flex flex-col">
                   <SyncPolicyPanel />
                 </div>
-                <div
-                  class="zone zone-runs flex-1 overflow-hidden flex flex-col"
-                >
+                <div class="zone zone-runs flex-1 overflow-hidden flex flex-col">
                   <SyncRunPanel />
                 </div>
               </div>
             </div>
 
-            <div
-              class="zone zone-mapping shrink-0 overflow-hidden"
-            >
+            <div class="zone zone-mapping shrink-0 overflow-hidden">
               <FieldMappingWorkbench />
             </div>
           </div>
@@ -98,8 +88,7 @@ onUnmounted(() => {
 .sync-config-page {
   background:
     radial-gradient(1200px 400px at 20% -20%, #dbeafe 0%, rgba(219, 234, 254, 0) 60%),
-    radial-gradient(800px 300px at 100% -10%, #e0f2fe 0%, rgba(224, 242, 254, 0) 60%),
-    #f3f4f6;
+    radial-gradient(800px 300px at 100% -10%, #e0f2fe 0%, rgba(224, 242, 254, 0) 60%), #f3f4f6;
 }
 
 .layout-shell {

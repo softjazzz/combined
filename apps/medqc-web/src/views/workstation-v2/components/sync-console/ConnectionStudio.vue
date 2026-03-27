@@ -102,7 +102,11 @@
         <div class="pt-2">
           <button
             class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
-            :class="isReadonly || state.isSavingMongoConnection ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100' : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'"
+            :class="
+              isReadonly || state.isSavingMongoConnection
+                ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100'
+                : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'
+            "
             :disabled="isReadonly || state.isSavingMongoConnection"
             @click="handleSaveMongo"
           >
@@ -183,7 +187,11 @@
         <div class="pt-2">
           <button
             class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
-            :class="isReadonly || state.isSavingPgConnection ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100' : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'"
+            :class="
+              isReadonly || state.isSavingPgConnection
+                ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100'
+                : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'
+            "
             :disabled="isReadonly || state.isSavingPgConnection"
             @click="handleSavePg"
           >

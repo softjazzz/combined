@@ -995,20 +995,20 @@ const analyzeDocumentQC = async (document: DocumentItem, categoryCode?: string) 
       throw new Error(`质控评估API调用失败: ${response.status} ${errorText}`)
     }
 
-    const result = await response.json()
+    const rawResult = await response.json()
+    const result = extractApiData<any>(rawResult, '质控评估失败')
 
     // 调试：打印完整响应结构
     console.log('质控API响应结构:', result)
     console.log('performance_metrics:', result.performance_metrics)
-    console.log('data.performance_metrics:', result.data?.performance_metrics)
+    console.log('data.performance_metrics:', result.performance_metrics)
 
     // 保存完整的质控结果（包括性能指标）
-    // 兼容两种响应格式：直接返回 或 嵌套在 data 中
-    qcAnalysisResult.value = result.data || result
+    qcAnalysisResult.value = result
     currentQCDocument.value = document
 
     // 更新文档的质控状态
-    const qcScore = (result.data?.evaluation_summary?.compliance_rate || result.evaluation_summary?.compliance_rate) || 0
+    const qcScore = result.evaluation_summary?.compliance_rate || 0
     const qcStatus = qcScore >= 90 ? 'passed' : qcScore >= 70 ? 'warning' : 'failed'
 
     const updatedDocument: DocumentItem = {

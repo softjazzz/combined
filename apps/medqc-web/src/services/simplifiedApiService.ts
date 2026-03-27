@@ -12,6 +12,12 @@ import type {
   LoginResponse,
   User
 } from '@/types'
+import {
+  clearAuthTokens,
+  getAccessToken,
+  setAccessToken,
+  setRefreshToken as writeRefreshToken,
+} from '@/utils/auth-token'
 
 // API基础配置
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
@@ -28,18 +34,20 @@ const apiClient: AxiosInstance = axios.create({
 
 // Token管理
 class TokenManager {
-  private static readonly TOKEN_KEY = 'medqc_access_token'
-
   static getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY)
+    return getAccessToken()
   }
 
   static setToken(token: string): void {
-    localStorage.setItem(this.TOKEN_KEY, token)
+    setAccessToken(token)
+  }
+
+  static setRefreshToken(token: string): void {
+    writeRefreshToken(token)
   }
 
   static clearTokens(): void {
-    localStorage.removeItem(this.TOKEN_KEY)
+    clearAuthTokens()
   }
 
   static isTokenExpired(token: string): boolean {
@@ -122,6 +130,9 @@ export class SimplifiedApiService {
       // 保存token
       if (response.data.access_token) {
         TokenManager.setToken(response.data.access_token)
+      }
+      if (response.data.refresh_token) {
+        TokenManager.setRefreshToken(response.data.refresh_token)
       }
 
       return {
@@ -296,5 +307,3 @@ export class SimplifiedApiService {
 
 // 导出默认实例
 export default SimplifiedApiService
-
-

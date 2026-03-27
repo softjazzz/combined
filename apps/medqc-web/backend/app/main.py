@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
@@ -8,8 +8,10 @@ import logging
 from fastapi.middleware.cors import CORSMiddleware
 from .core.settings import get_settings
 from .core.logging import configure_logging, request_logger_middleware
+from .core.otel import configure_otel
 from .core.middleware_errors import UnifiedErrorMiddleware
 from .core.middleware_api_version import APIVersionMiddleware
+from .core.access_control import enforce_default_auth
 
 logger = logging.getLogger(__name__)
 from .routers import system as system_router
@@ -54,9 +56,6 @@ from .routers import notifications as notifications_router
 from .routers import settlement as settlement_router
 from .routers import scoring_config as scoring_config_router
 from .routers import sync as sync_router
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -106,6 +105,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        dependencies=[Depends(enforce_default_auth)],
     )
 
     # CORS
@@ -134,6 +134,18 @@ def create_app() -> FastAPI:
     app.middleware("http")(request_logger_middleware)
     # Unified error shape
     app.add_middleware(UnifiedErrorMiddleware)
+
+    @app.middleware("http")
+    async def trace_header_writeback_middleware(request: Request, call_next):
+        """确保最终响应头中的 X-Trace-ID 与请求 trace_id 保持一致。"""
+        response = await call_next(request)
+        trace_id = getattr(request.state, "trace_id", None)
+        if trace_id:
+            response.headers["X-Trace-ID"] = str(trace_id)
+        return response
+
+    # P2-OBS-01: optional OTel bootstrap (fail-open, no startup blocking).
+    configure_otel(app)
 
     # Global exception handlers
     @app.exception_handler(HTTPException)
@@ -297,6 +309,14 @@ def create_app() -> FastAPI:
     async def startup_event():
         """应用启动时初始化"""
         logger.info("🚀 应用启动中...")
+        strict_startup_checks = (
+            settings.ENV.lower() == "production"
+            or os.getenv("STRICT_STARTUP_CHECKS", "false").lower() in {"1", "true", "yes"}
+        )
+
+        # P0-SEC-05: production must not boot with built-in demo users.
+        from .storage.memory import assert_no_default_demo_users_in_production
+        assert_no_default_demo_users_in_production(settings.ENV)
 
         # 前置校验 DATA_SOURCE（ADR-2026-03-16：启动即失败）
         from .database.repository import validate_data_source
@@ -306,9 +326,17 @@ def create_app() -> FastAPI:
             # 初始化 CDM 数据库
             from .database import init_db
             init_db()
+            # 预热可持久化后台任务服务，启动时恢复未完成任务。
+            from .services.smart_upload_async_service import get_smart_upload_async_service
+            from .services.drg.batch_task_service import get_batch_task_manager
+
+            get_smart_upload_async_service()
+            get_batch_task_manager()
             logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")
         except Exception as exc:
             logger.error(f"❌ 启动初始化失败: {exc}")
+            if strict_startup_checks:
+                raise
 
     return app
 

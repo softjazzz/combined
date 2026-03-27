@@ -14,6 +14,7 @@ ETL 同步服务 — 从远端 PostgreSQL (DHC) 拉取数据写入本地 Postgre
 import os
 import json
 import logging
+import re
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
@@ -27,6 +28,9 @@ from sqlalchemy import text
 from ..database.connection import engine
 
 logger = logging.getLogger(__name__)
+
+_SYNC_LOCK_KEY = int(os.getenv("PG_SYNC_LOCK_KEY", "2026032601"))
+_runtime_remote_password: str = ""
 
 
 # ==================== 同步状态管理 ====================
@@ -59,9 +63,112 @@ class SyncState:
 _sync_state = SyncState()
 
 
+def _ensure_sync_job_state_table(session: Session):
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS sync_job_state (
+                job_name VARCHAR(64) PRIMARY KEY,
+                is_running BOOLEAN NOT NULL DEFAULT FALSE,
+                last_sync_time VARCHAR(32) NULL,
+                last_sync_status VARCHAR(32) NOT NULL DEFAULT 'never',
+                total_records_synced INTEGER NOT NULL DEFAULT 0,
+                logs_json TEXT NULL,
+                remote_connected BOOLEAN NOT NULL DEFAULT FALSE,
+                local_connected BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+
+def _upsert_sync_job_state(state: SyncState):
+    if engine is None:
+        return
+    payload = asdict(state)
+    with Session(engine) as session:
+        _ensure_sync_job_state_table(session)
+        session.execute(
+            text(
+                """
+                INSERT INTO sync_job_state (
+                    job_name, is_running, last_sync_time, last_sync_status,
+                    total_records_synced, logs_json, remote_connected, local_connected, updated_at
+                )
+                VALUES (
+                    'pg_sync', :is_running, :last_sync_time, :last_sync_status,
+                    :total_records_synced, :logs_json, :remote_connected, :local_connected, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (job_name)
+                DO UPDATE SET
+                    is_running = EXCLUDED.is_running,
+                    last_sync_time = EXCLUDED.last_sync_time,
+                    last_sync_status = EXCLUDED.last_sync_status,
+                    total_records_synced = EXCLUDED.total_records_synced,
+                    logs_json = EXCLUDED.logs_json,
+                    remote_connected = EXCLUDED.remote_connected,
+                    local_connected = EXCLUDED.local_connected,
+                    updated_at = CURRENT_TIMESTAMP
+                """
+            ),
+            {
+                "is_running": bool(payload.get("is_running")),
+                "last_sync_time": str(payload.get("last_sync_time") or ""),
+                "last_sync_status": payload.get("last_sync_status") or "never",
+                "total_records_synced": int(payload.get("total_records_synced") or 0),
+                "logs_json": json.dumps(payload.get("logs") or [], ensure_ascii=False),
+                "remote_connected": bool(payload.get("remote_connected")),
+                "local_connected": bool(payload.get("local_connected")),
+            },
+        )
+        session.commit()
+
+
 def get_sync_state() -> Dict:
-    """获取当前同步状态"""
-    return asdict(_sync_state)
+    """获取当前同步状态（优先读取数据库状态，回退内存）"""
+    if engine is None:
+        return asdict(_sync_state)
+    try:
+        with Session(engine) as session:
+            _ensure_sync_job_state_table(session)
+            row = session.execute(
+                text(
+                    """
+                    SELECT
+                        is_running, last_sync_time, last_sync_status, total_records_synced,
+                        logs_json, remote_connected, local_connected
+                    FROM sync_job_state
+                    WHERE job_name = 'pg_sync'
+                    """
+                )
+            ).mappings().first()
+            if not row:
+                _upsert_sync_job_state(_sync_state)
+                return asdict(_sync_state)
+            logs = row.get("logs_json") or []
+            last_sync_time = row.get("last_sync_time")
+            if hasattr(last_sync_time, "strftime"):
+                last_sync_time = last_sync_time.strftime("%Y-%m-%d %H:%M:%S")
+            elif last_sync_time is not None:
+                last_sync_time = str(last_sync_time)
+            if isinstance(logs, str):
+                try:
+                    logs = json.loads(logs)
+                except Exception:
+                    logs = []
+            return {
+                "is_running": bool(row.get("is_running")),
+                "last_sync_time": last_sync_time,
+                "last_sync_status": row.get("last_sync_status") or "never",
+                "total_records_synced": int(row.get("total_records_synced") or 0),
+                "logs": logs if isinstance(logs, list) else [],
+                "remote_connected": bool(row.get("remote_connected")),
+                "local_connected": bool(row.get("local_connected")),
+            }
+    except Exception as exc:
+        logger.warning("读取 sync_job_state 失败，回退内存状态: %s", exc)
+        return asdict(_sync_state)
 
 
 # ==================== 配置文件持久化 ====================
@@ -74,19 +181,38 @@ _DEFAULT_CONFIG = {
     "remote_port": "5432",
     "remote_database": "dhc-app",
     "remote_username": "Baidu",
-    "remote_password": "",
+    "remote_password_ref": "env:REMOTE_DB_PASSWORD",
 }
 
 
+def _resolve_password_from_ref(ref: str) -> str:
+    if not ref:
+        return ""
+    env_key = ref
+    if ref.startswith("env:"):
+        env_key = ref.split(":", 1)[1].strip()
+    return os.getenv(env_key, "")
+
+
 def load_db_config() -> Dict:
-    """从 JSON 配置文件读取数据库配置（优先），回退到 .env"""
+    """读取数据库配置（配置文件仅保存非敏感字段；口令通过环境变量/运行时注入）"""
+    global _runtime_remote_password
+    cfg = dict(_DEFAULT_CONFIG)
     if _CONFIG_FILE.exists():
         try:
             with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
-                return {**_DEFAULT_CONFIG, **json.load(f)}
+                raw = json.load(f)
+                if isinstance(raw, dict):
+                    # 兼容旧格式（含 remote_password），读取但不再持久化
+                    legacy_password = str(raw.get("remote_password") or "")
+                    if legacy_password and not _runtime_remote_password:
+                        _runtime_remote_password = legacy_password
+                    raw.pop("remote_password", None)
+                    cfg.update(raw)
         except Exception:
             pass
-    # 回退：从 .env 的 REMOTE_DB_URL 解析
+
+    # 回退：从 .env 的 REMOTE_DB_URL 解析（用于 host/user/db）
     env_url = os.getenv("REMOTE_DB_URL", "")
     if env_url:
         try:
@@ -96,24 +222,35 @@ def load_db_config() -> Dict:
             username, password = cred.rsplit(":", 1)
             hostport, database = hostdb.split("/", 1)
             host, port = hostport.split(":", 1) if ":" in hostport else (hostport, "5432")
-            return {
+            cfg.update({
                 "remote_host": host,
                 "remote_port": port,
                 "remote_database": database,
                 "remote_username": username,
-                "remote_password": password,
-            }
+            })
+            if password and not _runtime_remote_password:
+                _runtime_remote_password = password
         except Exception:
             pass
-    return dict(_DEFAULT_CONFIG)
+
+    if not cfg.get("remote_password_ref"):
+        cfg["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
+
+    cfg["remote_password"] = _runtime_remote_password or _resolve_password_from_ref(str(cfg.get("remote_password_ref", "")))
+    return cfg
 
 
-def save_db_config(config: Dict) -> Dict:
-    """保存数据库配置到 JSON 文件"""
+def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict:
+    """保存数据库配置到 JSON 文件（不持久化明文密码）"""
+    global _runtime_remote_password
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    # 只保存白名单字段
-    safe_keys = {"remote_host", "remote_port", "remote_database", "remote_username", "remote_password"}
+    if runtime_password is not None and str(runtime_password).strip():
+        _runtime_remote_password = str(runtime_password).strip()
+    # 只保存白名单字段（不包含 remote_password）
+    safe_keys = {"remote_host", "remote_port", "remote_database", "remote_username", "remote_password_ref"}
     to_save = {k: v for k, v in config.items() if k in safe_keys}
+    if not to_save.get("remote_password_ref"):
+        to_save["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
     with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(to_save, f, indent=2, ensure_ascii=False)
     return to_save
@@ -129,7 +266,7 @@ def get_remote_db_url() -> str:
     db = cfg.get("remote_database", "")
     user = cfg.get("remote_username", "")
     pwd = cfg.get("remote_password", "")
-    if not host or not user:
+    if not host or not user or not pwd:
         return os.getenv("REMOTE_DB_URL", "")
     return f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
 
@@ -159,6 +296,7 @@ def test_remote_connection() -> Dict:
         cursor.close()
         conn.close()
         _sync_state.remote_connected = True
+        _upsert_sync_job_state(_sync_state)
         return {
             "connected": True,
             "version": version[:80],
@@ -167,6 +305,7 @@ def test_remote_connection() -> Dict:
         }
     except Exception as e:
         _sync_state.remote_connected = False
+        _upsert_sync_job_state(_sync_state)
         return {
             "connected": False,
             "error": str(e)[:200],
@@ -199,6 +338,7 @@ def test_local_connection() -> Dict:
                 except Exception:
                     tables_info[table_name] = 0
         _sync_state.local_connected = True
+        _upsert_sync_job_state(_sync_state)
         return {
             "connected": True,
             "version": version[:80] if version else "",
@@ -208,6 +348,7 @@ def test_local_connection() -> Dict:
         }
     except Exception as e:
         _sync_state.local_connected = False
+        _upsert_sync_job_state(_sync_state)
         return {
             "connected": False,
             "error": str(e)[:200],
@@ -469,18 +610,23 @@ def call_stored_procedure(remote_url: str, procedure: str, date_str: str, param_
 
 def upsert_to_local(table_name: str, records: List[Dict], key_fields: List[str]) -> int:
     """
-    将数据写入本地 PG（UPSERT 模式 — 有则更新，无则插入）
-    
-    采用简单策略：先按主键删除已存在的记录，再批量插入
+    将数据写入本地 PG（原子 UPSERT）
     """
     if not records:
         return 0
 
+    def _safe_identifier(name: str) -> str:
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
+            raise ValueError(f"非法标识符: {name}")
+        return name
+
+    table_ident = _safe_identifier(table_name)
+
     with Session(engine) as session:
         # 获取表中实际存在的列名
         result = session.execute(text(
-            f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}'"
-        ))
+            "SELECT column_name FROM information_schema.columns WHERE table_name = :table_name"
+        ), {"table_name": table_name})
         existing_columns = {row[0] for row in result}
 
         inserted = 0
@@ -497,22 +643,30 @@ def upsert_to_local(table_name: str, records: List[Dict], key_fields: List[str])
 
             # 构建 UPSERT SQL
             columns = list(filtered.keys())
-            values = list(filtered.values())
             placeholders = ", ".join([f":{c}" for c in columns])
-            col_list = ", ".join(columns)
+            col_list = ", ".join([_safe_identifier(c) for c in columns])
+            conflict_keys = [k for k in key_fields if k in filtered]
 
-            # 先尝试删除（按主键），再插入
-            if all(kf in filtered for kf in key_fields):
-                where_clause = " AND ".join([f"{kf} = :{kf}" for kf in key_fields])
-                session.execute(
-                    text(f"DELETE FROM {table_name} WHERE {where_clause}"),
-                    {kf: filtered[kf] for kf in key_fields}
-                )
+            if conflict_keys:
+                conflict_clause = ", ".join([_safe_identifier(k) for k in conflict_keys])
+                update_cols = [c for c in columns if c not in conflict_keys]
+                if update_cols:
+                    update_set = ", ".join(
+                        [f"{_safe_identifier(c)} = EXCLUDED.{_safe_identifier(c)}" for c in update_cols]
+                    )
+                    sql = (
+                        f"INSERT INTO {table_ident} ({col_list}) VALUES ({placeholders}) "
+                        f"ON CONFLICT ({conflict_clause}) DO UPDATE SET {update_set}"
+                    )
+                else:
+                    sql = (
+                        f"INSERT INTO {table_ident} ({col_list}) VALUES ({placeholders}) "
+                        f"ON CONFLICT ({conflict_clause}) DO NOTHING"
+                    )
+            else:
+                sql = f"INSERT INTO {table_ident} ({col_list}) VALUES ({placeholders})"
 
-            session.execute(
-                text(f"INSERT INTO {table_name} ({col_list}) VALUES ({placeholders})"),
-                filtered
-            )
+            session.execute(text(sql), filtered)
             inserted += 1
 
         session.commit()
@@ -532,79 +686,102 @@ def run_sync(sync_date: str = None, tables: List[str] = None) -> Dict:
     Returns:
         同步结果
     """
-    if _sync_state.is_running:
-        return {"success": False, "error": "同步正在进行中，请稍后再试"}
+    lock_conn = None
+    lock_acquired = False
+    try:
+        if engine is not None:
+            lock_conn = engine.connect()
+            lock_acquired = bool(
+                lock_conn.execute(
+                    text("SELECT pg_try_advisory_lock(:lock_key)"),
+                    {"lock_key": _SYNC_LOCK_KEY},
+                ).scalar()
+            )
+            if not lock_acquired:
+                return {"success": False, "error": "同步正在进行中，请稍后再试"}
+        elif _sync_state.is_running:
+            return {"success": False, "error": "同步正在进行中，请稍后再试"}
 
-    _sync_state.is_running = True
-    _sync_state.logs = []
+        _sync_state.is_running = True
+        _sync_state.logs = []
+        _upsert_sync_job_state(_sync_state)
 
-    if not sync_date:
-        sync_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        if not sync_date:
+            sync_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-    remote_url = get_remote_db_url()
-    if not remote_url:
-        _sync_state.is_running = False
-        return {"success": False, "error": "REMOTE_DB_URL 未配置"}
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            return {"success": False, "error": "REMOTE_DB_URL 未配置"}
 
-    # 确定要同步的表
-    target_tables = SYNC_TABLES
-    if tables:
-        target_tables = [t for t in SYNC_TABLES if t["name"] in tables]
+        # 确定要同步的表
+        target_tables = SYNC_TABLES
+        if tables:
+            target_tables = [t for t in SYNC_TABLES if t["name"] in tables]
 
-    total_synced = 0
-    results = []
-    has_error = False
+        total_synced = 0
+        results = []
+        has_error = False
 
-    for table_config in target_tables:
-        log = SyncLog(
-            table_name=table_config["name"],
-            stored_procedure=table_config["procedure"],
-            started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        for table_config in target_tables:
+            log = SyncLog(
+                table_name=table_config["name"],
+                stored_procedure=table_config["procedure"],
+                started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            log.status = "running"
+
+            try:
+                # 1. 调远端存储过程
+                logger.info("同步 %s (%s)...", table_config["label"], table_config["procedure"])
+                rows = call_stored_procedure(
+                    remote_url,
+                    table_config["procedure"],
+                    sync_date,
+                    table_config["params"],
+                )
+
+                # 2. 写入本地 PG
+                count = upsert_to_local(
+                    table_config["name"],
+                    rows,
+                    table_config["key_fields"],
+                )
+
+                log.record_count = count
+                log.status = "success"
+                total_synced += count
+                logger.info("  ✅ %s: %s 条", table_config["label"], count)
+
+            except Exception as e:
+                log.status = "failed"
+                log.error_msg = str(e)[:200]
+                has_error = True
+                logger.error("  ❌ %s: %s", table_config["label"], e)
+
+            log.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            results.append(asdict(log))
+
+        # 更新全局状态
+        _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _sync_state.last_sync_status = (
+            "failed" if has_error and total_synced == 0 else "partial" if has_error else "success"
         )
-        log.status = "running"
+        _sync_state.total_records_synced = total_synced
+        _sync_state.logs = results
 
-        try:
-            # 1. 调远端存储过程
-            logger.info(f"同步 {table_config['label']} ({table_config['procedure']})...")
-            rows = call_stored_procedure(
-                remote_url,
-                table_config["procedure"],
-                sync_date,
-                table_config["params"],
-            )
-
-            # 2. 写入本地 PG
-            count = upsert_to_local(
-                table_config["name"],
-                rows,
-                table_config["key_fields"],
-            )
-
-            log.record_count = count
-            log.status = "success"
-            total_synced += count
-            logger.info(f"  ✅ {table_config['label']}: {count} 条")
-
-        except Exception as e:
-            log.status = "failed"
-            log.error_msg = str(e)[:200]
-            has_error = True
-            logger.error(f"  ❌ {table_config['label']}: {e}")
-
-        log.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        results.append(asdict(log))
-
-    # 更新全局状态
-    _sync_state.is_running = False
-    _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    _sync_state.last_sync_status = "failed" if has_error and total_synced == 0 else \
-                                    "partial" if has_error else "success"
-    _sync_state.total_records_synced = total_synced
-    _sync_state.logs = results
-
-    return {
-        "success": not has_error,
-        "sync_date": sync_date,
-        "total_records": total_synced,
-        "tables": results,
-    }
+        return {
+            "success": not has_error,
+            "sync_date": sync_date,
+            "total_records": total_synced,
+            "tables": results,
+        }
+    finally:
+        _sync_state.is_running = False
+        _upsert_sync_job_state(_sync_state)
+        if lock_conn is not None and lock_acquired:
+            try:
+                lock_conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": _SYNC_LOCK_KEY})
+            except Exception as exc:
+                logger.warning("释放同步锁失败: %s", exc)
+        if lock_conn is not None:
+            lock_conn.close()

@@ -61,28 +61,31 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
-  title?: string
-  subtitle?: string
-  versionLabel: string
-  searchKeyword: string
-  loading: boolean
-  hasPendingChanges: boolean
-  readonly: boolean
-  searchPlaceholder?: string
-  createButtonText?: string
-  importButtonText?: string
-  preflightButtonText?: string
-  publishButtonText?: string
-}>(), {
-  title: '编码质控规则管理',
-  subtitle: '',
-  searchPlaceholder: '搜索规则名/编码/条件关键词',
-  createButtonText: '新建规则',
-  importButtonText: '导入模板',
-  preflightButtonText: '运行预检',
-  publishButtonText: '发布变更',
-})
+withDefaults(
+  defineProps<{
+    title?: string
+    subtitle?: string
+    versionLabel: string
+    searchKeyword: string
+    loading: boolean
+    hasPendingChanges: boolean
+    readonly: boolean
+    searchPlaceholder?: string
+    createButtonText?: string
+    importButtonText?: string
+    preflightButtonText?: string
+    publishButtonText?: string
+  }>(),
+  {
+    title: '编码质控规则管理',
+    subtitle: '',
+    searchPlaceholder: '搜索规则名/编码/条件关键词',
+    createButtonText: '新建规则',
+    importButtonText: '导入模板',
+    preflightButtonText: '运行预检',
+    publishButtonText: '发布变更',
+  },
+)
 
 const emit = defineEmits<{
   'update:searchKeyword': [value: string]

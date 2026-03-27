@@ -30,8 +30,35 @@ class TestSystemAPI:
         data = response.json()
         assert "system" in data["data"]
         assert "dependencies" in data["data"]
+        assert "runtime" in data["data"]
         assert "qc" in data["data"]
+        assert "sync" in data["data"]
         assert "timestamp" in data["data"]
+
+    def test_metrics_prometheus(self, client):
+        """测试 prometheus metrics 文本端点"""
+        response = client.get("/api/v1/metrics/prometheus")
+
+        assert response.status_code == 200
+        content_type = response.headers.get("content-type", "")
+        assert "text/plain" in content_type
+        body = response.text
+        assert "medqc_runtime_requests_total" in body
+        assert "medqc_runtime_request_latency_p95_ms" in body
+        assert "medqc_dependency_supabase_up" in body
+        assert "medqc_sync_failure_rate" in body
+
+    def test_readiness_endpoint(self, client):
+        """测试 readiness 端点"""
+        response = client.get("/api/v1/ready")
+
+        assert response.status_code in [200, 503]
+        data = response.json()
+        assert data.get("success") is True
+        assert "data" in data
+        assert "ready" in data["data"]
+        assert "dependencies" in data["data"]
+        assert "runtime" in data["data"]
 
     def test_cors_headers(self, client):
         """测试 CORS 头部"""
@@ -81,6 +108,7 @@ class TestSystemAPI:
 
     @pytest.mark.parametrize("endpoint", [
         "/api/v1/health",
+        "/api/v1/ready",
         "/api/v1/metrics",
     ])
     def test_system_endpoints_accessible(self, client, endpoint):

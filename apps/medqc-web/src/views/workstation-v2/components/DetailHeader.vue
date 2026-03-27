@@ -1,5 +1,7 @@
 <template>
-  <header class="grid flex-shrink-0 grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 border-b border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(248,250,252,0.82))] px-4 py-1.5 backdrop-blur-xl">
+  <header
+    class="grid flex-shrink-0 grid-cols-[auto,minmax(0,1fr),auto] items-center gap-3 border-b border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(248,250,252,0.82))] px-4 py-1.5 backdrop-blur-xl"
+  >
     <div class="flex items-center pr-1">
       <button
         class="group flex h-9 items-center gap-2 rounded-full border border-slate-200/75 bg-white/72 px-3.5 text-[13px] font-semibold text-slate-600 shadow-[0_2px_8px_rgba(15,23,42,0.03)] transition-all hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_6px_14px_rgba(37,99,235,0.08)]"
@@ -16,7 +18,9 @@
         class="flex min-w-0 items-center px-2 py-1"
       >
         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-          <h1 class="m-0 truncate text-[19px] font-black leading-none tracking-[-0.04em] text-slate-950">
+          <h1
+            class="m-0 truncate text-[19px] font-black leading-none tracking-[-0.04em] text-slate-950"
+          >
             {{ record.name }}
           </h1>
           <span
@@ -46,22 +50,32 @@
           <span class="h-1.5 w-1.5 rounded-full bg-slate-300" />
           <span class="font-mono text-[14px] font-bold text-slate-600">{{ record.id }}</span>
           <span class="h-1.5 w-1.5 rounded-full bg-slate-300" />
-          <span class="truncate text-[14px] font-semibold text-slate-500">{{ record.department }}</span>
+          <span class="truncate text-[14px] font-semibold text-slate-500">{{
+            record.department
+          }}</span>
           <template v-if="record.doctor">
             <span class="h-1.5 w-1.5 rounded-full bg-slate-300" />
-            <span class="truncate text-[14px] font-semibold text-slate-500">{{ record.doctor }}</span>
+            <span class="truncate text-[14px] font-semibold text-slate-500">{{
+              record.doctor
+            }}</span>
           </template>
         </div>
       </div>
     </div>
 
-    <div class="flex items-center justify-end gap-1.5 rounded-full border border-slate-200/75 bg-white/72 px-1.5 py-1 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-      <div class="rounded-full border border-slate-200/80 bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-slate-400">
+    <div
+      class="flex items-center justify-end gap-1.5 rounded-full border border-slate-200/75 bg-white/72 px-1.5 py-1 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+    >
+      <div
+        class="rounded-full border border-slate-200/80 bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-slate-400"
+      >
         &#x5F53;&#x524D;&#x75C5;&#x6848;
         <span class="ml-1 font-mono font-bold text-slate-700">{{ currentIndex + 1 }} / {{ totalCount }}</span>
       </div>
 
-      <div class="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/92 px-1.5 py-1">
+      <div
+        class="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/92 px-1.5 py-1"
+      >
         <a-tooltip :title="'\u4E0A\u4E00\u4F8B'">
           <button
             :disabled="currentIndex <= 0"
@@ -69,7 +83,7 @@
               'flex h-[30px] w-[30px] items-center justify-center rounded-full text-sm transition-all',
               currentIndex <= 0
                 ? 'cursor-not-allowed text-slate-300'
-                : 'text-slate-500 hover:bg-blue-50/80 hover:text-blue-700'
+                : 'text-slate-500 hover:bg-blue-50/80 hover:text-blue-700',
             ]"
             @click="$emit('prev')"
           >
@@ -83,7 +97,7 @@
               'flex h-[30px] w-[30px] items-center justify-center rounded-full text-sm transition-all',
               currentIndex >= totalCount - 1
                 ? 'cursor-not-allowed text-slate-300'
-                : 'text-slate-500 hover:bg-blue-50/80 hover:text-blue-700'
+                : 'text-slate-500 hover:bg-blue-50/80 hover:text-blue-700',
             ]"
             @click="$emit('next')"
           >

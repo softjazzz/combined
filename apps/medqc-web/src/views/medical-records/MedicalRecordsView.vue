@@ -455,6 +455,7 @@ import {
 } from '@ant-design/icons-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
+import { getAccessToken } from '@/utils/auth-token'
 // 添加API配置 - 支持外部IP访问
 const getApiBaseUrl = () => {
   // 开发环境使用Vite代理，生产环境使用完整URL
@@ -691,7 +692,7 @@ const loadRecords = async () => {
 
   try {
     // 简化认证逻辑 - 直接获取token，不依赖store状态
-    const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || localStorage.getItem('access_token')
+    const token = getAccessToken()
     console.log('🔑 Token检查:', token ? `找到token: ${token.substring(0, 20)}...` : '未找到token')
 
     if (!token) {
@@ -840,7 +841,7 @@ const loadRecords = async () => {
 const loadStats = async () => {
   try {
     // 获取认证token
-    const token = localStorage.getItem('token')
+    const token = getAccessToken()
     if (!token) {
       return // 如果没有token，使用默认统计数据
     }
@@ -936,7 +937,7 @@ const handleCopy = async (id: string) => {
 const handleDelete = async (id: string) => {
   try {
     // 获取认证token - 支持多种token键名
-    const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || localStorage.getItem('access_token')
+    const token = getAccessToken()
     if (!token) {
       message.error('请先登录')
       return

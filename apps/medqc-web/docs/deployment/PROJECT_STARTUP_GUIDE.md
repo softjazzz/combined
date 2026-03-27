@@ -2,7 +2,7 @@
 
 **更新时间**: 2024-12-24  
 **项目版本**: v2.0.0 (Python增强版)  
-**适用环境**: 开发环境 & 生产环境
+**适用环境**: 开发环境（生产启动请见 `P2_RELEASE_RUNBOOK.md`）
 
 ---
 
@@ -153,16 +153,16 @@ pnpm install
 npm install
 ```
 
-### **2. 启动前端开发服务器**
+### **2. 启动前端开发服务器（仅开发使用）**
 ```bash
 # 使用pnpm (推荐)
-pnpm dev
+pnpm dev  # 仅开发使用
 
 # 或使用npm
-npm run dev
+npm run dev  # 仅开发使用
 
 # 或使用现有脚本
-./start_frontend.sh
+./start_frontend.sh  # 仅开发使用
 ```
 
 ### **3. 验证前端服务**
@@ -175,7 +175,7 @@ npm run dev
 
 ## 🔧 **完整启动流程**
 
-### **开发环境一键启动**
+### **开发环境一键启动（仅开发使用）**
 ```bash
 # 1. 克隆项目并进入目录
 cd examples/002medqc/MedQC0817
@@ -193,9 +193,9 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 
-# 5. 启动前端 (新终端)
+# 5. 启动前端 (新终端，仅开发使用)
 cd ..
-pnpm dev
+pnpm dev  # 仅开发使用
 ```
 
 ### **使用Docker启动** (推荐生产环境)
@@ -357,6 +357,11 @@ tail -f backend/logs/app.log
 - 配置 **Redis** 缓存提升性能
 - 启用 **HTTPS** 和安全配置
 - 设置 **监控和告警** 系统
+
+### **生产启动口径**
+- 前端生产不使用 `pnpm dev` / `npm run dev` / `dev:medqc`
+- 生产发布请按 [P2_RELEASE_RUNBOOK.md](P2_RELEASE_RUNBOOK.md) 和 `scripts/deploy_medqc_release.sh` 执行
+- 生产运行由构建产物和 `run_*_prod.sh` / systemd 服务托管
 
 ### **测试验证**
 ```bash

@@ -66,7 +66,11 @@
         :document-type-options="documentTypeOptions"
         :document-type-set="query.documentTypeSet"
         document-type-placeholder="病历文书类型"
-        :pagination="{ current: query.current, pageSize: query.pageSize, total: filteredList.length }"
+        :pagination="{
+          current: query.current,
+          pageSize: query.pageSize,
+          total: filteredList.length,
+        }"
         :readonly="readonly"
         @select-rule="handleSelectRule"
         @update:view-mode="(v) => setQuery({ viewMode: v })"
@@ -127,7 +131,14 @@ import RulesCodingList from './coding/RulesCodingList.vue'
 import RulesCodingDetailPanel from './coding/RulesCodingDetailPanel.vue'
 import RulesCodingPublishDrawer from './coding/RulesCodingPublishDrawer.vue'
 import RulesCodingChangeTimeline from './coding/RulesCodingChangeTimeline.vue'
-import type { RuleChangeLogItem, RuleDetail, RuleListItem, RuleRiskLevel, RuleStatus, RuleTypeValue } from './coding/types'
+import type {
+  RuleChangeLogItem,
+  RuleDetail,
+  RuleListItem,
+  RuleRiskLevel,
+  RuleStatus,
+  RuleTypeValue,
+} from './coding/types'
 
 interface FrontpageRuleApi {
   rule_id: string
@@ -149,7 +160,9 @@ const readonly = ref(false)
 const loading = ref(false)
 const dirty = ref(false)
 const publishing = ref(false)
-const versionLabel = ref(`frontpage-rules v${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}`)
+const versionLabel = ref(
+  `frontpage-rules v${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}`,
+)
 
 const allRules = ref<FrontpageRuleListItem[]>([])
 const selectedRuleId = ref<string>()
@@ -159,7 +172,9 @@ const publishOpen = ref(false)
 const timelineCollapsed = ref(true)
 const timelineItems = ref<RuleChangeLogItem[]>([])
 const savedViews = ref<Array<{ id: string; name: string }>>([])
-const ownerOptions = ref<Array<{ label: string; value: string }>>([{ label: '系统', value: '系统' }])
+const ownerOptions = ref<Array<{ label: string; value: string }>>([
+  { label: '系统', value: '系统' },
+])
 const samplePreview = ref([
   { caseId: 'FP-001', matched: true, reason: '首页字段命中' },
   { caseId: 'FP-002', matched: false, reason: '字段值为空' },
@@ -248,7 +263,8 @@ function inferDocumentTypes(item: FrontpageRuleApi): string[] {
     .filter(Boolean)
   if (fromPayload.length > 0) return normalizeDocumentTypes(fromPayload)
 
-  const token = `${item.rule_name || ''} ${item.field_name || ''} ${item.description || ''}`.toLowerCase()
+  const token =
+    `${item.rule_name || ''} ${item.field_name || ''} ${item.description || ''}`.toLowerCase()
   const matched: string[] = []
   if (/(入院|admission|主诉|现病史|既往史|体格检查)/.test(token)) matched.push('admission_record')
   if (/(首次病程|first_course|病程)/.test(token)) matched.push('first_course_record')
@@ -282,13 +298,20 @@ const filteredList = computed(() => {
   const q = query.value
   if (q.searchKeyword.trim()) {
     const keyword = q.searchKeyword.trim().toLowerCase()
-    items = items.filter((item) => item.id.toLowerCase().includes(keyword) || item.name.toLowerCase().includes(keyword) || item.conditionSummary.toLowerCase().includes(keyword))
+    items = items.filter(
+      (item) =>
+        item.id.toLowerCase().includes(keyword) ||
+        item.name.toLowerCase().includes(keyword) ||
+        item.conditionSummary.toLowerCase().includes(keyword),
+    )
   }
   if (q.ruleType !== 'all') items = items.filter((item) => item.ruleType === q.ruleType)
   if (q.statusSet.length > 0) items = items.filter((item) => q.statusSet.includes(item.status))
   if (q.riskSet.length > 0) items = items.filter((item) => q.riskSet.includes(item.riskLevel))
   if (q.documentTypeSet.length > 0) {
-    items = items.filter((item) => item.documentTypes.some((doc) => q.documentTypeSet.includes(doc)))
+    items = items.filter((item) =>
+      item.documentTypes.some((doc) => q.documentTypeSet.includes(doc)),
+    )
   }
   if (q.statusFilter !== 'all') items = items.filter((item) => item.status === q.statusFilter)
   return items
@@ -329,7 +352,9 @@ const metrics = computed(() => {
 })
 
 const estimatedImpactCount = computed(() => Math.min(9999, filteredList.value.length * 2))
-const riskNotes = computed(() => (metrics.value.highRiskRules > 0 ? ['存在高风险规则，建议发布前复核。'] : []))
+const riskNotes = computed(() =>
+  metrics.value.highRiskRules > 0 ? ['存在高风险规则，建议发布前复核。'] : [],
+)
 
 function handleMetricClick(payload: { key: 'total' | 'enabled' | 'hit7d' | 'risk' }) {
   if (payload.key === 'enabled') setQuery({ statusSet: ['published'], statusFilter: 'published' })
@@ -378,7 +403,12 @@ function handleRuleChange(payload: Partial<RuleDetail>) {
 function handleSaveDraft(payload: RuleDetail) {
   const idx = allRules.value.findIndex((item) => item.id === payload.id)
   if (idx >= 0) {
-    allRules.value[idx] = { ...allRules.value[idx], name: payload.name, status: 'draft', conditionSummary: payload.description || allRules.value[idx].conditionSummary }
+    allRules.value[idx] = {
+      ...allRules.value[idx],
+      name: payload.name,
+      status: 'draft',
+      conditionSummary: payload.description || allRules.value[idx].conditionSummary,
+    }
   }
   dirty.value = false
   timelineItems.value.unshift({
@@ -395,7 +425,12 @@ function handleSaveDraft(payload: RuleDetail) {
 function handleDuplicateRule(payload: { id: string }) {
   const source = allRules.value.find((item) => item.id === payload.id)
   if (!source) return
-  allRules.value.unshift({ ...source, id: `${source.id}-COPY`, name: `${source.name}（副本）`, status: 'draft' })
+  allRules.value.unshift({
+    ...source,
+    id: `${source.id}-COPY`,
+    name: `${source.name}（副本）`,
+    status: 'draft',
+  })
   dirty.value = true
   message.success('规则已复制')
 }

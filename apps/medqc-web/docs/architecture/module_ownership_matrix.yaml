@@ -1,0 +1,65 @@
+generated_at: "2026-03-26"
+modules:
+  auth:
+    owner_role: "Backend Security Owner"
+    paths:
+      - "apps/medqc-web/backend/app/routers/auth.py"
+      - "apps/medqc-web/backend/app/core/security.py"
+      - "apps/medqc-web/backend/app/schemas/auth.py"
+    allow_depends_on:
+      - "core.*"
+      - "storage.*"
+      - "services.auth.*"
+    deny_depends_on:
+      - "routers.drg*"
+      - "routers.medical_records*"
+      - "routers.sync*"
+
+  sync:
+    owner_role: "Backend Data Owner"
+    paths:
+      - "apps/medqc-web/backend/app/routers/sync.py"
+      - "apps/medqc-web/backend/app/services/etl_sync.py"
+      - "apps/medqc-web/backend/app/services/sync_*"
+    allow_depends_on:
+      - "core.*"
+      - "services.*"
+      - "database.*"
+    deny_depends_on:
+      - "routers.drg*"
+      - "routers.medical_records*"
+
+  drg:
+    owner_role: "Backend DRG Owner"
+    paths:
+      - "apps/medqc-web/backend/app/routers/drg*.py"
+      - "apps/medqc-web/backend/app/services/drg/**"
+    allow_depends_on:
+      - "core.*"
+      - "services.common.*"
+      - "database.*"
+    deny_depends_on:
+      - "routers.medical_records*"
+      - "routers.sync*"
+
+  records:
+    owner_role: "Backend EMR Owner"
+    paths:
+      - "apps/medqc-web/backend/app/routers/medical_records*.py"
+      - "apps/medqc-web/backend/app/services/medical_records/**"
+    allow_depends_on:
+      - "core.*"
+      - "services.common.*"
+      - "database.*"
+    deny_depends_on:
+      - "routers.drg*"
+      - "routers.sync*"
+
+governance:
+  required_reviews:
+    - "Backend Owner"
+    - "QA Owner (when contract changes)"
+  release_gate_must_pass:
+    - "auth_guard"
+    - "openapi_contract"
+    - "metrics_catalog"

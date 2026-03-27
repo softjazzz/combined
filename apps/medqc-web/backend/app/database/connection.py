@@ -103,11 +103,26 @@ def init_db():
 
     view_ok, view_fail = _create_views()
 
-    print(f"[OK] CDM database initialized (PostgreSQL): {DATABASE_URL}")
+    logger.info("[OK] CDM database initialized (PostgreSQL): %s", _mask_dsn(DATABASE_URL))
     if view_ok:
         print(f"  views OK: {', '.join(view_ok)}")
     if view_fail:
         print(f"  views SKIPPED: {', '.join(view_fail)}")
+
+
+def _mask_dsn(dsn: str) -> str:
+    if not dsn:
+        return ""
+    if "@" not in dsn:
+        return dsn
+    try:
+        prefix, suffix = dsn.rsplit("@", 1)
+        if ":" not in prefix:
+            return dsn
+        user_part, _ = prefix.rsplit(":", 1)
+        return f"{user_part}:***@{suffix}"
+    except Exception:
+        return "***"
 
 
 def _sync_missing_columns():

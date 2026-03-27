@@ -14,7 +14,9 @@
         :class="collapsed ? 'px-2' : 'px-6'"
       >
         <div class="flex items-center gap-3 overflow-hidden whitespace-nowrap">
-          <div class="w-10 h-10 rounded-xl bg-[#1890FF] flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 transition-all duration-300">
+          <div
+            class="w-10 h-10 rounded-xl bg-[#1890FF] flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 transition-all duration-300"
+          >
             <MedicineBoxOutlined class="text-white text-xl" />
           </div>
           <div
@@ -53,6 +55,18 @@
                 <DesktopOutlined />
               </template>
               <span>工作台首页</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/records/running">
+              <template #icon>
+                <FileSearchOutlined />
+              </template>
+              <span>运行病历</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/records/final">
+              <template #icon>
+                <SafetyCertificateOutlined />
+              </template>
+              <span>终末病历质控</span>
             </a-menu-item>
             <a-menu-item
               key="ws-stage-frontpage-generate"
@@ -154,6 +168,12 @@
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
+            <a-menu-item key="/workstation-v4/rules?tab=custom">
+              <template #icon>
+                <AppstoreOutlined />
+              </template>
+              <span>泸县33条规则</span>
+            </a-menu-item>
             <a-menu-item key="/workstation-v4/rules?tab=frontpage">
               <template #icon>
                 <FileSearchOutlined />
@@ -218,7 +238,9 @@
     <!-- 主内容区域 -->
     <a-layout>
       <!-- 顶部导航栏 -->
-      <a-layout-header class="header bg-white/90 backdrop-blur-sm sticky top-0 z-20 shadow-sm border-b border-slate-200/60 px-6 flex items-center justify-between h-16 transition-all duration-300">
+      <a-layout-header
+        class="header bg-white/90 backdrop-blur-sm sticky top-0 z-20 shadow-sm border-b border-slate-200/60 px-6 flex items-center justify-between h-16 transition-all duration-300"
+      >
         <div class="flex items-center">
           <a-button
             type="text"
@@ -272,7 +294,9 @@
                   <span class="text-xs text-blue-600 cursor-pointer">全部已读</span>
                 </div>
                 <div class="space-y-1">
-                  <div class="p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors flex gap-3 items-start">
+                  <div
+                    class="p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors flex gap-3 items-start"
+                  >
                     <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div>
                       <div class="text-sm text-slate-700 font-medium">
@@ -291,7 +315,9 @@
               :number-style="{ backgroundColor: '#ef4444', boxShadow: '0 0 0 1px #fff' }"
               class="cursor-pointer"
             >
-              <div class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors">
+              <div
+                class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+              >
                 <BellOutlined class="text-xl" />
               </div>
             </a-badge>
@@ -301,7 +327,9 @@
 
           <!-- 用户头像和菜单 -->
           <a-dropdown :trigger="['click']">
-            <div class="flex items-center cursor-pointer hover:bg-slate-100 p-1.5 pr-4 rounded-xl transition-all duration-200 group select-none">
+            <div
+              class="flex items-center cursor-pointer hover:bg-slate-100 p-1.5 pr-4 rounded-xl transition-all duration-200 group select-none"
+            >
               <a-avatar
                 :size="36"
                 class="mr-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
@@ -311,13 +339,21 @@
                 </template>
               </a-avatar>
               <div class="flex flex-col mr-1 hidden sm:flex shrink-0">
-                <span class="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors whitespace-nowrap">{{ roleLabel }}</span>
-                <span class="text-[10px] text-slate-400 font-medium tracking-wider leading-tight whitespace-nowrap">{{ authStore.user?.email || '' }}</span>
+                <span
+                  class="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors whitespace-nowrap"
+                >{{ roleLabel }}</span>
+                <span
+                  class="text-[10px] text-slate-400 font-medium tracking-wider leading-tight whitespace-nowrap"
+                >{{ authStore.user?.email || '' }}</span>
               </div>
-              <DownOutlined class="ml-2 text-xs text-slate-400 group-hover:text-slate-600 transition-colors shrink-0" />
+              <DownOutlined
+                class="ml-2 text-xs text-slate-400 group-hover:text-slate-600 transition-colors shrink-0"
+              />
             </div>
             <template #overlay>
-              <a-menu class="min-w-[180px] p-2 rounded-2xl border border-slate-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]">
+              <a-menu
+                class="min-w-[180px] p-2 rounded-2xl border border-slate-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]"
+              >
                 <div class="px-3 py-2 mb-1">
                   <div class="text-xs text-slate-400">
                     Signed in as
@@ -426,6 +462,8 @@ const currentPageTitle = computed(() => {
     '/workstation-v4/grouper': '医保分组器',
     '/workstation-v4/data': '数据管理',
     '/workstation-v4/rules': '质控规则管理',
+    '/workstation-v4/records/running': '运行病历',
+    '/workstation-v4/records/final': '终末病历质控',
     '/workstation-v4/system-config': '系统配置',
   }
   return titleMap[path] || '工作台'
@@ -472,7 +510,9 @@ const handleMenuSelect = async ({ key }: { key: string }) => {
     const [path, queryStr] = keyStr.split('?')
     const params = new URLSearchParams(queryStr)
     const query: Record<string, string> = {}
-    params.forEach((v, k) => { query[k] = v })
+    params.forEach((v, k) => {
+      query[k] = v
+    })
     await navigateTo(path, query)
   } else {
     await navigateTo(keyStr)
@@ -512,7 +552,7 @@ watch(
     }
     selectedKeys.value = [base]
   },
-  { immediate: true }
+  { immediate: true },
 )
 </script>
 
@@ -557,7 +597,7 @@ watch(
   left: 0;
   width: 3px;
   height: 70%;
-  background-color: #1890FF;
+  background-color: #1890ff;
   border-radius: 4px;
 }
 
@@ -614,7 +654,7 @@ watch(
   left: -4px;
   width: 3px;
   height: 60%;
-  background-color: #1890FF;
+  background-color: #1890ff;
   border-radius: 4px;
 }
 

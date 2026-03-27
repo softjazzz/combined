@@ -2,6 +2,8 @@
 
 > 🏥 Complete startup guide for Medical Quality Control System (MedQC) frontend and backend services
 
+> Note: Frontend commands in this document are for development only. Production startup is handled through `docs/deployment/P2_RELEASE_RUNBOOK.md` and `scripts/deploy_medqc_release.sh`.
+
 ## 📋 Table of Contents
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
@@ -24,13 +26,13 @@
 
 ## 🚀 Quick Start
 
-### One-Command Startup
+### Development Startup
 ```bash
 # Execute in project root
 cd /home/ubuntu/coding/health-qc-monorepo
 
-# Start frontend (port 3000)
-pnpm dev:medqc
+# Start frontend (port 3000, dev only)
+pnpm dev:medqc  # development only
 
 # Start backend (port 8001) - in new terminal
 cd apps/medqc-web/backend
@@ -47,8 +49,8 @@ pwsh ./start_dev_backend.ps1 -Port 8001
 # In project root
 cd /home/ubuntu/coding/health-qc-monorepo
 
-# Start medqc-web frontend
-pnpm dev:medqc
+# Start medqc-web frontend (dev only)
+pnpm dev:medqc  # development only
 ```
 
 #### Method 2: Direct startup
@@ -60,7 +62,7 @@ cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web
 pnpm install
 
 # Start development server
-pnpm dev --host 0.0.0.0 --port 3000
+pnpm dev --host 0.0.0.0 --port 3000  # development only
 ```
 
 #### Frontend Success Indicators
@@ -113,6 +115,7 @@ INFO:     Application startup complete.
 - Frontend API configuration points to port 8001
 - Using wrong port will break frontend-backend communication
 - On Windows, avoid running bare `uvicorn ... --reload`; use `start_dev_backend.ps1` first
+- Frontend production does not use `pnpm dev` or `pnpm dev:medqc`
 
 ## 🔍 Health Checks
 
@@ -224,7 +227,7 @@ pnpm install
 ### Frontend Restart
 ```bash
 # Ctrl+C to stop current service, then restart
-pnpm dev:medqc
+pnpm dev:medqc  # development only
 ```
 
 ### Backend Restart

@@ -102,6 +102,18 @@
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
+            <a-menu-item key="/dashboard/rules?tab=semantic">
+              <template #icon>
+                <BranchesOutlined />
+              </template>
+              <span>四川省质控规则</span>
+            </a-menu-item>
+            <a-menu-item key="/dashboard/rules?tab=custom">
+              <template #icon>
+                <SettingOutlined />
+              </template>
+              <span>泸县33条规则</span>
+            </a-menu-item>
             <a-menu-item key="/dashboard/rules?tab=frontpage">
               <template #icon>
                 <FileTextOutlined />

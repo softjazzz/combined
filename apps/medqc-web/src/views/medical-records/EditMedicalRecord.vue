@@ -481,6 +481,7 @@ import { PlusOutlined } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordService'
+import { getAccessToken } from '@/utils/auth-token'
 
 interface EditableDocument {
   id?: string
@@ -624,7 +625,7 @@ const loadRecordData = async () => { try {
     console.log('正在加载病历数据，ID:', recordId)
 
     // 获取认证token
-    const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || localStorage.getItem('access_token')
+    const token = getAccessToken()
     if (!token) {
       message.error('请先登录')
       router.push('/login')
@@ -751,7 +752,7 @@ const handleSubmit = async () => {
     // 并发编辑检测 - 使用后端API
     if (originalData.value) {
       try {
-        const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || localStorage.getItem('access_token')
+        const token = getAccessToken()
         if (token) {
           const checkResponse = await fetch(`${API_BASE_URL}/api/medical-records/${recordId}`, {
             method: 'GET',
@@ -808,7 +809,7 @@ const handleSubmit = async () => {
     }
 
     // 获取认证token
-    const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || localStorage.getItem('access_token')
+    const token = getAccessToken()
     if (!token) {
       message.error('请先登录')
       router.push('/login')

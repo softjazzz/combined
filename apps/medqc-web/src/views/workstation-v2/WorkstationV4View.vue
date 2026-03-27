@@ -6,156 +6,218 @@
     <template v-if="viewMode === 'list'">
       <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
-          class="sticky top-0 z-10 border-b border-slate-200/60 bg-white/72 px-4 py-3 backdrop-blur-xl xl:px-5"
+          class="sticky top-0 z-10 border-b border-slate-200/60 bg-white/78 px-4 py-2.5 backdrop-blur-xl xl:px-5"
         >
           <div class="mx-auto w-full max-w-[1440px]">
             <div
-              class="rounded-[26px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,252,0.94))] px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]"
+              class="relative overflow-hidden rounded-[26px] border border-white/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(245,248,252,0.96)_46%,rgba(239,244,249,0.92)_100%)] px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
             >
-              <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-3">
-                    <h2
-                      class="truncate text-[34px] font-black leading-none tracking-[-0.05em] text-slate-900"
-                    >
+              <div class="pointer-events-none absolute right-[-44px] top-[-64px] h-[180px] w-[180px] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.12),rgba(59,130,246,0))]" />
+              <div class="pointer-events-none absolute bottom-[-110px] right-[18%] h-[180px] w-[220px] rounded-full bg-[radial-gradient(circle,rgba(14,165,233,0.1),rgba(14,165,233,0))]" />
+
+              <div class="relative workbench-hero">
+                <div class="workbench-hero__heading">
+                  <div class="min-w-0">
+                    <div class="workbench-hero__eyebrow">
+                      Medical Record Workbench
+                    </div>
+                    <h2 class="workbench-hero__title">
                       {{ stageMeta.pageTitle }}
                     </h2>
-                    <span
-                      class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-semibold text-slate-500"
-                    >
-                      {{ listRecords.length }} &#20363;
-                    </span>
+                    <div class="workbench-hero__subtitle">
+                      {{ stageMeta.pageDesc }}
+                    </div>
                   </div>
-                  <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-                    <span class="font-semibold text-slate-700">{{ activeDept }}</span>
-                    <span class="h-1 w-1 rounded-full bg-slate-300" />
-                    <span>{{ stageMeta.pageDesc }}</span>
+                  <span class="workbench-hero__badge">
+                    当前页 {{ listRecords.length }} 例
+                  </span>
+                </div>
+
+                <div class="workbench-kpis">
+                  <div class="workbench-kpi workbench-kpi--primary">
+                    <div class="workbench-kpi__label">
+                      <UserOutlined />
+                      <span>病历总量</span>
+                    </div>
+                    <div class="workbench-kpi__value">
+                      {{ totalVisibleCount }}
+                    </div>
+                    <div class="workbench-kpi__hint">
+                      当前工作台可见病历
+                    </div>
+                  </div>
+                  <div class="workbench-kpi workbench-kpi--neutral">
+                    <div class="workbench-kpi__label">
+                      <WarningOutlined />
+                      <span>高优先级</span>
+                    </div>
+                    <div class="workbench-kpi__value">
+                      {{ highPriorityCount }}
+                    </div>
+                    <div class="workbench-kpi__hint">
+                      建议优先处理病历
+                    </div>
+                  </div>
+                  <div class="workbench-kpi workbench-kpi--status">
+                    <div class="workbench-kpi__label">
+                      <NodeIndexOutlined />
+                      <span>当前范围</span>
+                    </div>
+                    <div class="workbench-kpi__value workbench-kpi__value--scope">
+                      {{ scopeStatusText }}
+                    </div>
+                    <div class="workbench-kpi__hint">
+                      {{ scopeHintText }}
+                    </div>
                   </div>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2.5">
-                  <a-input-search
-                    v-model:value="searchText"
-                    placeholder="&#25628;&#32034;&#30149;&#26696;&#21495; / &#22995;&#21517;"
-                    style="width: 240px"
-                    size="large"
-                    allow-clear
-                  />
-                  <a-select
-                    v-model:value="hospFilter"
-                    style="width: 128px"
-                    size="large"
-                    :options="hospOptions"
-                  />
-                  <button
-                    type="button"
-                    class="flex h-11 w-11 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_10px_18px_rgba(37,99,235,0.08)]"
-                    title="&#21047;&#26032;"
-                    @click="refreshData"
-                  >
-                    <SyncOutlined :spin="loading" />
-                  </button>
+                <div class="workbench-controls-panel">
+                  <div class="workbench-controls-grid">
+                    <a-input
+                      v-model:value="searchText"
+                      class="workbench-controls__search-input"
+                      placeholder="搜索病案号 / 姓名"
+                      size="large"
+                      allow-clear
+                    >
+                      <template #prefix>
+                        <SearchOutlined class="text-slate-400" />
+                      </template>
+                    </a-input>
+
+                    <a-select
+                      v-model:value="hospFilter"
+                      class="workbench-controls__status-select"
+                      size="large"
+                      :options="hospOptions"
+                    />
+
+                    <button
+                      type="button"
+                      class="workbench-controls__refresh"
+                      title="刷新"
+                      @click="refreshData"
+                    >
+                      <SyncOutlined :spin="loading" />
+                    </button>
+                  </div>
+
+                  <div class="workbench-dept-row">
+                    <div class="workbench-dept-row__label">
+                      <ScanOutlined />
+                      <span>Department Navigation</span>
+                    </div>
+                    <div
+                      class="workbench-dept-row__list"
+                    >
+                      <button
+                        v-for="dept in visibleDepartments"
+                        :key="dept.name"
+                        type="button"
+                        :class="[
+                          'workbench-dept-chip',
+                          activeDept === dept.name
+                            ? 'workbench-dept-chip--active'
+                            : 'workbench-dept-chip--idle',
+                        ]"
+                        @click="selectDept(dept.name)"
+                      >
+                        <span>{{ dept.name }}</span>
+                        <span class="workbench-dept-chip__count">
+                          {{ dept.total }}
+                        </span>
+                      </button>
+
+                      <a-dropdown
+                        v-if="overflowDepartments.length > 0"
+                        trigger="click"
+                        placement="bottomRight"
+                      >
+                        <button
+                          type="button"
+                          class="workbench-dept-chip workbench-dept-chip--idle"
+                        >
+                          <span>更多科室</span>
+                          <span class="workbench-dept-chip__count">
+                            {{ overflowDepartments.length }}
+                          </span>
+                          <DownOutlined class="text-[10px]" />
+                        </button>
+                        <template #overlay>
+                          <a-menu
+                            class="max-h-[320px] w-[220px] overflow-y-auto rounded-xl p-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]"
+                          >
+                            <a-menu-item
+                              v-for="dept in overflowDepartments"
+                              :key="`overflow-${dept.name}`"
+                              class="rounded-lg py-2"
+                              @click="selectDept(dept.name)"
+                            >
+                              <div class="flex items-center justify-between gap-3">
+                                <span class="truncate font-medium text-slate-700">{{ dept.name }}</span>
+                                <span
+                                  class="rounded bg-slate-50 px-1.5 text-[11px] font-bold text-slate-400"
+                                >{{ dept.total }}</span>
+                              </div>
+                            </a-menu-item>
+                          </a-menu>
+                        </template>
+                      </a-dropdown>
+                    </div>
+                  </div>
+
+                  <div class="workbench-controls__hint-inline">
+                    当前筛选状态保持即时生效，支持搜索、在院状态和科室切换联动。
+                  </div>
+                  <div class="workbench-controls__quick-links">
+                    <button
+                      type="button"
+                      class="workbench-controls__quick-link"
+                      @click="goToFinalRecords"
+                    >
+                      <CheckCircleOutlined />
+                      <span>终末病历质控</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div
-              class="mt-3 flex items-center gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-            >
-              <button
-                v-for="dept in visibleDepartments"
-                :key="dept.name"
-                type="button"
-                :class="[
-                  'inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200 cursor-pointer',
-                  activeDept === dept.name
-                    ? 'bg-blue-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.2)]'
-                    : 'bg-white/80 border border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-                ]"
-                @click="selectDept(dept.name)"
-              >
-                <span>{{ dept.name }}</span>
-                <span
-                  :class="[
-                    activeDept === dept.name
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 text-slate-500',
-                    'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold',
-                  ]"
-                >
-                  {{ dept.total }}
-                </span>
-              </button>
-
-              <a-dropdown
-                v-if="overflowDepartments.length > 0"
-                trigger="click"
-                placement="bottomRight"
-              >
-                <button
-                  type="button"
-                  class="inline-flex shrink-0 items-center gap-2 rounded-full border border-transparent bg-white/80 px-3.5 py-1.5 text-[13px] font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
-                >
-                  <span>更多科室</span>
-                  <span
-                    class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500"
-                  >
-                    {{ overflowDepartments.length }}
-                  </span>
-                  <DownOutlined class="text-[10px] ml-0.5" />
-                </button>
-                <template #overlay>
-                  <a-menu
-                    class="max-h-[320px] w-[220px] overflow-y-auto rounded-xl p-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]"
-                  >
-                    <a-menu-item
-                      v-for="dept in overflowDepartments"
-                      :key="`overflow-${dept.name}`"
-                      class="rounded-lg py-2"
-                      @click="selectDept(dept.name)"
-                    >
-                      <div class="flex items-center justify-between gap-3">
-                        <span class="truncate font-medium text-slate-700">{{ dept.name }}</span>
-                        <span
-                          class="text-[11px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded"
-                        >{{ dept.total }}</span>
-                      </div>
-                    </a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
             </div>
           </div>
         </div>
 
         <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
           <div class="mx-auto w-full max-w-[1440px]">
-            <PriorityLane
-              v-model:active-group="activePriorityGroup"
-              class="mb-4"
-              :groups="priorityGroups"
-              :cards="priorityCardsFiltered"
-              :readonly="isStageQueueMode"
-              @open-record="handlePriorityOpen"
-              @defer-record="handlePriorityDefer"
-            />
+            <div class="workstation-surface-enter">
+              <PriorityLane
+                v-model:active-group="activePriorityGroup"
+                class="mb-4"
+                :groups="priorityGroups"
+                :cards="priorityCardsFiltered"
+                :readonly="isStageQueueMode"
+                @open-record="handlePriorityOpen"
+                @defer-record="handlePriorityDefer"
+              />
+            </div>
 
-            <BatchTablePanel
-              :rows="workbenchRows"
-              :selected-row-keys="selectedWorkbenchKeys"
-              :summary-text="tableSummaryText"
-              :loading="loading"
-              @update:selected-row-keys="selectedWorkbenchKeys = $event"
-              @open-record="handleRowOpen"
-              @batch-extract="handleBatchExtract"
-              @batch-defer="handleBatchDefer"
-              @batch-assign="handleBatchAssign"
-              @clear-filters="handleClearFilters"
-            />
+            <div class="workstation-surface-enter workstation-surface-enter--delay-1">
+              <BatchTablePanel
+                :rows="workbenchRows"
+                :selected-row-keys="selectedWorkbenchKeys"
+                :summary-text="tableSummaryText"
+                :loading="loading"
+                @update:selected-row-keys="selectedWorkbenchKeys = $event"
+                @open-record="handleRowOpen"
+                @batch-extract="handleBatchExtract"
+                @batch-defer="handleBatchDefer"
+                @batch-assign="handleBatchAssign"
+                @clear-filters="handleClearFilters"
+              />
+            </div>
 
             <div
               v-if="listRecords.length === 0"
-              class="mt-4 flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center"
+              class="mt-4 flex min-h-[160px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-200/90 bg-white/85 px-5 py-10 text-center"
             >
               <InboxOutlined class="mb-3 text-[36px] text-slate-200" />
               <div class="text-[13px] font-medium text-slate-400">
@@ -165,7 +227,7 @@
 
             <div
               v-if="serverTotalPages > 1"
-              class="mt-3 flex justify-center rounded-xl border border-slate-200/70 bg-white px-5 py-3"
+              class="mt-3 flex justify-center rounded-[24px] border border-white/80 bg-white/90 px-5 py-3 shadow-[0_14px_28px_rgba(15,23,42,0.05)]"
             >
               <a-pagination
                 :current="currentPage"
@@ -1387,6 +1449,7 @@ import {
   LeftOutlined,
   RightOutlined,
   UserOutlined,
+  SearchOutlined,
   FileSearchOutlined,
   EyeOutlined,
   CheckOutlined,
@@ -1738,6 +1801,30 @@ const priorityCardsFiltered = computed(() => {
     .slice(0, 8)
 })
 
+const totalVisibleCount = computed(() => serverTotal.value || listRecords.value.length)
+const highPriorityCount = computed(
+  () => priorityCards.value.filter((card) => card.riskType !== 'normal').length,
+)
+const activeHospLabel = computed(
+  () => hospOptions.find((option) => option.value === hospFilter.value)?.label || '全部',
+)
+const scopeStatusText = computed(() => {
+  const parts = [activeDept.value]
+  if (activeHospLabel.value !== '全部') {
+    parts.push(activeHospLabel.value)
+  }
+  if (currentStageFilter.value) {
+    parts.push(stageMeta.value.tableTitle)
+  }
+  return parts.join(' / ')
+})
+const scopeHintText = computed(() => {
+  if (activeDept.value === '全部科室' && hospFilter.value === 'all' && !currentStageFilter.value) {
+    return '当前查看全量病历池'
+  }
+  return '当前工作范围已按筛选条件收敛'
+})
+
 const workbenchRows = computed<WorkbenchRow[]>(() =>
   listRecords.value.map((record) => ({
     id: record.id,
@@ -1752,7 +1839,7 @@ const workbenchRows = computed<WorkbenchRow[]>(() =>
 )
 
 const tableSummaryText = computed(() => {
-  return `当前筛选：${activeDept.value} / ${hospFilter.value} / ${stageMeta.value.tableTitle}`
+  return `当前筛选：${activeDept.value} / ${activeHospLabel.value} / ${stageMeta.value.tableTitle}`
 })
 
 // ========== 质控规则 Tab ==========
@@ -2386,6 +2473,10 @@ function handleClearFilters() {
   selectedWorkbenchKeys.value = []
 }
 
+function goToFinalRecords() {
+  router.push('/workstation-v4/records/final')
+}
+
 // 快捷翻页
 const currentRecordIndex = computed(() => {
   if (!selectedRecord.value) return -1
@@ -2664,6 +2755,342 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   background-color: rgba(148, 163, 184, 0.6);
 }
 
+.workbench-hero {
+  display: grid;
+  gap: 10px;
+}
+
+.workbench-hero__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workbench-hero__eyebrow {
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(148 163 184);
+}
+
+.workbench-hero__title {
+  margin-top: 6px;
+  font-size: 46px;
+  line-height: 0.98;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  color: rgb(2 6 23);
+}
+
+.workbench-hero__subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(100 116 139);
+}
+
+.workbench-hero__badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgb(100 116 139);
+}
+
+.workbench-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workbench-kpi {
+  display: flex;
+  min-height: 116px;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 16px 18px;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.05);
+}
+
+.workbench-kpi--primary {
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+}
+
+.workbench-kpi--neutral {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.workbench-kpi--status {
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.15), transparent 38%),
+    #ffffff;
+}
+
+.workbench-kpi__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(100 116 139);
+}
+
+.workbench-kpi__value {
+  margin-top: 6px;
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #0f172a;
+}
+
+.workbench-kpi__value--scope {
+  font-size: 42px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workbench-kpi__hint {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #94a3b8;
+}
+
+.workbench-controls-panel {
+  display: grid;
+  gap: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 12px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.04);
+}
+
+.workbench-controls-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px 44px;
+  grid-template-areas: 'search status refresh';
+  align-items: center;
+  gap: 8px;
+}
+
+.workbench-controls__search-input {
+  grid-area: search;
+  min-width: 0;
+}
+
+.workbench-controls__status-select {
+  grid-area: status;
+  width: 100%;
+  min-width: 0;
+}
+
+.workbench-controls__refresh {
+  grid-area: refresh;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  height: 40px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.96);
+  color: rgb(71 85 105);
+  transition: all 160ms ease;
+}
+
+.workbench-controls__refresh:hover {
+  border-color: rgba(96, 165, 250, 0.75);
+  color: rgb(30 64 175);
+  box-shadow: 0 8px 14px rgba(37, 99, 235, 0.08);
+}
+
+.workbench-dept-row {
+  display: grid;
+  gap: 7px;
+}
+
+.workbench-dept-row__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgb(148 163 184);
+}
+
+.workbench-dept-row__list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.workbench-dept-row__list::-webkit-scrollbar {
+  display: none;
+}
+
+.workbench-dept-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 160ms ease;
+}
+
+.workbench-dept-chip__count {
+  display: inline-flex;
+  min-width: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workbench-dept-chip--active {
+  border-color: rgb(15 23 42);
+  background: rgb(15 23 42);
+  color: white;
+}
+
+.workbench-dept-chip--active .workbench-dept-chip__count {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.workbench-dept-chip--idle {
+  border-color: rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.88);
+  color: rgb(71 85 105);
+}
+
+.workbench-dept-chip--idle:hover {
+  border-color: rgba(148, 163, 184, 0.45);
+  color: rgb(15 23 42);
+}
+
+.workbench-dept-chip--idle .workbench-dept-chip__count {
+  background: rgb(241 245 249);
+  color: rgb(100 116 139);
+}
+
+.workbench-controls__hint-inline {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgb(100 116 139);
+  border-top: 1px dashed rgba(203, 213, 225, 0.9);
+  padding-top: 8px;
+}
+
+.workbench-controls__quick-links {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.workbench-controls__quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(239, 246, 255, 0.85);
+  color: rgb(30 64 175);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  transition: all 160ms ease;
+}
+
+.workbench-controls__quick-link:hover {
+  border-color: rgba(59, 130, 246, 0.7);
+  background: rgba(219, 234, 254, 0.92);
+  color: rgb(30 58 138);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+}
+
+@media (max-width: 1279px) {
+  .workbench-hero__title {
+    font-size: 42px;
+  }
+
+  .workbench-controls-grid {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-areas:
+      'search refresh'
+      'status status';
+  }
+
+  .workbench-controls__quick-links {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1023px) {
+  .workbench-hero__heading {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .workbench-hero__title {
+    font-size: 36px;
+  }
+
+  .workbench-kpis {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .workbench-kpi__value {
+    font-size: 42px;
+  }
+
+  .workbench-kpi__value--scope {
+    font-size: 34px;
+  }
+
+  .workbench-controls-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'search'
+      'status'
+      'refresh';
+  }
+
+  .workbench-controls__refresh {
+    justify-self: start;
+  }
+}
+
 .workstation-shell :deep(.ant-input-affix-wrapper),
 .workstation-shell :deep(.ant-input-search .ant-input),
 .workstation-shell :deep(.ant-select-selector) {
@@ -2672,16 +3099,36 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 
 .workstation-shell :deep(.ant-input-affix-wrapper),
 .workstation-shell :deep(.ant-select-selector) {
-  min-height: 44px !important;
-  border-color: rgba(148, 163, 184, 0.22) !important;
-  background: rgba(255, 255, 255, 0.82) !important;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+  min-height: 42px !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
 }
 
 .workstation-shell :deep(.ant-input-affix-wrapper:hover),
 .workstation-shell :deep(.ant-select-focused .ant-select-selector),
 .workstation-shell :deep(.ant-select-selector:hover) {
   border-color: rgba(34, 211, 238, 0.4) !important;
+}
+
+.workstation-surface-enter {
+  animation: workstationSurfaceEnter 420ms ease-out both;
+}
+
+.workstation-surface-enter--delay-1 {
+  animation-delay: 90ms;
+}
+
+@keyframes workstationSurfaceEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 详情主 Tab 样式 */
@@ -2717,3 +3164,5 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   letter-spacing: 0.01em;
 }
 </style>
+
+

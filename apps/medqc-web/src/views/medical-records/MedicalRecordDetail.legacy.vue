@@ -1263,6 +1263,7 @@ import DocumentCategoryEditor from '@/components/DocumentCategoryEditor.vue'
 // 导入增强的医疗记录组件
 import EnhancedContentViewer from '@/components/medical-records/EnhancedContentViewer.vue'
 import EnhancedDocumentClassification from '@/components/medical-records/EnhancedDocumentClassification.vue'
+import { extractApiData } from '@/utils/api-helpers'
 
 // 路由和状态
 const route = useRoute()
@@ -2300,7 +2301,8 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
       throw new Error(`质控评估API调用失败: ${response.status} ${response.statusText}`)
     }
 
-    const evaluationResults = await response.json()
+    const rawEvaluationResults = await response.json()
+    const evaluationResults = extractApiData<any>(rawEvaluationResults, '质控评估失败')
     console.log('📥 收到质控评估结果:', evaluationResults)
 
     // 处理评估结果

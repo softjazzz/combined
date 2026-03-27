@@ -3,6 +3,8 @@
  * 连接前端与Python语义规则引擎
  */
 
+import { getAccessToken } from '@/utils/auth-token'
+
 export interface SemanticRuleDefinition {
   rule_id: string
   rule_name: string
@@ -65,6 +67,18 @@ export class SemanticRulesService {
       : (window.location.hostname === 'localhost'
         ? 'http://localhost:8001'
         : 'http://124.220.6.136:8001')
+  }
+
+  private buildHeaders(includeJson: boolean = true): Record<string, string> {
+    const headers: Record<string, string> = {}
+    const token = getAccessToken()
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+    if (includeJson) {
+      headers['Content-Type'] = 'application/json'
+    }
+    return headers
   }
 
   // ------------------- CRUD & Import/Export -------------------
@@ -322,9 +336,7 @@ export class SemanticRulesService {
     try {
       const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/stats`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
+        headers: this.buildHeaders(),
       })
 
       if (!response.ok) {
@@ -362,9 +374,7 @@ export class SemanticRulesService {
     try {
       const response = await fetch(`${this.baseURL}/api/v1/semantic-rules/validate-llm`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
+        headers: this.buildHeaders(),
       })
 
       if (!response.ok) {

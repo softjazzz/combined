@@ -215,6 +215,7 @@ import {
   UndoOutlined,
   SaveOutlined,
 } from '@ant-design/icons-vue'
+import { getAccessToken } from '@/utils/auth-token'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -273,7 +274,7 @@ const deductionTableData = computed(() => [
 
 // 加载配置
 function getToken() {
-  return localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || ''
+  return getAccessToken()
 }
 
 async function loadConfig() {

@@ -8,8 +8,25 @@ from dataclasses import asdict
 
 import pytest
 
+from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.services.etl_config import MongoSyncConfig
+from app.services.sync_idempotency import SyncTriggerReservation
+
+
+def _assert_success_shell(body: dict) -> dict:
+    assert body["success"] is True
+    assert isinstance(body.get("trace_id"), str) and body["trace_id"]
+    assert "data" in body
+    return body["data"]
+
+
+def _assert_error_shell(body: dict, expected_code: str | None = None) -> None:
+    assert body["success"] is False
+    assert isinstance(body.get("trace_id"), str) and body["trace_id"]
+    assert isinstance(body.get("error"), str) and body["error"]
+    if expected_code is not None:
+        assert body.get("code") == expected_code
 
 
 def _override_user(client, roles: list[str]):
@@ -25,6 +42,10 @@ def _override_user(client, roles: list[str]):
 
 @pytest.fixture(autouse=True)
 def _clear_dependency_overrides(client):
+    async def _noop_auth_gate():
+        return None
+
+    client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
     yield
     client.app.dependency_overrides.clear()
 
@@ -88,9 +109,11 @@ class TestSyncRouter:
         }
         resp = client.put("/api/v1/sync/config/mongo", json=payload)
         assert resp.status_code == 200
+        data = _assert_success_shell(resp.json())
         assert saved_holder["value"]["lookback_minutes"] == 15
         assert saved_holder["value"]["rescan_recent_days"] == 5
         assert saved_holder["value"]["enabled"] is True
+        assert "config" in data
 
     def test_update_pg_config(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -106,9 +129,15 @@ class TestSyncRouter:
 
         monkeypatch.setattr("app.services.etl_sync.load_db_config", lambda: dict(base_cfg))
         monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})
+        audit_calls: list[dict] = []
+        monkeypatch.setattr(
+            "app.routers.sync.audit_event",
+            lambda _request, **kwargs: audit_calls.append(kwargs),
+        )
 
-        def _fake_save_db_config(cfg):
+        def _fake_save_db_config(cfg, runtime_password=None):
             saved_holder["value"] = dict(cfg)
+            saved_holder["runtime_password"] = runtime_password
             return dict(cfg)
 
         monkeypatch.setattr("app.services.etl_sync.save_db_config", _fake_save_db_config)
@@ -122,13 +151,18 @@ class TestSyncRouter:
             },
         )
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["success"] is True
+        data = _assert_success_shell(resp.json())
         assert saved_holder["value"]["remote_host"] == "10.10.10.8"
         assert saved_holder["value"]["remote_port"] == "5433"
         # 空密码应保留旧密码
         assert saved_holder["value"]["remote_password"] == "secret"
-        assert body["config"]["remote_password_set"] is True
+        assert saved_holder["runtime_password"] is None
+        assert data["config"]["remote_password_set"] is True
+        assert any(
+            call.get("action") == "sync.config.pg.update"
+            and call.get("resource") == "/api/v1/sync/config/pg"
+            for call in audit_calls
+        )
 
     def test_test_connection_all(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -154,10 +188,10 @@ class TestSyncRouter:
 
         resp = client.post("/api/v1/sync/test-connection/all")
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["connected_count"] == 2
-        assert body["all_connected"] is False
-        assert body["mongo"]["connected"] is True
+        data = _assert_success_shell(resp.json())
+        assert data["connected_count"] == 2
+        assert data["all_connected"] is False
+        assert data["mongo"]["connected"] is True
 
     def test_preflight_mongo_blockers(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -175,10 +209,10 @@ class TestSyncRouter:
 
         resp = client.post("/api/v1/sync/preflight", json={"source": "mongo", "tier": "tier3"})
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["executable"] is False
-        assert any("总开关已关闭" in item for item in body["blockers"])
-        assert any("mongo_uri 未配置" in item for item in body["blockers"])
+        data = _assert_success_shell(resp.json())
+        assert data["executable"] is False
+        assert any("总开关已关闭" in item for item in data["blockers"])
+        assert any("mongo_uri 未配置" in item for item in data["blockers"])
 
     def test_preflight_pg_success(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -188,10 +222,10 @@ class TestSyncRouter:
 
         resp = client.post("/api/v1/sync/preflight", json={"source": "pg", "tables": ["mr"]})
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["source"] == "pg"
-        assert body["executable"] is True
-        assert body["estimated_impact"] == 123
+        data = _assert_success_shell(resp.json())
+        assert data["source"] == "pg"
+        assert data["executable"] is True
+        assert data["estimated_impact"] == 123
 
     def test_trigger_concurrency_guard_passthrough(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -206,7 +240,7 @@ class TestSyncRouter:
         resp = client.post("/api/v1/sync/trigger", json={"source": "mongo", "tier": "all"})
         assert resp.status_code == 200
         body = resp.json()
-        assert body["success"] is False
+        _assert_error_shell(body, expected_code="SYNC_ALREADY_RUNNING")
         assert "同步正在进行中" in body["error"]
         assert append_called["value"] is False
 
@@ -225,11 +259,61 @@ class TestSyncRouter:
 
         resp = client.post("/api/v1/sync/trigger", json={"source": "mongo", "tier": "tier1"})
         assert resp.status_code == 200
-        assert resp.json()["success"] is True
+        data = _assert_success_shell(resp.json())
+        assert data["success"] is True
         assert captured["record"]["source"] == "mongo"
         assert captured["record"]["tier"] == "tier1"
         assert captured["record"]["status"] == "success"
         assert captured["record"]["operator"]["email"] == "sync@test.local"
+
+    def test_trigger_idempotency_reuses_existing_run_id(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        calls = {"reserve": 0, "run": 0}
+        audit_calls: list[dict] = []
+
+        def _fake_reserve(**_kwargs):
+            calls["reserve"] += 1
+            if calls["reserve"] == 1:
+                return SyncTriggerReservation(
+                    created=True,
+                    run_id="syncrun-fixed-id",
+                    status="pending",
+                )
+            return SyncTriggerReservation(
+                created=False,
+                run_id="syncrun-fixed-id",
+                status="success",
+                result={"success": True, "results": {"tier1": {"synced": 2}}},
+            )
+
+        monkeypatch.setattr("app.services.sync_idempotency.reserve_sync_trigger", _fake_reserve)
+        monkeypatch.setattr("app.services.sync_idempotency.complete_sync_trigger", lambda **_kwargs: None)
+        monkeypatch.setattr("app.services.sync_run_history.append_sync_run_record", lambda _record: None)
+        monkeypatch.setattr(
+            "app.routers.sync.audit_event",
+            lambda _request, **kwargs: audit_calls.append(kwargs),
+        )
+
+        def _fake_run_mongo_sync(tier="all"):
+            calls["run"] += 1
+            return {"success": True, "results": {"tier1": {"synced": 2}}}
+
+        monkeypatch.setattr("app.services.mongo_sync.run_mongo_sync", _fake_run_mongo_sync)
+
+        first = client.post("/api/v1/sync/trigger", json={"source": "mongo", "tier": "tier1"})
+        assert first.status_code == 200
+        first_data = _assert_success_shell(first.json())
+        assert first_data["run_id"] == "syncrun-fixed-id"
+        assert first_data["idempotent_reused"] is False
+
+        second = client.post("/api/v1/sync/trigger", json={"source": "mongo", "tier": "tier1"})
+        assert second.status_code == 200
+        second_data = _assert_success_shell(second.json())
+        assert second_data["run_id"] == "syncrun-fixed-id"
+        assert second_data["idempotent_reused"] is True
+        assert calls["run"] == 1
+        assert any(call.get("outcome") == "success" for call in audit_calls)
+        assert any(call.get("outcome") == "reused" for call in audit_calls)
 
     def test_get_runs(self, client, monkeypatch):
         _override_user(client, ["qc_manager"])
@@ -245,11 +329,11 @@ class TestSyncRouter:
 
         resp = client.get("/api/v1/sync/runs", params={"source": "mongo", "tier": "tier2", "limit": 20})
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["total"] == 1
-        assert body["limit"] == 20
-        assert body["items"][0]["source"] == "mongo"
-        assert body["items"][0]["tier"] == "tier2"
+        data = _assert_success_shell(resp.json())
+        assert data["total"] == 1
+        assert data["limit"] == 20
+        assert data["items"][0]["source"] == "mongo"
+        assert data["items"][0]["tier"] == "tier2"
 
     def test_get_templates_permissions(self, client):
         _override_user(client, ["qc_manager"])
@@ -280,9 +364,8 @@ class TestSyncRouter:
             },
         )
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["success"] is True
-        assert body["template_id"] == "single_department_focus"
+        data = _assert_success_shell(resp.json())
+        assert data["template_id"] == "single_department_focus"
         assert saved_holder["value"]["target_departments"] == ["心内科"]
 
     def test_apply_template_validation(self, client):
@@ -339,9 +422,9 @@ class TestSyncRouter:
 
         resp = client.get("/api/v1/sync/departments")
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["total"] == 2
-        assert body["items"] == ["呼吸内科", "心内科"]
+        data = _assert_success_shell(resp.json())
+        assert data["total"] == 2
+        assert data["items"] == ["呼吸内科", "心内科"]
 
     def test_get_departments_requires_mongo_uri(self, client, monkeypatch):
         _override_user(client, ["admin"])

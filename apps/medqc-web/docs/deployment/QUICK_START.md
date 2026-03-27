@@ -3,9 +3,11 @@
 **版本**: v2.0.0 增强版  
 **更新**: 2024-12-24
 
+**适用范围**: 本文仅用于本地开发启动；生产启动请见 [P2_RELEASE_RUNBOOK.md](P2_RELEASE_RUNBOOK.md) 和 `scripts/deploy_medqc_release.sh`
+
 ---
 
-## 🚀 **一键启动 (推荐)**
+## 🚀 **一键启动（开发环境推荐）**
 
 ### **方法1: 使用增强版启动脚本**
 ```bash
@@ -16,7 +18,7 @@ chmod +x quick_start_enhanced.sh
 ./quick_start_enhanced.sh
 ```
 
-### **方法2: 手动启动**
+### **方法2: 手动启动（仅开发使用）**
 ```bash
 # 1. 安装依赖
 pnpm install
@@ -31,10 +33,18 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install fastapi uvicorn sqlalchemy asyncpg pydantic
 python main.py
 
-# 4. 启动前端 (新终端)
+# 4. 启动前端 (新终端，仅开发使用)
 cd ..
-pnpm dev
+pnpm dev  # 仅开发使用
 ```
+
+---
+
+## 🧭 **生产环境口径**
+
+- 前端生产不使用 `pnpm dev`
+- 生产发布请按 [P2_RELEASE_RUNBOOK.md](P2_RELEASE_RUNBOOK.md) 和 `scripts/deploy_medqc_release.sh` 执行
+- 生产运行由构建产物和 `run_*_prod.sh` / systemd 服务托管
 
 ---
 

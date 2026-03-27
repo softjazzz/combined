@@ -5,13 +5,19 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
-Environment="PATH=/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001
-Restart=always
-RestartSec=5
-StandardOutput=append:/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend/backend.log
-StandardError=append:/home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend/backend.log
+Group=ubuntu
+WorkingDirectory=/opt/medqc/current/backend
+EnvironmentFile=-/opt/medqc/shared/backend.env
+Environment="PATH=/opt/medqc/current/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="ENV=production"
+Environment="STRICT_STARTUP_CHECKS=true"
+ExecStart=/opt/medqc/current/scripts/run_backend_prod.sh
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=45
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=medqc-backend
 
 [Install]
 WantedBy=multi-user.target

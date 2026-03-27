@@ -1,55 +1,68 @@
 <template>
   <section
-    class="rounded-2xl border border-slate-200/70 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)] overflow-hidden"
+    class="batch-table-panel overflow-hidden rounded-[28px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,249,252,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.08)]"
   >
-    <div class="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-[14px] font-semibold text-slate-800">
-          批量工作台
+    <div class="border-b border-slate-200/70 px-5 py-4">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div class="min-w-0">
+          <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
+            Batch Workspace
+          </div>
+          <div class="mt-2 flex flex-wrap items-end gap-3">
+            <div class="text-[24px] font-black tracking-[-0.04em] text-slate-950">
+              批量工作台
+            </div>
+            <span class="inline-flex items-center rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-[12px] font-semibold text-slate-500">
+              当前 {{ rows.length }} 条候选病历
+            </span>
+            <span class="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[12px] font-semibold text-slate-500">
+              已选 {{ selectedRowKeys.length }} 条
+            </span>
+          </div>
+          <div class="mt-2 text-[13px] leading-6 text-slate-500">
+            {{ summaryText }}
+          </div>
         </div>
-        <a-space size="small">
+
+        <div class="flex flex-wrap items-center gap-2">
           <a-button
             size="small"
+            type="primary"
+            class="!h-9 !rounded-full !border-0 !bg-slate-950 !px-4 !font-semibold !shadow-[0_12px_20px_rgba(15,23,42,0.18)]"
+            :disabled="selectedRowKeys.length === 0 || readonly"
+            @click="emit('batch-extract', selectedRowKeys)"
+          >
+            批量进入抽取
+          </a-button>
+          <a-button
+            size="small"
+            class="!h-9 !rounded-full !border-slate-200/90 !px-4 !font-semibold !text-slate-600"
+            :disabled="selectedRowKeys.length === 0 || readonly"
+            @click="emit('batch-defer', selectedRowKeys)"
+          >
+            批量标记稍后
+          </a-button>
+          <a-button
+            size="small"
+            class="!h-9 !rounded-full !border-slate-200/90 !px-4 !font-semibold !text-slate-600"
+            :disabled="selectedRowKeys.length === 0 || readonly"
+            @click="emit('batch-assign', selectedRowKeys)"
+          >
+            批量分派
+          </a-button>
+          <a-button
+            size="small"
+            class="!h-9 !rounded-full !border-slate-200/90 !px-4 !font-semibold !text-slate-500"
             @click="emit('clear-filters')"
           >
             清空筛选
           </a-button>
-        </a-space>
-      </div>
-      <div class="mt-1 text-[12px] text-slate-500">
-        {{ summaryText }}
-      </div>
-    </div>
-
-    <div class="border-b border-slate-100 px-4 py-2.5 bg-white">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-[12px] text-slate-600">已选 {{ selectedRowKeys.length }} 条</span>
-        <a-button
-          size="small"
-          type="primary"
-          :disabled="selectedRowKeys.length === 0 || readonly"
-          @click="emit('batch-extract', selectedRowKeys)"
-        >
-          批量进入抽取
-        </a-button>
-        <a-button
-          size="small"
-          :disabled="selectedRowKeys.length === 0 || readonly"
-          @click="emit('batch-defer', selectedRowKeys)"
-        >
-          批量标记稍后
-        </a-button>
-        <a-button
-          size="small"
-          :disabled="selectedRowKeys.length === 0 || readonly"
-          @click="emit('batch-assign', selectedRowKeys)"
-        >
-          批量分派
-        </a-button>
+        </div>
       </div>
     </div>
 
     <a-table
+      class="batch-table-panel__table"
       :columns="columns"
       :data-source="rows"
       :loading="loading"
@@ -60,29 +73,43 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'patient'">
-          <div class="font-semibold text-slate-900">
+          <div class="text-[15px] font-bold tracking-tight text-slate-900">
             {{ record.patientName }}
           </div>
-          <div class="mt-1 flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="font-mono">{{ record.visitId }}</span>
-            <a-tag
+          <div class="mt-2 flex items-center gap-2 text-[12px] text-slate-500">
+            <span class="inline-flex items-center rounded-full bg-slate-100/90 px-2.5 py-1 font-mono text-[11px] text-slate-600">
+              {{ record.visitId }}
+            </span>
+            <span
               v-if="record.isDemo"
-              color="blue"
+              class="inline-flex items-center rounded-full border border-blue-200/80 bg-blue-50/90 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
             >
               Demo
-            </a-tag>
+            </span>
           </div>
         </template>
+        <template v-else-if="column.key === 'department'">
+          <span class="text-[13px] font-medium text-slate-600">{{ record.department }}</span>
+        </template>
+        <template v-else-if="column.key === 'stageStatus'">
+          <span class="inline-flex items-center rounded-full border border-sky-200/80 bg-sky-50/90 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+            {{ record.stageStatus }}
+          </span>
+        </template>
         <template v-else-if="column.key === 'risk'">
-          <span class="text-amber-700">{{ record.riskReason }}</span>
+          <span class="text-[13px] leading-6 text-slate-600">{{ record.riskReason }}</span>
+        </template>
+        <template v-else-if="column.key === 'updatedAt'">
+          <span class="text-[12px] font-medium text-slate-500">{{ record.updatedAt }}</span>
         </template>
         <template v-else-if="column.key === 'action'">
           <a-button
-            type="link"
+            type="default"
             size="small"
+            class="!h-8 !rounded-full !border-slate-200/90 !bg-white !px-3 !font-semibold !text-slate-700 !shadow-none"
             @click="emit('open-record', record.id)"
           >
-            查看详情 →
+            查看详情
           </a-button>
         </template>
       </template>
@@ -139,3 +166,42 @@ const columns = [
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
 </script>
+
+<style scoped>
+.batch-table-panel :deep(.ant-table) {
+  background: transparent;
+}
+
+.batch-table-panel :deep(.ant-table-container) {
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.batch-table-panel :deep(.ant-table-thead > tr > th) {
+  background: rgba(248, 250, 252, 0.9);
+  color: rgb(100 116 139);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.batch-table-panel :deep(.ant-table-tbody > tr > td) {
+  background: transparent;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.9);
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.batch-table-panel :deep(.ant-table-tbody > tr:hover > td) {
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.batch-table-panel :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: rgba(239, 246, 255, 0.88);
+}
+
+.batch-table-panel :deep(.ant-checkbox-wrapper) {
+  color: rgb(71 85 105);
+}
+</style>

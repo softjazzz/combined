@@ -1,0 +1,65 @@
+name: Backend Quality Gates - medqc-web
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/backend-quality-medqc.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/medqc-web/backend/**'
+      - '.github/workflows/backend-quality-medqc.yml'
+  workflow_dispatch:
+
+jobs:
+  backend-quality-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/medqc-web/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Auth guard check
+        run: python scripts/check_auth_guard.py
+
+      - name: Secret hygiene check
+        run: python scripts/check_secret_hygiene.py
+
+      - name: Alert rules check
+        run: python scripts/check_alert_rules.py
+
+      - name: OpenAPI contract check
+        run: python scripts/check_openapi_contract.py
+
+      - name: Migration roundtrip check
+        run: python scripts/check_migration_roundtrip.py
+
+      - name: Security hardening tests
+        env:
+          JWT_SECRET: ci-test-secret
+          ENV: development
+        run: |
+          python -m pytest -q tests/unit/test_auth_sync_contract.py tests/unit/test_openapi_contract.py tests/unit/test_audit_logging.py tests/unit/test_observability_contract.py tests/unit/test_security_hardening.py tests/unit/test_sync_router.py tests/unit/test_sync_consistency.py tests/unit/test_sync_idempotency.py tests/unit/test_task_audit.py tests/unit/test_upload_rate_limit.py tests/unit/test_upload_security_controls.py tests/unit/test_production_guard.py
+
+      - name: Release smoke tests
+        env:
+          JWT_SECRET: ci-test-secret
+          ENV: development
+        run: |
+          python -m pytest -q tests/integration/test_release_gate_smoke.py

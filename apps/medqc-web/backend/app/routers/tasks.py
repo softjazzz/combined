@@ -29,6 +29,7 @@ from ..schemas.tasks import (
     TaskRecordStatus,
 )
 from ..core.supabase_client import get_supabase, async_execute
+from ..core.audit import audit_event
 from ..core.response import success_response, paginated_response, get_trace_id
 from ..core.security import get_current_user
 from ..core.permissions import (
@@ -492,6 +493,22 @@ async def assign_task(
         count = sum(1 for u in updates if u["assignee_id"] == assignee.get("user_id"))
         assignment_summary[name] = count
 
+    audit_event(
+        request,
+        action="tasks.assignment.update",
+        resource="/api/v1/tasks/{task_id}/assign",
+        outcome="success" if fail_count == 0 else "partial",
+        current_user=current_user,
+        details={
+            "task_id": task_id,
+            "pending_records": len(records),
+            "total_assigned": len(updates),
+            "assignees_count": len(assignees),
+            "failed_updates": fail_count,
+            "assignment_summary": assignment_summary,
+        },
+    )
+
     return success_response(
         data={
             "task_id": task_id,
@@ -622,6 +639,15 @@ async def delete_task(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
+    audit_event(
+        request,
+        action="tasks.lifecycle.delete",
+        resource="/api/v1/tasks/{task_id}",
+        outcome="success",
+        current_user=current_user,
+        details={"task_id": task_id},
+    )
+
     return success_response(
         data={"task_id": task_id},
         message="任务已删除",
@@ -650,6 +676,15 @@ async def cancel_task(
         await async_execute(sb.table('qc_tasks').update(update_data).eq('id', task_id))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"取消失败: {str(e)}")
+
+    audit_event(
+        request,
+        action="tasks.lifecycle.cancel",
+        resource="/api/v1/tasks/{task_id}/cancel",
+        outcome="success",
+        current_user=current_user,
+        details={"task_id": task_id, "status": TaskStatus.CANCELLED.value},
+    )
 
     return success_response(
         data={"task_id": task_id, "status": TaskStatus.CANCELLED.value},

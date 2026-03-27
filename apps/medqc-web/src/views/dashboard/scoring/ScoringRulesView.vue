@@ -277,10 +277,11 @@ import {
   DownloadOutlined,
 } from '@ant-design/icons-vue'
 import axios from 'axios'
+import { getAccessToken } from '@/utils/auth-token'
 
 // 从 localStorage 读取 token（与 apiService.ts 的 TokenManager 保持一致）
 function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('medqc_access_token') || localStorage.getItem('token') || ''
+  const token = getAccessToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 

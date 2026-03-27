@@ -1,6 +1,20 @@
 ﻿// @ts-nocheck
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
+import {
+  clearAuthTokens,
+  getAccessToken as readAccessToken,
+  getRefreshToken as readRefreshToken,
+  setAccessToken as writeAccessToken,
+  setRefreshToken as writeRefreshToken,
+} from '@/utils/auth-token'
+import { extractApiErrorMessage, unwrapApiEnvelope } from '@/utils/api-envelope'
+import {
+  attachTraceIdToError,
+  ensureTraceHeaders,
+  extractTraceIdFromHeaders,
+  extractTraceIdFromResponse,
+} from '@/utils/trace'
 import type {
   ApiResponse,
   LoginRequest,
@@ -72,28 +86,26 @@ let refreshPromise: Promise<string> | null = null
 
 // Token管理
 class TokenManager {
-  private static readonly TOKEN_KEY = 'medqc_access_token'
-  private static readonly REFRESH_TOKEN_KEY = 'medqc_refresh_token'
-
   static getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY)
+    const token = readAccessToken()
+    return token || null
   }
 
   static setToken(token: string): void {
-    localStorage.setItem(this.TOKEN_KEY, token)
+    writeAccessToken(token)
   }
 
   static getRefreshToken(): string | null {
-    return localStorage.getItem(this.REFRESH_TOKEN_KEY)
+    const token = readRefreshToken()
+    return token || null
   }
 
   static setRefreshToken(token: string): void {
-    localStorage.setItem(this.REFRESH_TOKEN_KEY, token)
+    writeRefreshToken(token)
   }
 
   static clearTokens(): void {
-    localStorage.removeItem(this.TOKEN_KEY)
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY)
+    clearAuthTokens()
   }
 
   static isTokenExpired(token: string): boolean {
@@ -115,12 +127,12 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    // 添加请求ID用于调试
-    config.headers = config.headers || {}
-    config.headers['X-Request-ID'] = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const { headers: traceHeaders, traceId } = ensureTraceHeaders(config.headers as Record<string, unknown>)
+    config.headers = traceHeaders
 
     if (API_DEBUG) {
       console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+        traceId,
         headers: config.headers,
         data: config.data,
         params: config.params,
@@ -151,6 +163,8 @@ apiClient.interceptors.response.use(
   },
   async (error: unknown) => {
     const originalRequest = error.config
+    const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
+    attachTraceIdToError(error, traceId)
 
     // 只在开发环境或非认证错误时记录详细错误
     if (process.env.NODE_ENV === 'development' || error.response?.status !== 401) {
@@ -158,6 +172,7 @@ apiClient.interceptors.response.use(
         status: error.response?.status,
         data: error.response?.data,
         message: error.message,
+        traceId,
       })
     }
 
@@ -180,8 +195,17 @@ apiClient.interceptors.response.use(
 
       // 复用正在进行的刷新请求
       if (!refreshPromise) {
+        const inheritedTraceId =
+          extractTraceIdFromHeaders(originalRequest?.headers) ||
+          traceId ||
+          undefined
+        const { headers: refreshHeaders } = ensureTraceHeaders({}, inheritedTraceId)
         refreshPromise = axios
-          .post(`${API_BASE_URL}/api/v1/auth/refresh`, { refresh_token: refreshToken })
+          .post(
+            `${API_BASE_URL}/api/v1/auth/refresh`,
+            { refresh_token: refreshToken },
+            { headers: refreshHeaders },
+          )
           .then((response) => {
             const { access_token, refresh_token: newRefreshToken } = response.data
             if (access_token) TokenManager.setToken(access_token)
@@ -212,7 +236,7 @@ apiClient.interceptors.response.use(
     // 统一错误处理（兼容后端统一错误结构）
     const data = error.response?.data || {}
     const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'
-    const traceId = data.traceId
+    const traceIdFromPayload = traceId || data.trace_id || data.traceId
 
     // 根据状态码显示不同的错误信息
     switch (error.response?.status) {
@@ -236,7 +260,9 @@ apiClient.interceptors.response.use(
         break
       case 500:
         message.error(
-          traceId ? `服务器错误（${traceId}），请联系管理员` : '服务器内部错误，请联系管理员',
+          traceIdFromPayload
+            ? `服务器错误（${traceIdFromPayload}），请联系管理员`
+            : '服务器内部错误，请联系管理员',
         )
         break
       case 502:
@@ -261,6 +287,43 @@ apiClient.interceptors.response.use(
 // API服务类
 export class ApiService {
   // Generic HTTP helpers used by legacy/new modules.
+  static async requestRaw<T = unknown>(
+    config: AxiosRequestConfig,
+  ): Promise<AxiosResponse<T>> {
+    return apiClient.request<T>(config)
+  }
+
+  static async getRaw<T = unknown>(
+    url: string,
+    params?: Record<string, unknown>,
+    config?: AxiosRequestConfig,
+  ): Promise<AxiosResponse<T>> {
+    return apiClient.get<T>(url, { ...(config || {}), params })
+  }
+
+  static async postRaw<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig,
+  ): Promise<AxiosResponse<T>> {
+    return apiClient.post<T>(url, data, config)
+  }
+
+  static async putRaw<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig,
+  ): Promise<AxiosResponse<T>> {
+    return apiClient.put<T>(url, data, config)
+  }
+
+  static async deleteRaw<T = unknown>(
+    url: string,
+    config?: AxiosRequestConfig,
+  ): Promise<AxiosResponse<T>> {
+    return apiClient.delete<T>(url, config)
+  }
+
   static async get<T = unknown>(
     url: string,
     params?: Record<string, unknown>,
@@ -268,11 +331,11 @@ export class ApiService {
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.get<T>(url, { ...(config || {}), params })
-      return { success: true, data: response.data }
+      return { success: true, data: unwrapApiEnvelope<T>(response.data) }
     } catch (error: any) {
       return {
         success: false,
-        error: error?.response?.data?.message || error?.message || 'GET request failed',
+        error: extractApiErrorMessage(error?.response?.data, error?.message || 'GET request failed'),
         data: null as any,
       }
     }
@@ -285,11 +348,11 @@ export class ApiService {
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.post<T>(url, data, config)
-      return { success: true, data: response.data }
+      return { success: true, data: unwrapApiEnvelope<T>(response.data) }
     } catch (error: any) {
       return {
         success: false,
-        error: error?.response?.data?.message || error?.message || 'POST request failed',
+        error: extractApiErrorMessage(error?.response?.data, error?.message || 'POST request failed'),
         data: null as any,
       }
     }
@@ -302,11 +365,11 @@ export class ApiService {
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.put<T>(url, data, config)
-      return { success: true, data: response.data }
+      return { success: true, data: unwrapApiEnvelope<T>(response.data) }
     } catch (error: any) {
       return {
         success: false,
-        error: error?.response?.data?.message || error?.message || 'PUT request failed',
+        error: extractApiErrorMessage(error?.response?.data, error?.message || 'PUT request failed'),
         data: null as any,
       }
     }
@@ -318,11 +381,11 @@ export class ApiService {
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.delete<T>(url, config)
-      return { success: true, data: response.data }
+      return { success: true, data: unwrapApiEnvelope<T>(response.data) }
     } catch (error: any) {
       return {
         success: false,
-        error: error?.response?.data?.message || error?.message || 'DELETE request failed',
+        error: extractApiErrorMessage(error?.response?.data, error?.message || 'DELETE request failed'),
         data: null as any,
       }
     }

@@ -384,7 +384,7 @@ async def evaluate_batch(
 
 
 @router.post("/results/save")
-async def save_qc_result(req: SaveQCResultRequest):
+async def save_qc_result(request: Request, req: SaveQCResultRequest):
     try:
         base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -413,13 +413,18 @@ async def save_qc_result(req: SaveQCResultRequest):
         with filepath.open("w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
 
-        return {"success": True, "id": result_id, "path": str(filepath)}
+        return success_response(
+            data={"id": result_id, "path": str(filepath)},
+            message="质控结果保存成功",
+            trace_id=get_trace_id(request),
+        )
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"保存质控结果失败: {e}")
 
 
 @router.get("/results/history")
 async def get_qc_history(
+    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     document_type: Optional[str] = Query(None),
@@ -432,12 +437,16 @@ async def get_qc_history(
     try:
         base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
         if not base_dir.exists():
-            return {
-                "records": [],
-                "total": 0,
-                "page": page,
-                "page_size": page_size
-            }
+            return success_response(
+                data={
+                    "records": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                message="暂无历史记录",
+                trace_id=get_trace_id(request),
+            )
 
         # 读取所有JSON文件
         all_files = sorted(base_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -514,18 +523,22 @@ async def get_qc_history(
         end_idx = start_idx + page_size
         paginated_records = records[start_idx:end_idx]
 
-        return {
-            "records": paginated_records,
-            "total": total,
-            "page": page,
-            "page_size": page_size
-        }
+        return success_response(
+            data={
+                "records": paginated_records,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            },
+            message="获取质控历史成功",
+            trace_id=get_trace_id(request),
+        )
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取质控历史失败: {e}")
 
 
 @router.get("/results/latest")
-async def get_latest_qc_result():
+async def get_latest_qc_result(request: Request):
     """获取最新一次质控结果"""
     try:
         base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
@@ -541,7 +554,11 @@ async def get_latest_qc_result():
         with latest_file.open("r", encoding="utf-8") as f:
             data = json.load(f)
 
-        return data
+        return success_response(
+            data=data,
+            message="获取最新质控结果成功",
+            trace_id=get_trace_id(request),
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -549,7 +566,7 @@ async def get_latest_qc_result():
 
 
 @router.get("/results/{result_id:path}")
-async def get_qc_result_detail(result_id: str):
+async def get_qc_result_detail(request: Request, result_id: str):
     """获取指定ID的质控结果详情"""
     try:
         base_dir = Path(__file__).resolve().parent.parent / "storage" / "qc_results"
@@ -573,7 +590,11 @@ async def get_qc_result_detail(result_id: str):
             if model and not data.get("model"):
                 data["model"] = model
 
-            return data
+            return success_response(
+                data=data,
+                message="获取质控结果详情成功",
+                trace_id=get_trace_id(request),
+            )
 
         # 如果直接匹配失败，尝试查找以result_id开头的文件（result_id_*.json）
         matching_files = list(base_dir.glob(f"{result_id}_*.json"))
@@ -599,7 +620,11 @@ async def get_qc_result_detail(result_id: str):
         if model and not data.get("model"):
             data["model"] = model
 
-        return data
+        return success_response(
+            data=data,
+            message="获取质控结果详情成功",
+            trace_id=get_trace_id(request),
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -764,9 +789,9 @@ async def rules(
                     "description": rule.get("description", "")
                 })
             source = "json_file"
-            print(f"✅ 已从JSON文件加载 {len(data)} 条四川规则")
+            logger.info("Loaded %s Sichuan rules from JSON file", len(data))
         except Exception as e:
-            print(f"⚠️ 加载JSON文件失败: {e}，使用最小示例")
+            logger.warning("Failed to load Sichuan rules JSON file, fallback to minimal sample: %s", e)
             data = [
                 {"rule_id": "sc-001", "name": "入院记录完整性", "category": "基础", "defect_level": "major", "complexity": "medium", "applicable_documents": ["入院记录"], "score_deduction": 2, "medical_domain": "通用", "requires_rag": False, "requires_cot": False, "description": "检查入院记录结构是否完整"},
             ]
@@ -802,26 +827,34 @@ async def rules(
                 docs = ["通用文书"]
             for dt in docs:
                 by_type.setdefault(str(dt), []).append(r)
-        return {
-            "rules_by_document_type": by_type,
-            "document_types": list(sorted(by_type.keys())),
-            "total_rules": sum(len(v) for v in by_type.values()),
+        return success_response(
+            data={
+                "rules_by_document_type": by_type,
+                "document_types": list(sorted(by_type.keys())),
+                "total_rules": sum(len(v) for v in by_type.values()),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "success",
+                "source": source,
+            },
+            message="获取规则成功",
+            trace_id=get_trace_id(request),
+        )
+
+    return success_response(
+        data={
+            "rules": filtered,
+            "total_rules": len(filtered),
+            "document_type_filter": list(wanted_docs) if wanted_docs else None,
+            "rule_categories": list(sorted({d.get("category", "基础") for d in filtered})),
+            "complexity_distribution": {},
+            "defect_level_distribution": {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "success",
             "source": source,
-        }
-
-    return {
-        "rules": filtered,
-        "total_rules": len(filtered),
-        "document_type_filter": list(wanted_docs) if wanted_docs else None,
-        "rule_categories": list(sorted({d.get("category", "基础") for d in filtered})),
-        "complexity_distribution": {},
-        "defect_level_distribution": {},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": "success",
-        "source": source,
-    }
+        },
+        message="获取规则成功",
+        trace_id=get_trace_id(request),
+    )
 
 
 # ------------------------- Persistence Helpers -------------------------

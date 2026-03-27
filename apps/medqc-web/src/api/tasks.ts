@@ -4,45 +4,27 @@
  * 提供任务的创建、查询、抽样、分配、进度查看等功能
  */
 
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
+
 const BASE_URL = '/api/v1/tasks'
 
-/** 获取带认证的请求头 */
-function getHeaders(): Record<string, string> {
-    const token = localStorage.getItem('medqc_access_token')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-    }
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-    }
-    return headers
-}
-
 /** 通用请求封装 */
-async function request<T = any>(url: string, options: RequestInit = {}): Promise<{ success: boolean; data?: T; message?: string }> {
+async function request<T = any>(
+    config: Parameters<typeof ApiService.requestRaw>[0]
+): Promise<{ success: boolean; data?: T; message?: string }> {
     try {
-        const response = await fetch(url, {
-            headers: getHeaders(),
-            ...options,
-        })
-        const result = await response.json().catch(() => ({}))
-
-        if (!response.ok) {
-            return {
-                success: false,
-                message: result?.detail || result?.error || result?.message || response.statusText,
-            }
-        }
-
+        const response = await ApiService.requestRaw<T>(config)
+        const normalized = normalizeApiSuccess<T>(response.data)
         return {
-            success: result?.success !== false,
-            data: result?.data || result,
-            message: result?.message,
+            success: normalized.success,
+            data: normalized.data,
+            message: normalized.message,
         }
-    } catch (error: any) {
+    } catch (error) {
         return {
             success: false,
-            message: error?.message || '网络异常或服务器不可用',
+            message: extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
         }
     }
 }
@@ -137,38 +119,40 @@ export async function getTaskList(params?: {
         })
     }
     const url = `${BASE_URL}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-    return request<TaskListResponse>(url)
+    return request<TaskListResponse>({ method: 'GET', url })
 }
 
 /** 获取任务统计 */
 export async function getTaskStats() {
-    return request<TaskStats>(`${BASE_URL}/stats`)
+    return request<TaskStats>({ method: 'GET', url: `${BASE_URL}/stats` })
 }
 
 /** 获取任务详情 */
 export async function getTaskDetail(taskId: string) {
-    return request<TaskItem & { records?: any[] }>(`${BASE_URL}/${taskId}`)
+    return request<TaskItem & { records?: any[] }>({ method: 'GET', url: `${BASE_URL}/${taskId}` })
 }
 
 /** 创建任务 */
 export async function createTask(data: TaskCreateData) {
-    return request<TaskItem>(`${BASE_URL}`, {
+    return request<TaskItem>({
         method: 'POST',
-        body: JSON.stringify(data),
+        url: `${BASE_URL}`,
+        data,
     })
 }
 
 /** 更新任务 */
 export async function updateTask(taskId: string, data: Partial<TaskCreateData & { status?: TaskStatus }>) {
-    return request<TaskItem>(`${BASE_URL}/${taskId}`, {
+    return request<TaskItem>({
         method: 'PUT',
-        body: JSON.stringify(data),
+        url: `${BASE_URL}/${taskId}`,
+        data,
     })
 }
 
 /** 执行抽样 */
 export async function executeSampling(taskId: string) {
-    return request(`${BASE_URL}/${taskId}/sample`, { method: 'POST' })
+    return request({ method: 'POST', url: `${BASE_URL}/${taskId}/sample` })
 }
 
 /** 分配任务 */
@@ -176,28 +160,29 @@ export async function assignTask(taskId: string, data: {
     assignees: Array<{ user_id: string; user_name: string; department?: string }>
     method?: AssignMethod
 }) {
-    return request(`${BASE_URL}/${taskId}/assign`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify(data),
+        url: `${BASE_URL}/${taskId}/assign`,
+        data,
     })
 }
 
 /** 获取任务进度 */
 export async function getTaskProgress(taskId: string) {
-    return request<TaskProgress>(`${BASE_URL}/${taskId}/progress`)
+    return request<TaskProgress>({ method: 'GET', url: `${BASE_URL}/${taskId}/progress` })
 }
 
 /** 重新质控 */
 export async function reAnalyzeTask(taskId: string) {
-    return request(`${BASE_URL}/${taskId}/re-analyze`, { method: 'POST' })
+    return request({ method: 'POST', url: `${BASE_URL}/${taskId}/re-analyze` })
 }
 
 /** 取消任务 */
 export async function cancelTask(taskId: string) {
-    return request(`${BASE_URL}/${taskId}/cancel`, { method: 'POST' })
+    return request({ method: 'POST', url: `${BASE_URL}/${taskId}/cancel` })
 }
 
 /** 删除任务 */
 export async function deleteTask(taskId: string) {
-    return request(`${BASE_URL}/${taskId}`, { method: 'DELETE' })
+    return request({ method: 'DELETE', url: `${BASE_URL}/${taskId}` })
 }

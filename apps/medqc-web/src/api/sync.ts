@@ -124,32 +124,47 @@ export interface SyncTemplate {
   defaults: Partial<MongoConnectionConfig>
 }
 
+function unwrapSyncResponse<T = any>(raw: any): T {
+  if (!raw || typeof raw !== 'object') {
+    return raw as T
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'success')) {
+    if (raw.success === false) {
+      return raw as T
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, 'data')) {
+      return raw.data as T
+    }
+  }
+  return raw as T
+}
+
 export const syncApi = {
   async getStatus(): Promise<SyncStatusResponse> {
     const response = await http.get('/api/v1/sync/status')
-    return response.data
+    return unwrapSyncResponse<SyncStatusResponse>(response.data)
   },
 
   async getStatistics(): Promise<SyncStatistics> {
     const response = await http.get('/api/v1/sync/statistics')
-    return response.data
+    return unwrapSyncResponse<SyncStatistics>(response.data)
   },
 
   async getMongoConfig(): Promise<MongoConnectionConfig> {
     const response = await http.get('/api/v1/sync/config/mongo')
-    return response.data
+    return unwrapSyncResponse<MongoConnectionConfig>(response.data)
   },
 
   async updateMongoConfig(
     payload: Partial<MongoConnectionConfig>,
-  ): Promise<{ success: boolean; config: MongoConnectionConfig }> {
+  ): Promise<{ config: MongoConnectionConfig }> {
     const response = await http.put('/api/v1/sync/config/mongo', payload)
-    return response.data
+    return unwrapSyncResponse<{ config: MongoConnectionConfig }>(response.data)
   },
 
   async getPgConfig(): Promise<PgConnectionConfig> {
     const response = await http.get('/api/v1/sync/config/pg')
-    return response.data
+    return unwrapSyncResponse<PgConnectionConfig>(response.data)
   },
 
   async updatePgConfig(payload: {
@@ -158,29 +173,31 @@ export const syncApi = {
     remote_database: string
     remote_username: string
     remote_password?: string
-  }): Promise<{ success: boolean; config: PgConnectionConfig; connection: Record<string, any> }> {
+  }): Promise<{ config: PgConnectionConfig; connection: Record<string, any> }> {
     const response = await http.put('/api/v1/sync/config/pg', payload)
-    return response.data
+    return unwrapSyncResponse<{ config: PgConnectionConfig; connection: Record<string, any> }>(
+      response.data,
+    )
   },
 
   async testMongoConnection(): Promise<Record<string, any>> {
     const response = await http.post('/api/v1/sync/test-connection/mongo')
-    return response.data
+    return unwrapSyncResponse<Record<string, any>>(response.data)
   },
 
   async testPgRemoteConnection(): Promise<Record<string, any>> {
     const response = await http.post('/api/v1/sync/test-connection/pg-remote')
-    return response.data
+    return unwrapSyncResponse<Record<string, any>>(response.data)
   },
 
   async testPgLocalConnection(): Promise<Record<string, any>> {
     const response = await http.post('/api/v1/sync/test-connection/pg-local')
-    return response.data
+    return unwrapSyncResponse<Record<string, any>>(response.data)
   },
 
   async testAllConnections(): Promise<SyncConnectionStatus> {
     const response = await http.post('/api/v1/sync/test-connection/all')
-    return response.data
+    return unwrapSyncResponse<SyncConnectionStatus>(response.data)
   },
 
   async preflight(payload: {
@@ -189,7 +206,7 @@ export const syncApi = {
     tables?: string[]
   }): Promise<SyncPreflightResult> {
     const response = await http.post('/api/v1/sync/preflight', payload)
-    return response.data
+    return unwrapSyncResponse<SyncPreflightResult>(response.data)
   },
 
   async triggerSync(payload: {
@@ -199,12 +216,12 @@ export const syncApi = {
     tables?: string[]
   }): Promise<SyncTriggerResponse> {
     const response = await http.post('/api/v1/sync/trigger', payload)
-    return response.data
+    return unwrapSyncResponse<SyncTriggerResponse>(response.data)
   },
 
   async getMappings(): Promise<SyncMappingsResponse> {
     const response = await http.get('/api/v1/sync/mappings')
-    return response.data
+    return unwrapSyncResponse<SyncMappingsResponse>(response.data)
   },
 
   async getRuns(params?: {
@@ -213,24 +230,25 @@ export const syncApi = {
     limit?: number
   }): Promise<SyncRunsResponse> {
     const response = await http.get('/api/v1/sync/runs', { params })
-    return response.data
+    return unwrapSyncResponse<SyncRunsResponse>(response.data)
   },
 
   async getTemplates(): Promise<{ items: SyncTemplate[] }> {
     const response = await http.get('/api/v1/sync/templates')
-    return response.data
+    return unwrapSyncResponse<{ items: SyncTemplate[] }>(response.data)
   },
 
   async applyTemplate(payload: {
     template_id: SyncTemplate['id']
     departments?: string[]
-  }): Promise<{ success: boolean; template_id: string; config: MongoConnectionConfig }> {
+  }): Promise<{ template_id: string; config: MongoConnectionConfig }> {
     const response = await http.post('/api/v1/sync/templates/apply', payload)
-    return response.data
+    return unwrapSyncResponse<{ template_id: string; config: MongoConnectionConfig }>(response.data)
   },
 
   async getDepartments(): Promise<string[]> {
     const response = await http.get('/api/v1/sync/departments')
-    return Array.isArray(response.data?.items) ? response.data.items : []
+    const payload = unwrapSyncResponse<{ items?: string[] }>(response.data)
+    return Array.isArray(payload?.items) ? payload.items : []
   },
 }

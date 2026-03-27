@@ -7,6 +7,9 @@
  * @see PRD-病案质控管理员端.md — 补充 C（数据模型映射）
  */
 
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
+
 // ============= 复用已有 API =============
 // 直接从各模块 re-export，方便管理员页面统一导入
 
@@ -56,42 +59,23 @@ const DEFECTS_URL = '/api/v1/qc/defects'
 const TASKS_URL = '/api/v1/tasks'
 const DASHBOARD_URL = '/api/v1/dashboard'
 const REMEDIATION_URL = '/api/v1/remediation'
+const RECORDS_URL = '/api/v1/records'
 
-function getHeaders(): Record<string, string> {
-    const token = localStorage.getItem('medqc_access_token')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-    }
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-    }
-    return headers
-}
-
-async function request<T = any>(url: string, options: RequestInit = {}): Promise<{ success: boolean; data?: T; message?: string }> {
+async function request<T = any>(
+    config: Parameters<typeof ApiService.requestRaw>[0]
+): Promise<{ success: boolean; data?: T; message?: string }> {
     try {
-        const response = await fetch(url, {
-            headers: getHeaders(),
-            ...options,
-        })
-        const result = await response.json().catch(() => ({}))
-
-        if (!response.ok) {
-            return {
-                success: false,
-                message: result?.detail || result?.error || result?.message || response.statusText,
-            }
-        }
-
+        const response = await ApiService.requestRaw<T>(config)
+        const normalized = normalizeApiSuccess<T>(response.data)
         return {
-            success: result?.success !== false,
-            data: result?.data || result,
-            message: result?.message,
+            success: normalized.success,
+            data: normalized.data,
+            message: normalized.message,
         }
-    } catch (error: any) {
+    } catch (error) {
         return {
             success: false,
-            message: error?.message || '网络异常或服务器不可用',
+            message: extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
         }
     }
 }
@@ -155,6 +139,7 @@ export interface AssignRemediationData {
 
 /** 获取管理员端运行病历列表（聚合 task_records + 缺陷统计） */
 export async function getAdminRecordList(params?: {
+    scene?: 'running' | 'final' | 'outpatient_emergency'
     task_id?: string
     department?: string
     status?: string
@@ -172,9 +157,36 @@ export async function getAdminRecordList(params?: {
             }
         })
     }
-    // 管理员端暂复用 tasks 列表接口，后续可新增聚合接口
-    const url = `${TASKS_URL}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-    return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>(url)
+    const targetBaseUrl =
+        params?.scene === 'outpatient_emergency' ? `${RECORDS_URL}/outpatient-emergency` : TASKS_URL
+    const url = `${targetBaseUrl}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({ method: 'GET', url })
+}
+
+/** 获取门急诊病历分页列表（主链路接口） */
+export async function getOutpatientEmergencyRecordList(params?: {
+    keyword?: string
+    department?: string
+    status?: string
+    start_date?: string
+    end_date?: string
+    scoring_standard?: string
+    page?: number
+    page_size?: number
+}) {
+    const queryParams = new URLSearchParams()
+    if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, String(value))
+            }
+        })
+    }
+    const url = `${RECORDS_URL}/outpatient-emergency${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({
+        method: 'GET',
+        url,
+    })
 }
 
 /** 获取管理员端统计概览 */
@@ -193,7 +205,7 @@ export async function getAdminOverview(params?: {
     }
     // 复用 dashboard/overview 接口
     const url = `${DASHBOARD_URL}/overview${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-    return request<AdminOverviewStats>(url)
+    return request<AdminOverviewStats>({ method: 'GET', url })
 }
 
 /**
@@ -202,29 +214,32 @@ export async function getAdminOverview(params?: {
  * TODO: 后续后端新增 confirm 状态后切换
  */
 export async function confirmDefect(defectId: string, data?: ConfirmDefectData) {
-    return request(`${DEFECTS_URL}/${defectId}/urge`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify({ message: data?.comment || '管理员确认问题', ...data }),
+        url: `${DEFECTS_URL}/${defectId}/urge`,
+        data: { message: data?.comment || '管理员确认问题', ...data },
     })
 }
 
 /** 标记误报（后端当前无 false-alarm 路由，暂映射为 approve + 备注） */
 export async function markFalseAlarm(defectId: string, reason?: string) {
     // 后端无 false-alarm 路由，暂用 approve + comment 标记
-    return request(`${DEFECTS_URL}/${defectId}/approve`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify({ comment: `[误报] ${reason || '管理员标记为误报'}` }),
+        url: `${DEFECTS_URL}/${defectId}/approve`,
+        data: { comment: `[误报] ${reason || '管理员标记为误报'}` },
     })
 }
 
 /** 派发整改任务 */
 export async function assignRemediation(defectId: string, data: AssignRemediationData) {
-    return request(`${REMEDIATION_URL}`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify({
+        url: `${REMEDIATION_URL}`,
+        data: {
             defect_id: defectId,
             ...data,
-        }),
+        },
     })
 }
 
@@ -235,13 +250,14 @@ export async function batchCreateQCTask(data: {
     date_range?: { start: string; end: string }
     record_ids?: string[]
 }) {
-    return request(`${TASKS_URL}`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify({
+        url: `${TASKS_URL}`,
+        data: {
             task_type: 'one_time',
             sampling_method: 'all',
             ...data,
-        }),
+        },
     })
 }
 
@@ -250,7 +266,7 @@ export async function batchCreateQCTask(data: {
  * 后端无独立 /departments 接口，从 dashboard/overview 的 department_stats 键提取
  */
 export async function getDepartmentList() {
-    const res = await request<any>(`${DASHBOARD_URL}/overview`)
+    const res = await request<any>({ method: 'GET', url: `${DASHBOARD_URL}/overview` })
     if (res.success && res.data?.department_stats) {
         const depts = Object.keys(res.data.department_stats).map(name => ({ code: name, name }))
         return { success: true, data: depts }
@@ -293,14 +309,15 @@ export interface TaskProgressData {
  */
 export async function createQCTaskAndSample(params: CreateTaskParams) {
     // Step 1: 创建任务
-    const createRes = await request<any>(`${TASKS_URL}`, {
+    const createRes = await request<any>({
         method: 'POST',
-        body: JSON.stringify({
+        url: `${TASKS_URL}`,
+        data: {
             task_type: params.task_type || 'one_time',
             sampling_method: params.sampling_method || 'all',
             assign_method: 'keep',
             ...params,
-        }),
+        },
     })
     if (!createRes.success || !createRes.data?.id) {
         return createRes
@@ -309,9 +326,7 @@ export async function createQCTaskAndSample(params: CreateTaskParams) {
     const taskId = createRes.data.id
 
     // Step 2: 自动执行抽样
-    const sampleRes = await request<any>(`${TASKS_URL}/${taskId}/sample`, {
-        method: 'POST',
-    })
+    const sampleRes = await request<any>({ method: 'POST', url: `${TASKS_URL}/${taskId}/sample` })
 
     // 抽样失败时返回失败，不误报成功
     if (!sampleRes.success) {
@@ -335,20 +350,21 @@ export async function createQCTaskAndSample(params: CreateTaskParams) {
 
 /** 获取任务执行进度（用于轮询） */
 export async function fetchTaskProgress(taskId: string) {
-    return request<TaskProgressData>(`${TASKS_URL}/${taskId}/progress`)
+    return request<TaskProgressData>({ method: 'GET', url: `${TASKS_URL}/${taskId}/progress` })
 }
 
 /** 重新质控任务 */
 export async function reAnalyzeQCTask(taskId: string) {
-    return request<any>(`${TASKS_URL}/${taskId}/re-analyze`, {
-        method: 'POST',
-    })
+    return request<any>({ method: 'POST', url: `${TASKS_URL}/${taskId}/re-analyze` })
 }
 
 /** 获取单病历详情（文书内容，用于联审 Drawer） */
 export async function getRecordDetail(recordId: string) {
-    // 从 medical_records 或后端聚合接口获取病历文书
-    return request<any>(`/api/v1/records/${recordId}`)
+    const detailRes = await request<any>({ method: 'GET', url: `${RECORDS_URL}/${recordId}/qc-detail` })
+    if (detailRes.success) {
+        return detailRes
+    }
+    return request<any>({ method: 'GET', url: `${RECORDS_URL}/${recordId}` })
 }
 
 // ============= P1: 整改闭环 =============
@@ -391,27 +407,29 @@ export async function getRemediationList(params?: {
         })
     }
     const url = `${REMEDIATION_URL}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-    return request<{ items: RemediationItem[]; total: number }>(`${url}`)
+    return request<{ items: RemediationItem[]; total: number }>({ method: 'GET', url })
 }
 
 /** 获取整改统计 */
 export async function getRemediationStats() {
-    return request<any>(`${REMEDIATION_URL}/statistics/summary`)
+    return request<any>({ method: 'GET', url: `${REMEDIATION_URL}/statistics/summary` })
 }
 
 /** 验收整改（通过/驳回） */
 export async function reviewRemediation(taskId: string, data: { action: 'approve' | 'reject'; review_comment?: string }) {
-    return request(`${REMEDIATION_URL}/${taskId}/review`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify(data),
+        url: `${REMEDIATION_URL}/${taskId}/review`,
+        data,
     })
 }
 
 /** 关闭整改任务 */
 export async function closeRemediation(taskId: string, reason?: string) {
-    return request(`${REMEDIATION_URL}/${taskId}/close`, {
+    return request({
         method: 'POST',
-        body: JSON.stringify({ reason }),
+        url: `${REMEDIATION_URL}/${taskId}/close`,
+        data: { reason },
     })
 }
 
@@ -429,16 +447,17 @@ export async function batchCreateRemediation(data: {
     // 逐条创建整改任务（后端暂无 batch 接口）
     const results: any[] = []
     for (const defectId of data.defect_ids) {
-        const res = await request(`${REMEDIATION_URL}`, {
+        const res = await request({
             method: 'POST',
-            body: JSON.stringify({
+            url: `${REMEDIATION_URL}`,
+            data: {
                 defect_id: defectId,
                 assignee_id: data.assignee_id,
                 assignee_name: data.assignee_name,
                 assignee_department: data.assignee_department,
                 remediation_requirement: data.remediation_requirement,
                 deadline: data.deadline,
-            }),
+            },
         })
         results.push(res)
     }
@@ -470,13 +489,8 @@ export async function exportDefectsDownload(params?: {
     const url = `${DEFECTS_URL}/export${queryParams.toString() ? '?' + queryParams.toString() : ''}`
 
     try {
-        const response = await fetch(url, { headers: getHeaders() })
-        if (!response.ok) {
-            return { success: false, message: '导出失败' }
-        }
-
-        // 尝试获取 blob 下载
-        const blob = await response.blob()
+        const response = await ApiService.getRaw<Blob>(url, undefined, { responseType: 'blob' })
+        const blob = response.data
         const downloadUrl = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = downloadUrl
@@ -486,7 +500,7 @@ export async function exportDefectsDownload(params?: {
         document.body.removeChild(a)
         URL.revokeObjectURL(downloadUrl)
         return { success: true, message: '导出成功' }
-    } catch {
-        return { success: false, message: '导出失败，请重试' }
+    } catch (error) {
+        return { success: false, message: extractApiErrorMessageFromError(error, '导出失败，请重试') }
     }
 }

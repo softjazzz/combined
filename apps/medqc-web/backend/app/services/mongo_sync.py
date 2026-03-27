@@ -24,6 +24,8 @@ Codex 评审后修订版 — 修复 4 个 High 级问题：
    - 新：增加 rescan_recent_days，滚动重扫最近 N 天
 """
 
+import os
+import json
 import time
 import logging
 from datetime import datetime, timedelta
@@ -36,6 +38,7 @@ from sqlalchemy.orm import Session
 from ..database.connection import engine, SessionLocal
 
 logger = logging.getLogger(__name__)
+_MONGO_SYNC_LOCK_KEY = int(os.getenv("MONGO_SYNC_LOCK_KEY", "2026032602"))
 
 
 # ==================== 同步运行时状态（内存） ====================
@@ -63,9 +66,132 @@ class MongoSyncState:
 _mongo_state = MongoSyncState()
 
 
+def _ensure_mongo_sync_state_table(session: Session):
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS mongo_sync_state (
+                state_name VARCHAR(32) PRIMARY KEY,
+                is_running BOOLEAN NOT NULL DEFAULT FALSE,
+                last_sync_time VARCHAR(32) NULL,
+                last_sync_status VARCHAR(32) NOT NULL DEFAULT 'never',
+                connected BOOLEAN NOT NULL DEFAULT FALSE,
+                connection_error TEXT NULL,
+                tier1_last_run VARCHAR(32) NULL,
+                tier1_discovered INTEGER NOT NULL DEFAULT 0,
+                tier2_last_run VARCHAR(32) NULL,
+                tier2_synced INTEGER NOT NULL DEFAULT 0,
+                tier3_last_run VARCHAR(32) NULL,
+                tier3_synced INTEGER NOT NULL DEFAULT 0,
+                logs_json TEXT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+
+def _upsert_mongo_sync_state(state: MongoSyncState):
+    if engine is None:
+        return
+    payload = asdict(state)
+    with Session(engine) as session:
+        _ensure_mongo_sync_state_table(session)
+        session.execute(
+            text(
+                """
+                INSERT INTO mongo_sync_state (
+                    state_name, is_running, last_sync_time, last_sync_status,
+                    connected, connection_error, tier1_last_run, tier1_discovered,
+                    tier2_last_run, tier2_synced, tier3_last_run, tier3_synced,
+                    logs_json, updated_at
+                )
+                VALUES (
+                    'mongo_sync', :is_running, :last_sync_time, :last_sync_status,
+                    :connected, :connection_error, :tier1_last_run, :tier1_discovered,
+                    :tier2_last_run, :tier2_synced, :tier3_last_run, :tier3_synced,
+                    :logs_json, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (state_name)
+                DO UPDATE SET
+                    is_running = EXCLUDED.is_running,
+                    last_sync_time = EXCLUDED.last_sync_time,
+                    last_sync_status = EXCLUDED.last_sync_status,
+                    connected = EXCLUDED.connected,
+                    connection_error = EXCLUDED.connection_error,
+                    tier1_last_run = EXCLUDED.tier1_last_run,
+                    tier1_discovered = EXCLUDED.tier1_discovered,
+                    tier2_last_run = EXCLUDED.tier2_last_run,
+                    tier2_synced = EXCLUDED.tier2_synced,
+                    tier3_last_run = EXCLUDED.tier3_last_run,
+                    tier3_synced = EXCLUDED.tier3_synced,
+                    logs_json = EXCLUDED.logs_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """
+            ),
+            {
+                "is_running": bool(payload.get("is_running")),
+                "last_sync_time": str(payload.get("last_sync_time") or ""),
+                "last_sync_status": str(payload.get("last_sync_status") or "never"),
+                "connected": bool(payload.get("connected")),
+                "connection_error": str(payload.get("connection_error") or "")[:500],
+                "tier1_last_run": str(payload.get("tier1_last_run") or ""),
+                "tier1_discovered": int(payload.get("tier1_discovered") or 0),
+                "tier2_last_run": str(payload.get("tier2_last_run") or ""),
+                "tier2_synced": int(payload.get("tier2_synced") or 0),
+                "tier3_last_run": str(payload.get("tier3_last_run") or ""),
+                "tier3_synced": int(payload.get("tier3_synced") or 0),
+                "logs_json": json.dumps(payload.get("logs") or [], ensure_ascii=False),
+            },
+        )
+        session.commit()
+
+
 def get_mongo_sync_state() -> Dict:
-    """获取当前 MongoDB 同步状态"""
-    return asdict(_mongo_state)
+    """获取当前 MongoDB 同步状态（优先读取数据库，回退内存）"""
+    if engine is None:
+        return asdict(_mongo_state)
+    try:
+        with Session(engine) as session:
+            _ensure_mongo_sync_state_table(session)
+            row = session.execute(
+                text(
+                    """
+                    SELECT
+                        is_running, last_sync_time, last_sync_status, connected, connection_error,
+                        tier1_last_run, tier1_discovered, tier2_last_run, tier2_synced,
+                        tier3_last_run, tier3_synced, logs_json
+                    FROM mongo_sync_state
+                    WHERE state_name = 'mongo_sync'
+                    """
+                )
+            ).mappings().first()
+            if not row:
+                _upsert_mongo_sync_state(_mongo_state)
+                return asdict(_mongo_state)
+            logs = row.get("logs_json") or []
+            if isinstance(logs, str):
+                try:
+                    logs = json.loads(logs)
+                except Exception:
+                    logs = []
+            return {
+                "is_running": bool(row.get("is_running")),
+                "last_sync_time": str(row.get("last_sync_time") or "") or None,
+                "last_sync_status": str(row.get("last_sync_status") or "never"),
+                "connected": bool(row.get("connected")),
+                "connection_error": str(row.get("connection_error") or ""),
+                "tier1_last_run": str(row.get("tier1_last_run") or "") or None,
+                "tier1_discovered": int(row.get("tier1_discovered") or 0),
+                "tier2_last_run": str(row.get("tier2_last_run") or "") or None,
+                "tier2_synced": int(row.get("tier2_synced") or 0),
+                "tier3_last_run": str(row.get("tier3_last_run") or "") or None,
+                "tier3_synced": int(row.get("tier3_synced") or 0),
+                "logs": logs if isinstance(logs, list) else [],
+            }
+    except Exception as exc:
+        logger.warning("读取 mongo_sync_state 失败，回退内存状态: %s", exc)
+        return asdict(_mongo_state)
 
 
 # ==================== MongoDB 连接器 ====================
@@ -136,6 +262,7 @@ class MongoConnector:
             info = self._client.server_info()
             _mongo_state.connected = True
             _mongo_state.connection_error = ""
+            _upsert_mongo_sync_state(_mongo_state)
             return {
                 "connected": True,
                 "version": info.get("version", "unknown"),
@@ -144,6 +271,7 @@ class MongoConnector:
         except Exception as e:
             _mongo_state.connected = False
             _mongo_state.connection_error = str(e)[:200]
+            _upsert_mongo_sync_state(_mongo_state)
             return {
                 "connected": False,
                 "error": str(e)[:200],
@@ -504,6 +632,7 @@ def run_tier1_discover(connector: MongoConnector, config) -> Dict:
 
         _mongo_state.tier1_last_run = datetime.utcnow().isoformat()
         _mongo_state.tier1_discovered = discovered
+        _upsert_mongo_sync_state(_mongo_state)
 
         logger.info(f"Tier1 发现 {discovered} 条新/变更记录")
         return {"discovered": discovered, "cursor": str(max_update_time)}
@@ -591,6 +720,7 @@ def run_tier2_structural(connector: MongoConnector, config=None) -> Dict:
 
         _mongo_state.tier2_last_run = datetime.utcnow().isoformat()
         _mongo_state.tier2_synced = synced
+        _upsert_mongo_sync_state(_mongo_state)
 
         logger.info(f"Tier2 结构化同步 {synced} 条 visit")
         return {"synced": synced}
@@ -683,6 +813,7 @@ def run_tier3_fulltext(connector: MongoConnector, config=None) -> Dict:
 
         _mongo_state.tier3_last_run = datetime.utcnow().isoformat()
         _mongo_state.tier3_synced = synced
+        _upsert_mongo_sync_state(_mongo_state)
 
         logger.info(f"Tier3 全文同步 {synced} 条 visit")
         return {"synced": synced}
@@ -713,10 +844,24 @@ def run_mongo_sync(tier: str = "all") -> Dict:
     if not config.mongo_uri:
         return {"success": False, "error": "mongo_uri 未配置"}
 
-    if _mongo_state.is_running:
+    lock_conn = None
+    lock_acquired = False
+    if engine is not None:
+        lock_conn = engine.connect()
+        lock_acquired = bool(
+            lock_conn.execute(
+                text("SELECT pg_try_advisory_lock(:lock_key)"),
+                {"lock_key": _MONGO_SYNC_LOCK_KEY},
+            ).scalar()
+        )
+        if not lock_acquired:
+            lock_conn.close()
+            return {"success": False, "error": "同步正在进行中"}
+    elif _mongo_state.is_running:
         return {"success": False, "error": "同步正在进行中"}
 
     _mongo_state.is_running = True
+    _upsert_mongo_sync_state(_mongo_state)
     connector = MongoConnector(
         uri=config.mongo_uri,
         database=config.mongo_database,
@@ -743,17 +888,30 @@ def run_mongo_sync(tier: str = "all") -> Dict:
 
         _mongo_state.last_sync_time = datetime.utcnow().isoformat()
         _mongo_state.last_sync_status = "success"
+        _upsert_mongo_sync_state(_mongo_state)
 
         return {"success": True, "results": results}
 
     except Exception as e:
         _mongo_state.last_sync_status = "failed"
+        _upsert_mongo_sync_state(_mongo_state)
         logger.error(f"MongoDB 同步异常: {e}")
         return {"success": False, "error": str(e)[:300], "results": results}
 
     finally:
         _mongo_state.is_running = False
+        _upsert_mongo_sync_state(_mongo_state)
         connector.close()
+        if lock_conn is not None and lock_acquired:
+            try:
+                lock_conn.execute(
+                    text("SELECT pg_advisory_unlock(:lock_key)"),
+                    {"lock_key": _MONGO_SYNC_LOCK_KEY},
+                )
+            except Exception as exc:
+                logger.warning("释放 MongoDB 同步锁失败: %s", exc)
+        if lock_conn is not None:
+            lock_conn.close()
 
 
 # ==================== 同步统计 ====================

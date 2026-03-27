@@ -14,9 +14,13 @@ async def llm_parse_text_proxy(
     # Minimal safe placeholder: validate input shape and refuse if missing
     api_config = payload.get("apiConfig") or {}
     request_body = payload.get("requestBody") or {}
+    settings = get_settings()
 
-    api_endpoint = (api_config.get("apiEndpoint") or "").strip()
-    api_key = api_config.get("apiKey") or ""
+    api_endpoint = str(api_config.get("apiEndpoint") or settings.LLM_API_ENDPOINT or "").strip()
+    api_key = str(api_config.get("apiKey") or settings.LLM_API_KEY or "").strip()
+    model_name = str(request_body.get("model") or api_config.get("model") or settings.LLM_MODEL or "").strip()
+    if model_name and not request_body.get("model"):
+        request_body["model"] = model_name
 
     if not api_endpoint or not api_key:
         return JSONResponse(status_code=StatusCode.BAD_REQUEST, content={
@@ -31,7 +35,7 @@ async def llm_parse_text_proxy(
         api_endpoint = api_endpoint.rstrip('/') + '/chat/completions'
 
     # 阿里云部分模型需要 enable_thinking=false（非流式）等兼容项
-    model_name = request_body.get('model', '')
+    model_name = str(request_body.get('model', ''))
     if 'dashscope.aliyuncs.com' in endpoint_l:
         thinking_required_models = [
             'qwen2.5-14b-instruct',
@@ -46,12 +50,16 @@ async def llm_parse_text_proxy(
         if isinstance(rf, dict) and rf.get('type') == 'json_object' and (model_name.startswith('qwen2.5') or model_name.startswith('qwen3')):
             request_body.pop('response_format', None)
 
-    settings = get_settings()
     try:
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        result = await safe_post_json(api_endpoint, headers, request_body, timeout_seconds=60)
+        result = await safe_post_json(
+            api_endpoint,
+            headers,
+            request_body,
+            timeout_seconds=max(1, int(settings.LLM_TIMEOUT_SECONDS)),
+        )
         # 若上游返回错误，透传其状态码与消息
         if isinstance(result, dict) and result.get("__error__"):
             return JSONResponse(status_code=int(result.get("__status__", StatusCode.BAD_GATEWAY)), content=result.get("body") or {"error": "UpstreamError"})

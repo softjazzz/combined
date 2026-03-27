@@ -11,7 +11,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 from fastapi import APIRouter, Request, Depends, Query
 
@@ -23,6 +23,18 @@ from ..core.permissions import require_permission, ResourceType, PermissionActio
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 logger = logging.getLogger(__name__)
 _DB_STATS_TIMEOUT_SECONDS = float(os.getenv("DASHBOARD_DB_STATS_TIMEOUT_SECONDS", "2.0"))
+DashboardScene = Literal["all", "outpatient_emergency", "running", "final"]
+
+OUTPATIENT_EMERGENCY_TYPES = {
+    "outpatient",
+    "emergency",
+    "outpatient_emergency",
+    "门诊",
+    "急诊",
+    "门急诊",
+}
+RUNNING_STATUSES = {"running", "in_progress", "pending", "pending_review", "processing", "在院"}
+FINAL_STATUSES = {"final", "completed", "discharged", "archived", "已出院", "终末"}
 
 
 # ============================
@@ -62,19 +74,57 @@ async def _aggregate_from_memory() -> Dict[str, Any]:
     }
 
 
-async def _collect_db_stats(sb) -> Dict[str, Any]:
+def _safe_lower(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _record_matches_scene(record: Dict[str, Any], scene: DashboardScene) -> bool:
+    if scene == "all":
+        return True
+
+    record_type = _safe_lower(record.get("record_type") or record.get("visit_type"))
+    status = _safe_lower(record.get("status"))
+
+    if scene == "outpatient_emergency":
+        # 说明：优先使用 record_type/visit_type；若当前数据行无该字段，则先不裁掉，避免误杀。
+        return not record_type or record_type in OUTPATIENT_EMERGENCY_TYPES
+
+    if scene == "running":
+        if record_type in OUTPATIENT_EMERGENCY_TYPES:
+            return False
+        if not status:
+            return True
+        return status in RUNNING_STATUSES
+
+    if scene == "final":
+        if record_type in OUTPATIENT_EMERGENCY_TYPES:
+            return False
+        if not status:
+            return True
+        return status in FINAL_STATUSES
+
+    return True
+
+
+async def _collect_db_stats(sb, scene: DashboardScene) -> Dict[str, Any]:
     """从 Supabase 获取统计数据。"""
     stats = {}
 
     # 1. 病历统计
-    record_query = sb.table('medical_records').select('id,status,department', count='exact')
-    resp = await async_execute(record_query)
+    try:
+        record_query = sb.table('medical_records').select('id,status,department,record_type', count='exact')
+        resp = await async_execute(record_query)
+    except Exception:
+        # 兼容历史表结构：record_type 列不存在时回退
+        record_query = sb.table('medical_records').select('id,status,department', count='exact')
+        resp = await async_execute(record_query)
     records = list(getattr(resp, 'data', None) or [])
-    total_records = getattr(resp, 'count', None) or len(records)
+    filtered_records = [r for r in records if _record_matches_scene(r, scene)]
+    total_records = len(filtered_records)
 
     status_counts = {}
     dept_counts = {}
-    for r in records:
+    for r in filtered_records:
         st = r.get('status', 'unknown')
         status_counts[st] = status_counts.get(st, 0) + 1
         dept = r.get('department', '未分类')
@@ -87,10 +137,11 @@ async def _collect_db_stats(sb) -> Dict[str, Any]:
     }
 
     # 2. 质控结果统计
-    qc_query = sb.table('qc_results').select('id,overall_score,grade', count='exact')
+    # 说明：当前 qc_results 未稳定绑定统一 scene 字段，暂以全量计算，待统一聚合视图后替换。
+    qc_query = sb.table('qc_results').select('id,overall_score,grade')
     resp = await async_execute(qc_query)
     qc_results = list(getattr(resp, 'data', None) or [])
-    total_qc = getattr(resp, 'count', None) or len(qc_results)
+    total_qc = len(qc_results)
 
     grade_counts = {}
     scores = []
@@ -144,12 +195,17 @@ async def _collect_db_stats(sb) -> Dict[str, Any]:
 
 async def _get_db_stats(user_id: str = None) -> Dict[str, Any]:
     """从 Supabase 获取统计数据，超时后快速降级。"""
+    return await _get_db_stats_by_scene(scene="all", user_id=user_id)
+
+
+async def _get_db_stats_by_scene(scene: DashboardScene = "all", user_id: str = None) -> Dict[str, Any]:
+    """从 Supabase 获取统计数据（支持 scene），超时后快速降级。"""
     sb = get_supabase()
     if sb is None:
         return None
 
     try:
-        return await asyncio.wait_for(_collect_db_stats(sb), timeout=_DB_STATS_TIMEOUT_SECONDS)
+        return await asyncio.wait_for(_collect_db_stats(sb, scene), timeout=_DB_STATS_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         logger.warning("Dashboard DB stats timed out after %.1fs; using fallback data", _DB_STATS_TIMEOUT_SECONDS)
         return None
@@ -165,6 +221,7 @@ async def _get_db_stats(user_id: str = None) -> Dict[str, Any]:
 @router.get("/todo-stats")
 async def get_todo_stats(
     request: Request,
+    scene: DashboardScene = Query("all", description="场景: all | outpatient_emergency | running | final"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -182,7 +239,7 @@ async def get_todo_stats(
     user_id = current_user.get("user_id", "")
 
     # 尝试从数据库获取
-    db_stats = await _get_db_stats(user_id)
+    db_stats = await _get_db_stats_by_scene(scene=scene, user_id=user_id)
 
     if db_stats:
         # 从数据库统计构建待办视图
@@ -199,6 +256,9 @@ async def get_todo_stats(
             "task_stats": {
                 "countdown": remediation_status.get('pending', 0) + remediation_status.get('overdue', 0),
                 "in_progress": remediation_status.get('in_progress', 0),
+                # 口径冲突说明：
+                # 当前 not_started 仍由病历状态 pending 近似，不是“已分配给当前用户且未开始的任务”。
+                # 待任务明细聚合层统一后改为任务事实口径。
                 "not_started": record_status.get('pending', 0),
             },
             "defect_stats": {
@@ -214,15 +274,22 @@ async def get_todo_stats(
             "overview": {
                 "total_records": records.get('total', 0),
                 "avg_score": qc.get('avg_score', 0),
+                # 口径冲突说明：
+                # 当前 pass_rate = A / total（历史逻辑）。
+                # 项目需主控最终拍板：A+B / total 或分数阈值制（二选一固定）。
                 "pass_rate": round(
                     qc.get('by_grade', {}).get('A', 0) / max(qc.get('total', 1), 1) * 100, 1
                 ),
+                # 口径冲突说明：
+                # 当前 total_defects 使用整改任务总量近似，并非“缺陷事实总数”。
+                # 待缺陷事实表聚合口径统一后替换。
                 "total_defects": remediation.get('total', 0),
                 "grade_a": qc.get('by_grade', {}).get('A', 0),
                 "grade_b": qc.get('by_grade', {}).get('B', 0),
                 "grade_c": qc.get('by_grade', {}).get('C', 0),
             },
             "department_breakdown": records.get('by_department', {}),
+            "scene": scene,
         }
     else:
         # 回退：从内存数据构建
@@ -253,6 +320,7 @@ async def get_todo_stats(
                 "total_defects": defects,
             },
             "department_breakdown": {},
+            "scene": scene,
         }
 
     return success_response(
@@ -270,6 +338,7 @@ async def get_todo_stats(
 async def get_performance_ranking(
     request: Request,
     period: str = Query("this_week", description="时间段: this_week | last_week | this_month"),
+    scene: DashboardScene = Query("all", description="场景: all | outpatient_emergency | running | final"),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -307,12 +376,20 @@ async def get_performance_ranking(
     if sb is not None:
         try:
             # 质控员缺陷发现数排名 - 从 qc_results 聚合
-            resp = await async_execute(
-                sb.table('qc_results')
-                .select('analyzed_by,id')
-                .gte('created_at', start.isoformat())
-            )
+            try:
+                resp = await async_execute(
+                    sb.table('qc_results')
+                    .select('analyzed_by,id,record_type,status,visit_type')
+                    .gte('created_at', start.isoformat())
+                )
+            except Exception:
+                resp = await async_execute(
+                    sb.table('qc_results')
+                    .select('analyzed_by,id,status')
+                    .gte('created_at', start.isoformat())
+                )
             results = list(getattr(resp, 'data', None) or [])
+            results = [r for r in results if _record_matches_scene(r, scene)]
             user_defects = {}
             for r in results:
                 user = r.get('analyzed_by', '未知')
@@ -331,12 +408,20 @@ async def get_performance_ranking(
 
         try:
             # 质控员审查病历数排名
-            resp = await async_execute(
-                sb.table('qc_results')
-                .select('analyzed_by')
-                .gte('created_at', start.isoformat())
-            )
+            try:
+                resp = await async_execute(
+                    sb.table('qc_results')
+                    .select('analyzed_by,record_type,status,visit_type')
+                    .gte('created_at', start.isoformat())
+                )
+            except Exception:
+                resp = await async_execute(
+                    sb.table('qc_results')
+                    .select('analyzed_by,status')
+                    .gte('created_at', start.isoformat())
+                )
             results = list(getattr(resp, 'data', None) or [])
+            results = [r for r in results if _record_matches_scene(r, scene)]
             user_records = {}
             for r in results:
                 user = r.get('analyzed_by', '未知')
@@ -378,6 +463,7 @@ async def get_performance_ranking(
             "record_ranking": record_ranking,
             "period": period,
             "period_label": label,
+            "scene": scene,
         },
         message="获取工作表现排名成功",
         trace_id=get_trace_id(request),
@@ -391,12 +477,13 @@ async def get_performance_ranking(
 @router.get("/overview")
 async def get_overview(
     request: Request,
+    scene: DashboardScene = Query("all", description="场景: all | outpatient_emergency | running | final"),
     current_user: dict = Depends(get_current_user),
 ):
     """
     获取仪表板概览数据（总数/平均分/通过率/趋势）
     """
-    db_stats = await _get_db_stats()
+    db_stats = await _get_db_stats_by_scene(scene=scene)
 
     if db_stats:
         records = db_stats.get('records', {})
@@ -406,9 +493,11 @@ async def get_overview(
             "avg_score": qc.get('avg_score', 0),
             "grade_distribution": qc.get('by_grade', {}),
             "department_stats": records.get('by_department', {}),
+            # 同 todo-stats：这里仍使用 A / total，待主控冻结最终口径后统一替换。
             "pass_rate": round(
                 qc.get('by_grade', {}).get('A', 0) / max(qc.get('total', 1), 1) * 100, 1
             ),
+            "scene": scene,
         }
     else:
         mem = await _aggregate_from_memory()
@@ -419,6 +508,7 @@ async def get_overview(
             "department_stats": {},
             "pass_rate": 94.2,
             "total_defects": mem['total_defects'],
+            "scene": scene,
         }
 
     return success_response(

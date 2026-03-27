@@ -18,7 +18,7 @@ function loadPdfDeps() {
       ([jspdfModule, autoTableModule]) => ({
         jsPDF: jspdfModule.default,
         autoTable: autoTableModule.default,
-      })
+      }),
     )
   }
   return pdfDepsPromise
@@ -80,13 +80,12 @@ function exportExcel(payload: DrgMockExportPayload) {
 
     const arrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
     const blob = new Blob([arrayBuffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     downloadBlob(`${payload.filenameBase}.xlsx`, blob)
   })().catch((error) => {
     console.error('[drgMockExport:excel] failed', error)
   })
-  
 }
 
 function exportPdf(payload: DrgMockExportPayload) {
@@ -102,7 +101,7 @@ function exportPdf(payload: DrgMockExportPayload) {
       startY: 58,
       head: [['项目', '值']],
       body: metaRows,
-      styles: { fontSize: 9 }
+      styles: { fontSize: 9 },
     })
 
     if (payload.kpis?.length) {
@@ -110,7 +109,7 @@ function exportPdf(payload: DrgMockExportPayload) {
         startY: (doc as any).lastAutoTable.finalY + 12,
         head: [['指标', '值']],
         body: payload.kpis.map(([k, v]) => [k, v]),
-        styles: { fontSize: 9 }
+        styles: { fontSize: 9 },
       })
     }
 
@@ -126,7 +125,7 @@ function exportPdf(payload: DrgMockExportPayload) {
             doc.text(section.title, 40, data.cursor.y - 8)
             doc.setFontSize(10)
           }
-        }
+        },
       })
     })
 
@@ -148,7 +147,9 @@ function exportWord(payload: DrgMockExportPayload) {
     .map((section) => {
       const head = section.columns.map((col) => `<th>${escapeHtml(String(col))}</th>`).join('')
       const rows = section.rows
-        .map((row) => `<tr>${row.map((col) => `<td>${escapeHtml(String(col))}</td>`).join('')}</tr>`)
+        .map(
+          (row) => `<tr>${row.map((col) => `<td>${escapeHtml(String(col))}</td>`).join('')}</tr>`,
+        )
         .join('')
       return `<h3>${escapeHtml(section.title)}</h3><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`
     })

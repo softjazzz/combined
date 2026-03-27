@@ -1,6 +1,6 @@
-# 质控业务数据库设计 PRD v2.4
+# 质控业务数据库设计 PRD v2.6
 
-> v2.4 | 2026-03-14 | PostgreSQL 单栈定版（明确同库分 schema）
+> v2.6 | 2026-03-26 | PostgreSQL 单栈定版（补充现网兼容对象与字段缺口）
 
 ---
 
@@ -175,7 +175,8 @@ GROUP BY t.id, t.task_name, t.status;
 
 ### 2.5 `qc_results` — 质控结果
 
-> dashboard_api.py 使用 `overall_score`（非 `total_score`）
+> dashboard_api.py、qc.py、appeals.py、remediation.py 共同依赖  
+> 当前处于“新质控结果表 + 历史字段兼容”并行期，字段设计必须覆盖现有读写口径
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
@@ -184,12 +185,21 @@ GROUP BY t.id, t.task_name, t.status;
 | `rule_set` | VARCHAR(50) | | 规则集名称 |
 | `overall_score` | FLOAT | | **用 overall_score**（兼容 dashboard）；编码质控场景可为空 |
 | `grade` | VARCHAR(5) | | **A / B / C**（对应甲/乙/丙）；编码质控场景可为空 |
+| `status` | VARCHAR(20) | DEFAULT 'completed' | 当前质控状态；兼容 qc.py 写入 |
+| `issues` | TEXT | | JSON array，dashboard/qc.py 兼容字段 |
 | `defect_count` | INTEGER | DEFAULT 0 | |
 | `analysis_engine` | VARCHAR(20) | | llm / rule / hybrid |
 | `analysis_date` | DATETIME | | |
+| `analyzed_by` | VARCHAR(36) | | 看板排名统计当前使用该字段 |
+| `metadata` | TEXT | | JSON，分析元信息 |
 | `raw_output` | TEXT | | JSON |
 | `created_by` | VARCHAR(36) | | |
+| `updated_at` | DATETIME | DEFAULT NOW | |
 | `created_at` | DATETIME | DEFAULT NOW | |
+
+> 兼容约束：
+> 1. `created_by` 与 `analyzed_by` 现阶段允许并存，待看板统计统一后再收敛为单字段。
+> 2. `issues` / `metadata` 为现有接口兼容字段，后续如切换到拆表结构，需保留兼容读取窗口。
 
 ### 2.6 `qc_defects` — 缺陷记录
 
@@ -480,12 +490,14 @@ GROUP BY coder_id, coder_name, department_name;
 | `description` | TEXT | | 规则描述 |
 | `category` | VARCHAR(50) | NOT NULL | 规则分类（含编码质控） |
 | `severity` | VARCHAR(20) | | 严重程度 |
+| `rule_type` | VARCHAR(30) | | 规则类型；`qc.py` / `semantic_rules.py` 当前直接筛选 |
 | `scope` | VARCHAR(20) | DEFAULT 'global' | global / department |
 | `department_id` | VARCHAR(36) | | 科室规则时必填 |
 | `parent_rule_id` | VARCHAR(36) | | 覆盖全局规则时关联父规则 |
 | `override_action` | VARCHAR(20) | | override / disable |
 | `override_config` | TEXT | | JSON（覆盖配置） |
 | `priority` | INTEGER | DEFAULT 0 | 优先级 |
+| `execution_order` | INTEGER | DEFAULT 0 | 当前规则列表排序依赖 |
 | `status` | VARCHAR(20) | DEFAULT 'published' | draft / published / archived |
 | `version` | VARCHAR(20) | DEFAULT '1.0' | 规则版本 |
 | `effective_from` | DATETIME | | 生效开始 |
@@ -493,9 +505,11 @@ GROUP BY coder_id, coder_name, department_name;
 | `check_logic` | TEXT | | JSON（规则逻辑） |
 | `scoring_config` | TEXT | | JSON（评分配置；编码质控可为空） |
 | `applicable_documents` | TEXT | | JSON array（适用文书） |
+| `document_categories` | TEXT | | JSON array，兼容旧筛选口径 |
 | `primary_document_category` | VARCHAR(50) | | `qc.py` 聚合查询依赖 |
 | `is_active` | BOOLEAN | DEFAULT TRUE | 是否启用 |
 | `metadata` | TEXT | | JSON 扩展字段 |
+| `created_by` | VARCHAR(36) | | 批量导入兼容字段 |
 | `approved_by` | VARCHAR(36) | | 审批人 |
 | `approved_at` | DATETIME | | 审批时间 |
 | `created_at` | DATETIME | DEFAULT NOW | |
@@ -541,13 +555,255 @@ GROUP BY coder_id, coder_name, department_name;
 | `type` | VARCHAR(30) | NOT NULL | defect_urge / task_assign / appeal_result / remediation / system |
 | `title` | VARCHAR(200) | NOT NULL | |
 | `content` | TEXT | | |
+| `record_id` | VARCHAR(100) | | 当前通知概览会按病历聚合 |
+| `severity` | VARCHAR(20) | | 当前通知概览排序依赖 |
 | `sender_id` | VARCHAR(36) | | |
 | `recipient_id` | VARCHAR(36) | NOT NULL, INDEX | |
 | `related_type` | VARCHAR(30) | | defect / task / appeal / remediation |
 | `related_id` | VARCHAR(36) | | |
+| `metadata` | TEXT | | JSON 扩展信息 |
+| `payload` | TEXT | | JSON 扩展载荷 |
 | `is_read` | BOOLEAN | DEFAULT FALSE | |
 | `read_at` | DATETIME | | |
 | `created_at` | DATETIME | DEFAULT NOW | |
+
+### 2.22 `qc_async_jobs` — 异步任务台账主表（Redis 队列配套）
+
+> 用于承接运行病历质控、终末病历质控、AI 首页生成、结算清单生成、DRG 批处理、智能上传解析等长任务  
+> **不复用 `qc_tasks`**：`qc_tasks` 仍表示“业务抽查任务”，`qc_async_jobs` 表示“后台排队执行任务”
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(36) | PK | 任务 UUID |
+| `job_number` | VARCHAR(40) | UNIQUE, NOT NULL | 异步任务编号 |
+| `job_type` | VARCHAR(50) | NOT NULL, INDEX | running_record_qc / final_record_qc / frontpage_generate / settlement_generate / drg_batch_process / smart_upload_parse |
+| `business_type` | VARCHAR(50) | INDEX | 业务域：record / frontpage / settlement / drg / upload |
+| `business_id` | VARCHAR(100) | INDEX | 业务对象 ID，如 visit_id / batch_id |
+| `record_id` | VARCHAR(100) | INDEX | 病历关联键（如适用） |
+| `source_module` | VARCHAR(50) | | 来源模块：workstation / drg / smart_upload / sync |
+| `priority` | SMALLINT | DEFAULT 5 | 优先级，值越小优先级越高 |
+| `status` | VARCHAR(30) | DEFAULT 'accepted' | accepted / queued / running / succeeded / failed / retry_waiting / cancelled / partial_succeeded |
+| `queue_name` | VARCHAR(50) | | Redis 队列名 |
+| `idempotency_key` | VARCHAR(200) | UNIQUE | 幂等键，避免重复创建 |
+| `requested_by` | VARCHAR(36) | INDEX | 发起人 user_id |
+| `requested_by_name` | VARCHAR(50) | | 发起人名称冗余 |
+| `tenant_key` | VARCHAR(50) | | 租户/院区/科室隔离键（如适用） |
+| `payload` | TEXT | | JSON，请求摘要；避免存大对象 |
+| `result_summary` | TEXT | | JSON，结果摘要 |
+| `progress_pct` | FLOAT | DEFAULT 0 | 粗粒度进度百分比 |
+| `attempt_count` | INTEGER | DEFAULT 0 | 当前已重试次数 |
+| `max_attempts` | INTEGER | DEFAULT 3 | 最大重试次数 |
+| `next_retry_at` | DATETIME | | 下次重试时间 |
+| `error_code` | VARCHAR(50) | | 失败码 |
+| `error_message` | TEXT | | 失败原因摘要 |
+| `cancel_reason` | TEXT | | 取消原因 |
+| `trace_id` | VARCHAR(64) | INDEX | 链路追踪号 |
+| `accepted_at` | DATETIME | DEFAULT NOW | 受理时间 |
+| `queued_at` | DATETIME | | 入队时间 |
+| `started_at` | DATETIME | | 开始执行时间 |
+| `finished_at` | DATETIME | | 完成时间 |
+| `last_heartbeat_at` | DATETIME | | Worker 最近心跳时间，仅用于恢复判断 |
+| `created_at` | DATETIME | DEFAULT NOW | |
+| `updated_at` | DATETIME | DEFAULT NOW | |
+
+> 推荐索引：
+> 1. `(status, priority, created_at)`
+> 2. `(job_type, status, created_at)`
+> 3. `(business_type, business_id)`
+> 4. `idempotency_key UNIQUE`
+
+### 2.23 `qc_async_job_events` — 异步任务事件表
+
+> 记录关键状态变化，用于排障、审计、重放分析  
+> 只记录关键节点，不记录高频明细心跳
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(36) | PK | |
+| `job_id` | VARCHAR(36) | NOT NULL, INDEX | FK 逻辑关联 `qc_async_jobs.id` |
+| `event_type` | VARCHAR(30) | NOT NULL | accepted / queued / claimed / running / progress / retry_scheduled / succeeded / failed / cancelled / replayed |
+| `old_status` | VARCHAR(30) | | 变更前状态 |
+| `new_status` | VARCHAR(30) | | 变更后状态 |
+| `operator_id` | VARCHAR(36) | | 用户或 worker 标识 |
+| `operator_name` | VARCHAR(50) | | 操作人/执行器名称 |
+| `message` | TEXT | | 事件摘要 |
+| `details` | TEXT | | JSON，少量附加上下文 |
+| `trace_id` | VARCHAR(64) | INDEX | |
+| `created_at` | DATETIME | DEFAULT NOW | |
+
+### 2.24 `qc_async_job_dead_letters` — 异步任务失败沉淀表
+
+> 仅存放达到上限仍失败或被人工转入待处理区的任务  
+> 用于人工排查、重放和告警闭环
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | VARCHAR(36) | PK | |
+| `job_id` | VARCHAR(36) | UNIQUE, NOT NULL | 原异步任务 ID |
+| `job_type` | VARCHAR(50) | NOT NULL, INDEX | |
+| `business_type` | VARCHAR(50) | INDEX | |
+| `business_id` | VARCHAR(100) | INDEX | |
+| `final_status` | VARCHAR(30) | NOT NULL | dead_letter / failed |
+| `attempt_count` | INTEGER | DEFAULT 0 | 最终失败前已尝试次数 |
+| `error_code` | VARCHAR(50) | | |
+| `error_message` | TEXT | | 最终失败原因 |
+| `payload_snapshot` | TEXT | | JSON，请求快照 |
+| `result_snapshot` | TEXT | | JSON，已完成部分摘要 |
+| `requested_by` | VARCHAR(36) | | |
+| `trace_id` | VARCHAR(64) | INDEX | |
+| `moved_to_dead_letter_at` | DATETIME | DEFAULT NOW | |
+| `resolved_at` | DATETIME | | 人工处理完成时间 |
+| `resolved_by` | VARCHAR(36) | | 处理人 |
+| `resolution_note` | TEXT | | 处理说明 |
+| `created_at` | DATETIME | DEFAULT NOW | |
+
+### 2.25 Redis 与 PostgreSQL 分工约束（队列管理）
+
+> 该约束用于避免后续把运行态字段错误堆进业务表或数据库主表
+
+1. Redis 负责排队顺序、执行闸门、短期运行锁和短期取消信号。
+2. PostgreSQL 负责异步任务的状态真相、历史查询、失败原因和审计记录。
+3. `qc_async_jobs` 是后台长任务的唯一台账主表，**不得**继续用进程内内存作为事实来源。
+4. `qc_tasks` 与 `qc_async_jobs` 职责不同，前者不增加队列调度字段，避免业务任务和执行任务混淆。
+5. 不将“每秒级进度刷新”“临时队列顺序”“大模型原始全文结果”直接写入 PostgreSQL 主表。
+6. 服务重启后，恢复逻辑必须以 `qc_async_jobs.status` 为准重建 Redis 队列，而不是反向依赖 Redis 自身历史。
+
+### 2.26 现网兼容 / 支撑对象清单（当前代码仍依赖）
+
+> 下列对象不全部属于本 PRD 的主业务域，但当前路由仍直接访问。  
+> 若短期内不完成代码迁移，则必须提供兼容表或兼容视图，否则按本 PRD 单独建库后业务仍会缺对象。
+
+#### 2.26.1 `legacy.medical_records`
+
+最小兼容字段：
+
+1. `id`
+2. `status`
+3. `department`
+
+说明：
+
+1. `dashboard_api.py`、`appeals.py`、`remediation.py`、`emr_render.py` 当前仍直接读取。
+2. 目标态应逐步被 CDM 主链路替代，但过渡期不能删除。
+
+#### 2.26.2 `legacy.medical_documents`
+
+最小兼容字段：
+
+1. `id`
+2. `record_id`
+3. `document_type`
+4. `content`
+5. `status`
+6. `qc_status`
+7. `qc_score`
+8. `qc_last_analyzed`
+9. `qc_analysis_version`
+10. `created_at`
+11. `updated_at`
+
+说明：
+
+1. `qc_statistics_view`、`emr_render.py`、`qc_sichuan.py` 当前仍依赖。
+2. 若后续改为 CDM + 正式结果聚合，需要同步调整报表视图和渲染路由。
+
+#### 2.26.3 `qc.document_qc_results`
+
+最小兼容字段：
+
+1. `document_id`
+2. `rule_id`
+3. `result_status`
+4. `score`
+5. `max_score`
+6. `confidence_score`
+7. `issue_description`
+8. `evidence_text`
+9. `analysis_time_ms`
+10. `created_at`
+
+说明：
+
+1. `qc_sichuan.py` 当前有 best-effort 写入逻辑。
+2. 如果决定弃用，需要先移除该写入路径。
+
+#### 2.26.4 `qc.document_category_config`
+
+最小兼容字段：
+
+1. `id`
+2. `name`
+3. `code`
+4. `sort_order`
+5. `is_active`
+
+说明：
+
+1. `qc.py` 当前直接读取该表作为文书类别配置来源。
+
+#### 2.26.5 `qc.qc_rule_change_logs`
+
+最小兼容字段：
+
+1. `id`
+2. `rule_id`
+3. `change_type`
+4. `old_value`
+5. `new_value`
+6. `operator_id`
+7. `operator_name`
+8. `created_at`
+
+说明：
+
+1. `department_qc_rules.py` 当前直接查询规则变更历史。
+
+#### 2.26.6 `sys.departments`（或到 `sys_departments` 的兼容视图）
+
+最小兼容字段：
+
+1. `id`
+2. `code`
+3. `name`
+4. `is_active`
+
+说明：
+
+1. 现有代码仍使用 `departments` 表名，不是 `sys_departments`。
+2. 过渡期建议提供兼容视图，避免双表维护。
+
+#### 2.26.7 `sys.user_profiles`（兼容对象）
+
+最小兼容字段：
+
+1. `id`
+
+说明：
+
+1. `semantic_rules.py` 批量导入存在兜底读取。
+2. 若后续彻底迁到 `sys_users`，需同步移除该兼容逻辑。
+
+#### 2.26.8 `sys.llm_api_providers`
+
+最小兼容字段：
+
+1. `id`
+2. `is_active`
+
+说明：
+
+1. `semantic_rules.py`、`system.py` 当前健康检查仍探测此表。
+
+#### 2.26.9 `sys.llm_models`
+
+最小兼容字段：
+
+1. `id`
+2. `is_active`
+
+说明：
+
+1. `semantic_rules.py`、`system.py` 当前健康检查仍探测此表。
 
 ---
 
@@ -765,7 +1021,7 @@ P1 表：
 
 - [ ] 启动无 "table/view not found" 错误（含 6 个视图）
 - [ ] 6 个核心 router 全部 CRUD + 统计接口可通
-- [ ] 枚举值全部对齐：`one_time`（非 once）、`all/count/percentage`（非 random）、`keep/by_department/by_ratio/by_type`（非 auto/manual）、severity 用 `low/medium/high/critical`（非 critical/major/minor/info）
+- [ ] 枚举值全部对齐：`task_type=one_time/scheduled`、`sampling_method=all/count/percentage`、`assign_method=keep/by_department/by_ratio/by_type`；`qc_defects.severity=critical/error/warning/info`；`qc_remediation_tasks.severity=low/medium/high/critical`
 - [ ] 统计视图字段名正确：`avg_resolution_time_seconds`（非 hours）、`avg_completion_time_seconds`（非 hours）、`last_analyzed_time`
 - [ ] 编码员统计排名可用：`v_qc_coder_ranking` 返回 `qc_count/recheck_count/defect_found/pass_rate/avg_daily`
 - [ ] 编码质控场景只记录结果、不扣分：`qc_results.overall_score/grade` 可为空，`qc_defects.deduct_score = 0`

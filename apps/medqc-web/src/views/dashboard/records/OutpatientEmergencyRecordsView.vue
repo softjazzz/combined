@@ -118,7 +118,7 @@
             <template v-if="column.key === 'recordNumber'">
               <a
                 class="font-mono font-bold text-slate-700 hover:text-blue-600"
-                @click="handleView(record)"
+                @click="openDetail(record)"
               >
                 {{ record.record_id || record.id }}
               </a>
@@ -128,17 +128,27 @@
                 {{ getStatusText(record.status) }}
               </a-tag>
             </template>
+            <template v-if="column.key === 'actions'">
+              <a-button
+                type="link"
+                size="small"
+                class="!px-0"
+                @click="openDetail(record)"
+              >
+                质控详情
+              </a-button>
+            </template>
           </template>
         </a-table>
       </div>
     </div>
 
-    <QCReviewDrawer
-      :visible="drawerVisible"
-      :record="drawerRecord"
-      @update:visible="drawerVisible = $event"
-      @close="drawerVisible = false"
-      @refresh="fetchRecords"
+    <OutpatientEmergencyDetailDrawer
+      :visible="detailVisible"
+      :loading="detailLoading"
+      :record="detailRecord"
+      :detail-data="detailData"
+      @close="detailVisible = false"
     />
   </div>
 </template>
@@ -151,11 +161,12 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import {
   getAdminOverview,
   getDepartmentList,
+  getRecordDetail,
   getOutpatientEmergencyRecordList,
   type AdminOverviewStats,
   type AdminRecordItem,
 } from '@/api/qcAdmin'
-import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
+import OutpatientEmergencyDetailDrawer from './OutpatientEmergencyDetailDrawer.vue'
 
 const loading = ref(false)
 const searchKeyword = ref('')
@@ -165,8 +176,10 @@ const dateRange = ref<[Dayjs, Dayjs] | []>([])
 const records = ref<AdminRecordItem[]>([])
 const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 const selectedRowKeys = ref<string[]>([])
-const drawerVisible = ref(false)
-const drawerRecord = ref<AdminRecordItem | null>(null)
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const detailRecord = ref<AdminRecordItem | null>(null)
+const detailData = ref<Record<string, unknown> | null>(null)
 
 const overviewStats = ref<AdminOverviewStats>({
   total_records: 0,
@@ -202,6 +215,7 @@ const columns = [
   { title: '状态', dataIndex: 'status', key: 'status', width: 120 },
   { title: '得分', dataIndex: 'score', key: 'score', width: 100 },
   { title: '缺陷数', dataIndex: 'defect_count', key: 'defect_count', width: 100 },
+  { title: '操作', key: 'actions', width: 120, fixed: 'right' as const },
 ]
 
 const toNumber = (value: unknown): number => {
@@ -295,9 +309,34 @@ const handleRefresh = () => {
   loadOverview()
 }
 
-const handleView = (record: AdminRecordItem) => {
-  drawerRecord.value = record
-  drawerVisible.value = true
+const resolveRecordId = (record: AdminRecordItem): string => {
+  const candidate = record.id || record.record_id
+  return String(candidate || '').trim()
+}
+
+const openDetail = async (record: AdminRecordItem) => {
+  const recordId = resolveRecordId(record)
+  if (!recordId) {
+    message.warning('病历ID缺失，无法打开详情')
+    return
+  }
+
+  detailRecord.value = record
+  detailData.value = null
+  detailVisible.value = true
+  detailLoading.value = true
+  try {
+    const res = await getRecordDetail(recordId)
+    if (res.success) {
+      detailData.value = (res.data as Record<string, unknown>) || {}
+      return
+    }
+    message.warning(res.message || '加载质控详情失败')
+  } catch {
+    message.error('加载质控详情失败')
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 const handleTableChange = (pag: { current?: number; pageSize?: number }) => {

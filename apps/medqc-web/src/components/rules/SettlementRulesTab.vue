@@ -12,7 +12,9 @@
       @update:search-keyword="(v) => setQuery({ searchKeyword: v })"
       @create-rule="handleCreateRule"
       @import-template="() => message.info('模板导入入口预留')"
-      @run-preflight="() => message.success(`预检通过：预计影响 ${estimatedImpactCount} 条结算记录`)"
+      @run-preflight="
+        () => message.success(`预检通过：预计影响 ${estimatedImpactCount} 条结算记录`)
+      "
       @publish="publishOpen = true"
     />
 
@@ -63,7 +65,11 @@
         :view-mode="query.viewMode"
         :sort-by="query.sortBy"
         :status-filter="query.statusFilter"
-        :pagination="{ current: query.current, pageSize: query.pageSize, total: filteredList.length }"
+        :pagination="{
+          current: query.current,
+          pageSize: query.pageSize,
+          total: filteredList.length,
+        }"
         :readonly="readonly"
         @select-rule="handleSelectRule"
         @update:view-mode="(v) => setQuery({ viewMode: v })"
@@ -158,7 +164,9 @@ const publishOpen = ref(false)
 const timelineCollapsed = ref(true)
 const timelineItems = ref<RuleChangeLogItem[]>([])
 const savedViews = ref<Array<{ id: string; name: string }>>([])
-const ownerOptions = ref<Array<{ label: string; value: string }>>([{ label: '系统', value: '系统' }])
+const ownerOptions = ref<Array<{ label: string; value: string }>>([
+  { label: '系统', value: '系统' },
+])
 const samplePreview = ref([
   { caseId: 'SET-001', matched: true, reason: '分组规则命中' },
   { caseId: 'SET-002', matched: false, reason: '结算字段校验通过' },

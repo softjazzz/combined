@@ -44,6 +44,11 @@ class MedicalRecordRepository(ABC):
         """
         ...
 
+    @abstractmethod
+    def list_departments(self) -> List[str]:
+        """返回去重后的科室列表。"""
+        ...
+
     # ---------- 病案首页 ----------
     @abstractmethod
     def get_frontpage(self, institute_id: str, patient_id: str, visit_id: str) -> Optional[Dict]:
@@ -150,6 +155,23 @@ class SqliteRepository(MedicalRecordRepository):
                 "page": page,
                 "page_size": page_size,
             }
+        finally:
+            session.close()
+
+    def list_departments(self) -> List[str]:
+        from .models.cdm import MedicalRecordFrontpage
+        session = self._session_factory()
+        try:
+            depts = set()
+            for column in (
+                MedicalRecordFrontpage.discharge_dept_name,
+                MedicalRecordFrontpage.admission_dept_name,
+            ):
+                rows = session.query(column).filter(column.isnot(None), column != "").distinct().all()
+                for row in rows:
+                    if row and row[0]:
+                        depts.add(str(row[0]))
+            return sorted(depts)
         finally:
             session.close()
 
@@ -323,6 +345,9 @@ class MongoApiRepository(MedicalRecordRepository):
 
     def list_patients(self, **kwargs):
         raise NotImplementedError("MongoDB API 直读已弃用，请使用 Mongo Sync → PG 链路")
+
+    def list_departments(self) -> List[str]:
+        raise NotImplementedError("MongoDB API 直读已弃用")
 
     def get_frontpage(self, institute_id, patient_id, visit_id):
         raise NotImplementedError("MongoDB API 直读已弃用")

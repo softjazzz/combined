@@ -29,7 +29,7 @@
 
 ## 🚀 快速开始
 
-### 方法一：使用启动脚本 (推荐)
+### 方法一：使用启动脚本（仅开发使用）
 ```bash
 # 进入项目目录
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web
@@ -44,17 +44,22 @@ cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web
 ./start-services.sh stop      # 停止服务
 ```
 
-### 方法二：手动启动
+### 方法二：手动启动（仅开发使用）
 ```bash
-# 启动前端 (端口 3000)
+# 启动前端 (端口 3000，仅开发使用)
 cd /home/ubuntu/coding/health-qc-monorepo
-pnpm dev:medqc
+pnpm dev:medqc  # 仅开发使用
 
 # 启动后端 (端口 8001) - 新终端
 cd /home/ubuntu/coding/health-qc-monorepo/apps/medqc-web/backend
 export JWT_SECRET=dev-secret
 pwsh ./start_dev_backend.ps1 -Port 8001
 ```
+
+### 生产部署
+- 生产启动不使用 `pnpm dev` / `pnpm dev:medqc`
+- 生产发布请参考 `docs/deployment/P2_RELEASE_RUNBOOK.md` 和 `scripts/deploy_medqc_release.sh`
+- 生产运行由构建产物和 `run_*_prod.sh` / systemd 服务托管
 
 ## 🌐 访问地址
 

@@ -3,6 +3,16 @@ from __future__ import annotations
 import pytest
 
 
+def _login(client, email: str = "admin@medqc.com", password: str = "admin888") -> str:
+    resp = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
+
+
+def _headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
 class _FakeDemoStore:
     def list_cases(self, limit: int = 500):
         return [
@@ -53,8 +63,12 @@ class _FakeDemoStore:
 @pytest.mark.api
 def test_drg_analysis_contract(client, monkeypatch):
     monkeypatch.setattr("app.routers.drg.get_demo_drg_store", lambda: _FakeDemoStore())
+    token = _login(client)
 
-    resp = client.get("/api/v1/drg/analysis?dimension=hospital&start_date=2026-03-01&end_date=2026-03-31")
+    resp = client.get(
+        "/api/v1/drg/analysis?dimension=hospital&start_date=2026-03-01&end_date=2026-03-31",
+        headers=_headers(token),
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
@@ -79,8 +93,21 @@ def test_drg_analysis_contract(client, monkeypatch):
 @pytest.mark.api
 def test_drg_analysis_excel_export(client, monkeypatch):
     monkeypatch.setattr("app.routers.drg.get_demo_drg_store", lambda: _FakeDemoStore())
+    token = _login(client)
 
-    resp = client.get("/api/v1/drg/analysis/export/excel?dimension=hospital")
+    resp = client.get("/api/v1/drg/analysis/export/excel?dimension=hospital", headers=_headers(token))
     assert resp.status_code == 200
     assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in resp.headers.get("content-type", "")
 
+
+@pytest.mark.unit
+@pytest.mark.api
+def test_drg_analysis_rejects_invalid_dimension(client, monkeypatch):
+    monkeypatch.setattr("app.routers.drg.get_demo_drg_store", lambda: _FakeDemoStore())
+    token = _login(client)
+
+    resp = client.get("/api/v1/drg/analysis?dimension=not-a-dimension", headers=_headers(token))
+    assert resp.status_code == 400
+    body = resp.json()
+    message = body.get("detail") or body.get("error") or body.get("message")
+    assert message == "dimension 参数非法"

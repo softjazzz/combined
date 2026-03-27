@@ -1,5 +1,7 @@
 <template>
-  <aside class="custom-scrollbar w-[194px] min-w-[184px] max-w-[204px] shrink-0 overflow-y-auto border-r border-slate-200/70 bg-[linear-gradient(180deg,rgba(247,251,255,0.94),rgba(240,247,255,0.98))]">
+  <aside
+    class="custom-scrollbar w-[194px] min-w-[184px] max-w-[204px] shrink-0 overflow-y-auto border-r border-slate-200/70 bg-[linear-gradient(180deg,rgba(247,251,255,0.94),rgba(240,247,255,0.98))]"
+  >
     <div
       v-if="record"
       class="flex h-full flex-col"
@@ -26,7 +28,7 @@
                 ? isActive(doc)
                   ? 'cursor-pointer border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
                   : 'cursor-pointer border-transparent bg-transparent hover:border-sky-100 hover:bg-white/75'
-                : 'border-transparent bg-transparent text-slate-300'
+                : 'border-transparent bg-transparent text-slate-300',
             ]"
             @click="doc.has_content && $emit('preview-doc', doc)"
           >
@@ -48,7 +50,15 @@
               >
                 <FileTextOutlined />
               </span>
-              <span :class="doc.has_content ? (isActive(doc) ? 'truncate text-[12px] font-bold text-sky-800' : 'truncate text-[12px] font-semibold text-slate-700') : 'truncate text-[12px]'">
+              <span
+                :class="
+                  doc.has_content
+                    ? isActive(doc)
+                      ? 'truncate text-[12px] font-bold text-sky-800'
+                      : 'truncate text-[12px] font-semibold text-slate-700'
+                    : 'truncate text-[12px]'
+                "
+              >
                 {{ doc.label }}
               </span>
             </span>
@@ -79,11 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  SyncOutlined,
-  FileTextOutlined,
-  EyeOutlined,
-} from '@ant-design/icons-vue'
+import { SyncOutlined, FileTextOutlined, EyeOutlined } from '@ant-design/icons-vue'
 import type { PatientRecord, DocItem } from '../types'
 
 const props = defineProps<{

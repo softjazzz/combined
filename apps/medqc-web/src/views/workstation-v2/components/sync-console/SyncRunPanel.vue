@@ -22,7 +22,9 @@
       </div>
     </div>
 
-    <div class="px-5 py-2 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2 view-switch">
+    <div
+      class="px-5 py-2 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2 view-switch"
+    >
       <button
         class="px-2 py-1 rounded text-[11px] transition-colors"
         :class="

@@ -312,6 +312,7 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 import axios from 'axios'
+import { extractApiData } from '@/utils/api-helpers'
 
 // ==================== 类型 ====================
 
@@ -534,10 +535,10 @@ async function runContentQC() {
         { timeout: 120000 },
       )
 
-      const data = resp.data
+      const data = extractApiData<any>(resp.data, '文书质控失败')
       const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
 
-      if (data?.status === 'success') {
+      if (data?.status === 'success' || data?.evaluation_summary) {
         const evalSummary = data.evaluation_summary || {}
         const secIssues = parseEvalResults(data, sec.label)
 

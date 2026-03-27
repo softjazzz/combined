@@ -3,7 +3,9 @@ import logging
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException, status, Depends
 
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
+from ..core.rate_limit import enforce_rate_limit
 from ..core.security import get_current_user
+from ..core.upload_security import validate_uploaded_file
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ ALLOWED_TYPES = [
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".doc", ".docx"}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 async def _parse_text_file(file: UploadFile, file_content: bytes):
@@ -73,12 +77,16 @@ async def _parse_text_file(file: UploadFile, file_content: bytes):
     }
 
 
-async def _parse_file_common(file: UploadFile, options: str):
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail=f"不支持的文件类型: {file.content_type}")
+async def _parse_file_common(request: Request, file: UploadFile, options: str):
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=StatusCode.BAD_REQUEST, detail="文件大小不能超过10MB")
+    validate_uploaded_file(
+        request=request,
+        file=file,
+        content=content,
+        allowed_extensions=ALLOWED_EXTENSIONS,
+        allowed_content_types=ALLOWED_TYPES,
+        max_bytes=MAX_UPLOAD_BYTES,
+    )
     try:
         parse_options = json.loads(options)
     except json.JSONDecodeError:
@@ -112,16 +120,19 @@ async def _parse_file_common(file: UploadFile, options: str):
 
 @router.post("/parse-medical-file-public")
 async def parse_medical_file_public(    request: Request,file: UploadFile = File(...), options: str = Form("{}")):
-    return await _parse_file_common(file, options)
+    enforce_rate_limit(request, bucket="tools_parse_medical_file_public", max_requests=20, window_seconds=60)
+    return await _parse_file_common(request, file, options)
 
 
 @router.post("/parse-medical-file")
 async def parse_medical_file(    request: Request,file: UploadFile = File(...), options: str = Form("{}"), current_user: dict = Depends(get_current_user)):
-    return await _parse_file_common(file, options)
+    enforce_rate_limit(request, bucket="tools_parse_medical_file", max_requests=30, window_seconds=60)
+    return await _parse_file_common(request, file, options)
 
 
 @router.post("/parse-medical-text")
 async def parse_medical_text(    request: Request,text: str = Form(...)):
+    enforce_rate_limit(request, bucket="tools_parse_medical_text", max_requests=60, window_seconds=60)
     # Reuse text parsing logic
     from starlette.datastructures import UploadFile as _UF  # type: ignore
     fake_file = type("F", (), {"filename": "input.txt", "content_type": "text/plain"})()

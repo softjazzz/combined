@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import axios from 'axios'
+import { ApiService } from '@/services/apiService'
 import type { DeptInfo, PatientRecord } from '../types'
 import { normalizeRecord } from '../normalize'
 
@@ -78,9 +78,13 @@ export function usePatientRecords() {
   async function fetchData(page = 1) {
     loading.value = true
     try {
-      const { data } = await axios.get('/api/medical-records/workstation', {
+      const response = await ApiService.getRaw('/api/medical-records/workstation', {
         params: { page, page_size: 50 },
       })
+      const raw = response.data as Record<string, unknown>
+      const data = (raw && typeof raw === 'object' && 'data' in raw
+        ? (raw.data as Record<string, unknown>)
+        : raw) as Record<string, unknown>
 
       const normalizedRecords = Array.isArray(data.records)
         ? data.records.map((record: unknown) => normalizeRecord(record))

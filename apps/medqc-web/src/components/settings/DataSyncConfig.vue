@@ -577,10 +577,10 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import axios from 'axios'
 import { message } from 'ant-design-vue'
 import { SyncOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { isDrgMockModeEnabled, onDrgMockModeChange, setDrgMockModeEnabled } from '@/utils/drgMockMode'
+import { syncApi } from '@/api/sync'
 
 const mongoConfig = ref<any>({})
 const mongoSyncState = ref<any>({})
@@ -604,7 +604,7 @@ const configForm = ref({
 
 async function loadMongoConfig() {
   try {
-    const { data } = await axios.get('/api/v1/sync/config/mongo')
+    const data = await syncApi.getMongoConfig()
     mongoConfig.value = data
     connForm.value = { mongo_uri: '', mongo_database: data.mongo_database || 'his_emr', read_preference: data.read_preference || 'secondaryPreferred', connect_timeout_ms: data.connect_timeout_ms || 5000 }
     configForm.value = {
@@ -617,9 +617,9 @@ async function loadMongoConfig() {
 }
 async function loadMongoStatus() {
   try {
-    const [s, st] = await Promise.all([axios.get('/api/v1/sync/status'), axios.get('/api/v1/sync/statistics')])
-    mongoSyncState.value = s.data?.mongo_sync || {}
-    mongoStats.value = st.data || {}
+    const [s, st] = await Promise.all([syncApi.getStatus(), syncApi.getStatistics()])
+    mongoSyncState.value = s?.mongo_sync || {}
+    mongoStats.value = st || {}
     mongoStatus.value = { connected: mongoSyncState.value.connected || false }
   } catch (err) { console.error('获取 MongoDB 状态失败:', err) }
 }
@@ -628,8 +628,8 @@ async function saveMongoConnection() {
   try {
     const p: any = { mongo_database: connForm.value.mongo_database, read_preference: connForm.value.read_preference, connect_timeout_ms: connForm.value.connect_timeout_ms }
     if (connForm.value.mongo_uri) p.mongo_uri = connForm.value.mongo_uri
-    await axios.put('/api/v1/sync/config/mongo', p)
-    const { data } = await axios.post('/api/v1/sync/test-connection/mongo')
+    await syncApi.updateMongoConfig(p)
+    const data = await syncApi.testMongoConnection()
     connTestResult.value = data
     if (data.connected) { message.success('MongoDB 连接成功！'); showMongoModal.value = false; await loadMongoConfig(); await loadMongoStatus() }
     else message.warning('配置已保存，但连接失败')
@@ -637,12 +637,12 @@ async function saveMongoConnection() {
 }
 async function saveMongoConfig() {
   configSaving.value = true
-  try { await axios.put('/api/v1/sync/config/mongo', configForm.value); message.success('抽取策略配置已保存'); await loadMongoConfig() }
+  try { await syncApi.updateMongoConfig(configForm.value); message.success('抽取策略配置已保存'); await loadMongoConfig() }
   catch { message.error('保存失败') } finally { configSaving.value = false }
 }
 async function triggerMongoSync() {
   try {
-    const { data } = await axios.post('/api/v1/sync/trigger', { source: 'mongo', tier: mongoSyncTier.value })
+    const data = await syncApi.triggerSync({ source: 'mongo', tier: mongoSyncTier.value as any })
     data.success ? message.success('同步任务已启动') : message.warning(data.error || '同步启动失败')
     const poll = setInterval(async () => { await loadMongoStatus(); if (!mongoSyncState.value.is_running) clearInterval(poll) }, 2000)
   } catch { message.error('触发同步失败') }

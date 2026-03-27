@@ -35,13 +35,13 @@
       <!-- 顶部：医疗机构、付费方式、病案号 -->
       <table
         class="fp-tbl"
-        style="border-top:none;"
+        style="border-top: none"
       >
         <tr>
-          <td style="width:50%; border-top:none;">
+          <td style="width: 50%; border-top: none">
             医疗机构:<u class="fill">{{ d.hospitalization.hospital_name }}</u>
           </td>
-          <td style="width:50%; border-top:none;">
+          <td style="width: 50%; border-top: none">
             （组织机构代码:<u class="fill">{{ d.hospitalization.organization_code }}</u>）
           </td>
         </tr>
@@ -51,8 +51,12 @@
           </td>
         </tr>
         <tr>
-          <td>病案号:<u class="fill">{{ d.hospitalization.medical_record_no }}</u></td>
-          <td>第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u>次住院</td>
+          <td>
+            病案号:<u class="fill">{{ d.hospitalization.medical_record_no }}</u>
+          </td>
+          <td>
+            第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u>次住院
+          </td>
         </tr>
       </table>
 
@@ -62,22 +66,22 @@
       </div>
       <table class="fp-tbl">
         <tr>
-          <td style="width:14%">
+          <td style="width: 14%">
             姓名<u class="fill">{{ d.basic_info.patient_name }}</u>
           </td>
-          <td style="width:16%">
+          <td style="width: 16%">
             性别<u class="fill">{{ d.basic_info.gender }}</u>
           </td>
-          <td style="width:20%">
+          <td style="width: 20%">
             出生日期<u class="fill">{{ d.basic_info.birth_date }}</u>
           </td>
-          <td style="width:14%">
+          <td style="width: 14%">
             年龄<u class="fill">{{ d.basic_info.age_years }}</u>岁
           </td>
-          <td style="width:12%">
+          <td style="width: 12%">
             国籍<u class="fill">{{ d.basic_info.nationality }}</u>
           </td>
-          <td style="width:12%">
+          <td style="width: 12%">
             民族<u class="fill">{{ d.basic_info.ethnicity }}</u>
           </td>
         </tr>
@@ -85,7 +89,9 @@
           <td colspan="3">
             身份证号<u class="fill">{{ d.basic_info.id_number }}</u>
           </td>
-          <td>职业<u class="fill">{{ d.basic_info.occupation }}</u></td>
+          <td>
+            职业<u class="fill">{{ d.basic_info.occupation }}</u>
+          </td>
           <td colspan="2">
             婚姻<u class="fill">{{ d.basic_info.marital_status }}</u>
           </td>
@@ -104,8 +110,12 @@
           </td>
         </tr>
         <tr>
-          <td>联系人姓名<u class="fill">{{ d.basic_info.contact_name }}</u></td>
-          <td>关系<u class="fill">{{ d.basic_info.contact_relation }}</u></td>
+          <td>
+            联系人姓名<u class="fill">{{ d.basic_info.contact_name }}</u>
+          </td>
+          <td>
+            关系<u class="fill">{{ d.basic_info.contact_relation }}</u>
+          </td>
           <td colspan="2">
             地址<u class="fill">{{ d.basic_info.contact_address }}</u>
           </td>
@@ -122,25 +132,38 @@
       <table class="fp-tbl">
         <tr>
           <td colspan="6">
-            入院途径<u class="fill">{{ d.hospitalization.admission_way_text }}</u> □ 1.急诊 &nbsp; 2.门诊 &nbsp; 3.其他医疗机构转入 &nbsp; 9.其他
+            入院途径<u class="fill">{{ d.hospitalization.admission_way_text }}</u> □ 1.急诊 &nbsp;
+            2.门诊 &nbsp; 3.其他医疗机构转入 &nbsp; 9.其他
           </td>
         </tr>
         <tr>
           <td colspan="2">
             入院时间<u class="fill">{{ d.hospitalization.admission_datetime }}</u>
           </td>
-          <td>入院科别<u class="fill">{{ d.hospitalization.admission_dept }}</u></td>
-          <td>病房<u class="fill">{{ d.hospitalization.admission_ward }}</u></td>
-          <td>转科科别<u class="fill">{{ d.hospitalization.transfer_dept }}</u></td>
+          <td>
+            入院科别<u class="fill">{{ d.hospitalization.admission_dept }}</u>
+          </td>
+          <td>
+            病房<u class="fill">{{ d.hospitalization.admission_ward }}</u>
+          </td>
+          <td>
+            转科科别<u class="fill">{{ d.hospitalization.transfer_dept }}</u>
+          </td>
           <td>&nbsp;</td>
         </tr>
         <tr>
           <td colspan="2">
             出院时间<u class="fill">{{ d.hospitalization.discharge_datetime }}</u>
           </td>
-          <td>出院科别<u class="fill">{{ d.hospitalization.discharge_dept }}</u></td>
-          <td>病房<u class="fill">{{ d.hospitalization.discharge_ward }}</u></td>
-          <td>实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u>天</td>
+          <td>
+            出院科别<u class="fill">{{ d.hospitalization.discharge_dept }}</u>
+          </td>
+          <td>
+            病房<u class="fill">{{ d.hospitalization.discharge_ward }}</u>
+          </td>
+          <td>
+            实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u>天
+          </td>
           <td>&nbsp;</td>
         </tr>
       </table>
@@ -172,28 +195,28 @@
       <!-- ===== 出院诊断（双列布局） ===== -->
       <table class="fp-tbl">
         <tr class="hd-row">
-          <td style="width:25%">
+          <td style="width: 25%">
             出院诊断
           </td>
-          <td style="width:10%">
+          <td style="width: 10%">
             疾病编码
           </td>
-          <td style="width:8%">
+          <td style="width: 8%">
             入院<br>病情
           </td>
-          <td style="width:25%">
+          <td style="width: 25%">
             出院诊断
           </td>
-          <td style="width:10%">
+          <td style="width: 10%">
             疾病编码
           </td>
-          <td style="width:8%">
+          <td style="width: 8%">
             入院<br>病情
           </td>
         </tr>
         <tr
           v-for="(row, i) in diagnosisPairedRows"
-          :key="'d'+i"
+          :key="'d' + i"
           class="data-row"
         >
           <!-- 左列 -->
@@ -211,7 +234,9 @@
                 class="fp-main-alert-pill"
                 :class="formatSeverityClass(mainDiagnosisRowAlert.severity)"
               >
-                {{ formatFindingSeverityLabel(mainDiagnosisRowAlert.severity) }}·{{ formatFindingTypeLabel(mainDiagnosisRowAlert.type) }}
+                {{ formatFindingSeverityLabel(mainDiagnosisRowAlert.severity) }}·{{
+                  formatFindingTypeLabel(mainDiagnosisRowAlert.type)
+                }}
               </span>
               <button
                 v-if="row.left.name && isMainDiagnosisName(row.left.name)"
@@ -248,11 +273,15 @@
                 {{ mainRecommendationLabel }}
               </span>
               <span
-                v-if="row.right.name && isMainDiagnosisName(row.right.name) && mainDiagnosisRowAlert"
+                v-if="
+                  row.right.name && isMainDiagnosisName(row.right.name) && mainDiagnosisRowAlert
+                "
                 class="fp-main-alert-pill"
                 :class="formatSeverityClass(mainDiagnosisRowAlert.severity)"
               >
-                {{ formatFindingSeverityLabel(mainDiagnosisRowAlert.severity) }}·{{ formatFindingTypeLabel(mainDiagnosisRowAlert.type) }}
+                {{ formatFindingSeverityLabel(mainDiagnosisRowAlert.severity) }}·{{
+                  formatFindingTypeLabel(mainDiagnosisRowAlert.type)
+                }}
               </span>
               <button
                 v-if="row.right.name && isMainDiagnosisName(row.right.name)"
@@ -291,16 +320,24 @@
       <table class="fp-tbl">
         <tr>
           <td colspan="2">
-            损伤、中毒的外部原因<u class="fill">{{ d.other_medical_info.injury_poison_cause_text || '' }}</u>
+            损伤、中毒的外部原因<u class="fill">{{
+              d.other_medical_info.injury_poison_cause_text || ''
+            }}</u>
           </td>
           <td colspan="2">
             疾病编码<u class="fill">{{ d.other_medical_info.injury_poison_cause_icd || '' }}</u>
           </td>
         </tr>
         <tr>
-          <td>病理诊断<u class="fill">{{ d.other_medical_info.pathology_text || '' }}</u></td>
-          <td>疾病编码<u class="fill">{{ d.other_medical_info.pathology_icd || '' }}</u></td>
-          <td>病理号<u class="fill">{{ d.other_medical_info.pathology_no || '' }}</u></td>
+          <td>
+            病理诊断<u class="fill">{{ d.other_medical_info.pathology_text || '' }}</u>
+          </td>
+          <td>
+            疾病编码<u class="fill">{{ d.other_medical_info.pathology_icd || '' }}</u>
+          </td>
+          <td>
+            病理号<u class="fill">{{ d.other_medical_info.pathology_no || '' }}</u>
+          </td>
           <td>TNM分期<u class="fill" /></td>
         </tr>
       </table>
@@ -310,25 +347,25 @@
         <tr class="hd-row">
           <td
             rowspan="2"
-            style="width:20%"
+            style="width: 20%"
           >
             手术及操作名称
           </td>
           <td
             rowspan="2"
-            style="width:12%"
+            style="width: 12%"
           >
             手术及操作编码
           </td>
           <td
             rowspan="2"
-            style="width:12%"
+            style="width: 12%"
           >
             手术操作日期
           </td>
           <td
             rowspan="2"
-            style="width:8%"
+            style="width: 8%"
           >
             手术级别
           </td>
@@ -337,37 +374,37 @@
           </td>
           <td
             rowspan="2"
-            style="width:8%"
+            style="width: 8%"
           >
             切口愈合<br>等级
           </td>
           <td
             rowspan="2"
-            style="width:8%"
+            style="width: 8%"
           >
             麻醉方式
           </td>
           <td
             rowspan="2"
-            style="width:8%"
+            style="width: 8%"
           >
             麻醉医师
           </td>
         </tr>
         <tr class="hd-row">
-          <td style="width:8%">
+          <td style="width: 8%">
             术者
           </td>
-          <td style="width:8%">
+          <td style="width: 8%">
             I助
           </td>
-          <td style="width:8%">
+          <td style="width: 8%">
             II助
           </td>
         </tr>
         <tr
           v-for="(s, i) in paddedSurgeries"
-          :key="'s'+i"
+          :key="'s' + i"
           class="data-row"
         >
           <td>{{ s.text || '' }}</td>
@@ -408,7 +445,8 @@
       <table class="fp-tbl">
         <tr>
           <td colspan="3">
-            药物过敏<u class="fill">{{ d.other_medical_info.drug_allergy_flag }}</u> □ 1.无 &nbsp; 2.有
+            药物过敏<u class="fill">{{ d.other_medical_info.drug_allergy_flag }}</u> □ 1.无 &nbsp;
+            2.有
           </td>
           <td colspan="3">
             死亡患者尸检 □ 1.是 2.否
@@ -416,10 +454,12 @@
         </tr>
         <tr>
           <td colspan="3">
-            血型<u class="fill">{{ d.other_medical_info.abo_blood_type }}</u> □ 1.A &nbsp; 2.B &nbsp; 3.O &nbsp; 4.AB &nbsp; 5.不详 &nbsp; 6.未查
+            血型<u class="fill">{{ d.other_medical_info.abo_blood_type }}</u> □ 1.A &nbsp; 2.B
+            &nbsp; 3.O &nbsp; 4.AB &nbsp; 5.不详 &nbsp; 6.未查
           </td>
           <td colspan="3">
-            Rh<u class="fill">{{ d.other_medical_info.rh_blood_type }}</u> □ 1.阴 &nbsp; 2.阳 &nbsp; 3.不详 &nbsp; 4.未查
+            Rh<u class="fill">{{ d.other_medical_info.rh_blood_type }}</u> □ 1.阴 &nbsp; 2.阳 &nbsp;
+            3.不详 &nbsp; 4.未查
           </td>
         </tr>
         <tr>
@@ -430,7 +470,9 @@
         </tr>
         <tr>
           <td colspan="6">
-            是否有出院31天内再住院计划<u class="fill">{{ d.hospitalization.rehospital_within_month }}</u>
+            是否有出院31天内再住院计划<u class="fill">{{
+              d.hospitalization.rehospital_within_month
+            }}</u>
             □ 1.无 &nbsp; 2.有
           </td>
         </tr>
@@ -442,10 +484,10 @@
       </div>
       <table class="fp-tbl">
         <tr>
-          <td style="width:50%">
+          <td style="width: 50%">
             住院总费用<u class="fill">{{ d.costs.total_cost }}</u>
           </td>
-          <td style="width:50%">
+          <td style="width: 50%">
             自付金额<u class="fill">{{ d.costs.self_paid }}</u>
           </td>
         </tr>
@@ -457,14 +499,26 @@
       </div>
       <table class="fp-tbl">
         <tr>
-          <td>科主任<u class="fill">{{ d.staff.dept_director }}</u></td>
-          <td>主(副主)任医师<u class="fill">{{ d.staff.chief_physician }}</u></td>
-          <td>主治医师<u class="fill">{{ d.staff.attending_physician }}</u></td>
+          <td>
+            科主任<u class="fill">{{ d.staff.dept_director }}</u>
+          </td>
+          <td>
+            主(副主)任医师<u class="fill">{{ d.staff.chief_physician }}</u>
+          </td>
+          <td>
+            主治医师<u class="fill">{{ d.staff.attending_physician }}</u>
+          </td>
         </tr>
         <tr>
-          <td>住院医师<u class="fill">{{ d.staff.resident_physician }}</u></td>
-          <td>责任护士<u class="fill">{{ d.staff.responsible_nurse }}</u></td>
-          <td>编码员<u class="fill">{{ d.staff.coder }}</u></td>
+          <td>
+            住院医师<u class="fill">{{ d.staff.resident_physician }}</u>
+          </td>
+          <td>
+            责任护士<u class="fill">{{ d.staff.responsible_nurse }}</u>
+          </td>
+          <td>
+            编码员<u class="fill">{{ d.staff.coder }}</u>
+          </td>
         </tr>
         <tr>
           <td colspan="3">
@@ -542,11 +596,19 @@
               :class="formatSeverityClass(topAlert?.severity)"
             >
               <div class="evidence-hero__left">
-                <span class="evidence-hero__badge">{{ formatFindingSeverityLabel(topAlert?.severity) }}</span>
-                <strong class="evidence-hero__title">{{ formatFindingTypeLabel(topAlert?.type) }}</strong>
+                <span class="evidence-hero__badge">{{
+                  formatFindingSeverityLabel(topAlert?.severity)
+                }}</span>
+                <strong class="evidence-hero__title">{{
+                  formatFindingTypeLabel(topAlert?.type)
+                }}</strong>
               </div>
               <div class="evidence-hero__summary">
-                {{ topAlert?.summary || codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
+                {{
+                  topAlert?.summary ||
+                    codingAuditLlmEvidence?.summary ||
+                    '当前未识别到高风险审核项。'
+                }}
               </div>
               <div class="evidence-hero__meta">
                 <span>置信度 {{ llmConfidenceText }}</span>
@@ -554,171 +616,177 @@
               </div>
             </div>
 
-            <section class="evidence-block">
-              <div class="evidence-block-title">
-                主诊断决策
-              </div>
-              <div class="evidence-decision-grid">
-                <div class="evidence-decision-col">
-                  <div class="evidence-meta">
-                    医生填写主诊断
-                  </div>
-                  <div class="evidence-decision-main">
-                    {{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
-                  </div>
+            <template v-if="!isDiagnosisInappropriateOnlyHero">
+              <section class="evidence-block">
+                <div class="evidence-block-title">
+                  主诊断决策
                 </div>
-                <div class="evidence-decision-col">
-                  <div class="evidence-meta">
-                    系统推荐主诊断
-                  </div>
-                  <div class="evidence-decision-main">
-                    {{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}
-                    <span
-                      v-if="llmDiffersFromClinician"
-                      class="evidence-recommend-label"
-                    >
-                      {{ mainRecommendationLabel }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div class="evidence-logic">
-                {{ mainDiagnosisLlmEvidence?.conclusion || 'LLM已完成主诊断语义裁决。' }}
-              </div>
-              <div
-                v-if="mainRecommendationSummary"
-                class="evidence-logic"
-              >
-                {{ mainRecommendationSummary }}
-              </div>
-              <button
-                v-if="mainDiagnosisLlmEvidence?.reasoning_summary"
-                type="button"
-                class="evidence-toggle-btn"
-                @click="toggleReasoningSummary"
-              >
-                {{ reasoningSummaryExpanded ? '收起推理摘要' : '查看推理摘要' }}
-              </button>
-              <div
-                v-if="reasoningSummaryExpanded"
-                class="evidence-collapsed-snippet"
-              >
-                {{ mainDiagnosisLlmEvidence?.reasoning_summary || 'LLM推理摘要暂不可用。' }}
-              </div>
-            </section>
-
-            <section class="evidence-block">
-              <div class="evidence-block-title">
-                审核风险（Top3）
-              </div>
-              <div
-                v-if="riskTimelineItems.length === 0"
-                class="evidence-logic"
-              >
-                {{ codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
-              </div>
-              <template v-else>
-                <div
-                  v-for="(risk, idx) in riskTimelineItems"
-                  :key="`risk-timeline-${idx}`"
-                  class="evidence-risk-card"
-                >
-                  <div class="evidence-risk-head">
-                    <span class="evidence-risk-type">{{ formatFindingTypeLabel(risk.type) }}（{{ formatFindingSeverityLabel(risk.severity) }}）</span>
-                    <span
-                      class="evidence-risk-severity"
-                      :class="formatSeverityClass(risk.severity)"
-                    >
-                      {{ risk.count }} 项
-                    </span>
-                  </div>
-                  <div class="evidence-key-reason">
-                    建议：{{ risk.llm_recommendation || '建议人工复核。' }}
-                  </div>
-                  <div
-                    v-if="!isRiskDetailExpanded(idx)"
-                    class="evidence-collapsed-snippet"
-                  >
-                    {{ risk.shortSummary }}
-                  </div>
-                  <button
-                    type="button"
-                    class="evidence-toggle-btn"
-                    @click="toggleRiskDetail(idx)"
-                  >
-                    {{ isRiskDetailExpanded(idx) ? '收起详情' : '展开详情' }}
-                  </button>
-                  <template v-if="isRiskDetailExpanded(idx)">
-                    <div class="evidence-key-meta">
-                      原填写：{{ risk.clinician_text || '-' }}
+                <div class="evidence-decision-grid">
+                  <div class="evidence-decision-col">
+                    <div class="evidence-meta">
+                      医生填写主诊断
                     </div>
-                    <div class="evidence-key-meta">
-                      理由：{{ risk.reason || '-' }}
+                    <div class="evidence-decision-main">
+                      {{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
                     </div>
-                  </template>
+                  </div>
+                  <div class="evidence-decision-col">
+                    <div class="evidence-meta">
+                      系统推荐主诊断
+                    </div>
+                    <div class="evidence-decision-main">
+                      {{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}
+                      <span
+                        v-if="llmDiffersFromClinician"
+                        class="evidence-recommend-label"
+                      >
+                        {{ mainRecommendationLabel }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </template>
-            </section>
-
-            <section class="evidence-block">
-              <div class="evidence-block-title">
-                关键证据
-              </div>
-              <div class="evidence-logic">
-                {{ codingAuditLlmEvidence?.summary || 'LLM审核暂不可用' }}
-              </div>
-              <div
-                v-if="keyEvidenceGroups.length === 0"
-                class="evidence-logic"
-              >
-                暂无可展示的关键证据。
-              </div>
-              <template v-else>
+                <div class="evidence-logic">
+                  {{ mainDiagnosisLlmEvidence?.conclusion || 'LLM已完成主诊断语义裁决。' }}
+                </div>
                 <div
-                  v-for="(group, idx) in keyEvidenceGroups"
-                  :key="`key-group-${idx}`"
-                  class="evidence-key-card"
+                  v-if="mainRecommendationSummary"
+                  class="evidence-logic"
                 >
-                  <div class="evidence-risk-head">
-                    <span class="evidence-risk-type">{{ formatFindingTypeLabel(group.type) }}</span>
-                    <span class="evidence-key-meta">{{ group.llm_recommendation || '建议人工复核' }}</span>
-                  </div>
-                  <div class="evidence-key-meta">
-                    证据条数：{{ group.evidence.length }}
-                  </div>
+                  {{ mainRecommendationSummary }}
+                </div>
+                <button
+                  v-if="mainDiagnosisLlmEvidence?.reasoning_summary"
+                  type="button"
+                  class="evidence-toggle-btn"
+                  @click="toggleReasoningSummary"
+                >
+                  {{ reasoningSummaryExpanded ? '收起推理摘要' : '查看推理摘要' }}
+                </button>
+                <div
+                  v-if="reasoningSummaryExpanded"
+                  class="evidence-collapsed-snippet"
+                >
+                  {{ mainDiagnosisLlmEvidence?.reasoning_summary || 'LLM推理摘要暂不可用。' }}
+                </div>
+              </section>
+
+              <section class="evidence-block">
+                <div class="evidence-block-title">
+                  审核风险（Top3）
+                </div>
+                <div
+                  v-if="riskTimelineItems.length === 0"
+                  class="evidence-logic"
+                >
+                  {{ codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
+                </div>
+                <template v-else>
                   <div
-                    v-if="!isEvidenceGroupExpanded(idx)"
-                    class="evidence-collapsed-snippet"
+                    v-for="(risk, idx) in riskTimelineItems"
+                    :key="`risk-timeline-${idx}`"
+                    class="evidence-risk-card"
                   >
-                    {{ buildEvidenceGroupCollapsedText(group.evidence) }}
-                  </div>
-                  <button
-                    type="button"
-                    class="evidence-toggle-btn"
-                    @click="toggleEvidenceGroup(idx)"
-                  >
-                    {{ isEvidenceGroupExpanded(idx) ? '收起证据详情' : '查看更多证据' }}
-                  </button>
-                  <template v-if="isEvidenceGroupExpanded(idx)">
+                    <div class="evidence-risk-head">
+                      <span class="evidence-risk-type">{{ formatFindingTypeLabel(risk.type) }}（{{
+                        formatFindingSeverityLabel(risk.severity)
+                      }}）</span>
+                      <span
+                        class="evidence-risk-severity"
+                        :class="formatSeverityClass(risk.severity)"
+                      >
+                        {{ risk.count }} 项
+                      </span>
+                    </div>
+                    <div class="evidence-key-reason">
+                      建议：{{ risk.llm_recommendation || '建议人工复核。' }}
+                    </div>
                     <div
-                      v-for="(line, evIdx) in group.evidence"
-                      :key="`group-${idx}-ev-${evIdx}`"
-                      class="evidence-audit-quote"
+                      v-if="!isRiskDetailExpanded(idx)"
+                      class="evidence-collapsed-snippet"
                     >
-                      <div class="evidence-quote">
-                        {{ line.quote || '-' }}
+                      {{ risk.shortSummary }}
+                    </div>
+                    <button
+                      type="button"
+                      class="evidence-toggle-btn"
+                      @click="toggleRiskDetail(idx)"
+                    >
+                      {{ isRiskDetailExpanded(idx) ? '收起详情' : '展开详情' }}
+                    </button>
+                    <template v-if="isRiskDetailExpanded(idx)">
+                      <div class="evidence-key-meta">
+                        原填写：{{ risk.clinician_text || '-' }}
                       </div>
                       <div class="evidence-key-meta">
-                        来源：{{ line.source || '病历原文' }}
+                        理由：{{ risk.reason || '-' }}
                       </div>
-                      <div class="evidence-key-reason">
-                        支持理由：{{ line.why_it_supports || '-' }}
-                      </div>
-                    </div>
-                  </template>
+                    </template>
+                  </div>
+                </template>
+              </section>
+
+              <section class="evidence-block">
+                <div class="evidence-block-title">
+                  关键证据
                 </div>
-              </template>
-            </section>
+                <div class="evidence-logic">
+                  {{ codingAuditLlmEvidence?.summary || 'LLM审核暂不可用' }}
+                </div>
+                <div
+                  v-if="keyEvidenceGroups.length === 0"
+                  class="evidence-logic"
+                >
+                  暂无可展示的关键证据。
+                </div>
+                <template v-else>
+                  <div
+                    v-for="(group, idx) in keyEvidenceGroups"
+                    :key="`key-group-${idx}`"
+                    class="evidence-key-card"
+                  >
+                    <div class="evidence-risk-head">
+                      <span class="evidence-risk-type">{{ formatFindingTypeLabel(group.type) }}</span>
+                      <span class="evidence-key-meta">{{
+                        group.llm_recommendation || '建议人工复核'
+                      }}</span>
+                    </div>
+                    <div class="evidence-key-meta">
+                      证据条数：{{ group.evidence.length }}
+                    </div>
+                    <div
+                      v-if="!isEvidenceGroupExpanded(idx)"
+                      class="evidence-collapsed-snippet"
+                    >
+                      {{ buildEvidenceGroupCollapsedText(group.evidence) }}
+                    </div>
+                    <button
+                      type="button"
+                      class="evidence-toggle-btn"
+                      @click="toggleEvidenceGroup(idx)"
+                    >
+                      {{ isEvidenceGroupExpanded(idx) ? '收起证据详情' : '查看更多证据' }}
+                    </button>
+                    <template v-if="isEvidenceGroupExpanded(idx)">
+                      <div
+                        v-for="(line, evIdx) in group.evidence"
+                        :key="`group-${idx}-ev-${evIdx}`"
+                        class="evidence-audit-quote"
+                      >
+                        <div class="evidence-quote">
+                          {{ line.quote || '-' }}
+                        </div>
+                        <div class="evidence-key-meta">
+                          来源：{{ line.source || '病历原文' }}
+                        </div>
+                        <div class="evidence-key-reason">
+                          支持理由：{{ line.why_it_supports || '-' }}
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </section>
+            </template>
           </template>
           <div
             v-else
@@ -856,7 +924,8 @@ const d = computed(() => {
   const surgeries: any[] = Array.isArray(src.surgeries) ? src.surgeries : []
   const cost = src.cost || {}
 
-  const mainDiag = diags.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(diags, null)
+  const mainDiag =
+    diags.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(diags, null)
   const otherDiags = diags.filter((dd) => dd !== mainDiag)
 
   const mainProc = first(surgeries, null)
@@ -879,7 +948,7 @@ const d = computed(() => {
       contact_name: basic.contact_name || '',
       contact_relation: basic.contact_relationship || '',
       contact_phone: basic.contact_telephone || '',
-      contact_address: basic.contact_address || ''
+      contact_address: basic.contact_address || '',
     },
     hospitalization: {
       hospital_name: basic.institute_county_desc || '',
@@ -897,14 +966,16 @@ const d = computed(() => {
       discharge_datetime: basic.discharge_datetime || '',
       actual_hospital_days: basic.hospital_duration || '',
       leaving_hospital_way: basic.leaving_hospital_way || '',
-      rehospital_within_month: basic.rehospital_with_month || ''
+      rehospital_within_month: basic.rehospital_with_month || '',
     },
     diagnoses: {
       discharge_main_diagnosis_text: mainDiag?.diagnosis_name || null,
       discharge_main_icd: mainDiag?.diagnosis_code || null,
       admission_condition: mainDiag?.admission_condition || null,
-      discharge_other_diagnoses_texts: otherDiags.map((dd) => dd?.diagnosis_name || '').filter(Boolean),
-      discharge_other_icds: otherDiags.map((dd) => dd?.diagnosis_code || '').filter(Boolean)
+      discharge_other_diagnoses_texts: otherDiags
+        .map((dd) => dd?.diagnosis_name || '')
+        .filter(Boolean),
+      discharge_other_icds: otherDiags.map((dd) => dd?.diagnosis_code || '').filter(Boolean),
     },
     procedures: {
       main_procedure_text: mainProc?.surgery_name || null,
@@ -924,8 +995,8 @@ const d = computed(() => {
       other_procedures: otherProcs.map((p) => ({
         text: p?.surgery_name || p?.text || '',
         code: p?.surgery_code || p?.code || '',
-        date: normalizeDate(p?.surgery_begin_datetime || p?.date)
-      }))
+        date: normalizeDate(p?.surgery_begin_datetime || p?.date),
+      })),
     },
     other_medical_info: {
       pathology_text: otherSrc.pathology_text || '',
@@ -935,7 +1006,7 @@ const d = computed(() => {
       injury_poison_cause_icd: otherSrc.injury_poison_cause_icd || '',
       drug_allergy_flag: otherSrc.drug_allergy_flag || basic.allergy_sign || '',
       abo_blood_type: otherSrc.abo_blood_type || basic.abo_blood_code || '',
-      rh_blood_type: otherSrc.rh_blood_type || basic.rh_blood_code || ''
+      rh_blood_type: otherSrc.rh_blood_type || basic.rh_blood_code || '',
     },
     staff: {
       dept_director: basic.deptdirector_sign || '',
@@ -944,12 +1015,12 @@ const d = computed(() => {
       resident_physician: basic.resident_physician_sign || '',
       responsible_nurse: basic.responsible_nurse_sign || '',
       coder: basic.coder_sign || '',
-      medical_record_quality: basic.medicalrecord_quality || ''
+      medical_record_quality: basic.medicalrecord_quality || '',
     },
     costs: {
       total_cost: cost.total_cost || '',
-      self_paid: cost.self_pay || ''
-    }
+      self_paid: cost.self_pay || '',
+    },
   }
 })
 
@@ -970,20 +1041,24 @@ const diagnosisPairedRows = computed(() => {
   const leftCol = allDiags.slice(0, ROWS_PER_COL)
   const rightCol = allDiags.slice(ROWS_PER_COL, ROWS_PER_COL * 2)
   return leftCol.map((leftItem, idx) => {
-    const rightItem = rightCol[idx] || { diagnosis_name: '', diagnosis_code: '', admission_condition: '' }
+    const rightItem = rightCol[idx] || {
+      diagnosis_name: '',
+      diagnosis_code: '',
+      admission_condition: '',
+    }
     return {
       left: {
-        label: idx === 0 ? '主要诊断：' : (leftItem.diagnosis_name ? '其他诊断：' : ''),
+        label: idx === 0 ? '主要诊断：' : leftItem.diagnosis_name ? '其他诊断：' : '',
         name: leftItem.diagnosis_name || '',
         code: leftItem.diagnosis_code || '',
-        condition: leftItem.admission_condition || ''
+        condition: leftItem.admission_condition || '',
       },
       right: {
-        label: idx === 0 ? '其他诊断：' : (rightItem.diagnosis_name ? '' : ''),
+        label: idx === 0 ? '其他诊断：' : rightItem.diagnosis_name ? '' : '',
         name: rightItem.diagnosis_name || '',
         code: rightItem.diagnosis_code || '',
-        condition: rightItem.admission_condition || ''
-      }
+        condition: rightItem.admission_condition || '',
+      },
     }
   })
 })
@@ -1046,7 +1121,9 @@ function normalizeEvidenceKey(text: string): string {
 }
 
 const mainDiagnosisName = computed(() => {
-  const main = diagnosisRows.value.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) || first(diagnosisRows.value, null)
+  const main =
+    diagnosisRows.value.find((dd) => String(dd?.diagnosis_type || '').includes('主要')) ||
+    first(diagnosisRows.value, null)
   return String(main?.diagnosis_name || '').trim()
 })
 
@@ -1088,9 +1165,10 @@ const riskChipItems = computed(() => {
         metrics.set(key, { count: 1, severity })
         return
       }
-      const nextSeverity = (riskSeverityOrder[severity] || 0) > (riskSeverityOrder[prev.severity] || 0)
-        ? severity
-        : prev.severity
+      const nextSeverity =
+        (riskSeverityOrder[severity] || 0) > (riskSeverityOrder[prev.severity] || 0)
+          ? severity
+          : prev.severity
       metrics.set(key, { count: prev.count + 1, severity: nextSeverity })
     })
   }
@@ -1103,11 +1181,17 @@ const riskChipItems = computed(() => {
       procedure_missing: 'medium',
       diagnosis_insufficient_evidence: 'low',
     }
-    ;(['diagnosis_missing', 'procedure_missing', 'diagnosis_inappropriate', 'diagnosis_insufficient_evidence'] as AuditFindingType[])
-      .forEach((key) => {
-        const count = Number(counts[key] || 0)
-        if (count > 0) metrics.set(key, { count, severity: fallbackSeverity[key] })
-      })
+    ;(
+      [
+        'diagnosis_missing',
+        'procedure_missing',
+        'diagnosis_inappropriate',
+        'diagnosis_insufficient_evidence',
+      ] as AuditFindingType[]
+    ).forEach((key) => {
+      const count = Number(counts[key] || 0)
+      if (count > 0) metrics.set(key, { count, severity: fallbackSeverity[key] })
+    })
   }
   return Array.from(metrics.entries())
     .map(([key, val]) => ({
@@ -1117,7 +1201,8 @@ const riskChipItems = computed(() => {
       severity: val.severity,
     }))
     .sort((a, b) => {
-      const severityDelta = (riskSeverityOrder[b.severity] || 0) - (riskSeverityOrder[a.severity] || 0)
+      const severityDelta =
+        (riskSeverityOrder[b.severity] || 0) - (riskSeverityOrder[a.severity] || 0)
       if (severityDelta !== 0) return severityDelta
       return (riskTypeOrder[a.key] || 99) - (riskTypeOrder[b.key] || 99)
     })
@@ -1131,12 +1216,12 @@ const topAuditFindings = computed<CodingAuditFinding[]>(() => {
     .slice()
     .sort((a, b) => {
       const severityDelta =
-        (riskSeverityOrder[String(b?.severity || '').toLowerCase()] || 0)
-        - (riskSeverityOrder[String(a?.severity || '').toLowerCase()] || 0)
+        (riskSeverityOrder[String(b?.severity || '').toLowerCase()] || 0) -
+        (riskSeverityOrder[String(a?.severity || '').toLowerCase()] || 0)
       if (severityDelta !== 0) return severityDelta
       return (
-        (riskTypeOrder[String(a?.type || '').toLowerCase()] || 99)
-        - (riskTypeOrder[String(b?.type || '').toLowerCase()] || 99)
+        (riskTypeOrder[String(a?.type || '').toLowerCase()] || 99) -
+        (riskTypeOrder[String(b?.type || '').toLowerCase()] || 99)
       )
     })
     .slice(0, 3)
@@ -1145,16 +1230,19 @@ const topAuditFindings = computed<CodingAuditFinding[]>(() => {
 const riskTimelineItems = computed(() => {
   const rows = topAuditFindings.value
   if (!rows.length) return []
-  const grouped = new Map<string, {
-    type: string
-    severity: AuditFindingSeverity
-    llm_recommendation: string
-    reason: string
-    clinician_text: string
-    count: number
-    shortSummary: string
-    evidence: CodingAuditEvidenceLine[]
-  }>()
+  const grouped = new Map<
+    string,
+    {
+      type: string
+      severity: AuditFindingSeverity
+      llm_recommendation: string
+      reason: string
+      clinician_text: string
+      count: number
+      shortSummary: string
+      evidence: CodingAuditEvidenceLine[]
+    }
+  >()
   rows.forEach((finding) => {
     const type = String(finding.type || '').toLowerCase()
     const recommendation = String(finding.llm_recommendation || '').trim()
@@ -1180,9 +1268,10 @@ const riskTimelineItems = computed(() => {
       return
     }
     const prev = grouped.get(key)!
-    const nextSeverity = (riskSeverityOrder[severity] || 0) > (riskSeverityOrder[prev.severity] || 0)
-      ? severity
-      : prev.severity
+    const nextSeverity =
+      (riskSeverityOrder[severity] || 0) > (riskSeverityOrder[prev.severity] || 0)
+        ? severity
+        : prev.severity
     grouped.set(key, {
       ...prev,
       severity: nextSeverity,
@@ -1195,7 +1284,8 @@ const riskTimelineItems = computed(() => {
   })
   return Array.from(grouped.values())
     .sort((a, b) => {
-      const severityDelta = (riskSeverityOrder[b.severity] || 0) - (riskSeverityOrder[a.severity] || 0)
+      const severityDelta =
+        (riskSeverityOrder[b.severity] || 0) - (riskSeverityOrder[a.severity] || 0)
       if (severityDelta !== 0) return severityDelta
       return (riskTypeOrder[a.type] || 99) - (riskTypeOrder[b.type] || 99)
     })
@@ -1229,9 +1319,15 @@ const topAlert = computed(() => {
     type: fallbackType,
     severity: String(first.severity || 'medium').toLowerCase() as AuditFindingSeverity,
     summary: String(first.llm_recommendation || first.reason || '').trim(),
-    count: topAuditFindings.value.filter((x) => String(x.type || '').toLowerCase() === fallbackType).length || 1,
+    count:
+      topAuditFindings.value.filter((x) => String(x.type || '').toLowerCase() === fallbackType)
+        .length || 1,
   }
 })
+
+const isDiagnosisInappropriateOnlyHero = computed(
+  () => String(topAlert.value?.type || '').toLowerCase() === 'diagnosis_inappropriate',
+)
 
 const totalRiskCount = computed(() => {
   const counts = codingAuditLlmEvidence.value?.counts
@@ -1282,7 +1378,8 @@ const llmDiffersFromClinician = computed(() => {
 })
 
 const llmConfidenceText = computed(() => {
-  const value = mainDiagnosisLlmEvidence.value?.confidence ?? codingAuditLlmEvidence.value?.confidence
+  const value =
+    mainDiagnosisLlmEvidence.value?.confidence ?? codingAuditLlmEvidence.value?.confidence
   if (typeof value !== 'number' || Number.isNaN(value)) return '-'
   return `${Math.round(value * 100)}%`
 })
@@ -1345,7 +1442,9 @@ const expandedRiskDetails = ref<Record<number, boolean>>({})
 const expandedEvidenceGroups = ref<Record<number, boolean>>({})
 
 function clipText(text: unknown, maxLength = 70): string {
-  const value = String(text || '').replace(/\s+/g, ' ').trim()
+  const value = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!value) return '暂无摘要'
   if (value.length <= maxLength) return value
   return `${value.slice(0, maxLength)}...`
@@ -1497,7 +1596,7 @@ function closeDiagnosisEvidence() {
 .fp-wrapper {
   max-width: 900px;
   margin: 0 auto;
-  font-family: "SimSun", "宋体", "Songti SC", serif;
+  font-family: 'SimSun', '宋体', 'Songti SC', serif;
   font-size: 12px;
   color: #000;
   line-height: 1.5;
@@ -1516,7 +1615,7 @@ function closeDiagnosisEvidence() {
   font-weight: bold;
   letter-spacing: 6px;
   margin: 0 0 10px 0;
-  font-family: "SimHei", "黑体", sans-serif;
+  font-family: 'SimHei', '黑体', sans-serif;
 }
 
 /* 区间大标题（蓝底） */
@@ -1565,10 +1664,20 @@ u.fill {
 }
 
 /* 辅助类 */
-.bold { font-weight: bold; }
-.center { text-align: center; }
-.num { text-align: right; font-family: "Courier New", monospace; font-size: 11.5px; }
-.mono { font-family: "Courier New", monospace; }
+.bold {
+  font-weight: bold;
+}
+.center {
+  text-align: center;
+}
+.num {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-size: 11.5px;
+}
+.mono {
+  font-family: 'Courier New', monospace;
+}
 .fp-diag-cell {
   display: flex;
   align-items: flex-start;
@@ -1642,7 +1751,9 @@ u.fill {
 }
 
 /* 数据行最小高度 */
-.data-row td { height: 26px; }
+.data-row td {
+  height: 26px;
+}
 
 /* 底部注 */
 .fp-footer {
@@ -2053,7 +2164,6 @@ u.fill {
   font-weight: 600;
 }
 
-
 .evidence-actions {
   display: flex;
   justify-content: flex-end;
@@ -2079,6 +2189,9 @@ u.fill {
 
 /* 打印样式 */
 @media print {
-  .fp-wrapper { padding: 0; max-width: none; }
+  .fp-wrapper {
+    padding: 0;
+    max-width: none;
+  }
 }
 </style>

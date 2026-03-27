@@ -20,6 +20,7 @@ class SysUser(Base):
     id = Column(String(36), primary_key=True)
     username = Column(String(50), nullable=False, unique=True)
     email = Column(String(100), unique=True)
+    phone = Column(String(20), unique=True, comment="手机号（登录备用标识）")
     password_hash = Column(Text)
     display_name = Column(String(100), nullable=False)
     department = Column(String(100))
@@ -32,6 +33,7 @@ class SysUser(Base):
 
     __table_args__ = (
         Index("ix_sys_users_email", "email"),
+        Index("ix_sys_users_phone", "phone"),
         Index("ix_sys_users_role", "role"),
     )
 

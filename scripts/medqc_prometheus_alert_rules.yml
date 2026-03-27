@@ -1,0 +1,68 @@
+groups:
+  - name: medqc-backend
+    interval: 30s
+    rules:
+      - alert: MedQCBackendDown
+        expr: up{job="medqc-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: medqc-backend
+        annotations:
+          summary: "MedQC backend is down"
+          description: "Prometheus cannot scrape medqc-backend for more than 2 minutes."
+
+      - alert: MedQCHigh5xxRate
+        expr: |
+          (
+            increase(medqc_runtime_status_bucket_total{job="medqc-backend", code_class="5xx"}[5m])
+            /
+            clamp_min(increase(medqc_runtime_requests_total{job="medqc-backend"}[5m]), 1)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          service: medqc-backend
+        annotations:
+          summary: "MedQC 5xx rate is high"
+          description: "5xx ratio has stayed above 5% for 10 minutes."
+
+      - alert: MedQCHighP95Latency
+        expr: medqc_runtime_request_latency_p95_ms{job="medqc-backend"} > 2000
+        for: 10m
+        labels:
+          severity: warning
+          service: medqc-backend
+        annotations:
+          summary: "MedQC P95 latency is high"
+          description: "P95 latency has exceeded 2000ms for 10 minutes."
+
+      - alert: MedQCSyncFailureRateHigh
+        expr: medqc_sync_failure_rate{job="medqc-backend"} > 0.2
+        for: 15m
+        labels:
+          severity: critical
+          service: medqc-backend
+        annotations:
+          summary: "MedQC sync failure rate is high"
+          description: "Sync failure rate has stayed above 20% for 15 minutes."
+
+      - alert: MedQCSyncLagHigh
+        expr: medqc_sync_last_success_lag_seconds{job="medqc-backend"} > 1800
+        for: 15m
+        labels:
+          severity: critical
+          service: medqc-backend
+        annotations:
+          summary: "MedQC sync lag is high"
+          description: "No successful sync has been observed for more than 30 minutes."
+
+      - alert: MedQCSyncBacklogHigh
+        expr: medqc_sync_backlog_estimate{job="medqc-backend"} > 20
+        for: 15m
+        labels:
+          severity: warning
+          service: medqc-backend
+        annotations:
+          summary: "MedQC sync backlog proxy is high"
+          description: "Estimated sync backlog (failed runs in rolling window) has stayed above 20 for 15 minutes."

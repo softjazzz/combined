@@ -1,44 +1,54 @@
-#!/bin/bash
-# 安装 MedQC 前后端为 systemd 服务，实现持久化运行
+#!/usr/bin/env bash
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MEDQC_ROOT="${MEDQC_ROOT:-/opt/medqc}"
+SHARED_DIR="${MEDQC_ROOT}/shared"
+CURRENT_LINK="${MEDQC_ROOT}/current"
 
-echo "🔧 停止现有进程..."
-pkill -f "uvicorn.*8001" 2>/dev/null || true
-pkill -f "vite.*3000" 2>/dev/null || true
-sleep 2
+echo "[install-services] preparing runtime directories"
+sudo mkdir -p "${MEDQC_ROOT}/releases" "${SHARED_DIR}"
+sudo chown -R "${USER}:${USER}" "${MEDQC_ROOT}" || true
 
-echo "📋 复制服务文件到 systemd..."
+if [[ ! -f "${SHARED_DIR}/backend.env" ]]; then
+  cat > /tmp/backend.env.sample <<'EOF'
+ENV=production
+STRICT_STARTUP_CHECKS=true
+JWT_SECRET=replace-with-strong-secret
+DATA_SOURCE=pg
+EOF
+  sudo mv /tmp/backend.env.sample "${SHARED_DIR}/backend.env"
+  sudo chmod 600 "${SHARED_DIR}/backend.env"
+  echo "[install-services] created ${SHARED_DIR}/backend.env (please update secrets before start)"
+fi
+
+if [[ ! -f "${SHARED_DIR}/frontend.env" ]]; then
+  cat > /tmp/frontend.env.sample <<'EOF'
+FRONTEND_HOST=0.0.0.0
+FRONTEND_PORT=3000
+EOF
+  sudo mv /tmp/frontend.env.sample "${SHARED_DIR}/frontend.env"
+  sudo chmod 600 "${SHARED_DIR}/frontend.env"
+  echo "[install-services] created ${SHARED_DIR}/frontend.env"
+fi
+
+echo "[install-services] installing systemd unit files"
 sudo cp "${SCRIPT_DIR}/medqc-backend.service" /etc/systemd/system/
 sudo cp "${SCRIPT_DIR}/medqc-frontend.service" /etc/systemd/system/
 
-echo "🔄 重新加载 systemd 配置..."
+echo "[install-services] reloading systemd"
 sudo systemctl daemon-reload
 
-echo "🚀 启用并启动后端服务..."
-sudo systemctl enable medqc-backend.service
-sudo systemctl start medqc-backend.service
+echo "[install-services] enabling services"
+sudo systemctl enable medqc-backend.service medqc-frontend.service
 
-echo "🚀 启用并启动前端服务..."
-sudo systemctl enable medqc-frontend.service
-sudo systemctl start medqc-frontend.service
+if [[ -L "${CURRENT_LINK}" || -d "${CURRENT_LINK}" ]]; then
+  echo "[install-services] current release found, starting services"
+  sudo systemctl restart medqc-backend.service
+  sudo systemctl restart medqc-frontend.service
+else
+  echo "[install-services] no active release found at ${CURRENT_LINK}, skip start"
+  echo "[install-services] run scripts/deploy_medqc_release.sh first"
+fi
 
-sleep 3
-
-echo ""
-echo "📊 服务状态："
-echo "============================================"
-echo "后端服务 (medqc-backend):"
-sudo systemctl status medqc-backend.service --no-pager | head -10
-echo ""
-echo "前端服务 (medqc-frontend):"
-sudo systemctl status medqc-frontend.service --no-pager | head -10
-echo ""
-echo "============================================"
-echo "✅ 安装完成！服务将在系统重启后自动启动"
-echo ""
-echo "常用命令："
-echo "  查看状态: sudo systemctl status medqc-backend medqc-frontend"
-echo "  查看日志: sudo journalctl -u medqc-backend -f"
-echo "  重启服务: sudo systemctl restart medqc-backend medqc-frontend"
-echo "  停止服务: sudo systemctl stop medqc-backend medqc-frontend"
+echo "[install-services] done"

@@ -15,7 +15,9 @@ function asNumber(value: unknown): number {
 function asBoolean(value: unknown): boolean {
   if (typeof value === 'boolean') return value
   if (typeof value === 'number') return value !== 0
-  const normalized = String(value ?? '').trim().toLowerCase()
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
   return ['true', '1', 'yes', 'y', 'ok'].includes(normalized)
 }
 
@@ -30,7 +32,8 @@ function pickString(raw: LooseRecord, keys: string[]): string {
 function normalizeRecordStatus(rawStatus: string): PatientRecord['status'] {
   const status = rawStatus.toLowerCase()
   if (status === 'completed' || status === 'done' || status === 'approved') return 'completed'
-  if (status === 'processing' || status === 'in_progress' || status === 'running') return 'processing'
+  if (status === 'processing' || status === 'in_progress' || status === 'running')
+    return 'processing'
   if (status === 'warning' || status === 'high_risk') return 'warning'
   if (status === 'has_defects' || status === 'defect' || status === 'rejected') return 'has_defects'
   return 'pending'
@@ -64,32 +67,43 @@ export function resolveVisitId(record: PatientRecord): string {
 
 export function normalizeRecord(raw: unknown): PatientRecord {
   const source = (raw || {}) as LooseRecord
-  const id = pickString(source, ['id', 'record_id', 'visit_id', 'visitId']) || `record-${Date.now()}`
+  const id =
+    pickString(source, ['id', 'record_id', 'visit_id', 'visitId']) || `record-${Date.now()}`
   const visitId = pickString(source, ['visitId', 'visit_id']) || id
   const dischargeDate = pickString(source, ['dischargeDate', 'discharge_date', 'out_date'])
   const admissionDate = pickString(source, ['admissionDate', 'admission_date', 'in_date'])
   const rawCdmFrontpageEmpty = source.cdmFrontpageEmpty ?? source.cdm_frontpage_empty
-  const cdmFrontpageEmpty = rawCdmFrontpageEmpty === undefined || rawCdmFrontpageEmpty === null
-    ? undefined
-    : asBoolean(rawCdmFrontpageEmpty)
-  const hasAdmission = asBoolean(source.hasAdmission ?? source.has_admission)
-    || Boolean(admissionDate)
-    || Boolean(pickString(source, ['in_date', 'admission_no', 'hospitalization_no']))
+  const cdmFrontpageEmpty =
+    rawCdmFrontpageEmpty === undefined || rawCdmFrontpageEmpty === null
+      ? undefined
+      : asBoolean(rawCdmFrontpageEmpty)
+  const hasAdmission =
+    asBoolean(source.hasAdmission ?? source.has_admission) ||
+    Boolean(admissionDate) ||
+    Boolean(pickString(source, ['in_date', 'admission_no', 'hospitalization_no']))
   const hasFrontpageDraft = asBoolean(
-    source.hasFrontpageDraft
-    ?? source.has_frontpage_draft
-    ?? source.ai_frontpage_draft_exists
-    ?? source.draft_frontpage_exists,
+    source.hasFrontpageDraft ??
+      source.has_frontpage_draft ??
+      source.ai_frontpage_draft_exists ??
+      source.draft_frontpage_exists,
   )
   const hasFrontpageOfficialByFlag = source.hasFrontpageOfficial ?? source.has_frontpage_official
-  const hasFrontpageOfficial = hasFrontpageOfficialByFlag !== undefined && hasFrontpageOfficialByFlag !== null
-    ? asBoolean(hasFrontpageOfficialByFlag)
-    : (cdmFrontpageEmpty === undefined ? false : !cdmFrontpageEmpty)
-  const settlementHint = pickString(source, ['settlement_status', 'settlementStatus', 'medinsur_serial_no'])
+  const hasFrontpageOfficial =
+    hasFrontpageOfficialByFlag !== undefined && hasFrontpageOfficialByFlag !== null
+      ? asBoolean(hasFrontpageOfficialByFlag)
+      : cdmFrontpageEmpty === undefined
+        ? false
+        : !cdmFrontpageEmpty
+  const settlementHint = pickString(source, [
+    'settlement_status',
+    'settlementStatus',
+    'medinsur_serial_no',
+  ])
   const hasSettlementOfficialByFlag = source.hasSettlementOfficial ?? source.has_settlement_official
-  const hasSettlementOfficial = hasSettlementOfficialByFlag !== undefined && hasSettlementOfficialByFlag !== null
-    ? asBoolean(hasSettlementOfficialByFlag)
-    : Boolean(settlementHint)
+  const hasSettlementOfficial =
+    hasSettlementOfficialByFlag !== undefined && hasSettlementOfficialByFlag !== null
+      ? asBoolean(hasSettlementOfficialByFlag)
+      : Boolean(settlementHint)
 
   return {
     id,
@@ -101,18 +115,32 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     sex: pickString(source, ['sex', 'gender']) || '未知',
     age: asNumber(source.age ?? source.patient_age ?? source.age_years),
     insurance: pickString(source, ['insurance', 'insurance_type', 'medical_insurance_type']),
-    department: pickString(source, ['department', 'dept_name', 'deptName', 'current_department']) || '未分科室',
+    department:
+      pickString(source, ['department', 'dept_name', 'deptName', 'current_department']) ||
+      '未分科室',
     admissionDate,
     dischargeDate,
-    days: asNumber(source.days ?? source.stay_days ?? source.length_of_stay ?? source.hospital_days),
+    days: asNumber(
+      source.days ?? source.stay_days ?? source.length_of_stay ?? source.hospital_days,
+    ),
     cdmFrontpageEmpty,
     hasAdmission,
     hasFrontpageDraft,
-    frontpageDraftUpdatedAt: pickString(source, ['frontpageDraftUpdatedAt', 'frontpage_draft_updated_at', 'draft_updated_at']) || undefined,
+    frontpageDraftUpdatedAt:
+      pickString(source, [
+        'frontpageDraftUpdatedAt',
+        'frontpage_draft_updated_at',
+        'draft_updated_at',
+      ]) || undefined,
     hasFrontpageOfficial,
     hasSettlementOfficial,
     isDemoRecord: asBoolean(source.isDemoRecord ?? source.is_demo_record),
-    diagnosis: pickString(source, ['diagnosis', 'main_diagnosis', 'primary_diagnosis', 'discharge_main_diagnosis_text']),
+    diagnosis: pickString(source, [
+      'diagnosis',
+      'main_diagnosis',
+      'primary_diagnosis',
+      'discharge_main_diagnosis_text',
+    ]),
     diagnosisCode: pickString(source, ['diagnosisCode', 'diagnosis_code', 'main_diagnosis_code']),
     doctor: pickString(source, ['doctor', 'doctor_name', 'attending_doctor']),
     status: normalizeRecordStatus(

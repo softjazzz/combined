@@ -7,7 +7,9 @@ import csv
 import os
 from pydantic import BaseModel
 
+from ..core.audit import audit_event
 from ..core.response import success_response, error_response, get_trace_id, ErrorCode, StatusCode
+from ..core.pagination import REPORT_SCAN_LIMIT
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.settings import get_settings
 from ..services.sichuan_qc_service import SichuanQCService
@@ -53,7 +55,7 @@ async def qc_summary(request: Request):
     if sb is not None:
         try:
             # 读取聚合视图
-            view_rows = await async_execute(sb.table("qc_statistics_view").select("*").limit(1000))
+            view_rows = await async_execute(sb.table("qc_statistics_view").select("*").limit(REPORT_SCAN_LIMIT))
             rows = view_rows.data or []
             total_records = len(rows)
             if rows:
@@ -71,7 +73,7 @@ async def qc_summary(request: Request):
             logger.warning(f"[reports] 查询 qc_statistics_view 失败: {e}")
 
         try:
-            rr = await async_execute(sb.table("qc_rules").select("*").eq("is_active", True).limit(1000))
+            rr = await async_execute(sb.table("qc_rules").select("*").eq("is_active", True).limit(REPORT_SCAN_LIMIT))
             active_rules = len(rr.data or [])
         except Exception as e:
             logger.warning(f"[reports] 查询 qc_rules 失败: {e}")
@@ -116,7 +118,7 @@ async def qc_export(request: Request, payload: ExportRequest):
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="supabase unavailable")
 
     # 查询视图
-    q = sb.table("qc_statistics_view").select("*").limit(5000)
+    q = sb.table("qc_statistics_view").select("*").limit(REPORT_SCAN_LIMIT)
     if payload.record_ids:
         # 过滤指定 record_id
         q = q.in_("record_id", payload.record_ids)
@@ -146,11 +148,24 @@ async def qc_export(request: Request, payload: ExportRequest):
         for r in rows:
             writer.writerow({k: r.get(k) for k in headers})
 
+    download_url = f"/downloads/{filename}"
+    audit_event(
+        request,
+        action="reports.qc.export",
+        resource="/api/v1/reports/qc/export",
+        outcome="success",
+        details={
+            "requested_records_count": len(payload.record_ids or []),
+            "export_rows": len(rows),
+            "download_url": download_url,
+        },
+    )
+
     return success_response(
         data={
             "export_id": export_id,
             "requested_records": payload.record_ids or [],
-            "download_url": f"/downloads/{filename}",
+            "download_url": download_url,
             "count": len(rows),
         },
         message="导出成功",

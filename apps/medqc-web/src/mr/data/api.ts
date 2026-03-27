@@ -1,3 +1,5 @@
+import { clearAccessToken, getAccessToken, setAccessToken } from '@/utils/auth-token'
+
 // API 配置
 // 默认走相对路径，由前端开发服务器或网关反向代理转发到后端
 // 可通过 VITE_API_BASE_URL 覆盖为绝对地址（例如 http://api.example.com 或 http://127.0.0.1:8001）
@@ -355,22 +357,22 @@ export function highlightSearchKeyword(content: string, keyword: string): string
  * 获取认证token（如果需要）
  */
 function getToken(): string | null {
-  // 从localStorage或其他地方获取token
-  return localStorage.getItem('auth_token')
+  const token = getAccessToken()
+  return token || null
 }
 
 /**
  * 设置认证token
  */
 export function setAuthToken(token: string): void {
-  localStorage.setItem('auth_token', token)
+  setAccessToken(token)
 }
 
 /**
  * 清除认证token
  */
 export function clearAuthToken(): void {
-  localStorage.removeItem('auth_token')
+  clearAccessToken()
 }
 
 /**

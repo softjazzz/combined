@@ -13,10 +13,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -33,10 +30,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -53,10 +47,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -73,10 +64,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -93,10 +81,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -113,10 +98,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -133,10 +115,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -153,10 +132,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -173,10 +149,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -193,10 +166,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -213,10 +183,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   },
   {
@@ -233,10 +200,7 @@
     "operator": {
       "id": "admin-001",
       "email": "admin@medqc.com",
-      "roles": [
-        "admin",
-        "qc_manager"
-      ]
+      "roles": ["admin", "qc_manager"]
     }
   }
 ]

@@ -2,6 +2,8 @@
  * 智能编码顾问 API
  */
 
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
 import type {
     ShadowGroupingBatchRequest,
     ShadowGroupingBatchResponse,
@@ -11,6 +13,17 @@ import type {
 
 const USE_MOCK_DATA = (import.meta as any).env?.VITE_USE_DRG_MOCK !== 'false'
 const API_V1_PREFIX = '/api/v1'
+
+async function requestOrThrow<T>(
+    config: Parameters<typeof ApiService.requestRaw>[0]
+): Promise<T> {
+    try {
+        const response = await ApiService.requestRaw<T>(config)
+        return unwrapApiEnvelope<T>(response.data)
+    } catch (error) {
+        throw new Error(extractApiErrorMessageFromError(error, '请求失败'))
+    }
+}
 
 /**
  * 模拟数据：编码完整性分析响应
@@ -79,12 +92,11 @@ export async function analyzeCodingCompleteness(
         return Promise.resolve(mockAnalysisResponse)
     }
 
-    const response = await fetch(`${API_V1_PREFIX}/advisor/coding-completeness/analyze`, {
+    return requestOrThrow<CodingCompletenessResponse>({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request)
+        url: `${API_V1_PREFIX}/advisor/coding-completeness/analyze`,
+        data: request
     })
-    return response.json()
 }
 
 /**
@@ -115,10 +127,9 @@ export async function batchShadowGrouping(
         } as any) // 临时 bypass 类型检查，因为 ShadowGroupingBatchResponse 定义可能有差异
     }
 
-    const response = await fetch(`${API_V1_PREFIX}/advisor/shadow-grouping/batch`, {
+    return requestOrThrow<ShadowGroupingBatchResponse>({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request)
+        url: `${API_V1_PREFIX}/advisor/shadow-grouping/batch`,
+        data: request
     })
-    return response.json()
 }

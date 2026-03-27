@@ -4,9 +4,13 @@
       v-if="generating"
       class="py-4"
     >
-      <div class="mb-3 rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]">
+      <div
+        class="mb-3 rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
+      >
         <div class="flex items-start gap-2.5">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-blue-500 to-blue-700 shadow-[0_8px_16px_rgba(37,99,235,0.16)]">
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-blue-500 to-blue-700 shadow-[0_8px_16px_rgba(37,99,235,0.16)]"
+          >
             <ThunderboltOutlined class="text-base text-white" />
           </div>
           <div class="min-w-0 flex-1">
@@ -14,19 +18,24 @@
               <div class="text-[14px] font-bold tracking-tight text-slate-900">
                 正在从病历中提取病案首页
               </div>
-              <div class="rounded-full border border-blue-100/80 bg-blue-50/70 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+              <div
+                class="rounded-full border border-blue-100/80 bg-blue-50/70 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
+              >
                 {{ progressPercent }}%
               </div>
             </div>
             <div class="mt-1 text-[12px] leading-5 text-slate-500">
-              已完成 {{ completedCount }} / {{ totalCount }} 个模块，正在逐段整理结构化字段与编码结果
+              已完成 {{ completedCount }} /
+              {{ totalCount }} 个模块，正在逐段整理结构化字段与编码结果
             </div>
           </div>
           <a-spin class="mt-1" />
         </div>
 
         <div class="mt-3">
-          <div class="mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400">
+          <div
+            class="mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400"
+          >
             <span>提取进度</span>
             <span class="tabular-nums">{{ completedCount }}/{{ totalCount }}</span>
           </div>
@@ -70,7 +79,9 @@
                 <span
                   class="text-[13px] font-semibold"
                   :class="moduleTitleClass(module.status)"
-                >{{ module.label }}</span>
+                >{{
+                  module.label
+                }}</span>
                 <span
                   v-if="module.entry?.timestamp"
                   class="text-[10px] tabular-nums text-slate-400"
@@ -123,8 +134,12 @@
             tab="提取结果"
           >
             <template v-if="draft">
-              <div class="mb-3 flex flex-wrap items-center gap-2.5 rounded-[16px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.03)]">
-                <div class="flex h-7 w-7 items-center justify-center rounded-[10px] bg-blue-500/95 shadow-[0_6px_14px_rgba(37,99,235,0.1)]">
+              <div
+                class="mb-3 flex flex-wrap items-center gap-2.5 rounded-[16px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.03)]"
+              >
+                <div
+                  class="flex h-7 w-7 items-center justify-center rounded-[10px] bg-blue-500/95 shadow-[0_6px_14px_rgba(37,99,235,0.1)]"
+                >
                   <CheckCircleOutlined class="text-sm text-white" />
                 </div>
                 <div class="flex-1">
@@ -167,10 +182,14 @@
                   class="break-inside-avoid rounded-[16px] border border-slate-200/70 bg-white px-4 py-3.5 shadow-[0_2px_10px_rgba(15,23,42,0.02)] transition-shadow hover:shadow-[0_6px_16px_rgba(15,23,42,0.04)]"
                 >
                   <div class="mb-3 flex items-center gap-2.5 border-b border-slate-100/80 pb-2.5">
-                    <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                    <div
+                      class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10"
+                    >
                       <CheckCircleOutlined class="text-[11px] text-blue-600" />
                     </div>
-                    <span class="text-[14px] font-semibold tracking-wide text-slate-800">{{ module.label }}</span>
+                    <span class="text-[14px] font-semibold tracking-wide text-slate-800">{{
+                      module.label
+                    }}</span>
                     <span
                       v-if="module.entry?.timestamp"
                       class="ml-auto rounded-full bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-400"
@@ -182,7 +201,7 @@
                       class="ml-auto text-[11px] italic text-slate-400"
                     >未提取到数据</span>
                   </div>
-                
+
                   <div
                     v-if="module.entry?.preview?.length"
                     class="flex flex-col gap-3"
@@ -202,8 +221,12 @@
                       </template>
                       <template v-else>
                         <div class="flex items-start justify-between">
-                          <span class="w-24 shrink-0 text-[12px] text-slate-400">{{ preview.label }}</span>
-                          <span class="text-right text-[13px] font-medium text-slate-800">{{ preview.value }}</span>
+                          <span class="w-24 shrink-0 text-[12px] text-slate-400">{{
+                            preview.label
+                          }}</span>
+                          <span class="text-right text-[13px] font-medium text-slate-800">{{
+                            preview.value
+                          }}</span>
                         </div>
                       </template>
                     </div>
@@ -215,7 +238,9 @@
               v-else
               class="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-slate-200 bg-slate-50/65 py-14 text-slate-300"
             >
-              <div class="mb-3 flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-slate-200 bg-white">
+              <div
+                class="mb-3 flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-slate-200 bg-white"
+              >
                 <FileTextOutlined class="text-2xl" />
               </div>
               <div class="mb-1 text-sm font-medium text-slate-500">
@@ -231,7 +256,9 @@
             key="preview"
             tab="首页预览/打印"
           >
-            <div class="mb-3 rounded-[12px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-[12px] text-blue-700">
+            <div
+              class="mb-3 rounded-[12px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-[12px] text-blue-700"
+            >
               当前来源：LLM 抽取草稿（用于编辑、打印与对照）
             </div>
             <FrontpageSheet
@@ -251,7 +278,9 @@
             key="official"
             tab="系统首页"
           >
-            <div class="mb-3 rounded-[12px] border border-emerald-100/80 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-700">
+            <div
+              class="mb-3 rounded-[12px] border border-emerald-100/80 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-700"
+            >
               当前来源：官方首页（CDM/数据表，Mongo 同步入库）
             </div>
             <div
@@ -269,7 +298,9 @@
               v-else
               class="space-y-3"
             >
-              <div class="rounded-[12px] border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-500">
+              <div
+                class="rounded-[12px] border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-500"
+              >
                 系统首页暂无数据，以下展示官方首页空表样式（数据表当前为空或尚未同步）。
               </div>
               <FrontpageSheet
@@ -356,12 +387,22 @@ const draftSheetData = computed(() => {
   // 诊断列表
   const diagnoses: any[] = []
   if (diag.discharge_main_diagnosis_text) {
-    diagnoses.push({ diagnosis_type: '主要诊断', diagnosis_name: diag.discharge_main_diagnosis_text, diagnosis_code: diag.discharge_main_icd || '', admission_condition: diag.admission_condition || '' })
+    diagnoses.push({
+      diagnosis_type: '主要诊断',
+      diagnosis_name: diag.discharge_main_diagnosis_text,
+      diagnosis_code: diag.discharge_main_icd || '',
+      admission_condition: diag.admission_condition || '',
+    })
   }
   const others: string[] = diag.discharge_other_diagnoses_texts || []
   const otherIcds: string[] = diag.discharge_other_icds || []
   others.forEach((name: string, i: number) => {
-    diagnoses.push({ diagnosis_type: '其他诊断', diagnosis_name: name, diagnosis_code: otherIcds[i] || '', admission_condition: '' })
+    diagnoses.push({
+      diagnosis_type: '其他诊断',
+      diagnosis_name: name,
+      diagnosis_code: otherIcds[i] || '',
+      admission_condition: '',
+    })
   })
   // 手术列表
   const surgeries: any[] = []
@@ -385,7 +426,17 @@ const draftSheetData = computed(() => {
     })
   }
   ;(proc.other_procedures || []).forEach((p: any) => {
-    surgeries.push({ surgery_code: p.code || '', surgery_name: p.text || p.name || '', surgery_begin_datetime: p.date || '', surgical_level: '', surgeon: '', first_assistant: '', second_assistant: '', anesthesia_method: '', anesthesiologist: '' })
+    surgeries.push({
+      surgery_code: p.code || '',
+      surgery_name: p.text || p.name || '',
+      surgery_begin_datetime: p.date || '',
+      surgical_level: '',
+      surgeon: '',
+      first_assistant: '',
+      second_assistant: '',
+      anesthesia_method: '',
+      anesthesiologist: '',
+    })
   })
   // 费用
   const cats = co.categories || {}
@@ -421,10 +472,50 @@ const draftSheetData = computed(() => {
     exam_disposable_mat_fee: catValue('exam_disposable_material', '24'),
     treat_disposable_mat_fee: catValue('treat_disposable_material', '25'),
     surgery_disposable_mat_fee: catValue('surgery_disposable_material', '26'),
-    other_fee: catValue('other')
+    other_fee: catValue('other'),
   }
   // 基本信息
-  const basic: Record<string, any> = { name: bi.patient_name || '', sex: bi.gender || '', birthday: bi.birth_date || '', id_card_no: bi.id_number || '', marital_status: bi.marital_status || '', nationality: bi.nationality || '中国', ethnicity: bi.ethnicity || '', occupation_category: bi.occupation || '', nativeplace: bi.nativeplace || '', currentaddress: bi.current_address || '', contact_name: bi.contact_name || '', contact_relationship: bi.contact_relation || '', contact_telephone: bi.contact_phone || '', contact_address: bi.contact_address || '', work_unit: bi.work_unit || '', admission_datetime: ho.admission_datetime || '', discharge_datetime: ho.discharge_datetime || '', admission_dept_name: ho.admission_dept || '', discharge_dept_name: ho.discharge_dept || '', admission_ward_name: ho.admission_ward || '', discharge_ward_name: ho.discharge_ward || '', hospital_duration: ho.actual_hospital_days ?? '', medical_payment_method: ho.payment_method_text || '', admission_route: ho.admission_way_text || '', leaving_hospital_way: ho.leaving_hospital_way || '', transfer_dept_name: ho.transfer_dept || '', document_id: ho.medical_record_no || '', visit_cnt: ho.admission_times_in_hospital || '', rehospital_with_month: ho.rehospital_within_month || '', allergy_sign: omi.drug_allergy_flag || '', abo_blood_code: omi.abo_blood_type || '', rh_blood_code: omi.rh_blood_type || '', deptdirector_sign: st.dept_director || '', chief_physician_sign: st.chief_physician || '', attending_physician_sign: st.attending_physician || '', resident_physician_sign: st.resident_physician || '', responsible_nurse_sign: st.responsible_nurse || '', coder_sign: st.coder || '', medicalrecord_quality: st.medical_record_quality || '' }
+  const basic: Record<string, any> = {
+    name: bi.patient_name || '',
+    sex: bi.gender || '',
+    birthday: bi.birth_date || '',
+    id_card_no: bi.id_number || '',
+    marital_status: bi.marital_status || '',
+    nationality: bi.nationality || '中国',
+    ethnicity: bi.ethnicity || '',
+    occupation_category: bi.occupation || '',
+    nativeplace: bi.nativeplace || '',
+    currentaddress: bi.current_address || '',
+    contact_name: bi.contact_name || '',
+    contact_relationship: bi.contact_relation || '',
+    contact_telephone: bi.contact_phone || '',
+    contact_address: bi.contact_address || '',
+    work_unit: bi.work_unit || '',
+    admission_datetime: ho.admission_datetime || '',
+    discharge_datetime: ho.discharge_datetime || '',
+    admission_dept_name: ho.admission_dept || '',
+    discharge_dept_name: ho.discharge_dept || '',
+    admission_ward_name: ho.admission_ward || '',
+    discharge_ward_name: ho.discharge_ward || '',
+    hospital_duration: ho.actual_hospital_days ?? '',
+    medical_payment_method: ho.payment_method_text || '',
+    admission_route: ho.admission_way_text || '',
+    leaving_hospital_way: ho.leaving_hospital_way || '',
+    transfer_dept_name: ho.transfer_dept || '',
+    document_id: ho.medical_record_no || '',
+    visit_cnt: ho.admission_times_in_hospital || '',
+    rehospital_with_month: ho.rehospital_within_month || '',
+    allergy_sign: omi.drug_allergy_flag || '',
+    abo_blood_code: omi.abo_blood_type || '',
+    rh_blood_code: omi.rh_blood_type || '',
+    deptdirector_sign: st.dept_director || '',
+    chief_physician_sign: st.chief_physician || '',
+    attending_physician_sign: st.attending_physician || '',
+    resident_physician_sign: st.resident_physician || '',
+    responsible_nurse_sign: st.responsible_nurse || '',
+    coder_sign: st.coder || '',
+    medicalrecord_quality: st.medical_record_quality || '',
+  }
   const evidence = d.evidence || {}
   const otherMedicalInfo: Record<string, any> = {
     pathology_text: omi.pathology_text ?? '',

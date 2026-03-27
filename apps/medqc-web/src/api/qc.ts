@@ -1,3 +1,6 @@
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
+
 export interface TestQCRulePayload {
   rule_id: string
   medical_text: string
@@ -44,45 +47,74 @@ export interface TestQCRuleResponse {
   raw?: unknown
 }
 
+type NormalizedResponse<T> = {
+  ok: true
+  normalized: { success: boolean; data?: T; message?: string }
+  raw: unknown
+  status: number
+} | {
+  ok: false
+  message: string
+  raw?: unknown
+  status?: number
+}
+
+async function requestNormalized<T = unknown>(
+  config: Parameters<typeof ApiService.requestRaw>[0]
+): Promise<NormalizedResponse<T>> {
+  try {
+    const response = await ApiService.requestRaw<T>(config)
+    return {
+      ok: true,
+      normalized: normalizeApiSuccess<T>(response.data),
+      raw: response.data,
+      status: response.status
+    }
+  } catch (error: any) {
+    return {
+      ok: false,
+      message: extractApiErrorMessageFromError(error, '网络异常或服务器不可用'),
+      raw: error?.response?.data,
+      status: error?.response?.status
+    }
+  }
+}
+
 /**
  * 调用 /api/v1/qc/sichuan/test-rule
  */
 export async function testQCRule(payload: TestQCRulePayload): Promise<TestQCRuleResponse> {
   try {
-    const response = await fetch('/api/v1/qc/sichuan/test-rule', {
+    const response = await requestNormalized<TestQCRuleData>({
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+      url: '/api/v1/qc/sichuan/test-rule',
+      data: payload
     })
-
-    const result = await response.json().catch(() => ({}))
 
     if (!response.ok) {
       return {
         success: false,
-        message: result?.detail || result?.message || response.statusText,
+        message: response.message,
         status: response.status,
-        raw: result
+        raw: response.raw
       }
     }
 
-    // API 统一返回 { success, data, error/message }
-    if (result?.success === false) {
+    const normalized = response.normalized
+    if (!normalized.success) {
       return {
         success: false,
-        message: result?.error || result?.message || '质控评估失败',
+        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '质控评估失败'),
         status: response.status,
-        raw: result
+        raw: response.raw
       }
     }
 
     return {
       success: true,
-      data: result?.data as TestQCRuleData,
-      message: result?.message,
-      raw: result
+      data: normalized.data as TestQCRuleData,
+      message: normalized.message,
+      raw: response.raw
     }
   } catch (error: any) {
     return {
@@ -159,36 +191,42 @@ export interface BatchQCEvaluateResponse {
  */
 export async function batchEvaluateQC(payload: BatchQCEvaluatePayload): Promise<BatchQCEvaluateResponse> {
   try {
-    const response = await fetch('/api/v1/qc/sichuan/evaluate', {
+    const response = await requestNormalized<any>({
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+      url: '/api/v1/qc/sichuan/evaluate',
+      data: payload
     })
-
-    const result = await response.json().catch(() => ({}))
 
     if (!response.ok) {
       return {
         success: false,
-        message: result?.detail || result?.message || response.statusText,
+        message: response.message,
         status: response.status
       }
     }
 
-    // 后端直接返回评估结果（不包装在 success/data 中）
+    const normalized = response.normalized
+    if (!normalized.success) {
+      return {
+        success: false,
+        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '质控评估失败'),
+        status: response.status,
+      }
+    }
+    const payloadData = (normalized.data || {}) as any
+
     return {
       success: true,
       data: {
-        document_id: result.document_id,
-        evaluation_summary: result.evaluation_summary || {},
-        evaluation_results: result.evaluation_results || [],
-        performance_metrics: result.performance_metrics,
-        optimization_metrics: result.optimization_metrics,
-        prompt_mode: result.prompt_mode || payload.prompt_mode,
-        llm_info: result.llm_info
-      }
+        document_id: payloadData.document_id,
+        evaluation_summary: payloadData.evaluation_summary || {},
+        evaluation_results: payloadData.evaluation_results || [],
+        performance_metrics: payloadData.performance_metrics,
+        optimization_metrics: payloadData.optimization_metrics,
+        prompt_mode: payloadData.prompt_mode || payload.prompt_mode,
+        llm_info: payloadData.llm_info
+      },
+      message: normalized.message
     }
   } catch (error: any) {
     return {
@@ -272,25 +310,29 @@ export async function getQCHistoryList(params?: {
     if (params?.has_issues !== undefined) queryParams.append('has_issues', params.has_issues.toString())
 
     const url = `/api/v1/qc/sichuan/results/history${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-    const response = await fetch(url, {
+    const response = await requestNormalized<QCHistoryListResponse['data']>({
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      url
     })
-
-    const result = await response.json().catch(() => ({}))
 
     if (!response.ok) {
       return {
         success: false,
-        message: result?.detail || result?.message || response.statusText
+        message: response.message
+      }
+    }
+
+    const normalized = response.normalized
+    if (!normalized.success) {
+      return {
+        success: false,
+        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '获取质控历史失败'),
       }
     }
 
     return {
       success: true,
-      data: result
+      data: normalized.data
     }
   } catch (error: any) {
     return {
@@ -305,25 +347,29 @@ export async function getQCHistoryList(params?: {
  */
 export async function getQCHistoryDetail(resultId: string): Promise<QCHistoryDetailResponse> {
   try {
-    const response = await fetch(`/api/v1/qc/sichuan/results/${resultId}`, {
+    const response = await requestNormalized<QCHistoryDetailResponse['data']>({
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      url: `/api/v1/qc/sichuan/results/${resultId}`
     })
-
-    const result = await response.json().catch(() => ({}))
 
     if (!response.ok) {
       return {
         success: false,
-        message: result?.detail || result?.message || response.statusText
+        message: response.message
+      }
+    }
+
+    const normalized = response.normalized
+    if (!normalized.success) {
+      return {
+        success: false,
+        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '获取质控结果详情失败'),
       }
     }
 
     return {
       success: true,
-      data: result
+      data: normalized.data
     }
   } catch (error: any) {
     return {
@@ -338,25 +384,29 @@ export async function getQCHistoryDetail(resultId: string): Promise<QCHistoryDet
  */
 export async function getLatestQCResult(): Promise<QCHistoryDetailResponse> {
   try {
-    const response = await fetch('/api/v1/qc/sichuan/results/latest', {
+    const response = await requestNormalized<QCHistoryDetailResponse['data']>({
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      url: '/api/v1/qc/sichuan/results/latest'
     })
-
-    const result = await response.json().catch(() => ({}))
 
     if (!response.ok) {
       return {
         success: false,
-        message: result?.detail || result?.message || response.statusText
+        message: response.message
+      }
+    }
+
+    const normalized = response.normalized
+    if (!normalized.success) {
+      return {
+        success: false,
+        message: extractApiErrorMessageFromError({ response: { data: response.raw } }, '获取最新质控结果失败'),
       }
     }
 
     return {
       success: true,
-      data: result
+      data: normalized.data
     }
   } catch (error: any) {
     return {

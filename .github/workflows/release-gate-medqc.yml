@@ -1,0 +1,203 @@
+name: Release Gate - medqc-web
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "apps/medqc-web/**"
+      - "scripts/medqc-*.service"
+      - "scripts/deploy_medqc_release.sh"
+      - "scripts/rollback_medqc_release.sh"
+      - ".github/workflows/release-gate-medqc.yml"
+  push:
+    branches: [main, develop]
+    paths:
+      - "apps/medqc-web/**"
+      - "scripts/medqc-*.service"
+      - "scripts/deploy_medqc_release.sh"
+      - "scripts/rollback_medqc_release.sh"
+      - ".github/workflows/release-gate-medqc.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: release-gate-medqc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-gates:
+    name: Frontend Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/medqc-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Encoding check
+        run: pnpm run check:encoding
+
+      - name: Type check (release scope)
+        run: pnpm run type-check:release
+
+      - name: Unit tests (release scope)
+        run: pnpm run test:unit:release
+
+      - name: Build frontend artifact
+        run: pnpm run build
+
+      - name: Upload frontend dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: medqc-frontend-dist
+          path: apps/medqc-web/dist
+          if-no-files-found: error
+
+  backend-gates:
+    name: Backend Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/medqc-web/backend
+    env:
+      JWT_SECRET: ci-test-secret
+      ENV: development
+      STRICT_STARTUP_CHECKS: "true"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run backend release gates
+        run: |
+          python scripts/release_gate_runner.py --out-dir ../../release-gate-artifacts/backend --gate-timeout 600
+
+      - name: Upload backend gate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: medqc-backend-gate-details
+          path: apps/release-gate-artifacts/backend
+          if-no-files-found: error
+
+  release-gate-report:
+    name: Release Gate Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - frontend-gates
+      - backend-gates
+    if: always()
+    steps:
+      - name: Download backend gate details
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: medqc-backend-gate-details
+          path: artifacts/backend
+
+      - name: Build gate report
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          FRONTEND_RESULT="${{ needs.frontend-gates.result }}"
+          BACKEND_RESULT="${{ needs.backend-gates.result }}"
+          OVERALL_RESULT="passed"
+          if [[ "${FRONTEND_RESULT}" != "success" || "${BACKEND_RESULT}" != "success" ]]; then
+            OVERALL_RESULT="failed"
+          fi
+          BACKEND_DETAIL_JSON="artifacts/backend/backend-release-gate-report.json"
+          AUTH_COVERAGE="n/a"
+          SECRET_FINDINGS="n/a"
+          TESTS_PASSED="n/a"
+          TESTS_FAILED="n/a"
+          if [[ -f "${BACKEND_DETAIL_JSON}" ]]; then
+            AUTH_COVERAGE="$(python -c "import json; d=json.load(open('${BACKEND_DETAIL_JSON}', encoding='utf-8')); g=next((x for x in d.get('gates', []) if x.get('name')=='auth_guard'), {}); print(g.get('metrics', {}).get('coverage_ratio', 'n/a'))")"
+            SECRET_FINDINGS="$(python -c "import json; d=json.load(open('${BACKEND_DETAIL_JSON}', encoding='utf-8')); g=next((x for x in d.get('gates', []) if x.get('name')=='secret_hygiene'), {}); print(g.get('metrics', {}).get('findings', 'n/a'))")"
+            TESTS_PASSED="$(python -c "import json; d=json.load(open('${BACKEND_DETAIL_JSON}', encoding='utf-8')); print(sum(int(g.get('metrics',{}).get('passed',0)) for g in d.get('gates',[]) if str(g.get('name','')).startswith('pytest_')) )")"
+            TESTS_FAILED="$(python -c "import json; d=json.load(open('${BACKEND_DETAIL_JSON}', encoding='utf-8')); print(sum(int(g.get('metrics',{}).get('failed',0)) for g in d.get('gates',[]) if str(g.get('name','')).startswith('pytest_')) )")"
+          fi
+
+          cat > artifacts/release-gate-report.md <<EOF
+          # MedQC Release Gate Report
+
+          - Workflow: \`${{ github.workflow }}\`
+          - Run ID: \`${{ github.run_id }}\`
+          - Commit: \`${{ github.sha }}\`
+          - Branch/Ref: \`${{ github.ref }}\`
+          - Timestamp (UTC): \`$(date -u +'%Y-%m-%dT%H:%M:%SZ')\`
+
+          ## Gate Results
+          - Frontend Gates: **${FRONTEND_RESULT}**
+          - Backend Gates: **${BACKEND_RESULT}**
+          - Overall: **${OVERALL_RESULT}**
+          - Auth Coverage Ratio: **${AUTH_COVERAGE}**
+          - Secret Findings: **${SECRET_FINDINGS}**
+          - Backend Tests Passed: **${TESTS_PASSED}**
+          - Backend Tests Failed: **${TESTS_FAILED}**
+
+          ## Checklist
+          - [x] Encoding / Release-scope typecheck / Release-scope unit tests (frontend)
+          - [x] Build artifact generated (frontend)
+          - [x] Auth guard / secret hygiene checks (backend)
+          - [x] Migration upgrade/rollback verification (backend)
+          - [x] Contract + security + consistency + integration smoke tests (backend)
+          EOF
+
+          cat > artifacts/release-gate-report.json <<EOF
+          {
+            "workflow": "${{ github.workflow }}",
+            "run_id": "${{ github.run_id }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref }}",
+            "timestamp_utc": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "jobs": {
+              "frontend_gates": "${FRONTEND_RESULT}",
+              "backend_gates": "${BACKEND_RESULT}"
+            },
+            "backend_metrics": {
+              "auth_coverage_ratio": "${AUTH_COVERAGE}",
+              "secret_findings": "${SECRET_FINDINGS}",
+              "backend_tests_passed": "${TESTS_PASSED}",
+              "backend_tests_failed": "${TESTS_FAILED}"
+            },
+            "overall": "${OVERALL_RESULT}"
+          }
+          EOF
+
+          if [[ "${OVERALL_RESULT}" != "passed" ]]; then
+            echo "Release gate failed: ${OVERALL_RESULT}" >&2
+            exit 1
+          fi
+
+      - name: Upload release gate report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: medqc-release-gate-report
+          path: artifacts
+          if-no-files-found: error

@@ -92,36 +92,39 @@
 import type { RuleTypeValue } from './types'
 import { computed } from 'vue'
 
-const props = withDefaults(defineProps<{
-  ruleType: RuleTypeValue
-  statusSet: string[]
-  riskSet: string[]
-  ownerId?: string
-  ownerOptions: Array<{ label: string; value: string }>
-  savedViews: Array<{ id: string; name: string }>
-  readonly: boolean
-  ruleTypeTitle?: string
-  statusTitle?: string
-  riskTitle?: string
-  ownerTitle?: string
-  showOwnerFilter?: boolean
-  showDocumentTypeFilter?: boolean
-  documentTypeTitle?: string
-  documentTypeSet?: string[]
-  documentTypeOptions?: Array<{ label: string; value: string }>
-  ruleTypeOptions?: Array<{ label: string; value: string }>
-  statusOptions?: Array<{ label: string; value: string }>
-  riskOptions?: Array<{ label: string; value: string }>
-}>(), {
-  ruleTypeTitle: '规则类型',
-  statusTitle: '状态',
-  riskTitle: '风险等级',
-  ownerTitle: '最近修改人',
-  showOwnerFilter: true,
-  showDocumentTypeFilter: false,
-  documentTypeTitle: '病历文书类型',
-  documentTypeSet: () => [],
-})
+const props = withDefaults(
+  defineProps<{
+    ruleType: RuleTypeValue
+    statusSet: string[]
+    riskSet: string[]
+    ownerId?: string
+    ownerOptions: Array<{ label: string; value: string }>
+    savedViews: Array<{ id: string; name: string }>
+    readonly: boolean
+    ruleTypeTitle?: string
+    statusTitle?: string
+    riskTitle?: string
+    ownerTitle?: string
+    showOwnerFilter?: boolean
+    showDocumentTypeFilter?: boolean
+    documentTypeTitle?: string
+    documentTypeSet?: string[]
+    documentTypeOptions?: Array<{ label: string; value: string }>
+    ruleTypeOptions?: Array<{ label: string; value: string }>
+    statusOptions?: Array<{ label: string; value: string }>
+    riskOptions?: Array<{ label: string; value: string }>
+  }>(),
+  {
+    ruleTypeTitle: '规则类型',
+    statusTitle: '状态',
+    riskTitle: '风险等级',
+    ownerTitle: '最近修改人',
+    showOwnerFilter: true,
+    showDocumentTypeFilter: false,
+    documentTypeTitle: '病历文书类型',
+    documentTypeSet: () => [],
+  },
+)
 
 const emit = defineEmits<{
   'update:ruleType': [value: RuleTypeValue]

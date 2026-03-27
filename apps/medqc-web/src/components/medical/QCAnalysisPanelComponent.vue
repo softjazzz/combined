@@ -216,6 +216,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
+import { ApiService } from '@/services/apiService'
 import { 
   PlayCircleOutlined,
   FileSearchOutlined
@@ -355,9 +356,6 @@ const formatAnalysisTime = (timeStr: string) => {
 
 // 阿里云百炼API调用函数
 const callAliyunQCAPI = async (content: string) => {
-  const apiKey = 'sk-e2808814ae874c8f94e40f20c99bc3a3'
-  const baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  
   const prompt = `
 你是一位具有20年经验的资深病案质控专家，严格按照《四川省住院病历质量评定标准（2023年版）》进行病历质量评价。
 
@@ -420,13 +418,8 @@ ${content}
 请对以上病历进行专业、客观、全面的质控分析。
 `
 
-  const response = await fetch(`${baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
+  const response = await ApiService.postRaw('/api/v1/llm/parse-text', {
+    requestBody: {
       model: 'deepseek-v3',
       messages: [
         {
@@ -437,14 +430,10 @@ ${content}
       max_tokens: 4000,
       temperature: 0.1,
       stream: false
-    })
+    }
   })
 
-  if (!response.ok) {
-    throw new Error(`API调用失败: ${response.status}`)
-  }
-
-  const data = await response.json() as any
+  const data = response.data as any
   
   if (!data.choices || !data.choices[0] || !data.choices[0].message) {
     throw new Error('API响应格式异常')

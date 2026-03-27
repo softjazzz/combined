@@ -141,7 +141,9 @@ pip install -r requirements.txt
 
 ---
 
-## 🎯 第五步：应用启动
+## 🎯 第五步：应用启动（仅开发验证）
+
+> 生产部署请按 `P2_RELEASE_RUNBOOK.md` 和 `scripts/deploy_medqc_release.sh` 执行。
 
 ### 前端启动
 
@@ -149,8 +151,8 @@ pip install -r requirements.txt
 # 安装依赖
 pnpm install
 
-# 启动开发服务器
-pnpm dev
+# 启动开发服务器（仅开发使用）
+pnpm dev  # 仅开发使用
 
 # 访问 http://localhost:5173
 ```
@@ -294,4 +296,4 @@ python main.py
 4. **配置规则** - 设置质控规则参数
 5. **生成报告** - 使用统计分析功能
 
-系统现在已经准备好用于生产环境！🚀
+系统现在已经准备好进入生产部署流程！🚀

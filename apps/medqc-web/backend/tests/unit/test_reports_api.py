@@ -13,6 +13,18 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime
 import time
 
+from app.core.access_control import enforce_default_auth
+
+
+@pytest.fixture(autouse=True)
+def _bypass_default_auth_guard(client):
+    async def _noop_auth_gate():
+        return None
+
+    client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
+    yield
+    client.app.dependency_overrides.pop(enforce_default_auth, None)
+
 
 @pytest.mark.unit
 @pytest.mark.api
@@ -119,6 +131,65 @@ class TestReportsAPI:
                     # 验证数据一致
                     assert response1.json()["data"]["kpis"] == response2.json()["data"]["kpis"]
 
+    @pytest.mark.asyncio
+    async def test_qc_summary_uses_shared_scan_limit(self, client):
+        """测试质控汇总查询使用共享上限。"""
+        from app.routers import reports as reports_module
+
+        reports_module._QC_SUMMARY_CACHE = None
+        reports_module._QC_SUMMARY_CACHE_TS = 0.0
+
+        class _FakeQuery:
+            def __init__(self):
+                self.limit_calls = []
+
+            def select(self, *args, **kwargs):
+                return self
+
+            def eq(self, *args, **kwargs):
+                return self
+
+            def limit(self, value):
+                self.limit_calls.append(value)
+                return self
+
+        class _FakeTable:
+            def __init__(self, query):
+                self._query = query
+
+            def select(self, *args, **kwargs):
+                return self._query.select(*args, **kwargs)
+
+        class _FakeSupabase:
+            def __init__(self):
+                self.query = _FakeQuery()
+                self.table_calls = []
+
+            def table(self, name):
+                self.table_calls.append(name)
+                return _FakeTable(self.query)
+
+        mock_supabase = _FakeSupabase()
+        mock_view_response = MagicMock()
+        mock_view_response.data = []
+        mock_rules_response = MagicMock()
+        mock_rules_response.data = []
+
+        with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
+            with patch("app.routers.reports.async_execute") as mock_execute:
+                mock_execute.side_effect = [mock_view_response, mock_rules_response]
+                with patch("app.routers.reports.SichuanQCService") as mock_service:
+                    mock_service.return_value.stats.return_value = {
+                        "success_rate": 0.0,
+                        "avg_api_time": 0.0,
+                    }
+
+                    response = client.get("/api/v1/reports/qc/summary")
+
+        assert response.status_code == 200
+        assert mock_supabase.table_calls == ["qc_statistics_view", "qc_rules"]
+        assert mock_supabase.query.limit_calls == [1000, 1000]
+
 
 
 
@@ -143,14 +214,16 @@ class TestReportsAPI:
 
         with patch("app.routers.reports.get_supabase", return_value=mock_supabase):
             with patch("app.routers.reports.async_execute", return_value=mock_response):
-                response = client.post("/api/v1/reports/qc/export", json={})
+                with patch("app.routers.reports.audit_event") as mock_audit:
+                    response = client.post("/api/v1/reports/qc/export", json={})
 
-                assert response.status_code == 200
-                data = response.json()
-                assert data["success"] is True
-                assert "export_id" in data["data"]
-                assert "download_url" in data["data"]
-                assert "count" in data["data"]
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data["success"] is True
+                    assert "export_id" in data["data"]
+                    assert "download_url" in data["data"]
+                    assert "count" in data["data"]
+                    mock_audit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_qc_export_with_record_ids(self, client):

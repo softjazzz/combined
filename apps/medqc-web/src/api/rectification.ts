@@ -3,249 +3,199 @@
  * Rectification Management API
  */
 
+import { ApiService } from '@/services/apiService'
+import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
 import type {
-    RectificationTask,
-    RectificationTaskCreateRequest,
-    RectificationTaskUpdateRequest,
-    TaskAssignmentRequest,
-    TaskSubmissionRequest,
-    TaskReviewRequest,
-    RectificationTaskListResponse,
-    TaskFilters,
-    TaskStats
+  RectificationTask,
+  RectificationTaskCreateRequest,
+  RectificationTaskUpdateRequest,
+  TaskAssignmentRequest,
+  TaskSubmissionRequest,
+  TaskReviewRequest,
+  RectificationTaskListResponse,
+  TaskFilters,
+  TaskStats,
 } from '@/types/rectification'
 
 const API_V1_PREFIX = '/api/v1'
+
+async function requestOrThrow<T>(
+  config: Parameters<typeof ApiService.requestRaw>[0],
+  fallback: string,
+): Promise<T> {
+  try {
+    const response = await ApiService.requestRaw<T>(config)
+    return unwrapApiEnvelope<T>(response.data)
+  } catch (error) {
+    throw new Error(extractApiErrorMessageFromError(error, fallback))
+  }
+}
 
 /**
  * 创建整改任务
  */
 export async function createRectificationTask(
-    data: RectificationTaskCreateRequest
+  data: RectificationTaskCreateRequest,
 ): Promise<RectificationTask> {
-    const response = await fetch(`${API_V1_PREFIX}/rectifications`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify(data)
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '创建整改任务失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask>(
+    {
+      method: 'POST',
+      url: `${API_V1_PREFIX}/rectifications`,
+      data,
+    },
+    '创建整改任务失败',
+  )
 }
 
 /**
  * 获取整改任务列表
  */
 export async function getRectificationTasks(
-    filters: TaskFilters = {}
+  filters: TaskFilters = {},
 ): Promise<RectificationTaskListResponse> {
-    const queryParams = new URLSearchParams()
+  const params: Record<string, unknown> = {}
 
-    if (filters.status) queryParams.append('status', filters.status)
-    if (filters.severity) queryParams.append('severity', filters.severity)
-    if (filters.assigneeId) queryParams.append('assignee_id', filters.assigneeId)
-    if (filters.assignerId) queryParams.append('assigner_id', filters.assignerId)
-    if (filters.departmentId) queryParams.append('department_id', filters.departmentId)
-    if (filters.startDate) queryParams.append('start_date', filters.startDate)
-    if (filters.endDate) queryParams.append('end_date', filters.endDate)
-    if (filters.overdueOnly) queryParams.append('overdue_only', 'true')
-    if (filters.page) queryParams.append('page', filters.page.toString())
-    if (filters.pageSize) queryParams.append('page_size', filters.pageSize.toString())
+  if (filters.status) params.status = filters.status
+  if (filters.severity) params.severity = filters.severity
+  if (filters.assigneeId) params.assignee_id = filters.assigneeId
+  if (filters.assignerId) params.assigner_id = filters.assignerId
+  if (filters.departmentId) params.department_id = filters.departmentId
+  if (filters.startDate) params.start_date = filters.startDate
+  if (filters.endDate) params.end_date = filters.endDate
+  if (filters.overdueOnly) params.overdue_only = 'true'
+  if (filters.page) params.page = filters.page
+  if (filters.pageSize) params.page_size = filters.pageSize
 
-    const url = `${API_V1_PREFIX}/rectifications${queryParams.toString() ? `?${queryParams}` : ''}`
-    const response = await fetch(url, {
-        headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
-        }
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '获取整改任务列表失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTaskListResponse>(
+    {
+      method: 'GET',
+      url: `${API_V1_PREFIX}/rectifications`,
+      params,
+    },
+    '获取整改任务列表失败',
+  )
 }
 
 /**
  * 获取我的整改任务
  */
 export async function getMyTasks(status?: string): Promise<RectificationTask[]> {
-    const queryParams = new URLSearchParams()
-    if (status) queryParams.append('status', status)
+  const params: Record<string, unknown> = {}
+  if (status) params.status = status
 
-    const url = `${API_V1_PREFIX}/rectifications/my-tasks${queryParams.toString() ? `?${queryParams}` : ''}`
-    const response = await fetch(url, {
-        headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
-        }
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '获取我的任务失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask[]>(
+    {
+      method: 'GET',
+      url: `${API_V1_PREFIX}/rectifications/my-tasks`,
+      params,
+    },
+    '获取我的任务失败',
+  )
 }
 
 /**
  * 获取整改任务详情
  */
 export async function getRectificationTask(taskId: string): Promise<RectificationTask> {
-    const response = await fetch(`${API_V1_PREFIX}/rectifications/${taskId}`, {
-        headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
-        }
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '获取整改任务详情失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask>(
+    {
+      method: 'GET',
+      url: `${API_V1_PREFIX}/rectifications/${taskId}`,
+    },
+    '获取整改任务详情失败',
+  )
 }
 
 /**
  * 更新整改任务
  */
 export async function updateRectificationTask(
-    taskId: string,
-    data: RectificationTaskUpdateRequest
+  taskId: string,
+  data: RectificationTaskUpdateRequest,
 ): Promise<RectificationTask> {
-    const response = await fetch(`${API_V1_PREFIX}/rectifications/${taskId}`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify(data)
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '更新整改任务失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask>(
+    {
+      method: 'PUT',
+      url: `${API_V1_PREFIX}/rectifications/${taskId}`,
+      data,
+    },
+    '更新整改任务失败',
+  )
 }
 
 /**
  * 分配/重新分配整改任务
  */
 export async function assignTask(
-    taskId: string,
-    assignment: TaskAssignmentRequest
+  taskId: string,
+  assignment: TaskAssignmentRequest,
 ): Promise<RectificationTask> {
-    const response = await fetch(`${API_V1_PREFIX}/rectifications/${taskId}/assign`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify(assignment)
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '分配任务失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask>(
+    {
+      method: 'POST',
+      url: `${API_V1_PREFIX}/rectifications/${taskId}/assign`,
+      data: assignment,
+    },
+    '分配任务失败',
+  )
 }
 
 /**
  * 提交整改
  */
 export async function submitRectification(
-    taskId: string,
-    submission: TaskSubmissionRequest
+  taskId: string,
+  submission: TaskSubmissionRequest,
 ): Promise<RectificationTask> {
-    const response = await fetch(`${API_V1_PREFIX}/rectifications/${taskId}/submit`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify(submission)
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '提交整改失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask>(
+    {
+      method: 'POST',
+      url: `${API_V1_PREFIX}/rectifications/${taskId}/submit`,
+      data: submission,
+    },
+    '提交整改失败',
+  )
 }
 
 /**
  * 验收整改
  */
 export async function reviewRectification(
-    taskId: string,
-    review: TaskReviewRequest
+  taskId: string,
+  review: TaskReviewRequest,
 ): Promise<RectificationTask> {
-    const response = await fetch(`${API_V1_PREFIX}/rectifications/${taskId}/review`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify(review)
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '验收整改失败')
-    }
-
-    return response.json()
+  return requestOrThrow<RectificationTask>(
+    {
+      method: 'POST',
+      url: `${API_V1_PREFIX}/rectifications/${taskId}/review`,
+      data: review,
+    },
+    '验收整改失败',
+  )
 }
 
 /**
  * 获取整改任务统计
  */
 export async function getTaskStats(filters: {
-    departmentId?: string
-    assigneeId?: string
-    startDate?: string
-    endDate?: string
+  departmentId?: string
+  assigneeId?: string
+  startDate?: string
+  endDate?: string
 } = {}): Promise<TaskStats> {
-    const queryParams = new URLSearchParams()
+  const params: Record<string, unknown> = {}
 
-    if (filters.departmentId) queryParams.append('department_id', filters.departmentId)
-    if (filters.assigneeId) queryParams.append('assignee_id', filters.assigneeId)
-    if (filters.startDate) queryParams.append('start_date', filters.startDate)
-    if (filters.endDate) queryParams.append('end_date', filters.endDate)
+  if (filters.departmentId) params.department_id = filters.departmentId
+  if (filters.assigneeId) params.assignee_id = filters.assigneeId
+  if (filters.startDate) params.start_date = filters.startDate
+  if (filters.endDate) params.end_date = filters.endDate
 
-    const url = `${API_V1_PREFIX}/rectifications/stats${queryParams.toString() ? `?${queryParams}` : ''}`
-    const response = await fetch(url, {
-        headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
-        }
-    })
-
-    if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || '获取整改统计失败')
-    }
-
-    return response.json()
-}
-
-/**
- * 获取认证token
- * TODO: 根据实际的认证方案获取token
- */
-function getAuthToken(): string {
-    // 从localStorage或者store中获取token
-    return localStorage.getItem('access_token') || ''
+  return requestOrThrow<TaskStats>(
+    {
+      method: 'GET',
+      url: `${API_V1_PREFIX}/rectifications/stats`,
+      params,
+    },
+    '获取整改统计失败',
+  )
 }

@@ -13,16 +13,19 @@ from __future__ import annotations
 import json
 import logging
 import os
-import threading
-import uuid
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ..services.field_mapper import suggest_field_mapping, apply_mapping, STANDARD_FIELDS
+from ..core.rate_limit import enforce_rate_limit
+from ..core.security import get_current_user
+from ..core.upload_security import validate_uploaded_file
+from ..services.field_mapper import STANDARD_FIELDS, suggest_field_mapping
 from ..services.multi_file_processor import MultiFileProcessor
+from ..services.smart_upload_async_service import get_smart_upload_async_service
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,15 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv", ".zip"}
+ALLOWED_MIME_TYPES = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "text/csv",
+    "application/csv",
+    "text/plain",
+    "application/zip",
+    "application/x-zip-compressed",
+}
 
 
 # ============================================================================
@@ -58,117 +70,90 @@ class ReportGenerateRequest(BaseModel):
 # ============================================================================
 
 @router.post("/smart-upload")
-async def smart_upload(file: UploadFile = File(...)):
+async def smart_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    sync: bool = Query(False),
+    current_user: dict = Depends(get_current_user),
+):
     """
     智能上传：上传任意格式的 Excel/CSV/ZIP 文件
 
-    返回 file_id 和数据预览，同时后台启动 LLM 字段映射
+    默认异步返回 task_id；显式 sync=true 时返回原始同步结果。
     """
+    enforce_rate_limit(request, bucket="drg_smart_upload", max_requests=10, window_seconds=60)
+    task_service = get_smart_upload_async_service(UPLOAD_DIR)
+
     filename = file.filename or "unknown"
     ext = os.path.splitext(filename)[1].lower()
-    
+
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"不支持的文件格式: {ext}，仅支持 .xlsx/.xls/.csv/.zip"
         )
-    
+
     # 读取文件
     content = await file.read()
-    
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"文件过大: {len(content) / 1024 / 1024:.1f}MB，最大支持 50MB"
-        )
-    
-    # 生成文件 ID 并保存
-    file_id = str(uuid.uuid4())[:8]
-    file_dir = os.path.join(UPLOAD_DIR, file_id)
-    os.makedirs(file_dir, exist_ok=True)
-    
-    file_path = os.path.join(file_dir, filename)
-    with open(file_path, "wb") as f:
-        f.write(content)
-    
-    try:
-        # 处理文件
-        processor = MultiFileProcessor(file_dir)
-        excel_files = []
+    validate_uploaded_file(
+        request=request,
+        file=file,
+        content=content,
+        allowed_extensions=ALLOWED_EXTENSIONS,
+        allowed_content_types=ALLOWED_MIME_TYPES,
+        max_bytes=MAX_FILE_SIZE,
+    )
 
-        if ext == ".zip":
-            excel_files = processor.extract_zip(file_path, file_dir)
-            if not excel_files:
-                raise HTTPException(status_code=400, detail="ZIP 包中未找到 Excel 文件")
-        elif ext == ".csv":
-            # CSV 转换为 DataFrame 后保存为 Excel 供后续统一处理
-            df_csv = pd.read_csv(file_path, encoding='utf-8-sig')
-            xlsx_path = os.path.join(file_dir, filename.rsplit('.', 1)[0] + '.xlsx')
-            df_csv.to_excel(xlsx_path, index=False)
-            excel_files = [xlsx_path]
-        else:
-            excel_files = [file_path]
-        
-        # 探索文件结构
-        summary = processor.explore_files(excel_files)
-        
-        # 读取预览数据
-        first_file_info = processor.files_info[0]
-        preview_df = pd.read_excel(first_file_info["path"], nrows=5)
-        preview_df.columns = [str(c).strip() for c in preview_df.columns]
-        sample_data = preview_df.fillna("").astype(str).to_dict(orient="records")
-        
-        # 后台线程启动 LLM 字段映射
-        columns_list = list(preview_df.columns)
-        t = threading.Thread(
-            target=_background_field_mapping, 
-            args=(file_dir, columns_list, sample_data), 
-            daemon=True
-        )
-        t.start()
-        
-        return {
-            "success": True,
-            "file_id": file_id,
-            "filename": filename,
-            "row_count": summary["total_rows"],
-            "columns": summary["common_columns"],
-            "file_count": summary["file_count"],
-            "sample_data": sample_data[:3],
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        import shutil
-        if os.path.exists(file_dir):
-            shutil.rmtree(file_dir)
-        raise HTTPException(status_code=400, detail=f"文件处理失败: {str(e)}")
-
-
-def _background_field_mapping(target_dir: str, columns_list: List[str], samples: List[Dict]):
-    """在独立线程中运行 LLM 字段映射，完成后写入 mapping.json"""
-    try:
-        import asyncio
-        
-        loop = asyncio.new_event_loop()
+    if sync:
         try:
-            mapping_result = loop.run_until_complete(
-                suggest_field_mapping(columns_list, samples)
-            )
-        finally:
-            loop.close()
-        
-        if isinstance(mapping_result, dict) and mapping_result.get("mappings"):
-            cache_path = os.path.join(target_dir, "mapping.json")
-            with open(cache_path, "w", encoding="utf-8") as mf:
-                json.dump(mapping_result, mf, ensure_ascii=False, indent=2)
-            logger.info(f"[SmartUpload] LLM 字段映射完成，已缓存 {len(mapping_result['mappings'])} 个映射")
-    except Exception as e:
-        logger.warning(f"[SmartUpload] 后台 LLM 字段映射失败（不影响功能）: {e}")
+            result = task_service.process_upload_sync(filename=filename, content=content)
+            return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"文件处理失败: {exc}") from exc
+
+    task = task_service.submit_upload(filename=filename, content=content, current_user=current_user)
+    return JSONResponse(
+        status_code=202,
+        content={
+            "success": True,
+            "message": "任务已提交，正在后台处理",
+            "task_id": task["task_id"],
+            "file_id": task["file_id"],
+            "filename": task["filename"],
+            "status": task["status"],
+            "progress": task["progress"],
+            "status_url": f"/api/v1/drg/smart-upload/tasks/{task['task_id']}",
+            "result_url": f"/api/v1/drg/smart-upload/tasks/{task['task_id']}/result",
+            "cancel_url": f"/api/v1/drg/smart-upload/tasks/{task['task_id']}/cancel",
+        },
+    )
 
 
-# ============================================================================
+# =====================================================================
+# 1.1 任务状态 / 结果 / 取消
+# =====================================================================
+
+@router.get("/smart-upload/tasks/{task_id}")
+async def get_smart_upload_task_status(task_id: str):
+    service = get_smart_upload_async_service(UPLOAD_DIR)
+    return service.get_task_status(task_id)
+
+
+@router.get("/smart-upload/tasks/{task_id}/result")
+async def get_smart_upload_task_result(task_id: str):
+    service = get_smart_upload_async_service(UPLOAD_DIR)
+    return service.get_task_result(task_id)
+
+
+@router.post("/smart-upload/tasks/{task_id}/cancel")
+async def cancel_smart_upload_task(task_id: str):
+    service = get_smart_upload_async_service(UPLOAD_DIR)
+    return service.cancel_task(task_id)
+
+
+# ============================================================================ 
 # 2. 映射状态查询（前端轮询）
 # ============================================================================
 

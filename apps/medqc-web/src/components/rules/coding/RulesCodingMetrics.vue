@@ -61,32 +61,35 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
-  totalRules: number
-  enabledRules: number
-  draftRules: number
-  disabledRules: number
-  hit7d: number
-  hitRate7d: number
-  highRiskRules: number
-  conflictRules: number
-  falsePositiveHighRules: number
-  totalLabel?: string
-  enabledLabel?: string
-  hitLabel?: string
-  riskLabel?: string
-  enabledSubtext?: string
-  hitSubtext?: string
-  riskSubtext?: string
-}>(), {
-  totalLabel: '总规则数',
-  enabledLabel: '启用中',
-  hitLabel: '近7天命中',
-  riskLabel: '高风险规则',
-  enabledSubtext: '',
-  hitSubtext: '',
-  riskSubtext: '',
-})
+withDefaults(
+  defineProps<{
+    totalRules: number
+    enabledRules: number
+    draftRules: number
+    disabledRules: number
+    hit7d: number
+    hitRate7d: number
+    highRiskRules: number
+    conflictRules: number
+    falsePositiveHighRules: number
+    totalLabel?: string
+    enabledLabel?: string
+    hitLabel?: string
+    riskLabel?: string
+    enabledSubtext?: string
+    hitSubtext?: string
+    riskSubtext?: string
+  }>(),
+  {
+    totalLabel: '总规则数',
+    enabledLabel: '启用中',
+    hitLabel: '近7天命中',
+    riskLabel: '高风险规则',
+    enabledSubtext: '',
+    hitSubtext: '',
+    riskSubtext: '',
+  },
+)
 
 const emit = defineEmits<{
   'click-metric': [payload: { key: 'total' | 'enabled' | 'hit7d' | 'risk' }]

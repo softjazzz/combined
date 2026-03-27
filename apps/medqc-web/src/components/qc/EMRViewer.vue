@@ -115,6 +115,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { UserOutlined, ApartmentOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import { useDefectHighlight } from '@/composables/useDefectHighlight'
 import type { DefectAnnotation } from '@/composables/useDefectHighlight'
+import { getAccessToken } from '@/utils/auth-token'
 
 // ============= Props =============
 const props = withDefaults(defineProps<{
@@ -198,10 +199,7 @@ function resetViewerState() {
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const token =
-    localStorage.getItem('medqc_access_token') ||
-    localStorage.getItem('token') ||
-    localStorage.getItem('access_token')
+  const token = getAccessToken()
 
   return {
     'Content-Type': 'application/json',

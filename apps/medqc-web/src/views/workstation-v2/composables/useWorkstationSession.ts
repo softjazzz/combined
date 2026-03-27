@@ -59,8 +59,8 @@ export function useWorkstationSession() {
   const icdApplyTarget = ref<IcdApplyTarget>(state.icdApplyTarget)
   const icdApplyIndex = ref(state.icdApplyIndex)
 
-  const isOtherTarget = computed(() =>
-    icdApplyTarget.value === 'otherDiagnosis' || icdApplyTarget.value === 'otherProcedure',
+  const isOtherTarget = computed(
+    () => icdApplyTarget.value === 'otherDiagnosis' || icdApplyTarget.value === 'otherProcedure',
   )
 
   watch(

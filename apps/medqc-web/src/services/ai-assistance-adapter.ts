@@ -10,6 +10,7 @@ import type {
 } from '@/types/audit-module'
 
 import { unifiedAPIClient } from './unified-api-client'
+import { getAccessToken } from '@/utils/auth-token'
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -103,7 +104,7 @@ export class AIAssistanceServiceAdapter {
   }
 
   private getAuthToken(): string {
-    return localStorage.getItem('auth_token') || ''
+    return getAccessToken()
   }
 
   /**

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getTodoStats, getPerformanceRanking } from '@/api/dashboard'
 import type { TodoStats, PerformanceData } from '@/api/dashboard'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
+import { getAccessToken } from '@/utils/auth-token'
 import QCTrendChart from '@/components/charts/QCTrendChart.vue'
 import TodoBoard from '@/components/dashboard/TodoBoard.vue'
 import PerformanceBoard from '@/components/dashboard/PerformanceBoard.vue'
@@ -182,7 +183,7 @@ const stageQueueRoute: Record<WorkflowStageKey, string> = {
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('medqc_access_token')
+  const token = getAccessToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 

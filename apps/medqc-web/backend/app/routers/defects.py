@@ -27,6 +27,7 @@ from ..schemas.defects import (
     DefectExportRequest,
     DefectStatus,
 )
+from ..core.audit import audit_event
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode
 from ..core.security import get_current_user
@@ -516,6 +517,20 @@ async def export_defects(
             format=format,
             max_rows=max_rows,
             filters=filters,
+        )
+        audit_event(
+            request,
+            action="defects.export",
+            resource="/api/v1/qc/defects/export",
+            outcome="success",
+            current_user=current_user,
+            details={
+                "format": format,
+                "max_rows": max_rows,
+                "filters": filters,
+                "total_rows": int(result.get("total_rows") or 0),
+                "file_name": result.get("file_name"),
+            },
         )
 
         return FileResponse(

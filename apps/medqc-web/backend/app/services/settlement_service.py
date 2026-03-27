@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, tuple_
 
 from ..database.connection import engine
 from ..database.models.cdm import (
@@ -98,6 +98,12 @@ class SettlementService:
                     MedicalRecordFrontpage.sex,
                     MedicalRecordFrontpage.age_year,
                     MedicalRecordFrontpage.insurance_type,
+                ).filter(
+                    tuple_(
+                        MedicalRecordFrontpage.institute_id,
+                        MedicalRecordFrontpage.patient_id,
+                        MedicalRecordFrontpage.visit_id,
+                    ).in_(keys)
                 ).all()
                 for m in mrs:
                     name_map[(m.institute_id, m.patient_id, m.visit_id)] = {

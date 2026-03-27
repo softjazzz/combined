@@ -183,6 +183,7 @@ import {
 
 import SemanticRulesManager from '../../components/SemanticRulesManager.vue'
 import { semanticRulesService } from '../../services/semantic-rules-service'
+import { getAccessToken } from '../../utils/auth-token'
 
 const props = defineProps({
   showHeader: {
@@ -203,6 +204,15 @@ const llmStatus = ref({
   provider: '',
   model: ''
 })
+
+const buildAuthHeaders = () => {
+  const headers = { 'Content-Type': 'application/json' }
+  const token = getAccessToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return headers
+}
 
 // 系统特性列表
 const systemFeatures = [
@@ -260,7 +270,9 @@ const refreshData = async () => {
 
     // 获取规则总数（后端 page_size 最大为 200）
     // 使用相对路径以兼容 Vite 开发代理和生产环境反向代理
-    const rulesResponse = await fetch(`/api/v1/semantic-rules?page=1&page_size=200`)
+    const rulesResponse = await fetch(`/api/v1/semantic-rules?page=1&page_size=200`, {
+      headers: buildAuthHeaders(),
+    })
     if (rulesResponse.ok) {
       const data = await rulesResponse.json()
       if (data.success && engineStats.value) {
@@ -285,24 +297,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 主容器样式 */
 .semantic-rules-view {
   padding: 0;
   background: transparent;
   min-height: auto;
 }
 
-
-/* 规则管理容器 */
 .rules-manager-container {
-  background: white;
-  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
+  border-radius: 16px;
   margin: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  box-shadow: inset 0 0 0 1px #d7e4f5;
+  border: 1px solid #d7e4f5;
+  padding: 10px;
 }
 
-/* 系统概览模态框 */
 .system-overview {
   max-height: 600px;
   overflow-y: auto;
@@ -315,193 +324,30 @@ onMounted(() => {
   color: #1e293b;
 }
 
-/* 快速筛选标签样式 */
-.filter-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  user-select: none;
-  border: 2px solid transparent;
-
-  /* 未选中状态 */
-  background: rgba(248, 250, 252, 0.8);
-  color: #64748b;
-  border-color: #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.filter-tag:hover {
-  background: rgba(241, 245, 249, 1);
-  color: #475569;
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* 选中状态 - 主要筛选 */
-.filter-tag-active {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-  border-color: #2563eb;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-}
-
-.filter-tag-active:hover {
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-}
-
-/* 危险类型筛选 */
-.filter-tag-danger {
-  background: rgba(254, 242, 242, 0.8);
-  color: #dc2626;
-  border-color: #fecaca;
-}
-
-.filter-tag-danger:hover {
-  background: rgba(254, 226, 226, 1);
-  color: #b91c1c;
-  border-color: #fca5a5;
-}
-
-.filter-tag-danger-active {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  border-color: #dc2626;
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
-}
-
-.filter-tag-danger-active:hover {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
-}
-
-/* 成功类型筛选 */
-.filter-tag-success {
-  background: rgba(240, 253, 244, 0.8);
-  color: #16a34a;
-  border-color: #bbf7d0;
-}
-
-.filter-tag-success:hover {
-  background: rgba(220, 252, 231, 1);
-  color: #15803d;
-  border-color: #86efac;
-}
-
-.filter-tag-success-active {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  color: white;
-  border-color: #16a34a;
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
-}
-
-.filter-tag-success-active:hover {
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
-}
-
-/* 筛选标签文本 */
-.filter-tag-text {
-  font-weight: 500;
-  letter-spacing: 0.025em;
-}
-
-/* 筛选标签计数 */
-.filter-tag-count {
-  font-size: 11px;
-  opacity: 0.8;
-  font-weight: 600;
-  margin-left: 2px;
-}
-
-.filter-tag-active .filter-tag-count {
-  opacity: 0.9;
-}
-
-/* 按钮样式优化 */
 :deep(.ant-btn) {
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 :deep(.ant-btn-primary) {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #2f6fee 0%, #1f5de0 100%);
   border: none;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-  color: #ffffff !important; /* 确保文字为白色 */
+  box-shadow: 0 6px 14px rgba(47, 111, 238, 0.25);
+  color: #ffffff !important;
 }
 
 :deep(.ant-btn-primary:hover) {
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  background: linear-gradient(135deg, #1f5de0 0%, #184ab5 100%);
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-  color: #ffffff !important; /* 确保悬停时文字也为白色 */
+  box-shadow: 0 9px 20px rgba(31, 93, 224, 0.32);
+  color: #ffffff !important;
 }
 
-:deep(.ant-btn-primary span) {
-  color: #ffffff !important; /* 确保按钮内的span文字为白色 */
-}
-
-:deep(.ant-btn-primary:hover span) {
-  color: #ffffff !important; /* 确保悬停时按钮内的span文字也为白色 */
-}
-
-/* 卡片样式优化 */
-:deep(.ant-card) {
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-:deep(.ant-card-head) {
-  border-bottom: 1px solid #f1f5f9;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-}
-
-/* 标签样式优化 */
-:deep(.ant-tag) {
-  border-radius: 6px;
-  font-weight: 500;
-  padding: 4px 12px;
-  font-size: 12px;
-  border: none;
-}
-
-/* 焦点状态（键盘导航） */
-.filter-tag:focus {
-  outline: 2px solid #3b82f6;
-  outline-offset: 2px;
-}
-
-/* 活跃状态增强 */
-.filter-tag:active {
-  transform: translateY(0);
-  transition-duration: 0.1s;
-}
-
-/* 响应式设计 */
 @media (max-width: 768px) {
-  .semantic-rules-view {
-    padding: 12px;
-  }
-  
-  .filter-tag {
-    padding: 5px 10px;
-    font-size: 11px;
-  }
-
   .rules-manager-container {
-    margin: 0;
-    border-radius: 6px;
+    border-radius: 10px;
+    padding: 6px;
   }
 }
 </style>

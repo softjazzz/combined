@@ -17,15 +17,9 @@
   "max_concurrent": 2,
   "query_timeout_s": 30,
   "retry_max": 3,
-  "retry_backoff": [
-    5,
-    30,
-    120
-  ],
+  "retry_backoff": [5, 30, 120],
   "night_window_start": "22:00",
   "night_window_end": "06:00",
-  "target_departments": [
-    "呼吸内科"
-  ],
+  "target_departments": ["呼吸内科"],
   "enabled": true
 }

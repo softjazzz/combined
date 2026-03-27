@@ -1,154 +1,157 @@
 <template>
   <div class="semantic-rules-manager">
-    <!-- 1. 核心数据卡片区 -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      <!-- 卡片 1: 复杂度分布 (环形图) -->
-      <div class="stats-card relative overflow-hidden flex flex-col">
-        <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">
-            规则复杂度分布
+    <section class="ops-context block-enter">
+      <div>
+        <p class="ops-eyebrow">
+          四川省语义质控规则库
+        </p>
+        <h2 class="ops-title">
+          规则运营总览
+        </h2>
+        <p class="ops-subtitle">
+          面向病历质控运营与审计，统一管理规则复杂度、缺陷风险与执行入口。
+        </p>
+      </div>
+      <div class="ops-kpis">
+        <div class="ops-kpi">
+          <span class="ops-kpi-label">总规则</span>
+          <span class="ops-kpi-value">{{ sichuanStats.total_rules }}</span>
+        </div>
+        <div class="ops-kpi ops-kpi-warn">
+          <span class="ops-kpi-label">严重缺陷</span>
+          <span class="ops-kpi-value">{{ criticalDefectCount }}</span>
+        </div>
+        <div class="ops-kpi">
+          <span class="ops-kpi-label">最近同步</span>
+          <span class="ops-kpi-value">{{ lastRefreshedLabel }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="insight-grid block-enter-delayed">
+      <article class="insight-panel insight-panel-primary">
+        <div class="insight-head">
+          <h3 class="insight-title">
+            规则复杂度结构
           </h3>
-          <PieChartOutlined class="stats-icon" />
+          <PieChartOutlined class="insight-icon" />
         </div>
         <div class="flex items-center flex-1">
-          <!-- CSS 模拟环形图 (Donut Chart) -->
           <div
-            class="relative w-28 h-28 rounded-full mr-6 flex items-center justify-center flex-shrink-0"
+            class="complexity-donut"
             :style="complexityConicGradient"
           >
-            <!-- 镂空遮罩 -->
-            <div class="absolute w-20 h-20 bg-white rounded-full shadow-inner" />
-            <!-- 中心文字 -->
-            <div class="absolute flex flex-col items-center justify-center z-10">
-              <span class="text-2xl font-bold text-slate-700 leading-none">{{
-                sichuanStats.total_rules
-              }}</span>
-              <span class="text-[10px] text-slate-400 mt-1">总规则</span>
+            <div class="complexity-inner">
+              <span class="complexity-total">{{ sichuanStats.total_rules }}</span>
+              <span class="complexity-label">总规则</span>
             </div>
           </div>
-          <div class="space-y-3 text-sm flex-1">
-            <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-red-400 mr-2" />高复杂度</span>
-              <span class="font-bold text-slate-700 group-hover:text-red-500 transition-colors">{{
-                sichuanStats.complexity_distribution?.['高复杂度'] || 0
-              }}</span>
+          <div class="complexity-list">
+            <div class="complexity-item">
+              <span class="complexity-name"><span class="complexity-dot danger" />高复杂度</span>
+              <span class="complexity-value">{{ complexityBreakdown.high }}</span>
             </div>
-            <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-amber-400 mr-2" />中复杂度</span>
-              <span class="font-bold text-slate-700 group-hover:text-amber-500 transition-colors">{{
-                sichuanStats.complexity_distribution?.['中复杂度'] || 0
-              }}</span>
+            <div class="complexity-item">
+              <span class="complexity-name"><span class="complexity-dot warning" />中复杂度</span>
+              <span class="complexity-value">{{ complexityBreakdown.medium }}</span>
             </div>
-            <div class="flex justify-between items-center group">
-              <span class="flex items-center text-slate-600 text-xs"><span class="w-2 h-2 rounded-full bg-emerald-400 mr-2" />低复杂度</span>
-              <span
-                class="font-bold text-slate-700 group-hover:text-emerald-500 transition-colors"
-              >{{ sichuanStats.complexity_distribution?.['低复杂度'] || 0 }}</span>
+            <div class="complexity-item">
+              <span class="complexity-name"><span class="complexity-dot safe" />低复杂度</span>
+              <span class="complexity-value">{{ complexityBreakdown.low }}</span>
             </div>
           </div>
         </div>
-      </div>
+      </article>
 
-      <!-- 卡片 2: 缺陷级别 (进度条) -->
-      <div class="stats-card flex flex-col">
-        <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">
-            缺陷级别分布
+      <article class="insight-panel">
+        <div class="insight-head">
+          <h3 class="insight-title">
+            缺陷风险分布
           </h3>
-          <AlertOutlined class="stats-icon" />
+          <AlertOutlined class="insight-icon" />
         </div>
-        <div class="space-y-5 flex-1 justify-center flex flex-col">
-          <div>
-            <div class="flex justify-between text-xs mb-1.5">
-              <span class="text-slate-500 font-medium">严重缺陷 (阻断)</span>
-              <span class="text-red-500 font-bold">{{
-                sichuanStats.defect_level_distribution?.['严重缺陷'] || 0
-              }}</span>
+        <div class="risk-list">
+          <div class="risk-row">
+            <div class="risk-meta">
+              <span>严重缺陷（阻断）</span>
+              <span class="risk-count danger">{{ criticalDefectCount }}</span>
             </div>
-            <div class="w-full bg-slate-100 rounded-full h-2">
+            <div class="risk-track">
               <div
-                class="bg-red-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(239,68,68,0.2)]"
-                :style="{
-                  width: getPercentage(sichuanStats.defect_level_distribution?.['严重缺陷']) + '%',
-                }"
+                class="risk-fill danger"
+                :style="{ width: `${getDefectRate(criticalDefectCount)}%` }"
               />
             </div>
           </div>
-          <div>
-            <div class="flex justify-between text-xs mb-1.5">
-              <span class="text-slate-500 font-medium">一般缺陷 (警告)</span>
-              <span class="text-orange-400 font-bold">{{
-                sichuanStats.defect_level_distribution?.['一般缺陷'] || 0
-              }}</span>
+          <div class="risk-row">
+            <div class="risk-meta">
+              <span>一般缺陷（警告）</span>
+              <span class="risk-count warning">{{ majorDefectCount }}</span>
             </div>
-            <div class="w-full bg-slate-100 rounded-full h-2">
+            <div class="risk-track">
               <div
-                class="bg-orange-400 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(251,191,36,0.2)]"
-                :style="{
-                  width: getPercentage(sichuanStats.defect_level_distribution?.['一般缺陷']) + '%',
-                }"
+                class="risk-fill warning"
+                :style="{ width: `${getDefectRate(majorDefectCount)}%` }"
               />
             </div>
           </div>
-          <div>
-            <div class="flex justify-between text-xs mb-1.5">
-              <span class="text-slate-500 font-medium">轻微缺陷 (提示)</span>
-              <span class="text-emerald-500 font-bold">{{
-                sichuanStats.defect_level_distribution?.['轻微缺陷'] || 0
-              }}</span>
+          <div class="risk-row">
+            <div class="risk-meta">
+              <span>轻微缺陷（提示）</span>
+              <span class="risk-count safe">{{ minorDefectCount }}</span>
             </div>
-            <div class="w-full bg-slate-100 rounded-full h-2">
+            <div class="risk-track">
               <div
-                class="bg-emerald-500 h-2 rounded-full transition-all duration-1000 shadow-[0_2px_4px_rgba(16,185,129,0.2)]"
-                :style="{
-                  width: getPercentage(sichuanStats.defect_level_distribution?.['轻微缺陷']) + '%',
-                }"
+                class="risk-fill safe"
+                :style="{ width: `${getDefectRate(minorDefectCount)}%` }"
               />
             </div>
           </div>
         </div>
-      </div>
+        <div class="risk-footnote">
+          风险密度 {{ riskDensity }}
+        </div>
+      </article>
 
-      <!-- 卡片 3: 规则分类 (网格) -->
-      <div class="stats-card flex flex-col">
-        <div class="flex justify-between items-start mb-4">
-          <h3 class="stats-title">
-            规则分类统计
+      <article class="insight-panel">
+        <div class="insight-head">
+          <h3 class="insight-title">
+            分类覆盖 Top3
           </h3>
-          <AppstoreOutlined class="stats-icon" />
+          <AppstoreOutlined class="insight-icon" />
         </div>
-        <div class="grid grid-cols-3 gap-3 mt-2 flex-1">
+        <div class="category-list">
           <div
             v-for="(cat, idx) in topCategories"
             :key="cat.name"
-            :class="['stat-grid-item', categoryColors[idx % categoryColors.length]]"
+            class="category-item"
           >
-            <div class="text-xl font-bold mb-1">
-              {{ cat.count }}
+            <div class="category-index">
+              0{{ idx + 1 }}
             </div>
-            <div
-              class="text-[10px] font-medium opacity-70 truncate w-full text-center"
-              :title="cat.name"
-            >
-              {{ cat.name }}
+            <div class="category-meta">
+              <span class="category-name">{{ cat.name }}</span>
+              <span class="category-ratio">{{ getCategoryRatio(cat.count) }}</span>
+            </div>
+            <div class="category-count">
+              {{ cat.count }}
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
-    <!-- 2. 列表操作栏 -->
-    <div class="flex flex-col sm:flex-row justify-between items-center mb-5 gap-4">
-      <div class="relative w-full sm:w-96 search-wrapper group">
+    <section class="ops-toolbar block-enter-delayed-2">
+      <div class="relative w-full sm:w-[420px] search-wrapper group">
         <SearchOutlined class="search-icon group-hover:text-blue-500 transition-colors" />
         <input
           type="text"
-          placeholder="搜索规则编号、名称..."
+          placeholder="搜索规则编号、名称或文书类型"
           class="search-input"
           @input="(e) => handleSearch((e.target as HTMLInputElement).value)"
         >
       </div>
-      <div class="flex gap-3 w-full sm:w-auto justify-end">
+      <div class="toolbar-actions">
         <button
           class="modern-btn-ghost"
           @click="refreshSichuanRules"
@@ -168,10 +171,23 @@
           开始质控评估
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- 3. 数据表格 -->
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+    <section class="table-shell block-enter-delayed-2">
+      <div class="table-shell-head">
+        <div>
+          <p class="table-shell-eyebrow">
+            Rule Workspace
+          </p>
+          <h3 class="table-shell-title">
+            规则执行工作台
+          </h3>
+        </div>
+        <div class="table-shell-meta">
+          <span class="table-shell-count">{{ filteredRules.length }}</span>
+          <span class="table-shell-label">当前结果</span>
+        </div>
+      </div>
       <a-table
         :data-source="filteredRules"
         :columns="sichuanColumns"
@@ -182,65 +198,60 @@
         @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <!-- 编号列：Mono字体 + 浅色背景 -->
           <template v-if="column.key === 'rule_id'">
             <span
-              class="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold select-all border border-slate-200"
+              class="rule-code-pill"
             >
               {{ record.rule_code || record.rule_id }}
             </span>
           </template>
 
-          <!-- 规则名称 + 分类标签 -->
           <template v-if="column.key === 'name'">
-            <div class="pr-2">
-              <div class="text-slate-800 font-semibold text-[13px] leading-snug mb-0.5">
+            <div class="rule-main">
+              <div class="rule-main-title">
                 {{ record.name }}
               </div>
-              <div class="flex items-center gap-1.5">
+              <div class="rule-main-meta">
                 <span
-                  class="inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium shrink-0"
+                  class="rule-category-pill"
                   :class="getDocTypeColorClass(record.category)"
                 >
                   {{ getCategoryZh(record.category) }}
                 </span>
                 <span
-                  class="text-slate-400 text-[11px] truncate max-w-[240px]"
+                  class="rule-main-desc"
                   :title="record.description"
                 >
-                  {{ record.description }}
+                  检查内容：{{ record.description }}
                 </span>
               </div>
             </div>
           </template>
 
-          <!-- 复杂度 -->
           <template v-if="column.key === 'complexity'">
             <span
-              class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
+              class="status-pill"
               :class="getComplexityClass(record.complexity)"
             >
               {{ record.complexity }}
             </span>
           </template>
 
-          <!-- 缺陷级别 -->
           <template v-if="column.key === 'defect_level'">
             <span
-              class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
+              class="status-pill"
               :class="getDefectLevelClass(record.defect_level)"
             >
               {{ getSeverityZh(record.defect_level) }}
             </span>
           </template>
 
-          <!-- 适用文书 -->
           <template v-if="column.key === 'applicable_documents'">
-            <div class="flex flex-wrap gap-1.5">
+            <div class="doc-pill-stack">
               <span
                 v-for="docType in record.applicable_documents.slice(0, 2)"
                 :key="docType"
-                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium"
+                class="doc-pill"
                 :class="getDocTypeColorClass(docType)"
               >
                 {{ getDocTypeZh(docType) || '未知' }}
@@ -255,7 +266,7 @@
                   }}
                 </template>
                 <span
-                  class="text-[10px] text-slate-400 px-1.5 py-0.5 cursor-help bg-slate-50 rounded border border-slate-100"
+                  class="doc-pill-more"
                 >
                   +{{ record.applicable_documents.length - 2 }}
                 </span>
@@ -263,12 +274,11 @@
             </div>
           </template>
 
-          <!-- 操作列 -->
           <template v-if="column.key === 'actions'">
-            <div class="flex items-center justify-end gap-3">
+            <div class="table-actions">
               <a-tooltip title="查看详情">
                 <button
-                  class="icon-btn text-slate-400 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100"
+                  class="icon-btn"
                   @click="viewSichuanRuleDetail(record)"
                 >
                   <EyeOutlined />
@@ -284,7 +294,7 @@
           </template>
         </template>
       </a-table>
-    </div>
+    </section>
 
     <!-- 模态框保持不变，复用原有逻辑 -->
     <a-modal
@@ -618,6 +628,7 @@ import {
   CodeOutlined,
 } from '@ant-design/icons-vue'
 import { ApiService } from '@/services/apiService'
+import { getAccessToken } from '@/utils/auth-token'
 import type { User } from '@/types/auth'
 import { UserRole } from '@/types/auth'
 import { qcRuleCaseMap, buildCaseText } from '@/data/qcRuleCases'
@@ -686,13 +697,61 @@ const isEditingPrompt = ref(false)
 const currentPrompt = ref('')
 const editingPrompt = ref('')
 const promptLoading = ref(false)
+const lastRefreshedAt = ref<Date | null>(null)
+
+const buildAuthHeaders = (includeJson: boolean = false): Record<string, string> => {
+  const headers: Record<string, string> = {}
+  const token = getAccessToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json'
+  }
+  return headers
+}
 
 // 颜色计算属性
-const complexityConicGradient = computed(() => {
+const complexityBreakdown = computed(() => {
   const stats = sichuanStats.value.complexity_distribution || {}
-  const high = stats['高复杂度'] || 0
-  const mid = stats['中复杂度'] || 0
-  const low = stats['低复杂度'] || 0
+  return {
+    high: stats['高复杂度'] || 0,
+    medium: stats['中复杂度'] || 0,
+    low: stats['低复杂度'] || 0,
+  }
+})
+
+const criticalDefectCount = computed(
+  () => sichuanStats.value.defect_level_distribution?.['严重缺陷'] || 0,
+)
+const majorDefectCount = computed(
+  () => sichuanStats.value.defect_level_distribution?.['一般缺陷'] || 0,
+)
+const minorDefectCount = computed(
+  () => sichuanStats.value.defect_level_distribution?.['轻微缺陷'] || 0,
+)
+
+const defectTotal = computed(
+  () => criticalDefectCount.value + majorDefectCount.value + minorDefectCount.value,
+)
+
+const riskDensity = computed(() => {
+  if (!sichuanStats.value.total_rules) return '0%'
+  return `${Math.round((criticalDefectCount.value / sichuanStats.value.total_rules) * 100)}%`
+})
+
+const lastRefreshedLabel = computed(() => {
+  if (!lastRefreshedAt.value) return '未同步'
+  return lastRefreshedAt.value.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+})
+
+const complexityConicGradient = computed(() => {
+  const high = complexityBreakdown.value.high
+  const mid = complexityBreakdown.value.medium
+  const low = complexityBreakdown.value.low
   const total = high + mid + low || 1
 
   const p1 = (high / total) * 100
@@ -720,14 +779,9 @@ const filteredRules = computed(() => {
   )
 })
 
-const getPercentage = (count: number | undefined) => {
-  if (!count) return 0
-  const total = sichuanStats.value.total_rules || 1
-  return (count / total) * 100
-}
-
-const getCategoryCount = (cat: string) => {
-  return sichuanRules.value.filter((r) => r.category === cat).length
+const getDefectRate = (count: number | undefined) => {
+  if (!count || defectTotal.value === 0) return 0
+  return Math.round((count / defectTotal.value) * 100)
 }
 
 // 动态获取 top 3 分类
@@ -742,11 +796,10 @@ const topCategories = computed(() => {
     .map(([name, count]) => ({ name, count }))
 })
 
-const categoryColors = [
-  'bg-blue-50/50 border-blue-100 text-blue-600',
-  'bg-cyan-50/50 border-cyan-100 text-cyan-600',
-  'bg-purple-50/50 border-purple-100 text-purple-600',
-]
+const getCategoryRatio = (count: number) => {
+  if (!sichuanStats.value.total_rules) return '0%'
+  return `${Math.round((count / sichuanStats.value.total_rules) * 100)}%`
+}
 
 // 表格列定义（去掉重复的"分类"列，该信息已融入规则名称行）
 const sichuanColumns = [
@@ -771,9 +824,12 @@ const sichuanColumns = [
 const refreshSichuanRules = async () => {
   loading.value = true
   try {
-    const response = await fetch(`/api/v1/qc/sichuan/rules?_ts=${Date.now()}`)
+    const response = await fetch(`/api/v1/qc/sichuan/rules?_ts=${Date.now()}`, {
+      headers: buildAuthHeaders(),
+    })
     if (response.ok) {
-      const data = await response.json()
+      const raw = await response.json()
+      const data = raw?.data && typeof raw.data === 'object' ? raw.data : raw
       const normalizeRule = (r: any): SichuanQCRule => ({
         rule_id: r.rule_id || r.id || '',
         rule_code: r.rule_code,
@@ -810,6 +866,7 @@ const refreshSichuanRules = async () => {
           Object.keys(apiComplexity).length > 0 ? apiComplexity : computedComplexity,
         defect_level_distribution: Object.keys(apiDefect).length > 0 ? apiDefect : computedDefect,
       }
+      lastRefreshedAt.value = new Date()
       tablePagination.value.total = sichuanRules.value.length
       message.success('刷新成功')
     }
@@ -842,6 +899,9 @@ const viewSichuanRuleDetail = async (rule: SichuanQCRule) => {
     try {
       const resp = await fetch(
         `/api/v1/qc/sichuan/rules/${encodeURIComponent(rule.rule_id)}/prompt`,
+        {
+          headers: buildAuthHeaders(),
+        },
       )
       if (resp.ok) {
         const data = await resp.json()
@@ -896,7 +956,7 @@ const executeRuleTest = async () => {
   try {
     const resp = await fetch('/api/v1/qc/sichuan/test-rule', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildAuthHeaders(true),
       body: JSON.stringify({
         rule_id: testingRule.value.rule_id,
         medical_text: testMedicalText.value,
@@ -942,7 +1002,7 @@ const savePrompt = async () => {
       `/api/v1/qc/sichuan/rules/${encodeURIComponent(selectedRule.value.rule_id)}/prompt`,
       {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthHeaders(true),
         body: JSON.stringify({
           custom_prompt: editingPrompt.value.trim() || null,
         }),
@@ -1037,49 +1097,352 @@ onMounted(() => {
 
 <style scoped>
 .semantic-rules-manager {
+  --panel-bg: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  --panel-border: #dbe7f5;
+  --panel-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  --ink-strong: #0f2747;
+  --ink-main: #1f3b63;
+  --ink-muted: #6a7d99;
+  --accent: #2f6fee;
+  --accent-strong: #1f5de0;
+  --accent-soft: #eaf2ff;
+  --focus-ring: 0 0 0 4px rgba(47, 111, 238, 0.16);
   padding: 0;
+  color: var(--ink-main);
 }
 
-/* 卡片样式 */
-.stats-card {
-  background: white;
-  border-radius: 1.25rem; /* 20px */
-  padding: 1.75rem;
-  box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.04);
-  border: 1px solid #f1f5f9;
-  height: 100%;
-  min-height: 240px;
+.ops-context {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  background: radial-gradient(circle at right top, #edf4ff 0%, #ffffff 52%);
+  box-shadow: var(--panel-shadow);
+  padding: 1.15rem 1.35rem;
+  margin-bottom: 1rem;
 }
 
-.stats-title {
-  color: #475569;
+.ops-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #597198;
+  margin: 0 0 4px;
   font-weight: 600;
-  font-size: 0.9rem;
 }
 
-.stats-icon {
-  color: #cbd5e1;
-  font-size: 1.25rem;
+.ops-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink-strong);
+  letter-spacing: -0.01em;
 }
 
-/* 统计网格项 */
-.stat-grid-item {
+.ops-subtitle {
+  margin: 6px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+}
+
+.ops-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(84px, 1fr));
+  gap: 0.75rem;
+  width: min(420px, 100%);
+}
+
+.ops-kpi {
+  border: 1px solid #dce8fb;
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  background: rgba(255, 255, 255, 0.9);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 1rem;
-  border-radius: 1rem;
-  border-width: 1px;
-  border-style: solid;
-  height: 100%;
-  transition: all 0.2s;
-}
-.stat-grid-item:hover {
-  transform: translateY(-2px);
+  gap: 2px;
 }
 
-/* 搜索框 */
+.ops-kpi-warn {
+  border-color: #ffe0df;
+  background: #fff9f9;
+}
+
+.ops-kpi-label {
+  font-size: 11px;
+  color: #6f82a0;
+}
+
+.ops-kpi-value {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.insight-panel {
+  min-height: 220px;
+  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  box-shadow: var(--panel-shadow);
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.insight-panel-primary {
+  background: linear-gradient(165deg, #ffffff 0%, #eef5ff 100%);
+}
+
+.insight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.95rem;
+}
+
+.insight-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.insight-icon {
+  color: #9db3d2;
+  font-size: 1.05rem;
+}
+
+.complexity-donut {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.9rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
+.complexity-inner {
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #d8e6fb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.complexity-total {
+  font-size: 1.9rem;
+  color: var(--ink-strong);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.complexity-label {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #7084a3;
+}
+
+.complexity-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.complexity-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.34rem 0.45rem;
+  border: 1px solid #e8f0fd;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.complexity-name {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  color: #3d5579;
+  gap: 0.36rem;
+}
+
+.complexity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.complexity-dot.danger {
+  background: #ef4444;
+}
+
+.complexity-dot.warning {
+  background: #f59e0b;
+}
+
+.complexity-dot.safe {
+  background: #10b981;
+}
+
+.complexity-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.2rem;
+}
+
+.risk-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.risk-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #475f82;
+}
+
+.risk-count {
+  font-weight: 700;
+}
+
+.risk-count.danger {
+  color: #ef4444;
+}
+
+.risk-count.warning {
+  color: #f97316;
+}
+
+.risk-count.safe {
+  color: #10b981;
+}
+
+.risk-track {
+  width: 100%;
+  border-radius: 999px;
+  background: #e5edf8;
+  height: 9px;
+  overflow: hidden;
+}
+
+.risk-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.45s ease;
+}
+
+.risk-fill.danger {
+  background: linear-gradient(90deg, #f87171 0%, #ef4444 100%);
+}
+
+.risk-fill.warning {
+  background: linear-gradient(90deg, #fb923c 0%, #f97316 100%);
+}
+
+.risk-fill.safe {
+  background: linear-gradient(90deg, #34d399 0%, #10b981 100%);
+}
+
+.risk-footnote {
+  margin-top: auto;
+  font-size: 11px;
+  color: #6f83a2;
+  text-align: right;
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.2rem;
+}
+
+.category-item {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid #e8f0fd;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.5rem 0.6rem;
+}
+
+.category-index {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6d86ab;
+}
+
+.category-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2f476a;
+}
+
+.category-ratio {
+  font-size: 11px;
+  color: #7b8faa;
+}
+
+.category-count {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1c3860;
+}
+
+.ops-toolbar {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+  padding: 0.8rem;
+  margin-bottom: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 0.6rem;
+  width: 100%;
+  justify-content: flex-end;
+}
+
 .search-wrapper {
   position: relative;
 }
@@ -1100,19 +1463,19 @@ onMounted(() => {
   padding-right: 1rem;
   padding-top: 0.75rem;
   padding-bottom: 0.75rem;
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: #f9fbff;
+  border: 1px solid #d6e4f8;
   border-radius: 0.75rem;
   font-size: 0.9rem;
-  color: #334155;
+  color: #27405f;
   transition: all 0.2s;
   outline: none;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
 }
 
 .search-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 /* 按钮样式 */
@@ -1121,89 +1484,284 @@ onMounted(() => {
   border-radius: 0.75rem;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #64748b;
-  background: transparent;
-  border: 1px solid transparent;
+  color: #587196;
+  background: #f8fbff;
+  border: 1px solid #d4e2f7;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
 }
 
 .modern-btn-ghost:hover {
-  color: #3b82f6;
-  background: #eff6ff;
+  color: var(--accent);
+  background: #eef4ff;
+  border-color: #bfd3f3;
 }
 
 .modern-btn-primary {
   padding: 0.6rem 1.25rem;
   border-radius: 0.75rem;
-  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #2f6fee 0%, #245fdb 100%);
   color: white;
   font-size: 0.9rem;
   font-weight: 600;
   border: none;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 8px 18px rgba(47, 111, 238, 0.28);
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
 }
 
 .modern-btn-primary:hover {
-  background: linear-gradient(135deg, #4338ca 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--accent-strong) 0%, #1f55c8 100%);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.34);
+}
+
+.table-shell {
+  border-radius: 16px;
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: var(--panel-shadow);
+}
+
+.table-shell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid #dce8f8;
+  background: linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%);
+}
+
+.table-shell-eyebrow {
+  margin: 0 0 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6f86aa;
+  font-weight: 700;
+}
+
+.table-shell-title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.2;
+  color: var(--ink-strong);
+  font-weight: 700;
+}
+
+.table-shell-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid #d5e3f7;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.table-shell-count {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1c3f72;
+}
+
+.table-shell-label {
+  font-size: 11px;
+  color: #748aa8;
 }
 
 /* 表格样式 */
 .modern-table :deep(.ant-table-thead > tr > th) {
-  background: #f8fafc;
-  color: #475569;
-  font-size: 0.75rem;
+  background: #f2f7ff;
+  color: #36547b;
+  font-size: 0.72rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0.65rem 0.75rem;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid #dbe7f5;
+  padding: 0.72rem 0.78rem;
 }
 
 .modern-table :deep(.ant-table-tbody > tr > td) {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 0.85rem;
+  padding: 0.58rem 0.78rem;
+  border-bottom: 1px solid #edf3fc;
+  font-size: 0.84rem;
+  color: #334f76;
 }
 
 .modern-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: #f8fafc !important;
+  background: #f3f8ff !important;
+}
+
+.modern-table :deep(.ant-table-row) {
+  transition: background-color 0.2s ease;
+}
+
+.rule-code-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 0.38rem 0.7rem;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f6faff 0%, #eaf2ff 100%);
+  border: 1px solid #d3e0f5;
+  color: #27456b;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.02em;
+}
+
+.rule-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  padding-right: 0.5rem;
+}
+
+.rule-main-title {
+  color: #102746;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.rule-main-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.rule-category-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rule-main-desc {
+  font-size: 11px;
+  color: #7a90ad;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.doc-pill-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.doc-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.doc-pill-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #6d86a9;
+  border: 1px solid #d8e5f7;
+  background: #f7fbff;
+  cursor: help;
 }
 
 /* 表格操作按钮 */
 .table-action-btn {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #3b82f6;
+  color: #2563eb;
   padding: 0.35rem 0.85rem;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #bad0f5;
   border-radius: 0.5rem;
-  background: #eff6ff;
+  background: #edf3ff;
   transition: all 0.2s;
 }
 .table-action-btn:hover {
-  background: #3b82f6;
+  background: #2563eb;
   color: white;
-  border-color: #3b82f6;
+  border-color: #2563eb;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
 }
 
 .icon-btn {
-  padding: 0.35rem;
-  border-radius: 0.5rem;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: #6f86aa;
+  background: #f7fbff;
+  border: 1px solid #dbe7f6;
+}
+
+.icon-btn:hover {
+  color: #2563eb;
+  background: #edf4ff;
+  border-color: #bed2f6;
 }
 
 .animate-fade-in-up {
   animation: fadeInUp 0.3s ease-out;
+}
+
+.block-enter {
+  animation: blockFadeIn 0.35s ease-out;
+}
+
+.block-enter-delayed {
+  animation: blockFadeIn 0.4s ease-out;
+}
+
+.block-enter-delayed-2 {
+  animation: blockFadeIn 0.45s ease-out;
+}
+
+@keyframes blockFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeInUp {
@@ -1214,6 +1772,42 @@ onMounted(() => {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 1280px) {
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-panel {
+    min-height: 190px;
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-context {
+    flex-direction: column;
+  }
+
+  .ops-kpis {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ops-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .table-shell-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 </style>

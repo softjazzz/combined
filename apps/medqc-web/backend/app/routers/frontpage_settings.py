@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from ..core.security import require_roles
 from ..services.frontpage_settings import (
     FrontpageExtractionSettings,
     load_frontpage_settings,
@@ -16,7 +17,11 @@ from ..services.frontpage_settings import (
     update_frontpage_settings,
 )
 
-router = APIRouter(prefix="/api/v1/frontpage/settings", tags=["Frontpage Settings"])
+router = APIRouter(
+    prefix="/api/v1/frontpage/settings",
+    tags=["Frontpage Settings"],
+    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+)
 
 
 class FrontpageSettingsResponse(BaseModel):
@@ -56,4 +61,3 @@ async def put_frontpage_settings(payload: FrontpageSettingsUpdateRequest):
 async def post_frontpage_settings_reset():
     settings = reset_frontpage_settings()
     return FrontpageSettingsResponse(settings=settings, source="default")
-

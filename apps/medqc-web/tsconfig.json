@@ -62,5 +62,8 @@
     "**/*.legacy.vue",
     "**/*-backup.vue.ts",
     "**/*.legacy.vue.ts"
-  ]
+  ],
+  "vueCompilerOptions": {
+    "strictTemplates": false
+  }
 }
