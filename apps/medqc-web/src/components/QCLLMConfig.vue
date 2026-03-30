@@ -40,9 +40,9 @@
       </template>
 
       <!-- 配置列表 -->
-      <a-table 
-        :columns="columns" 
-        :data-source="configs" 
+      <a-table
+        :columns="columns"
+        :data-source="configs"
         :loading="loading"
         row-key="config_id"
         :pagination="{ pageSize: 10 }"
@@ -53,7 +53,7 @@
               {{ getConfigTypeName(record.config_name) }}
             </a-tag>
           </template>
-          
+
           <template v-if="column.key === 'provider'">
             <div>
               <div class="provider-name">
@@ -64,30 +64,30 @@
               </div>
             </div>
           </template>
-          
+
           <template v-if="column.key === 'status'">
             <a-tag :color="record.is_active ? 'green' : 'red'">
               {{ record.is_active ? '启用' : '禁用' }}
             </a-tag>
           </template>
-          
+
           <template v-if="column.key === 'actions'">
             <a-space>
               <a-button
                 size="small"
-                @click="testConfig(record)"
+                @click="testConfig(record as LLMConfig)"
               >
                 测试
               </a-button>
               <a-button
                 size="small"
-                @click="editConfig(record)"
+                @click="editConfig(record as LLMConfig)"
               >
                 编辑
               </a-button>
               <a-popconfirm
                 title="确定要删除这个配置吗？"
-                @confirm="deleteConfig(record)"
+                @confirm="deleteConfig(record as LLMConfig)"
               >
                 <a-button
                   size="small"
@@ -140,14 +140,14 @@
           label="LLM提供商"
           name="provider_id"
         >
-          <a-select 
-            v-model:value="configFormData.provider_id" 
+          <a-select
+            v-model:value="configFormData.provider_id"
             placeholder="选择LLM提供商"
             @change="onProviderChange"
           >
-            <a-select-option 
-              v-for="provider in providers" 
-              :key="provider.id" 
+            <a-select-option
+              v-for="provider in providers"
+              :key="provider.id"
               :value="provider.id"
             >
               {{ provider.provider_name }}
@@ -163,14 +163,14 @@
             v-model:value="configFormData.model_id"
             placeholder="选择模型"
           >
-            <a-select-option 
-              v-for="model in availableModels" 
-              :key="model.id" 
+            <a-select-option
+              v-for="model in availableModels"
+              :key="model.id"
               :value="model.id"
             >
               <div>
                 <div>{{ model.model_name }}</div>
-                <div style="font-size: 12px; color: #666;">
+                <div style="font-size: 12px; color: #666">
                   {{ model.description }}
                 </div>
               </div>
@@ -182,8 +182,8 @@
           label="API密钥"
           name="api_key"
         >
-          <a-input-password 
-            v-model:value="configFormData.api_key" 
+          <a-input-password
+            v-model:value="configFormData.api_key"
             placeholder="输入API密钥"
           />
         </a-form-item>
@@ -192,14 +192,14 @@
           label="自定义端点"
           name="custom_endpoint"
         >
-          <a-input 
-            v-model:value="configFormData.custom_endpoint" 
+          <a-input
+            v-model:value="configFormData.custom_endpoint"
             placeholder="可选：自定义API端点"
           />
         </a-form-item>
 
         <a-form-item label="自定义参数">
-          <a-textarea 
+          <a-textarea
             v-model:value="customParametersText"
             placeholder="可选：JSON格式的自定义参数，如 {&quot;temperature&quot;: 0.1}"
             :rows="3"
@@ -320,7 +320,7 @@ import {
   ImportOutlined,
   ExportOutlined,
   ExperimentOutlined,
-  InboxOutlined
+  InboxOutlined,
 } from '@ant-design/icons-vue'
 
 type ConfigName = 'qc_analysis' | 'extraction' | 'default'
@@ -401,7 +401,9 @@ const importData = ref<ImportConfigItem[] | null>(null)
 // 测试相关状态
 const showTestModal = ref(false)
 const testing = ref(false)
-const testPrompt = ref('请分析以下医疗文档的质量：\n\n主诉：患者因胸痛3小时来院就诊。\n现病史：患者3小时前无明显诱因出现胸痛，呈压榨性，伴有出汗。')
+const testPrompt = ref(
+  '请分析以下医疗文档的质量：\n\n主诉：患者因胸痛3小时来院就诊。\n现病史：患者3小时前无明显诱因出现胸痛，呈压榨性，伴有出汗。',
+)
 
 // 表格列定义
 const columns = [
@@ -409,29 +411,29 @@ const columns = [
     title: '配置类型',
     dataIndex: 'config_name',
     key: 'config_name',
-    width: 120
+    width: 120,
   },
   {
     title: '提供商/模型',
     key: 'provider',
-    width: 200
+    width: 200,
   },
   {
     title: '端点',
     dataIndex: 'base_endpoint',
     key: 'endpoint',
-    ellipsis: true
+    ellipsis: true,
   },
   {
     title: '状态',
     key: 'status',
-    width: 80
+    width: 80,
   },
   {
     title: '操作',
     key: 'actions',
-    width: 150
-  }
+    width: 150,
+  },
 ]
 
 // 导入预览表格列
@@ -439,24 +441,24 @@ const previewColumns = [
   {
     title: '配置类型',
     dataIndex: 'config_name',
-    key: 'config_name'
+    key: 'config_name',
   },
   {
     title: '提供商',
     dataIndex: 'provider_name',
-    key: 'provider_name'
+    key: 'provider_name',
   },
   {
     title: '模型',
     dataIndex: 'model_name',
-    key: 'model_name'
+    key: 'model_name',
   },
   {
     title: '状态',
     dataIndex: 'is_active',
     key: 'is_active',
-    customRender: ({ text }: { text: boolean }) => text ? '启用' : '禁用'
-  }
+    customRender: ({ text }: { text: boolean }) => (text ? '启用' : '禁用'),
+  },
 ]
 
 // 表单数据
@@ -466,7 +468,7 @@ const configFormData = reactive({
   model_id: '',
   api_key: '',
   custom_endpoint: '',
-  custom_parameters: {} as Record<string, unknown>
+  custom_parameters: {} as Record<string, unknown>,
 })
 
 const customParametersText = ref('')
@@ -476,30 +478,30 @@ const configFormRules = {
   config_name: [{ required: true, message: '请选择配置类型' }],
   provider_id: [{ required: true, message: '请选择LLM提供商' }],
   model_id: [{ required: true, message: '请选择模型' }],
-  api_key: [{ required: true, message: '请输入API密钥' }]
+  api_key: [{ required: true, message: '请输入API密钥' }],
 }
 
 // 计算属性
 const availableModels = computed(() => {
   if (!configFormData.provider_id) return []
-  return models.value.filter(model => model.provider_id === configFormData.provider_id)
+  return models.value.filter((model) => model.provider_id === configFormData.provider_id)
 })
 
 // 方法
 const getConfigTypeColor = (configName: string) => {
   const colors = {
-    'qc_analysis': 'blue',
-    'extraction': 'green',
-    'default': 'orange'
+    qc_analysis: 'blue',
+    extraction: 'green',
+    default: 'orange',
   } as const
   return colors[configName as ConfigName] || 'default'
 }
 
 const getConfigTypeName = (configName: string) => {
   const names = {
-    'qc_analysis': '质控分析',
-    'extraction': '文档提取',
-    'default': '默认配置'
+    qc_analysis: '质控分析',
+    extraction: '文档提取',
+    default: '默认配置',
   } as const
   return names[configName as ConfigName] || configName
 }
@@ -580,16 +582,16 @@ const saveConfig = async () => {
       }
     }
 
-    const url = editingConfig.value 
+    const url = editingConfig.value
       ? `/api/qc/llm-configs/${editingConfig.value.config_id}`
       : '/api/qc/llm-configs'
-    
+
     const method = editingConfig.value ? 'PUT' : 'POST'
-    
+
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(configFormData)
+      body: JSON.stringify(configFormData),
     })
 
     if (response.ok) {
@@ -618,7 +620,7 @@ const testConfig = async (config: LLMConfig) => {
 const deleteConfig = async (config: LLMConfig) => {
   try {
     const response = await fetch(`/api/qc/llm-configs/${config.config_id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     })
 
     if (response.ok) {
@@ -636,17 +638,17 @@ const deleteConfig = async (config: LLMConfig) => {
 // 导出配置
 const exportConfigs = () => {
   try {
-    const exportData: ImportConfigItem[] = configs.value.map(config => ({
+    const exportData: ImportConfigItem[] = configs.value.map((config) => ({
       config_name: config.config_name,
       provider_name: config.provider_name,
       model_name: config.model_name,
       custom_endpoint: config.custom_endpoint,
       custom_parameters: config.custom_parameters,
-      is_active: config.is_active
+      is_active: config.is_active,
     }))
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json'
+      type: 'application/json',
     })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -695,9 +697,10 @@ const importConfigs = async () => {
 
   importing.value = true
   try {
-    const baseURL = window.location.hostname === 'localhost'
-      ? 'http://localhost:8001'
-      : 'http://124.220.6.136:8001'
+    const baseURL =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:8001'
+        : 'http://124.220.6.136:8001'
 
     for (const config of importData.value) {
       const response = await fetch(`${baseURL}/api/qc/llm-configs`, {
@@ -705,7 +708,7 @@ const importConfigs = async () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config)
+        body: JSON.stringify(config),
       })
 
       if (!response.ok) {
@@ -718,7 +721,6 @@ const importConfigs = async () => {
     showImportModal.value = false
     cancelImport()
     refreshConfigs()
-
   } catch (error: unknown) {
     console.error('导入失败:', error)
     message.error(`导入失败: ${getErrorMessage(error)}`)
@@ -747,9 +749,10 @@ const runConfigTest = async () => {
 
   testing.value = true
   try {
-    const baseURL = window.location.hostname === 'localhost'
-      ? 'http://localhost:8001'
-      : 'http://124.220.6.136:8001'
+    const baseURL =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:8001'
+        : 'http://124.220.6.136:8001'
 
     const startTime = Date.now()
     const response = await fetch(`${baseURL}/api/qc/llm-configs/test`, {
@@ -759,8 +762,8 @@ const runConfigTest = async () => {
       },
       body: JSON.stringify({
         config_id: editingConfig.value.config_id,
-        test_prompt: testPrompt.value
-      })
+        test_prompt: testPrompt.value,
+      }),
     })
 
     const responseTime = Date.now() - startTime
@@ -777,20 +780,19 @@ const runConfigTest = async () => {
       message: '测试成功',
       response_time: responseTime,
       response: result.response,
-      details: result.details
+      details: result.details,
     }
 
     message.success('配置测试成功')
     showTestModal.value = false
     testModalVisible.value = true
-
   } catch (error: unknown) {
     console.error('测试失败:', error)
     testResult.value = {
       success: false,
       response_time: 0,
       message: getErrorMessage(error),
-      error: getErrorMessage(error)
+      error: getErrorMessage(error),
     }
 
     showTestModal.value = false

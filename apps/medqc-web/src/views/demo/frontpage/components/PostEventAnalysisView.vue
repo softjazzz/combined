@@ -71,7 +71,13 @@
       </a-select>
       <a-dropdown>
         <template #overlay>
-          <a-menu @click="handleExport">
+          <a-menu
+            @click="
+              (info) => {
+                void handleExport(info)
+              }
+            "
+          >
             <a-menu-item key="excel">
               <FileExcelOutlined /> 导出 Excel
             </a-menu-item>
@@ -317,6 +323,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import axios from 'axios'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import DrillDownModal from './DrillDownModal.vue'
 import OverCostAnalysisCard from './OverCostAnalysisCard.vue'
 import {
@@ -1653,7 +1660,8 @@ const buildMockExportPayload = () => {
 }
 
 // Export handler - use fetch to properly go through proxy
-const handleExport = async ({ key }: { key: string }) => {
+const handleExport = async ({ key }: MenuInfo) => {
+  const keyStr = String(key)
   const formatMap: Record<string, { ext: string; mime: string; name: string }> = {
     excel: {
       ext: 'xlsx',
@@ -1668,11 +1676,11 @@ const handleExport = async ({ key }: { key: string }) => {
     },
   }
 
-  const format = formatMap[key]
+  const format = formatMap[keyStr]
   if (!format) return
 
   if (useDemoData.value || !props.sessionId) {
-    exportDrgMockReport(key as DrgExportFormat, buildMockExportPayload())
+    exportDrgMockReport(keyStr as DrgExportFormat, buildMockExportPayload())
     message.warning(`当前缺少 session_id，已导出 ${format.name} 演示报告`)
     return
   }

@@ -130,12 +130,13 @@ import { ref, computed, watch } from 'vue'
 import { useClinicalWorkstationStore } from '@/stores/clinicalWorkstation'
 import { DocumentType } from '@/types/clinical-workstation'
 import type { Document } from '@/types/clinical-workstation'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   FileTextOutlined,
   FileOutlined,
   FolderOpenOutlined,
   FileUnknownOutlined,
-  EditOutlined
+  EditOutlined,
 } from '@ant-design/icons-vue'
 
 // ========== Store ==========
@@ -174,7 +175,7 @@ const sortedDocuments = computed(() => {
     [DocumentType.ROUNDS]: 15,
     [DocumentType.RESCUE]: 16,
     [DocumentType.DISCHARGE]: 17,
-    [DocumentType.OTHER]: 99
+    [DocumentType.OTHER]: 99,
   }
 
   return docs.sort((a, b) => {
@@ -201,7 +202,7 @@ watch(
       selectedKeys.value = []
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 /**
@@ -213,7 +214,7 @@ watch(
     if (!openKeys.value.includes('documents')) {
       openKeys.value.push('documents')
     }
-  }
+  },
 )
 
 // ========== Methods ==========
@@ -221,13 +222,14 @@ watch(
 /**
  * 菜单选择事件
  */
-function handleMenuSelect({ key }: { key: string }) {
-  if (key === 'frontpage' || key === 'frontpage-medical' || key === 'write-record') {
+function handleMenuSelect({ key }: MenuInfo) {
+  const keyStr = String(key)
+  if (keyStr === 'frontpage' || keyStr === 'frontpage-medical' || keyStr === 'write-record') {
     return
   }
 
   // 选择文书
-  store.selectDocument(key)
+  store.selectDocument(keyStr)
 }
 
 /**

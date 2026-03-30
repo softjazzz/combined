@@ -57,104 +57,112 @@
           row-key="admission_id"
           :custom-row="customRow"
         >
-          <template #groupingStatus="{ record }">
-            <a-tag
-              v-if="record.groupingStatus === 'grouped'"
-              color="success"
-            >
-              入组成功
-            </a-tag>
-            <a-tag
-              v-else
-              color="error"
-            >
-              未入组
-            </a-tag>
-          </template>
-
-          <template #drg="{ record }">
-            <span v-if="record.grouping">
-              {{ record.grouping.drg_code }}
-              <span style="color: #999">{{ record.grouping.drg_name }}</span>
-            </span>
-            <span v-else>-</span>
-          </template>
-
-          <template #baseline="{ record }">
-            <span v-if="typeof record.baselinePayment === 'number'">{{ formatCurrency(record.baselinePayment) }}</span>
-            <span v-else>-</span>
-          </template>
-
-          <template #actualCost="{ record }">
-            <span>{{ formatCurrency(record.actualCost) }}</span>
-          </template>
-
-          <template #costRate="{ record }">
-            <span v-if="typeof record.costRate === 'number'">
-              <a-tag :color="record.costRate > 120 ? 'error' : record.costRate > 100 ? 'warning' : 'success'">
-                {{ formatPercentage(record.costRate, 2) }}
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'groupingStatus'">
+              <a-tag
+                v-if="record.groupingStatus === 'grouped'"
+                color="success"
+              >
+                入组成功
               </a-tag>
-            </span>
-            <span v-else>-</span>
-          </template>
+              <a-tag
+                v-else
+                color="error"
+              >
+                未入组
+              </a-tag>
+            </template>
 
-          <template #profit="{ record }">
-            <span
-              v-if="typeof record.profitMargin === 'number'"
-              :style="{ color: record.profitMargin >= 0 ? '#3f8600' : '#cf1322' }"
-            >
-              {{ formatCurrency(record.profitMargin) }}
-            </span>
-            <span v-else>-</span>
-          </template>
+            <template v-else-if="column.key === 'drg'">
+              <span v-if="record.grouping">
+                {{ record.grouping.drg_code }}
+                <span style="color: #999">{{ record.grouping.drg_name }}</span>
+              </span>
+              <span v-else>-</span>
+            </template>
 
-          <template #ungroupedReason="{ record }">
-            <div class="cell-wrap">
-              <div class="cell-ellipsis">
-                {{ record.ungroupedReason || '-' }}
+            <template v-else-if="column.key === 'baseline'">
+              <span v-if="typeof record.baselinePayment === 'number'">{{
+                formatCurrency(record.baselinePayment)
+              }}</span>
+              <span v-else>-</span>
+            </template>
+
+            <template v-else-if="column.key === 'actualCost'">
+              <span>{{ formatCurrency(record.actualCost) }}</span>
+            </template>
+
+            <template v-else-if="column.key === 'costRate'">
+              <span v-if="typeof record.costRate === 'number'">
+                <a-tag
+                  :color="
+                    record.costRate > 120 ? 'error' : record.costRate > 100 ? 'warning' : 'success'
+                  "
+                >
+                  {{ formatPercentage(record.costRate, 2) }}
+                </a-tag>
+              </span>
+              <span v-else>-</span>
+            </template>
+
+            <template v-else-if="column.key === 'profit'">
+              <span
+                v-if="typeof record.profitMargin === 'number'"
+                :style="{ color: record.profitMargin >= 0 ? '#3f8600' : '#cf1322' }"
+              >
+                {{ formatCurrency(record.profitMargin) }}
+              </span>
+              <span v-else>-</span>
+            </template>
+
+            <template v-else-if="column.key === 'ungroupedReason'">
+              <div class="cell-wrap">
+                <div class="cell-ellipsis">
+                  {{ record.ungroupedReason || '-' }}
+                </div>
+                <a-button
+                  v-if="record.ungroupedReason"
+                  type="link"
+                  size="small"
+                  @click.stop="openDrawer(record as FeeMonitoringRow, 'fix')"
+                >
+                  详情
+                </a-button>
               </div>
+            </template>
+
+            <template v-else-if="column.key === 'fixSuggestion'">
+              <div class="cell-wrap">
+                <div class="cell-ellipsis">
+                  {{ record.fixSuggestion || '-' }}
+                </div>
+                <a-button
+                  v-if="record.fixSuggestion"
+                  type="link"
+                  size="small"
+                  @click.stop="openDrawer(record as FeeMonitoringRow, 'fix')"
+                >
+                  详情
+                </a-button>
+              </div>
+            </template>
+
+            <template v-else-if="column.key === 'action'">
               <a-button
-                v-if="record.ungroupedReason"
                 type="link"
                 size="small"
-                @click.stop="openDrawer(record, 'fix')"
+                @click.stop="openDrawer(record as FeeMonitoringRow)"
               >
                 详情
               </a-button>
-            </div>
-          </template>
-
-          <template #fixSuggestion="{ record }">
-            <div class="cell-wrap">
-              <div class="cell-ellipsis">
-                {{ record.fixSuggestion || '-' }}
-              </div>
               <a-button
-                v-if="record.fixSuggestion"
                 type="link"
                 size="small"
-                @click.stop="openDrawer(record, 'fix')"
+                @click.stop="goFix((record as FeeMonitoringRow).admission_id)"
               >
-                详情
+                去修正
               </a-button>
-            </div>
-          </template>
-
-          <template #action="{ record }">
-            <a-button
-              type="link"
-              size="small"
-              @click.stop="openDrawer(record)"
-            >
-              详情
-            </a-button>
-            <a-button
-              type="link"
-              size="small"
-              @click.stop="goFix(record.admission_id)"
-            >
-              去修正
-            </a-button>
+            </template>
           </template>
         </a-table>
       </a-card>
@@ -238,7 +246,9 @@
                       权重
                     </div>
                     <div class="kpi-value">
-                      <span v-if="selectedRow.grouping">{{ formatWeight(selectedRow.grouping.weight) }}</span>
+                      <span v-if="selectedRow.grouping">{{
+                        formatWeight(selectedRow.grouping.weight)
+                      }}</span>
                       <span v-else>-</span>
                     </div>
                   </div>
@@ -247,7 +257,9 @@
                       付费标准
                     </div>
                     <div class="kpi-value">
-                      <span v-if="typeof selectedRow.baselinePayment === 'number'">{{ formatCurrency(selectedRow.baselinePayment) }}</span>
+                      <span v-if="typeof selectedRow.baselinePayment === 'number'">{{
+                        formatCurrency(selectedRow.baselinePayment)
+                      }}</span>
                       <span v-else>-</span>
                     </div>
                   </div>
@@ -268,9 +280,17 @@
                     </div>
                     <div
                       class="kpi-value"
-                      :style="{ color: typeof selectedRow.profitMargin === 'number' && selectedRow.profitMargin < 0 ? '#cf1322' : '#3f8600' }"
+                      :style="{
+                        color:
+                          typeof selectedRow.profitMargin === 'number' &&
+                          selectedRow.profitMargin < 0
+                            ? '#cf1322'
+                            : '#3f8600',
+                      }"
                     >
-                      <span v-if="typeof selectedRow.profitMargin === 'number'">{{ formatCurrency(selectedRow.profitMargin) }}</span>
+                      <span v-if="typeof selectedRow.profitMargin === 'number'">{{
+                        formatCurrency(selectedRow.profitMargin)
+                      }}</span>
                       <span v-else>-</span>
                     </div>
                   </div>
@@ -282,20 +302,33 @@
                   <div class="kpi-bar-title">
                     <span>支付率</span>
                     <span class="kpi-bar-value">
-                      <span v-if="typeof selectedRow.costRate === 'number'">{{ formatPercentage(selectedRow.costRate, 2) }}</span>
+                      <span v-if="typeof selectedRow.costRate === 'number'">{{
+                        formatPercentage(selectedRow.costRate, 2)
+                      }}</span>
                       <span v-else>-</span>
                     </span>
                   </div>
                   <a-progress
-                    :percent="typeof selectedRow.costRate === 'number' ? Math.min(100, selectedRow.costRate) : 0"
-                    :status="typeof selectedRow.costRate === 'number' && selectedRow.costRate > 120 ? 'exception' : 'active'"
+                    :percent="
+                      typeof selectedRow.costRate === 'number'
+                        ? Math.min(100, selectedRow.costRate)
+                        : 0
+                    "
+                    :status="
+                      typeof selectedRow.costRate === 'number' && selectedRow.costRate > 120
+                        ? 'exception'
+                        : 'active'
+                    "
                     size="small"
                     :show-info="false"
                   />
                 </div>
 
                 <div
-                  v-if="typeof selectedRow.profitMargin === 'number' && typeof selectedRow.baselinePayment === 'number'"
+                  v-if="
+                    typeof selectedRow.profitMargin === 'number' &&
+                      typeof selectedRow.baselinePayment === 'number'
+                  "
                   class="kpi-bar"
                 >
                   <div class="kpi-bar-title">
@@ -308,7 +341,14 @@
                     </span>
                   </div>
                   <a-progress
-                    :percent="Math.min(100, (Math.max(0, -selectedRow.profitMargin) / Math.max(1, selectedRow.baselinePayment)) * 100)"
+                    :percent="
+                      Math.min(
+                        100,
+                        (Math.max(0, -selectedRow.profitMargin) /
+                          Math.max(1, selectedRow.baselinePayment)) *
+                          100,
+                      )
+                    "
                     status="exception"
                     size="small"
                     :show-info="false"
@@ -353,7 +393,9 @@
                   {{ formatCurrency(selectedRow.actualCost) }}
                 </a-descriptions-item>
                 <a-descriptions-item label="预估医保支付价格">
-                  <span v-if="typeof selectedRow.baselinePayment === 'number'">{{ formatCurrency(selectedRow.baselinePayment) }}</span>
+                  <span v-if="typeof selectedRow.baselinePayment === 'number'">{{
+                    formatCurrency(selectedRow.baselinePayment)
+                  }}</span>
                   <span v-else>-</span>
                 </a-descriptions-item>
                 <a-descriptions-item label="医保支付率检测">
@@ -539,7 +581,16 @@
                           :style="{ width: '120px' }"
                         />
                       </template>
-                      <div style="height: 320px; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px;">
+                      <div
+                        style="
+                          height: 320px;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          background: #fafafa;
+                          border-radius: 8px;
+                        "
+                      >
                         <a-skeleton-image />
                       </div>
                     </a-card>
@@ -557,7 +608,16 @@
                           :style="{ width: '120px' }"
                         />
                       </template>
-                      <div style="height: 320px; display: flex; align-items: center; justify-content: center; background: #fafafa; border-radius: 8px;">
+                      <div
+                        style="
+                          height: 320px;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          background: #fafafa;
+                          border-radius: 8px;
+                        "
+                      >
                         <a-skeleton-avatar
                           :size="120"
                           active
@@ -567,7 +627,7 @@
                     </a-card>
                   </a-col>
                 </a-row>
-                
+
                 <!-- 第三行：高值耗材骨架屏 -->
                 <a-card
                   size="small"
@@ -588,7 +648,14 @@
                       :key="i"
                       :span="8"
                     >
-                      <div style="height: 120px; background: #fafafa; border-radius: 8px; padding: 16px;">
+                      <div
+                        style="
+                          height: 120px;
+                          background: #fafafa;
+                          border-radius: 8px;
+                          padding: 16px;
+                        "
+                      >
                         <a-skeleton
                           active
                           avatar
@@ -632,11 +699,11 @@
                         {{ formatPercentage(selectedRow?.costRate || 0, 1) }}
                       </div>
                       <div class="stat-bar">
-                        <a-progress 
-                          :percent="Math.min(100, selectedRow?.costRate || 0)" 
-                          :show-info="false" 
+                        <a-progress
+                          :percent="Math.min(100, selectedRow?.costRate || 0)"
+                          :show-info="false"
                           :stroke-color="{ '0%': '#9254de', '100%': '#b37feb' }"
-                          size="small" 
+                          size="small"
                         />
                       </div>
                     </div>
@@ -644,17 +711,33 @@
                   <a-col :span="8">
                     <div
                       class="stat-card"
-                      :class="typeof selectedRow?.profitMargin === 'number' && selectedRow.profitMargin < 0 ? 'red' : 'green'"
+                      :class="
+                        typeof selectedRow?.profitMargin === 'number' &&
+                          selectedRow.profitMargin < 0
+                          ? 'red'
+                          : 'green'
+                      "
                     >
                       <div class="stat-label">
                         预估盈亏
                       </div>
                       <div class="stat-value">
-                        {{ typeof selectedRow?.profitMargin === 'number' ? (selectedRow.profitMargin > 0 ? '+' : '') : '' }}
+                        {{
+                          typeof selectedRow?.profitMargin === 'number'
+                            ? selectedRow.profitMargin > 0
+                              ? '+'
+                              : ''
+                            : ''
+                        }}
                         {{ formatCurrency(selectedRow?.profitMargin) }}
                       </div>
                       <div class="stat-trend">
-                        <span v-if="typeof selectedRow?.profitMargin === 'number' && selectedRow.profitMargin < 0">
+                        <span
+                          v-if="
+                            typeof selectedRow?.profitMargin === 'number' &&
+                              selectedRow.profitMargin < 0
+                          "
+                        >
                           建议重点管控高值耗材
                         </span>
                         <span v-else>费用控制良好</span>
@@ -679,10 +762,10 @@
                           费用累计趋势
                         </div>
                       </template>
-                      <FeeTrendChart 
-                        v-if="feeTrend.length > 0" 
-                        :trend="feeTrend" 
-                        :baseline-payment="selectedRow?.baselinePayment || null" 
+                      <FeeTrendChart
+                        v-if="feeTrend.length > 0"
+                        :trend="feeTrend"
+                        :baseline-payment="selectedRow?.baselinePayment || null"
                       />
                       <a-empty
                         v-else
@@ -714,7 +797,7 @@
                     </a-card>
                   </a-col>
                 </a-row>
-                
+
                 <!-- 第三行：高值耗材 -->
                 <a-card
                   size="small"
@@ -880,7 +963,13 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { message, Empty } from 'ant-design-vue'
-import { CopyOutlined, ReloadOutlined, WarningOutlined, DownloadOutlined } from '@ant-design/icons-vue'
+import type { TableColumnsType } from 'ant-design-vue'
+import {
+  CopyOutlined,
+  ReloadOutlined,
+  WarningOutlined,
+  DownloadOutlined,
+} from '@ant-design/icons-vue'
 import type { FeeMonitoringRow } from '@/types/drg-fee'
 import { useFeeMonitoring } from '@/composables/drg/useFeeMonitoring'
 import { exportToExcel } from '@/utils/export'
@@ -893,7 +982,7 @@ import {
   formatDateTime,
   formatPercentage,
   formatWeight,
-  getGenderText
+  getGenderText,
 } from '@/utils/drg'
 
 const {
@@ -910,7 +999,7 @@ const {
   loadData,
   filteredRows,
   openDrawer,
-  goFix
+  goFix,
 } = useFeeMonitoring()
 
 const listTabOptions = [
@@ -918,10 +1007,10 @@ const listTabOptions = [
   { label: '高倍率', value: 'highRate' },
   { label: '基础组', value: 'base' },
   { label: '更优推荐', value: 'better' },
-  { label: '未入组', value: 'ungrouped' }
+  { label: '未入组', value: 'ungrouped' },
 ]
 
-const columns = [
+const columns: TableColumnsType<FeeMonitoringRow> = [
   { title: '住院号', dataIndex: 'admission_id', width: 160 },
   { title: '出院科室', dataIndex: 'department', width: 140 },
   { title: '姓名', dataIndex: 'patient_name', width: 110 },
@@ -930,37 +1019,43 @@ const columns = [
     dataIndex: 'primary_diagnosis_name',
     width: 260,
     ellipsis: true,
-    customRender: ({ record }: any) => `${record.primary_diagnosis_code || ''} ${record.primary_diagnosis_name || ''}`
+    customRender: ({ record }: any) =>
+      `${record.primary_diagnosis_code || ''} ${record.primary_diagnosis_name || ''}`,
   },
   {
     title: '入院时间',
     dataIndex: 'admitAt',
     width: 160,
-    customRender: ({ text }: any) => formatDateTime(text)
+    customRender: ({ text }: any) => formatDateTime(text),
   },
   {
     title: '出院时间',
     dataIndex: 'dischargeAt',
     width: 160,
-    customRender: ({ text }: any) => formatDateTime(text)
+    customRender: ({ text }: any) => formatDateTime(text),
   },
-  { title: '入组状态', key: 'groupingStatus', width: 100, slots: { customRender: 'groupingStatus' } },
+  {
+    title: '入组状态',
+    key: 'groupingStatus',
+    width: 100,
+    slots: { customRender: 'groupingStatus' },
+  },
   { title: 'DRG', key: 'drg', width: 260, slots: { customRender: 'drg' } },
   {
     title: '是否命中基础组',
     dataIndex: 'isBaseGroup',
     width: 140,
-    customRender: ({ text }: any) => (text === true ? '是' : text === false ? '否' : '-')
+    customRender: ({ text }: any) => (text === true ? '是' : text === false ? '否' : '-'),
   },
   {
     title: '结算类型',
     dataIndex: 'settlementType',
-    width: 140
+    width: 140,
   },
   {
     title: '结算办法',
     dataIndex: 'settlementMethod',
-    width: 140
+    width: 140,
   },
   { title: '付费标准', key: 'baseline', width: 140, slots: { customRender: 'baseline' } },
   { title: '医疗总费用', key: 'actualCost', width: 140, slots: { customRender: 'actualCost' } },
@@ -968,7 +1063,7 @@ const columns = [
     title: '个人自费(元)',
     dataIndex: 'selfPay',
     width: 140,
-    customRender: ({ text }: any) => formatCurrency(text)
+    customRender: ({ text }: any) => formatCurrency(text),
   },
   { title: '支付率', key: 'costRate', width: 120, slots: { customRender: 'costRate' } },
   { title: '盈亏', key: 'profit', width: 140, slots: { customRender: 'profit' } },
@@ -976,15 +1071,21 @@ const columns = [
     title: '未入组原因',
     key: 'ungroupedReason',
     width: 240,
-    slots: { customRender: 'ungroupedReason' }
+    slots: { customRender: 'ungroupedReason' },
   },
   {
     title: '修正建议',
     key: 'fixSuggestion',
     width: 320,
-    slots: { customRender: 'fixSuggestion' }
+    slots: { customRender: 'fixSuggestion' },
   },
-  { title: '操作', key: 'action', width: 140, fixed: 'right', slots: { customRender: 'action' } }
+  {
+    title: '操作',
+    key: 'action',
+    width: 140,
+    fixed: 'right' as const,
+    slots: { customRender: 'action' },
+  },
 ]
 
 const exporting = ref(false)
@@ -999,7 +1100,7 @@ const handleExport = async () => {
   try {
     const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '')
     const fileName = `费用监测清单_${activeListTab.value}_${dateTag}`
-    
+
     const headerMap: Record<string, string> = {
       admission_id: '住院号',
       department: '科室',
@@ -1012,15 +1113,15 @@ const handleExport = async () => {
       costRate: '支付率',
       profitMargin: '盈亏(元)',
       ungroupedReason: '未入组原因',
-      fixSuggestion: '修正建议'
+      fixSuggestion: '修正建议',
     }
 
     // 处理数据格式，特别是嵌套对象和日期
-    const exportData = filteredRows.value.map(row => ({
+    const exportData = filteredRows.value.map((row) => ({
       ...row,
       drg_code: row.grouping?.drg_code || '-',
       admitAt: formatDateTime(row.admitAt),
-      costRate: typeof row.costRate === 'number' ? formatPercentage(row.costRate) : '-'
+      costRate: typeof row.costRate === 'number' ? formatPercentage(row.costRate) : '-',
     }))
 
     exportToExcel(exportData, fileName, '费用清单', headerMap)
@@ -1048,24 +1149,26 @@ const drawerSuggestions = computed(() => {
     return [
       {
         title: '存在更优入组选项（演示）',
-        description: '当前编码可能导致入组不稳定，建议核对主要诊断/主要手术是否一致，并检查并发症标记。'
-      }
+        description:
+          '当前编码可能导致入组不稳定，建议核对主要诊断/主要手术是否一致，并检查并发症标记。',
+      },
     ]
   }
 
   return [
     {
       title: '补充/修正主要手术或主要诊断',
-      description: '在忽略此手术操作代码的情况下，可以入到相关的DRG组。建议核对“主要手术或操作”是否填写正确。'
+      description:
+        '在忽略此手术操作代码的情况下，可以入到相关的DRG组。建议核对“主要手术或操作”是否填写正确。',
     },
     {
       title: '修正主要手术或操作为“主要手术或操作”',
-      description: '如果主要手术未被选择为“主要手术或操作”，仍然无法预入组。'
+      description: '如果主要手术未被选择为“主要手术或操作”，仍然无法预入组。',
     },
     {
       title: '找相似度最高3个手术操作',
-      description: '可用于替换：腹腔镜下阑门肌层切开术 / 腹腔镜下胃病损切除术 / …（演示占位）'
-    }
+      description: '可用于替换：腹腔镜下阑门肌层切开术 / 腹腔镜下胃病损切除术 / …（演示占位）',
+    },
   ]
 })
 
@@ -1074,12 +1177,13 @@ const drawerMoreSuggestions = computed(() => {
   return [
     {
       title: '以更合适的主要诊断尝试入组（演示）',
-      description: '若以“创伤性蛛网膜下出血（S06.600）”为主要诊断，可尝试入组ZB19（多发性严重创伤开胸术）等。'
+      description:
+        '若以“创伤性蛛网膜下出血（S06.600）”为主要诊断，可尝试入组ZB19（多发性严重创伤开胸术）等。',
     },
     {
       title: '关注费用消耗与高值耗材',
-      description: '支付率接近或超过100%时，建议提前控制关键费用结构，并关注后续医疗行为。'
-    }
+      description: '支付率接近或超过100%时，建议提前控制关键费用结构，并关注后续医疗行为。',
+    },
   ]
 })
 
@@ -1091,7 +1195,7 @@ const showSuggestionDetail = (title: string, content: string) => {
 
 const customRow = (record: FeeMonitoringRow) => {
   return {
-    onClick: () => openDrawer(record)
+    onClick: () => openDrawer(record),
   }
 }
 
@@ -1193,15 +1297,27 @@ onMounted(() => {
     border: 1px solid #f0f0f0;
 
     &:hover {
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
       border-color: #e6f7ff;
       background: #fff;
     }
 
-    &.blue { background: linear-gradient(135deg, #e6f7ff 0%, #f0f5ff 100%); border-color: #adc6ff; }
-    &.purple { background: linear-gradient(135deg, #f9f0ff 0%, #f3e6ff 100%); border-color: #d3adf7; }
-    &.red { background: linear-gradient(135deg, #fff1f0 0%, #fff2e8 100%); border-color: #ffccc7; }
-    &.green { background: linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%); border-color: #b7eb8f; }
+    &.blue {
+      background: linear-gradient(135deg, #e6f7ff 0%, #f0f5ff 100%);
+      border-color: #adc6ff;
+    }
+    &.purple {
+      background: linear-gradient(135deg, #f9f0ff 0%, #f3e6ff 100%);
+      border-color: #d3adf7;
+    }
+    &.red {
+      background: linear-gradient(135deg, #fff1f0 0%, #fff2e8 100%);
+      border-color: #ffccc7;
+    }
+    &.green {
+      background: linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%);
+      border-color: #b7eb8f;
+    }
 
     .stat-label {
       font-size: 13px;
@@ -1213,7 +1329,11 @@ onMounted(() => {
       font-size: 24px;
       font-weight: 600;
       color: #262626;
-      font-family: 'Din Alternate', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family:
+        'Din Alternate',
+        -apple-system,
+        BlinkMacSystemFont,
+        sans-serif;
       margin-bottom: 8px;
     }
 
@@ -1224,7 +1344,7 @@ onMounted(() => {
       align-items: center;
       gap: 4px;
     }
-    
+
     .stat-bar {
       margin-top: 4px;
     }
@@ -1237,7 +1357,7 @@ onMounted(() => {
     transition: all 0.3s;
 
     &:hover {
-      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
       border-color: #e6f7ff;
     }
 
@@ -1245,19 +1365,19 @@ onMounted(() => {
       min-height: 48px;
       padding: 0 16px;
       border-bottom: 1px solid #f5f5f5;
-      
+
       .ant-card-head-title {
         padding: 12px 0;
       }
     }
-    
+
     .card-title {
       font-weight: 600;
       font-size: 14px;
       color: #1f1f1f;
       display: flex;
       align-items: center;
-      
+
       &::before {
         content: '';
         display: block;

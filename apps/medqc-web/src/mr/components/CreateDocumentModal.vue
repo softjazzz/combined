@@ -114,7 +114,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 
 interface DocumentType {
   id: string
@@ -151,12 +151,12 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
   recordId: '',
-  documentTypes: () => []
+  documentTypes: () => [],
 })
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  'success': [document: unknown]
+  success: [document: unknown]
 }>()
 
 // 响应式数据
@@ -167,30 +167,31 @@ const formData = reactive<CreateDocumentForm>({
   documentType: '',
   title: '',
   content: '',
-  summary: ''
+  summary: '',
 })
 
 // 表单验证规则
-const rules = {
-  documentType: [
-    { required: true, message: '请选择文档类型', trigger: 'change' }
-  ],
+const rules: FormProps['rules'] = {
+  documentType: [{ required: true, message: '请选择文档类型', trigger: 'change' }],
   title: [
     { required: true, message: '请输入文档标题', trigger: 'blur' },
-    { min: 2, max: 200, message: '标题长度应在2-200字符之间', trigger: 'blur' }
+    { min: 2, max: 200, message: '标题长度应在2-200字符之间', trigger: 'blur' },
   ],
   content: [
     { required: true, message: '请输入文档内容', trigger: 'blur' },
-    { min: 10, message: '内容至少需要10个字符', trigger: 'blur' }
-  ]
+    { min: 10, message: '内容至少需要10个字符', trigger: 'blur' },
+  ],
 }
 
 // 监听visible变化，重置表单
-watch(() => props.visible, (newVisible) => {
-  if (newVisible) {
-    resetForm()
-  }
-})
+watch(
+  () => props.visible,
+  (newVisible) => {
+    if (newVisible) {
+      resetForm()
+    }
+  },
+)
 
 // 重置表单
 const resetForm = () => {
@@ -206,8 +207,10 @@ const filterOption = (input: string, option: unknown) => {
   const normalized = (option || {}) as { label?: string; value?: string }
   const label = normalized.label || ''
   const value = normalized.value || ''
-  return label.toLowerCase().includes(input.toLowerCase()) ||
-         value.toLowerCase().includes(input.toLowerCase())
+  return (
+    label.toLowerCase().includes(input.toLowerCase()) ||
+    value.toLowerCase().includes(input.toLowerCase())
+  )
 }
 
 // 处理类型变化
@@ -215,8 +218,8 @@ const handleTypeChange = (value: string) => {
   // 根据选择的类型自动填充标题建议
   if (value && !formData.title) {
     const [categoryCode, typeCode] = value.split('.')
-    const category = props.documentTypes.find(cat => cat.category_code === categoryCode)
-    const type = category?.types.find(t => t.type_code === typeCode)
+    const category = props.documentTypes.find((cat) => cat.category_code === categoryCode)
+    const type = category?.types.find((t) => t.type_code === typeCode)
     if (type) {
       formData.title = type.type_name
     }
@@ -230,22 +233,22 @@ const handleSubmit = async () => {
     loading.value = true
 
     const [categoryCode, typeCode] = formData.documentType.split('.')
-    
+
     const requestData = {
       title: formData.title,
       content: formData.content,
       summary: formData.summary || undefined,
       document_type: formData.documentType,
       category_code: categoryCode,
-      type_code: typeCode
+      type_code: typeCode,
     }
 
     const response = await fetch(`/api/medical-records/${props.recordId}/documents`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestData)
+      body: JSON.stringify(requestData),
     })
 
     if (!response.ok) {
@@ -254,11 +257,10 @@ const handleSubmit = async () => {
     }
 
     const result = await response.json()
-    
+
     message.success('文档创建成功')
     emit('success', result.document)
     emit('update:visible', false)
-    
   } catch (error: unknown) {
     console.error('创建文档失败:', error)
     message.error(error instanceof Error ? error.message : '创建文档失败')
