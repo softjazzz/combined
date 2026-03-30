@@ -305,9 +305,8 @@
                     }}
                   </div>
 
-                  <EMRViewer
+                  <AsyncEMRViewer
                     v-if="selectedRecord && emrRenderState !== 'fallback'"
-                    ref="emrViewerRef"
                     :record-id="selectedRecord.id"
                     :visit-id="selectedRecord.visitId || selectedRecord.id"
                     :patient-id="selectedRecord.patientId"
@@ -844,7 +843,7 @@
               <div
                 class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]"
               >
-                <AIProfileDashboard
+                <AsyncAIProfileDashboard
                   :frontpage="frontpageDraft"
                   :medical-text="combinedMedicalText"
                   style="height: 100%; overflow-y: auto"
@@ -993,7 +992,7 @@
               <div
                 class="rounded-[18px] border border-white/85 bg-white/88 p-1 shadow-[0_10px_22px_rgba(15,23,42,0.05)]"
               >
-                <DRGGroupingTab
+                <AsyncDRGGroupingTab
                   :drg-result="drgResult"
                   :loading="drgLoading"
                   :has-frontpage="!!frontpageDraft"
@@ -1425,9 +1424,9 @@
           </div>
         </header>
         <div class="flex-1 p-6">
-          <CodingRulesTab v-if="rulesSubTab === 'coding'" />
-          <FrontpageRulesOverview v-else-if="rulesSubTab === 'frontpage'" />
-          <SettlementRulesOverview v-else-if="rulesSubTab === 'settlement'" />
+          <AsyncCodingRulesTab v-if="rulesSubTab === 'coding'" />
+          <AsyncFrontpageRulesOverview v-else-if="rulesSubTab === 'frontpage'" />
+          <AsyncSettlementRulesOverview v-else-if="rulesSubTab === 'settlement'" />
         </div>
       </main>
     </template>
@@ -1435,7 +1434,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiClient } from '@/services/apiService'
 import { message, Modal } from 'ant-design-vue'
@@ -1458,24 +1457,17 @@ import {
   ScanOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
-import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
-import EMRViewer from '@/components/qc/EMRViewer.vue'
 import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
 import QCResultTab from './components/QCResultTab.vue'
 import ContentQCTab from './components/ContentQCTab.vue'
 import ICDSearchPanel from './components/ICDSearchPanel.vue'
 import SettlementSheet from './components/SettlementSheet.vue'
 import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
-import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
-import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
-import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
-import FrontpageRulesOverview from './components/FrontpageRulesOverview.vue'
-import SettlementRulesOverview from './components/SettlementRulesOverview.vue'
 import DetailHeader from './components/DetailHeader.vue'
 import DetailSidebar from './components/DetailSidebar.vue'
 import PriorityLane from './components/workbench/PriorityLane.vue'
 import BatchTablePanel from './components/workbench/BatchTablePanel.vue'
-import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
+import { useDRGGrouping } from './composables/useDRGGrouping'
 import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
 import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
@@ -1916,6 +1908,23 @@ const {
   formatRelativeTime,
 } = useNotifications(allRecords, openSessionRecord, assistPanelVisible, assistTab, frontpageTab)
 
+const AsyncEMRViewer = defineAsyncComponent(() => import('@/components/qc/EMRViewer.vue'))
+const AsyncAIProfileDashboard = defineAsyncComponent(
+  () => import('@/views/demo/frontpage/components/AIProfileDashboard.vue'),
+)
+const AsyncDRGGroupingTab = defineAsyncComponent(
+  () => import('@/views/demo/frontpage/components/DRGGroupingTab.vue'),
+)
+const AsyncCodingRulesTab = defineAsyncComponent(
+  () => import('@/components/rules/CodingRulesTab.vue'),
+)
+const AsyncFrontpageRulesOverview = defineAsyncComponent(
+  () => import('./components/FrontpageRulesOverview.vue'),
+)
+const AsyncSettlementRulesOverview = defineAsyncComponent(
+  () => import('./components/SettlementRulesOverview.vue'),
+)
+
 // ========== 病历文书预览 ==========
 const documentsList = ref<DocItem[]>([])
 const documentsLoading = ref(false)
@@ -1926,7 +1935,6 @@ const activeDocType = ref<string>('')
 
 // ========== 详情主 Tab ==========
 const detailMainTab = ref('records') // records | frontpage | settlement
-const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
 const emrRenderState = ref<'idle' | 'loading' | 'ready' | 'fallback'>('idle')
 
 // ========== 病历详情（拼接文书） ==========

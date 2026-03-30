@@ -199,9 +199,7 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'rule_id'">
-            <span
-              class="rule-code-pill"
-            >
+            <span class="rule-code-pill">
               {{ record.rule_code || record.rule_id }}
             </span>
           </template>
@@ -265,11 +263,7 @@
                       .join(', ')
                   }}
                 </template>
-                <span
-                  class="doc-pill-more"
-                >
-                  +{{ record.applicable_documents.length - 2 }}
-                </span>
+                <span class="doc-pill-more"> +{{ record.applicable_documents.length - 2 }} </span>
               </a-tooltip>
             </div>
           </template>
@@ -631,7 +625,6 @@ import { ApiService } from '@/services/apiService'
 import { getAccessToken } from '@/utils/auth-token'
 import type { User } from '@/types/auth'
 import { UserRole } from '@/types/auth'
-import { qcRuleCaseMap, buildCaseText } from '@/data/qcRuleCases'
 
 // 接口定义
 interface SichuanQCRule {
@@ -691,6 +684,10 @@ const testMedicalText = ref('')
 const testLoading = ref(false)
 const testExampleType = ref<'positive' | 'negative'>('negative')
 const testResult = ref<any>(null)
+const qcRuleCaseMapRef = ref<Record<string, any>>({})
+const buildCaseTextRef = ref<
+  ((example: Record<string, any>, options?: Record<string, unknown>) => string) | null
+>(null)
 
 // 提示词管理
 const isEditingPrompt = ref(false)
@@ -931,8 +928,9 @@ const switchExampleType = (type: 'positive' | 'negative') => {
   testExampleType.value = type
   if (testingRule.value) {
     const ruleId = testingRule.value.rule_id
-    const ruleCase = qcRuleCaseMap[ruleId]
-    if (ruleCase) {
+    const ruleCase = qcRuleCaseMapRef.value[ruleId]
+    const buildCaseText = buildCaseTextRef.value
+    if (ruleCase && buildCaseText) {
       const example = type === 'positive' ? ruleCase.positive : ruleCase.negative
       testMedicalText.value = buildCaseText(example, {
         includeHints: false,
@@ -1087,11 +1085,19 @@ const DOC_TYPE_COLORS: Record<string, string> = {
 const getDocTypeColorClass = (val: string) =>
   DOC_TYPE_COLORS[val] || 'bg-slate-50 text-slate-600 border border-slate-100'
 
-onMounted(() => {
+onMounted(async () => {
+  const [qcRuleCasesModule, userResp] = await Promise.all([
+    import('@/data/qcRuleCases'),
+    ApiService.getCurrentUser(),
+  ])
+
+  qcRuleCaseMapRef.value = qcRuleCasesModule.qcRuleCaseMap
+  buildCaseTextRef.value = qcRuleCasesModule.buildCaseText
+
   refreshSichuanRules()
-  ApiService.getCurrentUser().then((res) => {
-    if (res.success) currentUser.value = res.data ?? null
-  })
+  if (userResp.success) {
+    currentUser.value = userResp.data ?? null
+  }
 })
 </script>
 

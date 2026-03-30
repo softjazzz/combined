@@ -1,5 +1,10 @@
 <template>
-  <div :class="['batch-rule-test', isDemoMode ? 'demo-mode' : 'page-container min-h-screen bg-gray-50 p-2 lg:p-3']">
+  <div
+    :class="[
+      'batch-rule-test',
+      isDemoMode ? 'demo-mode' : 'page-container min-h-screen bg-gray-50 p-2 lg:p-3',
+    ]"
+  >
     <!-- 页面头部 + Tab 导航 (仅在非演示模式下显示) -->
     <div
       v-if="!isDemoMode"
@@ -139,10 +144,13 @@
             <div
               v-for="config in documentTypeConfigsWithCount"
               :key="config.key"
-              :class="['document-tab', {
-                active: currentDocumentType === config.key,
-                disabled: isTesting
-              }]"
+              :class="[
+                'document-tab',
+                {
+                  active: currentDocumentType === config.key,
+                  disabled: isTesting,
+                },
+              ]"
               @click="handleCardClick(config.key)"
             >
               <component
@@ -352,10 +360,13 @@
                         <div
                           v-for="rule in categoryRules"
                           :key="rule.rule_id"
-                          :class="['rule-row', {
-                            selected: selectedRuleIds.includes(rule.rule_id),
-                            disabled: isTesting
-                          }]"
+                          :class="[
+                            'rule-row',
+                            {
+                              selected: selectedRuleIds.includes(rule.rule_id),
+                              disabled: isTesting,
+                            },
+                          ]"
                           @click="toggleRuleSelection(rule.rule_id)"
                         >
                           <div class="col-checkbox">
@@ -408,7 +419,11 @@
               <template #icon>
                 <ThunderboltOutlined />
               </template>
-              {{ isTesting ? `正在测试 ${testProgress.completed}/${testProgress.total}` : '开始批量测试' }}
+              {{
+                isTesting
+                  ? `正在测试 ${testProgress.completed}/${testProgress.total}`
+                  : '开始批量测试'
+              }}
             </a-button>
 
             <!-- 启动快速质控评估按钮 -->
@@ -439,7 +454,7 @@
               查看质控结果
               <span
                 v-if="testResults.length > 0 || productionResult"
-                style="margin-left: 4px; opacity: 0.7;"
+                style="margin-left: 4px; opacity: 0.7"
               >
                 ({{ getResultsCountText }})
               </span>
@@ -489,9 +504,9 @@
             </a-collapse-panel>
           </a-collapse>
         </div>
-      <!-- 结束 batch-test-content -->
+        <!-- 结束 batch-test-content -->
       </div>
-    <!-- 结束批量质控评估内容区域 -->
+      <!-- 结束批量质控评估内容区域 -->
     </div>
     <!-- 结束 page-container -->
 
@@ -504,7 +519,15 @@
       :class="{ 'qc-loading-modal': isProductionTesting }"
     >
       <template #title>
-        <div style="display: flex; align-items: center; justify-content: space-between; width: calc(100% - 50px); padding-right: 10px;">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: calc(100% - 50px);
+            padding-right: 10px;
+          "
+        >
           <span>质控结果详情</span>
           <a-button
             v-if="isProductionTesting"
@@ -541,7 +564,7 @@
           <a-spin size="large">
             <template #indicator>
               <LoadingOutlined
-                style="font-size: 48px; color: #1890ff;"
+                style="font-size: 48px; color: #1890ff"
                 spin
               />
             </template>
@@ -555,7 +578,7 @@
           <a-button
             danger
             size="large"
-            style="margin-top: 24px;"
+            style="margin-top: 24px"
             @click="stopProductionQC"
           >
             <template #icon>
@@ -638,14 +661,20 @@
         >
           <a-space>
             <a-tag
-              v-if="productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model"
+              v-if="
+                productionResult.data.evaluation_summary?.model ||
+                  productionResult.data.llm_info?.model
+              "
               color="purple"
               class="model-tag"
             >
               <template #icon>
                 <RobotOutlined />
               </template>
-              {{ productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model }}
+              {{
+                productionResult.data.evaluation_summary?.model ||
+                  productionResult.data.llm_info?.model
+              }}
             </a-tag>
             <a-tag
               :color="getPromptModeColor(productionResult.data.prompt_mode)"
@@ -663,19 +692,33 @@
             :key="result.rule_id"
             :class="[
               'modal-result-item',
-              getResultStatusValue(result as any) === 'error' ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
+              getResultStatusValue(result as any) === 'error'
+                ? 'error'
+                : isResultNotApplicable(result)
+                  ? 'neutral'
+                  : isResultCompliant(result)
+                    ? 'compliant'
+                    : 'non-compliant',
             ]"
           >
             <div class="result-item-header">
               <span :class="['result-icon', getStatusPillClass(result as any)]">
-                <CheckCircleOutlined v-if="isResultCompliant(result) && !isResultNotApplicable(result)" />
+                <CheckCircleOutlined
+                  v-if="isResultCompliant(result) && !isResultNotApplicable(result)"
+                />
                 <CloseCircleOutlined v-else-if="isResultNonCompliant(result)" />
                 <ExclamationCircleOutlined v-else />
               </span>
               <span class="result-rule-id">{{ result.rule_id }}</span>
               <span class="result-rule-name">{{ result.rule_name }}</span>
               <a-tag
-                :color="getStatusPillClass(result as any) === 'danger' ? 'error' : (getStatusPillClass(result as any) === 'success' ? 'success' : 'default')"
+                :color="
+                  getStatusPillClass(result as any) === 'danger'
+                    ? 'error'
+                    : getStatusPillClass(result as any) === 'success'
+                      ? 'success'
+                      : 'default'
+                "
                 size="small"
               >
                 {{ getResultStatusText(result as any) }}
@@ -814,8 +857,7 @@
         class="modal-test-summary"
       >
         <div class="production-summary-tag">
-          {{ batchEvaluationStats.total }} 个质控点，
-          {{ batchEvaluationStats.passed }} 个符合，
+          {{ batchEvaluationStats.total }} 个质控点， {{ batchEvaluationStats.passed }} 个符合，
           {{ batchEvaluationStats.notApplicable }} 个不适用，
           {{ batchEvaluationStats.issues }} 个发现问题
         </div>
@@ -885,8 +927,9 @@
       >
         <a-spin size="large" />
         <p class="testing-text">
-          正在测试 {{ testProgress.currentRuleName || '...' }}
-          ({{ testProgress.completed }}/{{ testProgress.total }})
+          正在测试 {{ testProgress.currentRuleName || '...' }} ({{ testProgress.completed }}/{{
+            testProgress.total
+          }})
         </p>
       </div>
 
@@ -910,15 +953,27 @@
             :key="result.ruleId"
             :class="[
               'result-panel',
-              result.error ? 'error' : (isResultNotApplicable(result) ? 'neutral' : (isResultCompliant(result) ? 'compliant' : 'non-compliant'))
+              result.error
+                ? 'error'
+                : isResultNotApplicable(result)
+                  ? 'neutral'
+                  : isResultCompliant(result)
+                    ? 'compliant'
+                    : 'non-compliant',
             ]"
           >
             <template #header>
               <div class="result-panel-header">
                 <div class="header-left">
                   <span class="result-icon">
-                    <CheckCircleOutlined v-if="isResultCompliant(result) && !isResultNotApplicable(result) && !result.error" />
-                    <CloseCircleOutlined v-else-if="isResultNonCompliant(result) && !result.error" />
+                    <CheckCircleOutlined
+                      v-if="
+                        isResultCompliant(result) && !isResultNotApplicable(result) && !result.error
+                      "
+                    />
+                    <CloseCircleOutlined
+                      v-else-if="isResultNonCompliant(result) && !result.error"
+                    />
                     <ExclamationCircleOutlined v-else />
                   </span>
                   <div class="result-info">
@@ -1054,13 +1109,15 @@
             <div
               v-if="isTesting && testProgress.total > 0"
               class="modal-summary"
-              style="margin-bottom: 24px;"
+              style="margin-bottom: 24px"
             >
               <a-statistic
                 title="合规率"
                 :value="realtimeBatchStats.complianceRate"
                 suffix="%"
-                :value-style="{ color: realtimeBatchStats.complianceRate >= 70 ? '#16a34a' : '#dc2626' }"
+                :value-style="{
+                  color: realtimeBatchStats.complianceRate >= 70 ? '#16a34a' : '#dc2626',
+                }"
               />
               <a-statistic
                 title="符合要求"
@@ -1090,7 +1147,7 @@
             <a-spin size="large">
               <template #indicator>
                 <LoadingOutlined
-                  style="font-size: 48px; color: #1890ff;"
+                  style="font-size: 48px; color: #1890ff"
                   spin
                 />
               </template>
@@ -1103,7 +1160,7 @@
                 已完成 {{ testProgress.completed }}/{{ testProgress.total }} 条
                 <span
                   v-if="testProgress.currentRuleName"
-                  style="margin-left: 8px; opacity: 0.7;"
+                  style="margin-left: 8px; opacity: 0.7"
                 >
                   ({{ testProgress.currentRuleName }})
                 </span>
@@ -1151,7 +1208,7 @@
             <a-button
               danger
               size="large"
-              style="margin-top: 24px;"
+              style="margin-top: 24px"
               @click="isTesting ? stopBatchTest() : stopProductionQC()"
             >
               <template #icon>
@@ -1172,7 +1229,12 @@
                 title="合规率"
                 :value="productionResult.data.evaluation_summary?.compliance_rate || 0"
                 suffix="%"
-                :value-style="{ color: (productionResult.data.evaluation_summary?.compliance_rate || 0) >= 70 ? '#16a34a' : '#dc2626' }"
+                :value-style="{
+                  color:
+                    (productionResult.data.evaluation_summary?.compliance_rate || 0) >= 70
+                      ? '#16a34a'
+                      : '#dc2626',
+                }"
               />
               <a-statistic
                 title="符合要求"
@@ -1201,7 +1263,10 @@
 
             <!-- 性能指标卡片 -->
             <div
-              v-if="productionPerformanceMetrics.totalTime > 0 || productionPerformanceMetrics.totalTokens > 0"
+              v-if="
+                productionPerformanceMetrics.totalTime > 0 ||
+                  productionPerformanceMetrics.totalTokens > 0
+              "
               class="summary-metrics compact"
             >
               <div class="metric-item">
@@ -1236,28 +1301,49 @@
                 <!-- 模式标签 -->
                 <a-tag
                   v-if="productionResult.data.prompt_mode"
-                  :color="getModeTagColor(productionResult.data.prompt_mode === 'sequential_batch' ? 'sequential_batch' : 'optimized_batch')"
-                  style="font-weight: 600;"
+                  :color="
+                    getModeTagColor(
+                      productionResult.data.prompt_mode === 'sequential_batch'
+                        ? 'sequential_batch'
+                        : 'optimized_batch',
+                    )
+                  "
+                  style="font-weight: 600"
                 >
                   <template #icon>
-                    <ThunderboltOutlined v-if="productionResult.data.prompt_mode !== 'sequential_batch'" />
+                    <ThunderboltOutlined
+                      v-if="productionResult.data.prompt_mode !== 'sequential_batch'"
+                    />
                     <AppstoreOutlined v-else />
                   </template>
-                  {{ productionResult.data.prompt_mode === 'sequential_batch' ? '批量测试' : '快速质控' }}
+                  {{
+                    productionResult.data.prompt_mode === 'sequential_batch'
+                      ? '批量测试'
+                      : '快速质控'
+                  }}
                 </a-tag>
 
                 <a-tag
-                  v-if="productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model"
+                  v-if="
+                    productionResult.data.evaluation_summary?.model ||
+                      productionResult.data.llm_info?.model
+                  "
                   color="purple"
                   class="model-tag"
                 >
                   <template #icon>
                     <RobotOutlined />
                   </template>
-                  {{ productionResult.data.evaluation_summary?.model || productionResult.data.llm_info?.model }}
+                  {{
+                    productionResult.data.evaluation_summary?.model ||
+                      productionResult.data.llm_info?.model
+                  }}
                 </a-tag>
                 <a-tag
-                  v-if="productionResult.data.prompt_mode && productionResult.data.prompt_mode !== 'sequential_batch'"
+                  v-if="
+                    productionResult.data.prompt_mode &&
+                      productionResult.data.prompt_mode !== 'sequential_batch'
+                  "
                   :color="getPromptModeColor(productionResult.data.prompt_mode)"
                   class="prompt-mode-tag"
                 >
@@ -1361,7 +1447,8 @@
                           Token: {{ result.metadata.tokens_used || result.metadata.token_usage }}
                         </a-tag>
                         <a-tag v-if="result.metadata?.api_time || result.metadata?.duration">
-                          耗时: {{ (result.metadata.api_time || result.metadata.duration).toFixed(2) }}s
+                          耗时:
+                          {{ (result.metadata.api_time || result.metadata.duration).toFixed(2) }}s
                         </a-tag>
                       </a-space>
                     </div>
@@ -1412,11 +1499,11 @@
                   allow-clear
                 >
                   <a-select-option value="sequential_batch">
-                    <AppstoreOutlined style="margin-right: 4px;" />
+                    <AppstoreOutlined style="margin-right: 4px" />
                     批量测试
                   </a-select-option>
                   <a-select-option value="optimized_batch">
-                    <ThunderboltOutlined style="margin-right: 4px;" />
+                    <ThunderboltOutlined style="margin-right: 4px" />
                     快速质控
                   </a-select-option>
                 </a-select>
@@ -1465,7 +1552,7 @@
                 showSizeChanger: true,
                 showTotal: (total: number) => `共 ${total} 条记录`,
                 onChange: handleHistoryPageChange,
-                onShowSizeChange: handleHistoryPageChange
+                onShowSizeChange: handleHistoryPageChange,
               }"
               class="history-list"
             >
@@ -1484,7 +1571,7 @@
                         <!-- 批量/快速标识 -->
                         <a-tag
                           :color="getModeTagColor(item.mode)"
-                          style="margin: 0; font-weight: 600;"
+                          style="margin: 0; font-weight: 600"
                         >
                           <template #icon>
                             <ThunderboltOutlined v-if="item.mode === 'optimized_batch'" />
@@ -1501,7 +1588,9 @@
                     <div class="history-item-stats">
                       <div class="stat-item">
                         <span class="stat-label">合规率:</span>
-                        <span :class="['stat-value', item.compliance_rate >= 70 ? 'success' : 'error']">
+                        <span
+                          :class="['stat-value', item.compliance_rate >= 70 ? 'success' : 'error']"
+                        >
                           {{ item.compliance_rate }}%
                         </span>
                       </div>
@@ -1571,7 +1660,11 @@
                 <ClockCircleOutlined class="info-icon" />
                 <span class="info-label">质控时间：</span>
                 <span class="info-value">
-                  {{ formatDateTime(selectedHistoryRecord.created_at || selectedHistoryRecord.saved_at) }}
+                  {{
+                    formatDateTime(
+                      selectedHistoryRecord.created_at || selectedHistoryRecord.saved_at,
+                    )
+                  }}
                 </span>
               </div>
               <div class="detail-info-item">
@@ -1583,10 +1676,12 @@
                 <template v-if="selectedHistoryRecord.mode">
                   <a-tag
                     :color="getModeTagColor(selectedHistoryRecord.mode)"
-                    style="font-weight: 600; margin-right: 8px;"
+                    style="font-weight: 600; margin-right: 8px"
                   >
                     <template #icon>
-                      <ThunderboltOutlined v-if="selectedHistoryRecord.mode === 'optimized_batch'" />
+                      <ThunderboltOutlined
+                        v-if="selectedHistoryRecord.mode === 'optimized_batch'"
+                      />
                       <AppstoreOutlined v-else />
                     </template>
                     {{ getModeTagText(selectedHistoryRecord.mode) }}
@@ -1596,7 +1691,7 @@
                   <a-tag
                     color="purple"
                     class="model-tag"
-                    style="margin-right: 8px;"
+                    style="margin-right: 8px"
                   >
                     <template #icon>
                       <RobotOutlined />
@@ -1604,12 +1699,26 @@
                     {{ selectedHistoryRecord.model }}
                   </a-tag>
                 </template>
-                <template v-if="selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode">
+                <template
+                  v-if="
+                    selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode
+                  "
+                >
                   <a-tag
-                    :color="getPromptModeColor(selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode)"
+                    :color="
+                      getPromptModeColor(
+                        selectedHistoryRecord.metadata?.prompt_mode ||
+                          selectedHistoryRecord.prompt_mode,
+                      )
+                    "
                     class="prompt-mode-tag"
                   >
-                    {{ getPromptModeLabel(selectedHistoryRecord.metadata?.prompt_mode || selectedHistoryRecord.prompt_mode) }}
+                    {{
+                      getPromptModeLabel(
+                        selectedHistoryRecord.metadata?.prompt_mode ||
+                          selectedHistoryRecord.prompt_mode,
+                      )
+                    }}
                   </a-tag>
                 </template>
               </div>
@@ -1641,15 +1750,35 @@
               <div class="text-sky-300 font-medium mb-2">
                 📊 性能指标（历史记录）
               </div>
-              <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify(historyPerformance, null, 2) }}</pre>
+              <pre
+                class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto"
+              >{{ JSON.stringify(historyPerformance, null, 2) }}</pre>
               <div class="text-sky-300 font-medium mt-3 mb-2">
                 🔍 后端 performance_metrics
               </div>
-              <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify(selectedHistoryRecord.payload?.performance_metrics || selectedHistoryRecord.performance || '无', null, 2) }}</pre>
+              <pre
+                class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto"
+              >{{
+                  JSON.stringify(
+                    selectedHistoryRecord.payload?.performance_metrics ||
+                      selectedHistoryRecord.performance ||
+                      '无',
+                    null,
+                    2,
+                  )
+              }}</pre>
               <div class="text-sky-300 font-medium mt-3 mb-2">
                 📝 第一条规则 metadata
               </div>
-              <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify((selectedHistoryRecord.payload?.evaluation_results || [])[0]?.metadata || '无', null, 2) }}</pre>
+              <pre
+                class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto"
+              >{{
+                  JSON.stringify(
+                    (selectedHistoryRecord.payload?.evaluation_results || [])[0]?.metadata || '无',
+                    null,
+                    2,
+                  )
+              }}</pre>
             </div>
 
             <!-- 性能指标卡片（历史记录详情） -->
@@ -1691,15 +1820,31 @@
             <a-col :span="6">
               <a-statistic
                 title="合规率"
-                :value="(selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || selectedHistoryRecord.stats?.compliance_rate || 0)"
+                :value="
+                  selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate ||
+                    selectedHistoryRecord.stats?.compliance_rate ||
+                    0
+                "
                 suffix="%"
-                :value-style="{ color: (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 80 ? '#52c41a' : (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 60 ? '#faad14' : '#f5222d' }"
+                :value-style="{
+                  color:
+                    (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >= 80
+                      ? '#52c41a'
+                      : (selectedHistoryRecord.payload?.evaluation_summary?.compliance_rate || 0) >=
+                        60
+                        ? '#faad14'
+                        : '#f5222d',
+                }"
               />
             </a-col>
             <a-col :span="6">
               <a-statistic
                 title="异常数量"
-                :value="selectedHistoryRecord.payload?.evaluation_summary?.issues_found || selectedHistoryRecord.stats?.issues || 0"
+                :value="
+                  selectedHistoryRecord.payload?.evaluation_summary?.issues_found ||
+                    selectedHistoryRecord.stats?.issues ||
+                    0
+                "
                 suffix="条"
                 :value-style="{ color: '#f5222d' }"
               />
@@ -1707,14 +1852,24 @@
             <a-col :span="6">
               <a-statistic
                 title="质控规则"
-                :value="selectedHistoryRecord.payload?.evaluation_summary?.total_rules || selectedHistoryRecord.stats?.total || 0"
+                :value="
+                  selectedHistoryRecord.payload?.evaluation_summary?.total_rules ||
+                    selectedHistoryRecord.stats?.total ||
+                    0
+                "
                 suffix="条"
               />
             </a-col>
             <a-col :span="6">
               <a-statistic
                 title="处理耗时"
-                :value="(selectedHistoryRecord.performance?.totalTime || selectedHistoryRecord.performance?.processing_time || 0).toFixed(2)"
+                :value="
+                  (
+                    selectedHistoryRecord.performance?.totalTime ||
+                    selectedHistoryRecord.performance?.processing_time ||
+                    0
+                  ).toFixed(2)
+                "
                 suffix="秒"
               />
             </a-col>
@@ -1866,7 +2021,7 @@ import {
   ReloadOutlined,
   HistoryOutlined,
   StopOutlined,
-  LoadingOutlined
+  LoadingOutlined,
 } from '@ant-design/icons-vue'
 import {
   PRESET_ADMISSION_RECORD,
@@ -1880,21 +2035,30 @@ import {
   type BatchTestProgress,
   type DocumentTypeConfig,
   type RuleCategory,
-  type RuleSeries
+  type RuleSeries,
 } from '@/utils/batchTestHelpers'
-import { testQCRule, batchEvaluateQC, getQCHistoryList, getQCHistoryDetail, getLatestQCResult } from '@/api/qc'
+import {
+  testQCRule,
+  batchEvaluateQC,
+  getQCHistoryList,
+  getQCHistoryDetail,
+  getLatestQCResult,
+} from '@/api/qc'
 import type { TestQCRuleData, BatchQCEvaluateResponse, QCHistoryRecord } from '@/api/qc'
-import customRules from '../../backend/app/data/custom_rules_33.json'
-import { SAMPLE_MEDICAL_RECORDS, getSampleRecordById, type SampleMedicalRecord } from '@/utils/sampleMedicalRecords'
+import {
+  SAMPLE_MEDICAL_RECORDS,
+  getSampleRecordById,
+  type SampleMedicalRecord,
+} from '@/utils/sampleMedicalRecords'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 
 // Props
 interface Props {
-  demoMode?: boolean  // 演示模式（隐藏导航栏和标签页）
+  demoMode?: boolean // 演示模式（隐藏导航栏和标签页）
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  demoMode: false
+  demoMode: false,
 })
 
 const router = useRouter()
@@ -1909,7 +2073,7 @@ const batchSeries = computed<RuleSeries>(() => (batchSource.value === 'lx_legacy
 const batchDescription = computed(() =>
   batchSource.value === 'lx_legacy'
     ? '泸县存量质控规则：基于存量质控点（LXE 扩展规则）进行批量质控评估。'
-    : '泸县33条质控规则：维护本地自定义质控点，支持批量评估与测试。'
+    : '泸县33条质控规则：维护本地自定义质控点，支持批量评估与测试。',
 )
 
 // API端点配置
@@ -1919,14 +2083,14 @@ const apiEndpoints = computed(() => {
       save: '/api/v1/demo/qc-results/save',
       history: '/api/v1/demo/qc-results/history',
       detail: '/api/v1/demo/qc-results',
-      latest: '/api/v1/demo/qc-results/latest'
+      latest: '/api/v1/demo/qc-results/latest',
     }
   } else {
     return {
       save: '/api/v1/qc/sichuan/results/save',
       history: '/api/v1/qc/sichuan/results/history',
       detail: '/api/v1/qc/sichuan/results',
-      latest: '/api/v1/qc/sichuan/results/latest'
+      latest: '/api/v1/qc/sichuan/results/latest',
     }
   }
 })
@@ -1944,19 +2108,19 @@ const iconComponents: Record<string, any> = {
   admission: SolutionOutlined,
   course: FileTextOutlined,
   operation: ScissorOutlined,
-  discharge: HomeOutlined
+  discharge: HomeOutlined,
 }
 const iconColors: Record<string, string> = {
   admission: '#2563eb',
   course: '#16a34a',
   operation: '#f97316',
-  discharge: '#7c3aed'
+  discharge: '#7c3aed',
 }
 const iconBgColors: Record<string, string> = {
   admission: 'rgba(37, 99, 235, 0.12)',
   course: 'rgba(22, 163, 74, 0.12)',
   operation: 'rgba(249, 115, 22, 0.12)',
-  discharge: 'rgba(124, 58, 237, 0.12)'
+  discharge: 'rgba(124, 58, 237, 0.12)',
 }
 const medicalText = ref(PRESET_ADMISSION_RECORD)
 const originalMedicalText = ref(PRESET_ADMISSION_RECORD) // 保存原始文本用于检测修改
@@ -1966,7 +2130,7 @@ const isTesting = ref(false)
 const testResults = ref<BatchTestResult[]>([])
 const testProgress = ref<BatchTestProgress>({
   total: 0,
-  completed: 0
+  completed: 0,
 })
 
 // 快速质控评估状态
@@ -1981,7 +2145,7 @@ const currentResultFilter = ref<ResultFilter>('all') // 用于"本次质控结�
 const resultFilterOptions: { label: string; value: ResultFilter }[] = [
   { label: '全部', value: 'all' },
   { label: '仅异常', value: 'issues' },
-  { label: '仅合规', value: 'compliant' }
+  { label: '仅合规', value: 'compliant' },
 ]
 const expandedResultKeys = ref<string[]>([])
 
@@ -1991,23 +2155,24 @@ const promptModeConfig: Record<string, { tag: string; description: string; color
   current: {
     tag: '当前模式',
     description: '只使用 rule_id + name + description，Token消耗最低但准确率较低（0%）',
-    color: 'default'
+    color: 'default',
   },
   plan_a: {
     tag: '高效模式',
-    description: '采用优化提示词设计，仅提取检查要点进行批量评估，相比传统方式可节省80%的Token消耗和成本（准确率67%）',
-    color: 'green'
+    description:
+      '采用优化提示词设计，仅提取检查要点进行批量评估，相比传统方式可节省80%的Token消耗和成本（准确率67%）',
+    color: 'green',
   },
   plan_b: {
     tag: '标准模式',
     description: '使用完整 custom_prompt，包含所有质控指导信息，Token消耗最高（准确率56%）',
-    color: 'blue'
+    color: 'blue',
   },
   plan_c: {
     tag: '平衡模式',
     description: '提取检查要点和判定逻辑，在Token消耗和准确率之间取得平衡（准确率44%）',
-    color: 'orange'
-  }
+    color: 'orange',
+  },
 }
 
 // 新增：搜索和筛选状态
@@ -2023,14 +2188,13 @@ const historyLoading = ref(false)
 const historyPagination = ref({
   current: 1,
   pageSize: 20,
-  total: 0
+  total: 0,
 })
 const historyFilters = ref<{
   documentType?: string
   mode?: string
   dateRange?: [string, string]
   hasIssues?: boolean
-
 }>({})
 
 // 调试信息开关（历史详情）
@@ -2045,24 +2209,33 @@ const historyPerformance = computed(() => {
   const num = (v: any) => Number(v ?? 0) || 0
 
   if (perf) {
-    const totalTime = num((perf as any).totalTime ?? (perf as any).processing_time ?? (perf as any).total_time)
-    const totalTokens = num((perf as any).totalTokens ?? (perf as any).token_usage ?? (perf as any).tokens_used)
+    const totalTime = num(
+      (perf as any).totalTime ?? (perf as any).processing_time ?? (perf as any).total_time,
+    )
+    const totalTokens = num(
+      (perf as any).totalTokens ?? (perf as any).token_usage ?? (perf as any).tokens_used,
+    )
     const n = results.length
     return {
       source: 'backend',
       n,
       totalTime,
       totalTokens,
-      averageTime: n ? totalTime / n : totalTime
+      averageTime: n ? totalTime / n : totalTime,
     }
   }
 
-  const totalTime = results.reduce((s: number, r: any) => s + num(r?.metadata?.api_time ?? r?.metadata?.duration), 0)
-  const totalTokens = results.reduce((s: number, r: any) => s + num(r?.metadata?.tokens_used ?? r?.metadata?.token_usage), 0)
+  const totalTime = results.reduce(
+    (s: number, r: any) => s + num(r?.metadata?.api_time ?? r?.metadata?.duration),
+    0,
+  )
+  const totalTokens = results.reduce(
+    (s: number, r: any) => s + num(r?.metadata?.tokens_used ?? r?.metadata?.token_usage),
+    0,
+  )
   const n = results.length
   return { source: 'aggregated', n, totalTime, totalTokens, averageTime: n ? totalTime / n : 0 }
 })
-
 
 const selectedHistoryRecord = ref<any>(null)
 const showHistoryDetail = ref(false)
@@ -2080,7 +2253,7 @@ const originalMedicalTextContent = ref('')
 const selectedSampleRecord = ref<string | undefined>(undefined) // 当前选中的示例病历ID
 const availableSampleRecords = computed(() => {
   // 根据当前文书类型过滤示例病历
-  return SAMPLE_MEDICAL_RECORDS.filter(record => {
+  return SAMPLE_MEDICAL_RECORDS.filter((record) => {
     // 如果是入院记录，显示入院记录示例
     if (currentDocumentType.value === 'admission_record') {
       return record.type === 'admission_record'
@@ -2113,7 +2286,7 @@ const medicalSummary = computed(() => {
     gender: genderMatch ? genderMatch[1] : '未知',
     department: departmentMatch ? departmentMatch[1].trim() : '未知',
     chiefComplaint: chiefComplaintMatch ? chiefComplaintMatch[1].trim() : '未记录',
-    diagnosis: diagnosisMatch ? diagnosisMatch[1].trim() : '未记录'
+    diagnosis: diagnosisMatch ? diagnosisMatch[1].trim() : '未记录',
   }
 })
 
@@ -2124,14 +2297,18 @@ const hasUnsavedChanges = computed(() => {
 
 // 当前选中的病历类型配置
 const currentConfig = computed(() => {
-  return documentTypeConfigs.value.find(c => c.key === currentDocumentType.value) || documentTypeConfigs.value[0]
+  return (
+    documentTypeConfigs.value.find((c) => c.key === currentDocumentType.value) ||
+    documentTypeConfigs.value[0]
+  )
 })
+const customRules = ref<any[]>([])
 
 // 为每个类型计算质控点数量
 const documentTypeConfigsWithCount = computed(() => {
-  return documentTypeConfigs.value.map(config => ({
+  return documentTypeConfigs.value.map((config) => ({
     ...config,
-    ruleCount: filterRulesByDocumentType(customRules, config.key, batchSeries.value).length
+    ruleCount: filterRulesByDocumentType(customRules.value, config.key, batchSeries.value).length,
   }))
 })
 
@@ -2141,7 +2318,7 @@ const filteredRules = computed(() => {
     admissionRules.value,
     searchText.value,
     filterDefectLevel.value,
-    filterComplexity.value
+    filterComplexity.value,
   )
 })
 
@@ -2155,28 +2332,30 @@ const categorizedRulesArray = computed(() => {
   const entries = Array.from(categorizedRulesMap.value.entries())
   // 按照分类顺序排序
   return entries.sort((a, b) => {
-    const categoryA = RULE_CATEGORIES.find(c => c.key === a[0])
-    const categoryB = RULE_CATEGORIES.find(c => c.key === b[0])
+    const categoryA = RULE_CATEGORIES.find((c) => c.key === a[0])
+    const categoryB = RULE_CATEGORIES.find((c) => c.key === b[0])
     return (categoryA?.order || 999) - (categoryB?.order || 999)
   })
 })
 
 // 新增：全选状态
 const isAllSelected = computed(() => {
-  return filteredRules.value.length > 0 &&
-         filteredRules.value.every(rule => selectedRuleIds.value.includes(rule.rule_id))
+  return (
+    filteredRules.value.length > 0 &&
+    filteredRules.value.every((rule) => selectedRuleIds.value.includes(rule.rule_id))
+  )
 })
 
 // 新增：半选状态
 const isIndeterminate = computed(() => {
-  const selectedCount = filteredRules.value.filter(rule =>
-    selectedRuleIds.value.includes(rule.rule_id)
+  const selectedCount = filteredRules.value.filter((rule) =>
+    selectedRuleIds.value.includes(rule.rule_id),
   ).length
   return selectedCount > 0 && selectedCount < filteredRules.value.length
 })
 
 const visibleTestResults = computed(() => {
-  return testResults.value.filter(result => {
+  return testResults.value.filter((result) => {
     if (resultFilter.value === 'issues') {
       return result.error || isResultNonCompliant(result)
     }
@@ -2192,7 +2371,7 @@ const batchPerformanceMetrics = computed(() => {
     return {
       totalTokens: 0,
       totalTime: 0,
-      avgTime: 0
+      avgTime: 0,
     }
   }
 
@@ -2209,7 +2388,7 @@ const batchPerformanceMetrics = computed(() => {
   return {
     totalTokens,
     totalTime,
-    avgTime: totalTime / Math.max(testResults.value.length, 1)
+    avgTime: totalTime / Math.max(testResults.value.length, 1),
   }
 })
 
@@ -2222,7 +2401,7 @@ const batchEvaluationStats = computed(() => {
       passed: 0,
       notApplicable: 0,
       issues: 0,
-      errors: 0
+      errors: 0,
     }
   }
 
@@ -2231,7 +2410,7 @@ const batchEvaluationStats = computed(() => {
   let issues = 0
   let errors = 0
 
-  results.forEach(result => {
+  results.forEach((result) => {
     if (getResultStatusValue(result as any) === 'error') {
       errors++
       return
@@ -2256,7 +2435,7 @@ const batchEvaluationStats = computed(() => {
     passed,
     notApplicable,
     issues,
-    errors
+    errors,
   }
 })
 
@@ -2270,7 +2449,7 @@ const realtimeBatchStats = computed(() => {
     passed: stats.passed,
     notApplicable: stats.notApplicable,
     issues: stats.issues,
-    complianceRate: complianceRate
+    complianceRate: complianceRate,
   }
 })
 
@@ -2283,7 +2462,7 @@ const batchComplianceRate = computed(() => {
 
 // 批量测试过程中的“实时问题列表”（仅包含已完成规则中的异常项）
 const realtimeIssueResults = computed(() => {
-  return testResults.value.filter(result => !result.error && isResultNonCompliant(result))
+  return testResults.value.filter((result) => !result.error && isResultNonCompliant(result))
 })
 
 const productionPerformanceMetrics = computed(() => {
@@ -2295,13 +2474,19 @@ const productionPerformanceMetrics = computed(() => {
   if (metrics) {
     return {
       totalTokens: num((metrics as any).token_usage ?? (metrics as any).tokens_used),
-      totalTime: num((metrics as any).processing_time ?? (metrics as any).total_time)
+      totalTime: num((metrics as any).processing_time ?? (metrics as any).total_time),
     }
   }
 
   const results = (data as any).evaluation_results || []
-  const totalTokens = results.reduce((s: number, r: any) => s + num(r?.metadata?.tokens_used ?? r?.metadata?.token_usage), 0)
-  const totalTime = results.reduce((s: number, r: any) => s + num(r?.metadata?.api_time ?? r?.metadata?.duration), 0)
+  const totalTokens = results.reduce(
+    (s: number, r: any) => s + num(r?.metadata?.tokens_used ?? r?.metadata?.token_usage),
+    0,
+  )
+  const totalTime = results.reduce(
+    (s: number, r: any) => s + num(r?.metadata?.api_time ?? r?.metadata?.duration),
+    0,
+  )
   return { totalTokens, totalTime }
 })
 
@@ -2318,10 +2503,10 @@ const filteredProductionResults = computed(() => {
     return results
   }
   if (currentResultFilter.value === 'issues') {
-    return results.filter(r => !isResultCompliant(r) && !isResultNotApplicable(r))
+    return results.filter((r) => !isResultCompliant(r) && !isResultNotApplicable(r))
   }
   if (currentResultFilter.value === 'compliant') {
-    return results.filter(r => isResultCompliant(r) || isResultNotApplicable(r))
+    return results.filter((r) => isResultCompliant(r) || isResultNotApplicable(r))
   }
   return results
 })
@@ -2335,7 +2520,7 @@ const productionEvaluationStats = computed(() => {
       passed: 0,
       notApplicable: 0,
       issues: 0,
-      errors: 0
+      errors: 0,
     }
   }
 
@@ -2344,7 +2529,7 @@ const productionEvaluationStats = computed(() => {
   let issues = 0
   let errors = 0
 
-  results.forEach(result => {
+  results.forEach((result) => {
     if (getResultStatusValue(result as any) === 'error') {
       errors++
       return
@@ -2369,7 +2554,7 @@ const productionEvaluationStats = computed(() => {
     passed,
     notApplicable,
     issues,
-    errors
+    errors,
   }
 })
 const formatSeconds = (value?: number) => {
@@ -2388,9 +2573,9 @@ const formatTokens = (value?: number) => {
 const normalizeIssues = (data?: TestQCRuleData): BatchTestResult['issues'] => {
   if (!data) return []
   if (Array.isArray(data.issues) && data.issues.length > 0) {
-    return data.issues.map(issue => ({
+    return data.issues.map((issue) => ({
       description: issue.description || (issue as any).title || '',
-      evidence: issue.evidence || (issue as any).reference || ''
+      evidence: issue.evidence || (issue as any).reference || '',
     }))
   }
 
@@ -2399,8 +2584,8 @@ const normalizeIssues = (data?: TestQCRuleData): BatchTestResult['issues'] => {
     return [
       {
         description: data.findings,
-        evidence: data.evidence
-      }
+        evidence: data.evidence,
+      },
     ]
   }
 
@@ -2411,11 +2596,11 @@ const normalizeIssues = (data?: TestQCRuleData): BatchTestResult['issues'] => {
 const toggleSelectAll = () => {
   if (isAllSelected.value) {
     // 取消选择所有过滤后的规则
-    const filteredRuleIds = filteredRules.value.map(r => r.rule_id)
-    selectedRuleIds.value = selectedRuleIds.value.filter(id => !filteredRuleIds.includes(id))
+    const filteredRuleIds = filteredRules.value.map((r) => r.rule_id)
+    selectedRuleIds.value = selectedRuleIds.value.filter((id) => !filteredRuleIds.includes(id))
   } else {
     // 选择所有过滤后的规则（合并到已选列表）
-    const filteredRuleIds = filteredRules.value.map(r => r.rule_id)
+    const filteredRuleIds = filteredRules.value.map((r) => r.rule_id)
     selectedRuleIds.value = [...new Set([...selectedRuleIds.value, ...filteredRuleIds])]
   }
 }
@@ -2434,13 +2619,13 @@ const toggleRuleSelection = (ruleId: string) => {
 
 // 新增：获取分类标题文本
 const getCategoryHeaderText = (categoryKey: string, count: number): string => {
-  const category = RULE_CATEGORIES.find(c => c.key === categoryKey)
+  const category = RULE_CATEGORIES.find((c) => c.key === categoryKey)
   return category ? `${category.label} (${count}条)` : `未分类 (${count}条)`
 }
 
 // 新增：获取分类图标
 const getCategoryIcon = (categoryKey: string): string => {
-  const category = RULE_CATEGORIES.find(c => c.key === categoryKey)
+  const category = RULE_CATEGORIES.find((c) => c.key === categoryKey)
   return category?.icon || '📌'
 }
 
@@ -2460,9 +2645,9 @@ const normalizeComplexity = (complexity?: string): string => {
 const getDefectLevelColor = (level?: string): string => {
   const normalized = normalizeDefectLevel(level)
   const levelMap: Record<string, string> = {
-    '严重': 'error',
-    '一般': 'warning',
-    '轻微': 'success'
+    严重: 'error',
+    一般: 'warning',
+    轻微: 'success',
   }
   return levelMap[normalized] || 'default'
 }
@@ -2471,9 +2656,9 @@ const getDefectLevelColor = (level?: string): string => {
 const getDefectLevelIcon = (level?: string): string => {
   const normalized = normalizeDefectLevel(level)
   const iconMap: Record<string, string> = {
-    '严重': '🔴',
-    '一般': '🟡',
-    '轻微': '🟢'
+    严重: '🔴',
+    一般: '🟡',
+    轻微: '🟢',
   }
   return iconMap[normalized] || '🟡'
 }
@@ -2482,9 +2667,9 @@ const getDefectLevelIcon = (level?: string): string => {
 const getDefectLevelClass = (level?: string): string => {
   const normalized = normalizeDefectLevel(level)
   const classMap: Record<string, string> = {
-    '一级': 'level-high',
-    '二级': 'level-medium',
-    '三级': 'level-low'
+    一级: 'level-high',
+    二级: 'level-medium',
+    三级: 'level-low',
   }
   return classMap[normalized] || 'level-low'
 }
@@ -2493,9 +2678,9 @@ const getDefectLevelClass = (level?: string): string => {
 const getComplexityClass = (complexity?: string): string => {
   const normalized = normalizeComplexity(complexity)
   const classMap: Record<string, string> = {
-    '高': 'complexity-high',
-    '中': 'complexity-medium',
-    '低': 'complexity-low'
+    高: 'complexity-high',
+    中: 'complexity-medium',
+    低: 'complexity-low',
   }
   return classMap[normalized] || 'complexity-low'
 }
@@ -2504,9 +2689,9 @@ const getComplexityClass = (complexity?: string): string => {
 const getComplexityColor = (complexity?: string): string => {
   const normalized = normalizeComplexity(complexity)
   const complexityMap: Record<string, string> = {
-    '高': 'orange',
-    '中': 'green',
-    '低': 'blue'
+    高: 'orange',
+    中: 'green',
+    低: 'blue',
   }
   return complexityMap[normalized] || 'default'
 }
@@ -2515,9 +2700,9 @@ const getComplexityColor = (complexity?: string): string => {
 const getComplexityIcon = (complexity?: string): string => {
   const normalized = normalizeComplexity(complexity)
   const iconMap: Record<string, string> = {
-    '高': '🟠',
-    '中': '🟢',
-    '低': '🔵'
+    高: '🟠',
+    中: '🟢',
+    低: '🔵',
   }
   return iconMap[normalized] || '🟢'
 }
@@ -2553,7 +2738,7 @@ watch(currentDocumentType, (newType, oldType) => {
       onCancel: () => {
         // 取消切换，恢复到原来的类型
         currentDocumentType.value = oldType
-      }
+      },
     })
   } else {
     loadDocumentType(newType)
@@ -2562,7 +2747,7 @@ watch(currentDocumentType, (newType, oldType) => {
 
 // 加载指定病历类型的数据
 const loadDocumentType = (documentType: string) => {
-  const config = documentTypeConfigs.value.find(c => c.key === documentType)
+  const config = documentTypeConfigs.value.find((c) => c.key === documentType)
   if (!config) return
 
   // 1. 加载预置文本
@@ -2570,8 +2755,12 @@ const loadDocumentType = (documentType: string) => {
   originalMedicalText.value = config.presetText
 
   // 2. 筛选质控点
-  admissionRules.value = filterRulesByDocumentType(customRules, documentType, batchSeries.value)
-  selectedRuleIds.value = admissionRules.value.map(r => r.rule_id)
+  admissionRules.value = filterRulesByDocumentType(
+    customRules.value,
+    documentType,
+    batchSeries.value,
+  )
+  selectedRuleIds.value = admissionRules.value.map((r) => r.rule_id)
 
   // 3. 清空测试结果
   testResults.value = []
@@ -2616,7 +2805,10 @@ const handleParentMessage = (event: MessageEvent) => {
 }
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
+  const customRulesModule = await import('../../backend/app/data/custom_rules_33.json')
+  customRules.value = customRulesModule.default as any[]
+
   // 加载默认的入院记录类型
   loadDocumentType(currentDocumentType.value)
   window.addEventListener('keydown', handleKeydown)
@@ -2628,20 +2820,24 @@ onUnmounted(() => {
   window.removeEventListener('message', handleParentMessage)
 })
 
-watch(testResults, (newResults) => {
-  const existingIds = newResults.map(r => r.ruleId)
-  expandedResultKeys.value = expandedResultKeys.value.filter(key => existingIds.includes(key))
-  const latest = newResults[newResults.length - 1]
-  if (latest && (latest.error || isResultNonCompliant(latest))) {
-    if (!expandedResultKeys.value.includes(latest.ruleId)) {
-      expandedResultKeys.value = [...expandedResultKeys.value, latest.ruleId]
+watch(
+  testResults,
+  (newResults) => {
+    const existingIds = newResults.map((r) => r.ruleId)
+    expandedResultKeys.value = expandedResultKeys.value.filter((key) => existingIds.includes(key))
+    const latest = newResults[newResults.length - 1]
+    if (latest && (latest.error || isResultNonCompliant(latest))) {
+      if (!expandedResultKeys.value.includes(latest.ruleId)) {
+        expandedResultKeys.value = [...expandedResultKeys.value, latest.ruleId]
+      }
     }
-  }
-}, { deep: true })
+  },
+  { deep: true },
+)
 
 watch(visibleTestResults, (list) => {
-  const visibleIds = list.map(r => r.ruleId)
-  expandedResultKeys.value = expandedResultKeys.value.filter(key => visibleIds.includes(key))
+  const visibleIds = list.map((r) => r.ruleId)
+  expandedResultKeys.value = expandedResultKeys.value.filter((key) => visibleIds.includes(key))
 })
 
 // 计算属性
@@ -2649,10 +2845,7 @@ const testSummary = computed(() => {
   const stats = batchEvaluationStats.value
   if (stats.total === 0) return ''
 
-  const parts = [
-    `${stats.total}个质控点`,
-    `${stats.passed}个符合`
-  ]
+  const parts = [`${stats.total}个质控点`, `${stats.passed}个符合`]
 
   if (stats.notApplicable > 0) {
     parts.push(`${stats.notApplicable}个不适用`)
@@ -2666,7 +2859,9 @@ const testSummary = computed(() => {
 })
 
 const summaryColor = computed(() => {
-  const nonCompliantCount = testResults.value.filter(r => !r.error && isResultNonCompliant(r)).length
+  const nonCompliantCount = testResults.value.filter(
+    (r) => !r.error && isResultNonCompliant(r),
+  ).length
   return nonCompliantCount === 0 ? 'success' : 'warning'
 })
 
@@ -2747,7 +2942,7 @@ const handleSampleRecordChange = (sampleId: string | undefined) => {
 }
 
 const selectAll = () => {
-  selectedRuleIds.value = admissionRules.value.map(rule => rule.rule_id)
+  selectedRuleIds.value = admissionRules.value.map((rule) => rule.rule_id)
 }
 
 const deselectAll = () => {
@@ -2775,10 +2970,10 @@ const formatDateTime = (dateStr: string) => {
 const getPromptModeLabel = (mode: string | null | undefined) => {
   if (!mode) return '未知'
   const modeConfig: Record<string, string> = {
-    'plan_a': '高效模式',
-    'plan_b': '标准模式',
-    'plan_c': '平衡模式',
-    'current': '当前模式'
+    plan_a: '高效模式',
+    plan_b: '标准模式',
+    plan_c: '平衡模式',
+    current: '当前模式',
   }
   return modeConfig[mode] || mode
 }
@@ -2787,18 +2982,22 @@ const getPromptModeLabel = (mode: string | null | undefined) => {
 const getPromptModeColor = (mode: string | null | undefined) => {
   if (!mode) return 'default'
   const colorConfig: Record<string, string> = {
-    'plan_a': 'green',
-    'plan_b': 'blue',
-    'plan_c': 'orange',
-    'current': 'default'
+    plan_a: 'green',
+    plan_b: 'blue',
+    plan_c: 'orange',
+    current: 'default',
   }
   return colorConfig[mode] || 'default'
 }
 
 // 获取规则标题（用于历史详情）
 const getRuleHeader = (result: any) => {
-  const statusIcon = result.is_compliant || result.status === 'compliant' ? '✅' :
-                     result.status === 'not_applicable' ? '⊘' : '❌'
+  const statusIcon =
+    result.is_compliant || result.status === 'compliant'
+      ? '✅'
+      : result.status === 'not_applicable'
+        ? '⊘'
+        : '❌'
   return `${statusIcon} ${result.rule_id} - ${result.rule_name}`
 }
 
@@ -2832,7 +3031,8 @@ const isResultCompliant = (result: ResultLike): boolean => {
   return true
 }
 
-const isResultNonCompliant = (result: ResultLike): boolean => getResultStatusValue(result) === 'non_compliant'
+const isResultNonCompliant = (result: ResultLike): boolean =>
+  getResultStatusValue(result) === 'non_compliant'
 
 const isResultNotApplicable = (result: ResultLike): boolean => {
   const status = getResultStatusValue(result)
@@ -2923,9 +3123,9 @@ const saveQCResultToServer = async (payload: Record<string, any>) => {
     const response = await fetch(apiEndpoints.value.save, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {
@@ -2942,7 +3142,7 @@ const loadHistoryRecords = async () => {
   try {
     const params: any = {
       page: historyPagination.value.current,
-      page_size: historyPagination.value.pageSize
+      page_size: historyPagination.value.pageSize,
     }
 
     if (historyFilters.value.documentType) {
@@ -3023,11 +3223,12 @@ const viewHistoryDetail = async (record: QCHistoryRecord) => {
 const showOriginalMedicalText = () => {
   if (selectedHistoryRecord.value) {
     // 从历史记录中提取原始病历文本（多个可能的字段位置）
-    const medicalText = selectedHistoryRecord.value.medical_text ||
-                       selectedHistoryRecord.value.payload?.medical_text ||
-                       selectedHistoryRecord.value.payload?.document?.medical_text ||
-                       selectedHistoryRecord.value.payload?.document?.content ||
-                       ''
+    const medicalText =
+      selectedHistoryRecord.value.medical_text ||
+      selectedHistoryRecord.value.payload?.medical_text ||
+      selectedHistoryRecord.value.payload?.document?.medical_text ||
+      selectedHistoryRecord.value.payload?.document?.content ||
+      ''
 
     if (medicalText) {
       originalMedicalTextContent.value = medicalText
@@ -3092,7 +3293,7 @@ const startBatchTest = async () => {
   resultFilter.value = 'all'
   testProgress.value = {
     total: selectedRuleIds.value.length,
-    completed: 0
+    completed: 0,
   }
 
   // 获取当前LLM配置信息（包含模型名称）
@@ -3101,8 +3302,8 @@ const startBatchTest = async () => {
     const configResponse = await fetch('/api/v1/qc/sichuan/current-config', {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     })
     if (configResponse.ok) {
       const configResult = await configResponse.json()
@@ -3122,7 +3323,7 @@ const startBatchTest = async () => {
       break
     }
 
-    const rule = admissionRules.value.find(r => r.rule_id === ruleId)
+    const rule = admissionRules.value.find((r) => r.rule_id === ruleId)
     if (!rule) continue
 
     testProgress.value.currentRuleId = ruleId
@@ -3131,7 +3332,7 @@ const startBatchTest = async () => {
     try {
       const response = await testQCRule({
         rule_id: ruleId,
-        medical_text: medicalText.value
+        medical_text: medicalText.value,
       })
 
       if (response.success && response.data) {
@@ -3151,7 +3352,7 @@ const startBatchTest = async () => {
           evidenceVerified: data.evidence_verified ?? true,
           confidence: data.confidence ?? 0,
           llmRawOutput: data.llm_raw_output,
-          metadata: data.metadata
+          metadata: data.metadata,
         })
       } else {
         testResults.value.push({
@@ -3162,7 +3363,7 @@ const startBatchTest = async () => {
           findings: undefined,
           issues: [],
           confidence: 0,
-          error: response.message || '测试失败'
+          error: response.message || '测试失败',
         })
       }
     } catch (error: any) {
@@ -3170,11 +3371,11 @@ const startBatchTest = async () => {
         ruleId: ruleId,
         ruleName: rule.name,
         isCompliant: false,
-         status: 'uncertain',
+        status: 'uncertain',
         findings: undefined,
         issues: [],
         confidence: 0,
-        error: error?.message || '网络错误或服务异常'
+        error: error?.message || '网络错误或服务异常',
       })
     }
 
@@ -3193,7 +3394,9 @@ const startBatchTest = async () => {
   }
 
   // 结果按规则ID排序，便于浏览
-  testResults.value = [...testResults.value].sort((a, b) => a.ruleId.localeCompare(b.ruleId, 'zh-Hans-CN', { numeric: true }))
+  testResults.value = [...testResults.value].sort((a, b) =>
+    a.ruleId.localeCompare(b.ruleId, 'zh-Hans-CN', { numeric: true }),
+  )
 
   // 转换为 productionResult 格式，以便在统一UI中显示
   const document_id = `batch_${Date.now()}`
@@ -3201,7 +3404,7 @@ const startBatchTest = async () => {
   const performance = batchPerformanceMetrics.value
 
   // 转换 testResults 为 BatchQCResult[] 格式
-  const evaluation_results = testResults.value.map(result => ({
+  const evaluation_results = testResults.value.map((result) => ({
     rule_id: result.ruleId,
     rule_name: result.ruleName,
     is_compliant: result.isCompliant,
@@ -3214,7 +3417,7 @@ const startBatchTest = async () => {
     evidence: result.evidence,
     suggestion: result.suggestion,
     confidence: result.confidence,
-    metadata: result.metadata
+    metadata: result.metadata,
   }))
 
   // 构建 productionResult
@@ -3228,19 +3431,21 @@ const startBatchTest = async () => {
         total_rules: stats.total,
         compliant_rules: stats.passed,
         not_applicable: stats.notApplicable,
-        model: currentModel || undefined  // 添加模型信息
+        model: currentModel || undefined, // 添加模型信息
       },
       evaluation_results: evaluation_results,
       performance_metrics: {
         processing_time: performance.totalTime,
         token_usage: performance.totalTokens,
-        estimated_cost: 0
+        estimated_cost: 0,
       },
       prompt_mode: 'sequential_batch', // 标记为批量测试模式
-      llm_info: currentModel ? {
-        model: currentModel
-      } : undefined
-    }
+      llm_info: currentModel
+        ? {
+            model: currentModel,
+          }
+        : undefined,
+    },
   }
 
   message.success('批量测试完成!')
@@ -3258,11 +3463,11 @@ const startBatchTest = async () => {
       performance: performance,
       payload: productionResult.value.data,
       results: testResults.value,
-      model: currentModel || null,  // 保存使用的模型名称
+      model: currentModel || null, // 保存使用的模型名称
       metadata: {
         trigger: 'batch_test_ui',
-        source: batchSource.value
-      }
+        source: batchSource.value,
+      },
     })
   }
 }
@@ -3295,7 +3500,7 @@ const startProductionBatchQC = async () => {
       document_type: currentConfig.value.label,
       rule_ids: selectedRuleIds.value,
       persist: false,
-      prompt_mode: selectedPromptMode.value  // 传递选中的提示词优化方案
+      prompt_mode: selectedPromptMode.value, // 传递选中的提示词优化方案
     })
 
     productionResult.value = response
@@ -3311,12 +3516,12 @@ const startProductionBatchQC = async () => {
         stats: productionEvaluationStats.value,
         performance: productionPerformanceMetrics.value,
         payload: response.data,
-        model: response.data.evaluation_summary?.model || null,  // 保存使用的模型名称
+        model: response.data.evaluation_summary?.model || null, // 保存使用的模型名称
         metadata: {
           trigger: 'quick_qc_ui',
-          prompt_mode: selectedPromptMode.value,  // 记录使用的方案
-          source: batchSource.value
-        }
+          prompt_mode: selectedPromptMode.value, // 记录使用的方案
+          source: batchSource.value,
+        },
       })
     }
   } catch (error: any) {
@@ -3371,9 +3576,9 @@ const getResultsCountText = computed(() => {
 // 获取模式标签文本
 const getModeTagText = (mode: string) => {
   const modeMap: Record<string, string> = {
-    'optimized_batch': '快速',
-    'sequential_batch': '批量',
-    'single': '单条'
+    optimized_batch: '快速',
+    sequential_batch: '批量',
+    single: '单条',
   }
   return modeMap[mode] || '未知'
 }
@@ -3381,9 +3586,9 @@ const getModeTagText = (mode: string) => {
 // 获取模式标签颜色
 const getModeTagColor = (mode: string) => {
   const colorMap: Record<string, string> = {
-    'optimized_batch': 'cyan',      // 快速质控 - 青色
-    'sequential_batch': 'geekblue', // 批量测试 - 蓝色
-    'single': 'default'
+    optimized_batch: 'cyan', // 快速质控 - 青色
+    sequential_batch: 'geekblue', // 批量测试 - 蓝色
+    single: 'default',
   }
   return colorMap[mode] || 'default'
 }
@@ -3607,12 +3812,12 @@ const getModeTagColor = (mode: string) => {
 
   .panel-header {
     display: flex;
-    justify-content: flex-start;  // 改为左对齐
+    justify-content: flex-start; // 改为左对齐
     align-items: center;
-    gap: 12px;  // 标题和按钮之间的间距
+    gap: 12px; // 标题和按钮之间的间距
     margin-bottom: 16px;
     padding-bottom: 12px;
-    border-bottom: 1px solid @color-border-light;  // 底部边框代替背景
+    border-bottom: 1px solid @color-border-light; // 底部边框代替背景
 
     h3 {
       margin: 0;
@@ -3673,18 +3878,18 @@ const getModeTagColor = (mode: string) => {
         }
 
         .card-label {
-          font-size: 15px;  // 加大标题字体，和"基础信息"、"辅助检查"一样
-          font-weight: @font-weight-bold;  // 黑体（700）
-          color: @color-text-primary;  // 改为主色调，更突出
-          margin-bottom: @spacing-2;  // 增加底部间距
+          font-size: 15px; // 加大标题字体，和"基础信息"、"辅助检查"一样
+          font-weight: @font-weight-bold; // 黑体（700）
+          color: @color-text-primary; // 改为主色调，更突出
+          margin-bottom: @spacing-2; // 增加底部间距
           letter-spacing: 0.5px;
         }
 
         .card-value {
-          font-size: 12px;  // 调小内容字体，和原来的"患者信息"标题一样
-          font-weight: @font-weight-normal;  // 使用常规字重（400）
-          color: @color-text-secondary;  // 使用次要文字颜色
-          line-height: 1.8;  // 增加行高，提高可读性
+          font-size: 12px; // 调小内容字体，和原来的"患者信息"标题一样
+          font-weight: @font-weight-normal; // 使用常规字重（400）
+          color: @color-text-secondary; // 使用次要文字颜色
+          line-height: 1.8; // 增加行高，提高可读性
         }
       }
     }
@@ -4339,332 +4544,331 @@ const getModeTagColor = (mode: string) => {
     .option-name-simple {
       font-size: 14px;
       color: #1e293b;
-      }
-
-    }
-
-    .mode-description {
-      margin-top: 8px;
-      padding: 8px 12px;
-      background: rgba(14, 165, 233, 0.05);
-      border-left: 3px solid #0ea5e9;
-      border-radius: 4px;
-      font-size: 12px;
-      color: #475569;
-      line-height: 1.5;
     }
   }
 
-  /* 快速统计 */
-  .quick-stats {
+  .mode-description {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(14, 165, 233, 0.05);
+    border-left: 3px solid #0ea5e9;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.5;
+  }
+}
+
+/* 快速统计 */
+.quick-stats {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+
+  .stat-item {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+
+    &.stat-total {
+      background: #e0f2fe;
+      color: #0c4a6e;
+    }
+
+    &.stat-passed {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    &.stat-issues {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+  }
+}
+
+.production-results {
+  margin-top: 16px;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #bae6fd;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  /* 核心指标卡片 */
+  .results-header {
     display: flex;
-    gap: 12px;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.7);
-    border-radius: 6px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e2e8f0;
 
-    .stat-item {
-      font-size: 13px;
-      font-weight: 500;
-      padding: 4px 10px;
-      border-radius: 4px;
-      white-space: nowrap;
-
-      &.stat-total {
-        background: #e0f2fe;
-        color: #0c4a6e;
-      }
-
-      &.stat-passed {
-        background: #dcfce7;
-        color: #166534;
-      }
-
-      &.stat-issues {
-        background: #fee2e2;
-        color: #991b1b;
-      }
-    }
-  }
-
-  .production-results {
-    margin-top: 16px;
-    padding: 16px;
-    background: white;
-    border-radius: 8px;
-    border: 1px solid #bae6fd;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-
-    /* 核心指标卡片 */
-    .results-header {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 16px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid #e2e8f0;
-
-      @media (max-width: 767px) {
-        flex-direction: column;
-      }
-
-      .compliance-badge {
-        flex-shrink: 0;
-        width: 120px;
-        height: 120px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-
-        &.excellent {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-
-        &.good {
-          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        }
-
-        &.fair {
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-        }
-
-        &.poor {
-          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-        }
-
-        .badge-label {
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.9);
-          margin-bottom: 4px;
-          font-weight: 500;
-        }
-
-        .badge-value {
-          font-size: 32px;
-          font-weight: 700;
-          color: white;
-          line-height: 1;
-        }
-      }
-
-      .results-stats {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 8px;
-
-        .stat-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 15px;
-
-          .stat-icon {
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            font-weight: 700;
-            font-size: 14px;
-
-            &.success {
-              background: #dcfce7;
-              color: #16a34a;
-            }
-
-            &.warning {
-              background: #fef3c7;
-              color: #d97706;
-            }
-
-            &.neutral {
-              background: #f1f5f9;
-              color: #64748b;
-            }
-          }
-
-          .stat-text {
-            color: #1e293b;
-            font-weight: 500;
-          }
-        }
-      }
+    @media (max-width: 767px) {
+      flex-direction: column;
     }
 
-    /* 性能指标（紧凑） */
-    .performance-metrics-compact {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      padding: 12px;
-      background: #f8fafc;
-      border-radius: 6px;
-      margin-bottom: 12px;
-
-      .metric-compact {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 13px;
-        color: #475569;
-        padding: 4px 10px;
-        background: white;
-        border-radius: 4px;
-        border: 1px solid #e2e8f0;
-
-        .anticon {
-          color: #0ea5e9;
-        }
-      }
-    }
-
-    .view-details-action {
-      margin: 16px 0;
-
-      :deep(.ant-btn) {
-        height: 40px;
-        font-size: 14px;
-        font-weight: 500;
-      }
-    }
-
-    .production-results-preview {
-      max-height: 300px;
-      overflow-y: auto;
-
-      &::-webkit-scrollbar {
-        width: 6px;
-      }
-
-      &::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 3px;
-      }
-
-      &::-webkit-scrollbar-thumb {
-        background: #0ea5e9;
-        border-radius: 3px;
-
-        &:hover {
-          background: #0284c7;
-        }
-      }
-    }
-
-    .production-results-list {
+    .compliance-badge {
+      flex-shrink: 0;
+      width: 120px;
+      height: 120px;
       display: flex;
       flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+      &.excellent {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      }
+
+      &.good {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      }
+
+      &.fair {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      }
+
+      &.poor {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      }
+
+      .badge-label {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+
+      .badge-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: white;
+        line-height: 1;
+      }
+    }
+
+    .results-stats {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
       gap: 8px;
-      margin-top: 12px;
 
-      .production-result-item {
-        padding: 12px;
-        border-radius: 6px;
-        border: 1px solid #e5e7eb;
-        background: white;
+      .stat-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
 
-        &.compliant {
-          background: #f0fdf4;
-          border-color: #86efac;
-        }
-
-        &.non-compliant {
-          background: #fef2f2;
-          border-color: #fca5a5;
-        }
-
-        &.neutral {
-          background: #f8fafc;
-          border-color: #cbd5f5;
-        }
-
-        &.error {
-          background: #fff7ed;
-          border-color: #fed7aa;
-        }
-
-        .result-item-header {
+        .stat-icon {
+          width: 24px;
+          height: 24px;
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-bottom: 8px;
+          justify-content: center;
+          border-radius: 50%;
+          font-weight: 700;
+          font-size: 14px;
 
-          .result-icon {
-            font-size: 16px;
-
-            &.success {
-              color: #16a34a;
-            }
-
-            &.error {
-              color: #dc2626;
-            }
-
-            &.neutral {
-              color: #475569;
-            }
+          &.success {
+            background: #dcfce7;
+            color: #16a34a;
           }
 
-          .result-rule-id {
-            font-size: 13px;
-            font-weight: 600;
-            color: #0ea5e9;
+          &.warning {
+            background: #fef3c7;
+            color: #d97706;
           }
 
-          .result-rule-name {
-            flex: 1;
-            font-size: 13px;
-            color: #374151;
+          &.neutral {
+            background: #f1f5f9;
+            color: #64748b;
           }
         }
 
-        .result-findings {
-          margin-top: 8px;
-          padding: 8px;
-          background: #fef3c7;
-          border-left: 3px solid #f59e0b;
-          border-radius: 4px;
-
-          .findings-label {
-            font-size: 15px;
-            font-weight: 700;
-            color: #92400e;
-            margin-bottom: 6px;
-          }
-
-          .findings-content {
-            font-size: 13px;
-            color: #451a03;
-            line-height: 1.5;
-          }
-        }
-
-        .result-evidence {
-          margin-top: 6px;
-          font-size: 12px;
-          color: #6b7280;
-          padding-left: 12px;
-          border-left: 2px solid #d1d5db;
-
-          .evidence-label {
-            font-weight: 600;
-            margin-right: 4px;
-          }
-
-          .evidence-content {
-            font-style: italic;
-          }
+        .stat-text {
+          color: #1e293b;
+          font-weight: 500;
         }
       }
     }
   }
+
+  /* 性能指标（紧凑） */
+  .performance-metrics-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 6px;
+    margin-bottom: 12px;
+
+    .metric-compact {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #475569;
+      padding: 4px 10px;
+      background: white;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+
+      .anticon {
+        color: #0ea5e9;
+      }
+    }
+  }
+
+  .view-details-action {
+    margin: 16px 0;
+
+    :deep(.ant-btn) {
+      height: 40px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+  }
+
+  .production-results-preview {
+    max-height: 300px;
+    overflow-y: auto;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #0ea5e9;
+      border-radius: 3px;
+
+      &:hover {
+        background: #0284c7;
+      }
+    }
+  }
+
+  .production-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+
+    .production-result-item {
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      background: white;
+
+      &.compliant {
+        background: #f0fdf4;
+        border-color: #86efac;
+      }
+
+      &.non-compliant {
+        background: #fef2f2;
+        border-color: #fca5a5;
+      }
+
+      &.neutral {
+        background: #f8fafc;
+        border-color: #cbd5f5;
+      }
+
+      &.error {
+        background: #fff7ed;
+        border-color: #fed7aa;
+      }
+
+      .result-item-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+
+        .result-icon {
+          font-size: 16px;
+
+          &.success {
+            color: #16a34a;
+          }
+
+          &.error {
+            color: #dc2626;
+          }
+
+          &.neutral {
+            color: #475569;
+          }
+        }
+
+        .result-rule-id {
+          font-size: 13px;
+          font-weight: 600;
+          color: #0ea5e9;
+        }
+
+        .result-rule-name {
+          flex: 1;
+          font-size: 13px;
+          color: #374151;
+        }
+      }
+
+      .result-findings {
+        margin-top: 8px;
+        padding: 8px;
+        background: #fef3c7;
+        border-left: 3px solid #f59e0b;
+        border-radius: 4px;
+
+        .findings-label {
+          font-size: 15px;
+          font-weight: 700;
+          color: #92400e;
+          margin-bottom: 6px;
+        }
+
+        .findings-content {
+          font-size: 13px;
+          color: #451a03;
+          line-height: 1.5;
+        }
+      }
+
+      .result-evidence {
+        margin-top: 6px;
+        font-size: 12px;
+        color: #6b7280;
+        padding-left: 12px;
+        border-left: 2px solid #d1d5db;
+
+        .evidence-label {
+          font-weight: 600;
+          margin-right: 4px;
+        }
+
+        .evidence-content {
+          font-style: italic;
+        }
+      }
+    }
+  }
+}
 
 /* 质控结果详情弹窗 */
 .results-modal-content {
@@ -5324,7 +5528,7 @@ const getModeTagColor = (mode: string) => {
       align-items: center;
       gap: 8px;
       padding: 12px 16px;
-      background: linear-gradient(135deg, #E6F4FF 0%, #F0F9FF 100%);
+      background: linear-gradient(135deg, #e6f4ff 0%, #f0f9ff 100%);
       border-left: 4px solid @color-primary;
       border-radius: 8px;
       margin-bottom: 12px;
@@ -5415,7 +5619,7 @@ const getModeTagColor = (mode: string) => {
       gap: 16px;
       margin-bottom: 32px;
       padding: 20px;
-      background: linear-gradient(135deg, #F0F9FF 0%, #E6F4FF 100%);
+      background: linear-gradient(135deg, #f0f9ff 0%, #e6f4ff 100%);
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 
@@ -5457,7 +5661,7 @@ const getModeTagColor = (mode: string) => {
       gap: 16px;
       margin-bottom: 24px;
       padding: 20px;
-      background: linear-gradient(135deg, #F0F9FF 0%, #E6F4FF 100%);
+      background: linear-gradient(135deg, #f0f9ff 0%, #e6f4ff 100%);
       border-radius: 12px;
 
       :deep(.ant-statistic) {
@@ -5645,7 +5849,7 @@ const getModeTagColor = (mode: string) => {
   .history-detail-content {
     .detail-header {
       padding: 16px;
-      background: linear-gradient(135deg, #F0F9FF 0%, #E6F4FF 100%);
+      background: linear-gradient(135deg, #f0f9ff 0%, #e6f4ff 100%);
       border-radius: 8px;
       margin-bottom: 24px;
       .header-content {
@@ -5904,9 +6108,10 @@ const getModeTagColor = (mode: string) => {
       position: absolute;
       background: #1890ff;
       opacity: 0.9;
-      box-shadow: 0 0 10px rgba(24, 144, 255, 0.8),
-                  0 0 20px rgba(24, 144, 255, 0.5),
-                  0 0 30px rgba(24, 144, 255, 0.3);
+      box-shadow:
+        0 0 10px rgba(24, 144, 255, 0.8),
+        0 0 20px rgba(24, 144, 255, 0.5),
+        0 0 30px rgba(24, 144, 255, 0.3);
     }
 
     .progress-glow {
@@ -6019,7 +6224,8 @@ const getModeTagColor = (mode: string) => {
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
   }
   50% {

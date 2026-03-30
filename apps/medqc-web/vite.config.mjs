@@ -19,11 +19,37 @@ const publicHmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || devServer
 function createManualChunks(id) {
   const normalizedId = normalizeId(id)
 
+  if (normalizedId.includes('/src/views/drg-grouper/sichuan2024Grouper.js')) {
+    return 'grouper-sichuan-engine'
+  }
+
+  if (normalizedId.includes('/src/views/drg-grouper/cnDrg2023Grouper.js')) {
+    return 'grouper-cn-engine'
+  }
+
   if (
-    normalizedId.includes('/src/views/drg-grouper/sichuan2024Grouper.js')
-    || normalizedId.includes('/src/views/drg-grouper/cnDrg2023Grouper.js')
+    normalizedId.includes('/src/views/drg-grouper/cnDrg2023Data.ts')
+    || normalizedId.includes('/src/views/drg-grouper/sichuanDipData.ts')
   ) {
-    return 'grouper-engines'
+    return 'grouper-datasets'
+  }
+
+  if (
+    normalizedId.includes('/src/data/qcRuleCases.ts')
+  ) {
+    return 'rules-cases-core'
+  }
+
+  if (normalizedId.includes('/src/data/customRuleCases.ts')) {
+    return 'rules-cases-custom'
+  }
+
+  if (normalizedId.includes('/backend/app/data/custom_rules_33.json')) {
+    return 'rules-json-custom'
+  }
+
+  if (normalizedId.includes('/src/data/quality-standards.json')) {
+    return 'rules-json-standards'
   }
 
   if (normalizedId.includes('node_modules')) {
@@ -37,26 +63,110 @@ function createManualChunks(id) {
     }
 
     if (
-      normalizedId.includes('/node_modules/ant-design-vue/')
-      || normalizedId.includes('/node_modules/@ant-design/icons-vue/')
+      normalizedId.includes('/node_modules/ant-design-vue/es/table/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/pagination/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/tabs/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/tag/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/card/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/badge/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/list/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/descriptions/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/tooltip/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/dropdown/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/menu/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/popover/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/segmented/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/empty/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/spin/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/skeleton/')
     ) {
-      return 'vendor-antd'
+      return 'vendor-antd-display'
     }
 
     if (
-      normalizedId.includes('/node_modules/echarts/')
-      || normalizedId.includes('/node_modules/vue-echarts/')
+      normalizedId.includes('/node_modules/ant-design-vue/es/form/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/input/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/input-number/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/select/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/checkbox/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/radio/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/switch/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/upload/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/date-picker/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/time-picker/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/tree-select/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/auto-complete/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/cascader/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/slider/')
     ) {
+      return 'vendor-antd-form'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/ant-design-vue/es/modal/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/drawer/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/message/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/notification/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/progress/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/popconfirm/')
+      || normalizedId.includes('/node_modules/ant-design-vue/es/result/')
+    ) {
+      return 'vendor-antd-feedback'
+    }
+
+    if (normalizedId.includes('/node_modules/ant-design-vue/')) {
+      return 'vendor-antd-base'
+    }
+
+    if (normalizedId.includes('/node_modules/@ant-design/icons-vue/')) {
+      return 'vendor-antd-icons'
+    }
+
+    if (normalizedId.includes('/node_modules/vue-echarts/')) {
+      return 'vendor-echarts-vue'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/echarts/core/')
+      || normalizedId.includes('/node_modules/echarts/shared/')
+      || normalizedId.includes('/node_modules/echarts/lib/core/')
+    ) {
+      return 'vendor-echarts-core'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/echarts/charts/')
+      || normalizedId.includes('/node_modules/echarts/lib/chart/')
+    ) {
+      return 'vendor-echarts-charts'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/echarts/components/')
+      || normalizedId.includes('/node_modules/echarts/renderers/')
+      || normalizedId.includes('/node_modules/echarts/lib/component/')
+      || normalizedId.includes('/node_modules/echarts/lib/renderer/')
+    ) {
+      return 'vendor-echarts-components'
+    }
+
+    if (normalizedId.includes('/node_modules/echarts/')) {
       return 'vendor-echarts'
     }
 
+    if (normalizedId.includes('/node_modules/xlsx/')) {
+      return 'vendor-export-xlsx'
+    }
+
     if (
-      normalizedId.includes('/node_modules/xlsx/')
-      || normalizedId.includes('/node_modules/jspdf/')
+      normalizedId.includes('/node_modules/jspdf/')
       || normalizedId.includes('/node_modules/jspdf-autotable/')
-      || normalizedId.includes('/node_modules/html2canvas/')
     ) {
-      return 'vendor-export'
+      return 'vendor-export-pdf'
+    }
+
+    if (normalizedId.includes('/node_modules/html2canvas/')) {
+      return 'vendor-export-canvas'
     }
   }
 

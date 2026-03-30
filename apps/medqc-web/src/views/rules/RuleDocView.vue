@@ -43,10 +43,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { Typography } from 'ant-design-vue'
-// 直接复用后端配置的泸县规则 JSON（注意：从 src/views/rules/ 返回到项目根再进入 backend）
-import customRulesData from '../../../backend/app/data/custom_rules_33.json'
 
 interface SichuanQCRule {
   rule_id?: string
@@ -56,7 +54,7 @@ interface SichuanQCRule {
   custom_prompt?: string
 }
 
-const allRules = customRulesData as SichuanQCRule[]
+const allRules = ref<SichuanQCRule[]>([])
 
 // 从 custom_prompt 中提取【检查要点】段落
 const extractCheckPoints = (prompt?: string): string => {
@@ -98,7 +96,7 @@ const ruleDocColumns = [
 ]
 
 const ruleDocRows = computed(() =>
-  allRules
+  allRules.value
     // 仅展示 LX- 开头的泸县33条规则，排除扩展规则（LXE-）
     .filter((rule) => {
       const id = (rule.rule_id || rule.rule_code || '').toUpperCase()
@@ -111,6 +109,11 @@ const ruleDocRows = computed(() =>
       check_points: extractCheckPoints(rule.custom_prompt),
     })),
 )
+
+onMounted(async () => {
+  const customRulesModule = await import('../../../backend/app/data/custom_rules_33.json')
+  allRules.value = customRulesModule.default as SichuanQCRule[]
+})
 </script>
 
 <style scoped>
