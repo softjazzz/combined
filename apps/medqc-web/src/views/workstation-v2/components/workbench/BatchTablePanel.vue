@@ -70,10 +70,10 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'patient'">
-          <div class="batch-table-panel__patient-name">
-            {{ record.patientName }}
-          </div>
-          <div class="batch-table-panel__patient-meta mt-2 flex items-center gap-2 text-[12px]">
+          <div class="batch-table-panel__patient-cell">
+            <span class="batch-table-panel__patient-name">
+              {{ record.patientName }}
+            </span>
             <span
               class="batch-table-panel__visit-id inline-flex items-center px-2.5 py-1 font-mono text-[11px]"
             >
@@ -172,11 +172,11 @@ function stageTagClass(stageStatus: string) {
 }
 
 const columns = [
-  { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 260 },
-  { title: '科室', key: 'department', dataIndex: 'department', width: 180 },
-  { title: '阶段状态', key: 'stageStatus', dataIndex: 'stageStatus', width: 140 },
-  { title: '风险原因', key: 'risk', dataIndex: 'riskReason', width: 260 },
-  { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 140 },
+  { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 340 },
+  { title: '科室', key: 'department', dataIndex: 'department', width: 160 },
+  { title: '阶段状态', key: 'stageStatus', dataIndex: 'stageStatus', width: 120 },
+  { title: '风险原因', key: 'risk', dataIndex: 'riskReason', width: 340 },
+  { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 100 },
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
 </script>
@@ -275,14 +275,18 @@ const columns = [
 }
 
 .batch-table-panel__patient-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--workstation-text-primary, #0f172a);
 }
 
-.batch-table-panel__patient-meta {
-  color: var(--workstation-text-secondary, #5b6b84);
+.batch-table-panel__patient-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .batch-table-panel__visit-id,
@@ -295,12 +299,16 @@ const columns = [
   border: 1px solid var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
   background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
   color: var(--workstation-text-secondary, #5b6b84);
+  flex-shrink: 0;
 }
 
 .batch-table-panel__department,
 .batch-table-panel__risk {
   font-size: 13px;
   color: var(--workstation-text-secondary, #5b6b84);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .batch-table-panel__updated-at {
@@ -311,6 +319,7 @@ const columns = [
 
 .batch-table-panel__tag {
   border: 1px solid transparent;
+  flex-shrink: 0;
 }
 
 .batch-table-panel__tag--demo {
@@ -370,8 +379,8 @@ const columns = [
 .batch-table-panel :deep(.ant-table-tbody > tr > td) {
   background: transparent;
   border-bottom: 1px solid rgba(241, 245, 249, 0.9);
-  padding-top: 18px;
-  padding-bottom: 18px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr:hover > td) {
@@ -403,5 +412,12 @@ const columns = [
 .batch-table-panel :deep(.ant-empty-description) {
   color: var(--workstation-text-muted, #94a3b8);
   font-size: 13px;
+}
+
+.batch-table-panel__detail-button {
+  height: 32px !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
 }
 </style>
