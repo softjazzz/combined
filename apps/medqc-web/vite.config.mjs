@@ -18,6 +18,8 @@ const publicHmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || devServer
 
 function createManualChunks(id) {
   const normalizedId = normalizeId(id)
+  const antdMatch = normalizedId.match(/\/node_modules\/ant-design-vue\/es\/([^/]+)\//)
+  const antdSegment = antdMatch ? antdMatch[1] : ''
 
   if (normalizedId.includes('/src/views/drg-grouper/sichuan2024Grouper.js')) {
     return 'grouper-sichuan-engine'
@@ -63,55 +65,117 @@ function createManualChunks(id) {
     }
 
     if (
-      normalizedId.includes('/node_modules/ant-design-vue/es/table/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/pagination/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/tabs/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/tag/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/card/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/badge/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/list/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/descriptions/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/tooltip/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/dropdown/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/menu/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/popover/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/segmented/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/empty/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/spin/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/skeleton/')
+      [
+        'affix',
+        'alert',
+        'anchor',
+        'app',
+        'avatar',
+        'badge',
+        'breadcrumb',
+        'button',
+        'calendar',
+        'card',
+        'collapse',
+        'descriptions',
+        'divider',
+        'dropdown',
+        'empty',
+        'image',
+        'layout',
+        'list',
+        'menu',
+        'pagination',
+        'popover',
+        'segmented',
+        'skeleton',
+        'space',
+        'spin',
+        'statistic',
+        'steps',
+        'table',
+        'tabs',
+        'tag',
+        'timeline',
+        'tooltip',
+        'tree',
+        'typography',
+      ].includes(antdSegment)
     ) {
       return 'vendor-antd-display'
     }
 
     if (
-      normalizedId.includes('/node_modules/ant-design-vue/es/form/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/input/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/input-number/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/select/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/checkbox/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/radio/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/switch/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/upload/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/date-picker/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/time-picker/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/tree-select/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/auto-complete/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/cascader/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/slider/')
+      [
+        'auto-complete',
+        'cascader',
+        'checkbox',
+        'date-picker',
+        'form',
+        'input',
+        'input-number',
+        'mentions',
+        'radio',
+        'rate',
+        'select',
+        'slider',
+        'switch',
+        'time-picker',
+        'transfer',
+        'tree-select',
+        'upload',
+      ].includes(antdSegment)
     ) {
       return 'vendor-antd-form'
     }
 
     if (
-      normalizedId.includes('/node_modules/ant-design-vue/es/modal/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/drawer/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/message/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/notification/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/progress/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/popconfirm/')
-      || normalizedId.includes('/node_modules/ant-design-vue/es/result/')
+      [
+        'drawer',
+        'message',
+        'modal',
+        'notification',
+        'popconfirm',
+        'progress',
+        'result',
+        'tour',
+      ].includes(antdSegment)
     ) {
       return 'vendor-antd-feedback'
+    }
+
+    if (
+      [
+        '_util',
+        'config-provider',
+        'grid',
+        'locale',
+        'style',
+        'theme',
+        'vc-align',
+        'vc-cascader',
+        'vc-dialog',
+        'vc-drawer',
+        'vc-image',
+        'vc-input-number',
+        'vc-menu',
+        'vc-notification',
+        'vc-overflow',
+        'vc-pagination',
+        'vc-picker',
+        'vc-resize-observer',
+        'vc-select',
+        'vc-slider',
+        'vc-table',
+        'vc-textarea',
+        'vc-tooltip',
+        'vc-tree',
+        'vc-tree-select',
+        'vc-trigger',
+        'vc-upload',
+      ].includes(antdSegment)
+    ) {
+      return 'vendor-antd-system'
     }
 
     if (normalizedId.includes('/node_modules/ant-design-vue/')) {

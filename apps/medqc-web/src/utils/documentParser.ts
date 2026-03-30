@@ -1,9 +1,8 @@
 /**
  * 前端文档解析工具
- * 支持Word、TXT文档的解析，PDF通过后端处理
+ * 支持 Word、TXT 文档的解析，PDF 通过后端处理。
+ * Word 解析依赖 mammoth，改为运行时动态加载，避免把重依赖绑进轻入口。
  */
-
-import mammoth from 'mammoth'
 
 export interface ParseResult {
   success: boolean
@@ -19,28 +18,29 @@ export interface ParseResult {
 
 export class DocumentParser {
   /**
-   * 解析Word文档
+   * 解析 Word 文档
    */
   static async parseWord(file: File): Promise<ParseResult> {
     try {
       console.log('开始解析Word文件:', file.name)
-      
+
+      const mammoth = await import('mammoth')
       const arrayBuffer = await file.arrayBuffer()
-      const result = await mammoth.extractRawText({ arrayBuffer  })
-      
+      const result = await mammoth.extractRawText({ arrayBuffer })
+
       const content = result.value.trim()
       const wordCount = content.split(/\s+/).length
-      
+
       console.log(`Word解析完成: ${wordCount}字`)
-      
+
       return {
         success: true,
         content,
         metadata: {
           wordCount,
           fileType: 'Word',
-          fileName: file.name
-        }
+          fileName: file.name,
+        },
       }
     } catch (error) {
       console.error('Word解析失败:', error)
@@ -50,32 +50,32 @@ export class DocumentParser {
         error: `Word文档解析失败: ${error instanceof Error ? error.message : '未知错误'}`,
         metadata: {
           fileType: 'Word',
-          fileName: file.name
-        }
+          fileName: file.name,
+        },
       }
     }
   }
 
   /**
-   * 解析TXT文档
+   * 解析 TXT 文档
    */
   static async parseTXT(file: File): Promise<ParseResult> {
     try {
       console.log('开始解析TXT文件:', file.name)
-      
+
       const text = await file.text()
       const wordCount = text.trim().split(/\s+/).length
-      
+
       console.log(`TXT解析完成: ${wordCount}字`)
-      
+
       return {
         success: true,
         content: text,
         metadata: {
           wordCount,
           fileType: 'TXT',
-          fileName: file.name
-        }
+          fileName: file.name,
+        },
       }
     } catch (error) {
       console.error('TXT解析失败:', error)
@@ -85,18 +85,18 @@ export class DocumentParser {
         error: `TXT文档解析失败: ${error instanceof Error ? error.message : '未知错误'}`,
         metadata: {
           fileType: 'TXT',
-          fileName: file.name
-        }
+          fileName: file.name,
+        },
       }
     }
   }
 
   /**
-   * PDF文件处理提示（实际解析在后端进行）
+   * PDF 文件处理提示，实际解析在后端进行
    */
   static async handlePDF(file: File): Promise<ParseResult> {
     console.log('PDF文件将通过后端解析:', file.name)
-    
+
     return {
       success: true,
       content: `PDF文件: ${file.name}
@@ -116,8 +116,8 @@ export class DocumentParser {
 💡 点击"开始AI解析"按钮，系统将自动上传PDF到后端进行处理。`,
       metadata: {
         fileType: 'PDF',
-        fileName: file.name
-      }
+        fileName: file.name,
+      },
     }
   }
 
@@ -127,28 +127,27 @@ export class DocumentParser {
   static async parseDocument(file: File): Promise<ParseResult> {
     const fileName = file.name.toLowerCase()
     const fileType = file.type.toLowerCase()
-    
+
     try {
-      // 根据文件扩展名和MIME类型判断文件类型
       if (fileName.endsWith('.pdf') || fileType.includes('pdf')) {
         return await this.handlePDF(file)
-      } else if (
-        fileName.endsWith('.docx') || 
-        fileName.endsWith('.doc') || 
+      }
+
+      if (
+        fileName.endsWith('.docx') ||
+        fileName.endsWith('.doc') ||
         fileType.includes('word') ||
         fileType.includes('document')
       ) {
         return await this.parseWord(file)
-      } else if (
-        fileName.endsWith('.txt') || 
-        fileType.includes('text/plain')
-      ) {
-        return await this.parseTXT(file)
-      } else {
-        // 尝试作为文本文件处理
-        console.log('未知文件类型，尝试作为文本文件处理:', fileName, fileType)
+      }
+
+      if (fileName.endsWith('.txt') || fileType.includes('text/plain')) {
         return await this.parseTXT(file)
       }
+
+      console.log('未知文件类型，尝试作为文本文件处理:', fileName, fileType)
+      return await this.parseTXT(file)
     } catch (error) {
       console.error('文档解析失败:', error)
       return {
@@ -157,8 +156,8 @@ export class DocumentParser {
         error: `不支持的文件格式或解析失败: ${fileName}`,
         metadata: {
           fileType: 'Unknown',
-          fileName: file.name
-        }
+          fileName: file.name,
+        },
       }
     }
   }
@@ -169,13 +168,18 @@ export class DocumentParser {
   static isSupportedFileType(file: File): boolean {
     const fileName = file.name.toLowerCase()
     const fileType = file.type.toLowerCase()
-    
+
     const supportedExtensions = ['.pdf', '.docx', '.doc', '.txt']
-    const supportedMimeTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
-    
-    const hasValidExtension = supportedExtensions.some(ext => fileName.endsWith(ext))
-    const hasValidMimeType = supportedMimeTypes.some(mime => fileType.includes(mime))
-    
+    const supportedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ]
+
+    const hasValidExtension = supportedExtensions.some((ext) => fileName.endsWith(ext))
+    const hasValidMimeType = supportedMimeTypes.some((mime) => fileType.includes(mime))
+
     return hasValidExtension || hasValidMimeType
   }
 
@@ -185,20 +189,24 @@ export class DocumentParser {
   static getFileTypeDescription(file: File): string {
     const fileName = file.name.toLowerCase()
     const fileType = file.type.toLowerCase()
-    
+
     if (fileName.endsWith('.pdf') || fileType.includes('pdf')) {
       return 'PDF文档'
-    } else if (fileName.endsWith('.docx') || fileName.endsWith('.doc') || fileType.includes('word')) {
-      return 'Word文档'
-    } else if (fileName.endsWith('.txt') || fileType.includes('text/plain')) {
-      return '文本文档'
-    } else {
-      return '未知格式'
     }
+
+    if (fileName.endsWith('.docx') || fileName.endsWith('.doc') || fileType.includes('word')) {
+      return 'Word文档'
+    }
+
+    if (fileName.endsWith('.txt') || fileType.includes('text/plain')) {
+      return '文本文档'
+    }
+
+    return '未知格式'
   }
 
   /**
-   * 检查是否为PDF文件
+   * 检查是否为 PDF 文件
    */
   static isPDFFile(file: File): boolean {
     const fileName = file.name.toLowerCase()
