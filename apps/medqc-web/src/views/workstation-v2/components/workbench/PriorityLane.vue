@@ -85,7 +85,10 @@
           <span class="priority-lane__department-dot inline-flex h-2 w-2 rounded-full" />
           {{ card.department || '未分科室' }}
         </div>
-        <div class="priority-lane__risk-text mt-2 min-h-[54px] text-[12px] font-semibold leading-5">
+        <div
+          v-if="card.riskText"
+          class="priority-lane__risk-text mt-2 min-h-[54px] text-[12px] font-semibold leading-5"
+        >
           {{ card.riskText }}
         </div>
 

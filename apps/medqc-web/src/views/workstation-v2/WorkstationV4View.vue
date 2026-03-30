@@ -1645,15 +1645,8 @@ function riskTypeOf(record: PatientRecord): string {
 }
 
 function priorityReason(record: PatientRecord) {
-  const days = record.days || 0
-  const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
-  const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
-  if (isDischarged && cdmFrontpageEmpty) return '已出院，首页资料还未完善，建议优先处理'
-  if (isDischarged && days >= 8)
-    return '\u5df2\u51fa\u9662\uff0c\u5efa\u8bae\u5c3d\u5feb\u5b8c\u6210\u5355\u6848\u5904\u7406'
-  if (!isDischarged)
-    return '\u4ecd\u5728\u9662\uff0c\u5efa\u8bae\u8ddf\u8fdb\u5f53\u524d\u8fdb\u5ea6'
-  return '\u53ef\u76f4\u63a5\u8fdb\u5165\u8be6\u60c5\u9875\u8fdb\u884c\u590d\u6838'
+  void record
+  return ''
 }
 
 const priorityCards = computed<PriorityCard[]>(() => {
