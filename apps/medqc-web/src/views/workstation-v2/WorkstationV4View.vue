@@ -2798,15 +2798,16 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 
 .workbench-controls-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) 176px 176px 46px;
+  grid-template-columns: minmax(360px, 1.28fr) 152px 188px 46px;
   grid-template-areas: 'search status priority refresh';
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .workbench-controls__search-input {
   grid-area: search;
   min-width: 0;
+  max-width: 920px;
 }
 
 .workbench-controls__status-select {
@@ -2841,24 +2842,24 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   padding: 2px 2px 0;
 }
 
 .workbench-summary-inline__item {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border-radius: var(--workstation-radius-pill);
   background: var(--workstation-bg-card-soft);
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--workstation-text-secondary);
 }
 
 .workbench-summary-inline__item strong {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.1;
   font-weight: 800;
   color: var(--workstation-text-primary);
@@ -2883,24 +2884,23 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 
 .workbench-dept-row {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .workbench-dept-row__label {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--workstation-text-muted);
 }
 
 .workbench-dept-row__list {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   overflow-x: auto;
   padding-bottom: 2px;
   scrollbar-width: none;
@@ -2915,11 +2915,11 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border-radius: var(--workstation-radius-pill);
   border: 1px solid transparent;
-  padding: 5px 12px;
-  font-size: 13px;
+  padding: 6px 14px;
+  font-size: 14px;
   font-weight: 600;
   transition: all 160ms ease;
 }
@@ -2964,11 +2964,11 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 }
 
 .workbench-controls__hint-inline {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--workstation-text-secondary);
   border-top: 1px solid var(--workstation-divider);
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 .workstation-empty-state {
@@ -3033,6 +3033,14 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   border-color: var(--workstation-border-light) !important;
   background: var(--workstation-bg-surface-strong) !important;
   box-shadow: var(--workstation-shadow-input);
+}
+
+.workstation-shell :deep(.ant-input),
+.workstation-shell :deep(.ant-input-affix-wrapper input),
+.workstation-shell :deep(.ant-select-selection-item),
+.workstation-shell :deep(.ant-select-selection-placeholder) {
+  font-size: 14px !important;
+  font-weight: 500;
 }
 
 .workstation-shell :deep(.ant-input-affix-wrapper:hover),
