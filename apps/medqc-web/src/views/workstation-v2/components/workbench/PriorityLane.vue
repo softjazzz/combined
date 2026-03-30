@@ -254,27 +254,36 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__card {
-  border-radius: var(--workstation-radius-card, 24px);
-  border: 1px solid var(--workstation-border-light, rgba(255, 255, 255, 0.92));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 250, 252, 0.98));
-  box-shadow: var(--workstation-shadow-card, 0 16px 34px rgba(148, 163, 184, 0.1));
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.84)),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 18px 44px rgba(191, 207, 228, 0.24),
+    0 2px 10px rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
 }
 
 .priority-lane__card:hover {
-  box-shadow: var(--workstation-shadow-card-hover, 0 28px 48px rgba(148, 163, 184, 0.18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 24px 56px rgba(191, 207, 228, 0.32),
+    0 2px 12px rgba(255, 255, 255, 0.72);
 }
 
 .priority-lane__card-highlight {
   background: linear-gradient(
     90deg,
     rgba(148, 163, 184, 0),
-    rgba(148, 163, 184, 0.55),
+    rgba(255, 255, 255, 0.88),
     rgba(148, 163, 184, 0)
   );
 }
 
 .priority-lane__card-name {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 900;
   letter-spacing: -0.04em;
   color: var(--workstation-text-primary, #0f172a);
@@ -291,9 +300,12 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__visit-id {
-  border: 1px solid var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
-  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(246, 248, 252, 0.88);
   color: var(--workstation-text-secondary, #5b6b84);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 6px 16px rgba(191, 207, 228, 0.12);
 }
 
 .priority-lane__pill--demo,
@@ -304,9 +316,12 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__risk {
-  border: 1px solid transparent;
-  padding: 6px 10px;
-  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  padding: 8px 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 10px 24px rgba(191, 207, 228, 0.2);
+  backdrop-filter: blur(16px);
 }
 
 .priority-lane__risk--warning {
@@ -338,18 +353,20 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__department-dot {
-  background: rgba(148, 163, 184, 0.72);
+  background: linear-gradient(180deg, rgba(191, 219, 254, 0.98), rgba(148, 163, 184, 0.72));
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.86);
 }
 
 .priority-lane__risk-text {
-  color: var(--workstation-text-primary, #0f172a);
+  color: rgba(15, 23, 42, 0.92);
+  letter-spacing: -0.01em;
 }
 
 .priority-lane__action {
-  height: 32px !important;
+  height: 38px !important;
   border-radius: var(--workstation-radius-pill, 999px) !important;
-  padding: 0 14px !important;
-  font-size: 12px !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
   transition:
     transform 160ms ease,
@@ -361,21 +378,36 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #2f6fed) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--workstation-brand-500, #2f6fed) 86%, white),
+    var(--workstation-brand-500, #2f6fed)
+  ) !important;
   color: #fff !important;
-  box-shadow: var(--workstation-shadow-brand, 0 12px 22px rgba(47, 111, 237, 0.24)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 14px 28px rgba(47, 111, 237, 0.28) !important;
 }
 
 .priority-lane__action--primary:hover {
-  background: var(--workstation-brand-600, #1e5ae0) !important;
-  box-shadow: var(--workstation-shadow-brand-hover, 0 14px 28px rgba(47, 111, 237, 0.3)) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--workstation-brand-600, #1e5ae0) 84%, white),
+    var(--workstation-brand-600, #1e5ae0)
+  ) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 16px 30px rgba(47, 111, 237, 0.32) !important;
 }
 
 .priority-lane__action--secondary {
-  border-color: var(--workstation-brand-border, #c9d9f7) !important;
-  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(191, 219, 254, 0.84) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
   color: var(--workstation-text-secondary, #5b6b84) !important;
-  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 10px 20px rgba(191, 207, 228, 0.16) !important;
+  backdrop-filter: blur(14px);
 }
 
 .priority-lane__action--secondary:hover {
