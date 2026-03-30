@@ -40,7 +40,7 @@
       <article
         v-for="card in cards"
         :key="card.id"
-        class="priority-lane__card group relative overflow-hidden p-3.5 transition duration-300 hover:-translate-y-1"
+        class="priority-lane__card priority-lane__card--stack group relative flex h-full flex-col overflow-hidden p-3.5 transition duration-300 hover:-translate-y-1"
       >
         <div
           class="priority-lane__card-highlight pointer-events-none absolute inset-x-4 top-0 h-px"
@@ -89,7 +89,7 @@
           {{ card.riskText }}
         </div>
 
-        <div class="mt-3 flex items-center gap-2">
+        <div class="priority-lane__actions mt-3 flex items-center gap-2">
           <a-button
             type="primary"
             size="small"
@@ -273,6 +273,10 @@ function riskBadgeClass(riskType: string) {
     0 2px 12px rgba(255, 255, 255, 0.72);
 }
 
+.priority-lane__card--stack {
+  min-height: 100%;
+}
+
 .priority-lane__card-highlight {
   background: linear-gradient(
     90deg,
@@ -360,6 +364,10 @@ function riskBadgeClass(riskType: string) {
 .priority-lane__risk-text {
   color: rgba(15, 23, 42, 0.92);
   letter-spacing: -0.01em;
+}
+
+.priority-lane__actions {
+  margin-top: auto;
 }
 
 .priority-lane__action {
