@@ -317,9 +317,9 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__pill--demo,
 .priority-lane__risk--demo {
-  background: var(--workstation-state-demo-bg, #eaf5ff);
+  background: color-mix(in srgb, var(--workstation-state-demo-bg, #eaf5ff) 84%, white);
   color: var(--workstation-state-demo-text, #0f6cbd);
-  border: 1px solid rgba(191, 219, 254, 0.9);
+  border: 0;
 }
 
 .priority-lane__risk {
@@ -332,27 +332,27 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__risk--warning {
-  background: var(--workstation-state-warning-bg, #fff6e5);
+  background: color-mix(in srgb, var(--workstation-state-warning-bg, #fff6e5) 82%, white);
   color: var(--workstation-state-warning-text, #b85a00);
-  border-color: rgba(253, 230, 138, 0.9);
+  border-color: transparent;
 }
 
 .priority-lane__risk--danger {
-  background: var(--workstation-state-danger-bg, #fdeded);
+  background: color-mix(in srgb, var(--workstation-state-danger-bg, #fdeded) 82%, white);
   color: var(--workstation-state-danger-text, #b94a48);
-  border-color: rgba(252, 165, 165, 0.9);
+  border-color: transparent;
 }
 
 .priority-lane__risk--review {
-  background: var(--workstation-state-review-bg, #f3eeff);
+  background: color-mix(in srgb, var(--workstation-state-review-bg, #f3eeff) 82%, white);
   color: var(--workstation-state-review-text, #6e56cf);
-  border-color: rgba(216, 180, 254, 0.9);
+  border-color: transparent;
 }
 
 .priority-lane__risk--default {
   background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
   color: var(--workstation-text-secondary, #5b6b84);
-  border-color: var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
+  border-color: transparent;
 }
 
 .priority-lane__department {
@@ -388,41 +388,39 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__action--primary {
-  border: 0 !important;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--workstation-brand-500, #2f6fed) 86%, white),
-    var(--workstation-brand-500, #2f6fed)
-  ) !important;
-  color: #fff !important;
+  border: 1px solid color-mix(in srgb, var(--workstation-brand-500, #2f6fed) 28%, white) !important;
+  background: color-mix(in srgb, var(--workstation-brand-050, #eaf2ff) 86%, white) !important;
+  color: var(--workstation-brand-600, #1e5ae0) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 14px 28px rgba(47, 111, 237, 0.28) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 10px 20px rgba(191, 207, 228, 0.16) !important;
 }
 
+.priority-lane__card:hover .priority-lane__action--primary,
 .priority-lane__action--primary:hover {
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--workstation-brand-600, #1e5ae0) 84%, white),
     var(--workstation-brand-600, #1e5ae0)
   ) !important;
+  border-color: transparent !important;
+  color: #fff !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
     0 16px 30px rgba(47, 111, 237, 0.32) !important;
 }
 
 .priority-lane__action--secondary {
-  border-color: rgba(191, 219, 254, 0.84) !important;
-  background: rgba(255, 255, 255, 0.82) !important;
-  color: var(--workstation-text-secondary, #5b6b84) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 10px 20px rgba(191, 207, 228, 0.16) !important;
-  backdrop-filter: blur(14px);
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--workstation-text-muted, #94a3b8) !important;
+  box-shadow: none !important;
+  padding: 0 6px !important;
+  height: 38px !important;
 }
 
 .priority-lane__action--secondary:hover {
-  border-color: rgba(191, 219, 254, 0.95) !important;
+  background: transparent !important;
   color: var(--workstation-brand-600, #1e5ae0) !important;
 }
 

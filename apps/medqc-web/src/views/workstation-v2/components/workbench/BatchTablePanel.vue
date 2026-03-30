@@ -20,7 +20,7 @@
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="batch-table-panel__actions flex flex-wrap items-center gap-2">
           <a-button
             size="small"
             type="primary"
@@ -36,7 +36,7 @@
             :disabled="selectedRowKeys.length === 0 || readonly"
             @click="emit('batch-defer', selectedRowKeys)"
           >
-            批量标记稍后
+            标记稍后
           </a-button>
           <a-button
             size="small"
@@ -44,7 +44,7 @@
             :disabled="selectedRowKeys.length === 0 || readonly"
             @click="emit('batch-assign', selectedRowKeys)"
           >
-            批量分派
+            分派
           </a-button>
           <a-button
             size="small"
@@ -248,29 +248,49 @@ const columns = [
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #2f6fed) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--workstation-brand-500, #2f6fed) 88%, white),
+    var(--workstation-brand-500, #2f6fed)
+  ) !important;
   color: #fff !important;
-  box-shadow: var(--workstation-shadow-brand, 0 12px 22px rgba(47, 111, 237, 0.24)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 12px 22px rgba(47, 111, 237, 0.22) !important;
 }
 
 .batch-table-panel__action--primary:hover {
-  background: var(--workstation-brand-600, #1e5ae0) !important;
-  box-shadow: var(--workstation-shadow-brand-hover, 0 14px 28px rgba(47, 111, 237, 0.3)) !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--workstation-brand-600, #1e5ae0) 86%, white),
+    var(--workstation-brand-600, #1e5ae0)
+  ) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 14px 26px rgba(47, 111, 237, 0.26) !important;
 }
 
-.batch-table-panel__action--secondary,
+.batch-table-panel__action--secondary {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--workstation-text-secondary, #5b6b84) !important;
+  box-shadow: none !important;
+}
+
 .batch-table-panel__action--ghost,
 .batch-table-panel__detail-button {
-  border-color: var(--workstation-brand-border, #c9d9f7) !important;
-  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: transparent !important;
+  background: rgba(255, 255, 255, 0.72) !important;
   color: var(--workstation-text-secondary, #5b6b84) !important;
-  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 8px 16px rgba(191, 207, 228, 0.12) !important;
 }
 
 .batch-table-panel__action--secondary:hover,
 .batch-table-panel__action--ghost:hover,
 .batch-table-panel__detail-button:hover {
-  border-color: rgba(191, 219, 254, 0.95) !important;
+  border-color: transparent !important;
   color: var(--workstation-brand-600, #1e5ae0) !important;
 }
 
@@ -318,44 +338,43 @@ const columns = [
 }
 
 .batch-table-panel__tag {
-  border: 1px solid transparent;
+  border: 0;
   flex-shrink: 0;
+  box-shadow: none;
 }
 
 .batch-table-panel__tag--demo {
-  background: var(--workstation-state-demo-bg, #eaf5ff);
+  background: color-mix(in srgb, var(--workstation-state-demo-bg, #eaf5ff) 84%, white);
   color: var(--workstation-state-demo-text, #0f6cbd);
-  border-color: rgba(191, 219, 254, 0.9);
 }
 
 .batch-table-panel__tag--brand {
-  background: var(--workstation-brand-050, rgba(234, 242, 255, 0.98));
+  background: color-mix(
+    in srgb,
+    var(--workstation-brand-050, rgba(234, 242, 255, 0.98)) 88%,
+    white
+  );
   color: var(--workstation-brand-600, #1e5ae0);
-  border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
 }
 
 .batch-table-panel__tag--review {
-  background: var(--workstation-state-review-bg, #f3eeff);
+  background: color-mix(in srgb, var(--workstation-state-review-bg, #f3eeff) 84%, white);
   color: var(--workstation-state-review-text, #6e56cf);
-  border-color: rgba(216, 180, 254, 0.9);
 }
 
 .batch-table-panel__tag--danger {
-  background: var(--workstation-state-danger-bg, #fdeded);
+  background: color-mix(in srgb, var(--workstation-state-danger-bg, #fdeded) 84%, white);
   color: var(--workstation-state-danger-text, #b94a48);
-  border-color: rgba(252, 165, 165, 0.9);
 }
 
 .batch-table-panel__tag--success {
-  background: rgba(236, 253, 245, 0.96);
+  background: color-mix(in srgb, rgba(236, 253, 245, 0.96) 86%, white);
   color: #0f766e;
-  border-color: rgba(167, 243, 208, 0.92);
 }
 
 .batch-table-panel__tag--neutral {
-  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
+  background: rgba(248, 250, 252, 0.86);
   color: var(--workstation-text-secondary, #5b6b84);
-  border-color: var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
 }
 
 .batch-table-panel :deep(.ant-table) {
