@@ -24,10 +24,10 @@
           </span>
         </div>
       </div>
-      
+
       <div class="header-actions">
         <a-space>
-          <a-button 
+          <a-button
             v-if="canModifyLowerLevel && lowerLevelResults?.length"
             type="dashed"
             size="small"
@@ -36,8 +36,8 @@
             <EditOutlined />
             修改下级结果
           </a-button>
-          
-          <a-button 
+
+          <a-button
             v-if="editable && auditResult?.status === 'draft'"
             type="primary"
             :loading="saving"
@@ -46,8 +46,8 @@
             <SaveOutlined />
             保存
           </a-button>
-          
-          <a-button 
+
+          <a-button
             v-if="editable && auditResult?.status === 'draft'"
             type="primary"
             :loading="submitting"
@@ -114,7 +114,7 @@
                   <div class="section-header">
                     <span>发现的缺陷</span>
                     <a-space>
-                      <a-button 
+                      <a-button
                         :loading="aiAnalyzing"
                         size="small"
                         type="dashed"
@@ -123,7 +123,7 @@
                         <RobotOutlined />
                         AI辅助识别
                       </a-button>
-                      <a-button 
+                      <a-button
                         size="small"
                         type="primary"
                         ghost
@@ -141,9 +141,9 @@
                       v-if="formData.defects.length === 0"
                       description="暂无发现缺陷"
                     />
-                    
-                    <div 
-                      v-for="(defect, index) in formData.defects" 
+
+                    <div
+                      v-for="(defect, index) in formData.defects"
                       :key="index"
                       class="defect-item"
                     >
@@ -191,13 +191,13 @@
           </a-card>
 
           <!-- 下级结果预览 -->
-          <a-card 
+          <a-card
             v-if="lowerLevelResults?.length"
             title="下级审核结果"
             class="lower-results-card"
             size="small"
           >
-            <div 
+            <div
               v-for="lowerResult in lowerLevelResults"
               :key="lowerResult.id"
               class="lower-result-item"
@@ -209,7 +209,7 @@
               <div class="result-summary">
                 {{ lowerResult.audit_conclusion || '无结论' }}
               </div>
-              <a-button 
+              <a-button
                 v-if="canModifyLowerLevel"
                 size="small"
                 type="link"
@@ -255,21 +255,17 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { FormProps } from 'ant-design-vue'
 import {
   UserOutlined,
   EditOutlined,
   SaveOutlined,
   CheckOutlined,
   RobotOutlined,
-  PlusOutlined
+  PlusOutlined,
 } from '@ant-design/icons-vue'
 
-import type { 
-  QCAuditResult, 
-  QCDefect, 
-  AuditLevel,
-  AIDefectSuggestion 
-} from '@/types/audit-module'
+import type { QCAuditResult, QCDefect, AuditLevel, AIDefectSuggestion } from '@/types/audit-module'
 
 import { auditResultService } from '@/services/audit-result-service'
 // import DefectCard from './DefectCard.vue'
@@ -290,13 +286,13 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   editable: false,
   canModifyLowerLevel: false,
-  isFinalLevel: false
+  isFinalLevel: false,
 })
 
 // Emits
 const emit = defineEmits<{
-  'update': [data: unknown]
-  'submit': [auditResultId: string]
+  update: [data: unknown]
+  submit: [auditResultId: string]
   'modify-lower': [result: QCAuditResult]
 }>()
 
@@ -311,7 +307,7 @@ const aiAnalyzing = ref(false)
 const formData = ref({
   audit_score: 85,
   audit_conclusion: '',
-  defects: [] as Partial<QCDefect>[]
+  defects: [] as Partial<QCDefect>[],
 })
 
 // 对话框状态
@@ -321,11 +317,11 @@ const aiSuggestions = ref<AIDefectSuggestion[]>([])
 const selectedSuggestions = ref<AIDefectSuggestion[]>([])
 
 // 表单验证规则
-const formRules = {
+const formRules: FormProps['rules'] = {
   audit_score: [
     { required: true, message: '请设置审核评分' },
-    { type: 'number', min: 0, max: 100, message: '评分范围为0-100' }
-  ]
+    { type: 'number' as const, min: 0, max: 100, message: '评分范围为0-100' },
+  ],
 }
 
 // 评分标记
@@ -334,16 +330,16 @@ const scoreMarks = {
   60: '60',
   80: '80',
   90: '90',
-  100: '100'
+  100: '100',
 }
 
 // 计算属性
-const criticalDefectsCount = computed(() => 
-  formData.value.defects.filter(d => d.severity === 'critical').length
+const criticalDefectsCount = computed(
+  () => formData.value.defects.filter((d) => d.severity === 'critical').length,
 )
 
-const totalScoreDeduction = computed(() => 
-  formData.value.defects.reduce((sum, d) => sum + (d.score_deduction || 0), 0)
+const totalScoreDeduction = computed(() =>
+  formData.value.defects.reduce((sum, d) => sum + (d.score_deduction || 0), 0),
 )
 
 // 方法
@@ -351,7 +347,7 @@ const getLevelTitle = (level: AuditLevel): string => {
   const titles = {
     department: '科室级',
     hospital: '院级',
-    expert: '专家级'
+    expert: '专家级',
   }
   return titles[level]
 }
@@ -362,7 +358,7 @@ const getStatusColor = (status?: string): string => {
     submitted: 'processing',
     approved: 'success',
     rejected: 'error',
-    modified: 'warning'
+    modified: 'warning',
   }
   const key = (status && status in colors ? status : 'draft') as keyof typeof colors
   return colors[key]
@@ -374,7 +370,7 @@ const getStatusText = (status?: string): string => {
     submitted: '已提交',
     approved: '已通过',
     rejected: '已拒绝',
-    modified: '已修改'
+    modified: '已修改',
   }
   const key = (status && status in texts ? status : 'draft') as keyof typeof texts
   return texts[key]
@@ -404,16 +400,15 @@ const handleScoreChange = (value: number) => {
 const handleSave = async () => {
   try {
     saving.value = true
-    
+
     const formValid = await auditFormRef.value?.validate()
     if (!formValid) return
-    
+
     emit('update', {
       audit_score: formData.value.audit_score,
       audit_conclusion: formData.value.audit_conclusion,
-      defects: formData.value.defects
+      defects: formData.value.defects,
     })
-    
   } catch (error: unknown) {
     message.error('保存失败')
   } finally {
@@ -424,14 +419,13 @@ const handleSave = async () => {
 const handleSubmit = async () => {
   try {
     submitting.value = true
-    
+
     if (!props.auditResult?.id) {
       message.error('请先保存审核结果')
       return
     }
-    
+
     emit('submit', props.auditResult.id)
-    
   } catch (error) {
     message.error('提交失败')
   } finally {
@@ -442,11 +436,11 @@ const handleSubmit = async () => {
 const triggerAIAssistance = async () => {
   try {
     aiAnalyzing.value = true
-    
+
     // 调用AI辅助缺陷识别
     // const suggestions = await auditResultService.getAIDefectSuggestions(...)
     // aiSuggestions.value = suggestions
-    
+
     // 模拟AI建议
     aiSuggestions.value = [
       {
@@ -457,12 +451,11 @@ const triggerAIAssistance = async () => {
         suggested_description: '患者病历中未发现出院小结文档',
         confidence: 85,
         supporting_evidence: ['文档列表检查'],
-        rectification_suggestions: ['请补充完整的出院小结']
-      }
+        rectification_suggestions: ['请补充完整的出院小结'],
+      },
     ]
-    
+
     aiSuggestionsVisible.value = true
-    
   } catch (error) {
     message.error('AI分析失败')
   } finally {
@@ -471,18 +464,20 @@ const triggerAIAssistance = async () => {
 }
 
 const applyAISuggestions = () => {
-  formData.value.defects.push(...selectedSuggestions.value.map(s => ({
-    defect_type: s.suggested_type,
-    defect_category: s.suggested_category,
-    severity: s.suggested_severity,
-    title: s.suggested_title,
-    description: s.suggested_description,
-    ai_assisted: true,
-    ai_confidence: s.confidence,
-    score_deduction: s.suggested_severity === 'critical' ? 20 : 
-                    s.suggested_severity === 'major' ? 10 : 5
-  })))
-  
+  formData.value.defects.push(
+    ...selectedSuggestions.value.map((s) => ({
+      defect_type: s.suggested_type,
+      defect_category: s.suggested_category,
+      severity: s.suggested_severity,
+      title: s.suggested_title,
+      description: s.suggested_description,
+      ai_assisted: true,
+      ai_confidence: s.confidence,
+      score_deduction:
+        s.suggested_severity === 'critical' ? 20 : s.suggested_severity === 'major' ? 10 : 5,
+    })),
+  )
+
   aiSuggestionsVisible.value = false
   message.success(`已添加 ${selectedSuggestions.value.length} 个AI建议的缺陷`)
 }
@@ -534,15 +529,19 @@ const handleFormSubmit = () => {
 }
 
 // 监听审核结果变化
-watch(() => props.auditResult, (newResult) => {
-  if (newResult) {
-    formData.value = {
-      audit_score: newResult.audit_score,
-      audit_conclusion: newResult.audit_conclusion || '',
-      defects: newResult.defects_found || []
+watch(
+  () => props.auditResult,
+  (newResult) => {
+    if (newResult) {
+      formData.value = {
+        audit_score: newResult.audit_score,
+        audit_conclusion: newResult.audit_conclusion || '',
+        defects: newResult.defects_found || [],
+      }
     }
-  }
-}, { immediate: true, deep: true })
+  },
+  { immediate: true, deep: true },
+)
 
 onMounted(() => {
   // 初始化

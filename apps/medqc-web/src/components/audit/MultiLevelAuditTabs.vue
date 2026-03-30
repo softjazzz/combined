@@ -2,8 +2,8 @@
 <template>
   <div class="multi-level-audit">
     <!-- 审核级别标签页 -->
-    <a-tabs 
-      v-model:active-key="activeTab" 
+    <a-tabs
+      v-model:active-key="activeTab"
       class="audit-level-tabs"
       @change="handleTabChange"
     >
@@ -16,52 +16,52 @@
           <span class="tab-title">
             <TeamOutlined />
             科室级审核
-            <a-badge 
+            <a-badge
               v-if="auditResults.department?.status === 'approved'"
-              status="success" 
+              status="success"
               class="tab-badge"
             />
-            <a-badge 
+            <a-badge
               v-else-if="auditResults.department?.status === 'submitted'"
-              status="processing" 
+              status="processing"
               class="tab-badge"
             />
           </span>
         </template>
-        
+
         <AuditResultPanel
           :audit-result="auditResults.department"
           :editable="canEditDepartmentLevel"
           :reviewer-info="departmentReviewer"
           audit-level="department"
           @update="handleDepartmentUpdate"
-          @submit="handleSubmitResult"
+          @submit="(auditResultId) => handleSubmitResult('department', auditResultId)"
         />
       </a-tab-pane>
-      
+
       <!-- 院级审核 -->
-      <a-tab-pane 
-        key="hospital" 
-        tab="院级审核" 
+      <a-tab-pane
+        key="hospital"
+        tab="院级审核"
         :disabled="!auditResults.department?.is_final"
       >
         <template #tab>
           <span class="tab-title">
             <BankOutlined />
             院级审核
-            <a-badge 
+            <a-badge
               v-if="auditResults.hospital?.status === 'approved'"
-              status="success" 
+              status="success"
               class="tab-badge"
             />
-            <a-badge 
+            <a-badge
               v-else-if="auditResults.hospital?.status === 'submitted'"
-              status="processing" 
+              status="processing"
               class="tab-badge"
             />
           </span>
         </template>
-        
+
         <AuditResultPanel
           :audit-result="auditResults.hospital"
           :editable="canEditHospitalLevel"
@@ -70,34 +70,34 @@
           :lower-level-results="[auditResults.department]"
           audit-level="hospital"
           @update="handleHospitalUpdate"
-          @submit="handleSubmitResult"
+          @submit="(auditResultId) => handleSubmitResult('hospital', auditResultId)"
           @modify-lower="handleModifyLowerLevel"
         />
       </a-tab-pane>
-      
+
       <!-- 专家级审核 -->
-      <a-tab-pane 
-        key="expert" 
-        tab="专家级审核" 
+      <a-tab-pane
+        key="expert"
+        tab="专家级审核"
         :disabled="!auditResults.hospital?.is_final"
       >
         <template #tab>
           <span class="tab-title">
             <CrownOutlined />
             专家级审核
-            <a-badge 
+            <a-badge
               v-if="auditResults.expert?.status === 'approved'"
-              status="success" 
+              status="success"
               class="tab-badge"
             />
-            <a-badge 
+            <a-badge
               v-else-if="auditResults.expert?.status === 'submitted'"
-              status="processing" 
+              status="processing"
               class="tab-badge"
             />
           </span>
         </template>
-        
+
         <AuditResultPanel
           :audit-result="auditResults.expert"
           :editable="canEditExpertLevel"
@@ -107,22 +107,22 @@
           :is-final-level="true"
           audit-level="expert"
           @update="handleExpertUpdate"
-          @submit="handleSubmitResult"
+          @submit="(auditResultId) => handleSubmitResult('expert', auditResultId)"
           @modify-lower="handleModifyLowerLevel"
         />
       </a-tab-pane>
     </a-tabs>
-    
+
     <!-- 审核历史时间线 -->
     <div class="audit-timeline-section">
       <a-divider>审核历史</a-divider>
-      <AuditTimeline 
+      <AuditTimeline
         :audit-history="auditHistory"
         :current-level="activeTab"
         @view-detail="handleViewHistoryDetail"
       />
     </div>
-    
+
     <!-- 修改下级结果对话框 -->
     <a-modal
       v-model:open="modifyModalVisible"
@@ -144,17 +144,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  TeamOutlined, 
-  BankOutlined, 
-  CrownOutlined 
-} from '@ant-design/icons-vue'
+import { TeamOutlined, BankOutlined, CrownOutlined } from '@ant-design/icons-vue'
 
-import type { 
-  QCAuditResult, 
-  AuditLevel,
-  QCAuditTaskItem 
-} from '@/types/audit-module'
+import type { QCAuditResult, AuditLevel, QCAuditTaskItem } from '@/types/audit-module'
 
 import { useAuthStore } from '@/stores/auth'
 import { auditResultService } from '@/services/audit-result-service'
@@ -201,7 +193,7 @@ const loading = ref(false)
 const auditResults = ref<Record<AuditLevel, QCAuditResult | null>>({
   department: null,
   hospital: null,
-  expert: null
+  expert: null,
 })
 
 const auditHistory = ref<AuditHistoryItem[]>([])
@@ -217,21 +209,24 @@ const hospitalReviewer = computed(() => auditResults.value.hospital?.reviewer_na
 const expertReviewer = computed(() => auditResults.value.expert?.reviewer_name)
 
 // 权限控制
-const canEditDepartmentLevel = computed(() => 
-  authStore.hasRole('qc_reviewer_dept') && 
-  (!auditResults.value.department?.is_final || auditResults.value.department?.status === 'draft')
+const canEditDepartmentLevel = computed(
+  () =>
+    authStore.hasRole('qc_reviewer_dept') &&
+    (!auditResults.value.department?.is_final || auditResults.value.department?.status === 'draft'),
 )
 
-const canEditHospitalLevel = computed(() => 
-  authStore.hasRole('qc_reviewer_hospital') && 
-  auditResults.value.department?.is_final &&
-  (!auditResults.value.hospital?.is_final || auditResults.value.hospital?.status === 'draft')
+const canEditHospitalLevel = computed(
+  () =>
+    authStore.hasRole('qc_reviewer_hospital') &&
+    auditResults.value.department?.is_final &&
+    (!auditResults.value.hospital?.is_final || auditResults.value.hospital?.status === 'draft'),
 )
 
-const canEditExpertLevel = computed(() => 
-  authStore.hasRole('qc_reviewer_expert') && 
-  auditResults.value.hospital?.is_final &&
-  (!auditResults.value.expert?.is_final || auditResults.value.expert?.status === 'draft')
+const canEditExpertLevel = computed(
+  () =>
+    authStore.hasRole('qc_reviewer_expert') &&
+    auditResults.value.hospital?.is_final &&
+    (!auditResults.value.expert?.is_final || auditResults.value.expert?.status === 'draft'),
 )
 
 const getErrorMessage = (error: unknown): string => {
@@ -255,26 +250,30 @@ const getCurrentReviewerId = (): string | null => {
 const loadAuditResults = async () => {
   try {
     loading.value = true
-    
+
     const results = await auditResultService.getAuditResults(props.taskItemId, true)
-    
+
     // 按级别分组
     auditResults.value = {
-      department: results.find(r => r.audit_level === 'department') || null,
-      hospital: results.find(r => r.audit_level === 'hospital') || null,
-      expert: results.find(r => r.audit_level === 'expert') || null
+      department: results.find((r) => r.audit_level === 'department') || null,
+      hospital: results.find((r) => r.audit_level === 'hospital') || null,
+      expert: results.find((r) => r.audit_level === 'expert') || null,
     }
-    
+
     // 构建审核历史
-    auditHistory.value = results.map(result => ({
-      level: result.audit_level,
-      reviewer: result.reviewer_name || '',
-      score: result.audit_score,
-      status: result.status,
-      submitted_at: result.submitted_at,
-      review_duration: result.review_duration
-    })).sort((a, b) => new Date(a.submitted_at || '').getTime() - new Date(b.submitted_at || '').getTime())
-    
+    auditHistory.value = results
+      .map((result) => ({
+        level: result.audit_level,
+        reviewer: result.reviewer_name || '',
+        score: result.audit_score,
+        status: result.status,
+        submitted_at: result.submitted_at,
+        review_duration: result.review_duration,
+      }))
+      .sort(
+        (a, b) =>
+          new Date(a.submitted_at || '').getTime() - new Date(b.submitted_at || '').getTime(),
+      )
   } catch (error: unknown) {
     message.error(`加载审核结果失败: ${getErrorMessage(error)}`)
   } finally {
@@ -295,13 +294,12 @@ const handleDepartmentUpdate = async (resultData: CreateAuditResultPayload) => {
       props.taskItemId,
       'department',
       reviewerId,
-      resultData
+      resultData,
     )
-    
+
     auditResults.value.department = result
     emit('result-updated', 'department', result)
     message.success('科室级审核结果已保存')
-    
   } catch (error: unknown) {
     message.error(`保存失败: ${getErrorMessage(error)}`)
   }
@@ -316,13 +314,12 @@ const handleHospitalUpdate = async (resultData: CreateAuditResultPayload) => {
       props.taskItemId,
       'hospital',
       reviewerId,
-      resultData
+      resultData,
     )
-    
+
     auditResults.value.hospital = result
     emit('result-updated', 'hospital', result)
     message.success('院级审核结果已保存')
-    
   } catch (error: unknown) {
     message.error(`保存失败: ${getErrorMessage(error)}`)
   }
@@ -337,13 +334,12 @@ const handleExpertUpdate = async (resultData: CreateAuditResultPayload) => {
       props.taskItemId,
       'expert',
       reviewerId,
-      resultData
+      resultData,
     )
-    
+
     auditResults.value.expert = result
     emit('result-updated', 'expert', result)
     message.success('专家级审核结果已保存')
-    
   } catch (error: unknown) {
     message.error(`保存失败: ${getErrorMessage(error)}`)
   }
@@ -352,13 +348,12 @@ const handleExpertUpdate = async (resultData: CreateAuditResultPayload) => {
 const handleSubmitResult = async (level: AuditLevel, auditResultId: string) => {
   try {
     await auditResultService.submitAuditResult(auditResultId)
-    
+
     // 刷新数据
     await loadAuditResults()
-    
+
     emit('result-submitted', level, auditResults.value[level]!)
     message.success(`${level}级审核结果已提交`)
-    
   } catch (error: unknown) {
     message.error(`提交失败: ${getErrorMessage(error)}`)
   }
@@ -372,25 +367,20 @@ const handleModifyLowerLevel = (targetResult: QCAuditResult) => {
 const handleConfirmModification = async () => {
   try {
     const formData = await modifyFormRef.value?.validateAndGetData()
-    
+
     if (!formData || !modifyTarget.value) {
       return
     }
-    
+
     const reviewerId = getCurrentReviewerId()
     if (!reviewerId) return
 
-    await auditResultService.modifyLowerLevelResult(
-      modifyTarget.value.id,
-      reviewerId,
-      formData
-    )
-    
+    await auditResultService.modifyLowerLevelResult(modifyTarget.value.id, reviewerId, formData)
+
     modifyModalVisible.value = false
     await loadAuditResults()
-    
+
     message.success('下级审核结果修改成功')
-    
   } catch (error: unknown) {
     message.error(`修改失败: ${getErrorMessage(error)}`)
   }
@@ -406,11 +396,15 @@ const handleViewHistoryDetail = (historyItem: AuditHistoryItem) => {
 }
 
 // 监听任务项变化
-watch(() => props.taskItemId, () => {
-  if (props.taskItemId) {
-    loadAuditResults()
-  }
-}, { immediate: true })
+watch(
+  () => props.taskItemId,
+  () => {
+    if (props.taskItemId) {
+      loadAuditResults()
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   if (props.taskItemId) {
@@ -477,12 +471,12 @@ onMounted(() => {
   .multi-level-audit {
     padding: 16px;
   }
-  
+
   .audit-level-tabs :deep(.ant-tabs-tab) {
     padding: 8px 16px;
     font-size: 14px;
   }
-  
+
   .tab-title {
     flex-direction: column;
     gap: 4px;
