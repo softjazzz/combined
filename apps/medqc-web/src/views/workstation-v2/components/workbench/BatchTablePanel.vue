@@ -1,22 +1,18 @@
 <template>
   <section class="batch-table-panel">
-    <div class="batch-table-panel__header px-5 py-4">
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div class="min-w-0">
-          <div class="batch-table-panel__eyebrow">
-            Batch Workspace
-          </div>
-          <div class="mt-2 flex flex-wrap items-end gap-3">
+    <div class="batch-table-panel__header px-5 py-3.5">
+      <div
+        class="batch-table-panel__toolbar flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
+      >
+        <div class="batch-table-panel__toolbar-meta min-w-0">
+          <div class="flex flex-wrap items-center gap-2.5">
             <div class="batch-table-panel__title">
               批量工作台
             </div>
-            <span class="batch-table-panel__summary-pill"> 当前 {{ rows.length }} 条候选病历 </span>
+            <span class="batch-table-panel__summary-pill">当前 {{ rows.length }} 条</span>
             <span class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected">
               已选 {{ selectedRowKeys.length }} 条
             </span>
-          </div>
-          <div class="batch-table-panel__summary mt-2">
-            {{ summaryText }}
           </div>
         </div>
 
@@ -194,18 +190,18 @@ const columns = [
   border-bottom: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
 }
 
-.batch-table-panel__eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--workstation-text-muted, #94a3b8);
+.batch-table-panel__toolbar {
+  gap: 12px;
+}
+
+.batch-table-panel__toolbar-meta {
+  min-width: 0;
 }
 
 .batch-table-panel__title {
-  font-size: 24px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--workstation-text-primary, #0f172a);
 }
 
@@ -213,9 +209,9 @@ const columns = [
   display: inline-flex;
   align-items: center;
   border-radius: var(--workstation-radius-pill, 999px);
-  border: 1px solid var(--workstation-border-light, rgba(255, 255, 255, 0.92));
-  background: rgba(255, 255, 255, 0.88);
-  padding: 4px 12px;
+  border: 0;
+  background: rgba(248, 250, 252, 0.9);
+  padding: 4px 10px;
   font-size: 12px;
   font-weight: 700;
   color: var(--workstation-text-secondary, #5b6b84);
@@ -225,12 +221,6 @@ const columns = [
   border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
   background: var(--workstation-brand-100, rgba(239, 246, 255, 0.96));
   color: var(--workstation-brand-600, #1e5ae0);
-}
-
-.batch-table-panel__summary {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--workstation-text-secondary, #5b6b84);
 }
 
 .batch-table-panel__action {
