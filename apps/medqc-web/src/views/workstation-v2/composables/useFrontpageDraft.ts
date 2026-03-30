@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
-import axios from 'axios'
 import { message } from 'ant-design-vue'
+import ApiService, { apiClient } from '@/services/apiService'
 import type { FrontpageFocusTarget, IcdApplyTarget, PatientRecord } from '../types'
 import type { ICDCodeDetail } from '../components/ICDDetailPanel.vue'
 import { frontpageApi, type FrontpageExtractionSettings } from '@/api/frontpage'
@@ -35,6 +35,36 @@ function parseDownloadFilename(
   const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
   if (plainMatch?.[1]) return plainMatch[1]
   return fallback
+}
+
+async function fetchWithAuthRetry(
+  input: Parameters<typeof fetch>[0],
+  init: NonNullable<Parameters<typeof fetch>[1]> = {},
+) {
+  const withAuthHeaders = () => {
+    const token = localStorage.getItem('medqc_access_token') || ''
+    return {
+      ...(init.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+  }
+
+  let response = await fetch(input, {
+    ...init,
+    headers: withAuthHeaders(),
+  })
+
+  if (response.status !== 401) return response
+
+  const refreshResult = await ApiService.refreshToken()
+  if (!refreshResult.success) return response
+
+  response = await fetch(input, {
+    ...init,
+    headers: withAuthHeaders(),
+  })
+
+  return response
 }
 
 export function useFrontpageDraft(
@@ -272,7 +302,7 @@ export function useFrontpageDraft(
     }
 
     try {
-      const response = await fetch('/api/v1/frontpage/auto-generate-draft-stream', {
+      const response = await fetchWithAuthRetry('/api/v1/frontpage/auto-generate-draft-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,7 +389,7 @@ export function useFrontpageDraft(
     } as const
 
     try {
-      const response = await fetch('/api/v1/frontpage/export', {
+      const response = await fetchWithAuthRetry('/api/v1/frontpage/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -407,7 +437,7 @@ export function useFrontpageDraft(
 
     try {
       // 注意：AI 草稿保存到独立副表 ai_frontpage_draft，不覆盖原始 HIS 首页数据（mr 表）
-      await axios.post('/api/medical-records/ai-frontpage-draft', {
+      await apiClient.post('/api/medical-records/ai-frontpage-draft', {
         institute_id: record.instituteId || null,
         patient_id: record.patientId,
         visit_id: record.id,
