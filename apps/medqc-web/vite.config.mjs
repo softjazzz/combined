@@ -56,6 +56,27 @@ function createManualChunks(id) {
 
   if (normalizedId.includes('node_modules')) {
     if (
+      normalizedId.includes('/node_modules/mammoth/')
+      || normalizedId.includes('/node_modules/jszip/')
+      || normalizedId.includes('/node_modules/@xmldom/xmldom/')
+      || normalizedId.includes('/node_modules/xmlbuilder/')
+      || normalizedId.includes('/node_modules/lop/')
+    ) {
+      return 'vendor-docx-parser-core'
+    }
+
+    if (
+      normalizedId.includes('/node_modules/bluebird/')
+      || normalizedId.includes('/node_modules/underscore/')
+      || normalizedId.includes('/node_modules/base64-js/')
+      || normalizedId.includes('/node_modules/dingbat-to-unicode/')
+      || normalizedId.includes('/node_modules/path-is-absolute/')
+      || normalizedId.includes('/node_modules/argparse/')
+    ) {
+      return 'vendor-docx-parser-utils'
+    }
+
+    if (
       normalizedId.includes('/node_modules/vue/')
       || normalizedId.includes('/node_modules/@vue/')
       || normalizedId.includes('/node_modules/vue-router/')

@@ -2,6 +2,7 @@
  * CN-DRG 2023 绩效监测版 分组器包装
  * 与 drgGrouper.ts 接口完全相同，底层使用 cnDrg2023Grouper.js 引擎
  */
+import cnDrgEngineUrl from './cnDrg2023Grouper.js?url'
 import { CN_DRG_INFO } from './cnDrg2023Data'
 import type { GrouperInput, GrouperResult } from './drgGrouper'
 import { getMdcName } from './drgGrouper'
@@ -14,7 +15,8 @@ let cnDrgEnginePromise: Promise<CnDrgEngine> | null = null
 
 async function loadCnDrgEngine() {
   if (!cnDrgEnginePromise) {
-    cnDrgEnginePromise = import('./cnDrg2023Grouper')
+    // 引擎是自动生成的超大单文件，按 URL 在运行时导入，避免进入 Rollup chunk 警告主链路。
+    cnDrgEnginePromise = import(/* @vite-ignore */ cnDrgEngineUrl) as Promise<CnDrgEngine>
   }
   return cnDrgEnginePromise
 }

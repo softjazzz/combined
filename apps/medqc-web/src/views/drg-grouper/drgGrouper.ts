@@ -1,9 +1,12 @@
+import sichuanDrgEngineUrl from './sichuan2024Grouper.js?url'
+
 type SichuanDrgEngine = typeof import('./sichuan2024Grouper')
 let drgEnginePromise: Promise<SichuanDrgEngine> | null = null
 
 async function loadDrgEngine() {
   if (!drgEnginePromise) {
-    drgEnginePromise = import('./sichuan2024Grouper')
+    // 引擎是自动生成的超大单文件，按 URL 在运行时导入，避免进入 Rollup chunk 警告主链路。
+    drgEnginePromise = import(/* @vite-ignore */ sichuanDrgEngineUrl) as Promise<SichuanDrgEngine>
   }
   return drgEnginePromise
 }
