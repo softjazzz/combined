@@ -84,6 +84,14 @@ export const apiClient: AxiosInstance = axios.create({
 // 全局刷新控制，避免并发重复刷新与竞态
 let refreshPromise: Promise<string> | null = null
 
+function shouldSuppressExpected404(url: string | undefined, status: number | undefined): boolean {
+  if (status !== 404 || !url) return false
+  return (
+    url.includes('/api/medical-records/frontpage-sheet/') ||
+    url.includes('/api/medical-records/settlement/')
+  )
+}
+
 // Token管理
 class TokenManager {
   static getToken(): string | null {
@@ -165,13 +173,18 @@ apiClient.interceptors.response.use(
   },
   async (error: unknown) => {
     const originalRequest = error.config
+    const requestUrl: string | undefined = error.config?.url
+    const responseStatus: number | undefined = error.response?.status
     const traceId = extractTraceIdFromResponse(error.response) || extractTraceIdFromResponse(error)
     attachTraceIdToError(error, traceId)
 
     // 只在开发环境或非认证错误时记录详细错误
-    if (process.env.NODE_ENV === 'development' || error.response?.status !== 401) {
-      console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-        status: error.response?.status,
+    if (
+      !shouldSuppressExpected404(requestUrl, responseStatus) &&
+      (process.env.NODE_ENV === 'development' || responseStatus !== 401)
+    ) {
+      console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${requestUrl}`, {
+        status: responseStatus,
         data: error.response?.data,
         message: error.message,
         traceId,
