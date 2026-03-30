@@ -61,11 +61,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-  FileTextOutlined,
-  SettingOutlined,
-  CheckCircleOutlined
-} from '@ant-design/icons-vue'
+import type { AlertProps } from 'ant-design-vue'
+import { FileTextOutlined, SettingOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
 
 // Props
 interface Props {
@@ -89,29 +86,29 @@ defineEmits<{
 const steps = [
   { key: 'target', label: '测试对象', icon: FileTextOutlined },
   { key: 'rules', label: '规则配置', icon: SettingOutlined },
-  { key: 'run', label: '运行与结果', icon: CheckCircleOutlined }
+  { key: 'run', label: '运行与结果', icon: CheckCircleOutlined },
 ]
 
 // 计算当前步骤索引
 const currentStepIndex = computed(() => {
-  return steps.findIndex(s => s.key === props.currentStep)
+  return steps.findIndex((s) => s.key === props.currentStep)
 })
 
 // 当前步骤标签
 const currentStepLabel = computed(() => {
-  const step = steps.find(s => s.key === props.currentStep)
+  const step = steps.find((s) => s.key === props.currentStep)
   return step?.label || '运行与结果'
 })
 
 // 当前步骤图标
 const currentStepIcon = computed(() => {
-  const step = steps.find(s => s.key === props.currentStep)
+  const step = steps.find((s) => s.key === props.currentStep)
   return step?.icon || CheckCircleOutlined
 })
 
 // 获取步骤状态
 const getStepStatus = (stepKey: string) => {
-  const stepIndex = steps.findIndex(s => s.key === stepKey)
+  const stepIndex = steps.findIndex((s) => s.key === stepKey)
   if (stepIndex < currentStepIndex.value) return 'finish'
   if (stepIndex === currentStepIndex.value) return 'process'
   return 'wait'
@@ -132,7 +129,7 @@ const progressColor = computed(() => {
 })
 
 // 条件引导提示
-const readinessAlert = computed(() => {
+const readinessAlert = computed<{ type: AlertProps['type']; message: string } | null>(() => {
   const { hasRecord, hasDocuments, hasRules } = props
 
   if (hasRecord && hasDocuments && hasRules) {
@@ -182,4 +179,3 @@ const readinessAlert = computed(() => {
   }
 }
 </style>
-

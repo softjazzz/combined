@@ -146,6 +146,7 @@
           <div class="records-list">
             <a-spin :spinning="demoStore.isLoadingData">
               <a-list
+                v-if="paginatedRecords.length > 0"
                 :data-source="paginatedRecords"
                 :pagination="recordPaginationConfig"
                 size="small"
@@ -153,7 +154,7 @@
                 <template #renderItem="{ item }">
                   <a-list-item
                     class="record-item"
-                    :class="{ 'selected': isRecordSelected(item) }"
+                    :class="{ selected: isRecordSelected(item) }"
                     @click="handleSelectRecord(item)"
                   >
                     <a-list-item-meta>
@@ -202,23 +203,21 @@
                     </template>
                   </a-list-item>
                 </template>
-                <template #empty>
-                  <a-empty>
-                    <template #description>
-                      <div class="empty-description">
-                        <span>暂无病历数据</span>
-                        <a-button
-                          type="link"
-                          size="small"
-                          @click="handleResetFilters"
-                        >
-                          重置筛选
-                        </a-button>
-                      </div>
-                    </template>
-                  </a-empty>
-                </template>
               </a-list>
+              <a-empty v-else>
+                <template #description>
+                  <div class="empty-description">
+                    <span>暂无病历数据</span>
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="handleResetFilters"
+                    >
+                      重置筛选
+                    </a-button>
+                  </div>
+                </template>
+              </a-empty>
             </a-spin>
           </div>
         </a-card>
@@ -288,13 +287,14 @@
               <h4>可用文书</h4>
               <a-spin :spinning="demoStore.isLoadingData">
                 <a-list
+                  v-if="availableDocuments.length > 0"
                   :data-source="availableDocuments"
                   size="small"
                 >
                   <template #renderItem="{ item }">
                     <a-list-item
                       class="document-item"
-                      :class="{ 'selected': isDocumentSelected(item) }"
+                      :class="{ selected: isDocumentSelected(item) }"
                       @click="handleSelectDocument(item)"
                     >
                       <a-list-item-meta>
@@ -327,10 +327,11 @@
                       </template>
                     </a-list-item>
                   </template>
-                  <template #empty>
-                    <a-empty description="该病历暂无文书" />
-                  </template>
                 </a-list>
+                <a-empty
+                  v-else
+                  description="该病历暂无文书"
+                />
               </a-spin>
             </div>
           </div>
@@ -470,7 +471,7 @@ import {
   MedicineBoxOutlined,
   FileSearchOutlined,
   RightOutlined,
-  EyeOutlined
+  EyeOutlined,
 } from '@ant-design/icons-vue'
 import type { MedicalRecord } from '@/types/medical-records'
 
@@ -491,7 +492,7 @@ const selectedStatus = ref('')
 const recordsPagination = reactive({
   current: 1,
   pageSize: 6,
-  total: 0
+  total: 0,
 })
 
 const handleRecordPageChange = (page: number, pageSize?: number) => {
@@ -509,7 +510,7 @@ const recordPaginationConfig = computed(() => ({
   pageSizeOptions: ['6', '10', '20'],
   showTotal: (total: number) => `共 ${total} 条`,
   onChange: handleRecordPageChange,
-  onShowSizeChange: handleRecordPageChange
+  onShowSizeChange: handleRecordPageChange,
 }))
 
 // 过滤后的病历列表
@@ -518,20 +519,20 @@ const filteredRecords = computed(() => {
 
   // 科室筛选
   if (selectedDepartment.value) {
-    records = records.filter(r => r.department === selectedDepartment.value)
+    records = records.filter((r) => r.department === selectedDepartment.value)
   }
 
   // 状态筛选
   if (selectedStatus.value) {
-    records = records.filter(r => r.status === selectedStatus.value)
+    records = records.filter((r) => r.status === selectedStatus.value)
   }
 
   // 关键词搜索
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
-    records = records.filter(r =>
-      r.patient_name?.toLowerCase().includes(keyword) ||
-      r.id?.toLowerCase().includes(keyword)
+    records = records.filter(
+      (r) =>
+        r.patient_name?.toLowerCase().includes(keyword) || r.id?.toLowerCase().includes(keyword),
     )
   }
 
@@ -559,7 +560,7 @@ watch(
       recordsPagination.current = maxPage
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 // 可用文书列表
@@ -572,12 +573,14 @@ const availableDocuments = computed(() => {
   }
 
   // 如果没有文书列表，返回默认文书
-  return [{
-    id: `doc-${demoStore.testRecord.id}`,
-    title: '首次病程记录',
-    type: '首次病程记录',
-    created_at: demoStore.testRecord.admission_date || new Date().toISOString()
-  }]
+  return [
+    {
+      id: `doc-${demoStore.testRecord.id}`,
+      title: '首次病程记录',
+      type: '首次病程记录',
+      created_at: demoStore.testRecord.admission_date || new Date().toISOString(),
+    },
+  ]
 })
 
 // 是否可以继续
@@ -593,7 +596,7 @@ const isRecordSelected = (record: MedicalRecord) => {
 // 判断文书是否被选中
 const isDocumentSelected = (doc: any) => {
   const selectedDocs = demoStore.selectedDocumentList
-  return selectedDocs.some(d => d.id === doc.id)
+  return selectedDocs.some((d) => d.id === doc.id)
 }
 
 // 格式化日期
@@ -610,15 +613,17 @@ const handleSelectRecord = async (record: MedicalRecord) => {
 
     // 加载该病历的真实文书列表
     const resp = await listDocuments(record.id)
-    const docs = Array.isArray(resp?.data) ? resp.data : (Array.isArray(resp) ? resp : [])
+    const docs = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : []
     if (docs.length > 0) {
       // 回填到 testRecord.documents，供可用文书列表使用
       demoStore.selectTestRecord({ ...(record as any), documents: docs } as any)
       // 自动选择优先文书（入院记录优先），以便可以直接开始质控
       const docList = docs
-      const preferred = docList.find((d: any) =>
-        d.type === 'admission_record' || (d.title && String(d.title).includes('入院记录'))
-      ) || docList[0]
+      const preferred =
+        docList.find(
+          (d: any) =>
+            d.type === 'admission_record' || (d.title && String(d.title).includes('入院记录')),
+        ) || docList[0]
       if (preferred) {
         demoStore.setSelectedDocument(preferred as any)
       }

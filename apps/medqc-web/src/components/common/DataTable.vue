@@ -79,26 +79,26 @@
                     </div>
                     <a-select
                       v-if="filter.type === 'select'"
-                      v-model:value="filterValues[filter.key]"
+                      :value="getSelectFilterValue(filter.key)"
                       :placeholder="filter.placeholder"
                       :options="filter.options"
                       style="width: 160px"
                       allow-clear
-                      @change="handleFilterChange"
+                      @update:value="(value) => setSelectFilterValue(filter.key, value)"
                     />
                     <a-date-picker
                       v-else-if="filter.type === 'date'"
-                      v-model:value="filterValues[filter.key]"
+                      :value="getDateFilterValue(filter.key)"
                       :placeholder="filter.placeholder"
                       style="width: 160px"
-                      @change="handleFilterChange"
+                      @update:value="(value) => setDateFilterValue(filter.key, value)"
                     />
                     <a-input
                       v-else
-                      v-model:value="filterValues[filter.key]"
+                      :value="getInputFilterValue(filter.key)"
                       :placeholder="filter.placeholder"
                       style="width: 160px"
-                      @change="handleFilterChange"
+                      @update:value="(value) => setInputFilterValue(filter.key, value)"
                     />
                   </div>
                 </div>
@@ -202,6 +202,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
+import dayjs, { type Dayjs } from 'dayjs'
 import {
   FilterOutlined,
   SettingOutlined,
@@ -216,7 +217,7 @@ interface FilterItem {
   label: string
   type: 'select' | 'input' | 'date'
   placeholder?: string
-  options?: { label: string; value: unknown }[]
+  options?: { label: string; value: string | number }[]
 }
 
 interface BatchAction {
@@ -242,10 +243,11 @@ interface EmptyAction {
 }
 
 type TableRecord = Record<string, unknown>
+type FilterValue = string | number | Dayjs | undefined
 
 interface Props {
   // 基础属性
-  columns: TableColumnsType
+  columns: TableColumnsType<TableRecord>
   dataSource: TableRecord[]
   loading?: boolean
   size?: 'small' | 'middle' | 'large'
@@ -320,7 +322,7 @@ const searchLoading = ref(false)
 const refreshing = ref(false)
 const exporting = ref(false)
 const selectedRowKeys = ref<string[]>([])
-const filterValues = ref<Record<string, unknown>>({})
+const filterValues = ref<Record<string, FilterValue>>({})
 const visibleColumns = ref<string[]>([])
 
 // 初始化可见列
@@ -433,6 +435,47 @@ const handleSearchChange = (e: Event) => {
 
 const handleFilterChange = () => {
   emit('filter-change', filterValues.value)
+}
+
+const getSelectFilterValue = (key: string): string | number | undefined => {
+  const value = filterValues.value[key]
+  return typeof value === 'string' || typeof value === 'number' ? value : undefined
+}
+
+const setSelectFilterValue = (key: string, value: unknown) => {
+  if (typeof value === 'string' || typeof value === 'number') {
+    filterValues.value[key] = value
+  } else {
+    filterValues.value[key] = undefined
+  }
+  handleFilterChange()
+}
+
+const getDateFilterValue = (key: string): Dayjs | undefined => {
+  const value = filterValues.value[key]
+  return value && dayjs.isDayjs(value) ? value : undefined
+}
+
+const setDateFilterValue = (key: string, value: Dayjs | string | null | undefined) => {
+  if (!value) {
+    filterValues.value[key] = undefined
+  } else if (dayjs.isDayjs(value)) {
+    filterValues.value[key] = value
+  } else {
+    filterValues.value[key] = dayjs(value)
+  }
+  handleFilterChange()
+}
+
+const getInputFilterValue = (key: string): string => {
+  const value = filterValues.value[key]
+  if (value === undefined || value === null) return ''
+  return String(value)
+}
+
+const setInputFilterValue = (key: string, value: string) => {
+  filterValues.value[key] = value
+  handleFilterChange()
 }
 
 const handleBatchAction = (action: BatchAction) => {

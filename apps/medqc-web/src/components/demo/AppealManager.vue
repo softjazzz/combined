@@ -59,7 +59,7 @@
           <!-- 审核进度条（仅审核中状态） -->
           <a-progress
             v-if="record.status === 'reviewing'"
-            :percent="getReviewProgress(record)"
+            :percent="getReviewProgress(asAppeal(record))"
             :show-info="false"
             size="small"
             style="margin-top: 4px"
@@ -77,7 +77,7 @@
             <a-button
               type="link"
               size="small"
-              @click="handleViewDetail(record)"
+              @click="handleViewDetail(asAppeal(record))"
             >
               查看
             </a-button>
@@ -168,6 +168,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { message, Empty } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
+import type { BadgeProps } from 'ant-design-vue'
 import { useQCDemoStore } from '@/stores/qcDemo'
 import type { Appeal, AppealStatus } from '@/types/quality-control'
 import dayjs from 'dayjs'
@@ -182,28 +184,28 @@ const filteredAppeals = computed(() => {
   if (!statusFilter.value) {
     return demoStore.appeals
   }
-  return demoStore.appeals.filter(a => a.status === statusFilter.value)
+  return demoStore.appeals.filter((a) => a.status === statusFilter.value)
 })
 
 // 表格配置
-const columns = [
+const columns: TableColumnsType<Appeal> = [
   { title: '申诉ID', dataIndex: 'id', key: 'id', width: 150, ellipsis: true },
   { title: '申诉类型', key: 'reason', width: 120 },
   { title: '状态', key: 'status', width: 150 },
   { title: '提交人', dataIndex: 'submittedBy', key: 'submittedBy', width: 100 },
   { title: '提交时间', key: 'submittedAt', width: 180 },
-  { title: '操作', key: 'actions', width: 150, fixed: 'right' }
+  { title: '操作', key: 'actions', width: 150, fixed: 'right' as const },
 ]
 
 const pagination = {
   pageSize: 10,
   showSizeChanger: true,
-  showTotal: (total: number) => `共 ${total} 条`
+  showTotal: (total: number) => `共 ${total} 条`,
 }
 
 // 工具函数
 const getCountByStatus = (status: AppealStatus) => {
-  return demoStore.appeals.filter(a => a.status === status).length
+  return demoStore.appeals.filter((a) => a.status === status).length
 }
 
 const getReasonColor = (reason: string) => {
@@ -211,7 +213,7 @@ const getReasonColor = (reason: string) => {
     rule_misapplication: 'blue',
     data_error: 'orange',
     system_error: 'red',
-    other: 'default'
+    other: 'default',
   }
   return colors[reason as keyof typeof colors] || 'default'
 }
@@ -221,19 +223,19 @@ const getReasonLabel = (reason: string) => {
     rule_misapplication: '规则误用',
     data_error: '数据错误',
     system_error: '系统错误',
-    other: '其他'
+    other: '其他',
   }
   return labels[reason as keyof typeof labels] || reason
 }
 
-const getStatusBadge = (status: AppealStatus) => {
+const getStatusBadge = (status: AppealStatus): BadgeProps['status'] => {
   const badges = {
     pending: 'default',
     reviewing: 'processing',
     approved: 'success',
     rejected: 'error',
-    cancelled: 'warning'
-  }
+    cancelled: 'warning',
+  } as const
   return badges[status] || 'default'
 }
 
@@ -243,7 +245,7 @@ const getStatusLabel = (status: AppealStatus) => {
     reviewing: '审核中',
     approved: '已通过',
     rejected: '已驳回',
-    cancelled: '已撤销'
+    cancelled: '已撤销',
   }
   return labels[status] || status
 }
@@ -262,6 +264,8 @@ const getReviewProgress = (appeal: Appeal) => {
 
   return Math.floor(((elapsed - 5000) / 8000) * 100)
 }
+
+const asAppeal = (record: unknown) => record as Appeal
 
 const formatTime = (timestamp: Date | string) => {
   return dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss')
@@ -297,4 +301,3 @@ const handleDelete = (appealId: string) => {
   }
 }
 </style>
-

@@ -216,7 +216,9 @@
             class="batch-selection"
           >
             <a-checkbox
-              :indeterminate="selectedAppeals.length > 0 && selectedAppeals.length < filteredAppeals.length"
+              :indeterminate="
+                selectedAppeals.length > 0 && selectedAppeals.length < filteredAppeals.length
+              "
               :checked="selectedAppeals.length === filteredAppeals.length"
               @change="handleSelectAll"
             >
@@ -231,7 +233,7 @@
             class="appeal-item"
             :class="{
               active: currentAppeal?.id === appeal.id,
-              selected: selectedAppeals.includes(appeal.id)
+              selected: selectedAppeals.includes(appeal.id),
             }"
           >
             <!-- 选择框 -->
@@ -241,7 +243,7 @@
             >
               <a-checkbox
                 :checked="selectedAppeals.includes(appeal.id)"
-                @change="(e: Event) => handleSelectAppeal(appeal.id, (e.target as HTMLInputElement | null)?.checked ?? false)"
+                @change="(e) => handleSelectAppealChange(appeal.id, e)"
               />
             </div>
             <div class="appeal-header">
@@ -255,14 +257,14 @@
                 {{ formatTime(appeal.submittedAt) }}
               </div>
             </div>
-            
+
             <div class="appeal-content">
               <h5>申诉理由: {{ getReasonText(appeal.reason) }}</h5>
               <p class="appeal-description">
                 {{ appeal.description }}
               </p>
             </div>
-            
+
             <div class="appeal-actions">
               <a-space>
                 <a-button
@@ -271,16 +273,16 @@
                 >
                   查看详情
                 </a-button>
-                <a-button 
+                <a-button
                   v-if="appeal.status === 'pending'"
-                  size="small" 
+                  size="small"
                   @click="handleEditAppeal(appeal)"
                 >
                   编辑
                 </a-button>
-                <a-button 
+                <a-button
                   v-if="appeal.status === 'pending'"
-                  size="small" 
+                  size="small"
                   danger
                   @click="handleCancelAppeal(appeal)"
                 >
@@ -291,7 +293,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 当前申诉详情 -->
       <div
         v-if="currentAppeal"
@@ -325,23 +327,23 @@
             >
               {{ currentAppeal.description }}
             </a-descriptions-item>
-            <a-descriptions-item 
-              v-if="currentAppeal.reviewerComment" 
-              label="审核意见" 
+            <a-descriptions-item
+              v-if="currentAppeal.reviewerComment"
+              label="审核意见"
               :span="2"
             >
               {{ currentAppeal.reviewerComment }}
             </a-descriptions-item>
           </a-descriptions>
-          
+
           <!-- 附件列表 -->
           <div
             v-if="currentAppeal.attachments.length > 0"
             class="attachments"
           >
             <h5>附件</h5>
-            <a-list 
-              :data-source="currentAppeal.attachments" 
+            <a-list
+              :data-source="currentAppeal.attachments"
               size="small"
             >
               <template #renderItem="{ item }">
@@ -363,12 +365,12 @@
           </div>
         </div>
       </div>
-      
+
       <!-- 操作按钮 -->
       <div class="panel-actions">
         <a-space>
-          <a-button 
-            type="primary" 
+          <a-button
+            type="primary"
             :disabled="!activeNotification"
             @click="handleCreateAppeal"
           >
@@ -388,14 +390,16 @@
 <script setup lang="ts">
 import { ref, computed, h } from 'vue'
 import { message } from 'ant-design-vue'
+import type { MenuProps } from 'ant-design-vue'
 import {
   FormOutlined,
   PlusOutlined,
   ReloadOutlined,
   FileOutlined,
   DownloadOutlined,
-  DownOutlined
+  DownOutlined,
 } from '@ant-design/icons-vue'
+import type { CheckboxChangeEvent } from 'ant-design-vue/es/checkbox/interface'
 import type { Appeal, QCNotification, AppealReason } from '@/types/quality-control'
 import type { Dayjs } from 'dayjs'
 
@@ -420,21 +424,13 @@ const dateRange = ref<[Dayjs, Dayjs] | null>(null)
 const selectedAppeals = ref<string[]>([])
 
 // 计算属性
-const pendingCount = computed(() =>
-  props.appeals.filter(a => a.status === 'pending').length
-)
+const pendingCount = computed(() => props.appeals.filter((a) => a.status === 'pending').length)
 
-const reviewingCount = computed(() =>
-  props.appeals.filter(a => a.status === 'reviewing').length
-)
+const reviewingCount = computed(() => props.appeals.filter((a) => a.status === 'reviewing').length)
 
-const approvedCount = computed(() =>
-  props.appeals.filter(a => a.status === 'approved').length
-)
+const approvedCount = computed(() => props.appeals.filter((a) => a.status === 'approved').length)
 
-const rejectedCount = computed(() =>
-  props.appeals.filter(a => a.status === 'rejected').length
-)
+const rejectedCount = computed(() => props.appeals.filter((a) => a.status === 'rejected').length)
 
 const approvalRate = computed(() => {
   const total = approvedCount.value + rejectedCount.value
@@ -448,32 +444,35 @@ const filteredAppeals = computed(() => {
   // 关键词搜索
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
-    filtered = filtered.filter(appeal =>
-      appeal.id.toLowerCase().includes(keyword) ||
-      appeal.description.toLowerCase().includes(keyword)
+    filtered = filtered.filter(
+      (appeal) =>
+        appeal.id.toLowerCase().includes(keyword) ||
+        appeal.description.toLowerCase().includes(keyword),
     )
   }
 
   // 状态筛选
   if (filterStatus.value) {
-    filtered = filtered.filter(appeal => appeal.status === filterStatus.value)
+    filtered = filtered.filter((appeal) => appeal.status === filterStatus.value)
   }
 
   // 理由筛选
   if (filterReason.value) {
-    filtered = filtered.filter(appeal => appeal.reason === filterReason.value)
+    filtered = filtered.filter((appeal) => appeal.reason === filterReason.value)
   }
 
   // 日期范围筛选
   if (dateRange.value && dateRange.value.length === 2) {
     const [start, end] = dateRange.value
-    filtered = filtered.filter(appeal => {
+    filtered = filtered.filter((appeal) => {
       const appealDate = new Date(appeal.submittedAt)
       return appealDate >= start.toDate() && appealDate <= end.toDate()
     })
   }
 
-  return filtered.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+  return filtered.sort(
+    (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
+  )
 })
 
 // 方法
@@ -482,7 +481,7 @@ const getStatusColor = (status: string) => {
     pending: 'orange',
     reviewing: 'blue',
     approved: 'green',
-    rejected: 'red'
+    rejected: 'red',
   }
   return colors[status as keyof typeof colors] || 'default'
 }
@@ -492,7 +491,7 @@ const getStatusText = (status: string) => {
     pending: '待审核',
     reviewing: '审核中',
     approved: '已通过',
-    rejected: '已拒绝'
+    rejected: '已拒绝',
   }
   return texts[status as keyof typeof texts] || status
 }
@@ -503,7 +502,7 @@ const getReasonText = (reason: AppealReason) => {
     data_inaccuracy: '数据不准确',
     context_missing: '缺少上下文',
     technical_error: '技术错误',
-    other: '其他'
+    other: '其他',
   }
   return texts[reason] || reason
 }
@@ -539,13 +538,13 @@ const handleExport = () => {
   message.info('导出申诉数据')
 }
 
-const handleBatchAction = ({ key }: { key: string }) => {
+const handleBatchAction: MenuProps['onClick'] = ({ key }) => {
   if (selectedAppeals.value.length === 0) {
     message.warning('请先选择要操作的申诉')
     return
   }
 
-  emit('appealAction', `batch-${key}`, selectedAppeals.value as any)
+  emit('appealAction', `batch-${String(key)}`)
 
   switch (key) {
     case 'approve':
@@ -562,13 +561,17 @@ const handleBatchAction = ({ key }: { key: string }) => {
   selectedAppeals.value = []
 }
 
-const handleSelectAll = (e: Event) => {
-  const checked = (e.target as HTMLInputElement | null)?.checked ?? false
+const handleSelectAll = (e: CheckboxChangeEvent) => {
+  const checked = e.target.checked
   if (checked) {
-    selectedAppeals.value = filteredAppeals.value.map(appeal => appeal.id)
+    selectedAppeals.value = filteredAppeals.value.map((appeal) => appeal.id)
   } else {
     selectedAppeals.value = []
   }
+}
+
+const handleSelectAppealChange = (appealId: string, e: CheckboxChangeEvent) => {
+  handleSelectAppeal(appealId, e.target.checked)
 }
 
 const handleSelectAppeal = (appealId: string, checked: boolean) => {
@@ -614,12 +617,12 @@ const handleRefreshAppeals = () => {
   .appeal-panel {
     .appeals-section {
       margin-bottom: 24px;
-      
+
       .empty-appeals {
         text-align: center;
         padding: 40px 0;
       }
-      
+
       .appeals-list {
         .appeal-item {
           border: 1px solid #f0f0f0;
@@ -627,68 +630,68 @@ const handleRefreshAppeals = () => {
           padding: 16px;
           margin-bottom: 12px;
           transition: all 0.3s;
-          
+
           &:hover {
             border-color: #1890ff;
             box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
           }
-          
+
           &.active {
             border-color: #1890ff;
             background: #e6f7ff;
           }
-          
+
           .appeal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
-            
+
             .appeal-info {
               display: flex;
               align-items: center;
               gap: 8px;
-              
+
               .appeal-id {
                 font-size: 12px;
                 color: #666;
               }
             }
-            
+
             .appeal-time {
               font-size: 12px;
               color: #666;
             }
           }
-          
+
           .appeal-content {
             margin-bottom: 12px;
-            
+
             h5 {
               font-weight: 600;
               margin: 0 0 4px 0;
               color: #333;
             }
-            
+
             .appeal-description {
               margin: 0;
               color: #666;
               font-size: 14px;
             }
           }
-          
+
           .appeal-actions {
             text-align: right;
           }
         }
       }
     }
-    
+
     .current-appeal {
       .appeal-details {
         .attachments {
           margin-top: 16px;
-          
+
           h5 {
             font-weight: 600;
             margin-bottom: 8px;
@@ -697,7 +700,7 @@ const handleRefreshAppeals = () => {
         }
       }
     }
-    
+
     .panel-actions {
       text-align: center;
       padding-top: 16px;

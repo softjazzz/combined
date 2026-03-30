@@ -18,7 +18,7 @@
           show-icon
           message="质控标准"
           class="rule-source-alert"
-          style="margin-bottom: 16px;"
+          style="margin-bottom: 16px"
         >
           <template #description>
             <a-space
@@ -36,7 +36,7 @@
                 LLM优化
               </a-tag>
             </a-space>
-            <div style="margin-top: 8px; font-size: 13px;">
+            <div style="margin-top: 8px; font-size: 13px">
               基于《四川省住院病历质量评定标准（2023年版）》，包含完整的质控规则库
             </div>
           </template>
@@ -96,7 +96,7 @@
         <div
           v-if="selectedDocuments && selectedDocuments.length > 0"
           class="document-filter-info"
-          style="margin-bottom: 12px;"
+          style="margin-bottom: 12px"
         >
           <a-alert
             type="info"
@@ -109,7 +109,7 @@
 
         <div
           class="rules-filter"
-          style="margin-bottom: 16px;"
+          style="margin-bottom: 16px"
         >
           <a-row :gutter="8">
             <a-col :span="8">
@@ -118,7 +118,7 @@
                 placeholder="按类别筛选"
                 allow-clear
                 size="small"
-                style="width: 100%;"
+                style="width: 100%"
               >
                 <a-select-option value="completeness">
                   完整性
@@ -137,7 +137,7 @@
                 placeholder="按严重程度筛选"
                 allow-clear
                 size="small"
-                style="width: 100%;"
+                style="width: 100%"
               >
                 <a-select-option value="high">
                   严重
@@ -156,7 +156,7 @@
                 placeholder="按状态筛选"
                 allow-clear
                 size="small"
-                style="width: 100%;"
+                style="width: 100%"
               >
                 <a-select-option value="active">
                   启用
@@ -170,6 +170,7 @@
         </div>
 
         <a-list
+          v-if="filteredRules.length > 0"
           item-layout="horizontal"
           :data-source="filteredRules"
           :pagination="paginationConfig"
@@ -179,7 +180,7 @@
             <a-list-item
               :class="[
                 'rule-row',
-                { 'rule-selected': isRuleSelected(item), 'rule-disabled': item._disabled }
+                { 'rule-selected': isRuleSelected(item), 'rule-disabled': item._disabled },
               ]"
               :actions="getItemActions(item)"
             >
@@ -190,10 +191,11 @@
               />
             </a-list-item>
           </template>
-          <template #empty>
-            <a-empty description="暂无匹配的规则" />
-          </template>
         </a-list>
+        <a-empty
+          v-else
+          description="暂无匹配的规则"
+        />
       </div>
 
       <!-- 测试病历信息 -->
@@ -270,20 +272,30 @@
 <script setup lang="ts">
 import { ref, h, computed, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { SettingOutlined, PlayCircleOutlined, AuditOutlined, FileProtectOutlined } from '@ant-design/icons-vue'
+import {
+  SettingOutlined,
+  PlayCircleOutlined,
+  AuditOutlined,
+  FileProtectOutlined,
+} from '@ant-design/icons-vue'
 import type { QualityControlRule } from '@/types/quality-control'
 import { DOCUMENT_TYPE_TO_CATEGORY } from '@/utils/documentTypeUtils'
 import { lookupRuleCategories } from '@/qc/ruleDocumentMapping'
+import type { CheckboxChangeEvent } from 'ant-design-vue/es/checkbox/interface'
+import type { ListProps } from 'ant-design-vue'
 
 // Props
-const props = withDefaults(defineProps<{
-  selectedRules: QualityControlRule[]
-  availableRules?: QualityControlRule[]
-  testRecord: Record<string, unknown>
-  selectedDocuments?: Array<{ id: string; title?: string; type?: string; created_at?: string }>
-}>(), {
-  availableRules: () => []
-})
+const props = withDefaults(
+  defineProps<{
+    selectedRules: QualityControlRule[]
+    availableRules?: QualityControlRule[]
+    testRecord: Record<string, unknown>
+    selectedDocuments?: Array<{ id: string; title?: string; type?: string; created_at?: string }>
+  }>(),
+  {
+    availableRules: () => [],
+  },
+)
 
 // Emits
 const emit = defineEmits<{
@@ -309,7 +321,7 @@ const getRuleIdentity = (rule: any): string => {
 const selectedDocTypeCodes = computed<string[]>(() => {
   const docs = props.selectedDocuments || []
   const set = new Set<string>()
-  docs.forEach(d => {
+  docs.forEach((d) => {
     const typeCode = d.type || ''
     // 将细分类(type)映射到"6大类"分类代码
     const cat = (DOCUMENT_TYPE_TO_CATEGORY as any)[typeCode]
@@ -318,8 +330,20 @@ const selectedDocTypeCodes = computed<string[]>(() => {
       const s = (typeCode || '').toLowerCase()
       if (s.includes('admission')) mapped = 'admission_record'
       else if (s.includes('discharge')) mapped = 'discharge_record'
-      else if (s.includes('operation') || s.includes('surgery') || s.includes('preoperative') || s.includes('anesthesia')) mapped = 'operation_record'
-      else if (s.includes('imaging') || s.includes('lab') || s.includes('examination') || s.includes('report')) mapped = 'examination_report'
+      else if (
+        s.includes('operation') ||
+        s.includes('surgery') ||
+        s.includes('preoperative') ||
+        s.includes('anesthesia')
+      )
+        mapped = 'operation_record'
+      else if (
+        s.includes('imaging') ||
+        s.includes('lab') ||
+        s.includes('examination') ||
+        s.includes('report')
+      )
+        mapped = 'examination_report'
       else mapped = 'progress_note'
     }
     if (mapped) set.add(mapped)
@@ -331,7 +355,7 @@ const selectedDocTypeCodes = computed<string[]>(() => {
 const selectedDocTypeNames = computed<string[]>(() => {
   const docs = props.selectedDocuments || []
   const set = new Set<string>()
-  docs.forEach(d => {
+  docs.forEach((d) => {
     const typeCode = d.type || ''
     const label = getDocumentTypeLabel(typeCode)
     if (label) set.add(label)
@@ -360,7 +384,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   admission_note: '入院记录',
   discharge_summary: '出院小结',
   anesthesia_record: '麻醉记录',
-  nursing_record: '护理记录'
+  nursing_record: '护理记录',
 }
 
 function getDocumentTypeLabel(type?: string): string {
@@ -372,35 +396,45 @@ function getDocumentTypeLabel(type?: string): string {
 const rulesWithApplicability = computed<any[]>(() => {
   const codes = new Set(selectedDocTypeCodes.value)
   const all = availableRules
-  if (codes.size === 0) return all.map(r => ({ ...r, _applicable: true, _disabled: false }))
+  if (codes.size === 0) return all.map((r) => ({ ...r, _applicable: true, _disabled: false }))
 
   const labelToCode: Record<string, string> = {
-    '入院记录': 'admission_record',
-    '病程记录': 'progress_note',
-    '出院记录': 'discharge_record',
-    '手术相关记录': 'operation_record',
-    '手术记录': 'operation_record',
-    '辅助检查': 'examination_report',
-    '检查记录': 'examination_report',
-    '知情同意书': 'consent_form'
+    入院记录: 'admission_record',
+    病程记录: 'progress_note',
+    出院记录: 'discharge_record',
+    手术相关记录: 'operation_record',
+    手术记录: 'operation_record',
+    辅助检查: 'examination_report',
+    检查记录: 'examination_report',
+    知情同意书: 'consent_form',
   }
   const normalize = (d: string): string | undefined => {
     if (!d) return undefined
     const s = String(d).trim()
-    if (['admission_record','progress_note','discharge_record','operation_record','examination_report','consent_form'].includes(s)) return s
+    if (
+      [
+        'admission_record',
+        'progress_note',
+        'discharge_record',
+        'operation_record',
+        'examination_report',
+        'consent_form',
+      ].includes(s)
+    )
+      return s
     return labelToCode[s]
   }
 
   const arr = all.map((r: any) => {
     // 1) 先尝试从映射表/后端字段取得标准类别集合
     const mapped = lookupRuleCategories(r)
-    const raw: string[] = mapped.length > 0 ? mapped : (r.applicable_documents || [])
+    const raw: string[] = mapped.length > 0 ? mapped : r.applicable_documents || []
     const norm = raw.map(normalize).filter((x): x is string => !!x)
     let applicable = false
     if (codes.size === 1) {
       const [only] = Array.from(codes)
       // 修正：规则的文书类别列表中包含选中的类别即为适用
-      applicable = norm.length > 0 && norm.some(d => codes.has(d))
+      applicable = norm.length > 0 && norm.some((d) => codes.has(d))
       // 额外保护：若只选了入院记录，名称/描述命中手术相关关键词则不视为适用
       if (only === 'admission_record') {
         const text = `${r.name || ''} ${r.description || ''}`
@@ -409,7 +443,7 @@ const rulesWithApplicability = computed<any[]>(() => {
         }
       }
     } else {
-      applicable = norm.some(d => codes.has(d))
+      applicable = norm.some((d) => codes.has(d))
     }
     return { ...r, _applicable: applicable, _disabled: !applicable }
   })
@@ -421,16 +455,16 @@ const filteredRules = computed(() => {
   let rules = rulesWithApplicability.value
 
   if (categoryFilter.value) {
-    rules = rules.filter(rule => rule.category === categoryFilter.value)
+    rules = rules.filter((rule) => rule.category === categoryFilter.value)
   }
 
   if (severityFilter.value) {
-    rules = rules.filter(rule => rule.severity === severityFilter.value)
+    rules = rules.filter((rule) => rule.severity === severityFilter.value)
   }
 
   if (statusFilter.value) {
     const isActive = statusFilter.value === 'active'
-    rules = rules.filter(rule => rule.isActive === isActive)
+    rules = rules.filter((rule) => rule.isActive === isActive)
   }
 
   return rules
@@ -445,17 +479,19 @@ const selectedRuleIds = computed(() => {
   return set
 })
 
-const selectableRulesInView = computed(() => filteredRules.value.filter(rule => !rule._disabled))
+const selectableRulesInView = computed(() => filteredRules.value.filter((rule) => !rule._disabled))
 
 const isAllChecked = computed(() => {
   const selectable = selectableRulesInView.value
   if (selectable.length === 0) return false
-  return selectable.every(rule => selectedRuleIds.value.has(getRuleIdentity(rule)))
+  return selectable.every((rule) => selectedRuleIds.value.has(getRuleIdentity(rule)))
 })
 
 const isIndeterminate = computed(() => {
   if (selectableRulesInView.value.length === 0) return false
-  const hasSome = selectableRulesInView.value.some(rule => selectedRuleIds.value.has(getRuleIdentity(rule)))
+  const hasSome = selectableRulesInView.value.some((rule) =>
+    selectedRuleIds.value.has(getRuleIdentity(rule)),
+  )
   return hasSome && !isAllChecked.value
 })
 
@@ -471,15 +507,15 @@ const handlePageSizeChange = (_current: number, size: number) => {
   paginationState.current = 1
 }
 
-const paginationConfig = computed(() => ({
+const paginationConfig = computed<NonNullable<ListProps['pagination']>>(() => ({
   current: paginationState.current,
   pageSize: paginationState.pageSize,
-  size: 'small',
+  size: 'small' as const,
   showSizeChanger: true,
   showQuickJumper: true,
   pageSizeOptions: ['6', '10', '20', '50'],
   onChange: handlePageChange,
-  onShowSizeChange: handlePageSizeChange
+  onShowSizeChange: handlePageSizeChange,
 }))
 
 const selectionCoverage = computed(() => {
@@ -489,19 +525,27 @@ const selectionCoverage = computed(() => {
 // 工具函数
 const getSeverityColor = (severity: string) => {
   switch (severity) {
-    case 'high': return 'red'
-    case 'medium': return 'orange'
-    case 'low': return 'blue'
-    default: return 'default'
+    case 'high':
+      return 'red'
+    case 'medium':
+      return 'orange'
+    case 'low':
+      return 'blue'
+    default:
+      return 'default'
   }
 }
 
 const getSeverityText = (severity: string) => {
   switch (severity) {
-    case 'high': return '高'
-    case 'medium': return '中'
-    case 'low': return '低'
-    default: return '未知'
+    case 'high':
+      return '高'
+    case 'medium':
+      return '中'
+    case 'low':
+      return '低'
+    default:
+      return '未知'
   }
 }
 
@@ -538,13 +582,13 @@ const handleToggleRule = (rule: any, checked: boolean) => {
     const updated = [...props.selectedRules, rule]
     emit('rulesUpdated', updated)
   } else {
-    const updated = props.selectedRules.filter(r => getRuleIdentity(r) !== id)
+    const updated = props.selectedRules.filter((r) => getRuleIdentity(r) !== id)
     emit('rulesUpdated', updated)
   }
 }
 
-const handleToggleAll = (e: any) => {
-  const checked = e?.target?.checked ?? false
+const handleToggleAll = (e: CheckboxChangeEvent) => {
+  const checked = e.target.checked
   const inView = selectableRulesInView.value
   if (inView.length === 0) return
 
@@ -554,14 +598,14 @@ const handleToggleAll = (e: any) => {
       const id = getRuleIdentity(rule)
       if (id) map.set(id, rule)
     })
-    inView.forEach(rule => {
+    inView.forEach((rule) => {
       const id = getRuleIdentity(rule)
       if (id) map.set(id, rule)
     })
     emit('rulesUpdated', Array.from(map.values()))
   } else {
-    const idsToRemove = new Set(inView.map(rule => getRuleIdentity(rule)))
-    const updated = props.selectedRules.filter(rule => !idsToRemove.has(getRuleIdentity(rule)))
+    const idsToRemove = new Set(inView.map((rule) => getRuleIdentity(rule)))
+    const updated = props.selectedRules.filter((rule) => !idsToRemove.has(getRuleIdentity(rule)))
     emit('rulesUpdated', updated)
   }
 }
@@ -576,62 +620,48 @@ const clearAllRules = () => {
 }
 
 const renderAvatar = (_item?: any) => {
-  return h(
-    'div',
-    { class: 'rule-avatar fixed-icon' },
-    h(AuditOutlined)
-  )
+  return h('div', { class: 'rule-avatar fixed-icon' }, h(AuditOutlined))
 }
 
 const renderTitle = (item: any) => {
-  return h(
-    'div',
-    { class: 'rule-title-row' },
-    [
-      h(
-        'label',
-        { class: 'rule-checkbox-label' },
-        [
-          h('input', {
-            type: 'checkbox',
-            checked: isRuleSelected(item),
-            disabled: item._disabled,
-            onChange: (e: any) => handleToggleRule(item, e.target.checked)
-          }),
-          h('span', { class: 'rule-title-text' }, item.name || item.ruleCode || item.id)
-        ]
-      ),
-      h(
-        'div',
-        { class: 'rule-title-tags' },
-        [
-          h(
-            'span',
-            { class: ['rule-tag', `tag-${item.severity || 'medium'}`] },
-            getSeverityText(item.severity || 'medium')
-          ),
-          h('span', { class: 'rule-tag category' }, item.category || '规则'),
-          item.isActive ? h('span', { class: 'rule-tag active' }, '启用') : h('span', { class: 'rule-tag inactive' }, '禁用'),
-          item._applicable ? h('span', { class: 'rule-tag applicable' }, '适用') : null
-        ].filter(Boolean)
-      )
-    ]
-  )
+  return h('div', { class: 'rule-title-row' }, [
+    h('label', { class: 'rule-checkbox-label' }, [
+      h('input', {
+        type: 'checkbox',
+        checked: isRuleSelected(item),
+        disabled: item._disabled,
+        onChange: (e: any) => handleToggleRule(item, e.target.checked),
+      }),
+      h('span', { class: 'rule-title-text' }, item.name || item.ruleCode || item.id),
+    ]),
+    h(
+      'div',
+      { class: 'rule-title-tags' },
+      [
+        h(
+          'span',
+          { class: ['rule-tag', `tag-${item.severity || 'medium'}`] },
+          getSeverityText(item.severity || 'medium'),
+        ),
+        h('span', { class: 'rule-tag category' }, item.category || '规则'),
+        item.isActive
+          ? h('span', { class: 'rule-tag active' }, '启用')
+          : h('span', { class: 'rule-tag inactive' }, '禁用'),
+        item._applicable ? h('span', { class: 'rule-tag applicable' }, '适用') : null,
+      ].filter(Boolean),
+    ),
+  ])
 }
 
 const renderDescription = (item: any) => {
-  return h(
-    'div',
-    { class: 'rule-desc-wrapper' },
-    [
-      h('div', { class: 'rule-desc-meta' }, [
-        h('span', { class: 'rule-meta-item' }, `权重：${item.weight ?? 1}`),
-        h('span', { class: 'rule-meta-item' }, `类型：${item.ruleType || '未知'}`),
-        h('span', { class: 'rule-meta-item' }, `编号：${item.ruleCode || item.id}`)
-      ]),
-      h('div', { class: 'rule-desc-text' }, item.description || '暂无描述')
-    ]
-  )
+  return h('div', { class: 'rule-desc-wrapper' }, [
+    h('div', { class: 'rule-desc-meta' }, [
+      h('span', { class: 'rule-meta-item' }, `权重：${item.weight ?? 1}`),
+      h('span', { class: 'rule-meta-item' }, `类型：${item.ruleType || '未知'}`),
+      h('span', { class: 'rule-meta-item' }, `编号：${item.ruleCode || item.id}`),
+    ]),
+    h('div', { class: 'rule-desc-text' }, item.description || '暂无描述'),
+  ])
 }
 
 const getItemActions = (item: any) => {
@@ -640,10 +670,10 @@ const getItemActions = (item: any) => {
       'span',
       {
         class: 'rule-action',
-        onClick: () => handleToggleRule(item, !isRuleSelected(item))
+        onClick: () => handleToggleRule(item, !isRuleSelected(item)),
       },
-      isRuleSelected(item) ? '取消' : '选择'
-    )
+      isRuleSelected(item) ? '取消' : '选择',
+    ),
   ]
 }
 
@@ -671,7 +701,11 @@ watch(filteredRules, () => {
       .rules-summary {
         margin-bottom: 12px;
         padding: 14px 16px;
-        background: linear-gradient(135deg, rgba(230, 244, 255, 0.92) 0%, rgba(255, 255, 255, 0.96) 100%);
+        background: linear-gradient(
+          135deg,
+          rgba(230, 244, 255, 0.92) 0%,
+          rgba(255, 255, 255, 0.96) 100%
+        );
         border-radius: 12px;
         box-shadow: 0 1px 6px rgba(14, 110, 209, 0.08);
         display: flex;
@@ -920,9 +954,7 @@ watch(filteredRules, () => {
       padding-top: 20px;
       border-top: 1px solid #f0f0f0;
       margin-top: 24px;
-
+    }
   }
 }
-}
-
 </style>

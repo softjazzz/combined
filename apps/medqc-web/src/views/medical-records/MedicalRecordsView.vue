@@ -8,11 +8,18 @@
       <!-- 调试信息 -->
       <div
         class="debug-info"
-        style="background: #f0f0f0; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px;"
+        style="
+          background: #f0f0f0;
+          padding: 8px;
+          margin: 8px 0;
+          border-radius: 4px;
+          font-size: 12px;
+        "
       >
         <span class="inline-flex items-center gap-1">
           <ToolOutlined />
-          调试: 记录数={{ records.length }}, 加载中={{ loading }}, 总数={{ pagination.total }}, 视图={{ viewMode }}
+          调试: 记录数={{ records.length }}, 加载中={{ loading }}, 总数={{ pagination.total }},
+          视图={{ viewMode }}
         </span>
       </div>
       <div class="header-actions">
@@ -272,17 +279,19 @@
             </div>
 
             <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-              <div>科室：<span class="text-gray-800">{{ rec.department || '—' }}</span></div>
-              <div>文书：<span class="text-gray-800">{{ rec.documentsCount ?? 0 }}</span> 份</div>
+              <div>
+                科室：<span class="text-gray-800">{{ rec.department || '—' }}</span>
+              </div>
+              <div>
+                文书：<span class="text-gray-800">{{ rec.documentsCount ?? 0 }}</span> 份
+              </div>
               <div class="col-span-2 truncate">
                 主诊断：<span class="text-gray-800">{{ rec.primaryDiagnosis || '—' }}</span>
               </div>
             </div>
 
             <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
-              <div>
-                创建：{{ formatDateTime(rec.createdAt) }}
-              </div>
+              <div>创建：{{ formatDateTime(rec.createdAt) }}</div>
               <div class="flex items-center gap-2">
                 <a-button
                   type="link"
@@ -332,58 +341,7 @@
           :row-selection="rowSelection"
           size="middle"
           @change="handleTableChange"
-        >
-          <template #recordNumber="{ text }">
-            <span class="record-number">{{ text }}</span>
-          </template>
-          <template #patientName="{ record }">
-            <span class="patient-name">{{ record.patientName || record.recordName || '未知' }}</span>
-          </template>
-          <template #qualityPoints="{ record }">
-            <a-button
-              type="link"
-              size="small"
-              @click="showQualityPointsModal(record)"
-            >
-              查看质控点 ({{ record.qualityPointIds?.length || 0 }})
-            </a-button>
-          </template>
-          <template #createdAt="{ text }">
-            <span>{{ formatDateTime(text) }}</span>
-          </template>
-          <template #action="{ record }">
-            <a-space size="small">
-              <a-button
-                type="link"
-                size="small"
-                @click="handleViewDetail(record.id)"
-              >
-                详情
-              </a-button>
-              <a-button
-                type="link"
-                size="small"
-                @click="handleCopy(record.id)"
-              >
-                复制
-              </a-button>
-              <a-popconfirm
-                title="确定要删除这条病历吗？"
-                ok-text="确定"
-                cancel-text="取消"
-                @confirm="handleDelete(record.id)"
-              >
-                <a-button
-                  type="link"
-                  size="small"
-                  danger
-                >
-                  删除
-                </a-button>
-              </a-popconfirm>
-            </a-space>
-          </template>
-        </a-table>
+        />
       </a-card>
     </div>
 
@@ -397,7 +355,9 @@
       <div v-if="selectedRecord">
         <div class="modal-record-info">
           <p><strong>病历编号：</strong>{{ selectedRecord.recordNumber }}</p>
-          <p><strong>患者姓名：</strong>{{ selectedRecord.patientName || selectedRecord.recordName }}</p>
+          <p>
+            <strong>患者姓名：</strong>{{ selectedRecord.patientName || selectedRecord.recordName }}
+          </p>
         </div>
         <a-divider />
         <div class="quality-points-list">
@@ -425,9 +385,7 @@
                 <a-tag :color="getSeverityColor(point.severity)">
                   {{ point.severity }}
                 </a-tag>
-                <span class="applied-time">
-                  应用时间: {{ formatDateTime(point.appliedAt) }}
-                </span>
+                <span class="applied-time"> 应用时间: {{ formatDateTime(point.appliedAt) }} </span>
               </div>
             </div>
           </div>
@@ -438,9 +396,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { h, ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import {
+  message,
+  Button as AButton,
+  Popconfirm as APopconfirm,
+  Space as ASpace,
+} from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   FileTextOutlined,
@@ -451,7 +414,7 @@ import {
   RobotOutlined,
   PlusOutlined,
   BarChartOutlined,
-  ToolOutlined
+  ToolOutlined,
 } from '@ant-design/icons-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
@@ -532,6 +495,7 @@ const getErrorMessage = (error: unknown): string => {
 const loading = ref(false)
 const records = ref<MedicalRecordRow[]>([])
 const selectedRowKeys = ref<string[]>([])
+const asMedicalRecord = (record: Record<string, any>) => record as MedicalRecordRow
 const qualityPointsModalVisible = ref(false)
 const selectedRecord = ref<MedicalRecordRow | null>(null)
 const qualityPointsData = ref<QualityPointItem[]>([])
@@ -541,7 +505,7 @@ const stats = reactive({
   totalRecords: 156,
   monthlyNew: 23,
   pendingReview: 5,
-  withQualityPoints: 89
+  withQualityPoints: 89,
 })
 
 // 搜索表单
@@ -550,7 +514,7 @@ const searchForm = reactive({
   department: '',
   diagnosis: '',
   creator: '',
-  dateRange: null as [Dayjs, Dayjs] | null
+  dateRange: null as [Dayjs, Dayjs] | null,
 })
 
 // 分页配置
@@ -563,69 +527,79 @@ const pagination = reactive({
   showSizeChanger: true,
   showQuickJumper: true,
   showTotal: (total: number, range: [number, number]) =>
-    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
 })
 
 // 表格列配置
-const columns: TableColumnsType = [
+const columns: TableColumnsType<MedicalRecordRow> = [
   {
     title: '病历编号',
     dataIndex: 'recordNumber',
     key: 'recordNumber',
     width: 100,
     sorter: true,
-    slots: { customRender: 'recordNumber' }
+    customRender: ({ text }) => h('span', { class: 'record-number' }, String(text ?? '')),
   },
   {
     title: '患者姓名',
     dataIndex: 'patientName',
     key: 'patientName',
     width: 200,
-    slots: { customRender: 'patientName' }
+    customRender: ({ record }) =>
+      h('span', { class: 'patient-name' }, record.patientName || record.recordName || '未知'),
   },
   {
     title: '出院科室',
     dataIndex: 'department',
     key: 'department',
-    width: 120
+    width: 120,
   },
   {
     title: '主诊断名称',
     dataIndex: 'primaryDiagnosis',
     key: 'primaryDiagnosis',
-    width: 150
+    width: 150,
   },
   {
     title: '主要手术及操作',
     dataIndex: 'majorSurgery',
     key: 'majorSurgery',
     width: 180,
-    ellipsis: true
+    ellipsis: true,
   },
   {
     title: '文书数量',
     dataIndex: 'documentsCount',
     key: 'documentsCount',
     width: 80,
-    align: 'center'
+    align: 'center',
   },
   {
     title: '应用质控点',
     key: 'qualityPoints',
     width: 120,
-    slots: { customRender: 'qualityPoints' }
+    customRender: ({ record }) =>
+      h(
+        AButton,
+        {
+          type: 'link',
+          size: 'small',
+          onClick: () => showQualityPointsModal(record),
+        },
+        () => `查看质控点 (${record.qualityPointIds?.length || 0})`,
+      ),
   },
   {
     title: '病历创建人',
     dataIndex: 'createdBy',
     key: 'createdBy',
-    width: 100
+    width: 100,
   },
   {
     title: '最后操作人',
     dataIndex: 'lastModifiedBy',
     key: 'lastModifiedBy',
-    width: 100
+    width: 100,
   },
   {
     title: '创建时间',
@@ -633,25 +607,73 @@ const columns: TableColumnsType = [
     key: 'createdAt',
     width: 120,
     sorter: true,
-    slots: { customRender: 'createdAt' }
+    customRender: ({ text }) => h('span', formatDateTime(String(text ?? ''))),
   },
   {
     title: '操作',
     key: 'action',
     width: 120,
-    fixed: 'right',
-    slots: { customRender: 'action' }
-  }
+    fixed: 'right' as const,
+    customRender: ({ record }) =>
+      h(
+        ASpace,
+        { size: 'small' },
+        {
+          default: () => [
+            h(
+              AButton,
+              {
+                type: 'link',
+                size: 'small',
+                onClick: () => handleViewDetail(record.id),
+              },
+              () => '详情',
+            ),
+            h(
+              AButton,
+              {
+                type: 'link',
+                size: 'small',
+                onClick: () => handleCopy(record.id),
+              },
+              () => '复制',
+            ),
+            h(
+              APopconfirm,
+              {
+                title: '确定要删除这条病历吗？',
+                okText: '确定',
+                cancelText: '取消',
+                onConfirm: () => handleDelete(record.id),
+              },
+              {
+                default: () =>
+                  h(
+                    AButton,
+                    {
+                      type: 'link',
+                      size: 'small',
+                      danger: true,
+                    },
+                    () => '删除',
+                  ),
+              },
+            ),
+          ],
+        },
+      ),
+  },
 ]
 
 // 行选择配置
 const rowSelection = computed(() => ({
-  selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: string[]) => {
     selectedRowKeys.value = keys
   },
   onSelectAll: (selected: boolean, selectedRows: any[], changeRows: any[]) => {
     console.log('Select all:', selected, selectedRows, changeRows)
-  }
+  },
 }))
 
 // 生命周期
@@ -665,7 +687,7 @@ onMounted(async () => {
     records,
     loading,
     pagination,
-    authStore
+    authStore,
   }
   console.log('🔧 全局调试接口已添加: window.debugMedicalRecords')
 
@@ -677,7 +699,7 @@ onMounted(async () => {
 
   console.log('📊 认证状态:', {
     isAuthenticated: authStore.isAuthenticated,
-    user: authStore.user
+    user: authStore.user,
   })
 
   // 加载数据
@@ -725,7 +747,7 @@ const loadRecords = async () => {
     console.log('📡 API调用URL:', apiUrl)
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     }
 
     if (token) {
@@ -736,7 +758,7 @@ const loadRecords = async () => {
 
     const response = await fetch(apiUrl, {
       method: 'GET',
-      headers
+      headers,
     })
 
     console.log(`📊 API响应状态: ${response.status} ${response.statusText}`)
@@ -788,7 +810,8 @@ const loadRecords = async () => {
       status: record.status || '',
       importMethod: record.import_method || 'smart_import',
       aiConfidence: record.ai_confidence_score || 0,
-      documentsCount: record.document_count || (Array.isArray(record.documents) ? record.documents.length : 0)
+      documentsCount:
+        record.document_count || (Array.isArray(record.documents) ? record.documents.length : 0),
     }))
 
     console.log('🔄 转换后的记录数据:', records.value)
@@ -800,13 +823,13 @@ const loadRecords = async () => {
     console.log('📊 最终状态:', {
       recordsCount: records.value.length,
       paginationTotal: pagination.total,
-      loading: loading.value
+      loading: loading.value,
     })
   } catch (error: unknown) {
     console.error('❌ 加载病历列表失败:', error)
     console.error('错误详情:', {
       message: getErrorMessage(error),
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
     })
     message.error(`加载病历列表失败: ${getErrorMessage(error)}`)
 
@@ -820,15 +843,15 @@ const loadRecords = async () => {
         department: '内科',
         primaryDiagnosis: '高血压病',
         majorSurgery: '无',
-        qualityPointIds:  [],
+        qualityPointIds: [],
         createdBy: '系统',
         lastModifiedBy: '系统',
         createdAt: '2024-08-27T10:30:00Z',
         status: 'active',
         importMethod: 'smart_import',
         aiConfidence: 89.5,
-        documentsCount: 2
-      }
+        documentsCount: 2,
+      },
     ]
 
     records.value = mockData
@@ -851,15 +874,19 @@ const loadStats = async () => {
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     })
 
     if (response.ok) {
       const result = await response.json()
       const allRecords: Array<{ created_at?: string; status?: string; record_type?: string }> =
-        (Array.isArray(result.data?.items) ? result.data.items : Array.isArray(result.data) ? result.data : [])
+        Array.isArray(result.data?.items)
+          ? result.data.items
+          : Array.isArray(result.data)
+            ? result.data
+            : []
 
       // 计算统计数据
       const totalRecords = result.total || allRecords.length
@@ -872,13 +899,15 @@ const loadStats = async () => {
       }).length
 
       const pendingReview = allRecords.filter((record) => record.status === 'pending').length
-      const withQualityPoints = allRecords.filter((record) => record.record_type === 'LLM解析结果').length
+      const withQualityPoints = allRecords.filter(
+        (record) => record.record_type === 'LLM解析结果',
+      ).length
 
       Object.assign(stats, {
         totalRecords,
         monthlyNew,
         pendingReview,
-        withQualityPoints
+        withQualityPoints,
       })
     }
   } catch (error) {
@@ -893,19 +922,19 @@ const formatDateTime = (dateString: string) => {
 
 const getCategoryColor = (category: string) => {
   const colorMap: Record<string, string> = {
-    '完整性': 'blue',
-    '一致性': 'green',
-    '合理性': 'orange',
-    '及时性': 'purple'
+    完整性: 'blue',
+    一致性: 'green',
+    合理性: 'orange',
+    及时性: 'purple',
   }
   return colorMap[category] || 'default'
 }
 
 const getSeverityColor = (severity: string) => {
   const colorMap: Record<string, string> = {
-    '严重': 'red',
-    '重要': 'orange',
-    '轻微': 'green'
+    严重: 'red',
+    重要: 'orange',
+    轻微: 'green',
   }
   return colorMap[severity] || 'default'
 }
@@ -926,7 +955,7 @@ const handleViewDetail = (id: string) => {
 const handleCopy = async (id: string) => {
   try {
     // 模拟复制操作
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 500))
     message.success('病历复制成功')
     loadRecords()
   } catch (error) {
@@ -948,9 +977,9 @@ const handleDelete = async (id: string) => {
     const response = await fetch(apiUrl, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     })
 
     if (!response.ok) {
@@ -977,7 +1006,7 @@ const handleReset = () => {
     department: '',
     diagnosis: '',
     creator: '',
-    dateRange: null
+    dateRange: null,
   })
   handleSearch()
 }
@@ -990,13 +1019,11 @@ const toggleViewMode = () => {
   viewMode.value = viewMode.value === 'card' ? 'table' : 'card'
 }
 
-const handleTableChange: TableProps['onChange'] = (pag: any,  filters: any, sorter: any) => {
+const handleTableChange: TableProps['onChange'] = (pag: any, filters: any, sorter: any) => {
   pagination.current = pag?.current || 1
   pagination.pageSize = pag?.pageSize || 10
   loadRecords()
 }
-
-
 
 const showQualityPointsModal = async (record: MedicalRecordRow) => {
   selectedRecord.value = record
@@ -1009,19 +1036,17 @@ const showQualityPointsModal = async (record: MedicalRecordRow) => {
       name: '完整性检查',
       category: '完整性',
       severity: '重要',
-      appliedAt: '2024-08-27T10:30:00Z'
+      appliedAt: '2024-08-27T10:30:00Z',
     },
     {
       id: 'QC002',
       name: '一致性检查',
       category: '一致性',
       severity: '严重',
-      appliedAt: '2024-08-27T10:35:00Z'
-    }
+      appliedAt: '2024-08-27T10:35:00Z',
+    },
   ]
 }
-
-
 </script>
 
 <style scoped>
@@ -1245,7 +1270,7 @@ const showQualityPointsModal = async (record: MedicalRecordRow) => {
 
 /***** Medical record card hover *****/
 .record-card {
-  border: 1px solid rgba(226,232,240,0.8); /* slate-200 */
+  border: 1px solid rgba(226, 232, 240, 0.8); /* slate-200 */
   border-radius: 12px;
 }
 .record-card:hover {
@@ -1264,7 +1289,9 @@ const showQualityPointsModal = async (record: MedicalRecordRow) => {
 /* 病历编号/患者姓名在悬停时轻微放大并保持清晰 */
 .record-card .record-number-text,
 .record-card .patient-name-text {
-  transition: transform 0.24s ease, color 0.24s ease;
+  transition:
+    transform 0.24s ease,
+    color 0.24s ease;
   transform-origin: left center;
 }
 
@@ -1280,8 +1307,6 @@ const showQualityPointsModal = async (record: MedicalRecordRow) => {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
-
-
 
 /* 头部操作按钮保持稍大尺寸 */
 :deep(.header-actions .ant-btn) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import {
   UserOutlined,
   PlusOutlined,
@@ -72,6 +73,7 @@ const searchForm = reactive({
 
 const loading = ref(false)
 const selectedRowKeys = ref<string[]>([])
+const asUser = (record: Record<string, any>) => record as User
 
 // 过滤后的用户列表
 const filteredUsers = computed(() => {
@@ -90,7 +92,7 @@ const filteredUsers = computed(() => {
 })
 
 // 表格列定义
-const columns = [
+const columns: TableColumnsType<User> = [
   {
     title: '用户信息',
     dataIndex: 'display_name',
@@ -153,7 +155,7 @@ const columns = [
     title: '操作',
     key: 'actions',
     width: 200,
-    fixed: 'right',
+    fixed: 'right' as const,
   },
 ]
 
@@ -512,10 +514,10 @@ onMounted(() => {
           <template v-if="column.key === 'display_name'">
             <div class="user-info">
               <div class="user-name">
-                {{ record.display_name }}
+                {{ asUser(record).display_name }}
               </div>
               <div class="user-email">
-                {{ record.email }}
+                {{ asUser(record).email }}
               </div>
             </div>
           </template>
@@ -524,7 +526,7 @@ onMounted(() => {
           <template v-else-if="column.key === 'roles'">
             <div class="role-tags">
               <a-tag
-                v-for="role in record.roles"
+                v-for="role in asUser(record).roles"
                 :key="role"
                 :color="getRoleTag(role).color"
                 class="role-tag"
@@ -540,8 +542,8 @@ onMounted(() => {
 
           <!-- 状态列 -->
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusTag(record.status).color">
-              {{ getStatusTag(record.status).text }}
+            <a-tag :color="getStatusTag(asUser(record).status).color">
+              {{ getStatusTag(asUser(record).status).text }}
             </a-tag>
           </template>
 
@@ -553,7 +555,7 @@ onMounted(() => {
                 action="update"
                 type="link"
                 size="small"
-                @click="handleEditUser(record)"
+                @click="handleEditUser(asUser(record))"
               >
                 <EditOutlined />
                 编辑
@@ -564,7 +566,7 @@ onMounted(() => {
                 action="update"
                 type="link"
                 size="small"
-                @click="handleResetPassword(record)"
+                @click="handleResetPassword(asUser(record))"
               >
                 <SettingOutlined />
                 重置密码
@@ -576,7 +578,7 @@ onMounted(() => {
                 type="link"
                 size="small"
                 danger
-                @click="handleDeleteUser(record)"
+                @click="handleDeleteUser(asUser(record))"
               >
                 <DeleteOutlined />
                 删除

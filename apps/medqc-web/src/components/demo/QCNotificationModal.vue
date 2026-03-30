@@ -118,7 +118,7 @@
         class="qc-result-details"
       >
         <a-divider>
-          <span style="font-size: 16px; font-weight: 600;">质控分析结果</span>
+          <span style="font-size: 16px; font-weight: 600">质控分析结果</span>
         </a-divider>
 
         <!-- 总体评分和统计 -->
@@ -133,7 +133,7 @@
                   :value-style="{
                     color: getScoreColor(notification.qcResult.overallScore),
                     fontSize: '32px',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
                   }"
                 />
                 <div class="score-indicator">
@@ -141,7 +141,7 @@
                     :percent="notification.qcResult.overallScore"
                     :stroke-color="getScoreColor(notification.qcResult.overallScore)"
                     :show-info="false"
-                    stroke-width="8"
+                    :stroke-width="8"
                   />
                 </div>
               </div>
@@ -153,7 +153,7 @@
                   :value="getQualityGrade(notification.qcResult.overallScore)"
                   :value-style="{
                     fontSize: '20px',
-                    color: getScoreColor(notification.qcResult.overallScore)
+                    color: getScoreColor(notification.qcResult.overallScore),
                   }"
                 />
                 <div class="grade-description">
@@ -288,7 +288,7 @@
               >
                 <a-empty description="未发现质控问题">
                   <template #image>
-                    <CheckCircleOutlined style="font-size: 48px; color: #52c41a;" />
+                    <CheckCircleOutlined style="font-size: 48px; color: #52c41a" />
                   </template>
                 </a-empty>
               </div>
@@ -370,7 +370,13 @@
                     </template>
                     <div class="timeline-content">
                       <h5>开始质控分析</h5>
-                      <p>{{ formatFullTime(notification.qcResult.analysisStartTime || notification.timestamp) }}</p>
+                      <p>
+                        {{
+                          formatFullTime(
+                            notification.qcResult.analysisStartTime || notification.timestamp,
+                          )
+                        }}
+                      </p>
                     </div>
                   </a-timeline-item>
                   <a-timeline-item color="orange">
@@ -388,7 +394,13 @@
                     </template>
                     <div class="timeline-content">
                       <h5>分析完成</h5>
-                      <p>{{ formatFullTime(notification.qcResult.analysisEndTime || notification.timestamp) }}</p>
+                      <p>
+                        {{
+                          formatFullTime(
+                            notification.qcResult.analysisEndTime || notification.timestamp,
+                          )
+                        }}
+                      </p>
                     </div>
                   </a-timeline-item>
                 </a-timeline>
@@ -405,7 +417,7 @@
           <a-col :span="12">
             <a-space
               direction="vertical"
-              style="width: 100%;"
+              style="width: 100%"
             >
               <h4>通知操作</h4>
               <a-space wrap>
@@ -434,7 +446,7 @@
           <a-col :span="12">
             <a-space
               direction="vertical"
-              style="width: 100%;"
+              style="width: 100%"
             >
               <h4>质控申诉</h4>
               <a-space wrap>
@@ -494,7 +506,7 @@ import {
   EnvironmentOutlined,
   BulbOutlined,
   PlayCircleOutlined,
-  ScanOutlined
+  ScanOutlined,
 } from '@ant-design/icons-vue'
 import type { QCNotification } from '@/types/quality-control'
 import { structureSuggestions } from '@/utils/suggestionFormatter'
@@ -517,14 +529,20 @@ const activeTab = ref('issues')
 // 计算属性
 const modalVisible = computed({
   get: () => props.visible,
-  set: (value) => emit('update:visible', value)
+  set: (value) => emit('update:visible', value),
 })
 
 const modalTitle = computed(() => {
   if (!props.notification) return '质控通知详情'
-  return `质控通知详情 - ${props.notification.type === 'error' ? '错误' :
-    props.notification.type === 'warning' ? '警告' :
-    props.notification.type === 'info' ? '信息' : '成功'}`
+  return `质控通知详情 - ${
+    props.notification.type === 'error'
+      ? '错误'
+      : props.notification.type === 'warning'
+        ? '警告'
+        : props.notification.type === 'info'
+          ? '信息'
+          : '成功'
+  }`
 })
 
 const structuredSuggestions = computed(() => {
@@ -539,7 +557,7 @@ const getNotificationColor = (type: string) => {
     success: 'green',
     info: 'blue',
     warning: 'orange',
-    error: 'red'
+    error: 'red',
   }
   return colors[type as keyof typeof colors] || 'default'
 }
@@ -549,7 +567,7 @@ const getNotificationIcon = (type: string) => {
     success: 'CheckCircleOutlined',
     info: 'InfoCircleOutlined',
     warning: 'WarningOutlined',
-    error: 'ExclamationCircleOutlined'
+    error: 'ExclamationCircleOutlined',
   }
   return icons[type as keyof typeof icons] || 'InfoCircleOutlined'
 }
@@ -559,7 +577,7 @@ const getNotificationTypeText = (type: string) => {
     success: '成功',
     info: '信息',
     warning: '警告',
-    error: '错误'
+    error: '错误',
   }
   return texts[type as keyof typeof texts] || type
 }
@@ -569,7 +587,7 @@ const getSeverityColor = (severity: string) => {
     low: 'green',
     medium: 'orange',
     high: 'red',
-    critical: 'red'
+    critical: 'red',
   }
   return colors[severity as keyof typeof colors] || 'default'
 }
@@ -579,7 +597,7 @@ const getSeverityText = (severity: string) => {
     low: '轻微',
     medium: '中等',
     high: '严重',
-    critical: '紧急'
+    critical: '紧急',
   }
   return texts[severity as keyof typeof texts] || severity
 }
@@ -611,7 +629,7 @@ const getPriorityColor = (priority: string) => {
   const colors = {
     high: 'red',
     medium: 'orange',
-    low: 'green'
+    low: 'green',
   }
   return colors[priority as keyof typeof colors] || 'default'
 }
@@ -620,7 +638,7 @@ const getPriorityText = (priority: string) => {
   const texts = {
     high: '高优先级',
     medium: '中优先级',
-    low: '低优先级'
+    low: '低优先级',
   }
   return texts[priority as keyof typeof texts] || priority
 }
@@ -891,5 +909,4 @@ const handlePrint = () => {
     padding: 60px 0;
   }
 }
-
 </style>

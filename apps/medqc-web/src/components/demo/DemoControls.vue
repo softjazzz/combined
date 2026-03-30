@@ -109,6 +109,7 @@
 
 <script setup lang="ts">
 import { h } from 'vue'
+import type { MenuProps } from 'ant-design-vue'
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -120,7 +121,7 @@ import {
   UploadOutlined,
   DeleteOutlined,
   SettingOutlined,
-  DownOutlined
+  DownOutlined,
 } from '@ant-design/icons-vue'
 
 // Props
@@ -146,8 +147,8 @@ const emit = defineEmits<{
 }>()
 
 // 处理菜单操作
-const handleMenuAction = ({ key }: { key: string }) => {
-  emit('menu-action', key)
+const handleMenuAction: MenuProps['onClick'] = ({ key }) => {
+  emit('menu-action', String(key))
 }
 </script>
 

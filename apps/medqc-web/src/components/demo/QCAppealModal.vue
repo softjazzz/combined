@@ -32,7 +32,7 @@
           </a-descriptions-item>
         </a-descriptions>
       </div>
-      
+
       <!-- 申诉表单 -->
       <div class="appeal-form">
         <a-form
@@ -131,25 +131,25 @@
               </a-select-option>
             </a-select>
           </a-form-item>
-          
-          <a-form-item 
+
+          <a-form-item
             v-if="formData.reason === 'other'"
-            label="其他理由说明" 
+            label="其他理由说明"
             name="reasonText"
             required
           >
-            <a-input 
+            <a-input
               v-model:value="formData.reasonText"
               placeholder="请详细说明申诉理由"
             />
           </a-form-item>
-          
+
           <a-form-item
             label="详细描述"
             name="description"
             required
           >
-            <a-textarea 
+            <a-textarea
               v-model:value="formData.description"
               placeholder="请详细描述申诉的具体内容，包括相关证据和理由"
               :rows="4"
@@ -157,7 +157,7 @@
               show-count
             />
           </a-form-item>
-          
+
           <a-form-item label="支持材料">
             <a-upload
               v-model:file-list="fileList"
@@ -175,19 +175,19 @@
               支持上传图片、文档等文件，最多5个文件，单个文件不超过10MB
             </div>
           </a-form-item>
-          
+
           <a-form-item
             label="联系方式"
             name="contact"
           >
-            <a-input 
+            <a-input
               v-model:value="formData.contact"
               placeholder="请提供联系电话或邮箱（可选）"
             />
           </a-form-item>
         </a-form>
       </div>
-      
+
       <!-- 申诉须知 -->
       <div class="appeal-notice">
         <a-alert
@@ -213,6 +213,7 @@
 import { computed, ref, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 import type { FormInstance, UploadProps } from 'ant-design-vue'
+import type { FormProps } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import type { QCNotification, AppealReason } from '@/types/quality-control'
 
@@ -239,38 +240,36 @@ const formData = reactive({
   reasonText: '',
   description: '',
   contact: '',
-  priority: 'medium'
+  priority: 'medium',
 })
 
 // 表单验证规则
-const formRules = {
-  appealType: [
-    { required: true, message: '请选择申诉类型', trigger: 'change' }
-  ],
-  reason: [
-    { required: true, message: '请选择申诉理由', trigger: 'change' }
-  ],
+const formRules: FormProps['rules'] = {
+  appealType: [{ required: true, message: '请选择申诉类型', trigger: 'change' }],
+  reason: [{ required: true, message: '请选择申诉理由', trigger: 'change' }],
   reasonText: [
     { required: true, message: '请说明其他理由', trigger: 'blur' },
-    { min: 5, message: '理由说明至少需要5个字符', trigger: 'blur' }
+    { min: 5, message: '理由说明至少需要5个字符', trigger: 'blur' },
   ],
   description: [
     { required: true, message: '请填写详细描述', trigger: 'blur' },
     { min: 20, message: '描述至少需要20个字符', trigger: 'blur' },
-    { max: 500, message: '描述不能超过500个字符', trigger: 'blur' }
+    { max: 500, message: '描述不能超过500个字符', trigger: 'blur' },
   ],
-  priority: [
-    { required: true, message: '请选择申诉优先级', trigger: 'change' }
-  ],
+  priority: [{ required: true, message: '请选择申诉优先级', trigger: 'change' }],
   contact: [
-    { pattern: /^(1[3-9]\d{9}|[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+)$/, message: '请输入有效的手机号或邮箱', trigger: 'blur' }
-  ]
+    {
+      pattern: /^(1[3-9]\d{9}|[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+)$/,
+      message: '请输入有效的手机号或邮箱',
+      trigger: 'blur',
+    },
+  ],
 }
 
 // 计算属性
 const modalVisible = computed({
   get: () => props.visible,
-  set: (value) => emit('update:visible', value)
+  set: (value) => emit('update:visible', value),
 })
 
 // 方法
@@ -288,18 +287,24 @@ const handleReasonChange = (value: AppealReason) => {
 }
 
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-  const isValidType = ['image/jpeg', 'image/png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)
+  const isValidType = [
+    'image/jpeg',
+    'image/png',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ].includes(file.type)
   if (!isValidType) {
     message.error('只能上传图片、PDF或Word文档!')
     return false
   }
-  
+
   const isLt10M = file.size / 1024 / 1024 < 10
   if (!isLt10M) {
     message.error('文件大小不能超过10MB!')
     return false
   }
-  
+
   return false // 阻止自动上传
 }
 
@@ -327,11 +332,11 @@ const handleSubmit = async () => {
       description: formData.description,
       contact: formData.contact,
       priority: formData.priority,
-      attachments: fileList.value.map(file => ({
+      attachments: fileList.value.map((file) => ({
         name: file.name,
         size: file.size,
         type: file.type,
-        url: URL.createObjectURL(file.originFileObj)
+        url: URL.createObjectURL(file.originFileObj),
       })),
       status: 'pending',
       submittedAt: new Date(),
@@ -340,11 +345,11 @@ const handleSubmit = async () => {
       reviewedAt: null,
       reviewedBy: '',
       estimatedReviewTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3天后
-      relatedQCResult: props.notification.qcResult
+      relatedQCResult: props.notification.qcResult,
     }
 
     // 模拟API调用延迟
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
 
     emit('appeal-submitted', appealData)
     message.success('申诉提交成功！预计3个工作日内给出回复。')
@@ -352,7 +357,6 @@ const handleSubmit = async () => {
     // 重置表单
     resetForm()
     modalVisible.value = false
-
   } catch (error) {
     console.error('表单验证失败:', error)
     message.error('表单验证失败，请检查输入内容')
@@ -390,29 +394,29 @@ const resetForm = () => {
 .appeal-modal-content {
   .notification-summary {
     margin-bottom: 24px;
-    
+
     h4 {
       font-weight: 600;
       margin-bottom: 12px;
       color: #333;
     }
   }
-  
+
   .appeal-form {
     margin-bottom: 24px;
-    
+
     .upload-tip {
       margin-top: 8px;
       font-size: 12px;
       color: #666;
     }
   }
-  
+
   .appeal-notice {
     ul {
       margin: 8px 0 0 0;
       padding-left: 20px;
-      
+
       li {
         margin-bottom: 4px;
         font-size: 14px;

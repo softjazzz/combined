@@ -77,23 +77,23 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'status'">
-              <a-tag :color="getAppealStatusInfo(record.status).color">
-                {{ getAppealStatusInfo(record.status).label }}
+              <a-tag :color="getAppealStatusInfo(asAppeal(record).status).color">
+                {{ getAppealStatusInfo(asAppeal(record).status).label }}
               </a-tag>
             </template>
             <template v-if="column.key === 'appealType'">
-              {{ getAppealTypeLabel(record.appealType) }}
+              {{ getAppealTypeLabel(asAppeal(record).appealType) }}
             </template>
             <template v-if="column.key === 'createdAt'">
-              {{ formatDate(record.createdAt) }}
+              {{ formatDate(asAppeal(record).createdAt) }}
             </template>
             <template v-if="column.key === 'reviewer'">
               <div
-                v-if="record.reviewerName"
+                v-if="asAppeal(record).reviewerName"
                 class="text-xs"
               >
-                <div>{{ record.reviewerName }}</div>
-                <div>{{ formatDate(record.reviewedAt) }}</div>
+                <div>{{ asAppeal(record).reviewerName }}</div>
+                <div>{{ formatDate(asAppeal(record).reviewedAt) }}</div>
               </div>
               <span v-else>-</span>
             </template>
@@ -101,23 +101,23 @@
               <a-space>
                 <a-button
                   size="small"
-                  @click="viewDetail(record)"
+                  @click="viewDetail(asAppeal(record))"
                 >
                   详情
                 </a-button>
-                <a-button 
-                  v-if="canReview(record)" 
-                  type="primary" 
-                  ghost 
-                  size="small" 
-                  @click="openReviewModal(record)"
+                <a-button
+                  v-if="canReview(asAppeal(record))"
+                  type="primary"
+                  ghost
+                  size="small"
+                  @click="openReviewModal(asAppeal(record))"
                 >
                   审核
                 </a-button>
                 <a-popconfirm
-                  v-if="canWithdraw(record)"
+                  v-if="canWithdraw(asAppeal(record))"
                   title="确定撤销此申诉吗？"
-                  @confirm="handleWithdraw(record)"
+                  @confirm="handleWithdraw(asAppeal(record))"
                 >
                   <a-button
                     size="small"
@@ -145,16 +145,20 @@
 <script lang="ts" setup>
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { 
-    Appeal, AppealStatus,
-    APPEAL_STATUS_OPTIONS, APPEAL_TYPE_OPTIONS,
-    getAppealStatusInfo, getAppealTypeLabel
+import {
+  Appeal,
+  AppealStatus,
+  APPEAL_STATUS_OPTIONS,
+  APPEAL_TYPE_OPTIONS,
+  getAppealStatusInfo,
+  getAppealTypeLabel,
 } from '@/types/appeal'
 import { getAppeals, withdrawAppeal } from '@/api/appeal'
 import AppealReviewModal from '@/components/qc/AppealReviewModal.vue'
 
-const hasAdminPermission = ref(true) 
+const hasAdminPermission = ref(true)
 const currentUserId = ref('doctor_001') // 模拟当前用户ID
 
 const loading = ref(false)
@@ -162,101 +166,103 @@ const appeals = ref<Appeal[]>([])
 const showReviewModal = ref(false)
 const currentAppeal = ref<Appeal>()
 
+const asAppeal = (record: Record<string, any>) => record as Appeal
+
 const filters = reactive({
-    status: undefined as AppealStatus | undefined,
-    appealType: undefined,
+  status: undefined as AppealStatus | undefined,
+  appealType: undefined,
 })
 
 const pagination = reactive({
   current: 1,
   pageSize: 20,
   total: 0,
-  showTotal: (total: number) => `共 ${total} 条`
+  showTotal: (total: number) => `共 ${total} 条`,
 })
 
-const columns = [
+const columns: TableColumnsType<Appeal> = [
   { title: '申诉理由', dataIndex: 'appealReason', key: 'reason', ellipsis: true },
   { title: '类型', key: 'appealType', width: 120 },
   { title: '状态', key: 'status', width: 100 },
   { title: '申诉人', dataIndex: 'appellantName', key: 'appellant', width: 120 },
   { title: '提交时间', key: 'createdAt', width: 180 },
   { title: '审核信息', key: 'reviewer', width: 180 },
-  { title: '操作', key: 'action', fixed: 'right', width: 180 }
+  { title: '操作', key: 'action', fixed: 'right' as const, width: 180 },
 ]
 
 onMounted(() => {
-    fetchAppeals()
+  fetchAppeals()
 })
 
 const handleSearch = () => {
-    pagination.current = 1
-    fetchAppeals()
+  pagination.current = 1
+  fetchAppeals()
 }
 
 const resetFilters = () => {
-    filters.status = undefined
-    filters.appealType = undefined
-    handleSearch()
+  filters.status = undefined
+  filters.appealType = undefined
+  handleSearch()
 }
 
 const handleTableChange = (pag: any) => {
-    pagination.current = pag.current
-    pagination.pageSize = pag.pageSize
-    fetchAppeals()
+  pagination.current = pag.current
+  pagination.pageSize = pag.pageSize
+  fetchAppeals()
 }
 
 const fetchAppeals = async () => {
-    loading.value = true
-    try {
-        const res = await getAppeals({
-             status: filters.status,
-             appealType: filters.appealType,
-             page: pagination.current,
-             pageSize: pagination.pageSize
-        })
-        
-        appeals.value = res.items
-        pagination.total = res.total
-    } catch (error) {
-        message.error('加载申诉列表失败')
-    } finally {
-        loading.value = false
-    }
+  loading.value = true
+  try {
+    const res = await getAppeals({
+      status: filters.status,
+      appealType: filters.appealType,
+      page: pagination.current,
+      pageSize: pagination.pageSize,
+    })
+
+    appeals.value = res.items
+    pagination.total = res.total
+  } catch (error) {
+    message.error('加载申诉列表失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const formatDate = (date: string | null) => {
-    return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-'
+  return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-'
 }
 
 const canReview = (item: Appeal) => {
-    return item.status === AppealStatus.PENDING && hasAdminPermission.value
+  return item.status === AppealStatus.PENDING && hasAdminPermission.value
 }
 
 const canWithdraw = (item: Appeal) => {
-    return item.status === AppealStatus.PENDING && item.appellantId === currentUserId.value
+  return item.status === AppealStatus.PENDING && item.appellantId === currentUserId.value
 }
 
 const openReviewModal = (item: Appeal) => {
-    currentAppeal.value = item
-    showReviewModal.value = true
+  currentAppeal.value = item
+  showReviewModal.value = true
 }
 
 const viewDetail = (item: Appeal) => {
-    message.info('查看详情: ' + item.id)
+  message.info('查看详情: ' + item.id)
 }
 
 const handleWithdraw = async (item: Appeal) => {
-    try {
-        await withdrawAppeal(item.id)
-        message.success('已撤销')
-        refresh()
-    } catch (e: any) {
-        message.error(e.message || '撤销失败')
-    }
+  try {
+    await withdrawAppeal(item.id)
+    message.success('已撤销')
+    refresh()
+  } catch (e: any) {
+    message.error(e.message || '撤销失败')
+  }
 }
 
 const refresh = () => {
-    fetchAppeals()
+  fetchAppeals()
 }
 </script>
 
@@ -268,6 +274,6 @@ const refresh = () => {
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 .ml-2 {
-    margin-left: 8px;
+  margin-left: 8px;
 }
 </style>

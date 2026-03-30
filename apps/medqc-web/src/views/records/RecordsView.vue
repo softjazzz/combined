@@ -97,14 +97,14 @@
             <template v-if="column.key === 'patient'">
               <div class="patient-info">
                 <div class="font-medium text-gray-900">
-                  {{ record.patient_name }}
+                  {{ asMedicalRecord(record).patient_name }}
                 </div>
                 <div class="text-sm text-gray-500">
-                  {{ record.patient_age }}岁 ·
+                  {{ asMedicalRecord(record).patient_age }}岁 ·
                   {{
-                    record.patient_gender === 'M'
+                    asMedicalRecord(record).patient_gender === 'M'
                       ? '男'
-                      : record.patient_gender === 'F'
+                      : asMedicalRecord(record).patient_gender === 'F'
                         ? '女'
                         : '未知'
                   }}
@@ -115,35 +115,38 @@
             <!-- 状态标签 -->
             <template v-else-if="column.key === 'status'">
               <a-tag
-                :color="getStatusColor(record.status)"
+                :color="getStatusColor(asMedicalRecord(record).status)"
                 class="status-tag"
               >
-                {{ getStatusText(record.status) }}
+                {{ getStatusText(asMedicalRecord(record).status) }}
               </a-tag>
             </template>
 
             <!-- 质控评分 -->
             <template v-else-if="column.key === 'qc_score'">
               <div
-                v-if="record.qc_score !== null && record.qc_score !== undefined"
+                v-if="
+                  asMedicalRecord(record).qc_score !== null &&
+                    asMedicalRecord(record).qc_score !== undefined
+                "
                 class="score-display"
               >
                 <a-progress
-                  :percent="record.qc_score"
-                  :stroke-color="getScoreColor(record.qc_score)"
+                  :percent="asMedicalRecord(record).qc_score"
+                  :stroke-color="getScoreColor(asMedicalRecord(record).qc_score)"
                   size="small"
                   :show-info="false"
                   class="mb-1"
                 />
                 <div class="text-xs text-center">
-                  <span class="font-medium">{{ record.qc_score }}分</span>
+                  <span class="font-medium">{{ asMedicalRecord(record).qc_score }}分</span>
                   <a-tag
-                    v-if="record.qc_grade"
-                    :color="getGradeColor(record.qc_grade)"
+                    v-if="asMedicalRecord(record).qc_grade"
+                    :color="getGradeColor(asMedicalRecord(record).qc_grade)"
                     size="small"
                     class="ml-1"
                   >
-                    {{ record.qc_grade }}级
+                    {{ asMedicalRecord(record).qc_grade }}级
                   </a-tag>
                 </div>
               </div>
@@ -160,26 +163,26 @@
                   type="link"
                   size="small"
                   class="action-btn"
-                  @click="viewRecord(record)"
+                  @click="viewRecord(asMedicalRecord(record))"
                 >
                   查看
                 </a-button>
                 <a-button
-                  v-if="record.status === 'completed'"
+                  v-if="asMedicalRecord(record).status === 'completed'"
                   type="link"
                   size="small"
                   class="action-btn"
-                  @click="viewAnalysis(record)"
+                  @click="viewAnalysis(asMedicalRecord(record))"
                 >
                   分析结果
                 </a-button>
                 <a-button
-                  v-if="record.status === 'failed'"
+                  v-if="asMedicalRecord(record).status === 'failed'"
                   type="link"
                   size="small"
-                  :loading="retryingId === record.id"
+                  :loading="retryingId === asMedicalRecord(record).id"
                   class="action-btn"
-                  @click="retryAnalysis(record)"
+                  @click="retryAnalysis(asMedicalRecord(record))"
                 >
                   重新分析
                 </a-button>
@@ -187,7 +190,7 @@
                   title="确定要删除这条记录吗？"
                   ok-text="确定"
                   cancel-text="取消"
-                  @confirm="deleteRecord(record.id)"
+                  @confirm="deleteRecord(asMedicalRecord(record).id)"
                 >
                   <a-button
                     type="link"
@@ -290,6 +293,7 @@ const isLoading = ref(false)
 const isAnalyzing = ref(false)
 const statusFilter = ref<string>('')
 const retryingId = ref<string | null>(null)
+const asMedicalRecord = (record: Record<string, any>) => record as MedicalRecord
 
 // 抽屉状态
 const detailDrawerVisible = ref(false)
@@ -348,7 +352,7 @@ const headerStats = computed(() => [
 ])
 
 // 表格列定义
-const tableColumns: TableColumnsType = [
+const tableColumns: TableColumnsType<MedicalRecord> = [
   {
     title: '患者信息',
     key: 'patient',
@@ -403,7 +407,7 @@ const tableColumns: TableColumnsType = [
     title: '操作',
     key: 'actions',
     width: 200,
-    fixed: 'right',
+    fixed: 'right' as const,
   },
 ]
 
