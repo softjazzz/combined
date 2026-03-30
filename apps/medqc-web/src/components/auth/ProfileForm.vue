@@ -10,7 +10,7 @@
     >
       <!-- 头像上传区域 -->
       <div class="mb-6">
-        <AvatarUpload 
+        <AvatarUpload
           v-model="profileForm.avatar"
           :user-name="profileForm.display_name"
           @upload-success="handleAvatarSuccess"
@@ -63,9 +63,9 @@
             show-search
             :filter-option="filterDepartment"
           >
-            <a-select-option 
-              v-for="dept in departments" 
-              :key="dept.value" 
+            <a-select-option
+              v-for="dept in departments"
+              :key="dept.value"
               :value="dept.value"
             >
               {{ dept.label }}
@@ -96,7 +96,7 @@
             :key="role"
             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30"
           >
-            <div 
+            <div
               class="w-5 h-5 rounded bg-gradient-to-br flex items-center justify-center text-white text-xs font-bold"
               :class="getRoleColor(role)"
             >
@@ -127,7 +127,9 @@
       <div class="mb-6">
         <label class="block text-xs font-medium text-slate-300 mb-3">通知设置</label>
         <div class="space-y-3">
-          <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+          <div
+            class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+          >
             <div>
               <div class="text-sm text-slate-200">
                 邮件通知
@@ -136,13 +138,15 @@
                 接收系统重要通知邮件
               </div>
             </div>
-            <a-switch 
+            <a-switch
               v-model:checked="profileForm.notifications.email"
               class="bg-slate-600"
             />
           </div>
-          
-          <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+
+          <div
+            class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+          >
             <div>
               <div class="text-sm text-slate-200">
                 短信通知
@@ -151,13 +155,15 @@
                 接收紧急事件短信提醒
               </div>
             </div>
-            <a-switch 
+            <a-switch
               v-model:checked="profileForm.notifications.sms"
               class="bg-slate-600"
             />
           </div>
-          
-          <div class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+
+          <div
+            class="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+          >
             <div>
               <div class="text-sm text-slate-200">
                 系统推送
@@ -166,7 +172,7 @@
                 接收浏览器推送通知
               </div>
             </div>
-            <a-switch 
+            <a-switch
               v-model:checked="profileForm.notifications.push"
               class="bg-slate-600"
             />
@@ -189,7 +195,7 @@
           />
           保存更改
         </a-button>
-        
+
         <a-button
           size="large"
           class="h-12 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20"
@@ -228,6 +234,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { FormProps } from 'ant-design-vue'
 import { SaveOutlined, ReloadOutlined, LockOutlined } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 import type { User, UserRole } from '@/types/auth'
@@ -251,7 +258,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
 })
 
 // Emits
@@ -274,8 +281,8 @@ const profileForm = reactive({
   notifications: {
     email: true,
     sms: false,
-    push: true
-  }
+    push: true,
+  },
 })
 
 // 科室列表（复用注册表单的）
@@ -301,7 +308,7 @@ const departments = [
   { value: '药剂科', label: '药剂科' },
   { value: '质控科', label: '质控科' },
   { value: '信息科', label: '信息科' },
-  { value: '其他', label: '其他' }
+  { value: '其他', label: '其他' },
 ]
 
 // 用户角色
@@ -312,11 +319,9 @@ const profileRules = {
   display_name: [
     { required: true, message: '请输入姓名', trigger: 'blur' },
     { min: 2, message: '姓名至少2个字符', trigger: 'blur' },
-    { max: 20, message: '姓名不能超过20个字符', trigger: 'blur' }
+    { max: 20, message: '姓名不能超过20个字符', trigger: 'blur' },
   ],
-  department: [
-    { required: true, message: '请选择科室', trigger: 'change' }
-  ],
+  department: [{ required: true, message: '请选择科室', trigger: 'change' }],
   phone: [
     {
       validator: (_: unknown, value: string) => {
@@ -326,13 +331,11 @@ const profileRules = {
         }
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
+      trigger: 'blur',
+    },
   ],
-  bio: [
-    { max: 200, message: '个人简介不能超过200个字符', trigger: 'blur' }
-  ]
-}
+  bio: [{ max: 200, message: '个人简介不能超过200个字符', trigger: 'blur' }],
+} satisfies NonNullable<FormProps['rules']>
 
 // 初始化表单数据
 const initializeForm = () => {
@@ -347,8 +350,8 @@ const initializeForm = () => {
       notifications: {
         email: props.user.notifications?.email ?? true,
         sms: props.user.notifications?.sms ?? false,
-        push: props.user.notifications?.push ?? true
-      }
+        push: props.user.notifications?.push ?? true,
+      },
     })
   }
 }
@@ -395,7 +398,7 @@ const getRoleColor = (role: UserRole) => {
     qc_manager: 'from-blue-400 to-indigo-500',
     qc_staff: 'from-cyan-400 to-teal-500',
     doctor: 'from-emerald-400 to-teal-500',
-    viewer: 'from-purple-400 to-pink-500'
+    viewer: 'from-purple-400 to-pink-500',
   }
   return colors[role] || 'from-gray-400 to-gray-500'
 }
@@ -407,7 +410,7 @@ const getRoleInitial = (role: UserRole) => {
     qc_manager: 'Q',
     qc_staff: 'S',
     doctor: 'D',
-    viewer: 'V'
+    viewer: 'V',
   }
   return initials[role] || 'U'
 }
@@ -419,7 +422,7 @@ const getRoleLabel = (role: UserRole) => {
     qc_manager: '质控管理员',
     qc_staff: '质控员',
     doctor: '医生',
-    viewer: '查看者'
+    viewer: '查看者',
   }
   return labels[role] || '未知角色'
 }
@@ -430,9 +433,13 @@ onMounted(() => {
 })
 
 // Watch user changes
-watch(() => props.user, () => {
-  initializeForm()
-}, { deep: true })
+watch(
+  () => props.user,
+  () => {
+    initializeForm()
+  },
+  { deep: true },
+)
 </script>
 
 <style scoped>

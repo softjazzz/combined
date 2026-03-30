@@ -147,6 +147,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
+import type { FormProps } from 'ant-design-vue'
 import { UserOutlined, LockOutlined, LoginOutlined } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 import type { LoginRequest } from '@/types/auth'
@@ -182,14 +183,12 @@ const loginForm = reactive<LoginRequest>({
 
 // Form validation rules
 const loginRules = {
-  account: [
-    { required: true, message: '请输入用户名、手机号或邮箱', trigger: 'blur' },
-  ],
+  account: [{ required: true, message: '请输入用户名、手机号或邮箱', trigger: 'blur' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码至少6位字符', trigger: 'blur' },
   ],
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // Handle login
 const handleLogin = async () => {
@@ -206,11 +205,7 @@ const handleLogin = async () => {
 
 // Computed
 const isFormValid = computed(() => {
-  return (
-    loginForm.account &&
-    loginForm.password &&
-    loginForm.password.length >= 6
-  )
+  return loginForm.account && loginForm.password && loginForm.password.length >= 6
 })
 
 // Expose methods for parent component

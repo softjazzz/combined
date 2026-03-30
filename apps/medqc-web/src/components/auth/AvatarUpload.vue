@@ -3,13 +3,13 @@
     <div class="flex items-center gap-4">
       <!-- 当前头像显示 -->
       <div class="relative">
-        <div 
+        <div
           class="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center shadow-lg"
           :class="{ 'ring-4 ring-cyan-400/30': uploading }"
         >
-          <img 
-            v-if="currentAvatar" 
-            :src="currentAvatar" 
+          <img
+            v-if="currentAvatar"
+            :src="currentAvatar"
             :alt="userName || '用户头像'"
             class="w-full h-full object-cover"
           >
@@ -20,13 +20,15 @@
             {{ avatarInitial }}
           </div>
         </div>
-        
+
         <!-- 上传进度环 -->
-        <div 
-          v-if="uploading" 
+        <div
+          v-if="uploading"
           class="absolute inset-0 flex items-center justify-center"
         >
-          <div class="w-24 h-24 rounded-full border-4 border-transparent border-t-cyan-400 animate-spin" />
+          <div
+            class="w-24 h-24 rounded-full border-4 border-transparent border-t-cyan-400 animate-spin"
+          />
         </div>
       </div>
 
@@ -49,8 +51,8 @@
             :before-upload="beforeUpload"
             accept="image/jpeg,image/jpg,image/png"
           >
-            <a-button 
-              size="small" 
+            <a-button
+              size="small"
               :loading="uploading"
               class="bg-cyan-500/20 border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/30"
             >
@@ -60,9 +62,9 @@
           </a-upload>
 
           <!-- 删除按钮 -->
-          <a-button 
+          <a-button
             v-if="currentAvatar && !isDefaultAvatar"
-            size="small" 
+            size="small"
             danger
             class="bg-red-500/20 border-red-400/30 text-red-300 hover:bg-red-500/30"
             @click="handleRemove"
@@ -72,7 +74,7 @@
           </a-button>
 
           <!-- 重置为默认头像 -->
-          <a-button 
+          <a-button
             v-if="currentAvatar && !isDefaultAvatar"
             size="small"
             class="bg-slate-500/20 border-slate-400/30 text-slate-300 hover:bg-slate-500/30"
@@ -88,22 +90,22 @@
           v-if="uploadStatus"
           class="mt-2"
         >
-          <div 
-            v-if="uploadStatus.type === 'success'" 
+          <div
+            v-if="uploadStatus.type === 'success'"
             class="flex items-center gap-1 text-xs text-emerald-400"
           >
             <CheckCircleOutlined />
             {{ uploadStatus.message }}
           </div>
-          <div 
-            v-else-if="uploadStatus.type === 'error'" 
+          <div
+            v-else-if="uploadStatus.type === 'error'"
             class="flex items-center gap-1 text-xs text-red-400"
           >
             <ExclamationCircleOutlined />
             {{ uploadStatus.message }}
           </div>
-          <div 
-            v-else-if="uploadStatus.type === 'info'" 
+          <div
+            v-else-if="uploadStatus.type === 'info'"
             class="flex items-center gap-1 text-xs text-blue-400"
           >
             <InfoCircleOutlined />
@@ -126,7 +128,7 @@
           或者从下方预设头像中选择一个
         </p>
       </div>
-      
+
       <div class="grid grid-cols-6 gap-3">
         <div
           v-for="(preset, index) in presetAvatars"
@@ -135,8 +137,8 @@
           :class="{ 'ring-2 ring-cyan-400': currentAvatar === preset.url }"
           @click="selectPreset(preset)"
         >
-          <img 
-            :src="preset.url" 
+          <img
+            :src="preset.url"
             :alt="preset.name"
             class="w-full h-full object-cover"
           >
@@ -149,18 +151,17 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  UploadOutlined, 
-  DeleteOutlined, 
+import type { UploadProps } from 'ant-design-vue'
+import {
+  UploadOutlined,
+  DeleteOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
 } from '@ant-design/icons-vue'
 
-interface UploadRequestOption {
-  file: File | Blob
-}
+type UploadRequestOption = Parameters<NonNullable<UploadProps['customRequest']>>[0]
 
 interface Props {
   modelValue?: string
@@ -171,7 +172,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   showPresets: true,
-  maxSize: 2
+  maxSize: 2,
 })
 
 const emit = defineEmits<{
@@ -190,12 +191,12 @@ const uploadStatus = ref<{
 // 当前头像
 const currentAvatar = computed({
   get: () => props.modelValue,
-  set: (value: string) => emit('update:modelValue', value)
+  set: (value: string) => emit('update:modelValue', value),
 })
 
 // 是否为默认头像
 const isDefaultAvatar = computed(() => {
-  return !currentAvatar.value || presetAvatars.some(preset => preset.url === currentAvatar.value)
+  return !currentAvatar.value || presetAvatars.some((preset) => preset.url === currentAvatar.value)
 })
 
 // 头像首字母
@@ -219,7 +220,7 @@ const presetAvatars = [
   { name: '通用1', url: '/avatars/generic-1.png' },
   { name: '通用2', url: '/avatars/generic-2.png' },
   { name: '通用3', url: '/avatars/generic-3.png' },
-  { name: '通用4', url: '/avatars/generic-4.png' }
+  { name: '通用4', url: '/avatars/generic-4.png' },
 ]
 
 // 上传前验证
@@ -244,35 +245,35 @@ const beforeUpload = (file: File) => {
 // 处理上传
 const handleUpload = async (options: UploadRequestOption) => {
   const { file } = options
-  
+
   try {
     uploading.value = true
     uploadStatus.value = { type: 'info', message: '正在上传头像...' }
 
     // 模拟上传过程
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // 创建本地预览URL
     const reader = new FileReader()
     reader.onload = (e) => {
       const url = e.target?.result as string
       currentAvatar.value = url
-      
+
       uploadStatus.value = { type: 'success', message: '头像上传成功' }
       emit('upload-success', url)
-      
+
       // 3秒后清除状态提示
       setTimeout(() => {
         uploadStatus.value = null
       }, 3000)
     }
-    reader.readAsDataURL(file as File)
-
+    const uploadBlob = typeof file === 'string' ? new Blob([file]) : file
+    reader.readAsDataURL(uploadBlob)
   } catch (error) {
     console.error('头像上传失败:', error)
     uploadStatus.value = { type: 'error', message: '头像上传失败，请重试' }
     emit('upload-error', error instanceof Error ? error.message : '上传失败')
-    
+
     // 5秒后清除错误提示
     setTimeout(() => {
       uploadStatus.value = null
@@ -286,7 +287,7 @@ const handleUpload = async (options: UploadRequestOption) => {
 const handleRemove = () => {
   currentAvatar.value = ''
   uploadStatus.value = { type: 'info', message: '头像已删除' }
-  
+
   setTimeout(() => {
     uploadStatus.value = null
   }, 2000)
@@ -296,30 +297,34 @@ const handleRemove = () => {
 const handleReset = () => {
   currentAvatar.value = ''
   uploadStatus.value = { type: 'info', message: '已重置为默认头像' }
-  
+
   setTimeout(() => {
     uploadStatus.value = null
   }, 2000)
 }
 
 // 选择预设头像
-const selectPreset = (preset: typeof presetAvatars[0]) => {
+const selectPreset = (preset: (typeof presetAvatars)[0]) => {
   currentAvatar.value = preset.url
   uploadStatus.value = { type: 'success', message: `已选择 ${preset.name}` }
-  
+
   setTimeout(() => {
     uploadStatus.value = null
   }, 2000)
 }
 
 // 监听上传状态变化
-watch(uploadStatus,  (newStatus) => {
-  if (newStatus?.type === 'error') {
-    message.error(newStatus.message)
-  } else if (newStatus?.type === 'success') {
-    message.success(newStatus.message)
-  }
-}, { deep: true })
+watch(
+  uploadStatus,
+  (newStatus) => {
+    if (newStatus?.type === 'error') {
+      message.error(newStatus.message)
+    } else if (newStatus?.type === 'success') {
+      message.success(newStatus.message)
+    }
+  },
+  { deep: true },
+)
 </script>
 
 <style scoped>

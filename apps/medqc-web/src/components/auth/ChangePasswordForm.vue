@@ -140,6 +140,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
+import type { FormProps } from 'ant-design-vue'
 import {
   LockOutlined,
   SafetyCertificateOutlined,
@@ -227,7 +228,7 @@ const passwordRules = {
       trigger: 'blur',
     },
   ],
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // Handle form submit
 const handleSubmit = async () => {

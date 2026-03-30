@@ -58,9 +58,9 @@
           show-search
           :filter-option="filterDepartment"
         >
-          <a-select-option 
-            v-for="dept in departments" 
-            :key="dept.value" 
+          <a-select-option
+            v-for="dept in departments"
+            :key="dept.value"
             :value="dept.value"
           >
             {{ dept.label }}
@@ -82,7 +82,9 @@
         >
           <a-select-option value="doctor">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold">
+              <div
+                class="w-6 h-6 rounded bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold"
+              >
                 D
               </div>
               医生 - 可查看和编辑病案
@@ -90,7 +92,9 @@
           </a-select-option>
           <a-select-option value="qc_staff">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+              <div
+                class="w-6 h-6 rounded bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold"
+              >
                 Q
               </div>
               质控员 - 可执行质控分析
@@ -98,7 +102,9 @@
           </a-select-option>
           <a-select-option value="viewer">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
+              <div
+                class="w-6 h-6 rounded bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white text-xs font-bold"
+              >
                 V
               </div>
               查看者 - 仅可查看数据
@@ -144,9 +150,9 @@
       </a-form-item>
 
       <!-- 密码强度指示器 -->
-      <PasswordStrength 
-        v-if="registerForm.password" 
-        :password="registerForm.password" 
+      <PasswordStrength
+        v-if="registerForm.password"
+        :password="registerForm.password"
         class="mb-4"
       />
 
@@ -229,14 +235,15 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  UserOutlined, 
-  MailOutlined, 
-  LockOutlined, 
+import type { FormProps } from 'ant-design-vue'
+import {
+  UserOutlined,
+  MailOutlined,
+  LockOutlined,
   SafetyCertificateOutlined,
   PhoneOutlined,
   UserAddOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
 } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 import type { RegisterRequest, UserRole } from '@/types/auth'
@@ -248,7 +255,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
 })
 
 // Emits
@@ -270,7 +277,7 @@ const registerForm = reactive({
   password: '',
   confirmPassword: '',
   phone: '',
-  agreeTerms: false
+  agreeTerms: false,
 })
 
 // 科室列表
@@ -296,7 +303,7 @@ const departments = [
   { value: '药剂科', label: '药剂科' },
   { value: '质控科', label: '质控科' },
   { value: '信息科', label: '信息科' },
-  { value: '其他', label: '其他' }
+  { value: '其他', label: '其他' },
 ]
 
 // Form validation rules
@@ -304,36 +311,32 @@ const registerRules = {
   display_name: [
     { required: true, message: '请输入姓名', trigger: 'blur' },
     { min: 2, message: '姓名至少2个字符', trigger: 'blur' },
-    { max: 20, message: '姓名不能超过20个字符', trigger: 'blur' }
+    { max: 20, message: '姓名不能超过20个字符', trigger: 'blur' },
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
   ],
-  department: [
-    { required: true, message: '请选择科室', trigger: 'change' }
-  ],
-  role: [
-    { required: true, message: '请选择申请角色', trigger: 'change' }
-  ],
+  department: [{ required: true, message: '请选择科室', trigger: 'change' }],
+  role: [{ required: true, message: '请选择申请角色', trigger: 'change' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 8, message: '密码至少8位字符', trigger: 'blur' },
-    { 
+    {
       validator: (_: unknown, value: string) => {
         if (!value) return Promise.resolve()
-        
+
         const hasUpper = /[A-Z]/.test(value)
         const hasLower = /[a-z]/.test(value)
         const hasNumber = /\d/.test(value)
-        
+
         if (!hasUpper || !hasLower || !hasNumber) {
           return Promise.reject('密码必须包含大小写字母和数字')
         }
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
+      trigger: 'blur',
+    },
   ],
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },
@@ -345,8 +348,8 @@ const registerRules = {
         }
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
+      trigger: 'blur',
+    },
   ],
   phone: [
     {
@@ -357,8 +360,8 @@ const registerRules = {
         }
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
+      trigger: 'blur',
+    },
   ],
   agreeTerms: [
     {
@@ -368,16 +371,16 @@ const registerRules = {
         }
         return Promise.resolve()
       },
-      trigger: 'change'
-    }
-  ]
-}
+      trigger: 'change',
+    },
+  ],
+} satisfies NonNullable<FormProps['rules']>
 
 // Handle register
 const handleRegister = async () => {
   try {
     await formRef.value?.validate()
-    
+
     const { confirmPassword, agreeTerms, ...registerData } = registerForm
     emit('register', registerData as RegisterRequest)
   } catch (error: unknown) {
@@ -408,10 +411,10 @@ defineExpose({
       password: '',
       confirmPassword: '',
       phone: '',
-      agreeTerms: false
+      agreeTerms: false,
     })
   },
-  validateForm: () => formRef.value?.validate()
+  validateForm: () => formRef.value?.validate(),
 })
 </script>
 

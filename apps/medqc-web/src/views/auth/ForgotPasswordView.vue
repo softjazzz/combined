@@ -1,31 +1,44 @@
 <template>
-  <div class="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-950 via-slate-900 to-slate-950 text-white relative overflow-hidden">
+  <div
+    class="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-950 via-slate-900 to-slate-950 text-white relative overflow-hidden"
+  >
     <!-- 背景装饰 -->
     <div class="pointer-events-none absolute inset-0">
       <!-- 远景星云与光晕 -->
-      <div class="absolute -top-40 -left-40 w-[36rem] h-[36rem] rounded-full bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 blur-3xl" />
-      <div class="absolute -bottom-56 -right-56 w-[40rem] h-[40rem] rounded-full bg-gradient-to-tr from-purple-500/10 via-pink-500/10 to-rose-500/10 blur-3xl" />
+      <div
+        class="absolute -top-40 -left-40 w-[36rem] h-[36rem] rounded-full bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 blur-3xl"
+      />
+      <div
+        class="absolute -bottom-56 -right-56 w-[40rem] h-[40rem] rounded-full bg-gradient-to-tr from-purple-500/10 via-pink-500/10 to-rose-500/10 blur-3xl"
+      />
 
       <!-- 线路网格 -->
       <div
         class="absolute inset-0 opacity-[0.06]"
-        style="background-image: linear-gradient(rgba(255,255,255,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.12) 1px, transparent 1px); background-size: 40px 40px;"
+        style="
+          background-image:
+            linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+          background-size: 40px 40px;
+        "
       />
 
       <!-- 粒子群组 -->
       <div class="absolute inset-0">
-        <span class="ai-particle absolute left-1/5 top-1/3 w-1.5 h-1.5 bg-amber-400/80 rounded-full" />
+        <span
+          class="ai-particle absolute left-1/5 top-1/3 w-1.5 h-1.5 bg-amber-400/80 rounded-full"
+        />
         <span
           class="ai-particle absolute left-2/3 top-1/4 w-1 h-1 bg-orange-400/80 rounded-full"
-          style="animation-delay:.3s"
+          style="animation-delay: 0.3s"
         />
         <span
           class="ai-particle absolute left-1/3 top-2/3 w-1 h-1 bg-red-400/80 rounded-full"
-          style="animation-delay:.6s"
+          style="animation-delay: 0.6s"
         />
         <span
           class="ai-particle absolute left-3/4 top-1/2 w-1.5 h-1.5 bg-pink-400/80 rounded-full"
-          style="animation-delay:.9s"
+          style="animation-delay: 0.9s"
         />
       </div>
     </div>
@@ -34,12 +47,16 @@
     <header class="relative z-10">
       <div class="mx-auto max-w-7xl px-6 py-6 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-orange-600 to-red-700 flex items-center justify-center shadow-lg ai-logo">
+          <div
+            class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-orange-600 to-red-700 flex items-center justify-center shadow-lg ai-logo"
+          >
             <svg
               class="w-6 h-6 text-white"
               viewBox="0 0 24 24"
               fill="currentColor"
-            ><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+            >
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
           </div>
           <div>
             <div class="text-lg font-semibold tracking-wide">
@@ -51,8 +68,8 @@
           </div>
         </div>
         <div class="flex items-center gap-4">
-          <router-link 
-            to="/auth/login" 
+          <router-link
+            to="/auth/login"
             class="text-sm text-slate-300 hover:text-white transition-colors"
           >
             返回登录
@@ -65,11 +82,15 @@
     <main class="relative z-10">
       <div class="mx-auto max-w-md px-6 py-20">
         <div class="text-center mb-10">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-400/30 bg-amber-400/10 text-amber-200 text-xs mb-5">
+          <div
+            class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-400/30 bg-amber-400/10 text-amber-200 text-xs mb-5"
+          >
             <KeyOutlined /> 密码重置 · 找回账户访问权限
           </div>
           <h1 class="text-3xl font-extrabold leading-tight tracking-tight">
-            <span class="bg-gradient-to-r from-white via-amber-200 to-amber-400 bg-clip-text text-transparent">忘记密码？</span>
+            <span
+              class="bg-gradient-to-r from-white via-amber-200 to-amber-400 bg-clip-text text-transparent"
+            >忘记密码？</span>
           </h1>
           <p class="mt-4 text-slate-300/90">
             输入您的邮箱地址，我们将发送重置密码的链接给您。
@@ -79,26 +100,34 @@
         <!-- 重置表单容器 -->
         <div class="relative">
           <!-- 背板光效 -->
-          <div class="absolute -inset-1 rounded-[1.75rem] bg-gradient-to-r from-amber-500/30 via-orange-500/30 to-red-500/30 blur-xl" />
-          <div class="relative rounded-[1.5rem] bg-slate-900/60 backdrop-blur-xl ring-1 ring-white/10 p-8 tech-border">
+          <div
+            class="absolute -inset-1 rounded-[1.75rem] bg-gradient-to-r from-amber-500/30 via-orange-500/30 to-red-500/30 blur-xl"
+          />
+          <div
+            class="relative rounded-[1.5rem] bg-slate-900/60 backdrop-blur-xl ring-1 ring-white/10 p-8 tech-border"
+          >
             <!-- 步骤指示器 -->
             <div class="flex items-center justify-center mb-8">
               <div class="flex items-center gap-4">
-                <div 
+                <div
                   class="flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-300"
-                  :class="currentStep >= 1 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'"
+                  :class="
+                    currentStep >= 1 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'
+                  "
                 >
                   1
                 </div>
                 <div class="w-12 h-0.5 bg-slate-700 relative overflow-hidden">
-                  <div 
+                  <div
                     class="absolute inset-0 bg-amber-500 transition-all duration-500"
                     :style="{ width: currentStep >= 2 ? '100%' : '0%' }"
                   />
                 </div>
-                <div 
+                <div
                   class="flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-300"
-                  :class="currentStep >= 2 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'"
+                  :class="
+                    currentStep >= 2 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'
+                  "
                 >
                   2
                 </div>
@@ -158,14 +187,16 @@
               class="step-content text-center"
             >
               <div class="mb-6">
-                <div class="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div
+                  class="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4"
+                >
                   <CheckCircleOutlined class="text-emerald-400 text-2xl" />
                 </div>
                 <h3 class="text-lg font-semibold text-slate-100 mb-2">
                   邮件已发送
                 </h3>
                 <p class="text-slate-400 text-sm">
-                  重置密码的邮件已发送至 
+                  重置密码的邮件已发送至
                   <span class="text-amber-300 font-medium">{{ emailForm.email }}</span>
                 </p>
               </div>
@@ -199,7 +230,7 @@
                   <ReloadOutlined class="mr-2" />
                   重新发送
                 </a-button>
-                
+
                 <a-button
                   type="primary"
                   block
@@ -230,8 +261,8 @@
           <p class="text-slate-400 text-sm mb-2">
             还是无法找回密码？
           </p>
-          <a 
-            href="mailto:support@medqc.com" 
+          <a
+            href="mailto:support@medqc.com"
             class="text-amber-300 hover:text-amber-200 text-sm font-medium"
           >
             联系技术支持
@@ -246,14 +277,15 @@
 import { ref, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { 
+import type { FormProps } from 'ant-design-vue'
+import {
   KeyOutlined,
   MailOutlined,
   SendOutlined,
   CheckCircleOutlined,
   InfoCircleOutlined,
   ReloadOutlined,
-  LoginOutlined
+  LoginOutlined,
 } from '@ant-design/icons-vue'
 import type { FormInstance } from 'ant-design-vue'
 
@@ -264,36 +296,35 @@ const router = useRouter()
 const currentStep = ref(1)
 const sendingEmail = ref(false)
 const countdown = ref(0)
-let countdownTimer: NodeJS.Timeout | null = null
+let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 // 表单引用
 const emailFormRef = ref<FormInstance>()
 
 // 表单数据
 const emailForm = reactive({
-  email: ''
+  email: '',
 })
 
 // 表单规则
 const emailRules = {
   email: [
     { required: true, message: '请输入邮箱地址', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
-  ]
-}
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+} satisfies NonNullable<FormProps['rules']>
 
 // 发送重置邮件
 const handleSendResetEmail = async () => {
   try {
     sendingEmail.value = true
-    
+
     // 模拟发送邮件
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+
     message.success('重置邮件发送成功')
     currentStep.value = 2
     startCountdown()
-    
   } catch (error) {
     console.error('发送重置邮件失败:', error)
     message.error('发送失败，请重试')
@@ -308,7 +339,7 @@ const handleResendEmail = async () => {
     message.warning(`请等待 ${countdown.value} 秒后再重新发送`)
     return
   }
-  
+
   await handleSendResetEmail()
 }
 
@@ -335,7 +366,8 @@ onUnmounted(() => {
 <style scoped>
 /* 复用之前的动画样式 */
 @keyframes particleFloat {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px) translateX(0px);
   }
   25% {
@@ -350,11 +382,14 @@ onUnmounted(() => {
 }
 
 @keyframes circuitPulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 5px rgba(245, 158, 11, 0.3);
   }
   50% {
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.6), 0 0 30px rgba(245, 158, 11, 0.4);
+    box-shadow:
+      0 0 20px rgba(245, 158, 11, 0.6),
+      0 0 30px rgba(245, 158, 11, 0.4);
   }
 }
 
@@ -463,7 +498,8 @@ onUnmounted(() => {
 }
 
 @keyframes gradientShift {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {
@@ -477,11 +513,11 @@ onUnmounted(() => {
     padding-left: 1rem;
     padding-right: 1rem;
   }
-  
+
   .text-3xl {
     font-size: 1.875rem;
   }
-  
+
   .p-8 {
     padding: 1.5rem;
   }
