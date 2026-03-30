@@ -14,8 +14,8 @@
       <!-- 角色基本信息 -->
       <div class="mb-6">
         <div class="flex items-center space-x-4 mb-4">
-          <component 
-            :is="role.icon" 
+          <component
+            :is="role.icon"
             :class="['text-4xl', role.color]"
           />
           <div>
@@ -27,19 +27,19 @@
             </p>
           </div>
         </div>
-        
+
         <a-row :gutter="16">
           <a-col :span="12">
             <a-statistic
               title="当前用户数"
-              :value="role.userCount"
+              :value="Number(role.userCount ?? 0)"
               suffix="人"
             />
           </a-col>
           <a-col :span="12">
             <a-statistic
               title="权限数量"
-              :value="role.permissionCount"
+              :value="Number(role.permissionCount ?? 0)"
               suffix="项"
             />
           </a-col>
@@ -51,7 +51,7 @@
         <h4 class="text-lg font-semibold mb-4">
           权限配置
         </h4>
-        
+
         <div class="space-y-4">
           <div
             v-for="resource in resources"
@@ -60,8 +60,8 @@
           >
             <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div class="flex items-center space-x-3">
-                <component 
-                  :is="resource.icon" 
+                <component
+                  :is="resource.icon"
                   :class="['text-xl', resource.color]"
                 />
                 <div>
@@ -73,13 +73,13 @@
                   </p>
                 </div>
               </div>
-              
+
               <a-switch
                 v-model:checked="resource.enabled"
-                @change="handleResourceToggle(resource.key, $event)"
+                @change="(checked) => handleResourceToggle(resource.key, Boolean(checked))"
               />
             </div>
-            
+
             <!-- 详细权限 -->
             <div
               v-if="resource.enabled"
@@ -91,8 +91,8 @@
                 class="flex items-center justify-between"
               >
                 <div class="flex items-center space-x-2">
-                  <component 
-                    :is="action.icon" 
+                  <component
+                    :is="action.icon"
                     class="text-gray-500"
                   />
                   <span class="text-sm">{{ action.name }}</span>
@@ -100,10 +100,10 @@
                     <QuestionCircleOutlined class="text-gray-400 cursor-help" />
                   </a-tooltip>
                 </div>
-                
+
                 <a-checkbox
                   v-model:checked="action.enabled"
-                  @change="handleActionToggle(resource.key, action.key, $event)"
+                  @change="(e) => handleActionChange(resource.key, action.key, e)"
                 />
               </div>
             </div>
@@ -116,7 +116,7 @@
         <h4 class="text-lg font-semibold mb-4">
           拥有此角色的用户
         </h4>
-        
+
         <div class="space-y-2 max-h-40 overflow-y-auto">
           <div
             v-for="user in roleUsers"
@@ -139,13 +139,13 @@
                 </div>
               </div>
             </div>
-            
-            <a-badge 
+
+            <a-badge
               :status="user.is_active ? 'success' : 'default'"
               :text="user.is_active ? '激活' : '停用'"
             />
           </div>
-          
+
           <div
             v-if="roleUsers.length === 0"
             class="text-center py-4 text-gray-500"
@@ -159,8 +159,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, type Component } from 'vue'
 import { message } from 'ant-design-vue'
+import type { CheckboxChangeEvent } from 'ant-design-vue/es/checkbox/interface'
 import {
   QuestionCircleOutlined,
   FileTextOutlined,
@@ -175,12 +176,20 @@ import {
   PlusOutlined,
   DownloadOutlined,
   AuditOutlined,
-  ToolOutlined
+  ToolOutlined,
 } from '@ant-design/icons-vue'
 
 interface Props {
   visible: boolean
-  role?: Record<string, unknown>
+  role?: {
+    key: string
+    name: string
+    description: string
+    icon?: Component
+    color?: string
+    userCount?: number
+    permissionCount?: number
+  }
 }
 
 interface Emits {
@@ -190,7 +199,7 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  visible: false
+  visible: false,
 })
 
 const emit = defineEmits<Emits>()
@@ -208,12 +217,42 @@ const resources = ref([
     color: 'text-blue-500',
     enabled: true,
     actions: [
-      { key: 'create', name: '创建', description: '创建新的病案记录', icon: PlusOutlined, enabled: true },
-      { key: 'read', name: '查看', description: '查看病案记录详情', icon: EyeOutlined, enabled: true },
-      { key: 'update', name: '修改', description: '修改病案记录信息', icon: EditOutlined, enabled: true },
-      { key: 'delete', name: '删除', description: '删除病案记录', icon: DeleteOutlined, enabled: false },
-      { key: 'export', name: '导出', description: '导出病案记录数据', icon: DownloadOutlined, enabled: true }
-    ]
+      {
+        key: 'create',
+        name: '创建',
+        description: '创建新的病案记录',
+        icon: PlusOutlined,
+        enabled: true,
+      },
+      {
+        key: 'read',
+        name: '查看',
+        description: '查看病案记录详情',
+        icon: EyeOutlined,
+        enabled: true,
+      },
+      {
+        key: 'update',
+        name: '修改',
+        description: '修改病案记录信息',
+        icon: EditOutlined,
+        enabled: true,
+      },
+      {
+        key: 'delete',
+        name: '删除',
+        description: '删除病案记录',
+        icon: DeleteOutlined,
+        enabled: false,
+      },
+      {
+        key: 'export',
+        name: '导出',
+        description: '导出病案记录数据',
+        icon: DownloadOutlined,
+        enabled: true,
+      },
+    ],
   },
   {
     key: 'qc_results',
@@ -224,10 +263,28 @@ const resources = ref([
     enabled: true,
     actions: [
       { key: 'read', name: '查看', description: '查看质控结果', icon: EyeOutlined, enabled: true },
-      { key: 'update', name: '修改', description: '修改质控结果', icon: EditOutlined, enabled: true },
-      { key: 'review', name: '审核', description: '审核质控结果', icon: AuditOutlined, enabled: true },
-      { key: 'export', name: '导出', description: '导出质控结果', icon: DownloadOutlined, enabled: true }
-    ]
+      {
+        key: 'update',
+        name: '修改',
+        description: '修改质控结果',
+        icon: EditOutlined,
+        enabled: true,
+      },
+      {
+        key: 'review',
+        name: '审核',
+        description: '审核质控结果',
+        icon: AuditOutlined,
+        enabled: true,
+      },
+      {
+        key: 'export',
+        name: '导出',
+        description: '导出质控结果',
+        icon: DownloadOutlined,
+        enabled: true,
+      },
+    ],
   },
   {
     key: 'qc_rules',
@@ -237,12 +294,36 @@ const resources = ref([
     color: 'text-purple-500',
     enabled: true,
     actions: [
-      { key: 'create', name: '创建', description: '创建质控规则', icon: PlusOutlined, enabled: true },
+      {
+        key: 'create',
+        name: '创建',
+        description: '创建质控规则',
+        icon: PlusOutlined,
+        enabled: true,
+      },
       { key: 'read', name: '查看', description: '查看质控规则', icon: EyeOutlined, enabled: true },
-      { key: 'update', name: '修改', description: '修改质控规则', icon: EditOutlined, enabled: true },
-      { key: 'delete', name: '删除', description: '删除质控规则', icon: DeleteOutlined, enabled: true },
-      { key: 'manage', name: '管理', description: '管理质控规则', icon: ToolOutlined, enabled: true }
-    ]
+      {
+        key: 'update',
+        name: '修改',
+        description: '修改质控规则',
+        icon: EditOutlined,
+        enabled: true,
+      },
+      {
+        key: 'delete',
+        name: '删除',
+        description: '删除质控规则',
+        icon: DeleteOutlined,
+        enabled: true,
+      },
+      {
+        key: 'manage',
+        name: '管理',
+        description: '管理质控规则',
+        icon: ToolOutlined,
+        enabled: true,
+      },
+    ],
   },
   {
     key: 'users',
@@ -252,12 +333,36 @@ const resources = ref([
     color: 'text-orange-500',
     enabled: false,
     actions: [
-      { key: 'create', name: '创建', description: '创建新用户', icon: PlusOutlined, enabled: false },
+      {
+        key: 'create',
+        name: '创建',
+        description: '创建新用户',
+        icon: PlusOutlined,
+        enabled: false,
+      },
       { key: 'read', name: '查看', description: '查看用户信息', icon: EyeOutlined, enabled: false },
-      { key: 'update', name: '修改', description: '修改用户信息', icon: EditOutlined, enabled: false },
-      { key: 'delete', name: '删除', description: '删除用户', icon: DeleteOutlined, enabled: false },
-      { key: 'manage', name: '管理', description: '管理用户权限', icon: ToolOutlined, enabled: false }
-    ]
+      {
+        key: 'update',
+        name: '修改',
+        description: '修改用户信息',
+        icon: EditOutlined,
+        enabled: false,
+      },
+      {
+        key: 'delete',
+        name: '删除',
+        description: '删除用户',
+        icon: DeleteOutlined,
+        enabled: false,
+      },
+      {
+        key: 'manage',
+        name: '管理',
+        description: '管理用户权限',
+        icon: ToolOutlined,
+        enabled: false,
+      },
+    ],
   },
   {
     key: 'statistics',
@@ -268,8 +373,14 @@ const resources = ref([
     enabled: true,
     actions: [
       { key: 'read', name: '查看', description: '查看统计数据', icon: EyeOutlined, enabled: true },
-      { key: 'export', name: '导出', description: '导出统计报表', icon: DownloadOutlined, enabled: true }
-    ]
+      {
+        key: 'export',
+        name: '导出',
+        description: '导出统计报表',
+        icon: DownloadOutlined,
+        enabled: true,
+      },
+    ],
   },
   {
     key: 'settings',
@@ -280,10 +391,22 @@ const resources = ref([
     enabled: false,
     actions: [
       { key: 'read', name: '查看', description: '查看系统设置', icon: EyeOutlined, enabled: false },
-      { key: 'update', name: '修改', description: '修改系统设置', icon: EditOutlined, enabled: false },
-      { key: 'manage', name: '管理', description: '管理系统配置', icon: ToolOutlined, enabled: false }
-    ]
-  }
+      {
+        key: 'update',
+        name: '修改',
+        description: '修改系统设置',
+        icon: EditOutlined,
+        enabled: false,
+      },
+      {
+        key: 'manage',
+        name: '管理',
+        description: '管理系统配置',
+        icon: ToolOutlined,
+        enabled: false,
+      },
+    ],
+  },
 ])
 
 // 角色用户列表
@@ -293,15 +416,15 @@ const roleUsers = ref([
     email: 'admin@demo.com',
     display_name: '系统管理员',
     department: '信息科',
-    is_active: true
+    is_active: true,
   },
   {
     id: '2',
     email: 'qc@demo.com',
     display_name: '质控管理员',
     department: '质控科',
-    is_active: true
-  }
+    is_active: true,
+  },
 ])
 
 // 监听角色变化
@@ -310,10 +433,10 @@ watch(
   (newRole) => {
     if (newRole) {
       // 根据角色类型设置权限
-      updatePermissionsByRole((newRole as Record<string, unknown>).key as string)
+      updatePermissionsByRole(newRole.key)
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 // 方法
@@ -326,7 +449,7 @@ const updatePermissionsByRole = (roleKey: string) => {
       qc_rules: { enabled: true, actions: ['create', 'read', 'update', 'delete', 'manage'] },
       users: { enabled: true, actions: ['create', 'read', 'update', 'delete', 'manage'] },
       statistics: { enabled: true, actions: ['read', 'export'] },
-      settings: { enabled: true, actions: ['read', 'update', 'manage'] }
+      settings: { enabled: true, actions: ['read', 'update', 'manage'] },
     },
     qc_manager: {
       medical_records: { enabled: true, actions: ['read', 'export'] },
@@ -334,7 +457,7 @@ const updatePermissionsByRole = (roleKey: string) => {
       qc_rules: { enabled: true, actions: ['create', 'read', 'update', 'delete', 'manage'] },
       users: { enabled: true, actions: ['read'] },
       statistics: { enabled: true, actions: ['read', 'export'] },
-      settings: { enabled: false, actions: [] }
+      settings: { enabled: false, actions: [] },
     },
     qc_staff: {
       medical_records: { enabled: true, actions: ['read'] },
@@ -342,7 +465,7 @@ const updatePermissionsByRole = (roleKey: string) => {
       qc_rules: { enabled: true, actions: ['read'] },
       users: { enabled: false, actions: [] },
       statistics: { enabled: true, actions: ['read'] },
-      settings: { enabled: false, actions: [] }
+      settings: { enabled: false, actions: [] },
     },
     doctor: {
       medical_records: { enabled: true, actions: ['create', 'read', 'update'] },
@@ -350,17 +473,17 @@ const updatePermissionsByRole = (roleKey: string) => {
       qc_rules: { enabled: false, actions: [] },
       users: { enabled: false, actions: [] },
       statistics: { enabled: true, actions: ['read'] },
-      settings: { enabled: false, actions: [] }
-    }
+      settings: { enabled: false, actions: [] },
+    },
   }
 
   const permissions = rolePermissions[roleKey as keyof typeof rolePermissions]
   if (permissions) {
-    resources.value.forEach(resource => {
+    resources.value.forEach((resource) => {
       const resourcePermission = permissions[resource.key as keyof typeof permissions]
       if (resourcePermission) {
         resource.enabled = resourcePermission.enabled
-        resource.actions.forEach(action => {
+        resource.actions.forEach((action) => {
           action.enabled = resourcePermission.actions.includes(action.key)
         })
       }
@@ -369,12 +492,12 @@ const updatePermissionsByRole = (roleKey: string) => {
 }
 
 const handleResourceToggle = (resourceKey: string, enabled: boolean) => {
-  const resource = resources.value.find(r => r.key === resourceKey)
+  const resource = resources.value.find((r) => r.key === resourceKey)
   if (resource) {
     resource.enabled = enabled
     if (!enabled) {
       // 如果禁用资源，则禁用所有操作
-      resource.actions.forEach(action => {
+      resource.actions.forEach((action) => {
         action.enabled = false
       })
     }
@@ -382,29 +505,33 @@ const handleResourceToggle = (resourceKey: string, enabled: boolean) => {
 }
 
 const handleActionToggle = (resourceKey: string, actionKey: string, enabled: boolean) => {
-  const resource = resources.value.find(r => r.key === resourceKey)
+  const resource = resources.value.find((r) => r.key === resourceKey)
   if (resource) {
-    const action = resource.actions.find(a => a.key === actionKey)
+    const action = resource.actions.find((a) => a.key === actionKey)
     if (action) {
       action.enabled = enabled
     }
   }
 }
 
+const handleActionChange = (resourceKey: string, actionKey: string, event: CheckboxChangeEvent) => {
+  handleActionToggle(resourceKey, actionKey, !!event.target.checked)
+}
+
 const handleSubmit = async () => {
   try {
     loading.value = true
-    
+
     // 收集权限配置
-    const permissions = resources.value.map(resource => ({
+    const permissions = resources.value.map((resource) => ({
       resource: resource.key,
       enabled: resource.enabled,
-      actions: resource.actions.filter(action => action.enabled).map(action => action.key)
+      actions: resource.actions.filter((action) => action.enabled).map((action) => action.key),
     }))
-    
+
     emit('submit', {
       role: props.role?.key,
-      permissions
+      permissions,
     })
   } catch (error) {
     message.error('保存失败')
@@ -449,4 +576,4 @@ const getUserAvatarColor = (email: string) => {
   font-size: 20px;
   font-weight: 600;
 }
-</style> 
+</style>

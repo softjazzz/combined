@@ -90,7 +90,7 @@
                     v-if="model.value === currentConfig.defaultModel"
                     color="blue"
                     size="small"
-                    style="margin-left: 8px;"
+                    style="margin-left: 8px"
                   >
                     推荐
                   </a-tag>
@@ -98,7 +98,7 @@
                     v-if="model.qcStatus === 'passed'"
                     color="green"
                     size="small"
-                    style="margin-left: 8px;"
+                    style="margin-left: 8px"
                   >
                     质控验证
                   </a-tag>
@@ -189,7 +189,7 @@
                     <a-tag
                       color="blue"
                       size="small"
-                      style="margin-left: 8px;"
+                      style="margin-left: 8px"
                     >
                       影响质控稳定性
                     </a-tag>
@@ -202,14 +202,18 @@
                     <div class="param-header">
                       <label class="param-label">
                         Temperature（温度参数）
-                        <a-tooltip title="控制输出的随机性。值越低输出越确定，值越高输出越随机。推荐质控场景使用 0.1-0.3 以提高一致性。">
+                        <a-tooltip
+                          title="控制输出的随机性。值越低输出越确定，值越高输出越随机。推荐质控场景使用 0.1-0.3 以提高一致性。"
+                        >
                           <QuestionCircleOutlined class="param-help-icon" />
                         </a-tooltip>
                       </label>
                       <div class="param-value-display">
                         <span class="current-value">{{ advancedParams.temperature }}</span>
                         <a-tag
-                          v-if="advancedParams.temperature >= 0.1 && advancedParams.temperature <= 0.3"
+                          v-if="
+                            advancedParams.temperature >= 0.1 && advancedParams.temperature <= 0.3
+                          "
                           color="green"
                           size="small"
                         >
@@ -242,7 +246,9 @@
                     <div class="param-header">
                       <label class="param-label">
                         Top P（核采样参数）
-                        <a-tooltip title="控制输出多样性。与 temperature 配合使用，控制采样范围。通常保持 0.9 即可。">
+                        <a-tooltip
+                          title="控制输出多样性。与 temperature 配合使用，控制采样范围。通常保持 0.9 即可。"
+                        >
                           <QuestionCircleOutlined class="param-help-icon" />
                         </a-tooltip>
                       </label>
@@ -268,7 +274,9 @@
                     <div class="param-header">
                       <label class="param-label">
                         Max Tokens（最大输出长度）
-                        <a-tooltip title="控制 LLM 单次输出的最大 token 数量。质控场景推荐 4000-8000。">
+                        <a-tooltip
+                          title="控制 LLM 单次输出的最大 token 数量。质控场景推荐 4000-8000。"
+                        >
                           <QuestionCircleOutlined class="param-help-icon" />
                         </a-tooltip>
                       </label>
@@ -367,7 +375,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { message } from 'ant-design-vue'
-import { llmConfigService, type LLMProvider, type LLMModel, type UserLLMConfig } from '@/services/llmConfigService'
+import {
+  llmConfigService,
+  type LLMProvider,
+  type LLMModel,
+  type UserLLMConfig,
+} from '@/services/llmConfigService'
 import {
   KeyOutlined,
   InfoCircleOutlined,
@@ -378,17 +391,18 @@ import {
   EyeInvisibleOutlined,
   SettingOutlined,
   QuestionCircleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
 } from '@ant-design/icons-vue'
 import {
   ENHANCED_LLM_API_CONFIGS,
   EnhancedLLMApiConfigManager,
   type EnhancedLLMApiConfig,
-  type ModelOption
+  type ModelOption,
 } from '@/services/llmApiConfig'
 import { LLMService } from '@/services/llmServiceNew'
 import type { ParseResult } from '@/services/llmService'
 import { resolveApiBaseUrl, extractApiData } from '@/utils/api-helpers'
+import { authFetch } from '@/utils/auth-fetch'
 
 interface RemoteProvider {
   id?: string
@@ -415,7 +429,7 @@ const QC_SUCCESS_MODELS = new Set<string>([
   'qwen3-4b',
   'qwen3-235b-a22b-instruct-2507',
   'qwen2.5-32b-instruct',
-  'qwen2.5-14b-instruct'
+  'qwen2.5-14b-instruct',
 ])
 
 // 定义组件事件
@@ -426,9 +440,9 @@ const emit = defineEmits<{
 }>()
 
 // 响应式数据
-const selectedConfig = ref('alibaba')  // 默认选择阿里通义千问
+const selectedConfig = ref('alibaba') // 默认选择阿里通义千问
 const selectedModel = ref('')
-const apiKey = ref('sk-f1fa15b00fb042a9a80943a40e142daf')  // 预设API密钥
+const apiKey = ref('sk-f1fa15b00fb042a9a80943a40e142daf') // 预设API密钥
 const customEndpoint = ref('')
 const testing = ref(false)
 const saving = ref(false)
@@ -436,13 +450,13 @@ const saveSuccess = ref(false)
 
 // LLM 高级参数配置
 const advancedParams = reactive({
-  temperature: 0.2,  // 默认值：0.2（推荐用于质控场景）
-  top_p: 0.9,        // 默认值：0.9
-  max_tokens: 4000,  // 默认值：4000
+  temperature: 0.2, // 默认值：0.2（推荐用于质控场景）
+  top_p: 0.9, // 默认值：0.9
+  max_tokens: 4000, // 默认值：4000
 })
 
 // 高级参数区域是否展开
-const advancedParamsExpanded = ref(false)
+const advancedParamsExpanded = ref<string | string[]>(['1'])
 
 // 动态获取的数据
 const dynamicProviders = ref<RemoteProvider[]>([])
@@ -462,7 +476,9 @@ const configManager = new EnhancedLLMApiConfigManager()
 const availableConfigs = computed(() => Object.values(ENHANCED_LLM_API_CONFIGS))
 
 // 当前配置
-const currentConfig = computed<EnhancedLLMApiConfig | undefined>(() => ENHANCED_LLM_API_CONFIGS[selectedConfig.value])
+const currentConfig = computed<EnhancedLLMApiConfig | undefined>(
+  () => ENHANCED_LLM_API_CONFIGS[selectedConfig.value],
+)
 
 // 可用模型 - 优先使用动态获取的模型列表（兼容多种字段命名）
 const availableModels = computed<ModelOption[]>(() => {
@@ -479,21 +495,23 @@ const availableModels = computed<ModelOption[]>(() => {
           label,
           value,
           description: model.description || '',
-          qcStatus: QC_SUCCESS_MODELS.has(value) ? 'passed' : undefined
+          qcStatus: QC_SUCCESS_MODELS.has(value) ? 'passed' : undefined,
         }
       })
       .filter(Boolean) as ModelOption[]
   }
   // 回退到硬编码配置（向后兼容）
-  return (currentConfig.value?.availableModels || []).map(model => {
+  return (currentConfig.value?.availableModels || []).map((model) => {
     const nextLabel =
-      model.value.includes('30b-a3b') && model.value.includes('2507') && !model.label.includes('2507')
+      model.value.includes('30b-a3b') &&
+      model.value.includes('2507') &&
+      !model.label.includes('2507')
         ? `${model.label} (2507)`
         : model.label
     return {
       ...model,
       label: nextLabel,
-      qcStatus: model.qcStatus || (QC_SUCCESS_MODELS.has(model.value) ? 'passed' : undefined)
+      qcStatus: model.qcStatus || (QC_SUCCESS_MODELS.has(model.value) ? 'passed' : undefined),
     }
   })
 })
@@ -501,28 +519,34 @@ const availableModels = computed<ModelOption[]>(() => {
 // 当前模型信息（优先从动态模型或可用模型中查找）
 const currentModelInfo = computed<ModelOption | null>(() => {
   if (!selectedModel.value) return null
-  return availableModels.value.find(model => model.value === selectedModel.value) || null
+  return availableModels.value.find((model) => model.value === selectedModel.value) || null
 })
 
+interface ConfigStatus {
+  valid: boolean
+  type: 'success' | 'warning' | 'error' | 'info'
+  message: string
+}
+
 // 配置状态
-const configStatus = computed(() => {
+const configStatus = computed<ConfigStatus>(() => {
   const config = currentConfig.value
   if (!config) {
     return { valid: false, type: 'error', message: '未选择配置' }
   }
 
   if (config.requiresApiKey && !apiKey.value) {
-    return { 
-      valid: false, 
-      type: 'warning', 
-      message: `${config.displayName} 需要配置API密钥` 
+    return {
+      valid: false,
+      type: 'warning',
+      message: `${config.displayName} 需要配置API密钥`,
     }
   }
 
-  return { 
-    valid: true, 
-    type: 'success', 
-    message: `${config.displayName} 配置完成` 
+  return {
+    valid: true,
+    type: 'success',
+    message: `${config.displayName} 配置完成`,
   }
 })
 
@@ -535,34 +559,35 @@ const loadModelsForProvider = async (providerCode: string) => {
     const baseURL = resolveApiBaseUrl()
 
     // 首先获取提供商信息（兼容 {data:[]} 与 {providers:[]} 两种返回结构）
-    const providersResponse = await fetch(`${baseURL}${LLM_API_PREFIX}/providers`)
+    const providersResponse = await authFetch(`${baseURL}${LLM_API_PREFIX}/providers`)
     if (!providersResponse.ok) {
       throw new Error(`加载大模型提供商失败: ${providersResponse.status}`)
     }
     const providersRaw = await providersResponse.json()
-    const providersData = extractApiData<{ data?: RemoteProvider[]; providers?: RemoteProvider[] } | RemoteProvider[] | null | undefined>(
-      providersRaw,
-      '加载大模型提供商失败'
-    )
+    const providersData = extractApiData<
+      | { data?: RemoteProvider[]; providers?: RemoteProvider[] }
+      | RemoteProvider[]
+      | null
+      | undefined
+    >(providersRaw, '加载大模型提供商失败')
     const providerList = Array.isArray(providersData)
       ? providersData
       : ((providersData?.data || providersData?.providers || []) as RemoteProvider[])
     dynamicProviders.value = providerList
-    const provider = providerList.find(p => (p.provider_code || p.id) === providerCode)
+    const provider = providerList.find((p) => (p.provider_code || p.id) === providerCode)
 
     // 加载模型（兼容 {data:[]} 与 {models:[]}；后端可能不支持 provider_id 过滤时回退全量）
     const modelsPath = provider?.id
       ? `${LLM_API_PREFIX}/models?provider_id=${provider.id}`
       : `${LLM_API_PREFIX}/models`
-    const modelsResponse = await fetch(`${baseURL}${modelsPath}`)
+    const modelsResponse = await authFetch(`${baseURL}${modelsPath}`)
     if (!modelsResponse.ok) {
       throw new Error(`加载模型列表失败: ${modelsResponse.status}`)
     }
     const modelsRaw = await modelsResponse.json()
-    const modelsData = extractApiData<{ data?: RemoteModel[]; models?: RemoteModel[] } | RemoteModel[] | null | undefined>(
-      modelsRaw,
-      '加载模型列表失败'
-    )
+    const modelsData = extractApiData<
+      { data?: RemoteModel[]; models?: RemoteModel[] } | RemoteModel[] | null | undefined
+    >(modelsRaw, '加载模型列表失败')
     const modelsList = Array.isArray(modelsData)
       ? modelsData
       : ((modelsData?.data || modelsData?.models || []) as RemoteModel[])
@@ -570,9 +595,10 @@ const loadModelsForProvider = async (providerCode: string) => {
     console.log(`✅ 已加载 ${dynamicModels.value.length} 个模型`)
 
     // 若当前选择不在新列表中，则回退到默认或第一项
-    const values = new Set(availableModels.value.map(model => model.value))
+    const values = new Set(availableModels.value.map((model) => model.value))
     if (!values.has(selectedModel.value)) {
-      selectedModel.value = currentConfig.value?.defaultModel || availableModels.value[0]?.value || ''
+      selectedModel.value =
+        currentConfig.value?.defaultModel || availableModels.value[0]?.value || ''
     }
   } catch (error) {
     console.error('加载模型列表失败:', error)
@@ -600,7 +626,7 @@ const handleConfigChange = async () => {
   configManager.switchConfig(selectedConfig.value, apiKey.value)
   // 若无已选模型，回退到推荐或第一个可用模型
   if (!selectedModel.value) {
-    selectedModel.value = currentConfig.value?.defaultModel || (availableModels.value[0]?.value || '')
+    selectedModel.value = currentConfig.value?.defaultModel || availableModels.value[0]?.value || ''
   }
   testResult.value = null
 }
@@ -627,29 +653,29 @@ const handleEndpointChange = () => {
 
 const getFeatureColor = (feature: string): string => {
   const colorMap: Record<string, string> = {
-    '高准确率': 'green',
-    '中文优化': 'blue',
-    '企业级': 'purple',
-    '医疗专业': 'red',
-    '开源友好': 'orange',
-    '数据私有': 'cyan',
-    '开发测试': 'default',
-    '高并发': 'purple',
-    '多模态': 'geekblue',
-    '安全合规': 'green',
-    '可本地部署': 'orange'
+    高准确率: 'green',
+    中文优化: 'blue',
+    企业级: 'purple',
+    医疗专业: 'red',
+    开源友好: 'orange',
+    数据私有: 'cyan',
+    开发测试: 'default',
+    高并发: 'purple',
+    多模态: 'geekblue',
+    安全合规: 'green',
+    可本地部署: 'orange',
   }
   return colorMap[feature] || 'default'
 }
 
 const getPricingColor = (pricing?: string): string => {
   const colorMap: Record<string, string> = {
-    '免费': 'green',
-    '很低': 'cyan',
-    '低': 'blue',
-    '中': 'orange',
-    '高': 'red',
-    '很高': 'magenta'
+    免费: 'green',
+    很低: 'cyan',
+    低: 'blue',
+    中: 'orange',
+    高: 'red',
+    很高: 'magenta',
   }
   return colorMap[pricing || ''] || 'default'
 }
@@ -664,11 +690,11 @@ const resetAdvancedParams = () => {
 
 const getApiKeyHelp = (): string => {
   const helpMap: Record<string, string> = {
-    'openai': '在 OpenAI 官网获取 API Key',
-    'baidu': '在百度智能云控制台获取 Access Token',
-    'alibaba': '在阿里云控制台获取 API Key',
-    'tencent': '在腾讯云控制台获取 SecretId 和 SecretKey',
-    'zhipu': '在智谱AI开放平台获取 API Key'
+    openai: '在 OpenAI 官网获取 API Key',
+    baidu: '在百度智能云控制台获取 Access Token',
+    alibaba: '在阿里云控制台获取 API Key',
+    tencent: '在腾讯云控制台获取 SecretId 和 SecretKey',
+    zhipu: '在智谱AI开放平台获取 API Key',
   }
   return helpMap[selectedConfig.value] || '请联系服务提供商获取API密钥'
 }
@@ -691,20 +717,20 @@ const testConnection = async () => {
     const llmService = new LLMService({
       apiEndpoint: cfg.endpoint,
       apiKey: apiKey.value,
-      model: selectedModel.value || cfg.defaultModel
+      model: selectedModel.value || cfg.defaultModel,
     })
 
     // 发送测试请求
     const testPrompt = '请回复"连接测试成功"'
-    const result = await llmService.parseMedicalText(testPrompt, {
-      confidenceThreshold: 0.5
-    }) as ParseResult
+    const result = (await llmService.parseMedicalText(testPrompt, {
+      confidenceThreshold: 0.5,
+    })) as ParseResult
 
     if (result.success) {
       testResult.value = {
         success: true,
         message: '连接测试成功',
-        details: `响应时间: ${result.processingTime}ms`
+        details: `响应时间: ${result.processingTime}ms`,
       }
 
       // 销毁loading消息并显示成功消息
@@ -714,7 +740,7 @@ const testConnection = async () => {
         duration: 3,
         style: {
           marginTop: '20vh',
-        }
+        },
       })
     } else {
       throw new Error(result.error || '未知错误')
@@ -724,7 +750,7 @@ const testConnection = async () => {
     testResult.value = {
       success: false,
       message: '连接测试失败',
-      details: errorMessage
+      details: errorMessage,
     }
 
     // 销毁loading消息并显示错误消息
@@ -734,7 +760,7 @@ const testConnection = async () => {
       duration: 5,
       style: {
         marginTop: '20vh',
-      }
+      },
     })
   } finally {
     testing.value = false
@@ -749,7 +775,7 @@ const saveConfig = async () => {
     console.log('🔄 开始保存配置...', {
       selectedConfig: selectedConfig.value,
       selectedModel: selectedModel.value,
-      hasApiKey: !!apiKey.value
+      hasApiKey: !!apiKey.value,
     })
 
     // 显示开始保存的提示
@@ -778,7 +804,7 @@ const saveConfig = async () => {
         top_p: advancedParams.top_p,
         max_tokens: advancedParams.max_tokens,
       },
-      is_active: true
+      is_active: true,
     }
     console.log('💾 保存配置数据(按code):', configData)
 
@@ -787,19 +813,23 @@ const saveConfig = async () => {
       setTimeout(() => reject(new Error('保存配置超时，请检查网络连接')), 30000) // 30秒超时
     })
 
-    const saved = await Promise.race([
+    const saved = (await Promise.race([
       llmConfigService.saveConfig(configData as any),
-      timeoutPromise
-    ]) as any
+      timeoutPromise,
+    ])) as any
     console.log('✅ 配置保存成功:', saved)
 
     // 同步到运行时（可立即测试）
     console.log('🔄 同步配置到运行时...')
-    const endpoint = saved.custom_endpoint || (saved.provider?.base_endpoint || '')
+    const endpoint = saved.custom_endpoint || saved.provider?.base_endpoint || ''
     if (endpoint) {
       try {
         const { llmService } = await import('@/services/llmServiceNew')
-        llmService.updateConfig({ apiEndpoint: endpoint, apiKey: apiKey.value || '', model: saved.model?.model_code || '' })
+        llmService.updateConfig({
+          apiEndpoint: endpoint,
+          apiKey: apiKey.value || '',
+          model: saved.model?.model_code || '',
+        })
         console.log('✅ 运行时配置同步成功')
       } catch (syncError) {
         console.error('⚠️ 运行时配置同步失败:', syncError)
@@ -810,11 +840,11 @@ const saveConfig = async () => {
     // 调用后端配置重载 API
     console.log('🔄 通知后端重新加载配置...')
     try {
-      const reloadResponse = await fetch('/api/v1/qc/sichuan/reload-config', {
+      const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
 
       if (reloadResponse.ok) {
@@ -826,7 +856,7 @@ const saveConfig = async () => {
             duration: 2,
             style: {
               marginTop: '20vh',
-            }
+            },
           })
         } else {
           console.warn('⚠️ 后端配置重载失败:', reloadResult.message)
@@ -842,7 +872,7 @@ const saveConfig = async () => {
         duration: 3,
         style: {
           marginTop: '20vh',
-        }
+        },
       })
     }
 
@@ -854,7 +884,7 @@ const saveConfig = async () => {
       duration: 3,
       style: {
         marginTop: '20vh',
-      }
+      },
     })
 
     // 设置保存成功状态
@@ -867,7 +897,7 @@ const saveConfig = async () => {
       selectedModel: selectedModel.value,
       apiKey: apiKey.value,
       customEndpoint: customEndpoint.value,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
     window.dispatchEvent(new CustomEvent('llm-config-updated', { detail: payload }))
     emit('config-updated', payload)
@@ -891,7 +921,6 @@ const saveConfig = async () => {
 
       console.log('✅ 已发送所有关闭事件 (drawer + modal + global)')
     }, 1000) // 1秒后自动关闭
-
   } catch (e: unknown) {
     console.error('保存配置失败:', e)
     message.destroy()
@@ -903,7 +932,7 @@ const saveConfig = async () => {
       duration: 5,
       style: {
         marginTop: '20vh',
-      }
+      },
     })
   } finally {
     console.log('🔄 重置保存状态...')
@@ -934,9 +963,11 @@ const loadConfig = async () => {
 
       // 加载高级参数
       const customParams = (dbConfig.custom_parameters || {}) as Record<string, unknown>
-      advancedParams.temperature = typeof customParams.temperature === 'number' ? customParams.temperature : 0.2
+      advancedParams.temperature =
+        typeof customParams.temperature === 'number' ? customParams.temperature : 0.2
       advancedParams.top_p = typeof customParams.top_p === 'number' ? customParams.top_p : 0.9
-      advancedParams.max_tokens = typeof customParams.max_tokens === 'number' ? customParams.max_tokens : 4000
+      advancedParams.max_tokens =
+        typeof customParams.max_tokens === 'number' ? customParams.max_tokens : 4000
 
       // 加载该提供商的模型列表
       await loadModelsForProvider(selectedConfig.value)
@@ -948,13 +979,17 @@ const loadConfig = async () => {
     }
 
     // 2) 向后兼容：无数据库记录时，尝试从 localStorage 恢复
-    const savedConfig = typeof localStorage !== 'undefined' ? localStorage.getItem('llm-api-config') : null
+    const savedConfig =
+      typeof localStorage !== 'undefined' ? localStorage.getItem('llm-api-config') : null
     if (savedConfig) {
       const configData = JSON.parse(savedConfig)
-      selectedConfig.value = configData.selectedConfig || 'alibaba'  // 默认阿里通义千问
+      selectedConfig.value = configData.selectedConfig || 'alibaba' // 默认阿里通义千问
       selectedModel.value = configData.selectedModel || ''
       // 如果是阿里通义千问，使用预设API密钥
-      apiKey.value = selectedConfig.value === 'alibaba' ? 'sk-f1fa15b00fb042a9a80943a40e142daf' : (configData.apiKey || '')
+      apiKey.value =
+        selectedConfig.value === 'alibaba'
+          ? 'sk-f1fa15b00fb042a9a80943a40e142daf'
+          : configData.apiKey || ''
       customEndpoint.value = configData.customEndpoint || ''
 
       // 加载该提供商的模型列表
@@ -1008,7 +1043,7 @@ onMounted(async () => {
   await loadConfig()
   // 加载完成后，确保有可见的已选模型
   if (!selectedModel.value) {
-    selectedModel.value = currentConfig.value?.defaultModel || (availableModels.value[0]?.value || '')
+    selectedModel.value = currentConfig.value?.defaultModel || availableModels.value[0]?.value || ''
   }
 })
 </script>

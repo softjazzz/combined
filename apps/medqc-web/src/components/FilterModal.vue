@@ -90,11 +90,12 @@
         <!-- 评分范围 -->
         <a-form-item label="评分范围">
           <a-slider
-            v-model:value="formData.scoreRange"
+            :value="formData.scoreRange"
             range
             :min="0"
             :max="100"
             :marks="{ 0: '0', 60: '60', 80: '80', 100: '100' }"
+            @update:value="handleScoreRangeChange"
           />
         </a-form-item>
 
@@ -181,10 +182,24 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
 
 interface Props {
   visible: boolean
   currentConditions?: Record<string, unknown>
+}
+
+interface FilterFormData {
+  defectStatus: string[]
+  auditStatus: string[]
+  department: string[]
+  doctor: string[]
+  priority: string[]
+  scoreRange: [number, number]
+  defectCountMin?: number
+  defectCountMax?: number
+  timeRange?: [Dayjs, Dayjs]
+  isUrgent?: boolean
 }
 
 interface Emits {
@@ -200,7 +215,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>()
 
 // 表单数据
-const formData = reactive({
+const formData = reactive<FilterFormData>({
   defectStatus: [],
   auditStatus: [],
   department: [],
@@ -281,6 +296,12 @@ const handleConfirm = () => {
   // 重置模板相关状态
   saveAsTemplate.value = false
   templateName.value = ''
+}
+
+const handleScoreRangeChange = (value: number[]) => {
+  if (value.length >= 2) {
+    formData.scoreRange = [value[0] ?? 0, value[1] ?? 100]
+  }
 }
 
 // 取消
