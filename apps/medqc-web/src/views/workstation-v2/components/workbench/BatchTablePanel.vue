@@ -1,25 +1,21 @@
 <template>
-  <section
-    class="batch-table-panel overflow-hidden rounded-[28px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,249,252,0.96))] shadow-[0_24px_60px_rgba(15,23,42,0.08)]"
-  >
-    <div class="border-b border-slate-200/70 px-5 py-4">
+  <section class="batch-table-panel">
+    <div class="batch-table-panel__header px-5 py-4">
       <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div class="min-w-0">
-          <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
+          <div class="batch-table-panel__eyebrow">
             Batch Workspace
           </div>
           <div class="mt-2 flex flex-wrap items-end gap-3">
-            <div class="text-[24px] font-black tracking-[-0.04em] text-slate-950">
+            <div class="batch-table-panel__title">
               批量工作台
             </div>
-            <span class="inline-flex items-center rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-[12px] font-semibold text-slate-500">
-              当前 {{ rows.length }} 条候选病历
-            </span>
-            <span class="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50/90 px-3 py-1 text-[12px] font-semibold text-slate-500">
+            <span class="batch-table-panel__summary-pill"> 当前 {{ rows.length }} 条候选病历 </span>
+            <span class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected">
               已选 {{ selectedRowKeys.length }} 条
             </span>
           </div>
-          <div class="mt-2 text-[13px] leading-6 text-slate-500">
+          <div class="batch-table-panel__summary mt-2">
             {{ summaryText }}
           </div>
         </div>
@@ -28,7 +24,7 @@
           <a-button
             size="small"
             type="primary"
-            class="!h-9 !rounded-full !border-0 !bg-slate-950 !px-4 !font-semibold !shadow-[0_12px_20px_rgba(15,23,42,0.18)]"
+            class="batch-table-panel__action batch-table-panel__action--primary"
             :disabled="selectedRowKeys.length === 0 || readonly"
             @click="emit('batch-extract', selectedRowKeys)"
           >
@@ -36,7 +32,7 @@
           </a-button>
           <a-button
             size="small"
-            class="!h-9 !rounded-full !border-slate-200/90 !px-4 !font-semibold !text-slate-600"
+            class="batch-table-panel__action batch-table-panel__action--secondary"
             :disabled="selectedRowKeys.length === 0 || readonly"
             @click="emit('batch-defer', selectedRowKeys)"
           >
@@ -44,7 +40,7 @@
           </a-button>
           <a-button
             size="small"
-            class="!h-9 !rounded-full !border-slate-200/90 !px-4 !font-semibold !text-slate-600"
+            class="batch-table-panel__action batch-table-panel__action--secondary"
             :disabled="selectedRowKeys.length === 0 || readonly"
             @click="emit('batch-assign', selectedRowKeys)"
           >
@@ -52,7 +48,7 @@
           </a-button>
           <a-button
             size="small"
-            class="!h-9 !rounded-full !border-slate-200/90 !px-4 !font-semibold !text-slate-500"
+            class="batch-table-panel__action batch-table-panel__action--ghost"
             @click="emit('clear-filters')"
           >
             清空筛选
@@ -70,43 +66,49 @@
       :pagination="false"
       :row-selection="rowSelection"
       :scroll="{ x: 980 }"
+      :locale="tableLocale"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'patient'">
-          <div class="text-[15px] font-bold tracking-tight text-slate-900">
+          <div class="batch-table-panel__patient-name">
             {{ record.patientName }}
           </div>
-          <div class="mt-2 flex items-center gap-2 text-[12px] text-slate-500">
-            <span class="inline-flex items-center rounded-full bg-slate-100/90 px-2.5 py-1 font-mono text-[11px] text-slate-600">
+          <div class="batch-table-panel__patient-meta mt-2 flex items-center gap-2 text-[12px]">
+            <span
+              class="batch-table-panel__visit-id inline-flex items-center px-2.5 py-1 font-mono text-[11px]"
+            >
               {{ record.visitId }}
             </span>
             <span
               v-if="record.isDemo"
-              class="inline-flex items-center rounded-full border border-blue-200/80 bg-blue-50/90 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
+              class="batch-table-panel__tag batch-table-panel__tag--demo inline-flex items-center px-2.5 py-1 text-[11px] font-semibold"
             >
               Demo
             </span>
           </div>
         </template>
         <template v-else-if="column.key === 'department'">
-          <span class="text-[13px] font-medium text-slate-600">{{ record.department }}</span>
+          <span class="batch-table-panel__department">{{ record.department }}</span>
         </template>
         <template v-else-if="column.key === 'stageStatus'">
-          <span class="inline-flex items-center rounded-full border border-sky-200/80 bg-sky-50/90 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+          <span
+            class="batch-table-panel__tag inline-flex items-center px-2.5 py-1 text-[11px] font-semibold"
+            :class="stageTagClass(record.stageStatus)"
+          >
             {{ record.stageStatus }}
           </span>
         </template>
         <template v-else-if="column.key === 'risk'">
-          <span class="text-[13px] leading-6 text-slate-600">{{ record.riskReason }}</span>
+          <span class="batch-table-panel__risk">{{ record.riskReason }}</span>
         </template>
         <template v-else-if="column.key === 'updatedAt'">
-          <span class="text-[12px] font-medium text-slate-500">{{ record.updatedAt }}</span>
+          <span class="batch-table-panel__updated-at">{{ record.updatedAt }}</span>
         </template>
         <template v-else-if="column.key === 'action'">
           <a-button
             type="default"
             size="small"
-            class="!h-8 !rounded-full !border-slate-200/90 !bg-white !px-3 !font-semibold !text-slate-700 !shadow-none"
+            class="batch-table-panel__detail-button"
             @click="emit('open-record', record.id)"
           >
             查看详情
@@ -157,6 +159,18 @@ const rowSelection = computed(() => ({
     ),
 }))
 
+const tableLocale = {
+  emptyText: '当前筛选条件下暂无候选病历',
+}
+
+function stageTagClass(stageStatus: string) {
+  if (/终末|完成|已完成/.test(stageStatus)) return 'batch-table-panel__tag--success'
+  if (/待复核|质控|待审核/.test(stageStatus)) return 'batch-table-panel__tag--review'
+  if (/资料不全|缺失/.test(stageStatus)) return 'batch-table-panel__tag--danger'
+  if (/待处理|处理中|抽取/.test(stageStatus)) return 'batch-table-panel__tag--brand'
+  return 'batch-table-panel__tag--neutral'
+}
+
 const columns = [
   { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 260 },
   { title: '科室', key: 'department', dataIndex: 'department', width: 180 },
@@ -168,22 +182,189 @@ const columns = [
 </script>
 
 <style scoped>
+.batch-table-panel {
+  overflow: hidden;
+  border-radius: var(--workstation-radius-panel, 28px);
+  border: 1px solid var(--workstation-border-light, rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
+  box-shadow: var(--workstation-shadow-panel, 0 24px 60px rgba(148, 163, 184, 0.12));
+}
+
+.batch-table-panel__header {
+  border-bottom: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
+}
+
+.batch-table-panel__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--workstation-text-muted, #94a3b8);
+}
+
+.batch-table-panel__title {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: var(--workstation-text-primary, #0f172a);
+}
+
+.batch-table-panel__summary-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--workstation-radius-pill, 999px);
+  border: 1px solid var(--workstation-border-light, rgba(255, 255, 255, 0.92));
+  background: rgba(255, 255, 255, 0.88);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__summary-pill--selected {
+  border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
+  background: var(--workstation-brand-100, rgba(239, 246, 255, 0.96));
+  color: var(--workstation-brand-600, #1e5ae0);
+}
+
+.batch-table-panel__summary {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__action {
+  height: 36px !important;
+  border-radius: var(--workstation-radius-pill, 999px) !important;
+  padding: 0 16px !important;
+  font-weight: 700 !important;
+  transition:
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.batch-table-panel__action--primary {
+  border: 0 !important;
+  background: var(--workstation-brand-500, #2f6fed) !important;
+  color: #fff !important;
+  box-shadow: var(--workstation-shadow-brand, 0 12px 22px rgba(47, 111, 237, 0.24)) !important;
+}
+
+.batch-table-panel__action--primary:hover {
+  background: var(--workstation-brand-600, #1e5ae0) !important;
+  box-shadow: var(--workstation-shadow-brand-hover, 0 14px 28px rgba(47, 111, 237, 0.3)) !important;
+}
+
+.batch-table-panel__action--secondary,
+.batch-table-panel__action--ghost,
+.batch-table-panel__detail-button {
+  border-color: var(--workstation-brand-border, #c9d9f7) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: var(--workstation-text-secondary, #5b6b84) !important;
+  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08) !important;
+}
+
+.batch-table-panel__action--secondary:hover,
+.batch-table-panel__action--ghost:hover,
+.batch-table-panel__detail-button:hover {
+  border-color: rgba(191, 219, 254, 0.95) !important;
+  color: var(--workstation-brand-600, #1e5ae0) !important;
+}
+
+.batch-table-panel__patient-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--workstation-text-primary, #0f172a);
+}
+
+.batch-table-panel__patient-meta {
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__visit-id,
+.batch-table-panel__tag,
+.batch-table-panel__detail-button {
+  border-radius: var(--workstation-radius-pill, 999px);
+}
+
+.batch-table-panel__visit-id {
+  border: 1px solid var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
+  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__department,
+.batch-table-panel__risk {
+  font-size: 13px;
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__updated-at {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--workstation-text-muted, #94a3b8);
+}
+
+.batch-table-panel__tag {
+  border: 1px solid transparent;
+}
+
+.batch-table-panel__tag--demo {
+  background: var(--workstation-state-demo-bg, #eaf5ff);
+  color: var(--workstation-state-demo-text, #0f6cbd);
+  border-color: rgba(191, 219, 254, 0.9);
+}
+
+.batch-table-panel__tag--brand {
+  background: var(--workstation-brand-050, rgba(234, 242, 255, 0.98));
+  color: var(--workstation-brand-600, #1e5ae0);
+  border-color: var(--workstation-brand-border, rgba(191, 219, 254, 0.96));
+}
+
+.batch-table-panel__tag--review {
+  background: var(--workstation-state-review-bg, #f3eeff);
+  color: var(--workstation-state-review-text, #6e56cf);
+  border-color: rgba(216, 180, 254, 0.9);
+}
+
+.batch-table-panel__tag--danger {
+  background: var(--workstation-state-danger-bg, #fdeded);
+  color: var(--workstation-state-danger-text, #b94a48);
+  border-color: rgba(252, 165, 165, 0.9);
+}
+
+.batch-table-panel__tag--success {
+  background: rgba(236, 253, 245, 0.96);
+  color: #0f766e;
+  border-color: rgba(167, 243, 208, 0.92);
+}
+
+.batch-table-panel__tag--neutral {
+  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
+  color: var(--workstation-text-secondary, #5b6b84);
+  border-color: var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
+}
+
 .batch-table-panel :deep(.ant-table) {
   background: transparent;
 }
 
 .batch-table-panel :deep(.ant-table-container) {
-  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  border-top: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
 }
 
 .batch-table-panel :deep(.ant-table-thead > tr > th) {
-  background: rgba(248, 250, 252, 0.9);
-  color: rgb(100 116 139);
+  background: var(--workstation-bg-table-header, rgba(248, 250, 252, 0.92));
+  color: var(--workstation-text-muted, #94a3b8);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  border-bottom: 1px solid var(--workstation-divider, rgba(226, 232, 240, 0.88));
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr > td) {
@@ -194,14 +375,33 @@ const columns = [
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr:hover > td) {
-  background: rgba(248, 250, 252, 0.82);
+  background: var(--workstation-bg-table-row-hover, rgba(248, 250, 252, 0.88));
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: rgba(239, 246, 255, 0.88);
+  background: var(--workstation-bg-table-row-selected, rgba(239, 246, 255, 0.92));
 }
 
 .batch-table-panel :deep(.ant-checkbox-wrapper) {
-  color: rgb(71 85 105);
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel :deep(.ant-checkbox-inner) {
+  border-radius: 6px;
+  border-color: rgba(191, 219, 254, 0.96);
+}
+
+.batch-table-panel :deep(.ant-checkbox-checked .ant-checkbox-inner) {
+  background: var(--workstation-brand-500, #2f6fed);
+  border-color: var(--workstation-brand-500, #2f6fed);
+}
+
+.batch-table-panel :deep(.ant-empty) {
+  margin-block: 48px;
+}
+
+.batch-table-panel :deep(.ant-empty-description) {
+  color: var(--workstation-text-muted, #94a3b8);
+  font-size: 13px;
 }
 </style>

@@ -1,81 +1,65 @@
 <template>
-  <section
-    class="priority-lane overflow-hidden rounded-[28px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,247,251,0.96))] p-5 shadow-[0_20px_48px_rgba(15,23,42,0.07)]"
-  >
-    <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-      <div class="min-w-0">
-        <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
-          Priority Lane
-        </div>
-        <div class="mt-2 flex flex-wrap items-end gap-3">
-          <h3 class="text-[24px] font-black tracking-[-0.04em] text-slate-950">
-            优先处理池
-          </h3>
-          <span class="inline-flex items-center rounded-full border border-slate-200/80 bg-white/90 px-3 py-1 text-[12px] font-semibold text-slate-500">
-            首屏聚焦高风险与临期病历
-          </span>
-        </div>
-        <p class="mt-2 max-w-[520px] text-[13px] leading-6 text-slate-500">
-          先处理更容易影响当日清理进度的病历，再进入单案详情完成复核与补录。
-        </p>
+  <section class="priority-lane p-6">
+    <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+      <div class="min-w-0 xl:max-w-[520px]">
+        <h3 class="priority-lane__title">
+          优先处理池
+        </h3>
       </div>
 
-      <div class="flex flex-wrap gap-2 rounded-[22px] border border-slate-200/70 bg-white/85 p-1.5 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+      <div class="priority-lane__segments">
         <button
           v-for="group in groups"
           :key="group.key"
           type="button"
           :class="[
-            'inline-flex items-center gap-2 rounded-[16px] px-3.5 py-2 text-[12px] font-semibold transition-all duration-200',
+            'priority-lane__segment',
             group.key === activeGroup
-              ? 'bg-slate-950 text-white shadow-[0_12px_22px_rgba(15,23,42,0.16)]'
-              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
+              ? 'priority-lane__segment--active'
+              : 'priority-lane__segment--idle',
           ]"
           @click="emit('update:activeGroup', group.key)"
         >
-          <span>{{ group.label }}</span>
-          <span
-            :class="[
-              'inline-flex min-w-[24px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold',
-              group.key === activeGroup ? 'bg-white/12 text-white' : 'bg-slate-100 text-slate-500',
-            ]"
-          >
-            {{ group.count }}
-          </span>
+          <span class="priority-lane__segment-label">{{ group.label }}</span>
+          <span class="priority-lane__segment-count">{{ group.count }}</span>
         </button>
       </div>
     </div>
 
     <div
       v-if="cards.length === 0"
-      class="mt-5 rounded-[22px] border border-dashed border-slate-200/90 bg-white/75 px-4 py-10 text-center text-[13px] text-slate-500"
+      class="priority-lane__empty mt-5 px-4 py-10 text-center text-[13px]"
     >
       暂无高优病历，建议切换科室或放宽筛选条件。
     </div>
 
     <div
       v-else
-      class="mt-5 grid grid-cols-1 gap-3.5 xl:grid-cols-4"
+      class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
     >
       <article
         v-for="card in cards"
         :key="card.id"
-        class="group relative overflow-hidden rounded-[24px] border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,252,255,0.92))] p-4 shadow-[0_10px_30px_rgba(15,23,42,0.05)] transition duration-300 hover:-translate-y-1 hover:border-slate-300/70 hover:shadow-[0_20px_38px_rgba(15,23,42,0.1)]"
+        class="priority-lane__card group relative overflow-hidden p-3.5 transition duration-300 hover:-translate-y-1"
       >
-        <div class="pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,rgba(37,99,235,0.9),rgba(14,165,233,0.55),rgba(255,255,255,0))] opacity-75" />
+        <div
+          class="priority-lane__card-highlight pointer-events-none absolute inset-x-4 top-0 h-px"
+        />
 
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <div class="truncate text-[22px] font-black tracking-[-0.04em] text-slate-950">
+            <div class="priority-lane__card-name truncate">
               {{ card.patientName }}
             </div>
-            <div class="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-slate-500">
-              <span class="inline-flex items-center rounded-full bg-slate-100/90 px-2.5 py-1 font-mono text-[11px] text-slate-600">
+            <div class="priority-lane__meta mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span
+                class="priority-lane__visit-id inline-flex items-center px-2.5 py-1 font-mono text-[11px]"
+              >
                 {{ card.visitId }}
               </span>
               <span
                 v-if="card.isDemo"
-                class="inline-flex items-center rounded-full border border-blue-200/80 bg-blue-50/90 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
+                class="priority-lane__pill priority-lane__pill--demo inline-flex items-center px-2.5 py-1 text-[11px] font-semibold"
               >
                 Demo
               </span>
@@ -83,38 +67,40 @@
           </div>
 
           <div
-            class="rounded-[18px] border px-3 py-2 text-right"
+            class="priority-lane__risk text-right"
             :class="riskBadgeClass(card.riskType)"
           >
             <div class="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">
               {{ riskLabel(card.riskType) }}
             </div>
-            <div class="mt-1 text-[14px] font-bold">
+            <div class="mt-1 text-[12px] font-bold">
               {{ card.hospitalDays }} 天
             </div>
           </div>
         </div>
 
-        <div class="mt-4 flex items-center gap-2 text-[12px] font-semibold text-slate-500">
-          <span class="inline-flex h-2 w-2 rounded-full bg-blue-500/70" />
+        <div
+          class="priority-lane__department mt-3 flex items-center gap-2 text-[11px] font-semibold"
+        >
+          <span class="priority-lane__department-dot inline-flex h-2 w-2 rounded-full" />
           {{ card.department || '未分科室' }}
         </div>
-        <div class="mt-3 min-h-[44px] text-[13px] font-semibold leading-6 text-slate-700">
+        <div class="priority-lane__risk-text mt-2 min-h-[54px] text-[12px] font-semibold leading-5">
           {{ card.riskText }}
         </div>
 
-        <div class="mt-4 flex items-center gap-2.5">
+        <div class="mt-3 flex items-center gap-2">
           <a-button
             type="primary"
             size="small"
-            class="!h-9 !rounded-full !border-0 !bg-slate-950 !px-4 !font-semibold !shadow-[0_12px_20px_rgba(15,23,42,0.18)] transition group-hover:!translate-y-[-1px]"
+            class="priority-lane__action priority-lane__action--primary group-hover:!translate-y-[-1px]"
             @click="emit('open-record', card.id)"
           >
             立即处理
           </a-button>
           <a-button
             size="small"
-            class="!h-9 !rounded-full !border-slate-200/90 !bg-white/90 !px-4 !font-semibold !text-slate-600 !shadow-none"
+            class="priority-lane__action priority-lane__action--secondary"
             :disabled="readonly"
             @click="emit('defer-record', card.id)"
           >
@@ -170,10 +156,279 @@ function riskLabel(riskType: string) {
 }
 
 function riskBadgeClass(riskType: string) {
-  if (riskType === 'incomplete') return 'border-rose-200 bg-rose-50/90 text-rose-700'
-  if (riskType === 'timeout') return 'border-amber-200 bg-amber-50/90 text-amber-700'
-  if (riskType === 'ai_failed') return 'border-violet-200 bg-violet-50/90 text-violet-700'
-  if (riskType === 'demo') return 'border-sky-200 bg-sky-50/90 text-sky-700'
-  return 'border-slate-200 bg-slate-50/90 text-slate-600'
+  if (riskType === 'incomplete') return 'priority-lane__risk--danger'
+  if (riskType === 'timeout') return 'priority-lane__risk--warning'
+  if (riskType === 'ai_failed') return 'priority-lane__risk--review'
+  if (riskType === 'demo') return 'priority-lane__risk--demo'
+  return 'priority-lane__risk--default'
 }
 </script>
+
+<style scoped>
+.priority-lane {
+  overflow: hidden;
+  border-radius: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 248, 251, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 28px 60px rgba(148, 163, 184, 0.14);
+}
+
+.priority-lane__title {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  color: var(--workstation-text-primary, #0f172a);
+}
+
+.priority-lane__segments {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(96px, 1fr));
+  gap: 8px;
+  border-radius: var(--workstation-radius-panel, 30px);
+  background: var(--workstation-bg-card-soft, rgba(242, 245, 249, 0.9));
+  padding: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 18px 36px rgba(148, 163, 184, 0.12);
+}
+
+.priority-lane__segment {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-height: 82px;
+  border-radius: var(--workstation-radius-card, 22px);
+  padding: 14px 16px;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.priority-lane__segment--idle {
+  color: var(--workstation-text-secondary, rgb(71 85 105));
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.priority-lane__segment--idle:hover {
+  background: var(--workstation-bg-surface-strong, rgba(255, 255, 255, 0.92));
+  color: var(--workstation-text-primary, rgb(15 23 42));
+  box-shadow: var(--workstation-shadow-card, 0 10px 24px rgba(148, 163, 184, 0.12));
+}
+
+.priority-lane__segment--active {
+  background: linear-gradient(
+    180deg,
+    var(--workstation-brand-050, rgba(234, 242, 255, 0.98)),
+    rgba(245, 249, 255, 0.98)
+  );
+  color: var(--workstation-brand-600, rgb(30 90 224));
+  box-shadow:
+    0 18px 34px var(--workstation-brand-shadow, rgba(191, 219, 254, 0.3)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+}
+
+.priority-lane__segment--active::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(47, 111, 237, 0.88), rgba(147, 197, 253, 0.4));
+}
+
+.priority-lane__empty {
+  border-radius: var(--workstation-radius-card, 24px);
+  border: 1px dashed var(--workstation-divider, rgba(226, 232, 240, 0.88));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.9));
+  color: var(--workstation-text-secondary, rgb(91 107 132));
+  box-shadow: var(--workstation-shadow-card, 0 16px 30px rgba(148, 163, 184, 0.1));
+}
+
+.priority-lane__card {
+  border-radius: var(--workstation-radius-card, 24px);
+  border: 1px solid var(--workstation-border-light, rgba(255, 255, 255, 0.92));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 250, 252, 0.98));
+  box-shadow: var(--workstation-shadow-card, 0 16px 34px rgba(148, 163, 184, 0.1));
+}
+
+.priority-lane__card:hover {
+  box-shadow: var(--workstation-shadow-card-hover, 0 28px 48px rgba(148, 163, 184, 0.18));
+}
+
+.priority-lane__card-highlight {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0),
+    rgba(148, 163, 184, 0.55),
+    rgba(148, 163, 184, 0)
+  );
+}
+
+.priority-lane__card-name {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: var(--workstation-text-primary, #0f172a);
+}
+
+.priority-lane__meta {
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.priority-lane__visit-id,
+.priority-lane__pill,
+.priority-lane__risk {
+  border-radius: var(--workstation-radius-pill, 999px);
+}
+
+.priority-lane__visit-id {
+  border: 1px solid var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
+  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.priority-lane__pill--demo,
+.priority-lane__risk--demo {
+  background: var(--workstation-state-demo-bg, #eaf5ff);
+  color: var(--workstation-state-demo-text, #0f6cbd);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+}
+
+.priority-lane__risk {
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08);
+}
+
+.priority-lane__risk--warning {
+  background: var(--workstation-state-warning-bg, #fff6e5);
+  color: var(--workstation-state-warning-text, #b85a00);
+  border-color: rgba(253, 230, 138, 0.9);
+}
+
+.priority-lane__risk--danger {
+  background: var(--workstation-state-danger-bg, #fdeded);
+  color: var(--workstation-state-danger-text, #b94a48);
+  border-color: rgba(252, 165, 165, 0.9);
+}
+
+.priority-lane__risk--review {
+  background: var(--workstation-state-review-bg, #f3eeff);
+  color: var(--workstation-state-review-text, #6e56cf);
+  border-color: rgba(216, 180, 254, 0.9);
+}
+
+.priority-lane__risk--default {
+  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
+  color: var(--workstation-text-secondary, #5b6b84);
+  border-color: var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
+}
+
+.priority-lane__department {
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.priority-lane__department-dot {
+  background: rgba(148, 163, 184, 0.72);
+}
+
+.priority-lane__risk-text {
+  color: var(--workstation-text-primary, #0f172a);
+}
+
+.priority-lane__action {
+  height: 32px !important;
+  border-radius: var(--workstation-radius-pill, 999px) !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.priority-lane__action--primary {
+  border: 0 !important;
+  background: var(--workstation-brand-500, #2f6fed) !important;
+  color: #fff !important;
+  box-shadow: var(--workstation-shadow-brand, 0 12px 22px rgba(47, 111, 237, 0.24)) !important;
+}
+
+.priority-lane__action--primary:hover {
+  background: var(--workstation-brand-600, #1e5ae0) !important;
+  box-shadow: var(--workstation-shadow-brand-hover, 0 14px 28px rgba(47, 111, 237, 0.3)) !important;
+}
+
+.priority-lane__action--secondary {
+  border-color: var(--workstation-brand-border, #c9d9f7) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: var(--workstation-text-secondary, #5b6b84) !important;
+  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.08) !important;
+}
+
+.priority-lane__action--secondary:hover {
+  border-color: rgba(191, 219, 254, 0.95) !important;
+  color: var(--workstation-brand-600, #1e5ae0) !important;
+}
+
+.priority-lane__segment-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.priority-lane__segment-count {
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+@media (max-width: 1279px) {
+  .priority-lane__segments {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .priority-lane {
+    padding: 20px;
+  }
+
+  .priority-lane__title {
+    font-size: 24px;
+  }
+
+  .priority-lane__segments {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .priority-lane__segment {
+    min-height: 72px;
+    padding: 12px 14px;
+  }
+
+  .priority-lane__segment--active::before {
+    left: 14px;
+    right: 14px;
+  }
+
+  .priority-lane__segment-count {
+    font-size: 22px;
+  }
+}
+</style>
