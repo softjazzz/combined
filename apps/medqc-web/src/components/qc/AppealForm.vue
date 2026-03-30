@@ -3,7 +3,7 @@
     :title="title"
     :open="visible"
     :confirm-loading="submitting"
-    width="600px"
+    :width="600"
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
@@ -54,7 +54,7 @@
           :maxlength="500"
         />
       </a-form-item>
-      
+
       <!-- 这里预留上传组件位置，暂时只做UI展示 -->
       <a-form-item
         label="证据文件"
@@ -62,9 +62,9 @@
       >
         <a-upload
           v-model:file-list="fileList"
-          action="/api/v1/upload" 
+          action="/api/v1/upload"
           list-type="picture"
-          :before-upload="() => false" 
+          :before-upload="() => false"
         >
           <a-button>
             <upload-outlined />
@@ -82,7 +82,7 @@
 <script lang="ts" setup>
 import { ref, reactive, watch } from 'vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { AppealType, APPEAL_TYPE_OPTIONS } from '@/types/appeal'
 import { createAppeal } from '@/api/appeal'
@@ -112,22 +112,22 @@ interface FormState {
 const formState = reactive<FormState>({
   appealType: undefined,
   appealReason: '',
-  evidenceUrls: []
+  evidenceUrls: [],
 })
 
 const rules = {
   appealType: [{ required: true, message: '请选择申诉类型', trigger: 'change' }],
   appealReason: [
     { required: true, message: '请输入申诉理由', trigger: 'blur' },
-    { min: 10, message: '申诉理由至少10个字符', trigger: 'blur' }
-  ]
-}
+    { min: 10, message: '申诉理由至少10个字符', trigger: 'blur' },
+  ],
+} satisfies FormProps['rules']
 
 const handleSubmit = async () => {
   try {
     await formRef.value?.validate()
     submitting.value = true
-    
+
     // 模拟文件上传后的URL处理
     // 实际项目中应先上传文件获取URL
     const evidenceUrls = fileList.value.map((file: any) => file.url || file.name)
@@ -138,7 +138,7 @@ const handleSubmit = async () => {
       recordId: props.recordId,
       appealType: formState.appealType!,
       appealReason: formState.appealReason,
-      evidenceUrls: evidenceUrls
+      evidenceUrls: evidenceUrls,
     })
 
     message.success('申诉提交成功')

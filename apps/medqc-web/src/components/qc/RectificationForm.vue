@@ -3,7 +3,7 @@
     title="提交整改"
     :open="visible"
     :confirm-loading="submitting"
-    width="600px"
+    :width="600"
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
@@ -73,7 +73,7 @@
 <script lang="ts" setup>
 import { ref, reactive, watch } from 'vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { RectificationTask, getTaskSeverityInfo } from '@/types/rectification'
 import { submitRectification } from '@/api/rectification'
@@ -104,7 +104,7 @@ const rules = {
     { required: true, message: '请输入整改说明', trigger: 'blur' },
     { min: 5, message: '说明过短', trigger: 'blur' },
   ],
-}
+} satisfies FormProps['rules']
 
 const getSeverityLabel = (severity: any) => getTaskSeverityInfo(severity).label
 const getSeverityColor = (severity: any) => getTaskSeverityInfo(severity).color

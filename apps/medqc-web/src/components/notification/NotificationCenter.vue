@@ -78,6 +78,7 @@
     <div class="notification-list">
       <a-spin :spinning="loading">
         <a-list
+          v-if="filteredMessages.length > 0"
           :data-source="filteredMessages"
           item-layout="vertical"
           :pagination="paginationConfig"
@@ -158,7 +159,8 @@
                     <a-button
                       v-for="action in getPrimaryActions(item)"
                       :key="action.id"
-                      :type="action.type"
+                      :type="getActionButtonType(action.type)"
+                      :danger="action.type === 'danger'"
                       size="small"
                       @click.stop="executeAction(action, item)"
                     >
@@ -212,19 +214,18 @@
               </template>
             </a-list-item>
           </template>
-
-          <!-- 空状态 -->
-          <template #empty>
-            <a-empty description="暂无消息">
-              <a-button
-                type="primary"
-                @click="refreshMessages"
-              >
-                刷新消息
-              </a-button>
-            </a-empty>
-          </template>
         </a-list>
+        <a-empty
+          v-else
+          description="暂无消息"
+        >
+          <a-button
+            type="primary"
+            @click="refreshMessages"
+          >
+            刷新消息
+          </a-button>
+        </a-empty>
       </a-spin>
     </div>
 
@@ -249,6 +250,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   BellOutlined,
   ReloadOutlined,
@@ -415,8 +417,8 @@ const deleteMessage = async (messageId: string) => {
   })
 }
 
-const handleFilterChange = ({ key }: { key: string }) => {
-  currentFilter.value = key
+const handleFilterChange = ({ key }: MenuInfo) => {
+  currentFilter.value = String(key)
   currentPage.value = 1
 }
 
@@ -478,6 +480,11 @@ const executeAction = async (action: MessageAction, notification: QCNotification
 
 const getPrimaryActions = (notification: QCNotification): MessageAction[] => {
   return (notification.actions || []).filter((action) => action.type === 'primary').slice(0, 2) // 最多显示2个主要操作
+}
+
+const getActionButtonType = (type: MessageAction['type']) => {
+  if (type === 'primary') return 'primary'
+  return 'default'
 }
 
 const getSecondaryActions = (notification: QCNotification): MessageAction[] => {

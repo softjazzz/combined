@@ -3,13 +3,13 @@
     title="验收整改"
     :open="visible"
     :confirm-loading="submitting"
-    width="600px"
+    :width="600"
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
     <a-descriptions
       bordered
-      column="1"
+      :column="1"
       size="small"
       class="mb-4"
     >
@@ -85,7 +85,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, watch } from 'vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { RectificationTask, ReviewResult } from '@/types/rectification'
 import { reviewRectification } from '@/api/rectification'
@@ -113,7 +113,7 @@ const formState = reactive<FormState>({
 const rules = {
   reviewResult: [{ required: true, message: '请选择验收结果', trigger: 'change' }],
   reviewComment: [{ required: true, message: '请输入验收意见', trigger: 'blur' }],
-}
+} satisfies FormProps['rules']
 
 watch(
   () => props.visible,

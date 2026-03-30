@@ -36,13 +36,27 @@
           <div class="text-sky-300 font-medium mb-2">
             📊 进度调试信息
           </div>
-          <pre class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto">{{ JSON.stringify({
-            status,
-            currentStep,
-            totalSteps,
-            overallProgress,
-            steps: analysisSteps.map(s => ({ id: s.id, name: s.name, status: s.status, progress: s.progress, duration: s.duration }))
-          }, null, 2) }}</pre>
+          <pre
+            class="bg-slate-900/60 border border-sky-500/30 rounded p-2 text-xs text-slate-200 overflow-x-auto"
+          >{{
+              JSON.stringify(
+                {
+                  status,
+                  currentStep,
+                  totalSteps,
+                  overallProgress,
+                  steps: analysisSteps.map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    status: s.status,
+                    progress: s.progress,
+                    duration: s.duration,
+                  })),
+                },
+                null,
+                2,
+              )
+          }}</pre>
         </div>
 
         <!-- 总进度条 -->
@@ -55,7 +69,7 @@
             :percent="overallProgress"
             :show-info="false"
             :stroke-color="getProgressColor(status)"
-            stroke-width="8"
+            :stroke-width="8"
             class="overall-progress"
           />
         </div>
@@ -158,7 +172,9 @@
                   class="mb-3"
                 >
                   <div class="flex items-center justify-between mb-1">
-                    <span class="text-xs text-slate-400">{{ step.current_task || '处理中...' }}</span>
+                    <span class="text-xs text-slate-400">{{
+                      step.current_task || '处理中...'
+                    }}</span>
                     <span class="text-xs text-slate-400">{{ step.progress }}%</span>
                   </div>
                   <a-progress
@@ -334,7 +350,7 @@ import {
   ReloadOutlined,
   LoadingOutlined,
   CheckOutlined,
-  CloseOutlined
+  CloseOutlined,
 } from '@ant-design/icons-vue'
 
 // Props
@@ -344,14 +360,13 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  autoStart: false
+  autoStart: false,
 })
 
 // Emits
 const emit = defineEmits<{
   'analysis-completed': [result: unknown]
   'analysis-failed': [error: string]
-
 
   'analysis-paused': []
   'analysis-resumed': []
@@ -383,7 +398,7 @@ const analysisSteps = ref([
     current_task: '',
     duration: 0,
     details: null as any,
-    error: ''
+    error: '',
   },
   {
     id: '2',
@@ -394,7 +409,7 @@ const analysisSteps = ref([
     current_task: '',
     duration: 0,
     details: null as any,
-    error: ''
+    error: '',
   },
   {
     id: '3',
@@ -405,7 +420,7 @@ const analysisSteps = ref([
     current_task: '',
     duration: 0,
     details: null as any,
-    error: ''
+    error: '',
   },
   {
     id: '4',
@@ -416,7 +431,7 @@ const analysisSteps = ref([
     current_task: '',
     duration: 0,
     details: null as any,
-    error: ''
+    error: '',
   },
   {
     id: '5',
@@ -427,16 +442,18 @@ const analysisSteps = ref([
     current_task: '',
     duration: 0,
     details: null as any,
-    error: ''
-  }
+    error: '',
+  },
 ])
 
 // 日志
-const logs = ref<Array<{
-  timestamp: Date
-  level: 'info' | 'warn' | 'error' | 'debug'
-  message: string
-}>>([])
+const logs = ref<
+  Array<{
+    timestamp: Date
+    level: 'info' | 'warn' | 'error' | 'debug'
+    message: string
+  }>
+>([])
 
 // 定时器
 let progressTimer: NodeJS.Timeout | null = null
@@ -452,7 +469,7 @@ const startAnalysis = () => {
   overallProgress.value = 0
 
   // 重置步骤状态
-  analysisSteps.value.forEach(step => {
+  analysisSteps.value.forEach((step) => {
     step.status = 'pending'
     step.progress = 0
     step.current_task = ''
@@ -474,7 +491,9 @@ const simulateAnalysis = () => {
       status.value = 'completed'
       overallProgress.value = 100
       addLog('info', '质控分析完成')
-      emit('analysis-completed', { /* 分析结果 */ })
+      emit('analysis-completed', {
+        /* 分析结果 */
+      })
       return
     }
 
@@ -501,7 +520,9 @@ const simulateAnalysis = () => {
       // 更新总体进度
       const completedSteps = stepIndex
       const currentStepProgress = progress / 100
-      overallProgress.value = Math.floor(((completedSteps + currentStepProgress) / totalSteps.value) * 100)
+      overallProgress.value = Math.floor(
+        ((completedSteps + currentStepProgress) / totalSteps.value) * 100,
+      )
 
       // 更新统计数据
       processedRecords.value = Math.floor((overallProgress.value / 100) * totalRecords.value)
@@ -521,7 +542,7 @@ const simulateAnalysis = () => {
           processed: Math.floor(Math.random() * 50) + 20,
           errors: Math.floor(Math.random() * 3),
           warnings: Math.floor(Math.random() * 8),
-          time_remaining: `${Math.floor(Math.random() * 5) + 1}分钟`
+          time_remaining: `${Math.floor(Math.random() * 5) + 1}分钟`,
         }
 
         addLog('info', `完成: ${step.name} (${step.duration}秒)`)
@@ -537,36 +558,21 @@ const simulateAnalysis = () => {
 
 const getRandomTask = (stepName: string) => {
   const tasks = {
-    '数据预处理': [
-      '清理文本格式...',
-      '标准化医学术语...',
-      '验证数据完整性...',
-      '构建分析索引...'
-    ],
-    '规则引擎初始化': [
+    数据预处理: ['清理文本格式...', '标准化医学术语...', '验证数据完整性...', '构建分析索引...'],
+    规则引擎初始化: [
       '加载质控规则库...',
       '编译规则表达式...',
       '初始化评分权重...',
-      '验证规则完整性...'
+      '验证规则完整性...',
     ],
-    'AI模型分析': [
-      '调用大语言模型...',
-      '分析病案语义...',
-      '识别关键信息...',
-      '计算相似度得分...'
-    ],
-    '问题识别与分类': [
+    AI模型分析: ['调用大语言模型...', '分析病案语义...', '识别关键信息...', '计算相似度得分...'],
+    问题识别与分类: [
       '检测质控问题...',
       '分析问题严重程度...',
       '归类问题类型...',
-      '生成问题报告...'
+      '生成问题报告...',
     ],
-    '生成分析报告': [
-      '汇总分析结果...',
-      '生成改进建议...',
-      '格式化报告内容...',
-      '保存分析数据...'
-    ]
+    生成分析报告: ['汇总分析结果...', '生成改进建议...', '格式化报告内容...', '保存分析数据...'],
   }
 
   const stepTasks = tasks[stepName as keyof typeof tasks] || ['处理中...']
@@ -577,7 +583,7 @@ const addLog = (level: 'info' | 'warn' | 'error' | 'debug', message: string) => 
   logs.value.push({
     timestamp: new Date(),
     level,
-    message
+    message,
   })
 
   // 限制日志数量
@@ -629,7 +635,7 @@ const getStatusColor = (status: string) => {
     running: 'text-blue-400',
     paused: 'text-amber-400',
     completed: 'text-emerald-400',
-    failed: 'text-red-400'
+    failed: 'text-red-400',
   }
   return colors[status as keyof typeof colors] || 'text-slate-400'
 }
@@ -640,7 +646,7 @@ const getStatusLabel = (status: string) => {
     running: '分析中',
     paused: '已暂停',
     completed: '已完成',
-    failed: '分析失败'
+    failed: '分析失败',
   }
   return labels[status as keyof typeof labels] || status
 }
@@ -651,7 +657,7 @@ const getProgressColor = (status: string) => {
     running: '#3b82f6',
     paused: '#f59e0b',
     completed: '#10b981',
-    failed: '#ef4444'
+    failed: '#ef4444',
   }
   return colors[status as keyof typeof colors] || '#64748b'
 }
@@ -685,7 +691,7 @@ const getStepIcon = (stepStatus: string) => {
     pending: ClockCircleOutlined,
     running: LoadingOutlined,
     completed: CheckOutlined,
-    failed: CloseOutlined
+    failed: CloseOutlined,
   }
   return icons[stepStatus as keyof typeof icons] || ClockCircleOutlined
 }
@@ -695,7 +701,7 @@ const getStepStatusColor = (stepStatus: string) => {
     pending: 'default',
     running: 'blue',
     completed: 'green',
-    failed: 'red'
+    failed: 'red',
   }
   return colors[stepStatus as keyof typeof colors] || 'default'
 }
@@ -705,7 +711,7 @@ const getStepStatusLabel = (stepStatus: string) => {
     pending: '等待中',
     running: '执行中',
     completed: '已完成',
-    failed: '失败'
+    failed: '失败',
   }
   return labels[stepStatus as keyof typeof labels] || stepStatus
 }
@@ -719,7 +725,7 @@ const getLogLevelClass = (level: string) => {
     info: 'text-slate-300',
     warn: 'text-amber-300',
     error: 'text-red-300',
-    debug: 'text-slate-400'
+    debug: 'text-slate-400',
   }
   return classes[level as keyof typeof classes] || 'text-slate-300'
 }
@@ -729,7 +735,7 @@ const getLogLevelColor = (level: string) => {
     info: 'text-blue-400',
     warn: 'text-amber-400',
     error: 'text-red-400',
-    debug: 'text-slate-500'
+    debug: 'text-slate-500',
   }
   return colors[level as keyof typeof colors] || 'text-slate-400'
 }
@@ -748,7 +754,7 @@ const formatTime = (timestamp: Date) => {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
   })
 }
 
@@ -769,12 +775,7 @@ onUnmounted(() => {
 })
 
 // 暴露方法
-defineExpose({ startAnalysis,
-  pauseAnalysis,
-  resumeAnalysis,
-  stopAnalysis,
-  restartAnalysis
-  })
+defineExpose({ startAnalysis, pauseAnalysis, resumeAnalysis, stopAnalysis, restartAnalysis })
 </script>
 
 <style scoped>
@@ -790,7 +791,8 @@ defineExpose({ startAnalysis,
 }
 
 .log-container {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-family:
+    'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 }
 
 .log-container::-webkit-scrollbar {

@@ -3,13 +3,13 @@
     title="审核申诉"
     :open="visible"
     :confirm-loading="submitting"
-    width="600px"
+    :width="600"
     @ok="handleSubmit"
     @cancel="handleCancel"
   >
     <a-descriptions
       bordered
-      column="1"
+      :column="1"
       size="small"
       class="mb-4"
     >
@@ -104,7 +104,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, watch } from 'vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { Appeal, getAppealTypeLabel } from '@/types/appeal'
 import { reviewAppeal } from '@/api/appeal'
@@ -127,24 +127,27 @@ interface FormState {
 
 const formState = reactive<FormState>({
   decision: 'approve',
-  comment: ''
+  comment: '',
 })
 
 const rules = {
   decision: [{ required: true, message: '请选择审核结果', trigger: 'change' }],
-  comment: [{ required: true, message: '请输入审核意见', trigger: 'blur' }]
-}
+  comment: [{ required: true, message: '请输入审核意见', trigger: 'blur' }],
+} satisfies FormProps['rules']
 
 // 监听弹窗打开，重置表单
-watch(() => props.visible, (val) => {
-  if (val) {
-    formState.decision = 'approve'
-    formState.comment = ''
-  }
-})
+watch(
+  () => props.visible,
+  (val) => {
+    if (val) {
+      formState.decision = 'approve'
+      formState.comment = ''
+    }
+  },
+)
 
 const getAppealTypeLabelStr = (type?: string) => {
-    return type ? getAppealTypeLabel(type as any) : '-'
+  return type ? getAppealTypeLabel(type as any) : '-'
 }
 
 const formatDate = (dateStr?: string) => {
@@ -160,7 +163,7 @@ const handleSubmit = async () => {
 
     await reviewAppeal(props.appeal.id, {
       decision: formState.decision,
-      comment: formState.comment
+      comment: formState.comment,
     })
 
     message.success('审核完成')
@@ -187,6 +190,6 @@ const handleCancel = () => {
   margin-bottom: 16px;
 }
 .whitespace-pre-wrap {
-    white-space: pre-wrap;
+  white-space: pre-wrap;
 }
 </style>
