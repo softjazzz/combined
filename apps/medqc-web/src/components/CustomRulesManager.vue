@@ -245,13 +245,13 @@
             <div class="flex items-center justify-end gap-3">
               <button
                 class="icon-btn text-slate-500 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 font-medium px-3 py-1 h-7 text-xs rounded-md"
-                @click="viewSichuanRuleDetail(record)"
+                @click="viewSichuanRuleDetail(record as SichuanQCRule)"
               >
                 详情
               </button>
               <button
                 class="table-action-btn"
-                @click="startQCWithRule(record)"
+                @click="startQCWithRule(record as SichuanQCRule)"
               >
                 质控评估
               </button>
@@ -690,6 +690,7 @@
 import { ref, onMounted, h, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import {
   ReloadOutlined,
   FileTextOutlined,
@@ -793,7 +794,7 @@ const buildCaseTextRef = ref<
 >(null)
 
 // 分页
-const tablePagination = ref({
+const tablePagination = ref<TablePaginationConfig>({
   current: 1,
   pageSize: 20,
   total: 0,
@@ -839,7 +840,7 @@ const getCategoryCount = (cat: string) => {
 }
 
 // 表格列定义
-const customColumns = computed(() => [
+const customColumns = computed<TableColumnsType<SichuanQCRule>>(() => [
   {
     title: '序号',
     key: 'index',
@@ -913,9 +914,9 @@ const initCustomRules = async () => {
   }
 }
 
-const handleTableChange = (pag: any) => {
-  tablePagination.value.current = pag.current
-  tablePagination.value.pageSize = pag.pageSize
+const handleTableChange = (pag: TablePaginationConfig) => {
+  tablePagination.value.current = pag.current || 1
+  tablePagination.value.pageSize = pag.pageSize || 20
 }
 
 // 辅助方法

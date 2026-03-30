@@ -223,7 +223,7 @@
                 type="link"
                 size="small"
                 class="p-0"
-                @click="viewRule(record)"
+                @click="viewRule(record as DepartmentRule)"
               >
                 查看
               </a-button>
@@ -231,7 +231,7 @@
                 type="link"
                 size="small"
                 class="p-0"
-                @click="editRule(record)"
+                @click="editRule(record as DepartmentRule)"
               >
                 编辑
               </a-button>
@@ -240,7 +240,7 @@
                 type="link"
                 size="small"
                 class="p-0 text-green-600"
-                @click="publishRule(record)"
+                @click="publishRule(record as DepartmentRule)"
               >
                 发布
               </a-button>
@@ -248,7 +248,7 @@
                 type="link"
                 size="small"
                 class="p-0"
-                @click="viewHistory(record)"
+                @click="viewHistory(record as DepartmentRule)"
               >
                 历史
               </a-button>
@@ -256,7 +256,7 @@
                 title="确定要删除这条规则吗？"
                 ok-text="确定"
                 cancel-text="取消"
-                @confirm="deleteRule(record)"
+                @confirm="deleteRule(record as DepartmentRule)"
               >
                 <a-button
                   type="link"
@@ -536,7 +536,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
+import type { FormProps, TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import dayjs, { Dayjs } from 'dayjs'
 import {
   ApartmentOutlined,
@@ -614,7 +614,7 @@ const formRules = {
   name: [{ required: true, message: '请输入规则名称' }],
   category: [{ required: true, message: '请选择规则分类' }],
   severity: [{ required: true, message: '请选择严重程度' }],
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // 变更历史
 const historyModalVisible = ref(false)
@@ -630,7 +630,7 @@ const historyPagination = reactive({
 // 表格列定义
 // ============================================================================
 
-const columns: TableColumnsType = [
+const columns: TableColumnsType<DepartmentRule> = [
   {
     title: '规则编号',
     key: 'rule_code',

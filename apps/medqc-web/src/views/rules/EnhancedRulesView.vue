@@ -136,7 +136,7 @@
             <template v-if="column.key === 'status'">
               <a-switch
                 :checked="record.status === 'active'"
-                @change="(checked: boolean) => toggleRuleStatus(record, checked)"
+                @change="(checked: boolean) => toggleRuleStatus(record as RuleItem, checked)"
               />
             </template>
             <template v-else-if="column.key === 'category'">
@@ -154,20 +154,20 @@
                 <a-button
                   type="link"
                   size="small"
-                  @click="editRule(record)"
+                  @click="editRule(record as RuleItem)"
                 >
                   编辑
                 </a-button>
                 <a-button
                   type="link"
                   size="small"
-                  @click="testRule(record)"
+                  @click="testRule(record as RuleItem)"
                 >
                   测试
                 </a-button>
                 <a-popconfirm
                   title="确定要删除这个规则吗？"
-                  @confirm="deleteRule(record)"
+                  @confirm="deleteRule(record as RuleItem)"
                 >
                   <a-button
                     type="link"
@@ -307,6 +307,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { FormProps, TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 
 type RuleCategory = 'completeness' | 'consistency' | 'timeliness' | 'accuracy'
@@ -364,7 +365,7 @@ const ruleFormRules = {
   name: [{ required: true, message: '请输入规则名称' }],
   category: [{ required: true, message: '请选择规则类别' }],
   description: [{ required: true, message: '请输入规则描述' }],
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // 模拟规则数据
 const rules = ref<RuleItem[]>([
@@ -401,7 +402,7 @@ const rules = ref<RuleItem[]>([
 ])
 
 // 表格列配置
-const rulesColumns = [
+const rulesColumns: TableColumnsType<RuleItem> = [
   { title: '规则名称', dataIndex: 'name', key: 'name' },
   { title: '类别', dataIndex: 'category', key: 'category' },
   { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
@@ -412,7 +413,7 @@ const rulesColumns = [
 ]
 
 // 分页配置
-const pagination = reactive({
+const pagination = reactive<TablePaginationConfig>({
   current: 1,
   pageSize: 10,
   total: 0,

@@ -64,7 +64,7 @@
         allow-clear
         :value="ownerId"
         :options="ownerOptions"
-        @update:value="emit('update:ownerId', $event)"
+        @update:value="handleOwnerChange"
       />
     </div>
 
@@ -169,4 +169,12 @@ const resolvedRiskOptions = computed(() => props.riskOptions || defaultRiskOptio
 const resolvedDocumentTypeOptions = computed(
   () => props.documentTypeOptions || defaultDocumentTypeOptions,
 )
+
+const handleOwnerChange = (value: string | number | undefined) => {
+  if (value === undefined || value === null || value === '') {
+    emit('update:ownerId', undefined)
+    return
+  }
+  emit('update:ownerId', String(value))
+}
 </script>

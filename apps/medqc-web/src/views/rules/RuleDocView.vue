@@ -8,12 +8,7 @@
         :data-source="ruleDocRows"
         :columns="ruleDocColumns"
         class="rule-doc-table"
-        :pagination="{
-          pageSize: 10,
-          showSizeChanger: true,
-          pageSizeOptions: ['10', '20', '33', '50'],
-          showTotal: (total: number) => `共 ${total} 条质控点`,
-        }"
+        :pagination="ruleDocPagination"
         size="small"
         row-key="rule_id"
       >
@@ -43,8 +38,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
-import { Typography } from 'ant-design-vue'
+import { computed, onMounted, ref } from 'vue'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { loadCustomRules } from '@/utils/custom-rules-loader'
 
 interface SichuanQCRule {
@@ -53,6 +48,13 @@ interface SichuanQCRule {
   name: string
   description?: string
   custom_prompt?: string
+}
+
+interface RuleDocRow {
+  rule_id?: string
+  name: string
+  description?: string
+  check_points?: string
 }
 
 const allRules = ref<SichuanQCRule[]>([])
@@ -69,7 +71,7 @@ const extractCheckPoints = (prompt?: string): string => {
   return section.trim()
 }
 
-const ruleDocColumns = [
+const ruleDocColumns: TableColumnsType<RuleDocRow> = [
   {
     title: '质控点编号',
     dataIndex: 'rule_id',
@@ -96,7 +98,7 @@ const ruleDocColumns = [
   },
 ]
 
-const ruleDocRows = computed(() =>
+const ruleDocRows = computed<RuleDocRow[]>(() =>
   allRules.value
     // 仅展示 LX- 开头的泸县33条规则，排除扩展规则（LXE-）
     .filter((rule) => {
@@ -110,6 +112,14 @@ const ruleDocRows = computed(() =>
       check_points: extractCheckPoints(rule.custom_prompt),
     })),
 )
+
+const ruleDocPagination: TablePaginationConfig = {
+  pageSize: 10,
+  showSizeChanger: true,
+  pageSizeOptions: ['10', '20', '33', '50'],
+  showTotal: (total: number) => `共 ${total} 条质控点`,
+  size: 'small',
+}
 
 onMounted(async () => {
   allRules.value = (await loadCustomRules()) as SichuanQCRule[]

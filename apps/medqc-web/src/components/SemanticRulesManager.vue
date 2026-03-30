@@ -273,14 +273,14 @@
               <a-tooltip title="查看详情">
                 <button
                   class="icon-btn"
-                  @click="viewSichuanRuleDetail(record)"
+                  @click="viewSichuanRuleDetail(record as SichuanQCRule)"
                 >
                   <EyeOutlined />
                 </button>
               </a-tooltip>
               <button
                 class="table-action-btn"
-                @click="startQCWithRule(record)"
+                @click="startQCWithRule(record as SichuanQCRule)"
               >
                 评估
               </button>
@@ -625,6 +625,7 @@ import { ApiService } from '@/services/apiService'
 import { getAccessToken } from '@/utils/auth-token'
 import type { User } from '@/types/auth'
 import { UserRole } from '@/types/auth'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 
 // 接口定义
 interface SichuanQCRule {
@@ -663,7 +664,7 @@ const currentUser = ref<User | null>(null)
 const isAdmin = computed(() => currentUser.value?.roles?.includes(UserRole.ADMIN) || false)
 
 // 分页
-const tablePagination = ref({
+const tablePagination = ref<TablePaginationConfig>({
   current: 1,
   pageSize: 20,
   total: 0,
@@ -799,7 +800,7 @@ const getCategoryRatio = (count: number) => {
 }
 
 // 表格列定义（去掉重复的"分类"列，该信息已融入规则名称行）
-const sichuanColumns = [
+const sichuanColumns = computed<TableColumnsType<SichuanQCRule>>(() => [
   {
     title: '序号',
     key: 'index',
@@ -815,7 +816,7 @@ const sichuanColumns = [
   { title: '复杂度', key: 'complexity', width: 100 },
   { title: '缺陷级别', key: 'defect_level', width: 100 },
   { title: '操作', key: 'actions', width: 120, fixed: 'right', align: 'right' },
-]
+])
 
 // 方法
 const refreshSichuanRules = async () => {
@@ -882,9 +883,9 @@ const handleSearch = (val: string) => {
   tablePagination.value.current = 1
 }
 
-const handleTableChange = (pag: any) => {
-  tablePagination.value.current = pag.current
-  tablePagination.value.pageSize = pag.pageSize
+const handleTableChange = (pag: TablePaginationConfig) => {
+  tablePagination.value.current = pag.current || 1
+  tablePagination.value.pageSize = pag.pageSize || 20
 }
 
 const viewSichuanRuleDetail = async (rule: SichuanQCRule) => {

@@ -915,7 +915,7 @@
         <a-segmented
           v-model:value="resultFilter"
           :options="resultFilterOptions"
-          size="middle"
+          size="small"
         />
         <span class="results-count">共 {{ visibleTestResults.length }} 条结果</span>
       </div>
@@ -1509,15 +1509,20 @@
                 </a-select>
 
                 <a-select
-                  v-model:value="historyFilters.hasIssues"
+                  :value="
+                    historyFilters.hasIssues === undefined
+                      ? undefined
+                      : String(historyFilters.hasIssues)
+                  "
                   placeholder="合规状态"
                   style="width: 150px"
                   allow-clear
+                  @update:value="handleHistoryHasIssuesChange"
                 >
-                  <a-select-option :value="false">
+                  <a-select-option value="false">
                     全部合规
                   </a-select-option>
-                  <a-select-option :value="true">
+                  <a-select-option value="true">
                     存在异常
                   </a-select-option>
                 </a-select>
@@ -2197,6 +2202,14 @@ const historyFilters = ref<{
   dateRange?: [string, string]
   hasIssues?: boolean
 }>({})
+
+const handleHistoryHasIssuesChange = (value: string | number | undefined) => {
+  if (value === undefined || value === null || value === '') {
+    historyFilters.value.hasIssues = undefined
+    return
+  }
+  historyFilters.value.hasIssues = String(value) === 'true'
+}
 
 // 调试信息开关（历史详情）
 const showDebugInfo = ref(false)

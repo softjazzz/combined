@@ -151,7 +151,9 @@
               缺陷详情
             </div>
             <div class="bg-white/60 rounded p-3">
-              <pre class="text-xs m-0 whitespace-pre-wrap">{{ JSON.stringify(result.defect_details, null, 2) }}</pre>
+              <pre class="text-xs m-0 whitespace-pre-wrap">{{
+                JSON.stringify(result.defect_details, null, 2)
+              }}</pre>
             </div>
           </div>
         </div>
@@ -182,13 +184,14 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   FileTextOutlined,
   AppstoreOutlined,
   ThunderboltOutlined,
   ExperimentOutlined,
   CheckCircleOutlined,
-  CloseCircleOutlined
+  CloseCircleOutlined,
 } from '@ant-design/icons-vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
@@ -209,10 +212,13 @@ const errorMsg = ref('')
 const result = ref<Record<string, any> | null>(null)
 
 // Reset when rule changes
-watch(() => props.rule, () => {
-  result.value = null
-  errorMsg.value = ''
-})
+watch(
+  () => props.rule,
+  () => {
+    result.value = null
+    errorMsg.value = ''
+  },
+)
 
 const SAMPLE_TEXTS: Record<string, string> = {
   admission: `患者张某，男，58岁，因"反复胸闷、气促2年，加重3天"于2024年1月15日入院。
@@ -242,11 +248,11 @@ BNP: 1250pg/ml。
 1. 继续口服药物治疗
 2. 低盐低脂饮食
 3. 适当活动
-4. 2周后门诊复查`
+4. 2周后门诊复查`,
 }
 
-const handleSampleSelect = (e: { key: string }) => {
-  medicalText.value = SAMPLE_TEXTS[e.key] || ''
+const handleSampleSelect = (e: MenuInfo) => {
+  medicalText.value = SAMPLE_TEXTS[String(e.key)] || ''
   message.success('已填入示例文本')
 }
 
@@ -259,13 +265,16 @@ const executeTest = async () => {
 
   const ruleId = props.rule.id || props.rule.rule_id || props.rule.rule_code
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/semantic-rules/${encodeURIComponent(ruleId)}/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input_data: { content: medicalText.value }
-      })
-    })
+    const resp = await fetch(
+      `${API_BASE}/api/v1/semantic-rules/${encodeURIComponent(ruleId)}/execute`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input_data: { content: medicalText.value },
+        }),
+      },
+    )
 
     if (!resp.ok) {
       const errText = await resp.text()

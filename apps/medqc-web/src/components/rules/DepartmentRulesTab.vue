@@ -1,10 +1,14 @@
 <template>
   <div class="space-y-6">
     <!-- 筛选区域 -->
-    <div class="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 p-5">
+    <div
+      class="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 p-5"
+    >
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="relative group">
-          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">科室</label>
+          <label
+            class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5"
+          >科室</label>
           <a-select
             v-model:value="filters.department_id"
             placeholder="选择科室"
@@ -24,7 +28,9 @@
           </a-select>
         </div>
         <div>
-          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">规则状态</label>
+          <label
+            class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5"
+          >规则状态</label>
           <a-select
             v-model:value="filters.status_filter"
             placeholder="全部状态"
@@ -44,7 +50,9 @@
           </a-select>
         </div>
         <div>
-          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">覆盖行为</label>
+          <label
+            class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5"
+          >覆盖行为</label>
           <a-select
             v-model:value="filters.override_action"
             placeholder="全部类型"
@@ -61,9 +69,13 @@
           </a-select>
         </div>
         <div>
-          <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">搜索</label>
+          <label
+            class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5"
+          >搜索</label>
           <div class="relative">
-            <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
+            <SearchOutlined
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none"
+            />
             <input
               v-model="filters.keyword"
               type="text"
@@ -77,7 +89,9 @@
     </div>
 
     <!-- 规则列表 -->
-    <div class="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden">
+    <div
+      class="bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden"
+    >
       <!-- 列表头部 -->
       <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
         <div class="flex items-center gap-3">
@@ -118,16 +132,20 @@
         class="py-20 px-8"
       >
         <div class="max-w-md mx-auto text-center">
-          <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-100 flex items-center justify-center">
+          <div
+            class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-100 flex items-center justify-center"
+          >
             <ApartmentOutlined class="text-3xl text-blue-300" />
           </div>
           <h4 class="text-lg font-bold text-slate-700 mb-2">
             {{ filters.department_id ? '该科室暂无自定义规则' : '请先选择一个科室' }}
           </h4>
           <p class="text-sm text-slate-400 leading-relaxed mb-6">
-            {{ filters.department_id
-              ? '科室规则允许您针对特定科室覆盖全局规则参数，或禁用不适用的规则。点击下方按钮开始创建。'
-              : '从上方筛选区域选择一个科室，查看或管理该科室的自定义质控规则。' }}
+            {{
+              filters.department_id
+                ? '科室规则允许您针对特定科室覆盖全局规则参数，或禁用不适用的规则。点击下方按钮开始创建。'
+                : '从上方筛选区域选择一个科室，查看或管理该科室的自定义质控规则。'
+            }}
           </p>
           <button
             v-if="filters.department_id"
@@ -164,7 +182,9 @@
           <!-- 编号 -->
           <template v-if="column.key === 'rule_code'">
             <div class="flex items-center gap-2">
-              <span class="font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded text-xs font-semibold select-all border border-slate-200">
+              <span
+                class="font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded text-xs font-semibold select-all border border-slate-200"
+              >
                 {{ record.rule_code }}
               </span>
               <span
@@ -208,7 +228,9 @@
 
           <!-- 分类 -->
           <template v-else-if="column.key === 'category'">
-            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
+            <span
+              class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100"
+            >
               {{ getCategoryText(record.category) }}
             </span>
           </template>
@@ -229,7 +251,7 @@
               <a-tooltip title="查看详情">
                 <button
                   class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all"
-                  @click="viewRule(record)"
+                  @click="viewRule(record as DepartmentRule)"
                 >
                   <EyeOutlined />
                 </button>
@@ -237,7 +259,7 @@
               <a-tooltip title="编辑">
                 <button
                   class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
-                  @click="editRule(record)"
+                  @click="editRule(record as DepartmentRule)"
                 >
                   <EditOutlined />
                 </button>
@@ -245,14 +267,14 @@
               <button
                 v-if="record.status === 'draft'"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
-                @click="publishRule(record)"
+                @click="publishRule(record as DepartmentRule)"
               >
                 发布
               </button>
               <a-tooltip title="变更历史">
                 <button
                   class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 transition-all"
-                  @click="viewHistory(record)"
+                  @click="viewHistory(record as DepartmentRule)"
                 >
                   <HistoryOutlined />
                 </button>
@@ -261,10 +283,12 @@
                 title="确定要删除这条规则吗？"
                 ok-text="确定"
                 cancel-text="取消"
-                @confirm="deleteRule(record)"
+                @confirm="deleteRule(record as DepartmentRule)"
               >
                 <a-tooltip title="删除">
-                  <button class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all">
+                  <button
+                    class="p-1.5 rounded-lg text-slate-400 bg-slate-50 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all"
+                  >
                     <DeleteOutlined />
                   </button>
                 </a-tooltip>
@@ -289,7 +313,7 @@
       <a-form
         ref="formRef"
         :model="formData"
-        :rules="formRules"
+        :rules="typedFormRules"
         :label-col="{ span: 6 }"
         :wrapper-col="{ span: 18 }"
       >
@@ -515,7 +539,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import type { TableColumnsType } from 'ant-design-vue'
+import type { FormProps, TableColumnsType } from 'ant-design-vue'
 import {
   ReloadOutlined,
   PlusOutlined,
@@ -524,9 +548,10 @@ import {
   EyeOutlined,
   EditOutlined,
   DeleteOutlined,
-  HistoryOutlined
+  HistoryOutlined,
 } from '@ant-design/icons-vue'
 import { useDepartmentRules } from '@/composables/useDepartmentRules'
+import type { DepartmentRule, RuleChangeLog } from '@/services/department-qc-rules-service'
 
 const {
   loading,
@@ -572,6 +597,8 @@ const {
   initialize,
 } = useDepartmentRules()
 
+const typedFormRules = formRules as FormProps['rules']
+
 // 聚焦科室下拉框
 const focusDeptSelect = () => {
   const selectEl = document.querySelector('.dept-select .ant-select-selector') as HTMLElement
@@ -579,7 +606,7 @@ const focusDeptSelect = () => {
 }
 
 // 表格列定义
-const columns: TableColumnsType = [
+const columns: TableColumnsType<DepartmentRule> = [
   {
     title: '序号',
     key: 'index',
@@ -599,7 +626,7 @@ const columns: TableColumnsType = [
   { title: '操作', key: 'actions', width: 220, fixed: 'right', align: 'right' },
 ]
 
-const historyColumns: TableColumnsType = [
+const historyColumns: TableColumnsType<RuleChangeLog> = [
   { title: '操作', key: 'action', dataIndex: 'action', width: 100 },
   { title: '操作人', key: 'changed_by', dataIndex: 'changed_by', width: 120 },
   { title: '变更原因', key: 'reason', dataIndex: 'reason', width: 200 },
@@ -609,14 +636,17 @@ const historyColumns: TableColumnsType = [
 // 样式映射
 const getCategoryText = (category: string | undefined) => {
   const map: Record<string, string> = {
-    completeness: '完整性', consistency: '一致性', rationality: '合理性', timeliness: '及时性',
+    completeness: '完整性',
+    consistency: '一致性',
+    rationality: '合理性',
+    timeliness: '及时性',
   }
-  return category ? (map[category.toLowerCase()] || category) : '-'
+  return category ? map[category.toLowerCase()] || category : '-'
 }
 
 const getSeverityText = (severity: string | undefined) => {
   const map: Record<string, string> = { critical: '严重', major: '重要', minor: '轻微' }
-  return severity ? (map[severity.toLowerCase()] || severity) : '-'
+  return severity ? map[severity.toLowerCase()] || severity : '-'
 }
 
 const getSeverityClass = (severity: string | undefined) => {
@@ -625,7 +655,9 @@ const getSeverityClass = (severity: string | undefined) => {
     major: 'bg-orange-50 text-orange-700 border border-orange-100',
     minor: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
   }
-  return severity ? (map[severity.toLowerCase()] || 'bg-slate-50 text-slate-600 border border-slate-200') : 'bg-slate-50 text-slate-600 border border-slate-200'
+  return severity
+    ? map[severity.toLowerCase()] || 'bg-slate-50 text-slate-600 border border-slate-200'
+    : 'bg-slate-50 text-slate-600 border border-slate-200'
 }
 
 const getStatusClass = (status: string | undefined) => {
@@ -634,7 +666,9 @@ const getStatusClass = (status: string | undefined) => {
     published: 'bg-emerald-50 text-emerald-600 border border-emerald-100',
     archived: 'bg-slate-100 text-slate-400 border border-slate-200',
   }
-  return status ? (map[status] || 'bg-slate-100 text-slate-500 border border-slate-200') : 'bg-slate-100 text-slate-500 border border-slate-200'
+  return status
+    ? map[status] || 'bg-slate-100 text-slate-500 border border-slate-200'
+    : 'bg-slate-100 text-slate-500 border border-slate-200'
 }
 
 const getActionClass = (action: string | undefined) => {
@@ -644,7 +678,9 @@ const getActionClass = (action: string | undefined) => {
     publish: 'bg-emerald-50 text-emerald-600 border border-emerald-100',
     delete: 'bg-red-50 text-red-600 border border-red-100',
   }
-  return action ? (map[action] || 'bg-slate-50 text-slate-600 border border-slate-200') : 'bg-slate-50 text-slate-600 border border-slate-200'
+  return action
+    ? map[action] || 'bg-slate-50 text-slate-600 border border-slate-200'
+    : 'bg-slate-50 text-slate-600 border border-slate-200'
 }
 
 onMounted(() => {

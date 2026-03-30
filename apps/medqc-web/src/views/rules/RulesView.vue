@@ -423,7 +423,7 @@
                 <a-switch
                   v-model:checked="record.is_active"
                   :loading="record.updating"
-                  @change="(checked: boolean) => toggleRuleStatus(record, checked)"
+                  @change="(checked: boolean) => toggleRuleStatus(record as QCRule, checked)"
                 />
               </template>
 
@@ -444,7 +444,7 @@
                       type="text"
                       size="small"
                       class="text-slate-400 hover:text-blue-600"
-                      @click="viewRule(record)"
+                      @click="viewRule(record as ResolvedRule)"
                     >
                       <template #icon>
                         <EyeOutlined />
@@ -456,7 +456,7 @@
                       type="text"
                       size="small"
                       class="text-slate-400 hover:text-blue-600"
-                      @click="editRule(record)"
+                      @click="editRule(record as ResolvedRule)"
                     >
                       <template #icon>
                         <EditOutlined />
@@ -465,7 +465,7 @@
                   </a-tooltip>
                   <a-popconfirm
                     title="确定要删除这条规则吗？"
-                    @confirm="deleteRule(record)"
+                    @confirm="deleteRule(record as QCRule)"
                   >
                     <a-tooltip title="删除规则">
                       <a-button
@@ -483,7 +483,7 @@
                   <a-button
                     size="small"
                     class="text-blue-600 hover:text-blue-700 font-medium text-xs border border-blue-200 hover:border-blue-300 bg-white hover:bg-blue-50 px-3 rounded-lg ml-1 flex items-center gap-1 h-7"
-                    @click="testRule(record)"
+                    @click="testRule(record as ResolvedRule)"
                   >
                     <span>评估</span>
                   </a-button>
@@ -832,7 +832,7 @@
 import { ref, reactive, computed, onMounted, watch, defineAsyncComponent, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import type { FormProps, TableColumnsType, TablePaginationConfig, TableProps } from 'ant-design-vue'
 import {
   PlusOutlined,
   MedicineBoxOutlined,
@@ -950,8 +950,8 @@ const selectedRowKeys = ref<string[]>([])
 const searchText = ref('')
 const filterCategory = ref<string>()
 const filterDocumentCategory = ref<DocumentCategory>()
-const filterSeverity = ref<string>()
-const filterType = ref<string>()
+const filterSeverity = ref<ResolvedRule['severity']>()
+const filterType = ref<ResolvedRule['rule_type']>()
 const filterStatus = ref<string>()
 
 // 文书类别相关数据（仅来源于数据库，不再回退到内置配置）
@@ -984,34 +984,48 @@ const loadDocumentCategoryOptions = async () => {
       'examination_report',
       'consent_form',
     ])
-    const nonCanonical = categories.filter((c: any) => !canonical.has(c.category_code))
+    const nonCanonical = categories.filter(
+      (c: { category_code?: string }) => !canonical.has(c.category_code || ''),
+    )
     if (nonCanonical.length > 0) {
       console.warn(
         '⚠️ 发现非标准文书类别，将被过滤:',
-        nonCanonical.map((c: any) => c.category_code),
+        nonCanonical.map((c) => c.category_code),
       )
     }
 
     // 只使用6个标准类别
-    const validCategories = categories.filter((c: any) => canonical.has(c.category_code))
+    const validCategories = categories.filter((c: { category_code?: string }) =>
+      canonical.has(c.category_code || ''),
+    )
     if (validCategories.length === 0) {
       throw new Error('未找到有效的标准文书类别配置')
     }
 
     documentCategoryOptions.value = validCategories
-      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((cfg: any) => {
-        const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(
-          cfg.category_code as DocumentCategory,
-        )
-        return {
-          value: cfg.category_code as DocumentCategory,
-          label: cfg.category_name,
-          description: cfg.category_description || cfg.description,
-          color: disp.color,
-          icon: disp.icon,
-        }
-      })
+      .sort(
+        (a: { sort_order?: number }, b: { sort_order?: number }) =>
+          (a.sort_order ?? 0) - (b.sort_order ?? 0),
+      )
+      .map(
+        (cfg: {
+          category_code: DocumentCategory
+          category_name: string
+          category_description?: string
+          description?: string
+        }) => {
+          const disp = DocumentCategoryService.getDocumentCategoryDisplayConfig(
+            cfg.category_code as DocumentCategory,
+          )
+          return {
+            value: cfg.category_code as DocumentCategory,
+            label: cfg.category_name,
+            description: cfg.category_description || cfg.description,
+            color: disp.color,
+            icon: disp.icon,
+          }
+        },
+      )
     categoriesLoaded.value = true
 
     // console.log('📄 已加载文书类别选项:', documentCategoryOptions.value.map(o => o.label).join(', '))
@@ -1228,10 +1242,10 @@ const formRules = {
   severity: [{ required: true, message: '请选择严重程度' }],
   max_score: [{ required: true, type: 'number', min: 0, max: 100, message: '最大扣分范围0-100' }],
   weight: [{ required: true, type: 'number', min: 0.1, max: 5.0, message: '权重范围0.1-5.0' }],
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // 分页配置 - 增加每页显示数量，提高空间利用率
-const pagination = reactive({
+const pagination = reactive<TablePaginationConfig>({
   current: 1,
   pageSize: 20,
   total: 0,
@@ -1244,7 +1258,7 @@ const pagination = reactive({
 })
 
 // 表格列配置 - 紧凑化宽度
-const columns: TableColumnsType = [
+const columns: TableColumnsType<ResolvedRule> = [
   {
     title: '编码',
     dataIndex: 'rule_code',
@@ -1785,8 +1799,8 @@ const loadRules = async () => {
       keyword: searchText.value,
       category: filterCategory.value,
       document_category: filterDocumentCategory.value,
-      rule_type: filterType.value as any,
-      severity: filterSeverity.value as any,
+      rule_type: filterType.value || undefined,
+      severity: filterSeverity.value || undefined,
       is_active:
         filterStatus.value === 'active'
           ? true
@@ -2004,14 +2018,14 @@ const testRule = (rule: ResolvedRule) => {
   testDrawerOpen.value = true
 }
 
-const handleDrawerEdit = (rule: Record<string, any>) => {
+const handleDrawerEdit = (rule: ResolvedRule) => {
   detailDrawerOpen.value = false
-  editRule(rule as ResolvedRule)
+  editRule(rule)
 }
 
-const handleDrawerTest = (rule: Record<string, any>) => {
+const handleDrawerTest = (rule: ResolvedRule) => {
   detailDrawerOpen.value = false
-  testRule(rule as ResolvedRule)
+  testRule(rule)
 }
 
 const deleteRule = async (rule: QCRule) => {
