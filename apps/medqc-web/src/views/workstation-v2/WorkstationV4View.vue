@@ -417,7 +417,56 @@
                 <div
                   class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
                 >
+                  <div
+                    v-if="
+                      !frontpageGenerating &&
+                        !frontpagePostProcessing &&
+                        !frontpageDraft &&
+                        !frontpageSheetLoading &&
+                        !frontpageSheetData
+                    "
+                    class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-blue-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(245,249,255,0.98))] px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_14px_32px_rgba(148,163,184,0.08)]"
+                  >
+                    <div
+                      class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-200/80 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_12px_24px_rgba(59,130,246,0.14),inset_0_1px_0_rgba(255,255,255,0.8)]"
+                    >
+                      <FileSearchOutlined class="text-[28px] text-blue-600" />
+                    </div>
+                    <div class="text-[18px] font-black text-slate-900">
+                      暂无病案首页数据
+                    </div>
+                    <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
+                      当前病历还没有可展示的病案首页正式数据，可先生成首页草稿后再继续复核与补录。
+                    </div>
+                    <div class="mt-6 flex items-center gap-2">
+                      <a-button
+                        type="primary"
+                        class="!h-10 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18)]"
+                        :disabled="!canGenerateFrontpage"
+                        @click="handleGenerateFrontpage"
+                      >
+                        <template #icon>
+                          <ThunderboltOutlined />
+                        </template>
+                        生成首页草稿
+                      </a-button>
+                      <a-button
+                        class="!h-10 !rounded-full !border-slate-200/90 !bg-white/85 !px-5 !text-sm !font-semibold !text-slate-600"
+                        @click="
+                          selectedRecord?.patientId && selectedRecord?.visitId
+                            ? loadFrontpageSheet(selectedRecord.patientId, selectedRecord.visitId)
+                            : undefined
+                        "
+                      >
+                        <template #icon>
+                          <SyncOutlined />
+                        </template>
+                        重新加载
+                      </a-button>
+                    </div>
+                  </div>
                   <FrontpageWorkspacePanel
+                    v-else
                     :generating="frontpageGenerating"
                     :post-processing="frontpagePostProcessing"
                     :draft="frontpageDraft"
@@ -581,9 +630,52 @@
                       </div>
                     </div>
                   </div>
-                  <div v-else>
-                    <!-- 无数据时展示空白结算清单样表 -->
-                    <SettlementSheet :data="{}" />
+                  <div
+                    v-else
+                    class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-blue-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(245,249,255,0.98))] px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_14px_32px_rgba(148,163,184,0.08)]"
+                  >
+                    <div
+                      class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-200/80 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_12px_24px_rgba(59,130,246,0.14),inset_0_1px_0_rgba(255,255,255,0.8)]"
+                    >
+                      <MedicineBoxOutlined class="text-[28px] text-blue-600" />
+                    </div>
+                    <div class="text-[18px] font-black text-slate-900">
+                      暂无结算清单数据
+                    </div>
+                    <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
+                      当前病历还没有正式结算清单，可根据首页草稿和 CDM
+                      数据生成一份结算草稿后继续质控。
+                    </div>
+                    <div class="mt-6 flex items-center gap-2">
+                      <a-button
+                        type="primary"
+                        class="!h-10 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18)]"
+                        :disabled="
+                          !canGenerateSettlement ||
+                            !selectedRecord?.patientId ||
+                            !selectedRecord?.visitId
+                        "
+                        @click="generateSettlementDraft"
+                      >
+                        <template #icon>
+                          <ThunderboltOutlined />
+                        </template>
+                        生成结算草稿
+                      </a-button>
+                      <a-button
+                        class="!h-10 !rounded-full !border-slate-200/90 !bg-white/85 !px-5 !text-sm !font-semibold !text-slate-600"
+                        @click="
+                          selectedRecord?.patientId && selectedRecord?.visitId
+                            ? loadSettlement(selectedRecord.patientId, selectedRecord.visitId)
+                            : undefined
+                        "
+                      >
+                        <template #icon>
+                          <SyncOutlined />
+                        </template>
+                        重新加载
+                      </a-button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2041,6 +2133,26 @@ async function loadSettlement(patientId: string, visitId: string) {
     } else {
       console.error('加载结算清单失败:', err)
     }
+  } finally {
+    settlementLoading.value = false
+  }
+}
+
+async function generateSettlementDraft() {
+  if (!selectedRecord.value?.patientId || !selectedRecord.value?.visitId) return
+  settlementLoading.value = true
+  settlementQcReport.value = null
+  try {
+    const { data } = await apiClient.post(
+      `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/generate`,
+    )
+    settlementData.value = data ?? null
+    if (settlementData.value) {
+      message.success('结算草稿已生成')
+    }
+  } catch (err) {
+    message.warning('当前病历暂无可生成的结算清单数据')
+    console.warn('生成结算草稿失败:', err)
   } finally {
     settlementLoading.value = false
   }
