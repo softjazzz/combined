@@ -263,7 +263,9 @@ apiClient.interceptors.response.use(
         message.error(`权限不足：${errorMessage}`)
         break
       case 404:
-        message.error('请求的资源不存在')
+        if (!shouldSuppressExpected404(requestUrl, responseStatus)) {
+          message.error('请求的资源不存在')
+        }
         break
       case 422:
         message.error(`数据验证失败: ${errorMessage}`)
