@@ -66,10 +66,10 @@
       <!-- 批量操作按钮 -->
       <div class="batch-actions">
         <a-space size="large">
-          <a-button 
-            type="primary" 
+          <a-button
+            type="primary"
             size="large"
-            :loading="batchProcessing" 
+            :loading="batchProcessing"
             :disabled="uploadedFiles.length === 0"
             @click="startBatchProcessing"
           >
@@ -78,8 +78,8 @@
             </template>
             {{ batchProcessing ? '解析中...' : '一键解析所有文件' }}
           </a-button>
-          
-          <a-button 
+
+          <a-button
             v-if="batchProcessing"
             :disabled="!canPause"
             @click="pauseProcessing"
@@ -89,8 +89,8 @@
             </template>
             {{ isPaused ? '继续' : '暂停' }}
           </a-button>
-          
-          <a-button 
+
+          <a-button
             v-if="batchProcessing"
             danger
             @click="cancelProcessing"
@@ -100,7 +100,7 @@
             </template>
             取消
           </a-button>
-          
+
           <a-button
             danger
             @click="clearAllFiles"
@@ -121,13 +121,14 @@
         <div class="progress-header">
           <span class="progress-title">整体进度</span>
           <span class="progress-info">
-            {{ completedFiles }} / {{ uploadedFiles.length }} 
-            ({{ currentProcessingFile ? `正在处理: ${currentProcessingFile}` : '等待中' }})
+            {{ completedFiles }} / {{ uploadedFiles.length }} ({{
+              currentProcessingFile ? `正在处理: ${currentProcessingFile}` : '等待中'
+            }})
           </span>
         </div>
-        <a-progress 
-          :percent="overallProgress" 
-          :status="batchProcessing ? 'active' : (hasErrors ? 'exception' : 'success')"
+        <a-progress
+          :percent="overallProgress"
+          :status="batchProcessing ? 'active' : hasErrors ? 'exception' : 'success'"
           :show-info="false"
         />
       </div>
@@ -139,22 +140,22 @@
           :pagination="{ pageSize: 10, showSizeChanger: true }"
         >
           <template #renderItem="{ item, index }">
-            <a-list-item 
-              :class="['file-item', { 'selected': selectedFileIndex === index }]"
+            <a-list-item
+              :class="['file-item', { selected: selectedFileIndex === index }]"
               @click="selectFile(index)"
             >
               <template #actions>
                 <a-space>
-                  <a-button 
+                  <a-button
                     v-if="!item.processing && !item.parsed"
-                    size="small" 
+                    size="small"
                     :loading="item.processing"
                     @click.stop="processSingleFile(index)"
                   >
                     解析
                   </a-button>
-                  <a-button 
-                    size="small" 
+                  <a-button
+                    size="small"
                     danger
                     @click.stop="removeFile(index)"
                   >
@@ -162,7 +163,7 @@
                   </a-button>
                 </a-space>
               </template>
-              
+
               <a-list-item-meta>
                 <template #title>
                   <div class="file-title">
@@ -192,21 +193,19 @@
                     <span
                       v-else-if="item.error"
                       class="error-text"
-                    >
-                      错误: {{ item.error }}
-                    </span>
+                    > 错误: {{ item.error }} </span>
                   </div>
                 </template>
               </a-list-item-meta>
-              
+
               <!-- 单个文件进度条 -->
               <div
                 v-if="item.processing"
                 class="file-progress"
               >
-                <a-progress 
-                  :percent="item.progress || 0" 
-                  size="small" 
+                <a-progress
+                  :percent="item.progress || 0"
+                  size="small"
                   status="active"
                   :show-info="false"
                 />
@@ -224,8 +223,8 @@
         <a-divider>批量处理结果</a-divider>
         <div class="results-actions">
           <a-space>
-            <a-button 
-              type="primary" 
+            <a-button
+              type="primary"
               :disabled="batchResults.length === 0"
               @click="showBatchResultsModal"
             >
@@ -264,9 +263,9 @@
     >
       <div class="batch-results-content">
         <a-tabs v-model:active-key="activeResultTab">
-          <a-tab-pane 
-            v-for="(result, index) in batchResults" 
-            :key="index" 
+          <a-tab-pane
+            v-for="(result, index) in batchResults"
+            :key="index"
             :tab="result.fileName"
           >
             <LLMResultModal
@@ -291,6 +290,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { UploadProps } from 'ant-design-vue'
 import {
   InboxOutlined,
   ThunderboltOutlined,
@@ -303,7 +303,7 @@ import {
   FileOutlined,
   FilePdfOutlined,
   FileWordOutlined,
-  FileTextOutlined
+  FileTextOutlined,
 } from '@ant-design/icons-vue'
 import LLMResultModal from './LLMResultModal.vue'
 import type { ExtractedDocument } from '@/services/llmService'
@@ -313,7 +313,7 @@ enum FileStatus {
   PENDING = 'pending',
   PROCESSING = 'processing',
   COMPLETED = 'completed',
-  FAILED = 'failed'
+  FAILED = 'failed',
 }
 
 // 文件接口
@@ -354,6 +354,8 @@ type ProcessedFileResult = LLMParsedResult & {
   originalText?: string
 }
 
+type UploadRequestOption = Parameters<NonNullable<UploadProps['customRequest']>>[0]
+
 // Props和Emits
 interface Props {
   maxFileSize?: number // MB
@@ -370,7 +372,7 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   maxFileSize: 50,
   maxFileCount: 20,
-  allowedTypes: () => ['.pdf', '.doc', '.docx', '.txt']
+  allowedTypes: () => ['.pdf', '.doc', '.docx', '.txt'],
 })
 
 const emit = defineEmits<Emits>()
@@ -395,12 +397,14 @@ const totalSize = computed(() => {
 })
 
 const parsedCount = computed(() => {
-  return uploadedFiles.value.filter(file => file.parsed).length
+  return uploadedFiles.value.filter((file) => file.parsed).length
 })
 
 const successRate = computed(() => {
   if (uploadedFiles.value.length === 0) return 0
-  const successCount = uploadedFiles.value.filter(file => file.status === FileStatus.COMPLETED).length
+  const successCount = uploadedFiles.value.filter(
+    (file) => file.status === FileStatus.COMPLETED,
+  ).length
   return (successCount / uploadedFiles.value.length) * 100
 })
 
@@ -410,7 +414,7 @@ const overallProgress = computed(() => {
 })
 
 const hasErrors = computed(() => {
-  return uploadedFiles.value.some(file => file.status === FileStatus.FAILED)
+  return uploadedFiles.value.some((file) => file.status === FileStatus.FAILED)
 })
 
 // 方法
@@ -420,26 +424,30 @@ const beforeUpload = (file: File) => {
     message.error(`文件 ${file.name} 超过 ${props.maxFileSize}MB 限制`)
     return false
   }
-  
+
   // 检查文件数量
   if (uploadedFiles.value.length >= props.maxFileCount) {
     message.error(`最多只能上传 ${props.maxFileCount} 个文件`)
     return false
   }
-  
+
   // 检查文件类型
   const fileExt = '.' + file.name.split('.').pop()?.toLowerCase()
   if (!props.allowedTypes.includes(fileExt)) {
     message.error(`不支持的文件类型: ${fileExt}`)
     return false
   }
-  
+
   return false // 阻止自动上传
 }
 
-const handleFileUpload = (options: { file: File }) => {
+const handleFileUpload = (options: UploadRequestOption) => {
   const { file } = options
-  
+  if (!(file instanceof File)) {
+    message.error('暂不支持该文件类型上传')
+    return
+  }
+
   const processingFile: ProcessingFile = {
     id: Date.now() + Math.random().toString(),
     name: file.name,
@@ -449,9 +457,9 @@ const handleFileUpload = (options: { file: File }) => {
     status: FileStatus.PENDING,
     processing: false,
     parsed: false,
-    progress: 0
+    progress: 0,
   }
-  
+
   uploadedFiles.value.push(processingFile)
   message.success(`文件 ${file.name} 添加成功`)
 }
@@ -468,7 +476,7 @@ const getStatusColor = (status: FileStatus) => {
     [FileStatus.PENDING]: 'default',
     [FileStatus.PROCESSING]: 'processing',
     [FileStatus.COMPLETED]: 'success',
-    [FileStatus.FAILED]: 'error'
+    [FileStatus.FAILED]: 'error',
   }
   return colorMap[status]
 }
@@ -478,7 +486,7 @@ const getStatusText = (status: FileStatus) => {
     [FileStatus.PENDING]: '等待中',
     [FileStatus.PROCESSING]: '解析中',
     [FileStatus.COMPLETED]: '已完成',
-    [FileStatus.FAILED]: '失败'
+    [FileStatus.FAILED]: '失败',
   }
   return textMap[status]
 }
@@ -515,22 +523,22 @@ const clearAllFiles = () => {
 const processSingleFile = async (index: number) => {
   const file = uploadedFiles.value[index]
   if (!file || file.processing) return
-  
+
   try {
     file.processing = true
     file.status = FileStatus.PROCESSING
     file.progress = 0
-    
+
     // 模拟处理进度
     const progressInterval = setInterval(() => {
       if (file.progress < 90) {
         file.progress += Math.random() * 20
       }
     }, 500)
-    
+
     // 这里调用实际的LLM解析API
     const result = await callLLMParseAPI(file.file)
-    
+
     clearInterval(progressInterval)
     file.progress = 100
     file.processing = false
@@ -538,10 +546,9 @@ const processSingleFile = async (index: number) => {
     file.status = FileStatus.COMPLETED
     file.result = result
     file.confidence = result.data?.confidence ?? 0
-    
+
     emit('single-file-processed', result)
     message.success(`文件 ${file.name} 解析完成`)
-    
   } catch (error: unknown) {
     file.processing = false
     file.status = FileStatus.FAILED
@@ -554,43 +561,42 @@ const processSingleFile = async (index: number) => {
 // 批量处理
 const startBatchProcessing = async () => {
   if (uploadedFiles.value.length === 0) return
-  
+
   batchProcessing.value = true
   isPaused.value = false
   completedFiles.value = 0
   batchResults.value = []
-  
+
   try {
     for (let i = 0; i < uploadedFiles.value.length; i++) {
       if (!batchProcessing.value) break // 用户取消
-      
+
       while (isPaused.value) {
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
-      
+
       const file = uploadedFiles.value[i]
       if (file.parsed) {
         completedFiles.value++
         continue
       }
-      
+
       currentProcessingFile.value = file.name
       await processSingleFile(i)
-      
+
       if (file.result) {
         batchResults.value.push({
           fileName: file.name,
           ...file.result,
-          originalText: file.result.data?.content
+          originalText: file.result.data?.content,
         })
       }
-      
+
       completedFiles.value++
     }
-    
+
     message.success('批量解析完成!')
     emit('batch-completed', batchResults.value)
-    
   } catch (error: unknown) {
     const messageText = error instanceof Error ? error.message : '批量处理失败'
     message.error(`批量处理失败: ${messageText}`)
@@ -617,7 +623,7 @@ const showBatchResultsModal = () => {
 
 const exportBatchResults = () => {
   if (batchResults.value.length === 0) return
-  
+
   const dataStr = JSON.stringify(batchResults.value, null, 2)
   const blob = new Blob([dataStr], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -632,7 +638,7 @@ const saveBatchToDatabase = async () => {
   saving.value = true
   try {
     // 这里实现批量保存逻辑
-    await new Promise(resolve => setTimeout(resolve, 2000)) // 模拟保存
+    await new Promise((resolve) => setTimeout(resolve, 2000)) // 模拟保存
     message.success('批量保存成功!')
   } catch (error: unknown) {
     message.error(`批量保存失败: ${error instanceof Error ? error.message : '未知错误'}`)
@@ -664,22 +670,26 @@ const handleSingleExportPDF = (result: ProcessedFileResult) => {
 const callLLMParseAPI = async (file: File): Promise<LLMParsedResult> => {
   // 这里应该调用实际的LLM解析API
   return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() > 0.1) { // 90%成功率
-        resolve({
-          success: true,
-          processingTime: Math.floor(2000 + Math.random() * 3000),
-          data: {
-            patientName: '测试患者',
-            content: '模拟解析内容...',
-            confidence: Math.random() * 40 + 60, // 60-100%
-            documents: []
-          }
-        })
-      } else {
-        reject(new Error('模拟解析失败'))
-      }
-    }, 2000 + Math.random() * 3000) // 2-5秒
+    setTimeout(
+      () => {
+        if (Math.random() > 0.1) {
+          // 90%成功率
+          resolve({
+            success: true,
+            processingTime: Math.floor(2000 + Math.random() * 3000),
+            data: {
+              patientName: '测试患者',
+              content: '模拟解析内容...',
+              confidence: Math.random() * 40 + 60, // 60-100%
+              documents: [],
+            },
+          })
+        } else {
+          reject(new Error('模拟解析失败'))
+        }
+      },
+      2000 + Math.random() * 3000,
+    ) // 2-5秒
   })
 }
 </script>

@@ -88,6 +88,7 @@
 <script setup lang="ts">
 import { h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useQCDemoStore } from '@/stores/qcDemo'
 import {
   MoreOutlined,
@@ -96,7 +97,7 @@ import {
   SettingOutlined,
   DeleteOutlined,
   FileSearchOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import './DemoControlPanel.less'
 
@@ -109,8 +110,9 @@ const handleStepChange = async (step: string) => {
   console.log('[DemoControlPanel] 跳转完成，新步骤:', demoStore.currentStep)
 }
 
-const handleMenuClick = async ({ key }: { key: string }) => {
-  switch (key) {
+const handleMenuClick = async ({ key }: MenuInfo) => {
+  const keyStr = String(key)
+  switch (keyStr) {
     case 'import':
       handleImport()
       break
@@ -180,7 +182,7 @@ const handleClear = () => {
       localStorage.removeItem('qc-demo-state')
       demoStore.$reset()
       message.success('状态已清除')
-    }
+    },
   })
 }
 </script>

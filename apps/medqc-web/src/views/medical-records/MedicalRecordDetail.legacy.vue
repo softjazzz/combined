@@ -268,7 +268,7 @@
             {{ getStatusText(record.status) }}
           </a-tag>
         </template>
-          
+
         <a-row :gutter="[24, 16]">
           <a-col
             :xs="24"
@@ -305,7 +305,7 @@
                 <a-typography-text
                   :copyable="{
                     text: record.record_number,
-                    onCopy: () => handleCopySuccess('病历编号')
+                    onCopy: () => handleCopySuccess('病历编号'),
                   }"
                 >
                   {{ record.record_number }}
@@ -324,7 +324,7 @@
                 <a-typography-text
                   :copyable="{
                     text: record.id,
-                    onCopy: () => handleCopySuccess('记录ID')
+                    onCopy: () => handleCopySuccess('记录ID'),
                   }"
                   class="text-xs"
                 >
@@ -371,7 +371,7 @@
             诊断信息
           </a-tag>
         </template>
-          
+
         <a-row :gutter="[24, 16]">
           <a-col
             :xs="24"
@@ -395,8 +395,8 @@
                   v-if="record.diagnosis_secondary && record.diagnosis_secondary.length > 0"
                   class="space-y-1"
                 >
-                  <a-tag 
-                    v-for="(diagnosis, index) in record.diagnosis_secondary" 
+                  <a-tag
+                    v-for="(diagnosis, index) in record.diagnosis_secondary"
                     :key="index"
                     color="blue"
                     class="mb-1"
@@ -450,16 +450,16 @@
                 <span class="text-sm text-gray-600">
                   完整病历内容
                   <span
-                    v-if="currentRecordContent.length > 1000" 
+                    v-if="currentRecordContent.length > 1000"
                     class="text-xs text-blue-600 ml-2"
                   >
                     ({{ currentRecordContent.length }} 字符)
                   </span>
                 </span>
-                <a-button 
+                <a-button
                   v-if="currentRecordContent.length > 1000"
-                  size="small" 
-                  type="primary" 
+                  size="small"
+                  type="primary"
                   @click="toggleContentExpanded"
                 >
                   {{ contentExpanded ? '收起' : '展开全部' }}
@@ -468,7 +468,7 @@
               <div
                 :class="[
                   'content-text',
-                  { 'content-collapsed': !contentExpanded && currentRecordContent.length > 1000 }
+                  { 'content-collapsed': !contentExpanded && currentRecordContent.length > 1000 },
                 ]"
               >
                 <pre class="whitespace-pre-wrap font-sans">{{ currentRecordContent }}</pre>
@@ -528,11 +528,11 @@
             {{ record.file_attachments?.length || 0 }} 个文件
           </a-tag>
         </template>
-          
+
         <div v-if="record.file_attachments && record.file_attachments.length > 0">
           <div
             v-for="(file, index) in record.file_attachments"
-            :key="index" 
+            :key="index"
             class="file-item p-4 border border-gray-200 rounded-lg mb-3 last:mb-0"
           >
             <a-row :gutter="[16, 8]">
@@ -617,7 +617,7 @@
             </a-tag>
           </a-space>
         </template>
-          
+
         <a-row :gutter="[24, 16]">
           <a-col
             :xs="24"
@@ -645,8 +645,8 @@
                   v-if="record.tags && record.tags.length > 0"
                   class="space-y-1"
                 >
-                  <a-tag 
-                    v-for="(tag, index) in record.tags" 
+                  <a-tag
+                    v-for="(tag, index) in record.tags"
                     :key="index"
                     color="cyan"
                     class="mb-1"
@@ -687,7 +687,7 @@
             系统信息
           </a-tag>
         </template>
-          
+
         <a-row :gutter="[24, 16]">
           <a-col
             :xs="24"
@@ -726,7 +726,7 @@
             </div>
           </a-col>
         </a-row>
-          
+
         <!-- 解析结果详情 -->
         <div
           v-if="record.metadata?.parse_result"
@@ -738,18 +738,18 @@
             size="small"
             :column="1"
           >
-            <a-descriptions-item 
-              v-if="record.metadata.parse_result.medical_info?.department" 
+            <a-descriptions-item
+              v-if="record.metadata.parse_result.medical_info?.department"
               label="科室"
             >
               {{ record.metadata.parse_result.medical_info.department }}
             </a-descriptions-item>
-            <a-descriptions-item 
-              v-if="record.metadata.parse_result.medical_info?.symptoms?.length" 
+            <a-descriptions-item
+              v-if="record.metadata.parse_result.medical_info?.symptoms?.length"
               label="症状"
             >
-              <a-tag 
-                v-for="(symptom, index) in record.metadata.parse_result.medical_info.symptoms" 
+              <a-tag
+                v-for="(symptom, index) in record.metadata.parse_result.medical_info.symptoms"
                 :key="index"
                 color="orange"
                 class="mb-1 mr-1"
@@ -757,12 +757,12 @@
                 {{ symptom }}
               </a-tag>
             </a-descriptions-item>
-            <a-descriptions-item 
-              v-if="record.metadata.parse_result.medical_info?.procedures?.length" 
+            <a-descriptions-item
+              v-if="record.metadata.parse_result.medical_info?.procedures?.length"
               label="手术/操作"
             >
-              <a-tag 
-                v-for="(procedure, index) in record.metadata.parse_result.medical_info.procedures" 
+              <a-tag
+                v-for="(procedure, index) in record.metadata.parse_result.medical_info.procedures"
                 :key="index"
                 color="purple"
                 class="mb-1 mr-1"
@@ -770,12 +770,12 @@
                 {{ procedure }}
               </a-tag>
             </a-descriptions-item>
-            <a-descriptions-item 
-              v-if="record.metadata.parse_result.medical_info?.medications?.length" 
+            <a-descriptions-item
+              v-if="record.metadata.parse_result.medical_info?.medications?.length"
               label="用药"
             >
-              <a-tag 
-                v-for="(medication, index) in record.metadata.parse_result.medical_info.medications" 
+              <a-tag
+                v-for="(medication, index) in record.metadata.parse_result.medical_info.medications"
                 :key="index"
                 color="green"
                 class="mb-1 mr-1"
@@ -851,9 +851,10 @@
             </a-tooltip>
           </div>
           <div class="mt-2 text-xs text-gray-600">
-            {{ useMultiDocumentMode ?
-              '🚀 将使用多文书模式进行精准质控评估' :
-              '📋 将使用单一prompt模式进行整体评估'
+            {{
+              useMultiDocumentMode
+                ? '🚀 将使用多文书模式进行精准质控评估'
+                : '📋 将使用单一prompt模式进行整体评估'
             }}
           </div>
         </div>
@@ -885,7 +886,8 @@
               size="large"
               class="px-3 py-1"
             >
-              {{ documentTypeRuleMapping[docType]?.icon }} {{ documentTypeRuleMapping[docType]?.displayName }}
+              {{ documentTypeRuleMapping[docType]?.icon }}
+              {{ documentTypeRuleMapping[docType]?.displayName }}
               <span class="ml-2 text-xs">
                 ({{ documentTypeRuleMapping[docType]?.rules.length }}条规则)
               </span>
@@ -910,7 +912,8 @@
           >
             <div class="flex items-center justify-between mb-2">
               <span class="font-medium">
-                {{ documentTypeRuleMapping[docType]?.icon }} {{ documentTypeRuleMapping[docType]?.displayName }}
+                {{ documentTypeRuleMapping[docType]?.icon }}
+                {{ documentTypeRuleMapping[docType]?.displayName }}
               </span>
               <span class="text-sm text-gray-500">
                 {{ qcProgress[docType]?.completed || 0 }} / {{ qcProgress[docType]?.total || 0 }}
@@ -918,7 +921,9 @@
             </div>
             <a-progress
               :percent="getQCProgress(docType)"
-              :status="qcProgress[docType]?.completed === qcProgress[docType]?.total ? 'success' : 'active'"
+              :status="
+                qcProgress[docType]?.completed === qcProgress[docType]?.total ? 'success' : 'active'
+              "
               :stroke-color="{ '0%': '#108ee9', '100%': '#87d068' }"
             />
           </div>
@@ -971,9 +976,20 @@
                   <a-col :span="6">
                     <a-statistic
                       title="通过率"
-                      :value="qcProgress[docType]?.total > 0 ? Math.round((qcProgress[docType]?.passed / qcProgress[docType]?.total) * 100) : 0"
+                      :value="
+                        qcProgress[docType]?.total > 0
+                          ? Math.round(
+                            (qcProgress[docType]?.passed / qcProgress[docType]?.total) * 100,
+                          )
+                          : 0
+                      "
                       suffix="%"
-                      :value-style="{ color: qcProgress[docType]?.passed === qcProgress[docType]?.total ? '#52c41a' : '#faad14' }"
+                      :value-style="{
+                        color:
+                          qcProgress[docType]?.passed === qcProgress[docType]?.total
+                            ? '#52c41a'
+                            : '#faad14',
+                      }"
                     />
                   </a-col>
                 </a-row>
@@ -991,10 +1007,16 @@
                       <template #actions>
                         <span>
                           <component
-                            :is="getQCStatusIcon((item.compliant || item.is_compliant) ? 'passed' : 'failed')"
-                            :style="{ color: (item.compliant || item.is_compliant) ? '#52c41a' : '#f5222d' }"
+                            :is="
+                              getQCStatusIcon(
+                                item.compliant || item.is_compliant ? 'passed' : 'failed',
+                              )
+                            "
+                            :style="{
+                              color: item.compliant || item.is_compliant ? '#52c41a' : '#f5222d',
+                            }"
                           />
-                          {{ (item.compliant || item.is_compliant) ? '通过' : '不通过' }}
+                          {{ item.compliant || item.is_compliant ? '通过' : '不通过' }}
                         </span>
                         <span>置信度: {{ Math.round(item.confidence * 100) }}%</span>
                         <span v-if="!(item.compliant || item.is_compliant)">扣分: {{ item.score_deduction }}分</span>
@@ -1004,7 +1026,7 @@
                         <a-list-item-meta>
                           <template #title>
                             <a-tag
-                              :color="(item.compliant || item.is_compliant) ? 'success' : 'error'"
+                              :color="item.compliant || item.is_compliant ? 'success' : 'error'"
                               class="mr-2"
                             >
                               {{ item.rule_id }}
@@ -1029,7 +1051,7 @@
                               findings: item.findings || item.reasoning || '',
                               evidence: item.evidence || '',
                               reasoning: item.reasoning || item.findings || '',
-                              suggestions: item.suggestions || []
+                              suggestions: item.suggestions || [],
                             }"
                             :document-type="docType"
                             @highlight-text="handleHighlightText"
@@ -1251,7 +1273,7 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   WarningOutlined,
-  QuestionCircleOutlined
+  QuestionCircleOutlined,
 } from '@ant-design/icons-vue'
 
 // 导入佐证依据组件
@@ -1308,12 +1330,15 @@ interface QCEvaluationProgressLike {
   completed: number
   passed: number
   failed: number
-  rules: Record<string, {
-    status?: string
-    confidence?: number
-    reasoning?: string
-    [key: string]: any
-  }>
+  rules: Record<
+    string,
+    {
+      status?: string
+      confidence?: number
+      reasoning?: string
+      [key: string]: any
+    }
+  >
   [key: string]: any
 }
 
@@ -1372,7 +1397,7 @@ const showEditor = ref(false)
 const documentStats = ref({
   total_documents: 0,
   categories_count: 0,
-  ai_classified_count: 0
+  ai_classified_count: 0,
 })
 
 // 文档分类数据状态
@@ -1380,7 +1405,7 @@ const documentClassificationData = ref<DocumentClassificationDataLike>({
   documents: [],
   classificationResult: undefined,
   categories: [],
-  totalDocuments: 0
+  totalDocuments: 0,
 })
 
 // 文档查看对话框状态
@@ -1391,14 +1416,18 @@ const showSidebar = ref(true)
 const computedSummaryText = computed(() => {
   if (selectedDocument.value) {
     const doc = selectedDocument.value
-    if (doc.content_preview && String(doc.content_preview).trim()) return String(doc.content_preview)
-    if (record.value?.selectedDocumentContent) return String(record.value.selectedDocumentContent).slice(0, 400)
+    if (doc.content_preview && String(doc.content_preview).trim())
+      return String(doc.content_preview)
+    if (record.value?.selectedDocumentContent)
+      return String(record.value.selectedDocumentContent).slice(0, 400)
   }
   const base = record.value?.content || record.value?.raw_text || ''
   return String(base).slice(0, 400)
 })
 
-const currentRecordContent = computed(() => String(record.value?.content || record.value?.raw_text || ''))
+const currentRecordContent = computed(() =>
+  String(record.value?.content || record.value?.raw_text || ''),
+)
 
 const toggleSidebar = () => {
   showSidebar.value = !showSidebar.value
@@ -1497,7 +1526,9 @@ const handleDocumentSelect = async (document: LegacyDocumentLike) => {
     // 首先尝试从API获取完整的文档内容
     if (record.value?.id) {
       console.log('尝试从API获取完整文档内容...')
-      const response = await fetch(`${API_BASE_URL}/api/medical-records/${record.value.id}/documents`)
+      const response = await fetch(
+        `${API_BASE_URL}/api/medical-records/${record.value.id}/documents`,
+      )
       if (response.ok) {
         const data = await response.json()
         console.log('API返回的文档数据:', data)
@@ -1538,7 +1569,6 @@ const handleDocumentSelect = async (document: LegacyDocumentLike) => {
     if (!documentContent) {
       documentContent = '暂无该文档的详细内容'
     }
-
   } catch (error) {
     console.error('获取文档内容时出错:', error)
     // 降级到预览内容
@@ -1560,7 +1590,11 @@ const handleDocumentSelect = async (document: LegacyDocumentLike) => {
     console.log('内容前100字符:', documentContent.substring(0, 100))
   }
 
-  if (documentContent && documentContent !== '暂无该文档的详细内容' && documentContent !== '获取文档内容失败') {
+  if (
+    documentContent &&
+    documentContent !== '暂无该文档的详细内容' &&
+    documentContent !== '获取文档内容失败'
+  ) {
     message.success(`已选择文档: ${document.title || document.type || '未命名文档'}`)
   } else {
     message.info('该文档暂无详细内容，显示预览信息')
@@ -1597,7 +1631,10 @@ const findMatchingDocument = (apiData: any, targetDocument: any): any => {
   if (!apiData || !apiData.categories) return null
 
   // 规范化比较
-  const norm = (s: any) => String(s || '').replace(/\s+/g, '').toLowerCase()
+  const norm = (s: any) =>
+    String(s || '')
+      .replace(/\s+/g, '')
+      .toLowerCase()
   const tId = targetDocument?.id ? String(targetDocument.id) : ''
   const tType = norm(targetDocument?.type)
   const tTitle = norm(targetDocument?.title)
@@ -1606,7 +1643,7 @@ const findMatchingDocument = (apiData: any, targetDocument: any): any => {
   let bestScore = -1
 
   for (const category of apiData.categories) {
-    for (const doc of (category.documents || [])) {
+    for (const doc of category.documents || []) {
       // ID 直匹配优先
       if (tId && String(doc.id || '') === tId) {
         return doc
@@ -1623,7 +1660,10 @@ const findMatchingDocument = (apiData: any, targetDocument: any): any => {
       if (tTitle && dTitle.includes(tTitle)) score += 1
 
       // 平分时更偏向内容更长的（更可能是完整内容）
-      if (score > bestScore || (score === bestScore && (doc?.content?.length || 0) > (best?.content?.length || 0))) {
+      if (
+        score > bestScore ||
+        (score === bestScore && (doc?.content?.length || 0) > (best?.content?.length || 0))
+      ) {
         best = doc
         bestScore = score
       }
@@ -1648,12 +1688,12 @@ const extractDocumentFromRawText = (documentType: string, rawText: string): stri
 
   // 定义文档类型的关键词映射
   const typeKeywords: Record<string, string[]> = {
-    'first_progress_note': ['首次病程记录', '首次病程', '入院记录', '病程记录'],
-    'attending_progress': ['主治医师查房', '查房记录', '医师查房', '主任医师查房'],
-    'imaging_report': ['CT检查', '核磁检查', 'MRI', '影像检查', '检查记录', 'CT', '核磁'],
-    'preoperative_summary': ['术前', '手术前', '术前讨论', '术前小结', '术前准备', '术前主刀'],
-    'postoperative_note': ['术后', '手术后', '术后记录', '术后首次'],
-    '病理检查报告': ['病理检查', '病理报告', '病理结果']
+    first_progress_note: ['首次病程记录', '首次病程', '入院记录', '病程记录'],
+    attending_progress: ['主治医师查房', '查房记录', '医师查房', '主任医师查房'],
+    imaging_report: ['CT检查', '核磁检查', 'MRI', '影像检查', '检查记录', 'CT', '核磁'],
+    preoperative_summary: ['术前', '手术前', '术前讨论', '术前小结', '术前准备', '术前主刀'],
+    postoperative_note: ['术后', '手术后', '术后记录', '术后首次'],
+    病理检查报告: ['病理检查', '病理报告', '病理结果'],
   }
 
   const keywords = typeKeywords[documentType] || [documentType]
@@ -1661,9 +1701,9 @@ const extractDocumentFromRawText = (documentType: string, rawText: string): stri
 
   // 尝试多种分割方式
   const splitMethods = [
-    () => rawText.split(/=== 第\d+页 ===/),  // 按页分割
-    () => rawText.split(/\n\s*\n/),           // 按空行分割
-    () => [rawText]                           // 整体文本
+    () => rawText.split(/=== 第\d+页 ===/), // 按页分割
+    () => rawText.split(/\n\s*\n/), // 按空行分割
+    () => [rawText], // 整体文本
   ]
 
   for (const splitMethod of splitMethods) {
@@ -1691,7 +1731,8 @@ const extractDocumentFromRawText = (documentType: string, rawText: string): stri
 
           if (startIndex >= 0) {
             // 查找下一个文档开始的位置作为结束点
-            for (let i = startIndex + 10; i < lines.length; i++) { // 至少包含10行内容
+            for (let i = startIndex + 10; i < lines.length; i++) {
+              // 至少包含10行内容
               const line = lines[i].trim()
 
               // 检查是否是下一个文档的开始
@@ -1700,7 +1741,7 @@ const extractDocumentFromRawText = (documentType: string, rawText: string): stri
                 line.includes('医师签名') ||
                 line.match(/^={3,}/) ||
                 line.match(/^第\d+页/) ||
-                (line.length > 10 && keywords.some(k => k !== keyword && line.includes(k)))
+                (line.length > 10 && keywords.some((k) => k !== keyword && line.includes(k)))
 
               if (isNextDocument) {
                 endIndex = i
@@ -1712,14 +1753,15 @@ const extractDocumentFromRawText = (documentType: string, rawText: string): stri
             // 提取内容
             const extractedLines = lines.slice(startIndex, endIndex)
             const content = extractedLines
-              .filter(line => line.trim().length > 0) // 过滤空行
+              .filter((line) => line.trim().length > 0) // 过滤空行
               .join('\n')
               .trim()
 
             console.log(`提取的内容长度: ${content.length}`)
             console.log(`内容前200字符: ${content.substring(0, 200)}`)
 
-            if (content.length > 100) { // 确保提取的内容有意义
+            if (content.length > 100) {
+              // 确保提取的内容有意义
               return content
             }
           }
@@ -1804,9 +1846,10 @@ const loadDocumentStats = async () => {
       documentStats.value = {
         total_documents: data.total_documents || 0,
         categories_count: data.categories?.length || 0,
-        ai_classified_count: data.categories?.reduce((count: number, category: any) => {
-          return count + category.documents.filter((doc: any) => doc.ai_classified).length
-        }, 0) || 0
+        ai_classified_count:
+          data.categories?.reduce((count: number, category: any) => {
+            return count + category.documents.filter((doc: any) => doc.ai_classified).length
+          }, 0) || 0,
       }
 
       // 构建文档列表用于增强分类组件
@@ -1819,7 +1862,7 @@ const loadDocumentStats = async () => {
                 ...doc,
                 type: doc.type_info?.type_name || doc.category_code || '未分类',
                 confidence: doc.classification_confidence || 0,
-                ai_classified: doc.ai_classified || false
+                ai_classified: doc.ai_classified || false,
               })
             })
           }
@@ -1831,12 +1874,14 @@ const loadDocumentStats = async () => {
         documents: documents,
         classificationResult: {
           method: 'AI自动分类',
-          confidence: documents.length > 0 ?
-            documents.reduce((sum, doc) => sum + (doc.confidence || 0), 0) / documents.length : 0,
-          categories: data.categories?.length || 0
+          confidence:
+            documents.length > 0
+              ? documents.reduce((sum, doc) => sum + (doc.confidence || 0), 0) / documents.length
+              : 0,
+          categories: data.categories?.length || 0,
         },
         categories: data.categories || [],
-        totalDocuments: data.total_documents || 0
+        totalDocuments: data.total_documents || 0,
       }
 
       console.log('构建的文档列表:', documents)
@@ -1883,11 +1928,11 @@ const handleExport = async () => {
         性别: currentRecord.patient_gender,
         病历编号: currentRecord.record_number,
         记录ID: currentRecord.id,
-        创建时间: formatDateTime(currentRecord.created_at)
+        创建时间: formatDateTime(currentRecord.created_at),
       },
       诊断信息: {
         主要诊断: currentRecord.diagnosis_primary,
-        次要诊断: currentRecord.diagnosis_secondary
+        次要诊断: currentRecord.diagnosis_secondary,
       },
       病历内容: currentRecord.content,
       文件信息: currentRecord.file_attachments,
@@ -1896,9 +1941,9 @@ const handleExport = async () => {
         优先级: getPriorityText(currentRecord.priority_level),
         标签: currentRecord.tags,
         质控评分: currentRecord.qc_score,
-        质控等级: currentRecord.qc_grade
+        质控等级: currentRecord.qc_grade,
       },
-      元数据: currentRecord.metadata
+      元数据: currentRecord.metadata,
     }
 
     // 创建并下载文件
@@ -1933,9 +1978,9 @@ const handleDelete = () => {
 
   const confirmed = window.confirm(
     `确定要删除患者 "${record.value.patient_name}" 的医疗记录吗？\n\n` +
-    `病历编号: ${record.value.record_number}\n` +
-    `记录ID: ${record.value.id}\n\n` +
-    `此操作不可撤销！`
+      `病历编号: ${record.value.record_number}\n` +
+      `记录ID: ${record.value.id}\n\n` +
+      `此操作不可撤销！`,
   )
 
   if (confirmed) {
@@ -1964,8 +2009,8 @@ const performDelete = async () => {
     const response = await fetch(deleteUrl, {
       method: 'DELETE',
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     })
 
     console.log('删除响应状态:', response.status)
@@ -1993,7 +2038,6 @@ const performDelete = async () => {
       console.log('准备跳转回上一页')
       router.back()
     }, 1500)
-
   } catch (err: any) {
     console.error('删除医疗记录失败:', err)
     message.error(err.message || '删除医疗记录失败')
@@ -2038,30 +2082,102 @@ interface DocumentTypeMapping {
 
 // 文书类型与规则映射（默认兜底，启动时将用后端数据覆盖 rules 数组）
 const documentTypeRuleMapping: DocumentTypeMapping = {
-  '病程记录': {
-    rules: ['SC-001', 'SC-002', 'SC-003', 'SC-004', 'SC-005', 'SC-006', 'SC-007', 'SC-008', 'SC-009', 'SC-010', 'SC-011', 'SC-012', 'SC-013', 'SC-014', 'SC-015', 'SC-016', 'SC-017', 'SC-018', 'SC-019', 'SC-020'],
+  病程记录: {
+    rules: [
+      'SC-001',
+      'SC-002',
+      'SC-003',
+      'SC-004',
+      'SC-005',
+      'SC-006',
+      'SC-007',
+      'SC-008',
+      'SC-009',
+      'SC-010',
+      'SC-011',
+      'SC-012',
+      'SC-013',
+      'SC-014',
+      'SC-015',
+      'SC-016',
+      'SC-017',
+      'SC-018',
+      'SC-019',
+      'SC-020',
+    ],
     displayName: '病程记录',
-    icon: '📋'
+    icon: '📋',
   },
-  '手术记录': {
-    rules: ['SC-021', 'SC-022', 'SC-023', 'SC-024', 'SC-025', 'SC-026', 'SC-027', 'SC-028', 'SC-029', 'SC-030', 'SC-031', 'SC-032', 'SC-033', 'SC-034', 'SC-035'],
+  手术记录: {
+    rules: [
+      'SC-021',
+      'SC-022',
+      'SC-023',
+      'SC-024',
+      'SC-025',
+      'SC-026',
+      'SC-027',
+      'SC-028',
+      'SC-029',
+      'SC-030',
+      'SC-031',
+      'SC-032',
+      'SC-033',
+      'SC-034',
+      'SC-035',
+    ],
     displayName: '手术记录',
-    icon: '🏥'
+    icon: '🏥',
   },
-  '入院记录': {
-    rules: ['SC-036', 'SC-037', 'SC-038', 'SC-039', 'SC-040', 'SC-041', 'SC-042', 'SC-043', 'SC-044', 'SC-045', 'SC-046', 'SC-047', 'SC-048', 'SC-049', 'SC-050'],
+  入院记录: {
+    rules: [
+      'SC-036',
+      'SC-037',
+      'SC-038',
+      'SC-039',
+      'SC-040',
+      'SC-041',
+      'SC-042',
+      'SC-043',
+      'SC-044',
+      'SC-045',
+      'SC-046',
+      'SC-047',
+      'SC-048',
+      'SC-049',
+      'SC-050',
+    ],
     displayName: '入院记录',
-    icon: '📝'
+    icon: '📝',
   },
-  '出院记录': {
-    rules: ['SC-051', 'SC-052', 'SC-053', 'SC-054', 'SC-055', 'SC-056', 'SC-057', 'SC-058', 'SC-059', 'SC-060', 'SC-061', 'SC-062', 'SC-063', 'SC-064', 'SC-065', 'SC-066', 'SC-067', 'SC-068'],
+  出院记录: {
+    rules: [
+      'SC-051',
+      'SC-052',
+      'SC-053',
+      'SC-054',
+      'SC-055',
+      'SC-056',
+      'SC-057',
+      'SC-058',
+      'SC-059',
+      'SC-060',
+      'SC-061',
+      'SC-062',
+      'SC-063',
+      'SC-064',
+      'SC-065',
+      'SC-066',
+      'SC-067',
+      'SC-068',
+    ],
     displayName: '出院记录',
-    icon: '📄'
-  }
+    icon: '📄',
+  },
 }
 
 // 存储完整的分组规则数据，用于传递给后端评估
-const rulesByDocumentType = ref<Record<string, any[]>>({});
+const rulesByDocumentType = ref<Record<string, any[]>>({})
 
 // 根据文书类型给一个图标（用于从后端动态填充时）
 const getIconForDocType = (t: string): string => {
@@ -2082,7 +2198,7 @@ const loadRulesMapping = async (docTypes: string[]) => {
     let rulesByType: Record<string, any[]> = {}
     if (resp.ok) {
       const data = await resp.json()
-      rulesByType = (data.rules_by_document_type || {})
+      rulesByType = data.rules_by_document_type || {}
       // 若后端未分组返回，则尝试用扁平 rules 聚合
       if ((!rulesByType || Object.keys(rulesByType).length === 0) && Array.isArray(data.rules)) {
         // 若后端未分组或无法根据applicable_documents分组，则兜底：按请求的每个文书类型使用全量规则
@@ -2095,7 +2211,7 @@ const loadRulesMapping = async (docTypes: string[]) => {
     // 写入映射（仅覆盖 rules 列表，保持显示名/图标）
     for (const dt of docTypes) {
       const fromBackend = (rulesByType[dt] || []) as any[]
-      const ruleIds = fromBackend.map(r => r.rule_id || r.rule_code).filter(Boolean)
+      const ruleIds = fromBackend.map((r) => r.rule_id || r.rule_code).filter(Boolean)
       if (!documentTypeRuleMapping[dt]) {
         documentTypeRuleMapping[dt] = { rules: [], displayName: dt, icon: getIconForDocType(dt) }
       }
@@ -2123,22 +2239,41 @@ const detectDocumentTypes = (content: string): string[] => {
   const contentLower = content.toLowerCase()
 
   // 检测病程记录
-  if (contentLower.includes('病程记录') || contentLower.includes('日常病程') || contentLower.includes('主治医师查房')) {
+  if (
+    contentLower.includes('病程记录') ||
+    contentLower.includes('日常病程') ||
+    contentLower.includes('主治医师查房')
+  ) {
     types.push('病程记录')
   }
 
   // 检测手术记录
-  if (contentLower.includes('手术记录') || contentLower.includes('术中') || contentLower.includes('手术过程') || contentLower.includes('麻醉')) {
+  if (
+    contentLower.includes('手术记录') ||
+    contentLower.includes('术中') ||
+    contentLower.includes('手术过程') ||
+    contentLower.includes('麻醉')
+  ) {
     types.push('手术记录')
   }
 
   // 检测入院记录
-  if (contentLower.includes('入院记录') || contentLower.includes('主诉') || contentLower.includes('现病史') || contentLower.includes('入院诊断')) {
+  if (
+    contentLower.includes('入院记录') ||
+    contentLower.includes('主诉') ||
+    contentLower.includes('现病史') ||
+    contentLower.includes('入院诊断')
+  ) {
     types.push('入院记录')
   }
 
   // 检测出院记录
-  if (contentLower.includes('出院记录') || contentLower.includes('出院诊断') || contentLower.includes('出院医嘱') || contentLower.includes('出院情况')) {
+  if (
+    contentLower.includes('出院记录') ||
+    contentLower.includes('出院诊断') ||
+    contentLower.includes('出院医嘱') ||
+    contentLower.includes('出院情况')
+  ) {
     types.push('出院记录')
   }
 
@@ -2159,14 +2294,14 @@ const getApplicableRules = async (documentTypes: string[]): Promise<SichuanQCRul
 
     // 根据文书类型筛选适用规则
     const applicableRuleIds = new Set<string>()
-    documentTypes.forEach(docType => {
+    documentTypes.forEach((docType) => {
       const mapping = documentTypeRuleMapping[docType]
       if (mapping) {
-        mapping.rules.forEach(ruleId => applicableRuleIds.add(ruleId))
+        mapping.rules.forEach((ruleId) => applicableRuleIds.add(ruleId))
       }
     })
 
-    return allRules.filter(rule => applicableRuleIds.has(rule.rule_id))
+    return allRules.filter((rule) => applicableRuleIds.has(rule.rule_id))
   } catch (error) {
     console.error('获取适用规则失败:', error)
     return []
@@ -2190,7 +2325,8 @@ const startSichuanQC = async () => {
     return
   }
 
-  const hasBaseText = !!(currentRecord.content && String(currentRecord.content).trim().length > 0) ||
+  const hasBaseText =
+    !!(currentRecord.content && String(currentRecord.content).trim().length > 0) ||
     !!(currentRecord.raw_text && String(currentRecord.raw_text).trim().length > 0)
 
   // 若无正文内容，但存在多文书模式能力，则自动切换到多文书模式
@@ -2222,7 +2358,6 @@ const startSichuanQC = async () => {
     // 3. 开始质控评估
     qcStatus.value = 'evaluating'
     await performQCEvaluation(types, rules)
-
   } catch (error: any) {
     console.error('❌ 四川省质控评估失败:', error)
     message.error('质控评估失败: ' + (error.message || '未知错误'))
@@ -2244,13 +2379,13 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
   qcProgress.value = {}
   qcResults.value = {}
 
-  documentTypes.forEach(docType => {
+  documentTypes.forEach((docType) => {
     qcProgress.value[docType] = {
       total: documentTypeRuleMapping[docType]?.rules.length || 0,
       completed: 0,
       passed: 0,
       failed: 0,
-      rules: {}
+      rules: {},
     }
     qcResults.value[docType] = []
   })
@@ -2268,33 +2403,31 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
       document_content: String(currentRecord.content || currentRecord.raw_text || ''), // 确保不为null/undefined
       document_type: documentTypes.length > 0 ? documentTypes[0] : '病程记录', // 兼容性
       document_types: documentTypes,
-      rule_ids: rules.map(rule => rule.rule_id),
+      rule_ids: rules.map((rule) => rule.rule_id),
       use_multi_document_mode: useMultiDocumentMode.value, // 根据用户选择
       documents_by_type: documentsByType, // 预分类文书映射
       // 将已加载的分组规则传给后端，后端优先使用
       rules_by_document_type: Object.fromEntries(
-        documentTypes.map(dt => [dt, (rulesByDocumentType.value[dt] || [])])
+        documentTypes.map((dt) => [dt, rulesByDocumentType.value[dt] || []]),
       ),
       patient_info: {
         name: currentRecord.patient_name || '未知',
         age: String(currentRecord.patient_age || '未知'), // 确保转换为字符串
         gender: currentRecord.patient_gender || '未知',
-        record_id: currentRecord.id
-      }
+        record_id: currentRecord.id,
+      },
     }
-
-
 
     console.log('📤 发送质控评估请求:', JSON.stringify(evaluationRequest, null, 2))
 
     const response = await fetch(`${API_BASE_URL}/api/v1/qc/sichuan/evaluate`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify(evaluationRequest),
       // 统一超时到3分钟（180秒），与后端LLM超时保持一致
-      signal: AbortSignal.timeout(180000)
+      signal: AbortSignal.timeout(180000),
     })
 
     if (!response.ok) {
@@ -2310,7 +2443,6 @@ const performQCEvaluation = async (documentTypes: string[], rules: SichuanQCRule
 
     qcStatus.value = 'completed'
     message.success(`质控评估完成！共评估 ${rules.length} 条规则`)
-
   } catch (error: any) {
     console.error('❌ 质控评估执行失败:', error)
     qcStatus.value = 'error'
@@ -2337,7 +2469,7 @@ const processQCResults = (apiResponse: any, documentTypes: string[]) => {
 const processMultiDocumentResults = (apiResponse: any, documentTypes: string[]) => {
   const documentResults = apiResponse.document_results || {}
 
-  documentTypes.forEach(docType => {
+  documentTypes.forEach((docType) => {
     if (documentResults[docType]) {
       const docResult = documentResults[docType]
 
@@ -2360,7 +2492,7 @@ const processMultiDocumentResults = (apiResponse: any, documentTypes: string[]) 
             progress.rules[result.rule_id] = {
               status: isCompliant ? 'passed' : 'failed',
               confidence: result.confidence,
-              reasoning: result.findings || result.reasoning
+              reasoning: result.findings || result.reasoning,
             }
           })
         }
@@ -2384,11 +2516,12 @@ const processSinglePromptResults = (apiResponse: any, documentTypes: string[]) =
   const evaluationResults = apiResponse.evaluation_results || apiResponse.results || []
   console.log('📊 评估结果数组:', evaluationResults)
 
-  documentTypes.forEach(docType => {
-    const docTypeResults = evaluationResults.filter((result: any) => {
-      const ruleMapping = documentTypeRuleMapping[docType]
-      return ruleMapping && ruleMapping.rules.includes(result.rule_id)
-    }) || []
+  documentTypes.forEach((docType) => {
+    const docTypeResults =
+      evaluationResults.filter((result: any) => {
+        const ruleMapping = documentTypeRuleMapping[docType]
+        return ruleMapping && ruleMapping.rules.includes(result.rule_id)
+      }) || []
 
     console.log(`📋 ${docType} 相关结果:`, docTypeResults)
     qcResults.value[docType] = docTypeResults
@@ -2408,7 +2541,7 @@ const processSinglePromptResults = (apiResponse: any, documentTypes: string[]) =
       progress.rules[result.rule_id] = {
         status: isCompliant ? 'passed' : 'failed',
         confidence: result.confidence,
-        reasoning: result.reasoning || result.findings
+        reasoning: result.reasoning || result.findings,
       }
     })
   })
@@ -2447,7 +2580,9 @@ const clearAllHighlights = () => {
 }
 
 // 获取预分类文书映射
-const getPreclassifiedDocuments = async (documentTypes: string[]): Promise<Record<string, unknown> | null> => {
+const getPreclassifiedDocuments = async (
+  documentTypes: string[],
+): Promise<Record<string, unknown> | null> => {
   if (!record.value?.id) {
     console.warn('⚠️ 无法获取预分类文书：缺少记录ID')
     return null
@@ -2503,7 +2638,6 @@ const getPreclassifiedDocuments = async (documentTypes: string[]): Promise<Recor
 
     console.log('✅ 构建预分类文书映射:', Object.keys(mergedDocuments))
     return Object.keys(mergedDocuments).length > 0 ? mergedDocuments : null
-
   } catch (error) {
     console.error('❌ 获取预分类文书失败:', error)
     return null
@@ -2514,40 +2648,40 @@ const getPreclassifiedDocuments = async (documentTypes: string[]): Promise<Recor
 const mapDocumentTypeToQCType = (dbTypeName: string): string => {
   const typeMapping: Record<string, string> = {
     // 入院记录相关
-    '入院记录': '入院记录',
-    '住院病历': '入院记录',
-    '入院病历': '入院记录',
-    '入院诊断': '入院记录',
+    入院记录: '入院记录',
+    住院病历: '入院记录',
+    入院病历: '入院记录',
+    入院诊断: '入院记录',
 
     // 病程记录相关
-    '病程记录': '病程记录',
-    '日常病程': '病程记录',
-    '首次病程': '病程记录',
-    '首次病程记录': '病程记录',
-    '主治医师查房': '病程记录',
-    '上级医师查房': '病程记录',
-    '上级医师查房记录': '病程记录',
-    '主任医师查房': '病程记录',
-    '主任医师查房记录': '病程记录',
-    '日常病程记录': '病程记录',
-    '病程记录单': '病程记录',
+    病程记录: '病程记录',
+    日常病程: '病程记录',
+    首次病程: '病程记录',
+    首次病程记录: '病程记录',
+    主治医师查房: '病程记录',
+    上级医师查房: '病程记录',
+    上级医师查房记录: '病程记录',
+    主任医师查房: '病程记录',
+    主任医师查房记录: '病程记录',
+    日常病程记录: '病程记录',
+    病程记录单: '病程记录',
 
     // 手术记录相关
-    '手术记录': '手术记录',
-    '手术操作记录': '手术记录',
-    '术前小结': '手术记录',
-    '术后记录': '手术记录',
-    '术前讨论': '手术记录',
-    '术前讨论记录': '手术记录',
-    '术前查房': '手术记录',
-    '术前查房记录': '手术记录',
-    '手术同意书': '手术记录',
+    手术记录: '手术记录',
+    手术操作记录: '手术记录',
+    术前小结: '手术记录',
+    术后记录: '手术记录',
+    术前讨论: '手术记录',
+    术前讨论记录: '手术记录',
+    术前查房: '手术记录',
+    术前查房记录: '手术记录',
+    手术同意书: '手术记录',
 
     // 出院记录相关
-    '出院记录': '出院记录',
-    '出院小结': '出院记录',
-    '出院诊断': '出院记录',
-    '出院医嘱': '出院记录'
+    出院记录: '出院记录',
+    出院小结: '出院记录',
+    出院诊断: '出院记录',
+    出院医嘱: '出院记录',
   }
 
   return typeMapping[dbTypeName] || dbTypeName
@@ -2563,51 +2697,73 @@ const getQCProgress = (docType: string): number => {
 // 获取质控状态颜色
 const getQCStatusColor = (status?: string): string => {
   switch (status) {
-    case 'passed': return 'success'
-    case 'failed': return 'error'
-    case 'evaluating': return 'processing'
-    default: return 'default'
+    case 'passed':
+      return 'success'
+    case 'failed':
+      return 'error'
+    case 'evaluating':
+      return 'processing'
+    default:
+      return 'default'
   }
 }
 
 // 获取质控状态图标
 const getQCStatusIcon = (status: string) => {
   switch (status) {
-    case 'passed': return CheckCircleOutlined
-    case 'failed': return CloseCircleOutlined
-    case 'evaluating': return ClockCircleOutlined
-    default: return WarningOutlined
+    case 'passed':
+      return CheckCircleOutlined
+    case 'failed':
+      return CloseCircleOutlined
+    case 'evaluating':
+      return ClockCircleOutlined
+    default:
+      return WarningOutlined
   }
 }
 
 // 模态框状态辅助函数
 const getQCStatusMessage = (): string => {
   switch (qcStatus.value) {
-    case 'analyzing': return '正在分析病历内容...'
-    case 'evaluating': return '正在执行质控评估...'
-    case 'completed': return '质控评估完成'
-    case 'error': return '质控评估失败'
-    default: return '准备开始质控评估'
+    case 'analyzing':
+      return '正在分析病历内容...'
+    case 'evaluating':
+      return '正在执行质控评估...'
+    case 'completed':
+      return '质控评估完成'
+    case 'error':
+      return '质控评估失败'
+    default:
+      return '准备开始质控评估'
   }
 }
 
 const getQCStatusDescription = (): string => {
   switch (qcStatus.value) {
-    case 'analyzing': return '智能识别文书类型，匹配适用的四川省质控规则'
-    case 'evaluating': return '基于《四川省住院病历质量评定标准（2023年版）》进行评估'
-    case 'completed': return '已完成所有规则的评估，请查看详细结果'
-    case 'error': return '评估过程中出现错误，请重试或联系管理员'
-    default: return '即将开始四川省住院病历语义质控评估'
+    case 'analyzing':
+      return '智能识别文书类型，匹配适用的四川省质控规则'
+    case 'evaluating':
+      return '基于《四川省住院病历质量评定标准（2023年版）》进行评估'
+    case 'completed':
+      return '已完成所有规则的评估，请查看详细结果'
+    case 'error':
+      return '评估过程中出现错误，请重试或联系管理员'
+    default:
+      return '即将开始四川省住院病历语义质控评估'
   }
 }
 
-const getQCAlertType = (): string => {
+const getQCAlertType = (): 'success' | 'error' | 'warning' | 'info' => {
   switch (qcStatus.value) {
     case 'analyzing':
-    case 'evaluating': return 'info'
-    case 'completed': return 'success'
-    case 'error': return 'error'
-    default: return 'info'
+    case 'evaluating':
+      return 'info'
+    case 'completed':
+      return 'success'
+    case 'error':
+      return 'error'
+    default:
+      return 'info'
   }
 }
 
@@ -2619,7 +2775,7 @@ const exportQCReport = async () => {
         name: record.value?.patient_name || '未知',
         age: String(record.value?.patient_age || '未知'), // 确保转换为字符串
         gender: record.value?.patient_gender || '未知',
-        record_id: record.value?.id || '未知'
+        record_id: record.value?.id || '未知',
       },
       evaluation_time: new Date().toLocaleString('zh-CN'),
       document_types: detectedDocumentTypes.value,
@@ -2627,10 +2783,22 @@ const exportQCReport = async () => {
       qc_progress: qcProgress.value,
       summary: {
         total_rules: applicableRules.value.length,
-        total_passed: Object.values(qcProgress.value).reduce((sum: number, progress: QCEvaluationProgressLike) => sum + (progress.passed || 0), 0),
-        total_failed: Object.values(qcProgress.value).reduce((sum: number, progress: QCEvaluationProgressLike) => sum + (progress.failed || 0), 0),
-        total_score_deduction: Object.values(qcResults.value).flat().reduce((sum: number, result: QCEvaluationResultLike) => sum + (result.compliant ? 0 : result.score_deduction || 0), 0)
-      }
+        total_passed: Object.values(qcProgress.value).reduce(
+          (sum: number, progress: QCEvaluationProgressLike) => sum + (progress.passed || 0),
+          0,
+        ),
+        total_failed: Object.values(qcProgress.value).reduce(
+          (sum: number, progress: QCEvaluationProgressLike) => sum + (progress.failed || 0),
+          0,
+        ),
+        total_score_deduction: Object.values(qcResults.value)
+          .flat()
+          .reduce(
+            (sum: number, result: QCEvaluationResultLike) =>
+              sum + (result.compliant ? 0 : result.score_deduction || 0),
+            0,
+          ),
+      },
     }
 
     // 创建并下载报告文件
@@ -2710,7 +2878,7 @@ const formatDateTime = (dateStr: string | undefined) => {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
     })
   } catch {
     return dateStr
@@ -2729,10 +2897,10 @@ const formatFileSize = (bytes: number) => {
 // 获取状态颜色
 const getStatusColor = (status?: string) => {
   const colors: Record<string, string> = {
-    'pending': 'processing',
-    'completed': 'success',
-    'failed': 'error',
-    'reviewing': 'warning'
+    pending: 'processing',
+    completed: 'success',
+    failed: 'error',
+    reviewing: 'warning',
   }
   if (!status) return 'default'
   return colors[status] || 'default'
@@ -2741,10 +2909,10 @@ const getStatusColor = (status?: string) => {
 // 获取状态文本
 const getStatusText = (status?: string) => {
   const texts: Record<string, string> = {
-    'pending': '待处理',
-    'completed': '已完成',
-    'failed': '失败',
-    'reviewing': '审核中'
+    pending: '待处理',
+    completed: '已完成',
+    failed: '失败',
+    reviewing: '审核中',
   }
   if (!status) return '未知'
   return texts[status] || status
@@ -2765,7 +2933,7 @@ const getPriorityText = (level: number) => {
     2: '普通',
     3: '高',
     4: '紧急',
-    5: '特急'
+    5: '特急',
   }
   return texts[level] || `级别${level}`
 }
@@ -2781,10 +2949,10 @@ const getQcScoreColor = (score: number) => {
 // 获取质控等级颜色
 const getQcGradeColor = (grade: string) => {
   const colors: Record<string, string> = {
-    'A': 'green',
-    'B': 'blue',
-    'C': 'orange',
-    'D': 'red'
+    A: 'green',
+    B: 'blue',
+    C: 'orange',
+    D: 'red',
   }
   return colors[grade] || 'default'
 }
@@ -2792,9 +2960,9 @@ const getQcGradeColor = (grade: string) => {
 // 获取记录类型文本
 const getRecordTypeText = (type: string) => {
   const texts: Record<string, string> = {
-    'inpatient': '住院',
-    'outpatient': '门诊',
-    'emergency': '急诊'
+    inpatient: '住院',
+    outpatient: '门诊',
+    emergency: '急诊',
   }
   return texts[type] || type
 }
@@ -3103,8 +3271,14 @@ onMounted(() => {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fadeIn {

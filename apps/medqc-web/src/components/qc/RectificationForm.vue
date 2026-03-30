@@ -9,7 +9,7 @@
   >
     <a-descriptions
       bordered
-      column="1"
+      :column="1"
       size="small"
       class="mb-4"
     >

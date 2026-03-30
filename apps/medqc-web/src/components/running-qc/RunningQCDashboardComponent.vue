@@ -26,7 +26,7 @@
                   {{ dept }}
                 </a-select-option>
               </a-select>
-              
+
               <a-button
                 type="primary"
                 @click="refreshPatients"
@@ -38,7 +38,7 @@
               </a-button>
             </a-space>
           </template>
-          
+
           <!-- 患者列表 -->
           <a-table
             :columns="patientColumns"
@@ -54,32 +54,32 @@
                   {{ getRiskText(record.riskLevel) }}
                 </a-tag>
               </template>
-              
+
               <template v-if="column.key === 'grade'">
                 <a-tag :color="getGradeColor(record.grade)">
                   {{ record.grade }}
                 </a-tag>
               </template>
-              
+
               <template v-if="column.key === 'daysSinceAdmission'">
                 <a-tag :color="getDaysColor(record.daysSinceAdmission)">
                   第{{ record.daysSinceAdmission }}天
                 </a-tag>
               </template>
-              
+
               <template v-if="column.key === 'actions'">
                 <a-space>
-                  <a-button 
-                    type="primary" 
-                    size="small" 
+                  <a-button
+                    type="primary"
+                    size="small"
                     :loading="analyzingPatients.includes(record.id)"
-                    @click="analyzePatient(record)"
+                    @click="analyzePatient(record as InpatientRecord)"
                   >
                     质控分析
                   </a-button>
-                  <a-button 
-                    size="small" 
-                    @click="viewDetails(record)"
+                  <a-button
+                    size="small"
+                    @click="viewDetails(record as InpatientRecord)"
                   >
                     查看详情
                   </a-button>
@@ -89,7 +89,7 @@
           </a-table>
         </a-card>
       </a-col>
-      
+
       <!-- 右侧：实时统计 -->
       <a-col :span="8">
         <a-card
@@ -116,7 +116,7 @@
             </a-col>
           </a-row>
         </a-card>
-        
+
         <!-- 风险分布 -->
         <a-card
           title="风险分布"
@@ -124,10 +124,10 @@
         >
           <div
             ref="riskChartRef"
-            style="height: 200px;"
+            style="height: 200px"
           />
         </a-card>
-        
+
         <!-- 科室分布 -->
         <a-card
           title="科室分布"
@@ -135,10 +135,10 @@
         >
           <div
             ref="departmentChartRef"
-            style="height: 200px;"
+            style="height: 200px"
           />
         </a-card>
-        
+
         <!-- 近期提醒 -->
         <a-card
           title="近期提醒"
@@ -173,7 +173,7 @@
         </a-card>
       </a-col>
     </a-row>
-    
+
     <!-- 质控分析结果弹窗 -->
     <a-modal
       v-model:open="analysisModalVisible"
@@ -193,11 +193,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  ReloadOutlined, 
-  UserOutlined, 
-  ExclamationCircleOutlined 
-} from '@ant-design/icons-vue'
+import { ReloadOutlined, UserOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
 import * as echarts from 'echarts'
 import { runningQCService } from '../../lib/running-qc-service'
 import type { RunningQCResultComponent as RunningQCResultType } from '../../lib/running-qc-service'
@@ -248,7 +244,7 @@ const statistics = reactive({
   totalPatients: 0,
   highRiskPatients: 0,
   criticalPatients: 0,
-  overduePatients: 0
+  overduePatients: 0,
 })
 
 // 图表引用
@@ -261,47 +257,47 @@ const patientColumns = [
     title: '患者姓名',
     dataIndex: 'patientName',
     key: 'patientName',
-    width: 100
+    width: 100,
   },
   {
     title: '科室',
     dataIndex: 'department',
     key: 'department',
-    width: 100
+    width: 100,
   },
   {
     title: '入院天数',
     key: 'daysSinceAdmission',
-    width: 80
+    width: 80,
   },
   {
     title: '风险等级',
     key: 'riskLevel',
-    width: 80
+    width: 80,
   },
   {
     title: '质控等级',
     key: 'grade',
-    width: 80
+    width: 80,
   },
   {
     title: '主治医生',
     dataIndex: 'doctorName',
     key: 'doctorName',
-    width: 100
+    width: 100,
   },
   {
     title: '操作',
     key: 'actions',
-    width: 150
-  }
+    width: 150,
+  },
 ]
 
 // 组件挂载
 onMounted(async () => {
   await loadInpatients()
   initCharts()
-  
+
   // 设置定时刷新
   setInterval(refreshPatients, 5 * 60 * 1000) // 每5分钟刷新
 })
@@ -325,7 +321,7 @@ const loadInpatients = async () => {
         lastQCTime: '2024-01-18T09:00:00Z',
         nextCheckTime: '2024-01-18T21:00:00Z',
         doctorId: 'doctor1',
-        doctorName: '李医生'
+        doctorName: '李医生',
       },
       {
         id: '2',
@@ -340,7 +336,7 @@ const loadInpatients = async () => {
         lastQCTime: '2024-01-17T16:00:00Z',
         nextCheckTime: '2024-01-18T22:00:00Z',
         doctorId: 'doctor2',
-        doctorName: '王医生'
+        doctorName: '王医生',
       },
       {
         id: '3',
@@ -355,22 +351,21 @@ const loadInpatients = async () => {
         lastQCTime: '2024-01-18T10:00:00Z',
         nextCheckTime: '2024-01-19T10:00:00Z',
         doctorId: 'doctor1',
-        doctorName: '李医生'
-      }
+        doctorName: '李医生',
+      },
     ]
-    
+
     patients.value = mockPatients
     filteredPatients.value = mockPatients
-    
+
     // 提取科室列表
-    departments.value = [...new Set(mockPatients.map(p => p.department))]
-    
+    departments.value = [...new Set(mockPatients.map((p) => p.department))]
+
     // 更新统计数据
     updateStatistics()
-    
+
     // 加载提醒数据
     await loadRecentAlerts()
-    
   } catch (error) {
     console.error('加载在院病人数据失败:', error)
     message.error('加载数据失败')
@@ -390,14 +385,14 @@ const filterPatients = () => {
   if (!selectedDepartment.value) {
     filteredPatients.value = patients.value
   } else {
-    filteredPatients.value = patients.value.filter(p => p.department === selectedDepartment.value)
+    filteredPatients.value = patients.value.filter((p) => p.department === selectedDepartment.value)
   }
 }
 
 // 分析患者
 const analyzePatient = async (patient: InpatientRecord) => {
   analyzingPatients.value.push(patient.id)
-  
+
   try {
     const result = await runningQCService.analyzeRunningRecord({
       recordId: `running-${patient.id}`,
@@ -407,28 +402,31 @@ const analyzePatient = async (patient: InpatientRecord) => {
       admissionDate: patient.admissionDate,
       currentDate: new Date().toISOString(),
       doctorId: patient.doctorId,
-      analysisType: 'real-time'
+      analysisType: 'real-time',
     })
-    
+
     currentAnalysisResult.value = result
     analysisModalVisible.value = true
-    
+
     // 更新患者状态
-    const patientIndex = patients.value.findIndex(p => p.id === patient.id)
+    const patientIndex = patients.value.findIndex((p) => p.id === patient.id)
     if (patientIndex !== -1) {
       const score = result.score ?? 0
-      patients.value[patientIndex].riskLevel = score >= 90 ? 'low' : score >= 75 ? 'medium' : score >= 60 ? 'high' : 'critical'
+      patients.value[patientIndex].riskLevel =
+        score >= 90 ? 'low' : score >= 75 ? 'medium' : score >= 60 ? 'high' : 'critical'
       patients.value[patientIndex].grade = score >= 90 ? '甲级' : score >= 75 ? '乙级' : '丙级'
       patients.value[patientIndex].lastQCTime = new Date().toISOString()
-      patients.value[patientIndex].nextCheckTime = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
+      patients.value[patientIndex].nextCheckTime = new Date(
+        Date.now() + 12 * 60 * 60 * 1000,
+      ).toISOString()
     }
-    
+
     message.success('质控分析完成')
   } catch (error) {
     console.error('质控分析失败:', error)
     message.error('质控分析失败')
   } finally {
-    analyzingPatients.value = analyzingPatients.value.filter(id => id !== patient.id)
+    analyzingPatients.value = analyzingPatients.value.filter((id) => id !== patient.id)
   }
 }
 
@@ -448,7 +446,7 @@ const loadRecentAlerts = async () => {
       patientName: '李四',
       level: 'high',
       message: '入院记录超时24小时未完成',
-      time: '2024-01-18T10:30:00Z'
+      time: '2024-01-18T10:30:00Z',
     },
     {
       id: '2',
@@ -456,8 +454,8 @@ const loadRecentAlerts = async () => {
       patientName: '张三',
       level: 'medium',
       message: '首次病程记录需要完善',
-      time: '2024-01-18T11:00:00Z'
-    }
+      time: '2024-01-18T11:00:00Z',
+    },
   ]
 }
 
@@ -470,11 +468,11 @@ const handleAlert = (alert: Alert) => {
 // 更新统计数据
 const updateStatistics = () => {
   statistics.totalPatients = patients.value.length
-  statistics.highRiskPatients = patients.value.filter(p => 
-    p.riskLevel === 'high' || p.riskLevel === 'critical'
+  statistics.highRiskPatients = patients.value.filter(
+    (p) => p.riskLevel === 'high' || p.riskLevel === 'critical',
   ).length
-  statistics.criticalPatients = patients.value.filter(p => p.riskLevel === 'critical').length
-  statistics.overduePatients = patients.value.filter(p => p.daysSinceAdmission > 7).length
+  statistics.criticalPatients = patients.value.filter((p) => p.riskLevel === 'critical').length
+  statistics.overduePatients = patients.value.filter((p) => p.daysSinceAdmission > 7).length
 }
 
 // 初始化图表
@@ -483,39 +481,47 @@ const initCharts = () => {
   if (riskChartRef.value) {
     const riskChart = echarts.init(riskChartRef.value)
     const riskData = [
-      { name: '低风险', value: patients.value.filter(p => p.riskLevel === 'low').length },
-      { name: '中风险', value: patients.value.filter(p => p.riskLevel === 'medium').length },
-      { name: '高风险', value: patients.value.filter(p => p.riskLevel === 'high').length },
-      { name: '严重风险', value: patients.value.filter(p => p.riskLevel === 'critical').length }
+      { name: '低风险', value: patients.value.filter((p) => p.riskLevel === 'low').length },
+      { name: '中风险', value: patients.value.filter((p) => p.riskLevel === 'medium').length },
+      { name: '高风险', value: patients.value.filter((p) => p.riskLevel === 'high').length },
+      { name: '严重风险', value: patients.value.filter((p) => p.riskLevel === 'critical').length },
     ]
-    
+
     riskChart.setOption({
-      tooltip: { trigger: 'item' }, series: [{
-        type: 'pie', radius: '60%', data: riskData, itemStyle: {
-          color: (params: { dataIndex: number }) => {
-            const colors = ['#52c41a', '#faad14', '#ff7875', '#ff4d4f']
-            return colors[params.dataIndex]
-          }
-        }
-      }]
+      tooltip: { trigger: 'item' },
+      series: [
+        {
+          type: 'pie',
+          radius: '60%',
+          data: riskData,
+          itemStyle: {
+            color: (params: { dataIndex: number }) => {
+              const colors = ['#52c41a', '#faad14', '#ff7875', '#ff4d4f']
+              return colors[params.dataIndex]
+            },
+          },
+        },
+      ],
     })
   }
-  
+
   // 科室分布图表
   if (departmentChartRef.value) {
     const deptChart = echarts.init(departmentChartRef.value)
-    const deptData = departments.value.map(dept => ({
+    const deptData = departments.value.map((dept) => ({
       name: dept,
-      value: patients.value.filter(p => p.department === dept).length
+      value: patients.value.filter((p) => p.department === dept).length,
     }))
-    
+
     deptChart.setOption({
       tooltip: { trigger: 'item' },
-      series: [{
-        type: 'pie',
-        radius: '60%',
-        data: deptData
-      }]
+      series: [
+        {
+          type: 'pie',
+          radius: '60%',
+          data: deptData,
+        },
+      ],
     })
   }
 }
@@ -523,30 +529,44 @@ const initCharts = () => {
 // 辅助函数
 const getRiskColor = (level: string) => {
   switch (level) {
-    case 'low': return 'green'
-    case 'medium': return 'orange'
-    case 'high': return 'red'
-    case 'critical': return 'red'
-    default: return 'default'
+    case 'low':
+      return 'green'
+    case 'medium':
+      return 'orange'
+    case 'high':
+      return 'red'
+    case 'critical':
+      return 'red'
+    default:
+      return 'default'
   }
 }
 
 const getRiskText = (level: string) => {
   switch (level) {
-    case 'low': return '低风险'
-    case 'medium': return '中风险'
-    case 'high': return '高风险'
-    case 'critical': return '严重风险'
-    default: return '未知'
+    case 'low':
+      return '低风险'
+    case 'medium':
+      return '中风险'
+    case 'high':
+      return '高风险'
+    case 'critical':
+      return '严重风险'
+    default:
+      return '未知'
   }
 }
 
 const getGradeColor = (grade: string) => {
   switch (grade) {
-    case '甲级': return 'green'
-    case '乙级': return 'orange'
-    case '丙级': return 'red'
-    default: return 'default'
+    case '甲级':
+      return 'green'
+    case '乙级':
+      return 'orange'
+    case '丙级':
+      return 'red'
+    default:
+      return 'default'
   }
 }
 
@@ -558,11 +578,16 @@ const getDaysColor = (days: number) => {
 
 const getAlertColor = (level: string) => {
   switch (level) {
-    case 'low': return 'default'
-    case 'medium': return 'orange'
-    case 'high': return 'red'
-    case 'critical': return 'red'
-    default: return 'default'
+    case 'low':
+      return 'default'
+    case 'medium':
+      return 'orange'
+    case 'high':
+      return 'red'
+    case 'critical':
+      return 'red'
+    default:
+      return 'default'
   }
 }
 </script>
@@ -579,4 +604,4 @@ const getAlertColor = (level: string) => {
 .ant-list-item {
   padding: 8px 0;
 }
-</style> 
+</style>

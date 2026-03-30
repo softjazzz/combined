@@ -199,7 +199,7 @@
                   <template v-if="column.key === 'enabled'">
                     <a-switch
                       :checked="record.enabled"
-                      @change="(checked: boolean) => toggleRule(record, checked)"
+                      @change="(checked: boolean) => toggleRule(record as DepartmentRule, checked)"
                     />
                   </template>
                   <template v-else-if="column.key === 'severity'">
@@ -212,13 +212,13 @@
                       <a-button
                         type="link"
                         size="small"
-                        @click="editRule(record)"
+                        @click="editRule(record as DepartmentRule)"
                       >
                         编辑
                       </a-button>
                       <a-popconfirm
                         title="确定要删除这个规则吗？"
-                        @confirm="deleteRule(record)"
+                        @confirm="deleteRule(record as DepartmentRule)"
                       >
                         <a-button
                           type="link"

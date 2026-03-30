@@ -202,6 +202,8 @@ interface FilterFormData {
   isUrgent?: boolean
 }
 
+type SliderValue = number | [number, number]
+
 interface Emits {
   (e: 'update:visible', value: boolean): void
   (e: 'confirm', conditions: unknown, templateName?: string): void
@@ -285,7 +287,10 @@ const handleConfirm = () => {
     const value = conditions[key as keyof typeof conditions]
     if (Array.isArray(value) && value.length === 0) {
       delete conditions[key as keyof typeof conditions]
-    } else if (!Array.isArray(value) && (value === undefined || value === null || value === '')) {
+    } else if (
+      !Array.isArray(value) &&
+      (value === undefined || value === null || (typeof value === 'string' && value === ''))
+    ) {
       delete conditions[key as keyof typeof conditions]
     }
   })
@@ -298,8 +303,8 @@ const handleConfirm = () => {
   templateName.value = ''
 }
 
-const handleScoreRangeChange = (value: number[]) => {
-  if (value.length >= 2) {
+const handleScoreRangeChange = (value: SliderValue) => {
+  if (Array.isArray(value) && value.length >= 2) {
     formData.scoreRange = [value[0] ?? 0, value[1] ?? 100]
   }
 }

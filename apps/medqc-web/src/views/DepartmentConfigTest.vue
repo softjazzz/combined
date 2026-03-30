@@ -30,7 +30,7 @@
               </a-select-option>
             </a-select>
           </a-form-item>
-          
+
           <a-form-item label="测试类型">
             <a-select
               v-model:value="testConfig.testType"
@@ -51,7 +51,7 @@
               </a-select-option>
             </a-select>
           </a-form-item>
-          
+
           <a-form-item label="测试数据量">
             <a-input-number
               v-model:value="testConfig.dataSize"
@@ -60,7 +60,7 @@
               style="width: 120px"
             />
           </a-form-item>
-          
+
           <a-form-item>
             <a-button
               type="primary"
@@ -154,7 +154,7 @@
                 <a-button
                   type="link"
                   size="small"
-                  @click="viewDetails(record)"
+                  @click="viewDetails(record as TestResultItem)"
                 >
                   查看详情
                 </a-button>
@@ -162,7 +162,7 @@
                   v-if="record.status === 'failed'"
                   type="link"
                   size="small"
-                  @click="retryTest(record)"
+                  @click="retryTest(record as TestResultItem)"
                 >
                   重试
                 </a-button>
@@ -263,6 +263,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import { DownloadOutlined, ClearOutlined } from '@ant-design/icons-vue'
 
 type TestType = 'rules' | 'sampling' | 'workflow' | 'performance'
@@ -320,7 +321,7 @@ const testConfig = reactive<{
 }>({
   departmentId: '',
   testType: 'rules',
-  dataSize: 100
+  dataSize: 100,
 })
 
 // 科室列表
@@ -328,7 +329,7 @@ const departments = ref<Department[]>([
   { id: '1', name: '心内科' },
   { id: '2', name: '神经外科' },
   { id: '3', name: '急诊科' },
-  { id: '4', name: 'ICU' }
+  { id: '4', name: 'ICU' },
 ])
 
 // 测试结果
@@ -338,7 +339,7 @@ const testResults = ref<TestResultItem[]>([])
 const testLogs = ref<TestLogEntry[]>([])
 
 // 表格列配置
-const resultsColumns = [
+const resultsColumns: TableColumnsType<TestResultItem> = [
   { title: '测试ID', dataIndex: 'id', key: 'id', width: 120 },
   { title: '测试类型', dataIndex: 'testType', key: 'testType', width: 120 },
   { title: '科室', dataIndex: 'departmentId', key: 'departmentId', width: 120 },
@@ -346,21 +347,21 @@ const resultsColumns = [
   { title: '数据量', dataIndex: 'dataSize', key: 'dataSize', width: 100 },
   { title: '耗时', dataIndex: 'duration', key: 'duration', width: 100 },
   { title: '开始时间', dataIndex: 'startTime', key: 'startTime', width: 180 },
-  { title: '操作', key: 'actions', width: 150, fixed: 'right' }
+  { title: '操作', key: 'actions', width: 150, fixed: 'right' as const },
 ]
 
 // 计算属性
 const testSummary = computed(() => {
   const total = testResults.value.length
-  const successful = testResults.value.filter(r => r.status === 'success').length
-  const failed = testResults.value.filter(r => r.status === 'failed').length
+  const successful = testResults.value.filter((r) => r.status === 'success').length
+  const failed = testResults.value.filter((r) => r.status === 'failed').length
   const totalTime = testResults.value.reduce((sum, r) => sum + r.duration, 0)
-  
+
   return {
     totalTests: total,
     successRate: total > 0 ? Math.round((successful / total) * 100) : 0,
     avgTime: total > 0 ? Math.round(totalTime / total) : 0,
-    errorCount: failed
+    errorCount: failed,
   }
 })
 
@@ -368,21 +369,21 @@ const testSummary = computed(() => {
 const runTest = async () => {
   testing.value = true
   testLogs.value = []
-  
+
   try {
     addLog('info', '开始执行测试...')
     addLog('info', `科室: ${getDepartmentName(testConfig.departmentId)}`)
     addLog('info', `测试类型: ${getTestTypeName(testConfig.testType)}`)
     addLog('info', `数据量: ${testConfig.dataSize}`)
-    
+
     const startTime = new Date()
-    
+
     // 模拟测试执行
     await simulateTest()
-    
+
     const endTime = new Date()
     const duration = endTime.getTime() - startTime.getTime()
-    
+
     // 添加测试结果
     const result = {
       id: `test_${Date.now()}`,
@@ -397,16 +398,15 @@ const runTest = async () => {
         rulesExecuted: Math.floor(Math.random() * 50) + 10,
         recordsProcessed: testConfig.dataSize,
         defectsFound: Math.floor(Math.random() * 20),
-        averageScore: Math.floor(Math.random() * 30) + 70
+        averageScore: Math.floor(Math.random() * 30) + 70,
       },
-      error: Math.random() > 0.2 ? null : '模拟测试错误：配置参数不匹配'
+      error: Math.random() > 0.2 ? null : '模拟测试错误：配置参数不匹配',
     }
-    
+
     testResults.value.unshift(result)
-    
+
     addLog('success', `测试完成，耗时: ${duration}ms`)
     message.success('测试执行完成')
-    
   } catch (error: unknown) {
     addLog('error', `测试失败: ${getErrorMessage(error)}`)
     message.error('测试执行失败')
@@ -422,12 +422,12 @@ const simulateTest = async () => {
     '准备测试数据...',
     '执行质控规则...',
     '分析测试结果...',
-    '生成测试报告...'
+    '生成测试报告...',
   ]
-  
+
   for (const step of steps) {
     addLog('info', step)
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 500))
   }
 }
 
@@ -436,7 +436,7 @@ const addLog = (level: LogLevel, message: string) => {
     id: Date.now() + Math.random(),
     level,
     message,
-    timestamp: new Date().toLocaleTimeString()
+    timestamp: new Date().toLocaleTimeString(),
   })
 }
 
@@ -450,7 +450,7 @@ const retryTest = async (record: TestResultItem) => {
   testConfig.departmentId = record.departmentId
   testConfig.testType = record.testType
   testConfig.dataSize = record.dataSize
-  
+
   await runTest()
 }
 
@@ -476,13 +476,13 @@ const getTestTypeName = (type: string) => {
     rules: '规则测试',
     sampling: '抽样测试',
     workflow: '工作流测试',
-    performance: '性能测试'
+    performance: '性能测试',
   }
   return names[type as TestType] || type
 }
 
 const getDepartmentName = (id: string) => {
-  const dept = departments.value.find(d => d.id === id)
+  const dept = departments.value.find((d) => d.id === id)
   return dept ? dept.name : id
 }
 

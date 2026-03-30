@@ -237,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, h, watch } from 'vue'
+import { ref, reactive, h, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -322,7 +322,16 @@ const modals = reactive({
 })
 
 const selectedUser = ref<Record<string, unknown> | undefined>(undefined)
-const selectedRole = ref<Record<string, unknown> | undefined>(undefined)
+type EditableRole = {
+  key: string
+  name: string
+  description: string
+  icon?: Component
+  color?: string
+  userCount?: number
+  permissionCount?: number
+}
+const selectedRole = ref<EditableRole | undefined>(undefined)
 
 const showCreateUserModal = () => {
   selectedUser.value = undefined
@@ -334,7 +343,7 @@ const editUser = (user: any) => {
   modals.userEdit = true
 }
 
-const editRole = (role: any) => {
+const editRole = (role: EditableRole) => {
   selectedRole.value = role
   modals.roleEdit = true
 }
