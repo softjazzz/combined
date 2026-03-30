@@ -21,8 +21,10 @@
               : 'text-gray-500 hover:text-gray-700',
           ]"
           @click="
-            activeDocId = doc.id
-            loadDocument(doc)
+            () => {
+              activeDocId = doc.id
+              loadDocument(doc)
+            }
           "
         >
           {{ doc.doc_name || doc.doc_type }}
