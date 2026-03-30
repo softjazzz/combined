@@ -260,7 +260,7 @@
                   size="small"
                   type="text"
                   class="text-blue-400 hover:text-blue-300"
-                  @click="$emit('view-record', record)"
+                  @click="handleViewRecord(record)"
                 >
                   <EyeOutlined />
                 </a-button>
@@ -271,7 +271,7 @@
                   size="small"
                   type="text"
                   class="text-emerald-400 hover:text-emerald-300"
-                  @click="$emit('edit-record', record)"
+                  @click="handleEditRecord(record)"
                 >
                   <EditOutlined />
                 </a-button>
@@ -285,7 +285,7 @@
                   size="small"
                   type="text"
                   class="text-amber-400 hover:text-amber-300"
-                  @click="$emit('analyze-record', record)"
+                  @click="handleAnalyzeRecord(record)"
                 >
                   <ThunderboltOutlined />
                 </a-button>
@@ -347,6 +347,7 @@ import {
   DownloadOutlined,
   CopyOutlined,
 } from '@ant-design/icons-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import type { MedicalRecord, SearchParams, PaginationParams, TableColumn } from '@/types'
 import { DEPARTMENTS } from '@/types/medical-records'
 
@@ -356,7 +357,11 @@ interface Props {
 }
 
 interface SearchParamsState extends SearchParams {
-  filters: NonNullable<SearchParams['filters']>
+  filters: {
+    department?: string
+    status?: string
+    record_type?: string
+  }
   sort: NonNullable<SearchParams['sort']>
   pagination: NonNullable<SearchParams['pagination']>
 }
@@ -542,11 +547,26 @@ const handleTableChange = (pag: TablePaginationLike, filters: unknown, sorter: u
 }
 
 // 处理批量操作
-const handleBatchAction = ({ key }: { key: string }) => {
+const toMedicalRecord = (record: Record<string, any>): MedicalRecord => record as MedicalRecord
+
+const handleViewRecord = (record: Record<string, any>) => {
+  emit('view-record', toMedicalRecord(record))
+}
+
+const handleEditRecord = (record: Record<string, any>) => {
+  emit('edit-record', toMedicalRecord(record))
+}
+
+const handleAnalyzeRecord = (record: Record<string, any>) => {
+  emit('analyze-record', toMedicalRecord(record))
+}
+
+const handleBatchAction = (info: MenuInfo) => {
+  const action = String(info.key)
   const selectedRecords = records.value.filter((record) =>
     selectedRowKeys.value.includes(record.id),
   )
-  emit('batch-action', key, selectedRecords)
+  emit('batch-action', action, selectedRecords)
 }
 
 // 处理记录操作
@@ -554,8 +574,8 @@ const handleRecordAction = (action: string, record: MedicalRecord) => {
   emit('record-action', action, record)
 }
 
-const handleRecordMenuClick = (info: { key: string }, record: MedicalRecord) => {
-  handleRecordAction(info.key, record)
+const handleRecordMenuClick = (info: MenuInfo, record: Record<string, any>) => {
+  handleRecordAction(String(info.key), toMedicalRecord(record))
 }
 
 // 获取状态颜色

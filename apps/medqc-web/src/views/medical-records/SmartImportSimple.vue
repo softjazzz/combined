@@ -358,6 +358,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import type { UploadChangeParam, UploadFile } from 'ant-design-vue'
 import {
   InboxOutlined,
   ThunderboltOutlined,
@@ -412,16 +413,7 @@ interface UploadFileLike {
   result?: ParseResponse | null
 }
 
-interface UploadChangeFileItem {
-  name: string
-  size: number
-  type?: string
-  originFileObj?: File
-}
-
-interface UploadChangeInfo {
-  fileList: UploadChangeFileItem[]
-}
+type UploadChangeInfo = UploadChangeParam<UploadFile<any>>
 
 interface SourceResultItem extends ParseResponse {
   sourceFile: string
@@ -601,19 +593,21 @@ const handleUploadChange = (info: UploadChangeInfo) => {
   console.log(`[${new Date().toLocaleTimeString()}] handleUploadChange 被调用, 文件数量: ${info.fileList.length}`)
 
   // 过滤出新添加的文件
-  const newFiles = info.fileList.filter((fileItem: UploadChangeFileItem) => {
+  const newFiles = info.fileList.filter((fileItem) => {
+    const fileSize = fileItem.size ?? 0
     const exists = uploadedFiles.value.some(existing =>
-      existing.name === fileItem.name && existing.size === fileItem.size
+      existing.name === fileItem.name && existing.size === fileSize
     )
     return !exists
   })
 
   // 添加新文件到列表
-  newFiles.forEach((fileItem: UploadChangeFileItem) => {
+  newFiles.forEach((fileItem) => {
     const rawFile = fileItem.originFileObj ?? (fileItem as unknown as File)
+    const fileSize = fileItem.size ?? 0
     const fileObj = {
       name: fileItem.name,
-      size: fileItem.size,
+      size: fileSize,
       type: fileItem.type || 'application/pdf',
       file: rawFile,
       parsing: false,

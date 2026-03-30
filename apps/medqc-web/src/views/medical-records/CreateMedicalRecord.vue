@@ -411,7 +411,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, FolderOutlined, FileTextOutlined } from '@ant-design/icons-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps, TreeProps } from 'ant-design-vue'
 
 interface DocumentTreeNode {
   key: string
@@ -422,9 +422,7 @@ interface DocumentTreeNode {
   children?: DocumentTreeNode[]
 }
 
-interface TreeSelectInfo {
-  node?: DocumentTreeNode
-}
+type TreeSelectInfo = Parameters<NonNullable<TreeProps['onSelect']>>[1]
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -577,7 +575,7 @@ const formRules = {
   primary_diagnosis: [
     { required: true, message: '请输入主诊断', trigger: 'blur' }
   ]
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // 生命周期
 onMounted(() => {
@@ -640,9 +638,10 @@ const onSearch = () => {
 
 // 选择文书类型
 const onSelectDocument = (keys: string[], info: TreeSelectInfo) => {
-  if (info.node?.isLeaf) {
+  const node = info.node as unknown as DocumentTreeNode | undefined
+  if (node?.isLeaf) {
     selectedKeys.value = keys
-    selectedDocument.value = info.node
+    selectedDocument.value = node
   }
 }
 

@@ -291,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import { storeToRefs } from 'pinia'
@@ -453,12 +453,12 @@ const columns: ColumnsType<TestMedicalRecordSummary> = [
   }
 ]
 
-const rowSelection = {
-  selectedRowKeys,
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: (string | number)[]) => {
-    selectedRowKeys.value = keys as string[]
-  }
-}
+    selectedRowKeys.value = keys.map((key) => String(key))
+  },
+}))
 
 const applyFilter = async () => {
   store.updateConditions({

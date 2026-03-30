@@ -478,7 +478,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordService'
 import { getAccessToken } from '@/utils/auth-token'
@@ -610,7 +610,7 @@ const formRules = {
   status: [
     { required: true, message: '请选择状态', trigger: 'change' }
   ]
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // 生命周期
 onMounted(async () => {

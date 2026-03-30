@@ -374,6 +374,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   FolderOpenOutlined,
   ReloadOutlined,
@@ -514,9 +515,10 @@ const documentTreeData = computed(() => {
 })
 
 // 方法
-const handleFilterChange = ({ key }: { key: string }) => {
-  activeFilter.value = key
-  emit('classification-filter', { filter: key })
+const handleFilterChange = ({ key }: MenuInfo) => {
+  const filterKey = String(key)
+  activeFilter.value = filterKey
+  emit('classification-filter', { filter: filterKey })
 }
 
 const handleSearch = (value: string) => {

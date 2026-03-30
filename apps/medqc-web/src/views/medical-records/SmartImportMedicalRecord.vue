@@ -649,6 +649,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import type { UploadFile } from 'ant-design-vue'
 import {
   InboxOutlined,
   FolderOpenOutlined,
@@ -745,17 +746,15 @@ interface BatchFileItem {
 }
 
 interface UploadInfoLike {
-  fileList: Array<{
-    originFileObj?: File
-  }>
+  fileList: UploadFile[]
 }
 
 // 响应式数据
 const currentStep = ref(0)
 const inputMethod = ref('paste')
 const inputText = ref('')
-const uploadFileList = ref<unknown[]>([])
-const batchFileList = ref<unknown[]>([])
+const uploadFileList = ref<UploadFile[]>([])
+const batchFileList = ref<UploadFile[]>([])
 const uploadedContent = ref('')
 const uploadedFile = ref<File | null>(null)
 const isParsingFile = ref(false)

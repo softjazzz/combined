@@ -263,6 +263,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { FormProps, UploadProps } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import {
   UserOutlined,
@@ -281,12 +282,7 @@ type RecordFormModel = MedicalRecord & {
   file_url?: string
   file_name?: string
 }
-interface UploadRequestOption {
-  file: File | Blob
-  onProgress?: (event: { percent: number }) => void
-  onSuccess?: (response: string) => void
-  onError?: (error: Error) => void
-}
+type UploadRequestOption = Parameters<NonNullable<UploadProps['customRequest']>>[0]
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
@@ -370,7 +366,7 @@ const formRules = {
     { min: 50, message: '病案内容至少50个字符', trigger: 'blur' },
     { max: 10000, message: '病案内容不能超过10000个字符', trigger: 'blur' }
   ]
-}
+} satisfies NonNullable<FormProps['rules']>
 
 // 初始化表单数据
 const initializeForm = () => {
@@ -448,36 +444,25 @@ const beforeUpload = (file: File) => {
 }
 
 // 处理文件上传
-const handleFileUpload = async (options: UploadRequestOption) => {
+const handleFileUpload = (options: UploadRequestOption) => {
   const { file, onProgress, onSuccess, onError } = options
-  
-  try {
-    uploadProgress.show = true
-    uploadProgress.percentage = 0
+  uploadProgress.show = true
+  uploadProgress.percentage = 0
 
-    // 模拟上传进度
-    const interval = setInterval(() => {
-      uploadProgress.percentage += 10
-      onProgress?.({ percent: uploadProgress.percentage })
-      
-      if (uploadProgress.percentage >= 100) {
-        clearInterval(interval)
-        
-        // 模拟上传完成
-        setTimeout(() => {
-          formData.file = file as File
-          uploadProgress.show = false
-          onSuccess?.('上传成功')
-          message.success('文件上传成功')
-        }, 500)
-      }
-    }, 200)
+  const interval = setInterval(() => {
+    uploadProgress.percentage += 10
+    onProgress?.({ percent: uploadProgress.percentage })
 
-  } catch (error) {
-    uploadProgress.show = false
-    onError?.(error as Error)
-    message.error('文件上传失败')
-  }
+    if (uploadProgress.percentage >= 100) {
+      clearInterval(interval)
+      setTimeout(() => {
+        formData.file = file as File
+        uploadProgress.show = false
+        onSuccess?.('上传成功')
+        message.success('文件上传成功')
+      }, 500)
+    }
+  }, 200)
 }
 
 // 筛选科室选项

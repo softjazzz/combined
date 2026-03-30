@@ -159,7 +159,7 @@
                     <a-button
                       :loading="batchParsing"
                       type="primary"
-                      size="default"
+                      size="middle"
                       @click="parseAllFiles"
                     >
                       <template #icon>
@@ -192,7 +192,7 @@
 
                     <a-button
                       type="default"
-                      size="default"
+                      size="middle"
                       danger
                       @click="clearAllFiles"
                     >
