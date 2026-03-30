@@ -719,6 +719,7 @@ import { type QCRuleCaseExample } from '@/data/qcRuleCases'
 import { ApiService } from '@/services/apiService'
 import type { User } from '@/types/auth'
 import { UserRole } from '@/types/auth'
+import { loadCustomRules } from '@/utils/custom-rules-loader'
 
 const router = useRouter()
 
@@ -861,8 +862,7 @@ const initCustomRules = async () => {
   loading.value = true
   try {
     if (!customRulesData.value.length) {
-      const customRulesModule = await import('../../backend/app/data/custom_rules_33.json')
-      customRulesData.value = customRulesModule.default as any[]
+      customRulesData.value = await loadCustomRules()
     }
 
     const rawRules = customRulesData.value

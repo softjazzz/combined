@@ -45,6 +45,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { Typography } from 'ant-design-vue'
+import { loadCustomRules } from '@/utils/custom-rules-loader'
 
 interface SichuanQCRule {
   rule_id?: string
@@ -111,8 +112,7 @@ const ruleDocRows = computed(() =>
 )
 
 onMounted(async () => {
-  const customRulesModule = await import('../../../backend/app/data/custom_rules_33.json')
-  allRules.value = customRulesModule.default as SichuanQCRule[]
+  allRules.value = (await loadCustomRules()) as SichuanQCRule[]
 })
 </script>
 

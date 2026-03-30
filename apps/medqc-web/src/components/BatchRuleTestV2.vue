@@ -142,10 +142,13 @@
             <div
               v-for="rule in filteredRules"
               :key="rule.rule_id"
-              :class="['rule-item', {
-                selected: selectedRuleIds.includes(rule.rule_id),
-                disabled: isTesting
-              }]"
+              :class="[
+                'rule-item',
+                {
+                  selected: selectedRuleIds.includes(rule.rule_id),
+                  disabled: isTesting,
+                },
+              ]"
               @click="toggleRuleSelection(rule.rule_id)"
             >
               <a-checkbox
@@ -231,7 +234,11 @@
               <template #icon>
                 <ThunderboltOutlined />
               </template>
-              {{ isTesting ? `评估中 ${testProgress.completed}/${testProgress.total}` : '🚀 开始批量评估' }}
+              {{
+                isTesting
+                  ? `评估中 ${testProgress.completed}/${testProgress.total}`
+                  : '🚀 开始批量评估'
+              }}
             </a-button>
 
             <a-button
@@ -290,7 +297,11 @@
               AI 正在评估中...
             </div>
             <div class="evaluating-hint">
-              {{ isTesting ? `${testProgress.completed}/${testProgress.total} 条规则` : '使用优化提示词批量评估' }}
+              {{
+                isTesting
+                  ? `${testProgress.completed}/${testProgress.total} 条规则`
+                  : '使用优化提示词批量评估'
+              }}
             </div>
           </div>
 
@@ -323,7 +334,10 @@
                   </svg>
                   <div class="chart-text">
                     <div class="chart-value">
-                      {{ productionResult.data.evaluation_summary.compliance_rate?.toFixed(1) || '0.0' }}%
+                      {{
+                        productionResult.data.evaluation_summary.compliance_rate?.toFixed(1) ||
+                          '0.0'
+                      }}%
                     </div>
                     <div class="chart-label">
                       合规率
@@ -348,7 +362,10 @@
                 <div class="summary-row">
                   <span class="summary-label">处理时间：</span>
                   <span class="summary-value">
-                    {{ productionResult.data.performance_metrics?.processing_time.toFixed(2) || '0.00' }}s
+                    {{
+                      productionResult.data.performance_metrics?.processing_time.toFixed(2) ||
+                        '0.00'
+                    }}s
                   </span>
                 </div>
                 <div class="summary-row">
@@ -362,7 +379,10 @@
 
             <!-- 详细结果列表 -->
             <div
-              v-if="productionResult.data.evaluation_results && productionResult.data.evaluation_results.length > 0"
+              v-if="
+                productionResult.data.evaluation_results &&
+                  productionResult.data.evaluation_results.length > 0
+              "
               class="results-list"
             >
               <div class="results-header">
@@ -443,7 +463,7 @@
             <div class="results-stats">
               <div class="stat-item">
                 <div class="stat-value">
-                  {{ testResults.filter(r => r.isCompliant).length }}
+                  {{ testResults.filter((r) => r.isCompliant).length }}
                 </div>
                 <div class="stat-label">
                   合规
@@ -451,7 +471,7 @@
               </div>
               <div class="stat-item">
                 <div class="stat-value error">
-                  {{ testResults.filter(r => !r.isCompliant).length }}
+                  {{ testResults.filter((r) => !r.isCompliant).length }}
                 </div>
                 <div class="stat-label">
                   不合规
@@ -512,13 +532,9 @@ import {
   AppstoreOutlined,
   FileTextOutlined,
   BarChartOutlined,
-  SearchOutlined
+  SearchOutlined,
 } from '@ant-design/icons-vue'
-import {
-  SolutionOutlined,
-  ScissorOutlined,
-  HomeOutlined
-} from '@ant-design/icons-vue'
+import { SolutionOutlined, ScissorOutlined, HomeOutlined } from '@ant-design/icons-vue'
 import {
   PRESET_ADMISSION_RECORD,
   filterRulesByDocumentType,
@@ -526,11 +542,11 @@ import {
   filterRules,
   type BatchTestResult,
   type BatchTestProgress,
-  type DocumentTypeConfig
+  type DocumentTypeConfig,
 } from '@/utils/batchTestHelpers'
 import { testQCRule, batchEvaluateQC } from '@/api/qc'
 import type { TestQCRuleData, BatchQCEvaluateResponse } from '@/api/qc'
-import customRules from '../../backend/app/data/custom_rules_33.json'
+import { loadCustomRules } from '@/utils/custom-rules-loader'
 
 const router = useRouter()
 
@@ -539,7 +555,7 @@ const iconComponents: Record<string, any> = {
   admission: SolutionOutlined,
   course: FileTextOutlined,
   operation: ScissorOutlined,
-  discharge: HomeOutlined
+  discharge: HomeOutlined,
 }
 
 // 数据状态
@@ -547,13 +563,14 @@ const currentDocumentType = ref<string>('admission_record')
 const documentTypeConfigs = ref<DocumentTypeConfig[]>(DOCUMENT_TYPE_CONFIGS)
 const medicalText = ref(PRESET_ADMISSION_RECORD)
 const originalMedicalText = ref(PRESET_ADMISSION_RECORD)
+const customRules = ref<any[]>([])
 const admissionRules = ref<any[]>([])
 const selectedRuleIds = ref<string[]>([])
 const isTesting = ref(false)
 const testResults = ref<BatchTestResult[]>([])
 const testProgress = ref<BatchTestProgress>({
   total: 0,
-  completed: 0
+  completed: 0,
 })
 
 // 生产批量质控状态
@@ -568,7 +585,10 @@ const filterComplexity = ref<string | undefined>(undefined)
 
 // 当前配置
 const currentConfig = computed(() => {
-  return documentTypeConfigs.value.find(c => c.key === currentDocumentType.value) || documentTypeConfigs.value[0]
+  return (
+    documentTypeConfigs.value.find((c) => c.key === currentDocumentType.value) ||
+    documentTypeConfigs.value[0]
+  )
 })
 
 // 过滤后的规则
@@ -577,19 +597,21 @@ const filteredRules = computed(() => {
     admissionRules.value,
     searchText.value,
     filterDefectLevel.value,
-    filterComplexity.value
+    filterComplexity.value,
   )
 })
 
 // 全选状态
 const isAllSelected = computed(() => {
-  return filteredRules.value.length > 0 &&
-         filteredRules.value.every(rule => selectedRuleIds.value.includes(rule.rule_id))
+  return (
+    filteredRules.value.length > 0 &&
+    filteredRules.value.every((rule) => selectedRuleIds.value.includes(rule.rule_id))
+  )
 })
 
 const isIndeterminate = computed(() => {
-  const selectedCount = filteredRules.value.filter(rule =>
-    selectedRuleIds.value.includes(rule.rule_id)
+  const selectedCount = filteredRules.value.filter((rule) =>
+    selectedRuleIds.value.includes(rule.rule_id),
   ).length
   return selectedCount > 0 && selectedCount < filteredRules.value.length
 })
@@ -598,7 +620,7 @@ const isIndeterminate = computed(() => {
 const filteredEvaluationResults = computed(() => {
   if (!productionResult.value?.data?.evaluation_results) return []
   if (resultFilter.value === 'issues') {
-    return productionResult.value.data.evaluation_results.filter(r => !r.is_compliant)
+    return productionResult.value.data.evaluation_results.filter((r) => !r.is_compliant)
   }
   return productionResult.value.data.evaluation_results
 })
@@ -615,7 +637,7 @@ const handleDocumentTypeChange = (value: string) => {
 }
 
 const loadRulesForDocumentType = (documentType: string) => {
-  admissionRules.value = filterRulesByDocumentType(customRules, documentType)
+  admissionRules.value = filterRulesByDocumentType(customRules.value, documentType)
   selectedRuleIds.value = []
 }
 
@@ -625,7 +647,7 @@ const resetMedicalText = () => {
 
 const toggleSelectAll = (e: any) => {
   if (e.target.checked) {
-    selectedRuleIds.value = filteredRules.value.map(rule => rule.rule_id)
+    selectedRuleIds.value = filteredRules.value.map((rule) => rule.rule_id)
   } else {
     selectedRuleIds.value = []
   }
@@ -673,18 +695,18 @@ const startBatchTest = async () => {
   testResults.value = []
   testProgress.value = {
     total: selectedRuleIds.value.length,
-    completed: 0
+    completed: 0,
   }
 
   try {
     for (const ruleId of selectedRuleIds.value) {
-      const rule = admissionRules.value.find(r => r.rule_id === ruleId)
+      const rule = admissionRules.value.find((r) => r.rule_id === ruleId)
       if (!rule) continue
 
       try {
         const response = await testQCRule({
           rule_id: ruleId,
-          medical_text: medicalText.value
+          medical_text: medicalText.value,
         })
 
         if (response.success && response.data) {
@@ -704,7 +726,7 @@ const startBatchTest = async () => {
             issues: response.data.issues || [],
             llmRawOutput: response.data.llm_raw_output,
             metadata: response.data.metadata,
-            error: response.success ? undefined : (response.message || '评估失败')
+            error: response.success ? undefined : response.message || '评估失败',
           })
         }
       } catch (error) {
@@ -739,7 +761,7 @@ const startProductionBatchQC = async () => {
       document_content: medicalText.value,
       document_type: currentConfig.value.label,
       rule_ids: selectedRuleIds.value,
-      persist: false
+      persist: false,
     })
 
     productionResult.value = response
@@ -753,7 +775,8 @@ const startProductionBatchQC = async () => {
 }
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
+  customRules.value = await loadCustomRules()
   loadRulesForDocumentType(currentDocumentType.value)
 })
 </script>

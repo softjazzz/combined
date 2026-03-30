@@ -268,8 +268,7 @@
                         {{ item.name }}
                       </template>
                       <template #description>
-                        大小: {{ formatFileSize(item.size) }} |
-                        类型: {{ item.type }}
+                        大小: {{ formatFileSize(item.size) }} | 类型: {{ item.type }}
                       </template>
                     </a-list-item-meta>
                   </a-list-item>
@@ -374,7 +373,7 @@
       <div class="review-section">
         <a-alert
           message="AI解析完成"
-          :description="`成功解析出 ${((extractedData && extractedData.documents) ? extractedData.documents.length : 0)} 个文书，请仔细检查并修正以下信息`"
+          :description="`成功解析出 ${extractedData && extractedData.documents ? extractedData.documents.length : 0} 个文书，请仔细检查并修正以下信息`"
           type="success"
           show-icon
           class="review-alert"
@@ -497,7 +496,7 @@
                 <a-col :span="8">
                   <a-statistic
                     title="识别文书数量"
-                    :value="(extractedData.documents ? extractedData.documents.length : 0)"
+                    :value="extractedData.documents ? extractedData.documents.length : 0"
                     :value-style="{ color: '#1890ff' }"
                   >
                     <template #prefix>
@@ -647,7 +646,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -661,28 +660,52 @@ import {
   TrophyOutlined,
   ReloadOutlined,
   CheckOutlined,
-  SettingOutlined
+  SettingOutlined,
 } from '@ant-design/icons-vue'
-import LLMApiConfigDatabase from '@/components/LLMApiConfigDatabase.vue'
-import { llmService } from '@/services/llmServiceNew'
-import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordService'
-import { llmConfigService, type UserLLMConfig } from '@/services/llmConfigService'
-import { DocumentParser } from '@/utils/documentParser'
-import MedicalDocumentTree from '@/components/MedicalDocumentTree.vue'
+import type { UserLLMConfig } from '@/services/llmConfigService'
 import type { ExtractedDocument as TreeExtractedDocument } from '@/services/llmService'
 import type {
   ExtractedMedicalData as PersistedExtractedMedicalData,
   ExtractedDocument as PersistedExtractedDocument,
-  DocumentType as PersistedDocumentType
+  DocumentType as PersistedDocumentType,
 } from '@/types/medical'
 import {
   getGroupedDocumentTypeOptions,
   getDocumentTypeLabel,
   getDocumentTypeColor,
-  inferDocumentType
+  inferDocumentType,
 } from '@/utils/documentTypeUtils'
 
 const router = useRouter()
+const LLMApiConfigDatabase = defineAsyncComponent(
+  () => import('@/components/LLMApiConfigDatabase.vue'),
+)
+const MedicalDocumentTree = defineAsyncComponent(
+  () => import('@/components/MedicalDocumentTree.vue'),
+)
+
+let llmServicePromise: Promise<typeof import('@/services/llmServiceNew')> | null = null
+let supabaseMedicalRecordServicePromise: Promise<
+  typeof import('@/services/supabaseMedicalRecordService')
+> | null = null
+let documentParserPromise: Promise<typeof import('@/utils/documentParser')> | null = null
+
+const getLLMService = async () => {
+  const module = await (llmServicePromise ??= import('@/services/llmServiceNew'))
+  return module.llmService
+}
+
+const getSupabaseMedicalRecordService = async () => {
+  const module = await (supabaseMedicalRecordServicePromise ??= import(
+    '@/services/supabaseMedicalRecordService'
+  ))
+  return module.supabaseMedicalRecordService
+}
+
+const getDocumentParser = async () => {
+  const module = await (documentParserPromise ??= import('@/utils/documentParser'))
+  return module.DocumentParser
+}
 
 interface ExtractedDocumentPosition {
   startMarker?: string
@@ -763,7 +786,7 @@ const extractedData = reactive<ExtractedMedicalData>({
   primaryDiagnosis: '',
   secondaryDiagnosis: [],
   majorSurgery: '',
-  documents: []
+  documents: [],
 })
 
 // 计算属性
@@ -779,21 +802,21 @@ const canProceedToNext = computed(() => {
 })
 
 const extractedFieldsCount = computed(() => {
-  let count = 0;
-  if (extractedData.patientName) count++;
-  if (extractedData.department) count++;
-  if (extractedData.primaryDiagnosis) count++;
-  if (extractedData.majorSurgery) count++;
-  count += (extractedData.documents ? extractedData.documents.length : 0);
-  return count;
+  let count = 0
+  if (extractedData.patientName) count++
+  if (extractedData.department) count++
+  if (extractedData.primaryDiagnosis) count++
+  if (extractedData.majorSurgery) count++
+  count += extractedData.documents ? extractedData.documents.length : 0
+  return count
 })
 
 const averageConfidence = computed(() => {
   // 模拟计算平均置信度
   return 89
 })
-const treeDocuments = computed<TreeExtractedDocument[]>(() =>
-  extractedData.documents as unknown as TreeExtractedDocument[]
+const treeDocuments = computed<TreeExtractedDocument[]>(
+  () => extractedData.documents as unknown as TreeExtractedDocument[],
 )
 
 // 获取分组的文书类型选项
@@ -807,6 +830,7 @@ onMounted(async () => {
 
   // 尝试从数据库加载默认配置
   try {
+    const llmService = await getLLMService()
     const success = await llmService.loadConfigFromDatabase('default')
     if (success) {
       console.log('已加载默认LLM配置')
@@ -834,7 +858,9 @@ const generateRecordNumber = () => {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+  const random = Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, '0')
   extractedData.recordNumber = `MR${year}${month}${day}${random}`
 }
 
@@ -856,7 +882,12 @@ const beforeUpload = (file: File) => {
   console.log('beforeUpload 被调用:', file.name, file.type, file.size)
 
   // 验证文件类型
-  const isValidType = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'].includes(file.type)
+  const isValidType = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+  ].includes(file.type)
   if (!isValidType) {
     message.error('只支持 PDF、Word、文本文件格式')
     return false
@@ -879,7 +910,7 @@ const beforeBatchUpload = () => {
 
 const handleFileUpload = async (info: UploadInfoLike) => {
   console.log('🔥 handleFileUpload 被调用了！', info)
-  const file = (info.fileList[0] && info.fileList[0].originFileObj)
+  const file = info.fileList[0] && info.fileList[0].originFileObj
   console.log('📁 提取的文件对象:', file)
   if (file) {
     // 防止重复处理
@@ -892,10 +923,17 @@ const handleFileUpload = async (info: UploadInfoLike) => {
     uploadedFile.value = file
 
     // 检查文件类型是否支持
-    const allowedTypes = ['text/plain', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
     const allowedExtensions = ['.txt', '.pdf', '.doc', '.docx']
 
-    const isValidType = allowedTypes.includes(file.type) || allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+    const isValidType =
+      allowedTypes.includes(file.type) ||
+      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
 
     if (!isValidType) {
       message.error(`不支持的文件格式: ${file.name}`)
@@ -936,6 +974,7 @@ const handleFileUpload = async (info: UploadInfoLike) => {
         await parseTextFile(file)
       } else {
         // 其他文件类型使用原有的DocumentParser
+        const DocumentParser = await getDocumentParser()
         const parseResult = await DocumentParser.parseDocument(file)
 
         if (parseResult.success) {
@@ -1000,21 +1039,28 @@ const handleBatchUpload = (info: unknown) => {
   batchFiles.value = [
     { name: '患者张三病历.txt', size: 15420, type: 'text/plain' },
     { name: '患者李四病历.doc', size: 23680, type: 'application/msword' },
-    { name: '患者王五病历.txt', size: 18950, type: 'text/plain' }
+    { name: '患者王五病历.txt', size: 18950, type: 'text/plain' },
   ]
 }
 
 // 备用文件选择处理
 const handleDebugFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
-  const file = (target.files && target.files[0])
+  const file = target.files && target.files[0]
   if (file) {
     console.log('📁 备用上传：选择了文件', file.name, file.type, file.size)
 
     // 检查文件类型
-    const allowedTypes = ['text/plain', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
     const allowedExtensions = ['.txt', '.pdf', '.doc', '.docx']
-    const isValidType = allowedTypes.includes(file.type) || allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+    const isValidType =
+      allowedTypes.includes(file.type) ||
+      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
 
     if (!isValidType) {
       message.error(`不支持的文件格式: ${file.name}`)
@@ -1028,7 +1074,7 @@ const handleDebugFileSelect = (event: Event) => {
     }
 
     debugSelectedFile.value = file
-    uploadedFile.value = file  // 同步到主要的文件变量
+    uploadedFile.value = file // 同步到主要的文件变量
     message.success(`已选择文件: ${file.name}`)
   }
 }
@@ -1060,12 +1106,19 @@ const handleDebugParsePDF = async () => {
 ⏳ 正在处理中，请稍候...`
 
     // 根据文件类型选择解析方法
-    if (debugSelectedFile.value.type === 'application/pdf' || debugSelectedFile.value.name.toLowerCase().endsWith('.pdf')) {
+    if (
+      debugSelectedFile.value.type === 'application/pdf' ||
+      debugSelectedFile.value.name.toLowerCase().endsWith('.pdf')
+    ) {
       await parsePDFFile(debugSelectedFile.value)
-    } else if (debugSelectedFile.value.type === 'text/plain' || debugSelectedFile.value.name.toLowerCase().endsWith('.txt')) {
+    } else if (
+      debugSelectedFile.value.type === 'text/plain' ||
+      debugSelectedFile.value.name.toLowerCase().endsWith('.txt')
+    ) {
       await parseTextFile(debugSelectedFile.value)
     } else {
       // 其他文件类型使用DocumentParser
+      const DocumentParser = await getDocumentParser()
       const parseResult = await DocumentParser.parseDocument(debugSelectedFile.value)
       if (parseResult.success) {
         uploadedContent.value = parseResult.content
@@ -1118,7 +1171,11 @@ const getFileTypeDescription = (file: File) => {
     return 'PDF文档'
   } else if (file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt')) {
     return '文本文件'
-  } else if (file.type.includes('msword') || file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
+  } else if (
+    file.type.includes('msword') ||
+    file.name.toLowerCase().endsWith('.doc') ||
+    file.name.toLowerCase().endsWith('.docx')
+  ) {
     return 'Word文档'
   }
   return '文档'
@@ -1128,11 +1185,19 @@ const getFileTypeDescription = (file: File) => {
 const getErrorSuggestions = (errorMessage: string) => {
   if (errorMessage.includes('用户未登录')) {
     return '请刷新页面重新登录后再试'
-  } else if (errorMessage.includes('Not authenticated') || errorMessage.includes('401') || errorMessage.includes('403')) {
+  } else if (
+    errorMessage.includes('Not authenticated') ||
+    errorMessage.includes('401') ||
+    errorMessage.includes('403')
+  ) {
     return '认证失败，请检查登录状态或刷新页面重新登录'
   } else if (errorMessage.includes('网络连接失败') || errorMessage.includes('NetworkError')) {
     return '网络连接问题，请检查网络连接状态，确保前后端服务都在运行'
-  } else if (errorMessage.includes('请求超时') || errorMessage.includes('timeout') || errorMessage.includes('AbortError')) {
+  } else if (
+    errorMessage.includes('请求超时') ||
+    errorMessage.includes('timeout') ||
+    errorMessage.includes('AbortError')
+  ) {
     return '请求处理时间过长，可能是文件过大或服务器繁忙，请稍后重试'
   } else if (errorMessage.includes('无法连接到服务器') || errorMessage.includes('fetch')) {
     return '服务器连接失败，请确认后端服务正在运行，或联系技术支持'
@@ -1167,16 +1232,17 @@ const parsePDFFile = async (file: File) => {
     const timeoutId = setTimeout(() => controller.abort(), 60000) // 60秒超时
 
     // 尝试直接调用后端，如果代理有问题的话
-    const apiUrl = window.location.hostname === 'localhost'
-      ? 'http://localhost:8001/api/parse-medical-file'
-      : '/api/parse-medical-file'
+    const apiUrl =
+      window.location.hostname === 'localhost'
+        ? 'http://localhost:8001/api/parse-medical-file'
+        : '/api/parse-medical-file'
 
     console.log('调用API:', apiUrl)
     console.log('发送请求...')
     const response = await fetch(apiUrl, {
       method: 'POST',
       body: formData,
-      signal: controller.signal
+      signal: controller.signal,
     })
 
     clearTimeout(timeoutId)
@@ -1209,18 +1275,18 @@ const parsePDFFile = async (file: File) => {
 `
 
       // 如果提取到医疗信息，显示它们
-      if (Object.keys(medicalInfo).some(key => medicalInfo[key])) {
+      if (Object.keys(medicalInfo).some((key) => medicalInfo[key])) {
         displayContent += `🏥 自动提取的医疗信息:
 `
-        Object.entries(medicalInfo).forEach(([key,  value]) => {
+        Object.entries(medicalInfo).forEach(([key, value]) => {
           if (value) {
             const keyMap: Record<string, string> = {
-              'patient_name': '患者姓名',
-              'patient_age': '年龄',
-              'patient_gender': '性别',
-              'department': '科室',
-              'diagnosis': '诊断',
-              'vital_signs': '生命体征'
+              patient_name: '患者姓名',
+              patient_age: '年龄',
+              patient_gender: '性别',
+              department: '科室',
+              diagnosis: '诊断',
+              vital_signs: '生命体征',
             }
             displayContent += `- ${keyMap[key] || key}: ${Array.isArray(value) ? value.join(', ') : value}
 `
@@ -1294,7 +1360,7 @@ const handleStartParsing = async () => {
       inputMethodUsed = 'upload'
 
       // 检查是否为PDF文件，需要通过后端处理
-      if (uploadedFile.value && DocumentParser.isPDFFile(uploadedFile.value)) {
+      if (uploadedFile.value && (await getDocumentParser()).isPDFFile(uploadedFile.value)) {
         fileToProcess = uploadedFile.value
         console.log('准备通过后端处理PDF文件:', fileToProcess.name)
       } else {
@@ -1316,6 +1382,7 @@ const handleStartParsing = async () => {
     await simulateAIParsing()
 
     // 确保在使用前加载默认配置（用户级优先，回退全局）
+    const llmService = await getLLMService()
     await llmService.loadConfigFromDatabase('default')
 
     // 调用LLM服务进行解析
@@ -1328,7 +1395,7 @@ const handleStartParsing = async () => {
         extractDiagnosis: true,
         extractSurgeryInfo: true,
         classifyDocuments: true,
-        confidenceThreshold: 0.7
+        confidenceThreshold: 0.7,
       })
     } else {
       // 处理文本内容
@@ -1338,7 +1405,7 @@ const handleStartParsing = async () => {
         extractDiagnosis: true,
         extractSurgeryInfo: true,
         classifyDocuments: true,
-        confidenceThreshold: 0.7
+        confidenceThreshold: 0.7,
       })
     }
 
@@ -1356,13 +1423,15 @@ const handleStartParsing = async () => {
       department: data.department || '',
       primaryDiagnosis: data.primaryDiagnosis || '',
       majorSurgery: data.majorSurgery || '',
-      documents: (data.documents ? data.documents.map(doc => ({
-        id: doc.id,
-        type: doc.type,
-        title: doc.title,
-        content: doc.content,
-        confidence: doc.confidence
-      })) : [])
+      documents: data.documents
+        ? data.documents.map((doc) => ({
+            id: doc.id,
+            type: doc.type,
+            title: doc.title,
+            content: doc.content,
+            confidence: doc.confidence,
+          }))
+        : [],
     })
 
     // 写入全局store与session，并跳转到结果页
@@ -1374,7 +1443,10 @@ const handleStartParsing = async () => {
     // 成本提示：显示本次解析的 token 用量与节省估算（结果页里也会展示）
     const tokensUsed = parseResult.tokensUsed || 0
     if (tokensUsed > 0) {
-      const baselineTokens = (parseResult.data?.content ? Math.round(parseResult.data.content.length/4) : Math.round((textToParse||'').length/4)) + 1000
+      const baselineTokens =
+        (parseResult.data?.content
+          ? Math.round(parseResult.data.content.length / 4)
+          : Math.round((textToParse || '').length / 4)) + 1000
       const saved = Math.max(0, baselineTokens - tokensUsed)
       const savedPct = baselineTokens > 0 ? Math.round((saved / baselineTokens) * 100) : 0
       message.info(`本次LLM用量≈${tokensUsed} tokens，较旧方案预计节省≈${savedPct}%`, 6)
@@ -1396,13 +1468,13 @@ const simulateAIParsing = async () => {
     { step: 1, progress: 25, delay: 1000 },
     { step: 2, progress: 50, delay: 1500 },
     { step: 3, progress: 75, delay: 2000 },
-    { step: 4, progress: 100, delay: 1000 }
+    { step: 4, progress: 100, delay: 1000 },
   ]
 
   for (const { step, progress, delay } of steps) {
     parsingStep.value = step
     parsingProgress.value = progress
-    await new Promise(resolve => setTimeout(resolve, delay))
+    await new Promise((resolve) => setTimeout(resolve, delay))
   }
 }
 
@@ -1442,31 +1514,38 @@ const handleConfirmImport = async () => {
       primaryDiagnosis: extractedData.primaryDiagnosis,
       secondaryDiagnosis: extractedData.secondaryDiagnosis,
       majorSurgery: extractedData.majorSurgery,
-      documents: (extractedData.documents ? extractedData.documents.map((doc): PersistedExtractedDocument => ({
-        id: doc.id,
-        type: doc.type as PersistedDocumentType,
-        title: doc.title,
-        content: doc.content,
-        confidence: doc.confidence ?? 0,
-        extractedAt: new Date(),
-        position: doc.position ? {
-          startMarker: doc.position.startMarker || '',
-          endMarker: doc.position.endMarker || '',
-          startIndex: doc.position.startIndex,
-          endIndex: doc.position.endIndex,
-          fullContent: doc.position.fullContent
-        } : undefined
-      })) : []),
-      confidence: averageConfidence.value
+      documents: extractedData.documents
+        ? extractedData.documents.map(
+            (doc): PersistedExtractedDocument => ({
+              id: doc.id,
+              type: doc.type as PersistedDocumentType,
+              title: doc.title,
+              content: doc.content,
+              confidence: doc.confidence ?? 0,
+              extractedAt: new Date(),
+              position: doc.position
+                ? {
+                    startMarker: doc.position.startMarker || '',
+                    endMarker: doc.position.endMarker || '',
+                    startIndex: doc.position.startIndex,
+                    endIndex: doc.position.endIndex,
+                    fullContent: doc.position.fullContent,
+                  }
+                : undefined,
+            }),
+          )
+        : [],
+      confidence: averageConfidence.value,
     }
 
     // 保存到Supabase数据库（测试表）
+    const supabaseMedicalRecordService = await getSupabaseMedicalRecordService()
     const savedRecord = await supabaseMedicalRecordService.saveAIExtractionResult(
       extractedMedicalData,
       rawText,
       inputMethodUsed,
       2500,
-      1250
+      1250,
     )
 
     // 同步写入医疗文书表
@@ -1485,7 +1564,10 @@ const handleConfirmImport = async () => {
           const startIdx = baseText.indexOf(pos.startMarker)
           if (startIdx >= 0) {
             if (pos.endMarker) {
-              const after = baseText.indexOf(pos.endMarker, startIdx + String(pos.startMarker).length)
+              const after = baseText.indexOf(
+                pos.endMarker,
+                startIdx + String(pos.startMarker).length,
+              )
               if (after > startIdx) full = baseText.slice(startIdx, after)
             }
             if (!full) full = baseText.slice(startIdx, Math.min(baseText.length, startIdx + 4000))
@@ -1503,7 +1585,7 @@ const handleConfirmImport = async () => {
           ai_confidence_score: d.confidence || 0,
           position: d.position || undefined,
           sort_order: idx,
-          status: 'active' as const
+          status: 'active' as const,
         }
       })
       if (batch.length) await createDocumentsBatch(batch)
@@ -1512,7 +1594,7 @@ const handleConfirmImport = async () => {
     }
 
     importedCount.value = 1
-    importedDocumentsCount.value = (extractedData.documents ? extractedData.documents.length : 0)
+    importedDocumentsCount.value = extractedData.documents ? extractedData.documents.length : 0
 
     // 保存记录ID用于后续查看
     localStorage.setItem('lastImportedRecordId', savedRecord.id)
@@ -1549,7 +1631,7 @@ const handleImportAnother = () => {
     department: '',
     primaryDiagnosis: '',
     majorSurgery: '',
-    documents: []
+    documents: [],
   })
   generateRecordNumber()
 }
@@ -1562,6 +1644,7 @@ const handleBackToList = () => {
 const loadAndApplyApiConfig = async () => {
   try {
     // 首先尝试从数据库加载默认配置
+    const llmService = await getLLMService()
     const success = await llmService.loadConfigFromDatabase('default')
     if (success) {
       console.log('已从数据库加载默认配置')
@@ -1580,12 +1663,12 @@ const loadAndApplyApiConfig = async () => {
       llmService.updateConfig({
         apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         apiKey: configData.apiKey || '',
-        model: configData.selectedModel || 'qwen-plus'
+        model: configData.selectedModel || 'qwen-plus',
       })
 
       console.log('已加载并应用localStorage配置:', {
         model: configData.selectedModel,
-        hasApiKey: !!configData.apiKey
+        hasApiKey: !!configData.apiKey,
       })
     } else {
       console.log('未找到保存的API配置，使用默认配置')
@@ -1602,6 +1685,7 @@ const handleApiConfigUpdated = async (config: UserLLMConfig) => {
 
   try {
     // 从数据库加载配置到llmService实例
+    const llmService = await getLLMService()
     const success = await llmService.loadConfigFromDatabase(config.config_name)
     if (success) {
       message.success(`已切换到配置: ${config.config_name}`)
@@ -1629,6 +1713,7 @@ const handleGlobalConfigUpdate = async (event: Event) => {
 
   try {
     // 从数据库重新加载配置
+    const llmService = await getLLMService()
     const success = await llmService.loadConfigFromDatabase('default')
     if (success) {
       console.log('已应用全局配置更新')
@@ -1715,7 +1800,8 @@ const handleCancel = () => {
 }
 
 .enhanced-text-input {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', monospace !important;
+  font-family:
+    'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', monospace !important;
   font-size: 14px !important;
   line-height: 1.6 !important;
   border-radius: 8px !important;

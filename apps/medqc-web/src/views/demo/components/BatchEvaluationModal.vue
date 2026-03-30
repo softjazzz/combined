@@ -385,14 +385,7 @@ import {
   ExclamationCircleTwoTone,
 } from '@ant-design/icons-vue'
 import type { QCRule, EvaluationResult } from '@/types/demo'
-import {
-  qcRuleCaseMap,
-  buildCaseText,
-  extractHints,
-  extractFocusPoints,
-  type QCRuleCaseExample,
-} from '@/data/qcRuleCases'
-import { customRuleCaseMap } from '@/data/customRuleCases'
+import type { QCRuleCaseExample } from '@/data/qcRuleCases'
 
 interface Props {
   visible: boolean
@@ -417,6 +410,32 @@ const statusToneIcons: Record<StatusTone, any> = {
   warning: ExclamationCircleFilled,
   error: CloseCircleFilled,
   info: InfoCircleFilled,
+}
+
+const qcRuleCaseMapRef = ref<Record<string, any>>({})
+const customRuleCaseMapRef = ref<Record<string, any>>({})
+const buildCaseTextRef = ref<
+  ((example: QCRuleCaseExample, options?: Record<string, unknown>) => string) | null
+>(null)
+const extractHintsRef = ref<((example: QCRuleCaseExample) => string[]) | null>(null)
+const extractFocusPointsRef = ref<((example: QCRuleCaseExample) => string[]) | null>(null)
+let caseDataPromise: Promise<void> | null = null
+
+const ensureCaseDataLoaded = async () => {
+  if (!caseDataPromise) {
+    caseDataPromise = Promise.all([
+      import('@/data/qcRuleCases'),
+      import('@/data/customRuleCases'),
+    ]).then(([qcRuleCasesModule, customRuleCasesModule]) => {
+      qcRuleCaseMapRef.value = qcRuleCasesModule.qcRuleCaseMap
+      customRuleCaseMapRef.value = customRuleCasesModule.customRuleCaseMap
+      buildCaseTextRef.value = qcRuleCasesModule.buildCaseText
+      extractHintsRef.value = qcRuleCasesModule.extractHints
+      extractFocusPointsRef.value = qcRuleCasesModule.extractFocusPoints
+    })
+  }
+
+  return caseDataPromise
 }
 
 // 文书类别映射
@@ -490,13 +509,13 @@ const getExampleMedicalText = (rule: QCRule, type: 'positive' | 'negative'): str
 
   // 2. 回退到前端内置示例（旧方案），避免短期内打断已有使用
   const ruleId = rule.rule_id
-  let ruleCase = ruleId ? customRuleCaseMap[ruleId] : undefined
+  let ruleCase = ruleId ? customRuleCaseMapRef.value[ruleId] : undefined
   if (!ruleCase && ruleId) {
-    ruleCase = qcRuleCaseMap[ruleId]
+    ruleCase = qcRuleCaseMapRef.value[ruleId]
   }
-  if (ruleCase) {
+  if (ruleCase && buildCaseTextRef.value) {
     const example = type === 'positive' ? ruleCase.positive : ruleCase.negative
-    const built = buildCaseText(example, {
+    const built = buildCaseTextRef.value(example, {
       includeHints: false,
       includeFocusPoints: false,
       includeTitle: false,
@@ -519,11 +538,11 @@ const currentCaseExample = computed<QCRuleCaseExample | null>(() => {
   if (!ruleId) return null
 
   // 优先从泸县33条规则库查找
-  let ruleCase = customRuleCaseMap[ruleId]
+  let ruleCase = customRuleCaseMapRef.value[ruleId]
 
   // 如果没找到，从四川省规则库查找
   if (!ruleCase) {
-    ruleCase = qcRuleCaseMap[ruleId]
+    ruleCase = qcRuleCaseMapRef.value[ruleId]
   }
 
   if (!ruleCase) return null
@@ -534,14 +553,14 @@ const currentCaseExample = computed<QCRuleCaseExample | null>(() => {
 
 // 提取当前示例的提示信息
 const currentHints = computed<string[]>(() => {
-  if (!currentCaseExample.value) return []
-  return extractHints(currentCaseExample.value)
+  if (!currentCaseExample.value || !extractHintsRef.value) return []
+  return extractHintsRef.value(currentCaseExample.value)
 })
 
 // 提取当前示例的质控关注点
 const currentFocusPoints = computed<string[]>(() => {
-  if (!currentCaseExample.value) return []
-  return extractFocusPoints(currentCaseExample.value)
+  if (!currentCaseExample.value || !extractFocusPointsRef.value) return []
+  return extractFocusPointsRef.value(currentCaseExample.value)
 })
 
 // 状态
@@ -574,7 +593,8 @@ const defaultPositiveText = `入院记录：患者主诉胃痛3天，既往有�
 // 监听示例类型切换或规则变化，自动加载对应的案例文本
 watch(
   [exampleType, () => props.rule],
-  () => {
+  async () => {
+    await ensureCaseDataLoaded()
     const rule = props.rule
 
     // 1. 优先使用后端规则对象里自带的 positive_example / negative_example
@@ -587,8 +607,8 @@ watch(
     }
 
     // 2. 若规则中未配置示例，则回退到前端内置案例（与另一个质控评估页面保持一致）
-    if (currentCaseExample.value) {
-      medicalText.value = buildCaseText(currentCaseExample.value, {
+    if (currentCaseExample.value && buildCaseTextRef.value) {
+      medicalText.value = buildCaseTextRef.value(currentCaseExample.value, {
         includeHints: false,
         includeFocusPoints: false,
         includeTitle: false,
@@ -599,6 +619,16 @@ watch(
 
     // 3. 最终兜底：使用简单默认示例
     medicalText.value = exampleType.value === 'negative' ? defaultNegativeText : defaultPositiveText
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) {
+      void ensureCaseDataLoaded()
+    }
   },
   { immediate: true },
 )

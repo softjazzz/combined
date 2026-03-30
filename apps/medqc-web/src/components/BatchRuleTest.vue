@@ -2050,6 +2050,7 @@ import {
   getSampleRecordById,
   type SampleMedicalRecord,
 } from '@/utils/sampleMedicalRecords'
+import { loadCustomRules } from '@/utils/custom-rules-loader'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 
 // Props
@@ -2806,8 +2807,7 @@ const handleParentMessage = (event: MessageEvent) => {
 
 // 初始化
 onMounted(async () => {
-  const customRulesModule = await import('../../backend/app/data/custom_rules_33.json')
-  customRules.value = customRulesModule.default as any[]
+  customRules.value = await loadCustomRules()
 
   // 加载默认的入院记录类型
   loadDocumentType(currentDocumentType.value)
