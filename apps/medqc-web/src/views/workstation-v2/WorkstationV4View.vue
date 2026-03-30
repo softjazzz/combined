@@ -30,7 +30,7 @@
 
                 <div class="relative workbench-hero">
                   <div class="workbench-controls-panel">
-                    <div class="workbench-controls-grid">
+                    <div class="workbench-controls-search-row">
                       <a-input
                         v-model:value="searchText"
                         class="workbench-controls__search-input"
@@ -42,55 +42,9 @@
                           <SearchOutlined class="text-slate-400" />
                         </template>
                       </a-input>
-
-                      <a-select
-                        v-model:value="hospFilter"
-                        class="workbench-controls__status-select"
-                        size="large"
-                        :options="hospOptions"
-                      />
-
-                      <a-select
-                        v-model:value="activePriorityGroup"
-                        class="workbench-controls__priority-select"
-                        size="large"
-                        :options="priorityFilterOptions"
-                      />
-
-                      <button
-                        type="button"
-                        class="workbench-controls__refresh"
-                        title="刷新"
-                        @click="refreshData"
-                      >
-                        <SyncOutlined :spin="loading" />
-                      </button>
-                    </div>
-
-                    <div class="workbench-summary-inline">
-                      <span class="workbench-summary-inline__item">
-                        病历总量
-                        <strong>{{ totalVisibleCount }}</strong>
-                      </span>
-                      <span class="workbench-summary-inline__dot" />
-                      <span
-                        class="workbench-summary-inline__item workbench-summary-inline__item--accent"
-                      >
-                        高优先级
-                        <strong>{{ highPriorityCount }}</strong>
-                      </span>
-                      <span class="workbench-summary-inline__dot" />
-                      <span class="workbench-summary-inline__item">
-                        当前页
-                        <strong>{{ listRecords.length }}</strong>
-                      </span>
                     </div>
 
                     <div class="workbench-dept-row">
-                      <div class="workbench-dept-row__label">
-                        <ScanOutlined />
-                        <span>科室导航</span>
-                      </div>
                       <div class="workbench-dept-row__list">
                         <button
                           v-for="dept in visibleDepartments"
@@ -148,10 +102,6 @@
                           </template>
                         </a-dropdown>
                       </div>
-                    </div>
-
-                    <div class="workbench-controls__hint-inline">
-                      当前筛选状态保持即时生效，支持搜索、在院状态和科室切换联动。
                     </div>
                   </div>
                 </div>
@@ -1760,18 +1710,6 @@ const priorityCardsFiltered = computed(() => {
 })
 
 const totalVisibleCount = computed(() => serverTotal.value || listRecords.value.length)
-const highPriorityCount = computed(
-  () => priorityCards.value.filter((card) => card.riskType !== 'normal').length,
-)
-const priorityFilterOptions = computed(() => [
-  { value: 'all', label: '优先级：全部' },
-  ...priorityGroups.value
-    .filter((group) => group.key !== 'all')
-    .map((group) => ({
-      value: group.key,
-      label: `${group.label} (${group.count})`,
-    })),
-])
 const activeHospLabel = computed(
   () => hospOptions.find((option) => option.value === hospFilter.value)?.label || '全部',
 )
@@ -2796,105 +2734,18 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   box-shadow: var(--workstation-shadow-panel);
 }
 
-.workbench-controls-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 1.28fr) 152px 188px 46px;
-  grid-template-areas: 'search status priority refresh';
+.workbench-controls-search-row {
+  display: flex;
   align-items: center;
-  gap: 12px;
 }
 
 .workbench-controls__search-input {
-  grid-area: search;
   min-width: 0;
-  max-width: 920px;
-}
-
-.workbench-controls__status-select {
-  grid-area: status;
-  width: 100%;
-  min-width: 0;
-}
-
-.workbench-controls__priority-select {
-  grid-area: priority;
-  width: 100%;
-  min-width: 0;
-}
-
-.workbench-controls__refresh {
-  grid-area: refresh;
-  width: 46px !important;
-  min-width: 46px !important;
-  max-width: 46px !important;
-  height: 46px;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--workstation-radius-pill);
-  border: 1px solid var(--workstation-border-light);
-  background: var(--workstation-bg-surface-strong);
-  color: var(--workstation-text-secondary);
-  transition: all 160ms ease;
-}
-
-.workbench-summary-inline {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 2px 2px 0;
-}
-
-.workbench-summary-inline__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: var(--workstation-radius-pill);
-  background: var(--workstation-bg-card-soft);
-  padding: 5px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--workstation-text-secondary);
-}
-
-.workbench-summary-inline__item strong {
-  font-size: 16px;
-  line-height: 1.1;
-  font-weight: 800;
-  color: var(--workstation-text-primary);
-}
-
-.workbench-summary-inline__item--accent strong {
-  color: var(--workstation-state-warning-text);
-}
-
-.workbench-summary-inline__dot {
-  width: 4px;
-  height: 4px;
-  border-radius: var(--workstation-radius-pill);
-  background: var(--workstation-divider);
-}
-
-.workbench-controls__refresh:hover {
-  border-color: var(--workstation-brand-border);
-  color: var(--workstation-brand-600);
-  box-shadow: 0 14px 24px var(--workstation-brand-shadow);
+  width: min(50%, 520px);
 }
 
 .workbench-dept-row {
-  display: grid;
-  gap: 12px;
-}
-
-.workbench-dept-row__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--workstation-text-muted);
+  display: block;
 }
 
 .workbench-dept-row__list {
@@ -2963,14 +2814,6 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
   color: var(--workstation-text-secondary);
 }
 
-.workbench-controls__hint-inline {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--workstation-text-secondary);
-  border-top: 1px solid var(--workstation-divider);
-  padding-top: 10px;
-}
-
 .workstation-empty-state {
   border-radius: var(--workstation-radius-card);
   border: 1px dashed var(--workstation-divider);
@@ -2994,30 +2837,15 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 }
 
 @media (max-width: 1279px) {
-  .workbench-controls-grid {
-    grid-template-columns: minmax(0, 1fr) 1fr 44px;
-    grid-template-areas:
-      'search search refresh'
-      'status priority priority';
+  .workbench-controls__search-input {
+    width: min(64%, 520px);
   }
 }
 
 @media (max-width: 1023px) {
-  .workbench-controls-grid {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'search'
-      'status'
-      'priority'
-      'refresh';
-  }
-
-  .workbench-summary-inline {
-    gap: 10px;
-  }
-
-  .workbench-controls__refresh {
-    justify-self: start;
+  .workbench-controls__search-input {
+    width: 100%;
+    max-width: none;
   }
 }
 
