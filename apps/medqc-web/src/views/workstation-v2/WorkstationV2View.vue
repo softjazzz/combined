@@ -113,9 +113,7 @@
             :style="{ width: leftPanelWidth + '%' }"
           >
             <div class="panel-header">
-              <span class="panel-title">
-                <FileTextOutlined /> 病历原文
-              </span>
+              <span class="panel-title"> <FileTextOutlined /> 病历原文 </span>
               <a-space>
                 <a-button
                   v-if="demoCase"
@@ -147,7 +145,7 @@
           <!-- 右栏：分析面板 -->
           <div
             class="panel-right"
-            :style="{ width: (100 - leftPanelWidth) + '%' }"
+            :style="{ width: 100 - leftPanelWidth + '%' }"
           >
             <div class="panel-header">
               <a-segmented
@@ -187,10 +185,22 @@
                 :drg-result="drgResult"
                 :loading="drgGrouping"
                 :has-frontpage="!!frontpage"
-                :main-diagnosis-code="frontpage?.primary_diagnosis_code || frontpage?.diagnoses?.discharge_main_icd || ''"
-                :main-diagnosis-text="frontpage?.primary_diagnosis_name || frontpage?.diagnoses?.discharge_main_diagnosis_text || ''"
-                :main-procedure-code="frontpage?.main_procedure_code || frontpage?.procedures?.main?.code || ''"
-                :main-procedure-name="frontpage?.main_procedure_name || frontpage?.procedures?.main?.name || ''"
+                :main-diagnosis-code="
+                  frontpage?.primary_diagnosis_code ||
+                    frontpage?.diagnoses?.discharge_main_icd ||
+                    ''
+                "
+                :main-diagnosis-text="
+                  frontpage?.primary_diagnosis_name ||
+                    frontpage?.diagnoses?.discharge_main_diagnosis_text ||
+                    ''
+                "
+                :main-procedure-code="
+                  frontpage?.main_procedure_code || frontpage?.procedures?.main?.code || ''
+                "
+                :main-procedure-name="
+                  frontpage?.main_procedure_name || frontpage?.procedures?.main?.name || ''
+                "
                 @group="performDRGGrouping"
                 @open-optimization="openOptimization"
               />
@@ -202,9 +212,7 @@
               />
 
               <!-- Tab5: ICD 查询 (M4) -->
-              <ICDSearchPanel
-                v-else-if="activeTab === 'icd'"
-              />
+              <ICDSearchPanel v-else-if="activeTab === 'icd'" />
             </div>
           </div>
         </div>
@@ -212,9 +220,7 @@
         <!-- 底部：测试用例列表 -->
         <div class="workbench-footer">
           <div class="footer-header">
-            <span class="panel-title">
-              <ProfileOutlined /> 测试用例
-            </span>
+            <span class="panel-title"> <ProfileOutlined /> 测试用例 </span>
             <a-space>
               <a-tag color="blue">
                 {{ testCases.length }} 份
@@ -244,19 +250,13 @@
       />
 
       <!-- DRG 事中监控 -->
-      <InProcessMonitoringView
-        v-else-if="currentView === 'mid-analysis'"
-      />
+      <InProcessMonitoringView v-else-if="currentView === 'mid-analysis'" />
 
       <!-- 付费监测 -->
-      <PaymentMonitoringView
-        v-else-if="currentView === 'payment'"
-      />
+      <PaymentMonitoringView v-else-if="currentView === 'payment'" />
 
       <!-- DRG 事后分析 -->
-      <PostEventAnalysisView
-        v-else-if="currentView === 'post-analysis'"
-      />
+      <PostEventAnalysisView v-else-if="currentView === 'post-analysis'" />
 
       <!-- 数据上传 -->
       <ExcelUploadView
@@ -269,7 +269,13 @@
       <div
         v-else-if="currentView === 'messages'"
         class="tab-placeholder"
-        style="height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column;"
+        style="
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+        "
       >
         <BellOutlined style="font-size: 48px; color: #1677ff" />
         <h3>质控消息概览</h3>
@@ -307,6 +313,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   ThunderboltOutlined,
   MenuFoldOutlined,
@@ -344,13 +351,16 @@ import QCAlertPanel from './components/QCAlertPanel.vue'
 import { useMedicalTextExtraction, useDRGGrouping } from '@/views/demo/frontpage/composables'
 
 // ==================== Props ====================
-const props = withDefaults(defineProps<{
-  embedded?: boolean
-  initialView?: string
-}>(), {
-  embedded: false,
-  initialView: 'workbench',
-})
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean
+    initialView?: string
+  }>(),
+  {
+    embedded: false,
+    initialView: 'workbench',
+  },
+)
 
 // ==================== 布局状态 ====================
 const sidebarCollapsed = ref(false)
@@ -359,12 +369,15 @@ const currentView = ref(props.initialView || 'workbench')
 const activeTab = ref('frontpage')
 
 // 嵌入模式下，跟随路由 prop 变化切换视图
-watch(() => props.initialView, (newView) => {
-  if (newView && props.embedded) {
-    currentView.value = newView
-    menuSelectedKeys.value = [newView]
-  }
-})
+watch(
+  () => props.initialView,
+  (newView) => {
+    if (newView && props.embedded) {
+      currentView.value = newView
+      menuSelectedKeys.value = [newView]
+    }
+  },
+)
 
 const analysisTabs = [
   { label: '首页', value: 'frontpage' },
@@ -390,15 +403,16 @@ const selectedBatchId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
 
 // ===== Composables =====
-const { extracting, extractionProgress, extractionStatus, extractStructuredData } = useMedicalTextExtraction({
-  demoCase,
-  onStartExtract: () => {
-    console.log('[workstation-v2] AI 提取开始')
-  },
-  onExtracted: () => {
-    console.log('[workstation-v2] AI 提取完成')
-  },
-})
+const { extracting, extractionProgress, extractionStatus, extractStructuredData } =
+  useMedicalTextExtraction({
+    demoCase,
+    onStartExtract: () => {
+      console.log('[workstation-v2] AI 提取开始')
+    },
+    onExtracted: () => {
+      console.log('[workstation-v2] AI 提取完成')
+    },
+  })
 
 const {
   drgLoading: drgGrouping,
@@ -427,7 +441,7 @@ async function loadDemoCase(idx: number) {
   currentCaseIndex.value = idx
   try {
     const tc = testCases.value[idx]
-    await new Promise(resolve => setTimeout(resolve, 300))
+    await new Promise((resolve) => setTimeout(resolve, 300))
     demoCase.value = {
       case_id: `case_${idx + 1}`,
       description: tc.description,
@@ -464,7 +478,8 @@ function handleSuggestionAction(id: number, action: 'accept' | 'reject') {
 }
 
 // ==================== 导航 ====================
-function onMenuClick({ key }: { key: string }) {
+function onMenuClick(info: MenuInfo) {
+  const key = String(info.key)
   currentView.value = key
   menuSelectedKeys.value = [key]
 }
@@ -585,7 +600,8 @@ onUnmounted(() => {
 }
 
 /* 面板通用 */
-.panel-left, .panel-right {
+.panel-left,
+.panel-right {
   display: flex;
   flex-direction: column;
   overflow: hidden;
