@@ -73,7 +73,7 @@ if (API_DEBUG) {
 }
 
 // 创建axios实例
-const apiClient: AxiosInstance = axios.create({
+export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
   headers: {

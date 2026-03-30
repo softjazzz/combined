@@ -1345,7 +1345,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
+import { apiClient } from '@/services/apiService'
 import { message, Modal } from 'ant-design-vue'
 import {
   MedicineBoxOutlined,
@@ -1908,14 +1908,14 @@ const frontpageSheetLoading = ref(false)
 async function loadFrontpageSheet(patientId: string, visitId: string) {
   frontpageSheetLoading.value = true
   try {
-    const resp = await fetch(`/api/medical-records/frontpage-sheet/${patientId}/${visitId}`)
-    if (resp.ok) {
-      frontpageSheetData.value = await resp.json()
-    } else {
-      frontpageSheetData.value = null
+    const { data } = await apiClient.get(
+      `/api/medical-records/frontpage-sheet/${patientId}/${visitId}`,
+    )
+    frontpageSheetData.value = data ?? null
+  } catch (e: any) {
+    if (e?.response?.status !== 404) {
+      console.error('加载病案首页数据失败:', e)
     }
-  } catch (e) {
-    console.error('加载病案首页数据失败:', e)
     frontpageSheetData.value = null
   } finally {
     frontpageSheetLoading.value = false
@@ -2007,7 +2007,7 @@ async function loadConcatText(visitId: string) {
   concatLoading.value = true
   concatText.value = ''
   try {
-    const { data } = await axios.get(`/api/medical-records/documents/${visitId}`, {
+    const { data } = await apiClient.get(`/api/medical-records/documents/${visitId}`, {
       params: { mode: 'concat' },
     })
     concatText.value = data.text || ''
@@ -2023,18 +2023,20 @@ async function loadSettlement(patientId: string, visitId: string) {
   settlementData.value = null
   settlementQcReport.value = null
   try {
-    const { data } = await axios.get(`/api/medical-records/settlement/${patientId}/${visitId}`)
+    const { data } = await apiClient.get(`/api/medical-records/settlement/${patientId}/${visitId}`)
     settlementData.value = data
   } catch (err: any) {
     if (err?.response?.status === 404) {
       // Fallback: 从首页抽取结果与 CDM SQL 生成草稿
       try {
-        const { data: draft } = await axios.post(
+        const { data: draft } = await apiClient.post(
           `/api/medical-records/settlement/${patientId}/${visitId}/generate`,
         )
         settlementData.value = draft
-      } catch (genErr) {
-        console.warn('草稿生成也失败，显示空白样表:', genErr)
+      } catch (genErr: any) {
+        if (genErr?.response?.status !== 404) {
+          console.warn('草稿生成也失败，显示空白样表:', genErr)
+        }
       }
     } else {
       console.error('加载结算清单失败:', err)
@@ -2053,7 +2055,7 @@ async function runSettlementQc() {
     const qcUrl = isGenerated
       ? `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/generate/qc`
       : `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`
-    const { data } = await axios.post(qcUrl)
+    const { data } = await apiClient.post(qcUrl)
     settlementQcReport.value = data
     message.success(`质控完成: ${data.summary.passed}/${data.summary.total} 通过`)
   } catch (err) {
@@ -2074,7 +2076,7 @@ async function loadDocuments(visitId: string) {
   documentsLoading.value = true
   documentsList.value = []
   try {
-    const { data } = await axios.get(`/api/medical-records/documents/${visitId}`)
+    const { data } = await apiClient.get(`/api/medical-records/documents/${visitId}`)
     // 只显示有内容的与前 3 个核心文书类型（即使无内容也展示）
     const coreTypes = ['admission_record', 'discharge_record', 'surgery_record']
     const docs: DocItem[] = data.documents || []

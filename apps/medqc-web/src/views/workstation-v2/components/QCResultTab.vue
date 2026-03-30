@@ -19,7 +19,9 @@
         <span
           v-if="getTabCount(tab.key) > 0"
           class="qc-result-tab__tab-badge"
-        >{{ getTabCount(tab.key) }}</span>
+        >{{
+          getTabCount(tab.key)
+        }}</span>
       </button>
     </div>
 
@@ -40,8 +42,12 @@
           v-if="!isTabEmpty || totalIssueCount > 0"
           class="qc-overview__status"
         >
-          <span class="qc-overview__status-label">{{ currentIssues.length > 0 ? '当前问题' : '当前状态' }}</span>
-          <strong class="qc-overview__status-value">{{ currentIssues.length > 0 ? currentIssues.length : '待分析' }}</strong>
+          <span class="qc-overview__status-label">{{
+            currentIssues.length > 0 ? '当前问题' : '当前状态'
+          }}</span>
+          <strong class="qc-overview__status-value">{{
+            currentIssues.length > 0 ? currentIssues.length : '待分析'
+          }}</strong>
         </div>
       </div>
 
@@ -81,7 +87,7 @@
           <a-spin />
           <div
             class="qc-start__title"
-            style="margin-top: 16px;"
+            style="margin-top: 16px"
           >
             正在分析...
           </div>
@@ -111,7 +117,9 @@
             :class="['qc-issue', { 'qc-issue--dismissed': issue.dismissed }]"
           >
             <div class="qc-issue__content">
-              <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{ severityLabel(issue.severity) }}</span>
+              <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{
+                severityLabel(issue.severity)
+              }}</span>
               <p
                 class="qc-issue__desc"
                 title="定位到相关字段"
@@ -146,17 +154,20 @@
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
-                  ><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  /><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                  /></svg>
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
                   定位字段
                 </button>
                 <button
@@ -169,12 +180,14 @@
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
-                  ><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  /></svg>
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
                   文书依据
                 </button>
                 <a-dropdown
@@ -224,7 +237,7 @@
       >
         <CheckCircleOutlined
           class="qc-empty__icon"
-          style="color: #52c41a;"
+          style="color: #52c41a"
         />
         <div class="qc-empty__title">
           未发现质控问题
@@ -232,7 +245,7 @@
         <a-button
           type="link"
           size="small"
-          style="margin-top: 8px;"
+          style="margin-top: 8px"
           @click="startCurrentTab"
         >
           <ReloadOutlined /> 重新分析
@@ -284,7 +297,7 @@ import {
   ReloadOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons-vue'
-import axios from 'axios'
+import { apiClient } from '@/services/apiService'
 import {
   urgeDefect,
   markDefectRemediated,
@@ -360,9 +373,7 @@ const qcTabs = [
   },
 ]
 
-const currentTabConfig = computed(() =>
-  qcTabs.find(t => t.key === currentTab.value) || qcTabs[0],
-)
+const currentTabConfig = computed(() => qcTabs.find((t) => t.key === currentTab.value) || qcTabs[0])
 
 const isTabLoading = computed(() => {
   const tab = currentTab.value
@@ -380,7 +391,7 @@ const isTabEmpty = computed(() => {
 })
 
 const currentIssues = computed(() =>
-  issues.value.filter(i => i.category === currentTab.value && !i.dismissed),
+  issues.value.filter((i) => i.category === currentTab.value && !i.dismissed),
 )
 
 const groupedIssues = computed(() => {
@@ -394,28 +405,30 @@ const groupedIssues = computed(() => {
   return Object.values(groups)
 })
 
-const totalIssueCount = computed(() =>
-  issues.value.filter(i => !i.dismissed).length,
-)
+const totalIssueCount = computed(() => issues.value.filter((i) => !i.dismissed).length)
 
 function getTabCount(tab: string) {
-  return issues.value.filter(i => i.category === tab && !i.dismissed).length
+  return issues.value.filter((i) => i.category === tab && !i.dismissed).length
 }
 
 function severityColor(sev: string) {
-  return {
-    error: '#ef4444',
-    warning: '#f59e0b',
-    info: '#2563eb',
-  }[sev] || '#94a3b8'
+  return (
+    {
+      error: '#ef4444',
+      warning: '#f59e0b',
+      info: '#2563eb',
+    }[sev] || '#94a3b8'
+  )
 }
 
 function severityLabel(sev: string) {
-  return {
-    error: '严重',
-    warning: '警告',
-    info: '提示',
-  }[sev] || '未知'
+  return (
+    {
+      error: '严重',
+      warning: '警告',
+      info: '提示',
+    }[sev] || '未知'
+  )
 }
 
 function dismissIssue(issue: QCIssue) {
@@ -563,18 +576,19 @@ async function fetchCodingQCFromBackend() {
   }
 
   try {
-    const resp = await axios.post('/api/v1/qc/coding-qc/check', payload, { timeout: 30000 })
+    const resp = await apiClient.post('/api/v1/qc/coding-qc/check', payload, { timeout: 30000 })
     const data = resp.data?.data
     if (!data) return []
 
     const codingIssues: QCIssue[] = []
     let idx = 0
 
-    for (const issue of (data.rule_issues || [])) {
+    for (const issue of data.rule_issues || []) {
       codingIssues.push({
-        id: `coding-rule-${idx += 1}`,
+        id: `coding-rule-${(idx += 1)}`,
         category: 'coding',
-        severity: issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+        severity:
+          issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
         group: issue.dimension === 'format' ? '编码格式校验' : '编码存在性验证',
         description: issue.description,
         suggestion: issue.suggestion,
@@ -590,11 +604,12 @@ async function fetchCodingQCFromBackend() {
       consistency: '编码一致性',
     }
 
-    for (const issue of (data.llm_issues || [])) {
+    for (const issue of data.llm_issues || []) {
       codingIssues.push({
-        id: `coding-llm-${idx += 1}`,
+        id: `coding-llm-${(idx += 1)}`,
         category: 'coding',
-        severity: issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+        severity:
+          issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
         group: dimensionLabels[issue.dimension] || 'LLM 语义审查',
         description: issue.description,
         suggestion: issue.suggestion,
@@ -613,7 +628,7 @@ async function fetchCodingQCFromBackend() {
 async function loadFrontpageData(): Promise<Record<string, any> | null> {
   if (props.visitId && props.patientId) {
     try {
-      const resp = await axios.get(
+      const resp = await apiClient.get(
         `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
       )
       if (resp.data) return resp.data
@@ -631,32 +646,36 @@ async function runFormQC() {
   formQCLoading.value = true
   try {
     const patientData = {
-      patientId: fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
-      documents: [{
-        id: `doc_${Date.now()}`,
-        type: 'admission_record' as DocumentType,
-        content: JSON.stringify(fpData),
-        timestamp: new Date().toISOString(),
-        status: 'draft',
-      }],
+      patientId:
+        fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
+      documents: [
+        {
+          id: `doc_${Date.now()}`,
+          type: 'admission_record' as DocumentType,
+          content: JSON.stringify(fpData),
+          timestamp: new Date().toISOString(),
+          status: 'draft',
+        },
+      ],
     }
     const engineResult = await integratedQCEngine.executeQualityControl(patientData)
 
-    const kept = issues.value.filter(i => i.category === 'coding')
+    const kept = issues.value.filter((i) => i.category === 'coding')
     let issueId = 0
     if (engineResult.ruleResults?.length > 0) {
       engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
         if (!ruleRes.isCompliant && ruleRes.findings?.length > 0) {
-          ruleRes.findings.forEach(finding => {
+          ruleRes.findings.forEach((finding) => {
             let sev: 'error' | 'warning' | 'info' = 'info'
             if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
             else if (finding.severity === 'minor') sev = 'warning'
 
             let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) tabCat = 'cost'
+            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG'))
+              tabCat = 'cost'
 
             kept.push({
-              id: `sys-${issueId += 1}`,
+              id: `sys-${(issueId += 1)}`,
               category: tabCat,
               severity: sev,
               group: ruleRes.ruleName || '未知规则',
@@ -683,7 +702,7 @@ async function runFormQC() {
 async function runCodingQC() {
   codingQCLoading.value = true
   try {
-    const kept = issues.value.filter(i => i.category !== 'coding')
+    const kept = issues.value.filter((i) => i.category !== 'coding')
     const codingIssues = await fetchCodingQCFromBackend()
     kept.push(...codingIssues)
     issues.value = kept
@@ -707,14 +726,17 @@ async function runAllQC() {
   formQCLoading.value = true
   try {
     const patientData = {
-      patientId: fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
-      documents: [{
-        id: `doc_${Date.now()}`,
-        type: 'admission_record' as DocumentType,
-        content: JSON.stringify(fpData),
-        timestamp: new Date().toISOString(),
-        status: 'draft',
-      }],
+      patientId:
+        fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
+      documents: [
+        {
+          id: `doc_${Date.now()}`,
+          type: 'admission_record' as DocumentType,
+          content: JSON.stringify(fpData),
+          timestamp: new Date().toISOString(),
+          status: 'draft',
+        },
+      ],
     }
 
     const [engineResult, codingIssues] = await Promise.all([
@@ -727,16 +749,17 @@ async function runAllQC() {
     if (engineResult.ruleResults?.length > 0) {
       engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
         if (!ruleRes.isCompliant && ruleRes.findings?.length > 0) {
-          ruleRes.findings.forEach(finding => {
+          ruleRes.findings.forEach((finding) => {
             let sev: 'error' | 'warning' | 'info' = 'info'
             if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
             else if (finding.severity === 'minor') sev = 'warning'
 
             let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG')) tabCat = 'cost'
+            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG'))
+              tabCat = 'cost'
 
             newIssues.push({
-              id: `sys-${issueId += 1}`,
+              id: `sys-${(issueId += 1)}`,
               category: tabCat,
               severity: sev,
               group: ruleRes.ruleName || '未知规则',
@@ -1042,7 +1065,10 @@ watch(
   margin-bottom: 8px;
   overflow: hidden;
   box-shadow: 0 8px 18px rgba(148, 163, 184, 0.07);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .qc-issue::before {
