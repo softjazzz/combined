@@ -483,8 +483,12 @@ watch(
       <div class="mb-8">
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-bold text-slate-800">病案处理入口</h2>
-            <p class="text-xs text-slate-400 mt-1">从任务队列分发病历，进入工作台执行单病历处理</p>
+            <h2 class="text-lg font-bold text-slate-800">
+              病案处理入口
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">
+              从任务队列分发病历，进入工作台执行单病历处理
+            </p>
           </div>
           <span class="text-xs text-slate-400">
             {{ workflowLoading ? '更新中...' : '实时联动' }}
@@ -554,7 +558,9 @@ watch(
             </span>
           </div>
           <div class="relative z-10">
-            <div class="text-slate-500 text-sm font-medium mb-1">平均评分</div>
+            <div class="text-slate-500 text-sm font-medium mb-1">
+              平均评分
+            </div>
             <div class="flex items-baseline gap-1.5">
               <span class="text-3xl font-bold text-slate-800 tracking-tight">{{
                 stats.averageScore
@@ -592,7 +598,9 @@ watch(
             </span>
           </div>
           <div class="relative z-10">
-            <div class="text-slate-500 text-sm font-medium mb-1">通过率</div>
+            <div class="text-slate-500 text-sm font-medium mb-1">
+              通过率
+            </div>
             <div class="flex items-baseline gap-1.5">
               <span class="text-3xl font-bold text-slate-800 tracking-tight">{{
                 stats.passRate
@@ -625,9 +633,7 @@ watch(
               {{ stats.totalRecords }}
             </div>
             <div class="text-xs text-emerald-600 flex items-center gap-1">
-              <span class="bg-emerald-50 px-1.5 py-0.5 rounded text-emerald-600 font-medium"
-                >+12.5%</span
-              >
+              <span class="bg-emerald-50 px-1.5 py-0.5 rounded text-emerald-600 font-medium">+12.5%</span>
               <span class="text-slate-400">较上周</span>
             </div>
           </div>
@@ -645,9 +651,7 @@ watch(
               {{ stats.pendingRecords }}
             </div>
             <div class="text-xs text-orange-600 flex items-center gap-1">
-              <span class="bg-orange-50 px-1.5 py-0.5 rounded text-orange-600 font-medium"
-                >需关注</span
-              >
+              <span class="bg-orange-50 px-1.5 py-0.5 rounded text-orange-600 font-medium">需关注</span>
               <span class="text-slate-400">处理积压</span>
             </div>
           </div>
@@ -693,8 +697,12 @@ watch(
         >
           <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
             <div>
-              <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">质控趋势分析</h3>
-              <p class="text-slate-400 text-xs mt-1">可视化展示近期的质控评分波动与病案处理量</p>
+              <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                质控趋势分析
+              </h3>
+              <p class="text-slate-400 text-xs mt-1">
+                可视化展示近期的质控评分波动与病案处理量
+              </p>
             </div>
 
             <div class="flex bg-slate-50 rounded-lg p-1 border border-slate-100">
@@ -716,7 +724,11 @@ watch(
 
           <div class="h-[350px] w-full relative">
             <!-- 图表容器 -->
-            <QCTrendChart :period="selectedPeriod" :height="350" :auto-refresh="true" />
+            <QCTrendChart
+              :period="selectedPeriod"
+              :height="350"
+              :auto-refresh="true"
+            />
           </div>
         </div>
 
@@ -762,8 +774,12 @@ watch(
           <!-- 最新动态 Timeline -->
           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex-1">
             <div class="flex items-center justify-between mb-5">
-              <h3 class="text-base font-bold text-slate-800">最新动态</h3>
-              <button class="text-xs text-blue-600 hover:underline">查看全部</button>
+              <h3 class="text-base font-bold text-slate-800">
+                最新动态
+              </h3>
+              <button class="text-xs text-blue-600 hover:underline">
+                查看全部
+              </button>
             </div>
 
             <div class="relative">

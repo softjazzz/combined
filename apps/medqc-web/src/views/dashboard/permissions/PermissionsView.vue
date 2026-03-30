@@ -27,7 +27,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -43,7 +43,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -59,7 +59,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -103,7 +103,7 @@
                 添加用户
               </a-button>
             </div>
-            
+
             <!-- 搜索筛选 -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <a-input
@@ -115,21 +115,21 @@
                   <SearchOutlined class="text-gray-400" />
                 </template>
               </a-input>
-              
+
               <a-select
                 v-model:value="selectedRole"
                 placeholder="选择角色"
                 class="rounded-lg"
                 :options="roleOptions"
               />
-              
+
               <a-select
                 v-model:value="selectedDepartment"
                 placeholder="选择科室"
                 class="rounded-lg"
                 :options="departmentOptions"
               />
-              
+
               <a-button
                 type="primary"
                 class="rounded-lg"
@@ -171,7 +171,7 @@
                     <a-button
                       type="link"
                       size="small"
-                      @click="handleEditUser(record)"
+                      @click="handleEditUser(record as UserRecord)"
                     >
                       <EditOutlined />
                       编辑
@@ -179,16 +179,16 @@
                     <a-button
                       type="link"
                       size="small"
-                      @click="handleUserPermissions(record)"
+                      @click="handleUserPermissions(record as UserRecord)"
                     >
                       <SafetyCertificateOutlined />
                       权限
                     </a-button>
-                    <a-button 
-                      type="link" 
-                      size="small" 
+                    <a-button
+                      type="link"
+                      size="small"
                       :danger="record.status === 'active'"
-                      @click="handleToggleUserStatus(record)"
+                      @click="handleToggleUserStatus(record as UserRecord)"
                     >
                       {{ record.status === 'active' ? '禁用' : '启用' }}
                     </a-button>
@@ -228,7 +228,9 @@
               >
                 <div class="flex items-center justify-between mb-4">
                   <div class="flex items-center">
-                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                    <div
+                      class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3"
+                    >
                       <TeamOutlined class="text-blue-600" />
                     </div>
                     <div>
@@ -268,7 +270,7 @@
                     </template>
                   </a-dropdown>
                 </div>
-                
+
                 <div class="mb-4">
                   <p class="text-sm text-gray-600 mb-2">
                     用户数量: <span class="font-medium">{{ role.userCount }}</span>
@@ -277,7 +279,7 @@
                     权限数量: <span class="font-medium">{{ role.permissions?.length || 0 }}</span>
                   </p>
                 </div>
-                
+
                 <div class="flex flex-wrap gap-1">
                   <a-tag
                     v-for="permission in role.permissions?.slice(0, 3)"
@@ -359,7 +361,7 @@
             <h3 class="text-lg font-semibold text-gray-800 mb-4">
               访问日志
             </h3>
-            
+
             <!-- 日志筛选 -->
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
               <a-input
@@ -371,20 +373,20 @@
                   <SearchOutlined class="text-gray-400" />
                 </template>
               </a-input>
-              
+
               <a-select
                 v-model:value="selectedLogType"
                 placeholder="操作类型"
                 class="rounded-lg"
                 :options="logTypeOptions"
               />
-              
+
               <a-range-picker
                 v-model:value="logDateRange"
-                placeholder="选择日期范围"
+                :placeholder="['开始日期', '结束日期']"
                 class="rounded-lg"
               />
-              
+
               <a-button
                 type="primary"
                 class="rounded-lg"
@@ -393,7 +395,7 @@
                 <SearchOutlined />
                 搜索
               </a-button>
-              
+
               <a-button
                 class="rounded-lg"
                 @click="handleExportLogs"
@@ -436,6 +438,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
 import {
   UserOutlined,
   TeamOutlined,
@@ -446,7 +450,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   MoreOutlined,
-  DownloadOutlined
+  DownloadOutlined,
 } from '@ant-design/icons-vue'
 
 interface UserRecord {
@@ -490,6 +494,8 @@ interface PaginationState {
   total: number
 }
 
+type DateRange = [Dayjs, Dayjs] | null
+
 // 响应式数据
 const activeTab = ref('users')
 const loading = ref(false)
@@ -503,7 +509,7 @@ const users = ref<UserRecord[]>([])
 const userPagination = ref<PaginationState>({
   current: 1,
   pageSize: 10,
-  total: 0
+  total: 0,
 })
 
 // 角色管理相关
@@ -516,12 +522,12 @@ const permissionTree = ref<PermissionTreeNode[]>([])
 // 日志管理相关
 const logSearch = ref('')
 const selectedLogType = ref<string | undefined>(undefined)
-const logDateRange = ref<unknown[]>([])
+const logDateRange = ref<DateRange>(null)
 const logs = ref<LogRecord[]>([])
 const logPagination = ref<PaginationState>({
   current: 1,
   pageSize: 10,
-  total: 0
+  total: 0,
 })
 
 // 选项配置
@@ -529,13 +535,13 @@ const roleOptions = [
   { value: 'admin', label: '系统管理员' },
   { value: 'qc_manager', label: '质控管理员' },
   { value: 'doctor', label: '医生' },
-  { value: 'nurse', label: '护士' }
+  { value: 'nurse', label: '护士' },
 ]
 
 const departmentOptions = [
   { value: 'internal', label: '内科' },
   { value: 'surgery', label: '外科' },
-  { value: 'pediatrics', label: '儿科' }
+  { value: 'pediatrics', label: '儿科' },
 ]
 
 const logTypeOptions = [
@@ -543,27 +549,27 @@ const logTypeOptions = [
   { value: 'logout', label: '登出' },
   { value: 'view', label: '查看' },
   { value: 'edit', label: '编辑' },
-  { value: 'delete', label: '删除' }
+  { value: 'delete', label: '删除' },
 ]
 
 // 表格列配置
-const userColumns = [
+const userColumns: TableColumnsType<UserRecord> = [
   { title: '用户名', dataIndex: 'username', key: 'username', width: 120 },
   { title: '姓名', dataIndex: 'name', key: 'name', width: 100 },
   { title: '科室', dataIndex: 'department', key: 'department', width: 100 },
   { title: '角色', dataIndex: 'roles', key: 'roles', width: 150 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 80 },
   { title: '最后登录', dataIndex: 'lastLogin', key: 'lastLogin', width: 150 },
-  { title: '操作', key: 'action', width: 200, fixed: 'right' }
+  { title: '操作', key: 'action', width: 200, fixed: 'right' as const },
 ]
 
-const logColumns = [
+const logColumns: TableColumnsType<LogRecord> = [
   { title: '用户', dataIndex: 'username', key: 'username', width: 120 },
   { title: '操作类型', dataIndex: 'type', key: 'type', width: 100 },
   { title: '操作描述', dataIndex: 'description', key: 'description', width: 200 },
   { title: '结果', dataIndex: 'result', key: 'result', width: 80 },
   { title: 'IP地址', dataIndex: 'ip', key: 'ip', width: 120 },
-  { title: '时间', dataIndex: 'timestamp', key: 'timestamp', width: 150 }
+  { title: '时间', dataIndex: 'timestamp', key: 'timestamp', width: 150 },
 ]
 
 // 工具函数
@@ -572,7 +578,7 @@ const getRoleText = (role: string) => {
     admin: '系统管理员',
     qc_manager: '质控管理员',
     doctor: '医生',
-    nurse: '护士'
+    nurse: '护士',
   }
   return roleMap[role] || role
 }
@@ -582,7 +588,7 @@ const getPermissionText = (permission: string) => {
     'user.view': '查看用户',
     'user.edit': '编辑用户',
     'record.view': '查看病历',
-    'record.edit': '编辑病历'
+    'record.edit': '编辑病历',
   }
   return permissionMap[permission] || permission
 }
@@ -591,7 +597,7 @@ const getPermissionTypeColor = (type: string) => {
   const colorMap: Record<string, string> = {
     module: 'blue',
     action: 'green',
-    resource: 'orange'
+    resource: 'orange',
   }
   return colorMap[type] || 'default'
 }
@@ -600,7 +606,7 @@ const getPermissionTypeText = (type: string) => {
   const textMap: Record<string, string> = {
     module: '模块',
     action: '操作',
-    resource: '资源'
+    resource: '资源',
   }
   return textMap[type] || type
 }
@@ -611,7 +617,7 @@ const getLogTypeColor = (type: string) => {
     logout: 'blue',
     view: 'cyan',
     edit: 'orange',
-    delete: 'red'
+    delete: 'red',
   }
   return colorMap[type] || 'default'
 }
@@ -622,7 +628,7 @@ const getLogTypeText = (type: string) => {
     logout: '登出',
     view: '查看',
     edit: '编辑',
-    delete: '删除'
+    delete: '删除',
   }
   return textMap[type] || type
 }
@@ -695,8 +701,8 @@ const handleLogTableChange = (pag: Partial<PaginationState>) => {
 const fetchUsers = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     users.value = [
       {
         id: 1,
@@ -705,7 +711,7 @@ const fetchUsers = async () => {
         department: '内科',
         roles: ['doctor'],
         status: 'active',
-        lastLogin: '2024-01-16 10:30:00'
+        lastLogin: '2024-01-16 10:30:00',
       },
       {
         id: 2,
@@ -714,10 +720,10 @@ const fetchUsers = async () => {
         department: '外科',
         roles: ['qc_manager'],
         status: 'active',
-        lastLogin: '2024-01-16 09:15:00'
-      }
+        lastLogin: '2024-01-16 09:15:00',
+      },
     ]
-    
+
     userPagination.value.total = 50
   } catch (error) {
     message.error('获取用户数据失败')
@@ -734,15 +740,15 @@ const fetchRoles = async () => {
         name: '系统管理员',
         description: '拥有系统所有权限',
         userCount: 5,
-        permissions: ['user.view', 'user.edit', 'record.view', 'record.edit']
+        permissions: ['user.view', 'user.edit', 'record.view', 'record.edit'],
       },
       {
         id: 2,
         name: '质控管理员',
         description: '负责质控相关功能',
         userCount: 12,
-        permissions: ['record.view', 'record.edit']
-      }
+        permissions: ['record.view', 'record.edit'],
+      },
     ]
   } catch (error) {
     message.error('获取角色数据失败')
@@ -758,8 +764,8 @@ const fetchPermissions = async () => {
         type: 'module',
         children: [
           { title: '查看用户', key: 'user.view', type: 'action' },
-          { title: '编辑用户', key: 'user.edit', type: 'action' }
-        ]
+          { title: '编辑用户', key: 'user.edit', type: 'action' },
+        ],
       },
       {
         title: '病历管理',
@@ -767,9 +773,9 @@ const fetchPermissions = async () => {
         type: 'module',
         children: [
           { title: '查看病历', key: 'record.view', type: 'action' },
-          { title: '编辑病历', key: 'record.edit', type: 'action' }
-        ]
-      }
+          { title: '编辑病历', key: 'record.edit', type: 'action' },
+        ],
+      },
     ]
   } catch (error) {
     message.error('获取权限数据失败')
@@ -779,8 +785,8 @@ const fetchPermissions = async () => {
 const fetchLogs = async () => {
   logLoading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     logs.value = [
       {
         id: 1,
@@ -789,7 +795,7 @@ const fetchLogs = async () => {
         description: '用户登录系统',
         result: 'success',
         ip: '192.168.1.100',
-        timestamp: '2024-01-16 10:30:00'
+        timestamp: '2024-01-16 10:30:00',
       },
       {
         id: 2,
@@ -798,10 +804,10 @@ const fetchLogs = async () => {
         description: '查看病历 R2024001',
         result: 'success',
         ip: '192.168.1.101',
-        timestamp: '2024-01-16 10:25:00'
-      }
+        timestamp: '2024-01-16 10:25:00',
+      },
     ]
-    
+
     logPagination.value.total = 200
   } catch (error) {
     message.error('获取日志数据失败')

@@ -177,7 +177,7 @@
 
         <a-range-picker
           v-model:value="dateRange"
-          placeholder="选择日期范围"
+          :placeholder="['开始日期', '结束日期']"
           class="rounded-lg"
         />
 
@@ -239,18 +239,18 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'priority'">
-            <a-tag :color="getPriorityColor(record.priority)">
-              {{ getPriorityText(record.priority) }}
+            <a-tag :color="getPriorityColor((record as DashboardTaskItem).priority)">
+              {{ getPriorityText((record as DashboardTaskItem).priority) }}
             </a-tag>
           </template>
           <template v-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
+            <a-tag :color="getStatusColor((record as DashboardTaskItem).status)">
+              {{ getStatusText((record as DashboardTaskItem).status) }}
             </a-tag>
           </template>
           <template v-if="column.key === 'progress'">
             <a-progress
-              :percent="record.progress"
+              :percent="(record as DashboardTaskItem).progress"
               size="small"
             />
           </template>
@@ -260,9 +260,9 @@
                 size="small"
                 class="mr-2"
               >
-                {{ record.assignee?.charAt(0) }}
+                {{ (record as DashboardTaskItem).assignee?.charAt(0) }}
               </a-avatar>
-              {{ record.assignee || '未分配' }}
+              {{ (record as DashboardTaskItem).assignee || '未分配' }}
             </div>
           </template>
           <template v-if="column.key === 'action'">
@@ -270,16 +270,16 @@
               <a-button
                 type="link"
                 size="small"
-                @click="handleViewDetail(record)"
+                @click="handleViewDetail(record as DashboardTaskItem)"
               >
                 <EyeOutlined />
                 详情
               </a-button>
               <a-button
-                v-if="!record.assignee"
+                v-if="!(record as DashboardTaskItem).assignee"
                 type="link"
                 size="small"
-                @click="handleAssign(record)"
+                @click="handleAssign(record as DashboardTaskItem)"
               >
                 <UserAddOutlined />
                 分配
@@ -287,7 +287,7 @@
               <a-button
                 type="link"
                 size="small"
-                @click="handleEdit(record)"
+                @click="handleEdit(record as DashboardTaskItem)"
               >
                 <EditOutlined />
                 编辑
@@ -296,7 +296,7 @@
                 type="link"
                 size="small"
                 danger
-                @click="handleDelete(record)"
+                @click="handleDelete(record as DashboardTaskItem)"
               >
                 <DeleteOutlined />
                 删除
@@ -310,10 +310,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
 import { getTaskList, getTaskStats, createTask, deleteTask, cancelTask } from '@/api/tasks'
-import type { TaskItem, TaskStats } from '@/api/tasks'
+import type { TaskItem, TaskStats, TaskStatus } from '@/api/tasks'
 import CreateTaskDrawer from '@/components/qc/CreateTaskDrawer.vue'
 import {
   ProjectOutlined,
@@ -337,11 +339,16 @@ import {
 // 响应式数据
 const loading = ref(false)
 const searchKeyword = ref('')
-const selectedStatus = ref(undefined)
-const selectedAssignee = ref(undefined)
-const selectedDepartment = ref(undefined)
-const dateRange = ref([])
-const tasks = ref<TaskItem[]>([])
+const selectedStatus = ref<TaskStatus | undefined>(undefined)
+const selectedAssignee = ref<string | undefined>(undefined)
+const selectedDepartment = ref<string | undefined>(undefined)
+type DateRange = [Dayjs, Dayjs] | null
+type DashboardTaskItem = TaskItem & {
+  priority?: string
+  assignee?: string
+}
+const dateRange = ref<DateRange>(null)
+const tasks = ref<DashboardTaskItem[]>([])
 const selectedRowKeys = ref<string[]>([])
 const showCreateDrawer = ref(false)
 
@@ -366,12 +373,12 @@ const pagination = ref({
 })
 
 // 行选择配置
-const rowSelection = {
-  selectedRowKeys: selectedRowKeys,
-  onChange: (keys: string[]) => {
-    selectedRowKeys.value = keys
+const rowSelection = computed<TableProps['rowSelection']>(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: Array<string | number>) => {
+    selectedRowKeys.value = keys.map((key) => String(key))
   },
-}
+}))
 
 // 选项配置
 const statusOptions = [
@@ -397,7 +404,7 @@ const departmentOptions = [
 ]
 
 // 表格列配置
-const columns = [
+const columns: TableColumnsType<TaskItem> = [
   { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
   { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
   { title: '任务类型', dataIndex: 'task_type', key: 'taskType', width: 100 },
@@ -491,7 +498,7 @@ const handleReset = () => {
   selectedStatus.value = undefined
   selectedAssignee.value = undefined
   selectedDepartment.value = undefined
-  dateRange.value = []
+  dateRange.value = null
   pagination.value.current = 1
   fetchTasks()
 }
@@ -505,19 +512,19 @@ const handleExport = () => {
   message.info('导出任务数据')
 }
 
-const handleViewDetail = (record: any) => {
+const handleViewDetail = (record: DashboardTaskItem) => {
   message.info(`查看任务详情: ${record.task_name}`)
 }
 
-const handleAssign = (record: any) => {
+const handleAssign = (record: DashboardTaskItem) => {
   message.info(`分配任务: ${record.task_name}`)
 }
 
-const handleEdit = (record: any) => {
+const handleEdit = (record: DashboardTaskItem) => {
   message.info(`编辑任务: ${record.task_name}`)
 }
 
-const handleDelete = async (record: any) => {
+const handleDelete = async (record: DashboardTaskItem) => {
   try {
     const res = await deleteTask(record.id)
     if (res.success) {
@@ -562,7 +569,7 @@ const fetchTasks = async () => {
 
     if (res.success && res.data) {
       const data = res.data as any
-      tasks.value = data.items || []
+      tasks.value = (data.items || []) as DashboardTaskItem[]
       pagination.value.total = data.total || 0
     } else {
       message.error(res.message || '获取任务列表失败')

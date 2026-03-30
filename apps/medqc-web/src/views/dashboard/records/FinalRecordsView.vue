@@ -2,7 +2,9 @@
   <div class="final-records-page min-h-screen bg-slate-50/50 p-6">
     <!-- 1. 顶部 KPI 概览卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+      <div
+        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
+      >
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">
             总病历数
@@ -11,12 +13,16 @@
             {{ formatInteger(overviewStats.total_records) }}
           </div>
         </div>
-        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+        <div
+          class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform"
+        >
           <FileTextOutlined class="text-lg" />
         </div>
       </div>
-      
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+
+      <div
+        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
+      >
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">
             已归档
@@ -25,12 +31,16 @@
             {{ formatInteger(overviewStats.archived_count) }}
           </div>
         </div>
-        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+        <div
+          class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform"
+        >
           <CheckCircleOutlined class="text-lg" />
         </div>
       </div>
-      
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+
+      <div
+        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
+      >
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">
             待处理
@@ -39,12 +49,16 @@
             {{ formatInteger(overviewStats.pending_count) }}
           </div>
         </div>
-        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+        <div
+          class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform"
+        >
           <ClockCircleOutlined class="text-lg" />
         </div>
       </div>
-      
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+
+      <div
+        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
+      >
         <div>
           <div class="text-slate-500 text-xs font-medium mb-1">
             质控通过率
@@ -53,16 +67,22 @@
             {{ formatRate(overviewStats.pass_rate) }}%
           </div>
         </div>
-        <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+        <div
+          class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform"
+        >
           <TrophyOutlined class="text-lg" />
         </div>
       </div>
     </div>
 
     <!-- 2. 主内容区：工具栏 + 表格 -->
-    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]">
+    <div
+      class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
+    >
       <!-- 工具栏 Header -->
-      <div class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div
+        class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+      >
         <!-- 左侧：搜索与筛选 -->
         <div class="flex items-center gap-3 flex-1">
           <div class="relative">
@@ -74,7 +94,7 @@
             />
             <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
-          
+
           <a-select
             v-model:value="selectedDepartment"
             class="w-32 custom-select"
@@ -106,7 +126,7 @@
               {{ status.label }}
             </a-select-option>
           </a-select>
-          
+
           <div class="h-6 w-px bg-slate-200 mx-1" />
 
           <a-range-picker
@@ -125,7 +145,7 @@
           >
             <FolderOutlined /> 批量归档
           </a-button>
-           
+
           <a-button
             class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1"
             @click="handleExport"
@@ -168,15 +188,17 @@
             <template v-if="column.key === 'recordNumber'">
               <div
                 class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer"
-                @click="handleView(record)"
+                @click="handleView(record as AdminRecordItem)"
               >
                 {{ record.record_id }}
               </div>
             </template>
-            
+
             <template v-if="column.key === 'patientInfo'">
               <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
+                <div
+                  class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200"
+                >
                   {{ (record.patient_name || '').charAt(0) }}
                 </div>
                 <div class="text-sm font-medium text-slate-700">
@@ -186,12 +208,13 @@
             </template>
 
             <template v-if="column.key === 'qcStatus'">
-              <span 
+              <span
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
                 :class="{
-                  'bg-emerald-50 text-emerald-600 border-emerald-100': record.status === 'completed' || record.status === 'passed',
+                  'bg-emerald-50 text-emerald-600 border-emerald-100':
+                    record.status === 'completed' || record.status === 'passed',
                   'bg-rose-50 text-rose-600 border-rose-100': record.status === 'failed',
-                  'bg-amber-50 text-amber-600 border-amber-100': record.status === 'pending'
+                  'bg-amber-50 text-amber-600 border-amber-100': record.status === 'pending',
                 }"
               >
                 <span
@@ -199,7 +222,7 @@
                   :class="{
                     'bg-emerald-500': record.status === 'completed' || record.status === 'passed',
                     'bg-rose-500': record.status === 'failed',
-                    'bg-amber-500': record.status === 'pending'
+                    'bg-amber-500': record.status === 'pending',
                   }"
                 />
                 {{ getQCStatusText(record.status) }}
@@ -207,27 +230,28 @@
             </template>
 
             <template v-if="column.key === 'defectCount'">
-              <span 
+              <span
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
                 :class="{
                   'bg-slate-100 text-slate-600 border-slate-200': record.defect_count === 0,
-                  'bg-amber-50 text-amber-600 border-amber-100': record.defect_count > 0 && record.defect_count <= 3,
-                  'bg-rose-50 text-rose-600 border-rose-100': record.defect_count > 3
+                  'bg-amber-50 text-amber-600 border-amber-100':
+                    record.defect_count > 0 && record.defect_count <= 3,
+                  'bg-rose-50 text-rose-600 border-rose-100': record.defect_count > 3,
                 }"
               >
                 {{ record.defect_count || 0 }}
               </span>
             </template>
-            
+
             <template v-if="column.key === 'qcScore'">
               <div class="flex items-center gap-2">
                 <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
-                <a-progress 
+                <a-progress
                   v-if="record.score"
-                  :percent="record.score" 
-                  :show-info="false" 
-                  :stroke-color="getScoreColor(record.score)" 
-                  size="small" 
+                  :percent="record.score"
+                  :show-info="false"
+                  :stroke-color="getScoreColor(record.score)"
+                  size="small"
                   class="w-16"
                 />
               </div>
@@ -275,7 +299,7 @@
                 <a-tooltip title="查看详情">
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-all"
-                    @click="handleView(record)"
+                    @click="handleView(record as AdminRecordItem)"
                   >
                     <EyeOutlined />
                   </button>
@@ -283,7 +307,7 @@
                 <a-tooltip title="质控报告">
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
-                    @click="handleQCReport(record)"
+                    @click="handleQCReport(record as AdminRecordItem)"
                   >
                     <FileSearchOutlined />
                   </button>
@@ -294,7 +318,7 @@
                 >
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all"
-                    @click="handleArchive(record)"
+                    @click="handleArchive(record as AdminRecordItem)"
                   >
                     <FolderOutlined />
                   </button>
@@ -304,14 +328,15 @@
           </template>
         </a-table>
       </div>
-      
+
       <!-- 底部批量操作栏 (有选中时显示) -->
       <transition name="slide-up">
         <div
           v-if="selectedRowKeys.length > 0"
           class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50"
         >
-          <span class="text-sm font-medium">已选择 <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
+          <span class="text-sm font-medium">已选择
+            <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
           <div class="h-4 w-px bg-slate-600" />
           <div class="flex items-center gap-2">
             <button
@@ -346,6 +371,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
 import {
@@ -359,7 +385,7 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   TrophyOutlined,
-  CloseOutlined
+  CloseOutlined,
 } from '@ant-design/icons-vue'
 import {
   getAdminRecordList,
@@ -380,7 +406,8 @@ const loading = ref(false)
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
 const selectedQCStatus = ref<string | undefined>(undefined)
-const dateRange = ref<[Dayjs, Dayjs] | []>([])
+type DateRange = [Dayjs, Dayjs] | null
+const dateRange = ref<DateRange>(null)
 const records = ref<AdminRecordItem[]>([])
 const selectedRowKeys = ref<string[]>([])
 const drawerVisible = ref(false)
@@ -403,15 +430,15 @@ const pagination = ref({
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条记录`
+  showTotal: (total: number) => `共 ${total} 条记录`,
 })
 
 // 行选择配置
-const rowSelection = computed(() => ({
+const rowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRowKeys.value,
-  onChange: (keys: string[]) => {
-    selectedRowKeys.value = keys
-  }
+  onChange: (keys: Array<string | number>) => {
+    selectedRowKeys.value = keys.map((key) => String(key))
+  },
 }))
 
 // 科室选项 — 动态加载
@@ -421,39 +448,39 @@ const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 const qcStatusOptions = [
   { value: 'passed', label: '通过' },
   { value: 'failed', label: '未通过' },
-  { value: 'pending', label: '待质控' }
+  { value: 'pending', label: '待质控' },
 ]
 
 // 表格列配置 — 增加缺陷数列
-const columns = [
+const columns: TableColumnsType<AdminRecordItem> = [
   {
     title: '病历号',
     dataIndex: 'record_id',
     key: 'recordNumber',
-    width: 120
+    width: 120,
   },
   {
     title: '患者信息',
     key: 'patientInfo',
-    width: 150
+    width: 150,
   },
   {
     title: '科室',
     dataIndex: 'department',
     key: 'department',
-    width: 120
+    width: 120,
   },
   {
     title: '出院日期',
     dataIndex: 'discharge_date',
     key: 'dischargeDate',
-    width: 120
+    width: 120,
   },
   {
     title: '质控状态',
     dataIndex: 'status',
     key: 'qcStatus',
-    width: 120
+    width: 120,
   },
   {
     title: '缺陷数',
@@ -478,8 +505,8 @@ const columns = [
     title: '操作',
     key: 'action',
     width: 140,
-    fixed: 'right'
-  }
+    fixed: 'right' as const,
+  },
 ]
 
 const getQCStatusText = (status: string) => {
@@ -487,7 +514,7 @@ const getQCStatusText = (status: string) => {
     passed: '通过',
     completed: '通过',
     failed: '未通过',
-    pending: '待质控'
+    pending: '待质控',
   }
   return textMap[status] || status
 }
@@ -518,7 +545,7 @@ const formatRate = (value: unknown): string => {
 const loadDepartments = async () => {
   const res = await getDepartmentList()
   if (res.success && res.data) {
-    departmentOptions.value = res.data.map(d => ({ value: d.code || d.name, label: d.name }))
+    departmentOptions.value = res.data.map((d) => ({ value: d.code || d.name, label: d.name }))
   }
 }
 
@@ -562,10 +589,54 @@ const fetchRecords = async () => {
     } else {
       // API 未就绪时使用 mock 数据兜底
       records.value = [
-        { id: '1', task_id: '', record_id: 'F2024001', patient_name: '王五', department: '内科', discharge_date: '2024-01-10', status: 'completed', defect_count: 2, score: 95, created_at: '' },
-        { id: '2', task_id: '', record_id: 'F2024002', patient_name: '赵六', department: '外科', discharge_date: '2024-01-12', status: 'failed', defect_count: 5, score: 72, created_at: '' },
-        { id: '3', task_id: '', record_id: 'F2024003', patient_name: '李四', department: '儿科', discharge_date: '2024-01-15', status: 'completed', defect_count: 1, score: 88, created_at: '' },
-        { id: '4', task_id: '', record_id: 'F2024004', patient_name: '张三', department: '内科', discharge_date: '2024-01-18', status: 'pending', defect_count: 0, score: undefined, created_at: '' },
+        {
+          id: '1',
+          task_id: '',
+          record_id: 'F2024001',
+          patient_name: '王五',
+          department: '内科',
+          discharge_date: '2024-01-10',
+          status: 'completed',
+          defect_count: 2,
+          score: 95,
+          created_at: '',
+        },
+        {
+          id: '2',
+          task_id: '',
+          record_id: 'F2024002',
+          patient_name: '赵六',
+          department: '外科',
+          discharge_date: '2024-01-12',
+          status: 'failed',
+          defect_count: 5,
+          score: 72,
+          created_at: '',
+        },
+        {
+          id: '3',
+          task_id: '',
+          record_id: 'F2024003',
+          patient_name: '李四',
+          department: '儿科',
+          discharge_date: '2024-01-15',
+          status: 'completed',
+          defect_count: 1,
+          score: 88,
+          created_at: '',
+        },
+        {
+          id: '4',
+          task_id: '',
+          record_id: 'F2024004',
+          patient_name: '张三',
+          department: '内科',
+          discharge_date: '2024-01-18',
+          status: 'pending',
+          defect_count: 0,
+          score: undefined,
+          created_at: '',
+        },
       ] as any[]
       pagination.value.total = 4
     }
@@ -626,7 +697,11 @@ const resolveStageByAction = (action: WorkstationLaunchAction): WorkflowStageKey
   if (action === 'qc_frontpage') return 'frontpage_qc'
   if (action === 'qc_settlement') return 'settlement_qc'
   const stageFromQuery = String(route.query.stage || '').trim()
-  if (stageFromQuery === 'frontpage_generate' || stageFromQuery === 'frontpage_qc' || stageFromQuery === 'settlement_qc') {
+  if (
+    stageFromQuery === 'frontpage_generate' ||
+    stageFromQuery === 'frontpage_qc' ||
+    stageFromQuery === 'settlement_qc'
+  ) {
     return stageFromQuery
   }
   return 'settlement_qc'

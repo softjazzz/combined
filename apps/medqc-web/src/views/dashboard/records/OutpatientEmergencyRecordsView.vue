@@ -35,8 +35,12 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]">
-      <div class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div
+      class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
+    >
+      <div
+        class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+      >
         <div class="flex items-center gap-3 flex-1">
           <div class="relative">
             <a-input
@@ -163,7 +167,9 @@
         v-if="selectedRowKeys.length"
         class="px-6 py-2 bg-blue-50/60 border-b border-blue-100 text-sm text-slate-700 flex items-center justify-between"
       >
-        <span>已选择 <span class="font-semibold text-blue-700">{{ selectedRowKeys.length }}</span> 条门急诊病历</span>
+        <span>已选择
+          <span class="font-semibold text-blue-700">{{ selectedRowKeys.length }}</span>
+          条门急诊病历</span>
         <a-button
           type="link"
           class="!px-0"
@@ -189,7 +195,7 @@
             <template v-if="column.key === 'recordNumber'">
               <a
                 class="font-mono font-bold text-slate-700 hover:text-blue-600"
-                @click="openDetail(record)"
+                @click="openDetail(record as AdminRecordItem)"
               >
                 {{ record.record_id || record.id }}
               </a>
@@ -205,7 +211,7 @@
                   type="link"
                   size="small"
                   class="!px-0"
-                  @click="openDetail(record)"
+                  @click="openDetail(record as AdminRecordItem)"
                 >
                   质控详情
                 </a-button>
@@ -213,7 +219,7 @@
                   type="link"
                   size="small"
                   class="!px-0"
-                  @click="handleRecordUrge(record)"
+                  @click="handleRecordUrge(record as AdminRecordItem)"
                 >
                   催办
                 </a-button>
@@ -221,7 +227,7 @@
                   type="link"
                   size="small"
                   class="!px-0"
-                  @click="handleRecordApprove(record)"
+                  @click="handleRecordApprove(record as AdminRecordItem)"
                 >
                   通过
                 </a-button>
@@ -250,6 +256,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import {
@@ -272,7 +279,8 @@ const loading = ref(false)
 const searchKeyword = ref('')
 const selectedDepartment = ref<string | undefined>(undefined)
 const selectedStatus = ref<string | undefined>(undefined)
-const dateRange = ref<[Dayjs, Dayjs] | []>([])
+type DateRange = [Dayjs, Dayjs] | null
+const dateRange = ref<DateRange>(null)
 const records = ref<AdminRecordItem[]>([])
 const departmentOptions = ref<Array<{ value: string; label: string }>>([])
 const selectedRowKeys = ref<string[]>([])
@@ -299,7 +307,7 @@ const pagination = ref({
   showTotal: (total: number) => `共 ${total} 条记录`,
 })
 
-const rowSelection = computed(() => ({
+const rowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: Array<string | number>) => {
     selectedRowKeys.value = keys.map((key) => String(key))
@@ -314,7 +322,7 @@ const selectedRecords = computed(() => {
   return records.value.filter((record) => keySet.has(String(record.id)))
 })
 
-const columns = [
+const columns: TableColumnsType<AdminRecordItem> = [
   { title: '病历号', dataIndex: 'record_id', key: 'recordNumber', width: 140 },
   { title: '患者姓名', dataIndex: 'patient_name', key: 'patient_name', width: 120 },
   { title: '就诊类型', dataIndex: 'visit_type', key: 'visit_type', width: 100 },
@@ -416,7 +424,7 @@ const resetFilters = () => {
   searchKeyword.value = ''
   selectedDepartment.value = undefined
   selectedStatus.value = undefined
-  dateRange.value = []
+  dateRange.value = null
   pagination.value.current = 1
   selectedRowKeys.value = []
   fetchRecords()
@@ -467,13 +475,13 @@ const queryDefectIdsForRecord = async (record: AdminRecordItem): Promise<string[
   if (!res.success || !res.data) {
     return []
   }
-  return (res.data.items || [])
-    .map((item) => String(item.id || '').trim())
-    .filter(Boolean)
+  return (res.data.items || []).map((item) => String(item.id || '').trim()).filter(Boolean)
 }
 
 const queryDefectIdsForSelectedRecords = async (): Promise<string[]> => {
-  const all = await Promise.all(selectedRecords.value.map((record) => queryDefectIdsForRecord(record)))
+  const all = await Promise.all(
+    selectedRecords.value.map((record) => queryDefectIdsForRecord(record)),
+  )
   return Array.from(new Set(all.flat()))
 }
 

@@ -66,10 +66,10 @@
             allow-clear
             @change="fetchNotifications"
           >
-            <a-select-option :value="false">
+            <a-select-option value="false">
               未读
             </a-select-option>
-            <a-select-option :value="true">
+            <a-select-option value="true">
               已读
             </a-select-option>
           </a-select>
@@ -82,7 +82,9 @@
             :key="notif.id"
             :class="[
               'bg-white rounded-xl border p-4 cursor-pointer transition-all',
-              notif.is_read ? 'border-gray-100 opacity-70' : 'border-blue-100 shadow-sm hover:shadow-md'
+              notif.is_read
+                ? 'border-gray-100 opacity-70'
+                : 'border-blue-100 shadow-sm hover:shadow-md',
             ]"
             @click="handleNotifClick(notif)"
           >
@@ -90,7 +92,7 @@
               <span
                 :class="[
                   'w-8 h-8 rounded-lg flex items-center justify-center text-white flex-shrink-0 mt-0.5',
-                  notifIconBg(notif.type)
+                  notifIconBg(notif.type),
                 ]"
               >
                 <component :is="notifIcon(notif.type)" />
@@ -144,7 +146,9 @@
             :key="st.key"
             :class="[
               'bg-white rounded-xl border p-4 cursor-pointer transition-all text-center',
-              rectStatusFilter === st.key ? 'border-blue-500 shadow-md' : 'border-gray-100 hover:border-blue-200'
+              rectStatusFilter === st.key
+                ? 'border-blue-500 shadow-md'
+                : 'border-gray-100 hover:border-blue-200',
             ]"
             @click="rectStatusFilter = rectStatusFilter === st.key ? '' : st.key"
           >
@@ -259,10 +263,16 @@ const activeTab = ref('notifications')
 const notifications = ref<any[]>([])
 const unreadCount = ref(0)
 const notifType = ref<string | undefined>(undefined)
-const readFilter = ref<boolean | undefined>(undefined)
+const readFilter = ref<'false' | 'true' | undefined>(undefined)
 
 const rectifications = ref<any[]>([])
-const rectStats = ref<Record<string, number>>({ pending: 0, overdue: 0, submitted: 0, approved: 0, total: 0 })
+const rectStats = ref<Record<string, number>>({
+  pending: 0,
+  overdue: 0,
+  submitted: 0,
+  approved: 0,
+  total: 0,
+})
 const rectStatusFilter = ref('')
 
 // ============= 整改状态列表 =============
@@ -276,7 +286,7 @@ const rectStatusList = [
 // ============= 计算属性 =============
 const filteredRectifications = computed(() => {
   if (!rectStatusFilter.value) return rectifications.value
-  return rectifications.value.filter(r => r.status === rectStatusFilter.value)
+  return rectifications.value.filter((r) => r.status === rectStatusFilter.value)
 })
 
 // ============= 方法 =============
@@ -284,10 +294,14 @@ const fetchNotifications = async () => {
   try {
     const params: any = {}
     if (notifType.value) params.type = notifType.value
-    if (readFilter.value !== undefined && readFilter.value !== null) params.is_read = readFilter.value
+    if (readFilter.value !== undefined) params.is_read = readFilter.value === 'true'
     const res = await ApiService.get('/api/v1/notifications', params)
     if (!res.success) return
-    const data = (res.data as { data?: { items?: Array<Record<string, unknown>>; unread_count?: number } } | undefined)?.data
+    const data = (
+      res.data as
+        | { data?: { items?: Array<Record<string, unknown>>; unread_count?: number } }
+        | undefined
+    )?.data
     if (data) {
       notifications.value = data.items || []
       unreadCount.value = data.unread_count || 0
@@ -301,7 +315,11 @@ const fetchRectifications = async () => {
   try {
     const res = await ApiService.get('/api/v1/notifications/rectifications')
     if (!res.success) return
-    const data = (res.data as { data?: { items?: Array<Record<string, unknown>>; stats?: Record<string, number> } } | undefined)?.data
+    const data = (
+      res.data as
+        | { data?: { items?: Array<Record<string, unknown>>; stats?: Record<string, number> } }
+        | undefined
+    )?.data
     if (data) {
       rectifications.value = data.items || []
       rectStats.value = data.stats || {}
@@ -322,7 +340,9 @@ const markAllRead = async () => {
     if (!res.success) throw new Error(String(res.error || 'mark all read failed'))
     message.success('已全部标为已读')
     await fetchNotifications()
-  } catch (err) { message.error('操作失败') }
+  } catch (err) {
+    message.error('操作失败')
+  }
 }
 
 const handleNotifClick = async (notif: any) => {
@@ -332,17 +352,23 @@ const handleNotifClick = async (notif: any) => {
       if (!res.success) return
       notif.is_read = true
       unreadCount.value = Math.max(0, unreadCount.value - 1)
-    } catch (err) { /* ignore */ }
+    } catch (err) {
+      /* ignore */
+    }
   }
 }
 
 const submitRect = async (id: string) => {
   try {
-    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/submit`, { note: '已完成整改' })
+    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/submit`, {
+      note: '已完成整改',
+    })
     if (!res.success) throw new Error(String(res.error || 'submit rectification failed'))
     message.success('整改已提交')
     await fetchRectifications()
-  } catch (err) { message.error('提交失败') }
+  } catch (err) {
+    message.error('提交失败')
+  }
 }
 
 const approveRect = async (id: string) => {
@@ -351,42 +377,58 @@ const approveRect = async (id: string) => {
     if (!res.success) throw new Error(String(res.error || 'approve rectification failed'))
     message.success('审核通过，问题已闭环')
     await fetchRectifications()
-  } catch (err) { message.error('审核失败') }
+  } catch (err) {
+    message.error('审核失败')
+  }
 }
 
 const rejectRect = async (id: string) => {
   try {
-    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/reject`, { reason: '整改不充分' })
+    const res = await ApiService.put(`/api/v1/notifications/rectifications/${id}/reject`, {
+      reason: '整改不充分',
+    })
     if (!res.success) throw new Error(String(res.error || 'reject rectification failed'))
     message.warning('已退回整改')
     await fetchRectifications()
-  } catch (err) { message.error('退回失败') }
+  } catch (err) {
+    message.error('退回失败')
+  }
 }
 
 // ============= 辅助 =============
-const notifIcon = (type: string) => ({
-  qc_result: FileTextOutlined,
-  urge: SendOutlined,
-  rectification: ToolOutlined,
-  appeal: ExclamationCircleOutlined,
-  system: SettingOutlined,
-}[type] || BellOutlined)
+const notifIcon = (type: string) =>
+  ({
+    qc_result: FileTextOutlined,
+    urge: SendOutlined,
+    rectification: ToolOutlined,
+    appeal: ExclamationCircleOutlined,
+    system: SettingOutlined,
+  })[type] || BellOutlined
 
-const notifIconBg = (type: string) => ({
-  qc_result: 'bg-blue-500',
-  urge: 'bg-orange-500',
-  rectification: 'bg-green-500',
-  appeal: 'bg-red-500',
-  system: 'bg-gray-500',
-}[type] || 'bg-gray-400')
+const notifIconBg = (type: string) =>
+  ({
+    qc_result: 'bg-blue-500',
+    urge: 'bg-orange-500',
+    rectification: 'bg-green-500',
+    appeal: 'bg-red-500',
+    system: 'bg-gray-500',
+  })[type] || 'bg-gray-400'
 
-const rectStatusColor = (status: string) => ({
-  pending: 'orange', overdue: 'red', submitted: 'blue', approved: 'green',
-}[status] || 'default')
+const rectStatusColor = (status: string) =>
+  ({
+    pending: 'orange',
+    overdue: 'red',
+    submitted: 'blue',
+    approved: 'green',
+  })[status] || 'default'
 
-const rectStatusLabel = (status: string) => ({
-  pending: '待整改', overdue: '已超期', submitted: '待审核', approved: '已闭环',
-}[status] || status)
+const rectStatusLabel = (status: string) =>
+  ({
+    pending: '待整改',
+    overdue: '已超期',
+    submitted: '待审核',
+    approved: '已闭环',
+  })[status] || status
 
 const formatTime = (iso: string) => {
   if (!iso) return ''

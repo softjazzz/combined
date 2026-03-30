@@ -34,7 +34,7 @@
         <a-step title="配置规则" />
         <a-step title="测试" />
       </a-steps>
-      
+
       <!-- 下一步按钮 -->
       <div class="step-actions">
         <a-button
@@ -64,8 +64,8 @@
               name="name"
               class="required-field"
             >
-              <a-input 
-                v-model:value="formData.name" 
+              <a-input
+                v-model:value="formData.name"
                 placeholder="请输入，最多100字"
                 :maxlength="100"
                 show-count
@@ -77,8 +77,8 @@
               name="type"
               class="required-field"
             >
-              <a-select 
-                v-model:value="formData.type" 
+              <a-select
+                v-model:value="formData.type"
                 placeholder="请选择"
                 allow-clear
               >
@@ -99,8 +99,8 @@
               name="document"
               class="required-field"
             >
-              <a-select 
-                v-model:value="formData.document" 
+              <a-select
+                v-model:value="formData.document"
                 placeholder="请选择"
                 allow-clear
               >
@@ -120,8 +120,8 @@
               label="质量管理制度"
               name="managementSystem"
             >
-              <a-select 
-                v-model:value="formData.managementSystem" 
+              <a-select
+                v-model:value="formData.managementSystem"
                 placeholder="请选择"
                 allow-clear
               >
@@ -142,8 +142,8 @@
               name="category"
               class="required-field"
             >
-              <a-select 
-                v-model:value="formData.category" 
+              <a-select
+                v-model:value="formData.category"
                 placeholder="请选择"
                 allow-clear
               >
@@ -163,8 +163,8 @@
               label="核心制度分类"
               name="coreSystemCategory"
             >
-              <a-select 
-                v-model:value="formData.coreSystemCategory" 
+              <a-select
+                v-model:value="formData.coreSystemCategory"
                 placeholder="请选择"
                 allow-clear
               >
@@ -184,8 +184,8 @@
               label="质控信息分类"
               name="infoCategory"
             >
-              <a-select 
-                v-model:value="formData.infoCategory" 
+              <a-select
+                v-model:value="formData.infoCategory"
                 placeholder="请选择"
                 allow-clear
               >
@@ -209,8 +209,8 @@
             label="质控点来源"
             name="source"
           >
-            <a-textarea 
-              v-model:value="formData.source" 
+            <a-textarea
+              v-model:value="formData.source"
               placeholder="请输入内容"
               :rows="4"
               :maxlength="500"
@@ -222,8 +222,8 @@
             label="质控点意义说明"
             name="significance"
           >
-            <a-textarea 
-              v-model:value="formData.significance" 
+            <a-textarea
+              v-model:value="formData.significance"
               placeholder="请输入内容"
               :rows="4"
               :maxlength="500"
@@ -235,8 +235,8 @@
             label="质控点错误示例"
             name="errorExample"
           >
-            <a-textarea 
-              v-model:value="formData.errorExample" 
+            <a-textarea
+              v-model:value="formData.errorExample"
               placeholder="请输入内容"
               :rows="4"
               :maxlength="500"
@@ -252,7 +252,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { message } from 'ant-design-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import type { QualityControlPointForm } from '@/types/quality-control'
 
 // 当前步骤
@@ -272,24 +272,18 @@ const formData = reactive<QualityControlPointForm>({
   managementSystem: '',
   source: '',
   significance: '',
-  errorExample: ''
+  errorExample: '',
 })
 
 // 表单验证规则
-const formRules = {
+const formRules: FormProps['rules'] = {
   name: [
     { required: true, message: '请输入质控点名称', trigger: 'blur' },
-    { max: 100, message: '质控点名称不能超过100个字符', trigger: 'blur' }
+    { max: 100, message: '质控点名称不能超过100个字符', trigger: 'blur' },
   ],
-  category: [
-    { required: true, message: '请选择质控大类', trigger: 'change' }
-  ],
-  type: [
-    { required: true, message: '请选择质控类型', trigger: 'change' }
-  ],
-  document: [
-    { required: true, message: '请选择质控文书', trigger: 'change' }
-  ]
+  category: [{ required: true, message: '请选择质控大类', trigger: 'change' }],
+  type: [{ required: true, message: '请选择质控类型', trigger: 'change' }],
+  document: [{ required: true, message: '请选择质控文书', trigger: 'change' }],
 }
 
 // 下一步处理
@@ -317,7 +311,7 @@ const handleNextStep = async () => {
       color: #666666;
       font-size: 14px;
     }
-    
+
     :deep(.ant-breadcrumb-separator) {
       color: #999999;
     }
@@ -342,12 +336,12 @@ const handleNextStep = async () => {
     .custom-steps {
       max-width: 600px;
       margin: 0 auto;
-      
+
       :deep(.ant-steps-item-title) {
         font-size: 16px;
         font-weight: 500;
       }
-      
+
       :deep(.ant-steps-item-process .ant-steps-item-icon) {
         background: #1890ff;
         border-color: #1890ff;
@@ -400,7 +394,7 @@ const handleNextStep = async () => {
         font-size: 14px;
         font-weight: 500;
         color: #333333;
-        
+
         &::before {
           display: none !important;
         }
@@ -418,11 +412,11 @@ const handleNextStep = async () => {
         border-radius: 6px;
         border: 1px solid #d9d9d9;
         font-size: 14px;
-        
+
         &:hover {
           border-color: #40a9ff;
         }
-        
+
         &:focus,
         &.ant-input-focused,
         &.ant-select-focused .ant-select-selector {
@@ -446,7 +440,7 @@ const handleNextStep = async () => {
 
     .steps-container {
       padding: 24px 16px;
-      
+
       .step-actions {
         position: static;
         margin-top: 24px;

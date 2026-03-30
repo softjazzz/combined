@@ -27,7 +27,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -43,7 +43,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -59,7 +59,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -129,7 +129,7 @@
           class="rounded-lg"
           :options="statusOptions"
         />
-        
+
         <a-input-search
           v-model:value="searchKeyword"
           placeholder="搜索任务名称"
@@ -137,12 +137,12 @@
           class="rounded-lg"
           @search="handleFilter"
         />
-        
+
         <a-range-picker
           v-model:value="dateRange"
           class="rounded-lg"
         />
-        
+
         <div class="flex space-x-2">
           <a-button
             type="primary"
@@ -191,33 +191,36 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
+            <a-tag :color="getStatusColor((record as TaskItem).status)">
+              {{ getStatusText((record as TaskItem).status) }}
             </a-tag>
           </template>
           <template v-if="column.key === 'progress'">
             <a-progress
-              :percent="record.progress"
+              :percent="(record as TaskItem).progress"
               size="small"
-              :status="record.progress >= 100 ? 'success' : 'active'"
+              :status="(record as TaskItem).progress >= 100 ? 'success' : 'active'"
             />
           </template>
           <template v-if="column.key === 'action'">
             <div class="flex space-x-2">
-              <a-button 
-                v-if="record.status === 'draft' || record.status === 'assigned'" 
-                type="link" 
+              <a-button
+                v-if="
+                  (record as TaskItem).status === 'draft' ||
+                    (record as TaskItem).status === 'assigned'
+                "
+                type="link"
                 size="small"
-                @click="handleStartWork(record)"
+                @click="handleStartWork(record as TaskItem)"
               >
                 <PlayCircleOutlined />
                 开始
               </a-button>
-              <a-button 
-                v-if="record.status === 'in_progress'" 
-                type="link" 
+              <a-button
+                v-if="(record as TaskItem).status === 'in_progress'"
+                type="link"
                 size="small"
-                @click="handleContinueWork(record)"
+                @click="handleContinueWork(record as TaskItem)"
               >
                 <EditOutlined />
                 继续
@@ -225,7 +228,7 @@
               <a-button
                 type="link"
                 size="small"
-                @click="handleViewDetail(record)"
+                @click="handleViewDetail(record as TaskItem)"
               >
                 <EyeOutlined />
                 详情
@@ -252,16 +255,28 @@
               基本信息
             </h4>
             <div class="grid grid-cols-2 gap-3 text-sm">
-              <div><span class="text-slate-400">编号：</span><span class="font-medium">{{ detailTask.task_number }}</span></div>
-              <div><span class="text-slate-400">类型：</span><span class="font-medium">{{ detailTask.task_type === 'one_time' ? '一次性' : '定时' }}</span></div>
+              <div>
+                <span class="text-slate-400">编号：</span><span class="font-medium">{{ detailTask.task_number }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400">类型：</span><span class="font-medium">{{
+                  detailTask.task_type === 'one_time' ? '一次性' : '定时'
+                }}</span>
+              </div>
               <div>
                 <span class="text-slate-400">状态：</span><a-tag :color="getStatusColor(detailTask.status)">
                   {{ getStatusText(detailTask.status) }}
                 </a-tag>
               </div>
-              <div><span class="text-slate-400">创建人：</span><span class="font-medium">{{ detailTask.creator_name }}</span></div>
-              <div><span class="text-slate-400">截止：</span><span class="font-medium">{{ detailTask.deadline || '无' }}</span></div>
-              <div><span class="text-slate-400">创建时间：</span><span class="font-medium">{{ formatDate(detailTask.created_at) }}</span></div>
+              <div>
+                <span class="text-slate-400">创建人：</span><span class="font-medium">{{ detailTask.creator_name }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400">截止：</span><span class="font-medium">{{ detailTask.deadline || '无' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400">创建时间：</span><span class="font-medium">{{ formatDate(detailTask.created_at) }}</span>
+              </div>
             </div>
           </div>
 
@@ -305,8 +320,12 @@
               </div>
             </div>
             <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div><span class="text-slate-400">平均分：</span><span class="font-bold">{{ detailProgress.avg_score ?? '-' }}</span></div>
-              <div><span class="text-slate-400">总缺陷：</span><span class="font-bold text-red-500">{{ detailProgress.total_defects }}</span></div>
+              <div>
+                <span class="text-slate-400">平均分：</span><span class="font-bold">{{ detailProgress.avg_score ?? '-' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400">总缺陷：</span><span class="font-bold text-red-500">{{ detailProgress.total_defects }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -318,6 +337,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
 import { useRouter } from 'vue-router'
 import { getTaskList, getTaskStats, getTaskDetail, getTaskProgress, updateTask } from '@/api/tasks'
 import type { TaskItem, TaskStats, TaskProgress } from '@/api/tasks'
@@ -331,7 +352,7 @@ import {
   FilterOutlined,
   ReloadOutlined,
   EditOutlined,
-  EyeOutlined
+  EyeOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -340,7 +361,8 @@ const router = useRouter()
 const loading = ref(false)
 const selectedStatus = ref<string | undefined>(undefined)
 const searchKeyword = ref('')
-const dateRange = ref([])
+type DateRange = [Dayjs, Dayjs] | null
+const dateRange = ref<DateRange>(null)
 const tasks = ref<TaskItem[]>([])
 
 // 统计
@@ -372,7 +394,7 @@ const pagination = ref({
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条任务`
+  showTotal: (total: number) => `共 ${total} 条任务`,
 })
 
 // 状态选项
@@ -381,34 +403,54 @@ const statusOptions = [
   { value: 'assigned', label: '已分配' },
   { value: 'in_progress', label: '进行中' },
   { value: 'completed', label: '已完成' },
-  { value: 'cancelled', label: '已取消' }
+  { value: 'cancelled', label: '已取消' },
 ]
 
 // 表格列配置
-const columns = [
+const columns: TableColumnsType<TaskItem> = [
   { title: '任务编号', dataIndex: 'task_number', key: 'taskNumber', width: 140 },
   { title: '任务名称', dataIndex: 'task_name', key: 'taskName', width: 200 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
   { title: '进度', dataIndex: 'progress', key: 'progress', width: 140 },
-  { title: '总病历', dataIndex: 'total_records', key: 'totalRecords', width: 90, align: 'center' as const },
-  { title: '已完成', dataIndex: 'completed_records', key: 'completedRecords', width: 90, align: 'center' as const },
+  {
+    title: '总病历',
+    dataIndex: 'total_records',
+    key: 'totalRecords',
+    width: 90,
+    align: 'center' as const,
+  },
+  {
+    title: '已完成',
+    dataIndex: 'completed_records',
+    key: 'completedRecords',
+    width: 90,
+    align: 'center' as const,
+  },
   { title: '截止时间', dataIndex: 'deadline', key: 'deadline', width: 150 },
-  { title: '操作', key: 'action', width: 200, fixed: 'right' as const }
+  { title: '操作', key: 'action', width: 200, fixed: 'right' as const },
 ]
 
 // 工具函数
 const getStatusColor = (status: string) => {
   const map: Record<string, string> = {
-    draft: 'default', sampling: 'cyan', assigned: 'orange',
-    in_progress: 'blue', completed: 'green', cancelled: 'red'
+    draft: 'default',
+    sampling: 'cyan',
+    assigned: 'orange',
+    in_progress: 'blue',
+    completed: 'green',
+    cancelled: 'red',
   }
   return map[status] || 'default'
 }
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    draft: '草稿', sampling: '抽样中', assigned: '已分配',
-    in_progress: '进行中', completed: '已完成', cancelled: '已取消'
+    draft: '草稿',
+    sampling: '抽样中',
+    assigned: '已分配',
+    in_progress: '进行中',
+    completed: '已完成',
+    cancelled: '已取消',
   }
   return map[status] || status
 }
@@ -416,8 +458,16 @@ const getStatusText = (status: string) => {
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
   try {
-    return new Date(dateStr).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  } catch { return dateStr }
+    return new Date(dateStr).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return dateStr
+  }
 }
 
 // ====== 数据获取 ======
@@ -462,7 +512,7 @@ const fetchTasks = async () => {
 
 const handleStartTask = () => {
   // 跳转到第一个待处理任务
-  const pending = tasks.value.find(t => t.status === 'draft' || t.status === 'assigned')
+  const pending = tasks.value.find((t) => t.status === 'draft' || t.status === 'assigned')
   if (pending) {
     handleStartWork(pending)
   } else {
@@ -487,7 +537,7 @@ const handleFilter = () => {
 const handleResetFilter = () => {
   selectedStatus.value = undefined
   searchKeyword.value = ''
-  dateRange.value = []
+  dateRange.value = null
   pagination.value.current = 1
   fetchTasks()
 }

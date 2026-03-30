@@ -58,7 +58,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -79,7 +79,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -100,7 +100,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <div class="flex items-center justify-between">
           <div>
@@ -215,9 +215,9 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'passRate'">
             <div class="flex items-center">
-              <a-progress 
-                :percent="record.passRate" 
-                size="small" 
+              <a-progress
+                :percent="record.passRate"
+                size="small"
                 :stroke-color="getProgressColor(record.passRate)"
                 class="flex-1 mr-2"
               />
@@ -226,7 +226,7 @@
           </template>
           <template v-if="column.key === 'trend'">
             <div class="flex items-center">
-              <component 
+              <component
                 :is="record.trend > 0 ? ArrowUpOutlined : ArrowDownOutlined"
                 :class="record.trend > 0 ? 'text-green-500' : 'text-red-500'"
                 class="text-xs mr-1"
@@ -244,7 +244,7 @@
               <a-button
                 type="link"
                 size="small"
-                @click="handleViewDetail(record)"
+                @click="handleViewDetail(record as DepartmentStatsRow)"
               >
                 <EyeOutlined />
                 详情
@@ -252,7 +252,7 @@
               <a-button
                 type="link"
                 size="small"
-                @click="handleDepartmentReport(record)"
+                @click="handleDepartmentReport(record as DepartmentStatsRow)"
               >
                 <FileTextOutlined />
                 报告
@@ -268,6 +268,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import {
@@ -281,13 +282,14 @@ import {
   BarChartOutlined,
   PieChartOutlined,
   DownloadOutlined,
-  EyeOutlined
+  EyeOutlined,
 } from '@ant-design/icons-vue'
 
 // 响应式数据
 const loading = ref(false)
 const tableLoading = ref(false)
-const dateRange = ref([dayjs().subtract(30, 'day'), dayjs()])
+type DateRange = [Dayjs, Dayjs] | null
+const dateRange = ref<DateRange>([dayjs().subtract(30, 'day'), dayjs()])
 const trendPeriod = ref('month')
 
 // 统计数据
@@ -295,7 +297,7 @@ const statistics = ref({
   totalRecords: 1247,
   passRate: 94.2,
   avgProcessTime: 2.8,
-  aiAccuracy: 96.5
+  aiAccuracy: 96.5,
 })
 
 // 科室统计数据
@@ -306,7 +308,7 @@ const departmentStats = ref([
     passedRecords: 325,
     passRate: 95.0,
     avgTime: 2.5,
-    trend: 3.2
+    trend: 3.2,
   },
   {
     department: '外科',
@@ -314,7 +316,7 @@ const departmentStats = ref([
     passedRecords: 276,
     passRate: 92.6,
     avgTime: 3.1,
-    trend: -1.8
+    trend: -1.8,
   },
   {
     department: '儿科',
@@ -322,7 +324,7 @@ const departmentStats = ref([
     passedRecords: 178,
     passRate: 95.7,
     avgTime: 2.2,
-    trend: 5.1
+    trend: 5.1,
   },
   {
     department: '妇产科',
@@ -330,7 +332,7 @@ const departmentStats = ref([
     passedRecords: 218,
     passRate: 93.2,
     avgTime: 2.9,
-    trend: 2.3
+    trend: 2.3,
   },
   {
     department: '急诊科',
@@ -338,8 +340,8 @@ const departmentStats = ref([
     passedRecords: 169,
     passRate: 90.4,
     avgTime: 3.8,
-    trend: -2.1
-  }
+    trend: -2.1,
+  },
 ])
 
 // 日期预设选项
@@ -347,14 +349,14 @@ const datePresets = [
   { label: '最近7天', value: [dayjs().subtract(7, 'day'), dayjs()] },
   { label: '最近30天', value: [dayjs().subtract(30, 'day'), dayjs()] },
   { label: '最近3个月', value: [dayjs().subtract(3, 'month'), dayjs()] },
-  { label: '最近6个月', value: [dayjs().subtract(6, 'month'), dayjs()] }
+  { label: '最近6个月', value: [dayjs().subtract(6, 'month'), dayjs()] },
 ]
 
 // 时间周期选项
 const periodOptions = [
   { value: 'week', label: '按周' },
   { value: 'month', label: '按月' },
-  { value: 'quarter', label: '按季度' }
+  { value: 'quarter', label: '按季度' },
 ]
 
 interface DepartmentStatsRow {
@@ -367,52 +369,52 @@ interface DepartmentStatsRow {
 }
 
 // 表格列配置
-const tableColumns = [
+const tableColumns: TableColumnsType<DepartmentStatsRow> = [
   {
     title: '科室',
     dataIndex: 'department',
     key: 'department',
-    width: 120
+    width: 120,
   },
   {
     title: '总病案数',
     dataIndex: 'totalRecords',
     key: 'totalRecords',
     width: 120,
-    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.totalRecords - b.totalRecords
+    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.totalRecords - b.totalRecords,
   },
   {
     title: '通过数',
     dataIndex: 'passedRecords',
     key: 'passedRecords',
-    width: 100
+    width: 100,
   },
   {
     title: '通过率',
     dataIndex: 'passRate',
     key: 'passRate',
     width: 200,
-    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.passRate - b.passRate
+    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.passRate - b.passRate,
   },
   {
     title: '平均处理时间(h)',
     dataIndex: 'avgTime',
     key: 'avgTime',
     width: 150,
-    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.avgTime - b.avgTime
+    sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => a.avgTime - b.avgTime,
   },
   {
     title: '趋势',
     dataIndex: 'trend',
     key: 'trend',
-    width: 100
+    width: 100,
   },
   {
     title: '操作',
     key: 'action',
     width: 150,
-    fixed: 'right'
-  }
+    fixed: 'right' as const,
+  },
 ]
 
 // 工具函数
@@ -435,7 +437,9 @@ const handleRefresh = () => {
 }
 
 const handleTrendPeriodChange = () => {
-  message.info(`切换到${trendPeriod.value === 'week' ? '按周' : trendPeriod.value === 'month' ? '按月' : '按季度'}统计`)
+  message.info(
+    `切换到${trendPeriod.value === 'week' ? '按周' : trendPeriod.value === 'month' ? '按月' : '按季度'}统计`,
+  )
 }
 
 const handleExportChart = () => {
@@ -462,13 +466,13 @@ const handleDepartmentReport = (record: DepartmentStatsRow) => {
 const fetchStatistics = async () => {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
     // 模拟数据更新
     statistics.value = {
       totalRecords: Math.floor(Math.random() * 500) + 1000,
       passRate: Math.floor(Math.random() * 10) + 90,
       avgProcessTime: Math.round((Math.random() * 2 + 2) * 10) / 10,
-      aiAccuracy: Math.floor(Math.random() * 5) + 95
+      aiAccuracy: Math.floor(Math.random() * 5) + 95,
     }
   } catch (error) {
     message.error('获取统计数据失败')
@@ -480,7 +484,7 @@ const fetchStatistics = async () => {
 const fetchDepartmentStats = async () => {
   tableLoading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 800))
+    await new Promise((resolve) => setTimeout(resolve, 800))
     // 数据已在初始化时设置
   } catch (error) {
     message.error('获取科室统计数据失败')

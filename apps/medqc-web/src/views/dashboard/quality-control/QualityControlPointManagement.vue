@@ -144,7 +144,9 @@
             <a-switch
               v-model:checked="record.enabled"
               size="small"
-              @change="(checked: boolean) => handleToggleEnable(record, checked)"
+              @change="
+                (checked: boolean) => handleToggleEnable(record as QualityControlPoint, checked)
+              "
             />
           </template>
 
@@ -154,14 +156,14 @@
               <a-button
                 type="link"
                 size="small"
-                @click="handleView(record)"
+                @click="handleView(record as QualityControlPoint)"
               >
                 查看
               </a-button>
               <a-button
                 type="link"
                 size="small"
-                @click="handleEdit(record)"
+                @click="handleEdit(record as QualityControlPoint)"
               >
                 编辑
               </a-button>
@@ -169,7 +171,7 @@
                 type="link"
                 size="small"
                 danger
-                @click="handleDelete(record)"
+                @click="handleDelete(record as QualityControlPoint)"
               >
                 下线
               </a-button>
@@ -184,11 +186,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import type {
   QualityControlPoint,
   QualityControlSearchParams,
-  TableColumn,
   PaginationConfig,
 } from '@/types/quality-control'
 
@@ -245,8 +247,8 @@ const tableData = ref<QualityControlPoint[]>([
 ])
 
 // 表格列配置
-const tableColumns = computed<TableColumn[]>(() => {
-  const baseColumns: TableColumn[] = [
+const tableColumns = computed<TableColumnsType<QualityControlPoint>>(() => {
+  const baseColumns: TableColumnsType<QualityControlPoint> = [
     {
       title: '质控点ID',
       dataIndex: 'id',
@@ -345,19 +347,19 @@ const tableColumns = computed<TableColumn[]>(() => {
     dataIndex: 'action',
     key: 'action',
     width: 150,
-    fixed: 'right',
+    fixed: 'right' as const,
   })
 
   return baseColumns
 })
 
 // 行选择配置
-const rowSelection = {
-  selectedRowKeys: selectedRowKeys,
-  onChange: (keys: string[]) => {
-    selectedRowKeys.value = keys
+const rowSelection = computed<TableProps['rowSelection']>(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: Array<string | number>) => {
+    selectedRowKeys.value = keys.map((key) => String(key))
   },
-}
+}))
 
 // 分页配置
 const paginationConfig = reactive({

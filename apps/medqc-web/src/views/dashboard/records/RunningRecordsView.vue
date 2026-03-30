@@ -127,7 +127,7 @@
               <a-tabs
                 v-model:active-key="activeTab"
                 class="defect-tabs"
-                size="default"
+                size="middle"
               >
                 <a-tab-pane
                   key="defects"
@@ -139,8 +139,6 @@
                 />
               </a-tabs>
             </div>
-
-
 
             <!-- 快速筛选标签 -->
             <div class="flex flex-wrap items-center gap-2">
@@ -165,7 +163,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3">
               <span class="text-sm font-medium text-gray-700">筛选条件</span>
-              
+
               <!-- 快捷筛选 -->
               <a-dropdown placement="bottomLeft">
                 <a-button
@@ -225,7 +223,9 @@
             </div>
 
             <div class="flex items-center space-x-3">
-              <span class="text-sm text-gray-500">{{ currentView === 'defects' ? '缺陷列表' : '病历列表' }}</span>
+              <span class="text-sm text-gray-500">{{
+                currentView === 'defects' ? '缺陷列表' : '病历列表'
+              }}</span>
               <a-switch
                 v-model:checked="currentView"
                 checked-value="records"
@@ -284,7 +284,7 @@
                   class="mx-2"
                 />
               </div>
-              
+
               <!-- 批量操作按钮 -->
               <a-button
                 v-if="selectedRowKeys.length > 0"
@@ -329,9 +329,9 @@
 
             <!-- 右侧功能按钮 -->
             <div class="flex items-center space-x-2">
-              <a-button 
-                size="small" 
-                :loading="exportLoading" 
+              <a-button
+                size="small"
+                :loading="exportLoading"
                 class="border-gray-300 text-gray-600 hover:text-blue-600 hover:border-blue-300"
                 @click="handleExportAll"
               >
@@ -350,9 +350,9 @@
                 导出质控详情
               </a-button>
 
-              <a-button 
-                size="small" 
-                :loading="loading" 
+              <a-button
+                size="small"
+                :loading="loading"
                 class="border-gray-300 text-gray-600 hover:text-green-600 hover:border-green-300"
                 @click="handleRefresh"
               >
@@ -361,8 +361,8 @@
               </a-button>
 
               <!-- 自定义列设置 -->
-              <a-button 
-                size="small" 
+              <a-button
+                size="small"
                 class="border-gray-300 text-gray-600 hover:text-purple-600 hover:border-purple-300"
                 @click="showColumnSettings = true"
               >
@@ -388,30 +388,30 @@
               <template v-if="column.key === 'registrationNo'">
                 <a
                   class="text-blue-600 hover:text-blue-800"
-                  @click="handleViewDetail(record)"
+                  @click="handleViewDetail(record as RunningRecord)"
                 >
-                  {{ record.registrationNo }}
+                  {{ (record as RunningRecord).registrationNo }}
                 </a>
               </template>
               <template v-if="column.key === 'serialNo'">
                 <a
                   class="text-blue-600 hover:text-blue-800"
-                  @click="handleViewDetail(record)"
+                  @click="handleViewDetail(record as RunningRecord)"
                 >
-                  {{ record.serialNo }}
+                  {{ (record as RunningRecord).serialNo }}
                 </a>
               </template>
               <template v-if="column.key === 'caseNo'">
                 <a
                   class="text-blue-600 hover:text-blue-800"
-                  @click="handleViewDetail(record)"
+                  @click="handleViewDetail(record as RunningRecord)"
                 >
-                  {{ record.caseNo }}
+                  {{ (record as RunningRecord).caseNo }}
                 </a>
               </template>
               <template v-if="column.key === 'auditStatus'">
-                <a-tag :color="getAuditStatusColor(record.auditStatus)">
-                  {{ getAuditStatusText(record.auditStatus) }}
+                <a-tag :color="getAuditStatusColor((record as RunningRecord).auditStatus)">
+                  {{ getAuditStatusText((record as RunningRecord).auditStatus) }}
                 </a-tag>
               </template>
               <template v-if="column.key === 'action'">
@@ -419,15 +419,15 @@
                   <a-button
                     type="link"
                     size="small"
-                    @click="handleViewDetail(record)"
+                    @click="handleViewDetail(record as RunningRecord)"
                   >
                     详情
                   </a-button>
                   <a-button
-                    v-if="!record.isUrgent"
+                    v-if="!(record as RunningRecord).isUrgent"
                     type="link"
                     size="small"
-                    @click="handleUrgeRecord(record)"
+                    @click="handleUrgeRecord(record as RunningRecord)"
                   >
                     催办
                   </a-button>
@@ -670,6 +670,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
+import type { Dayjs } from 'dayjs'
 import {
   SearchOutlined,
   DownOutlined,
@@ -685,10 +688,10 @@ import {
   SendOutlined,
   CheckOutlined,
   FileExcelOutlined,
-  FileTextOutlined
+  FileTextOutlined,
 } from '@ant-design/icons-vue'
 
-type TimeRangeValue = [unknown, unknown] | null
+type TimeRangeValue = [Dayjs, Dayjs] | null
 
 interface QuickFilterItem {
   key: string
@@ -735,9 +738,9 @@ type FilterForm = {
   hospitalStatus?: string
   dischargeDept?: string
   admissionDept?: string
-  dischargeDate?: unknown
-  admissionStartDate?: unknown
-  admissionEndDate?: unknown
+  dischargeDate?: Dayjs | string
+  admissionStartDate?: Dayjs | string
+  admissionEndDate?: Dayjs | string
   submitMethod?: string
   scoreContent?: string
   scoreItem?: string
@@ -770,20 +773,20 @@ const queryConditions = reactive({
   timeRange: 'all',
   scoringStandard: 'all',
   searchType: 'registrationNo',
-  searchValue: ''
+  searchValue: '',
 })
 
 // 筛选条件
 const activeFilterConditions = ref<ActiveFilterCondition[]>([
   { label: '科室', value: '内科' },
-  { label: '状态', value: '待审核' }
+  { label: '状态', value: '待审核' },
 ])
 
 const filterTemplates = ref([
   { id: 1, name: '今日待审核' },
   { id: 2, name: '本周超时' },
   { id: 3, name: '高风险病历' },
-  { id: 4, name: '重点科室' }
+  { id: 4, name: '重点科室' },
 ])
 
 // 快速筛选标签
@@ -794,19 +797,17 @@ const quickFilters = ref<QuickFilterItem[]>([
   { key: 'internal', label: '内涵质控缺陷', active: false },
   { key: 'critical', label: '重点病历缺陷', active: false },
   { key: 'completed', label: '已修正未审核缺陷', active: false },
-  { key: 'approved', label: '核查申请未审核缺陷', active: false }
+  { key: 'approved', label: '核查申请未审核缺陷', active: false },
 ])
 
 // 当前筛选条件
-const currentFilterConditions = ref([
-  '核查申请: 行政查房'
-])
+const currentFilterConditions = ref(['核查申请: 行政查房'])
 
 // 多选框筛选条件
 const filterConditions = ref<FilterConditionItem[]>([
   { key: 'pending', label: '待审核病历', checked: false },
   { key: 'reviewing', label: '核查申请中', checked: true },
-  { key: 'overtime', label: '超时病历', checked: false }
+  { key: 'overtime', label: '超时病历', checked: false },
 ])
 
 // 新建筛选表单数据
@@ -833,7 +834,7 @@ const filterForm = reactive<FilterForm>({
   qcResultType: undefined,
   comprehensiveName: undefined,
   scoreValue: '',
-  testName: undefined
+  testName: undefined,
 })
 
 // 表格数据
@@ -847,12 +848,12 @@ const records = ref<RunningRecord[]>([
     doctorName: '李医生',
     department: '内科',
     auditStatus: 'pending',
-    isUrgent: false
-  }
+    isUrgent: false,
+  },
 ])
 
 // 表格列配置
-const recordColumns = [
+const recordColumns: TableColumnsType<RunningRecord> = [
   { title: '登记号', dataIndex: 'registrationNo', key: 'registrationNo', width: 120 },
   { title: '流水号', dataIndex: 'serialNo', key: 'serialNo', width: 120 },
   { title: '病案号', dataIndex: 'caseNo', key: 'caseNo', width: 120 },
@@ -860,7 +861,7 @@ const recordColumns = [
   { title: '临床医生', dataIndex: 'doctorName', key: 'doctorName', width: 100 },
   { title: '科室', dataIndex: 'department', key: 'department', width: 100 },
   { title: '审核状态', dataIndex: 'auditStatus', key: 'auditStatus', width: 100 },
-  { title: '操作', key: 'action', width: 120, fixed: 'right' }
+  { title: '操作', key: 'action', width: 120, fixed: 'right' as const },
 ]
 
 // 分页配置
@@ -871,17 +872,18 @@ const pagination = reactive({
   showSizeChanger: true,
   showQuickJumper: true,
   showTotal: (total: number, range: [number, number]) =>
-    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+    `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
 })
 
 // 行选择配置
-const rowSelection = computed(() => ({
-  selectedRowKeys: selectedRowKeys.value, onChange: (keys: string[]) => {
-    selectedRowKeys.value = keys
+const rowSelection = computed<TableProps['rowSelection']>(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: Array<string | number>) => {
+    selectedRowKeys.value = keys.map((key) => String(key))
   },
-  getCheckboxProps: (record: Record<string, unknown>) => ({
-    disabled: Boolean(record.disabled)
-  })
+  getCheckboxProps: (record: RunningRecord) => ({
+    disabled: Boolean(record.disabled),
+  }),
 }))
 
 // 计算属性
@@ -909,7 +911,7 @@ const handleQuery = () => {
   }, 1000)
 }
 
-const handleQuickFilter = ({ key }: { key: string }) => {
+const handleQuickFilter = ({ key }: MenuInfo) => {
   console.log('Quick filter:', key)
   message.info('应用快捷筛选')
 }
@@ -925,7 +927,7 @@ const removeFilterCondition = (index: number) => {
 
 const handleQuickFilterClick = (filter: QuickFilterItem) => {
   // 重置所有筛选状态
-  quickFilters.value.forEach(f => f.active = false)
+  quickFilters.value.forEach((f) => (f.active = false))
   // 激活当前筛选
   filter.active = true
 
@@ -947,7 +949,7 @@ const handleFilterConditionChange = (condition: FilterConditionItem) => {
 }
 
 const handleClearFilters = () => {
-  filterConditions.value.forEach(condition => {
+  filterConditions.value.forEach((condition) => {
     condition.checked = false
   })
   message.info('筛选条件已清空')
@@ -989,7 +991,7 @@ const handleConfirm = () => {
       selectedConditions.push({
         key,
         value,
-        label: getFieldLabel(key)
+        label: getFieldLabel(key),
       })
     }
   })
@@ -1003,7 +1005,7 @@ const handleConfirm = () => {
   console.log('应用筛选条件:', {
     name: filterForm.filterName,
     mode: filterForm.selectionMode,
-    conditions: selectedConditions
+    conditions: selectedConditions,
   })
 
   message.success(`筛选条件"${filterForm.filterName}"已创建`)
@@ -1033,7 +1035,7 @@ const getFieldLabel = (key: string) => {
     qcResultType: '质控结果类型',
     comprehensiveName: '综合名称',
     scoreValue: '分值',
-    testName: '检验名称'
+    testName: '检验名称',
   }
   return key in labelMap ? labelMap[key as LabelFilterKey] : key
 }
@@ -1101,7 +1103,7 @@ const getAuditStatusColor = (status: string) => {
     pending: 'orange',
     approved: 'green',
     rejected: 'red',
-    reviewing: 'blue'
+    reviewing: 'blue',
   }
   return colorMap[status] || 'default'
 }
@@ -1111,7 +1113,7 @@ const getAuditStatusText = (status: string) => {
     pending: '待审核',
     approved: '已通过',
     rejected: '已拒绝',
-    reviewing: '审核中'
+    reviewing: '审核中',
   }
   return textMap[status] || '未知'
 }
@@ -1570,8 +1572,6 @@ onMounted(() => {
   font-size: 12px;
   line-height: 20px;
 }
-
-
 
 /* 开关样式 */
 :deep(.ant-switch-small) {
