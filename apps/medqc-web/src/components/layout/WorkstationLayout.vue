@@ -413,6 +413,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useAuthStore } from '@/stores/auth'
 import {
   MenuUnfoldOutlined,
@@ -503,7 +504,7 @@ async function navigateTo(path: string, query?: Record<string, string>) {
   }
 }
 
-const handleMenuSelect = async ({ key }: { key: string }) => {
+const handleMenuSelect = async ({ key }: MenuInfo) => {
   const keyStr = String(key)
   if (keyStr.startsWith('ws-stage-')) return
   if (keyStr.includes('?')) {

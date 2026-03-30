@@ -32,7 +32,7 @@
             <!-- 列显示控制 -->
             <a-checkbox
               v-model:checked="column.visible"
-              :disabled="column.fixed"
+              :disabled="column.fixedPosition !== 'none'"
             >
               {{ column.title }}
             </a-checkbox>
@@ -54,12 +54,12 @@
             <!-- 固定列设置 -->
             <div class="column-fixed-setting">
               <a-select
-                v-model:value="column.fixed"
+                v-model:value="column.fixedPosition"
                 size="small"
                 style="width: 80px"
                 :disabled="column.key === 'action'"
               >
-                <a-select-option :value="false">
+                <a-select-option value="none">
                   不固定
                 </a-select-option>
                 <a-select-option value="left">
@@ -157,20 +157,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { HolderOutlined } from '@ant-design/icons-vue'
+
+type ColumnFixed = false | 'left' | 'right'
+type ColumnFixedPosition = 'none' | 'left' | 'right'
 
 interface ColumnConfig {
   key: string
   title: string
   width: number
   visible: boolean
-  fixed: boolean | 'left' | 'right'
+  fixed: ColumnFixed
+  fixedPosition: ColumnFixedPosition
   sorter: boolean
   sortable?: boolean
   dataIndex?: string
 }
+
+type ConfirmColumnConfig = Omit<ColumnConfig, 'fixedPosition'>
 
 interface Props {
   visible: boolean
@@ -179,7 +185,7 @@ interface Props {
 
 interface Emits {
   (e: 'update:visible', value: boolean): void
-  (e: 'confirm', columns: ColumnConfig[]): void
+  (e: 'confirm', columns: ConfirmColumnConfig[]): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -211,6 +217,7 @@ const initColumnList = () => {
     width: col.width || 120,
     visible: true,
     fixed: col.fixed || false,
+    fixedPosition: col.fixed === 'left' || col.fixed === 'right' ? col.fixed : 'none',
     sorter: !!col.sorter,
     sortable: col.sortable !== false,
   }))
@@ -224,6 +231,7 @@ const applyScheme = (scheme: string) => {
         col.visible = true
         col.width = getDefaultWidth(col.key)
         col.fixed = col.key === 'action' ? 'right' : false
+        col.fixedPosition = col.key === 'action' ? 'right' : 'none'
       })
       break
     case 'compact':
@@ -231,6 +239,7 @@ const applyScheme = (scheme: string) => {
         col.visible = isCompactColumn(col.key)
         col.width = Math.max(80, (col.width || 120) * 0.8)
         col.fixed = col.key === 'action' ? 'right' : false
+        col.fixedPosition = col.key === 'action' ? 'right' : 'none'
       })
       break
     case 'detailed':
@@ -242,6 +251,11 @@ const applyScheme = (scheme: string) => {
             ? 'left'
             : 'right'
           : false
+        col.fixedPosition = ['registrationNo', 'action'].includes(col.key)
+          ? col.key === 'registrationNo'
+            ? 'left'
+            : 'right'
+          : 'none'
       })
       break
   }
@@ -304,7 +318,13 @@ const saveScheme = () => {
 
 // 确认
 const handleConfirm = () => {
-  emit('confirm', [...columnList.value])
+  emit(
+    'confirm',
+    columnList.value.map(({ fixedPosition, ...column }) => ({
+      ...column,
+      fixed: fixedPosition === 'none' ? false : fixedPosition,
+    })),
+  )
   emit('update:visible', false)
 }
 

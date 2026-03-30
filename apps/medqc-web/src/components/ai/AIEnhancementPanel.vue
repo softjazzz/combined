@@ -73,7 +73,7 @@
             :value-style="{ color: getPerformanceColor(stats.performanceScore) }"
           />
           <div class="mt-2">
-            <a-badge 
+            <a-badge
               :status="getPerformanceStatus(stats.performanceScore)"
               :text="getPerformanceText(stats.performanceScore)"
             />
@@ -139,8 +139,10 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'improvement'">
-                  <a-tag 
-                    :color="record.improvement > 0 ? 'green' : record.improvement < 0 ? 'red' : 'blue'"
+                  <a-tag
+                    :color="
+                      record.improvement > 0 ? 'green' : record.improvement < 0 ? 'red' : 'blue'
+                    "
                   >
                     {{ record.improvement > 0 ? '+' : '' }}{{ record.improvement }}
                   </a-tag>
@@ -226,7 +228,7 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'confidence'">
-                  <a-progress 
+                  <a-progress
                     :percent="Math.round(record.confidence * 100)"
                     size="small"
                     :stroke-color="getConfidenceColor(record.confidence)"
@@ -343,7 +345,7 @@
               >
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key === 'value'">
-                    <a-progress 
+                    <a-progress
                       :percent="getMetricPercent(record.value, record.type)"
                       size="small"
                       :stroke-color="getMetricColor(record.value, record.type)"
@@ -414,7 +416,7 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'status'">
-                  <a-badge 
+                  <a-badge
                     :status="getTaskStatus(record.status)"
                     :text="getTaskStatusText(record.status)"
                   />
@@ -433,9 +435,9 @@
                     >
                       详情
                     </a-button>
-                    <a-button 
-                      type="link" 
-                      size="small" 
+                    <a-button
+                      type="link"
+                      size="small"
                       :disabled="record.status !== 'pending'"
                       @click="executeTask(record)"
                     >
@@ -445,9 +447,9 @@
                       title="确定取消此任务吗？"
                       @confirm="cancelTask(record)"
                     >
-                      <a-button 
-                        type="link" 
-                        size="small" 
+                      <a-button
+                        type="link"
+                        size="small"
                         danger
                         :disabled="record.status !== 'pending'"
                       >
@@ -487,10 +489,10 @@
           label="原始评分"
           required
         >
-          <a-input-number 
-            v-model:value="learningForm.originalScore" 
-            :min="0" 
-            :max="100" 
+          <a-input-number
+            v-model:value="learningForm.originalScore"
+            :min="0"
+            :max="100"
             style="width: 100%"
           />
         </a-form-item>
@@ -498,16 +500,16 @@
           label="修正评分"
           required
         >
-          <a-input-number 
-            v-model:value="learningForm.reviewedScore" 
-            :min="0" 
-            :max="100" 
+          <a-input-number
+            v-model:value="learningForm.reviewedScore"
+            :min="0"
+            :max="100"
             style="width: 100%"
           />
         </a-form-item>
         <a-form-item label="反馈内容">
-          <a-textarea 
-            v-model:value="learningForm.feedback" 
+          <a-textarea
+            v-model:value="learningForm.feedback"
             placeholder="请输入反馈内容"
             :rows="4"
           />
@@ -573,8 +575,8 @@
           label="模式描述"
           required
         >
-          <a-textarea 
-            v-model:value="knowledgeForm.pattern" 
+          <a-textarea
+            v-model:value="knowledgeForm.pattern"
             placeholder="请输入模式描述"
             :rows="4"
           />
@@ -583,17 +585,17 @@
           label="置信度"
           required
         >
-          <a-slider 
-            v-model:value="knowledgeForm.confidence" 
-            :min="0" 
-            :max="1" 
+          <a-slider
+            v-model:value="knowledgeForm.confidence"
+            :min="0"
+            :max="1"
             :step="0.1"
             :marks="{ 0: '0%', 0.5: '50%', 1: '100%' }"
           />
         </a-form-item>
         <a-form-item label="元数据">
-          <a-textarea 
-            v-model:value="knowledgeForm.metadata" 
+          <a-textarea
+            v-model:value="knowledgeForm.metadata"
             placeholder="请输入JSON格式的元数据"
             :rows="3"
           />
@@ -656,11 +658,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
-import { 
-  ReloadOutlined, 
-  SettingOutlined, 
-  PlusOutlined 
-} from '@ant-design/icons-vue'
+import { ReloadOutlined, SettingOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import * as echarts from 'echarts'
 
 // 响应式数据
@@ -681,7 +679,7 @@ const stats = reactive({
   performanceScore: 88.5,
   pendingTasks: 12,
   runningTasks: 3,
-  completedTasks: 145
+  completedTasks: 145,
 })
 
 // 学习记录
@@ -694,7 +692,7 @@ const learningRecords = ref([
     improvement: 7,
     feedback: '诊断描述需要更详细',
     reviewerId: 'Dr. Zhang',
-    timestamp: '2024-01-15 14:30:00'
+    timestamp: '2024-01-15 14:30:00',
   },
   {
     id: '2',
@@ -704,8 +702,8 @@ const learningRecords = ref([
     improvement: -3,
     feedback: '治疗方案过于激进',
     reviewerId: 'Dr. Li',
-    timestamp: '2024-01-15 13:45:00'
-  }
+    timestamp: '2024-01-15 13:45:00',
+  },
 ])
 
 // 知识库
@@ -717,7 +715,7 @@ const knowledgeBase = ref([
     confidence: 0.95,
     usageCount: 120,
     successRate: 0.92,
-    lastUpdated: '2024-01-15'
+    lastUpdated: '2024-01-15',
   },
   {
     id: '2',
@@ -726,8 +724,8 @@ const knowledgeBase = ref([
     confidence: 0.88,
     usageCount: 85,
     successRate: 0.89,
-    lastUpdated: '2024-01-14'
-  }
+    lastUpdated: '2024-01-14',
+  },
 ])
 
 // 学习任务
@@ -738,7 +736,7 @@ const learningTasks = ref([
     status: 'pending',
     priority: 'high',
     createdAt: '2024-01-15 15:00:00',
-    description: '处理用户反馈学习'
+    description: '处理用户反馈学习',
   },
   {
     id: '2',
@@ -746,8 +744,8 @@ const learningTasks = ref([
     status: 'running',
     priority: 'medium',
     createdAt: '2024-01-15 14:30:00',
-    description: '识别新的质控模式'
-  }
+    description: '识别新的质控模式',
+  },
 ])
 
 // 性能指标
@@ -756,7 +754,7 @@ const performanceMetrics = ref([
   { name: '精确率', value: 0.862, type: 'percentage', trend: 1.8 },
   { name: '召回率', value: 0.841, type: 'percentage', trend: -0.5 },
   { name: '处理时间', value: 3200, type: 'time', trend: -5.2 },
-  { name: '用户满意度', value: 0.875, type: 'percentage', trend: 3.1 }
+  { name: '用户满意度', value: 0.875, type: 'percentage', trend: 3.1 },
 ])
 
 // 表单数据
@@ -765,14 +763,14 @@ const learningForm = reactive({
   originalScore: 0,
   reviewedScore: 0,
   feedback: '',
-  corrections: []
+  corrections: [],
 })
 
 const knowledgeForm = reactive({
   category: '',
   pattern: '',
   confidence: 0.8,
-  metadata: ''
+  metadata: '',
 })
 
 const settingsForm = reactive({
@@ -781,7 +779,7 @@ const settingsForm = reactive({
   enablePatternRecognition: true,
   adaptiveScoring: true,
   personalizedRecommendations: true,
-  learningFrequency: 'hourly'
+  learningFrequency: 'hourly',
 })
 
 // 表格列定义
@@ -792,7 +790,7 @@ const learningColumns = [
   { title: '改进幅度', key: 'improvement' },
   { title: '审核人', dataIndex: 'reviewerId', key: 'reviewerId' },
   { title: '时间', dataIndex: 'timestamp', key: 'timestamp' },
-  { title: '操作', key: 'actions' }
+  { title: '操作', key: 'actions' },
 ]
 
 const knowledgeColumns = [
@@ -801,7 +799,7 @@ const knowledgeColumns = [
   { title: '置信度', key: 'confidence' },
   { title: '使用情况', key: 'usage' },
   { title: '更新时间', dataIndex: 'lastUpdated', key: 'lastUpdated' },
-  { title: '操作', key: 'actions' }
+  { title: '操作', key: 'actions' },
 ]
 
 const tasksColumns = [
@@ -810,13 +808,13 @@ const tasksColumns = [
   { title: '优先级', key: 'priority' },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt' },
   { title: '描述', dataIndex: 'description', key: 'description' },
-  { title: '操作', key: 'actions' }
+  { title: '操作', key: 'actions' },
 ]
 
 const metricsColumns = [
   { title: '指标', dataIndex: 'name', key: 'name' },
   { title: '数值', key: 'value' },
-  { title: '趋势', key: 'trend' }
+  { title: '趋势', key: 'trend' },
 ]
 
 // 分页配置
@@ -824,18 +822,18 @@ const paginationConfig = {
   pageSize: 10,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条记录`
+  showTotal: (total: number) => `共 ${total} 条记录`,
 }
 
 // 计算属性
 const filteredKnowledgeBase = computed(() => {
   if (!selectedCategory.value) return knowledgeBase.value
-  return knowledgeBase.value.filter(item => item.category === selectedCategory.value)
+  return knowledgeBase.value.filter((item) => item.category === selectedCategory.value)
 })
 
 const filteredTasks = computed(() => {
   if (!selectedTaskType.value) return learningTasks.value
-  return learningTasks.value.filter(task => task.type === selectedTaskType.value)
+  return learningTasks.value.filter((task) => task.type === selectedTaskType.value)
 })
 
 // 图表引用
@@ -849,7 +847,7 @@ const refreshData = async () => {
   loading.value = true
   try {
     // 模拟数据刷新
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
     message.success('数据刷新成功')
   } catch (error) {
     message.error('数据刷新失败')
@@ -864,7 +862,7 @@ const getPerformanceColor = (score: number) => {
   return '#f5222d'
 }
 
-const getPerformanceStatus = (score: number) => {
+const getPerformanceStatus = (score: number): 'success' | 'warning' | 'error' => {
   if (score >= 90) return 'success'
   if (score >= 80) return 'warning'
   return 'error'
@@ -882,13 +880,15 @@ const getConfidenceColor = (confidence: number) => {
   return '#f5222d'
 }
 
-const getTaskStatus = (status: string) => {
+const getTaskStatus = (
+  status: string,
+): 'success' | 'error' | 'warning' | 'default' | 'processing' => {
   const statusMap = {
     pending: 'default',
     running: 'processing',
     completed: 'success',
-    failed: 'error'
-  }
+    failed: 'error',
+  } as const
   return statusMap[status as keyof typeof statusMap] || 'default'
 }
 
@@ -897,7 +897,7 @@ const getTaskStatusText = (status: string) => {
     pending: '待处理',
     running: '运行中',
     completed: '已完成',
-    failed: '失败'
+    failed: '失败',
   }
   return textMap[status as keyof typeof textMap] || status
 }
@@ -907,7 +907,7 @@ const getPriorityColor = (priority: string) => {
     critical: 'red',
     high: 'orange',
     medium: 'blue',
-    low: 'green'
+    low: 'green',
   }
   return colorMap[priority as keyof typeof colorMap] || 'default'
 }
@@ -917,7 +917,7 @@ const getPriorityText = (priority: string) => {
     critical: '紧急',
     high: '高',
     medium: '中',
-    low: '低'
+    low: '低',
   }
   return textMap[priority as keyof typeof textMap] || priority
 }
@@ -960,7 +960,7 @@ const resetLearningForm = () => {
     originalScore: 0,
     reviewedScore: 0,
     feedback: '',
-    corrections: []
+    corrections: [],
   })
 }
 
@@ -990,7 +990,7 @@ const resetKnowledgeForm = () => {
     category: '',
     pattern: '',
     confidence: 0.8,
-    metadata: ''
+    metadata: '',
   })
 }
 
@@ -1069,7 +1069,7 @@ const resetSettings = () => {
     enablePatternRecognition: true,
     adaptiveScoring: true,
     personalizedRecommendations: true,
-    learningFrequency: 'hourly'
+    learningFrequency: 'hourly',
   })
 }
 
@@ -1084,12 +1084,14 @@ const initCharts = () => {
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
         yAxis: { type: 'value' },
-        series: [{
-          name: '性能评分',
-          type: 'line',
-          data: [82, 85, 88, 87, 90, 88],
-          smooth: true
-        }]
+        series: [
+          {
+            name: '性能评分',
+            type: 'line',
+            data: [82, 85, 88, 87, 90, 88],
+            smooth: true,
+          },
+        ],
       })
     }
 
@@ -1099,14 +1101,16 @@ const initCharts = () => {
       chart.setOption({
         title: { text: '准确率分析', textStyle: { fontSize: 14 } },
         tooltip: { trigger: 'item' },
-        series: [{
-          name: '准确率',
-          type: 'pie',
-          data: [
-            { value: 88.5, name: '准确识别' },
-            { value: 11.5, name: '误识别' }
-          ]
-        }]
+        series: [
+          {
+            name: '准确率',
+            type: 'pie',
+            data: [
+              { value: 88.5, name: '准确识别' },
+              { value: 11.5, name: '误识别' },
+            ],
+          },
+        ],
       })
     }
 
@@ -1118,11 +1122,13 @@ const initCharts = () => {
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'category', data: ['AI分析', '规则引擎', '结果合并', '后处理'] },
         yAxis: { type: 'value' },
-        series: [{
-          name: '处理时间(ms)',
-          type: 'bar',
-          data: [3200, 800, 200, 100]
-        }]
+        series: [
+          {
+            name: '处理时间(ms)',
+            type: 'bar',
+            data: [3200, 800, 200, 100],
+          },
+        ],
       })
     }
 
@@ -1134,11 +1140,13 @@ const initCharts = () => {
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'category', data: ['很满意', '满意', '一般', '不满意', '很不满意'] },
         yAxis: { type: 'value' },
-        series: [{
-          name: '用户数量',
-          type: 'bar',
-          data: [45, 32, 15, 5, 3]
-        }]
+        series: [
+          {
+            name: '用户数量',
+            type: 'bar',
+            data: [45, 32, 15, 5, 3],
+          },
+        ],
       })
     }
   })
@@ -1157,11 +1165,11 @@ onMounted(() => {
 
 .stat-card {
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .stat-card:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   transform: translateY(-2px);
   transition: all 0.3s ease;
 }
@@ -1184,4 +1192,4 @@ onMounted(() => {
 :deep(.ant-tabs-card > .ant-tabs-content) {
   margin-top: 16px;
 }
-</style> 
+</style>

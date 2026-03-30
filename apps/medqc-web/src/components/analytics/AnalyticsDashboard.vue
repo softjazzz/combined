@@ -75,8 +75,14 @@
                   {{ formatMetricValue(metric.value, metric.unit) }}
                 </div>
                 <div class="metric-change flex items-center mt-2">
-                  <component 
-                    :is="metric.trend === 'up' ? 'ArrowUpOutlined' : metric.trend === 'down' ? 'ArrowDownOutlined' : 'MinusOutlined'"
+                  <component
+                    :is="
+                      metric.trend === 'up'
+                        ? 'ArrowUpOutlined'
+                        : metric.trend === 'down'
+                          ? 'ArrowDownOutlined'
+                          : 'MinusOutlined'
+                    "
                     :class="getTrendClass(metric.trend)"
                     class="text-xs mr-1"
                   />
@@ -484,17 +490,14 @@ import {
   DownloadOutlined,
   EyeOutlined,
   DeleteOutlined,
-  MoreOutlined
+  MoreOutlined,
 } from '@ant-design/icons-vue'
 import LineChart from '../charts/LineChart.vue'
 import BarChart from '../charts/BarChart.vue'
 import RadarChartEcharts from '../charts/RadarChartEcharts.vue'
 import { analyticsEngine } from '../../lib/analytics-engine'
 import { reportEngine } from '../../lib/report-engine'
-import type { 
-  AnalyticsInsight, 
-  TimeRange
-} from '../../lib/analytics-engine'
+import type { AnalyticsInsight, TimeRange } from '../../lib/analytics-engine'
 import type { ReportTemplate, ReportInstance } from '../../lib/report-engine'
 
 interface TrendChartDataItem {
@@ -545,22 +548,26 @@ const reportTemplates = ref<ReportTemplate[]>([])
 const recentReports = ref<ReportInstance[]>([])
 
 // ECharts 雷达图数据
-const radarChartEchartsData = ref<Array<{
-  name: string
-  value: number[]
-  color?: string
-}>>([])
+const radarChartEchartsData = ref<
+  Array<{
+    name: string
+    value: number[]
+    color?: string
+  }>
+>([])
 
-const radarChartIndicators = ref<Array<{
-  name: string
-  max: number
-  min?: number
-}>>([
+const radarChartIndicators = ref<
+  Array<{
+    name: string
+    max: number
+    min?: number
+  }>
+>([
   { name: '质量评分', max: 100, min: 0 },
   { name: '工作效率', max: 100, min: 0 },
   { name: '生产力', max: 100, min: 0 },
   { name: '一致性', max: 100, min: 0 },
-  { name: '及时性', max: 100, min: 0 }
+  { name: '及时性', max: 100, min: 0 },
 ])
 
 // 报表相关
@@ -570,23 +577,26 @@ const reportForm = ref({
   template_id: '',
   date_range: null as [Dayjs, Dayjs] | null,
   department: '',
-  output_format: 'pdf'
+  output_format: 'pdf',
 })
 
 // 计算属性
 const timeRange = computed<TimeRange>(() => ({
   start: dateRange.value[0].format('YYYY-MM-DD'),
   end: dateRange.value[1].format('YYYY-MM-DD'),
-  granularity: trendGranularity.value
+  granularity: trendGranularity.value,
 }))
 
-const dateRanges = computed(() => ({
-  '今天': [dayjs(), dayjs()],
-  '昨天': [dayjs().subtract(1, 'day'), dayjs().subtract(1, 'day')],
-  '最近7天': [dayjs().subtract(7, 'days'), dayjs()],
-  '最近30天': [dayjs().subtract(30, 'days'), dayjs()],
-  '本月': [dayjs().startOf('month'), dayjs().endOf('month')],
-  '上月': [dayjs().subtract(1, 'month').startOf('month'), dayjs().subtract(1, 'month').endOf('month')]
+const dateRanges = computed<Record<string, [Dayjs, Dayjs]>>(() => ({
+  今天: [dayjs(), dayjs()],
+  昨天: [dayjs().subtract(1, 'day'), dayjs().subtract(1, 'day')],
+  最近7天: [dayjs().subtract(7, 'days'), dayjs()],
+  最近30天: [dayjs().subtract(30, 'days'), dayjs()],
+  本月: [dayjs().startOf('month'), dayjs().endOf('month')],
+  上月: [
+    dayjs().subtract(1, 'month').startOf('month'),
+    dayjs().subtract(1, 'month').endOf('month'),
+  ],
 }))
 
 // 图表配置
@@ -596,19 +606,19 @@ const trendChartOptions = computed(() => ({
   scales: {
     y: {
       beginAtZero: true,
-      max: 100
-    }
+      max: 100,
+    },
   },
   plugins: {
     legend: {
       display: true,
-      position: 'top'
+      position: 'top',
     },
     tooltip: {
       mode: 'index',
-      intersect: false
-    }
-  }
+      intersect: false,
+    },
+  },
 }))
 
 const comparisonChartOptions = computed(() => ({
@@ -617,14 +627,14 @@ const comparisonChartOptions = computed(() => ({
   indexAxis: 'y',
   scales: {
     x: {
-      beginAtZero: true
-    }
+      beginAtZero: true,
+    },
   },
   plugins: {
     legend: {
-      display: false
-    }
-  }
+      display: false,
+    },
+  },
 }))
 
 // radarChartOptions 已移除，ECharts 组件不需要这些选项
@@ -640,7 +650,7 @@ const refreshData = async () => {
       loadRadarData(),
       loadInsights(),
       loadReportTemplates(),
-      loadRecentReports()
+      loadRecentReports(),
     ])
   } catch (error) {
     console.error('刷新数据失败:', error)
@@ -661,7 +671,7 @@ const loadCoreMetrics = async () => {
       change: 12.5,
       trend: 'up',
       color: '#1890ff',
-      icon: 'FileTextOutlined'
+      icon: 'FileTextOutlined',
     },
     {
       key: 'avg_score',
@@ -671,7 +681,7 @@ const loadCoreMetrics = async () => {
       change: 3.2,
       trend: 'up',
       color: '#52c41a',
-      icon: 'TrophyOutlined'
+      icon: 'TrophyOutlined',
     },
     {
       key: 'grade_a_rate',
@@ -681,7 +691,7 @@ const loadCoreMetrics = async () => {
       change: 2.8,
       trend: 'up',
       color: '#722ed1',
-      icon: 'CheckCircleOutlined'
+      icon: 'CheckCircleOutlined',
     },
     {
       key: 'avg_processing_time',
@@ -691,8 +701,8 @@ const loadCoreMetrics = async () => {
       change: -8.5,
       trend: 'down',
       color: '#faad14',
-      icon: 'ClockCircleOutlined'
-    }
+      icon: 'ClockCircleOutlined',
+    },
   ]
 }
 
@@ -706,9 +716,9 @@ const loadTrendData = async () => {
       { period: '2024-01-04', recordCount: 55, averageScore: 85.7, passRate: 68.9 },
       { period: '2024-01-05', recordCount: 49, averageScore: 87.2, passRate: 72.3 },
       { period: '2024-01-06', recordCount: 51, averageScore: 88.5, passRate: 74.1 },
-      { period: '2024-01-07', recordCount: 47, averageScore: 86.8, passRate: 71.5 }
+      { period: '2024-01-07', recordCount: 47, averageScore: 86.8, passRate: 71.5 },
     ]
-    
+
     trendChartData.value = mockTrends
     console.log('趋势数据已加载:', trendChartData.value)
   } catch (error) {
@@ -725,18 +735,18 @@ const loadComparisonData = async () => {
       { department: '外科', total_records: 98, avg_score: 82.3, grade_a_rate: 65.1 },
       { department: '儿科', total_records: 75, avg_score: 88.7, grade_a_rate: 72.4 },
       { department: '妇产科', total_records: 88, avg_score: 86.9, grade_a_rate: 70.5 },
-      { department: '急诊科', total_records: 156, avg_score: 79.8, grade_a_rate: 58.9 }
+      { department: '急诊科', total_records: 156, avg_score: 79.8, grade_a_rate: 58.9 },
     ]
-    
+
     // 转换为 ECharts BarChart 组件期望的格式
     comparisonChartData.value = mockComparison.map((dept, index) => ({
       department: dept.department,
       recordCount: dept.total_records || 0,
       averageScore: dept.avg_score || 0,
       passRate: dept.grade_a_rate || 0,
-      color: `hsla(${200 + index * 30}, 70%, 50%, 0.8)`
+      color: `hsla(${200 + index * 30}, 70%, 50%, 0.8)`,
     }))
-    
+
     console.log('科室对比数据已加载:', comparisonChartData.value)
   } catch (error) {
     console.error('加载对比数据失败:', error)
@@ -748,12 +758,40 @@ const loadRadarData = async () => {
   try {
     // 临时使用模拟数据来测试图表显示
     const mockPerformance = [
-      { doctor_name: '张医生', quality_score: 85, efficiency_score: 78, productivity_score: 92, avg_score: 86, overall_score: 85 },
-      { doctor_name: '李医生', quality_score: 78, efficiency_score: 85, productivity_score: 88, avg_score: 82, overall_score: 83 },
-      { doctor_name: '王医生', quality_score: 92, efficiency_score: 76, productivity_score: 85, avg_score: 88, overall_score: 85 },
-      { doctor_name: '刘医生', quality_score: 88, efficiency_score: 82, productivity_score: 79, avg_score: 85, overall_score: 84 }
+      {
+        doctor_name: '张医生',
+        quality_score: 85,
+        efficiency_score: 78,
+        productivity_score: 92,
+        avg_score: 86,
+        overall_score: 85,
+      },
+      {
+        doctor_name: '李医生',
+        quality_score: 78,
+        efficiency_score: 85,
+        productivity_score: 88,
+        avg_score: 82,
+        overall_score: 83,
+      },
+      {
+        doctor_name: '王医生',
+        quality_score: 92,
+        efficiency_score: 76,
+        productivity_score: 85,
+        avg_score: 88,
+        overall_score: 85,
+      },
+      {
+        doctor_name: '刘医生',
+        quality_score: 88,
+        efficiency_score: 82,
+        productivity_score: 79,
+        avg_score: 85,
+        overall_score: 84,
+      },
     ]
-    
+
     radarChartData.value = {
       labels: ['质量评分', '工作效率', '生产力', '一致性', '及时性'],
       datasets: mockPerformance.map((doctor, index) => ({
@@ -763,14 +801,14 @@ const loadRadarData = async () => {
           doctor.efficiency_score,
           doctor.productivity_score,
           doctor.avg_score,
-          doctor.overall_score
+          doctor.overall_score,
         ],
         borderColor: `hsla(${index * 72}, 70%, 50%, 1)`,
         backgroundColor: `hsla(${index * 72}, 70%, 50%, 0.2)`,
-        pointBackgroundColor: `hsla(${index * 72}, 70%, 50%, 1)`
-      }))
+        pointBackgroundColor: `hsla(${index * 72}, 70%, 50%, 1)`,
+      })),
     }
-    
+
     // 同时更新 ECharts 格式的数据
     radarChartEchartsData.value = mockPerformance.map((doctor, index) => ({
       name: doctor.doctor_name,
@@ -779,11 +817,11 @@ const loadRadarData = async () => {
         doctor.efficiency_score,
         doctor.productivity_score,
         doctor.avg_score,
-        doctor.overall_score
+        doctor.overall_score,
       ],
-      color: `hsla(${index * 72}, 70%, 50%, 1)`
+      color: `hsla(${index * 72}, 70%, 50%, 1)`,
     }))
-    
+
     console.log('雷达图数据已加载:', radarChartEchartsData.value)
   } catch (error) {
     console.error('加载雷达数据失败:', error)
@@ -793,7 +831,10 @@ const loadRadarData = async () => {
 
 const loadInsights = async () => {
   try {
-    insights.value = await analyticsEngine.generateInsights(timeRange.value, selectedDepartment.value)
+    insights.value = await analyticsEngine.generateInsights(
+      timeRange.value,
+      selectedDepartment.value,
+    )
   } catch (error) {
     console.error('加载洞察数据失败:', error)
   }
@@ -855,10 +896,12 @@ const handleGenerateReport = async () => {
     await reportEngine.generateReport(reportForm.value.template_id, {
       period_start: reportForm.value.date_range[0].format('YYYY-MM-DD'),
       period_end: reportForm.value.date_range[1].format('YYYY-MM-DD'),
-      filters: reportForm.value.department ? { department: reportForm.value.department } : undefined,
-      output_format: reportForm.value.output_format
+      filters: reportForm.value.department
+        ? { department: reportForm.value.department }
+        : undefined,
+      output_format: reportForm.value.output_format,
     })
-    
+
     message.success('报表生成任务已提交，请稍后查看')
     showReportModal.value = false
     loadRecentReports()
@@ -932,7 +975,7 @@ const getInsightClass = (type: string): string => {
     achievement: 'border-green-200 bg-green-50',
     warning: 'border-yellow-200 bg-yellow-50',
     opportunity: 'border-blue-200 bg-blue-50',
-    risk: 'border-red-200 bg-red-50'
+    risk: 'border-red-200 bg-red-50',
   }
   return classes[type as keyof typeof classes] || 'border-gray-200 bg-gray-50'
 }
@@ -942,7 +985,7 @@ const getInsightIcon = (type: string): string => {
     achievement: 'CheckCircleOutlined',
     warning: 'ExclamationCircleOutlined',
     opportunity: 'BulbOutlined',
-    risk: 'ExclamationCircleOutlined'
+    risk: 'ExclamationCircleOutlined',
   }
   return icons[type as keyof typeof icons] || 'BulbOutlined'
 }
@@ -952,7 +995,7 @@ const getInsightIconClass = (type: string): string => {
     achievement: 'text-green-500',
     warning: 'text-yellow-500',
     opportunity: 'text-blue-500',
-    risk: 'text-red-500'
+    risk: 'text-red-500',
   }
   return classes[type as keyof typeof classes] || 'text-gray-500'
 }
@@ -962,7 +1005,7 @@ const getReportTypeColor = (type: string): string => {
     qc_summary: 'blue',
     performance: 'green',
     trend: 'purple',
-    comparison: 'orange'
+    comparison: 'orange',
   }
   return colors[type as keyof typeof colors] || 'default'
 }
@@ -972,7 +1015,7 @@ const getReportTypeLabel = (type: string): string => {
     qc_summary: '质控总结',
     performance: '绩效分析',
     trend: '趋势分析',
-    comparison: '对比分析'
+    comparison: '对比分析',
   }
   return labels[type as keyof typeof labels] || type
 }
@@ -982,7 +1025,7 @@ const getReportStatusColor = (status: string): string => {
     pending: 'default',
     generating: 'processing',
     completed: 'success',
-    failed: 'error'
+    failed: 'error',
   }
   return colors[status as keyof typeof colors] || 'default'
 }
@@ -992,7 +1035,7 @@ const getReportStatusLabel = (status: string): string => {
     pending: '待生成',
     generating: '生成中',
     completed: '已完成',
-    failed: '失败'
+    failed: '失败',
   }
   return labels[status as keyof typeof labels] || status
 }
@@ -1001,7 +1044,7 @@ const getComparisonMetricLabel = (metric: string): string => {
   const labels = {
     avg_score: '平均评分',
     grade_a_rate: '优秀率',
-    total_records: '病案数量'
+    total_records: '病案数量',
   }
   return labels[metric as keyof typeof labels] || metric
 }
@@ -1086,4 +1129,4 @@ watch(selectedDepartment, () => {
 .report-item:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
-</style> 
+</style>
