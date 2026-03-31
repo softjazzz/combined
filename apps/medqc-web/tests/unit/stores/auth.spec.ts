@@ -20,10 +20,14 @@ vi.mock('@/services/apiService', () => ({
   ApiService: {
     login: vi.fn(),
     logout: vi.fn(),
+    register: vi.fn(),
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(),
-    refreshToken: vi.fn()
-  }
+    refreshToken: vi.fn(),
+    updateProfile: vi.fn(),
+    forgotPassword: vi.fn(),
+    updatePassword: vi.fn(),
+  },
 }))
 
 import { ApiService } from '@/services/apiService'
@@ -45,7 +49,7 @@ describe('Auth Store', () => {
     display_name: '测试用户',
     roles: ['doctor'],
     department: '心内科',
-    is_active: true
+    is_active: true,
   }
 
   describe('initial state', () => {
@@ -71,15 +75,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -97,15 +101,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -118,7 +122,7 @@ describe('Auth Store', () => {
       const userWithSingleRole = {
         ...mockUser,
         roles: undefined,
-        role: 'admin'
+        role: 'admin',
       } as any
 
       vi.mocked(ApiService.login).mockResolvedValue({
@@ -126,15 +130,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: userWithSingleRole
+          user: userWithSingleRole,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: userWithSingleRole,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -151,15 +155,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -171,7 +175,7 @@ describe('Auth Store', () => {
 
       const userWithoutName = {
         ...mockUser,
-        display_name: undefined
+        display_name: undefined,
       } as any
 
       vi.mocked(ApiService.login).mockResolvedValue({
@@ -179,15 +183,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: userWithoutName
+          user: userWithoutName,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: userWithoutName,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -204,15 +208,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -229,15 +233,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -262,15 +266,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       const result = await store.signIn('test@example.com', 'password')
@@ -279,8 +283,8 @@ describe('Auth Store', () => {
       expect(store.user).toEqual(mockUser)
       expect(store.isAuthenticated).toBe(true)
       expect(ApiService.login).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        password: 'password'
+        account: 'test@example.com',
+        password: 'password',
       })
     })
 
@@ -290,7 +294,7 @@ describe('Auth Store', () => {
       vi.mocked(ApiService.login).mockResolvedValue({
         success: false,
         error: '鐢ㄦ埛鍚嶆垨瀵嗙爜閿欒',
-        data: null
+        data: null,
       })
 
       const result = await store.signIn('test@example.com', 'wrong-password')
@@ -310,16 +314,16 @@ describe('Auth Store', () => {
           data: {
             access_token: 'mock-token',
             refresh_token: 'mock-refresh-token',
-            user: mockUser
+            user: mockUser,
           },
-          message: '鐧诲綍鎴愬姛'
+          message: '鐧诲綍鎴愬姛',
         })
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -338,15 +342,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -355,7 +359,7 @@ describe('Auth Store', () => {
       // 鐒跺悗鐧诲嚭
       vi.mocked(ApiService.logout).mockResolvedValue({
         success: true,
-        message: '鐧诲嚭鎴愬姛'
+        message: '鐧诲嚭鎴愬姛',
       })
 
       await store.signOut()
@@ -374,15 +378,15 @@ describe('Auth Store', () => {
         data: {
           access_token: 'mock-token',
           refresh_token: 'mock-refresh-token',
-          user: mockUser
+          user: mockUser,
         },
-        message: '鐧诲綍鎴愬姛'
+        message: '鐧诲綍鎴愬姛',
       })
 
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.signIn('test@example.com', 'password')
@@ -404,7 +408,7 @@ describe('Auth Store', () => {
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.initialize()
@@ -431,7 +435,7 @@ describe('Auth Store', () => {
       vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
         success: true,
         data: mockUser,
-        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛'
+        message: '鑾峰彇鐢ㄦ埛淇℃伅鎴愬姛',
       })
 
       await store.initialize()
@@ -449,26 +453,37 @@ describe('Auth Store', () => {
       store.user = mockUser
 
       const updates = {
-        display_name: '鏇存柊鍚庣殑鐢ㄦ埛'
+        display_name: '鏇存柊鍚庣殑鐢ㄦ埛',
       }
+
+      vi.mocked(ApiService.updateProfile).mockResolvedValue({
+        success: true,
+        data: { ...mockUser, ...updates },
+        message: '更新成功',
+      })
 
       const result = await store.updateProfile(updates)
 
       expect(result.success).toBe(true)
+      expect(store.user?.display_name).toBe(updates.display_name)
     })
 
     it('should no-op when updating without sign-in', async () => {
       const store = useAuthStore()
 
       const updates = {
-        display_name: '鏇存柊鍚庣殑鐢ㄦ埛'
+        display_name: '鏇存柊鍚庣殑鐢ㄦ埛',
       }
+
+      vi.mocked(ApiService.updateProfile).mockResolvedValue({
+        success: false,
+        error: '未登录',
+      })
 
       const result = await store.updateProfile(updates)
 
-      expect(result.success).toBe(true) // 鏂规硶鎬绘槸杩斿洖 success
+      expect(result.success).toBe(false)
+      expect(store.user).toBeNull()
     })
   })
 })
-
-

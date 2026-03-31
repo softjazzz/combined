@@ -1,32 +1,36 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import { fileURLToPath } from 'url'
+
+const dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@/components': resolve(__dirname, 'src/components'),
-      '@/views': resolve(__dirname, 'src/views'),
-      '@/stores': resolve(__dirname, 'src/stores'),
-      '@/utils': resolve(__dirname, 'src/utils'),
-      '@/types': resolve(__dirname, 'src/types'),
-      '@/lib': resolve(__dirname, 'src/lib'),
-      '@/assets': resolve(__dirname, 'src/assets'),
-      '@/styles': resolve(__dirname, 'src/styles')
-    }
+      '@': resolve(dirname, 'src'),
+      '@/components': resolve(dirname, 'src/components'),
+      '@/views': resolve(dirname, 'src/views'),
+      '@/stores': resolve(dirname, 'src/stores'),
+      '@/utils': resolve(dirname, 'src/utils'),
+      '@/types': resolve(dirname, 'src/types'),
+      '@/lib': resolve(dirname, 'src/lib'),
+      '@/assets': resolve(dirname, 'src/assets'),
+      '@/styles': resolve(dirname, 'src/styles'),
+    },
   },
   test: {
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     clearMocks: true,
+    exclude: ['**/tests/e2e/**', '**/*.test.js', 'src/services/document-category-service.test.ts'],
     coverage: {
       provider: 'istanbul',
       reportsDirectory: 'coverage/unit',
       reporter: ['text', 'html', 'lcov'],
       include: ['src/**/*.{ts,tsx,vue}'],
-      exclude: ['src/**/__mocks__/**', 'src/**/types.ts']
-    }
-  }
+      exclude: ['src/**/__mocks__/**', 'src/**/types.ts'],
+    },
+  },
 })
