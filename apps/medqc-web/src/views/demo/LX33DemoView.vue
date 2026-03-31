@@ -3,15 +3,21 @@
     <!-- 背景装饰：极淡的点阵 -->
     <div
       class="absolute inset-0 pointer-events-none"
-      style="background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 32px 32px; opacity: 0.25;"
+      style="
+        background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+        background-size: 32px 32px;
+        opacity: 0.25;
+      "
     />
-    
+
     <div class="relative z-10">
       <!-- 1. 页面头部 & 全局操作 -->
       <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 class="text-2xl font-bold text-slate-800 flex items-center gap-3">
-            <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+            <div
+              class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"
+            >
               <MedicineBoxOutlined class="text-xl" />
             </div>
             泸县33条质控规则测试
@@ -21,19 +27,19 @@
           </p>
         </div>
         <div class="flex flex-wrap gap-3">
-          <button 
+          <button
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
             @click="ruleDocModalVisible = true"
           >
             <FileTextOutlined class="mr-2" /> 规则说明
           </button>
-          <button 
+          <button
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
             @click="showFeedbacksPage"
           >
             <HistoryOutlined class="mr-2" /> 反馈记录
           </button>
-          <button 
+          <button
             class="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-all text-sm font-medium flex items-center shadow-sm"
             @click="exportFeedbacks"
           >
@@ -51,7 +57,9 @@
       <!-- 2. 核心指标卡片 (KPI Cards) - 纯净风格 -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <!-- 卡片 1 -->
-        <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
+        <div
+          class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group"
+        >
           <div class="flex justify-between items-center">
             <div>
               <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">
@@ -61,14 +69,18 @@
                 {{ stats.total_feedbacks }}
               </div>
             </div>
-            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+            <div
+              class="w-12 h-12 rounded-2xl bg-slate-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-50 transition-colors"
+            >
               <MessageOutlined class="text-xl" />
             </div>
           </div>
         </div>
 
         <!-- 卡片 2 -->
-        <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
+        <div
+          class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group"
+        >
           <div class="flex justify-between items-center">
             <div>
               <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">
@@ -78,19 +90,25 @@
                 <div class="text-3xl font-bold text-slate-800 tracking-tight font-mono">
                   {{ stats.correct_feedbacks }}
                 </div>
-                <div class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                <div
+                  class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md"
+                >
                   {{ (stats.accuracy_rate * 100).toFixed(0) }}% 准确率
                 </div>
               </div>
             </div>
-            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-50 transition-colors">
+            <div
+              class="w-12 h-12 rounded-2xl bg-slate-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-50 transition-colors"
+            >
               <CheckCircleOutlined class="text-xl" />
             </div>
           </div>
         </div>
 
         <!-- 卡片 3 -->
-        <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group">
+        <div
+          class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all relative group"
+        >
           <div class="flex justify-between items-center">
             <div>
               <div class="text-slate-500 text-xs font-medium mb-1 uppercase tracking-wider">
@@ -105,7 +123,9 @@
                 </div>
               </div>
             </div>
-            <div class="w-12 h-12 rounded-2xl bg-slate-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-50 transition-colors">
+            <div
+              class="w-12 h-12 rounded-2xl bg-slate-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-50 transition-colors"
+            >
               <CloseCircleOutlined class="text-xl" />
             </div>
           </div>
@@ -115,16 +135,20 @@
       <!-- 3. 规则列表表格 -->
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <!-- 表格头部工具栏 -->
-        <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div
+          class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"
+        >
           <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
             <AppstoreOutlined class="text-blue-500" />
             规则列表
           </h3>
-          <span class="text-slate-500 text-xs font-medium bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-sm">
+          <span
+            class="text-slate-500 text-xs font-medium bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-sm"
+          >
             共 {{ displayRules.length }} 条规则
           </span>
         </div>
-        
+
         <a-table
           :data-source="displayRules"
           :columns="columns"
@@ -134,23 +158,29 @@
             showSizeChanger: true,
             pageSizeOptions: ['10', '20', '33', '50'],
             showQuickJumper: true,
-            showTotal: (total: number) => `共 ${total} 条`
+            showTotal: (total: number) => `共 ${total} 条`,
           }"
           class="modern-table"
           :scroll="{ x: 1000 }"
         >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.key === 'index'">
-              <span class="text-slate-400 font-mono text-xs">{{ String(record._index || index + 1).padStart(2, '0') }}</span>
+              <span class="text-slate-400 font-mono text-xs">{{
+                String(record._index || index + 1).padStart(2, '0')
+              }}</span>
             </template>
 
             <template v-if="column.key === 'rule_id'">
-              <span class="font-mono text-blue-700 font-medium bg-blue-50/50 px-2 py-0.5 rounded text-xs border border-blue-100/50">{{ record.rule_id || record.rule_code }}</span>
+              <span
+                class="font-mono text-blue-700 font-medium bg-blue-50/50 px-2 py-0.5 rounded text-xs border border-blue-100/50"
+              >{{ record.rule_id || record.rule_code }}</span>
             </template>
 
             <template v-if="column.key === 'name'">
               <div class="flex flex-col">
-                <span class="font-medium text-slate-700 group-hover:text-blue-700 transition-colors">{{ record.name }}</span>
+                <span
+                  class="font-medium text-slate-700 group-hover:text-blue-700 transition-colors"
+                >{{ record.name }}</span>
                 <span
                   class="text-xs text-slate-400 truncate max-w-[240px]"
                   :title="record.description"
@@ -171,7 +201,7 @@
                   :class="{
                     'bg-rose-500': record.complexity === '高复杂度',
                     'bg-amber-500': record.complexity === '中复杂度',
-                    'bg-emerald-500': record.complexity === '低复杂度'
+                    'bg-emerald-500': record.complexity === '低复杂度',
                   }"
                 />
                 <span class="text-xs text-slate-600">{{ record.complexity }}</span>
@@ -182,9 +212,12 @@
               <span
                 class="text-xs font-medium px-2 py-0.5 rounded-full"
                 :class="{
-                  'bg-rose-50 text-rose-600': record.defect_level === 'critical' || record.defect_level === '严重缺陷',
-                  'bg-amber-50 text-amber-600': record.defect_level === 'major' || record.defect_level === '一般缺陷',
-                  'bg-slate-100 text-slate-500': record.defect_level === 'minor' || record.defect_level === '轻微缺陷'
+                  'bg-rose-50 text-rose-600':
+                    record.defect_level === 'critical' || record.defect_level === '严重缺陷',
+                  'bg-amber-50 text-amber-600':
+                    record.defect_level === 'major' || record.defect_level === '一般缺陷',
+                  'bg-slate-100 text-slate-500':
+                    record.defect_level === 'minor' || record.defect_level === '轻微缺陷',
                 }"
               >
                 {{ getDefectLevelText(record.defect_level) }}
@@ -194,7 +227,11 @@
             <template v-if="column.key === 'source'">
               <span
                 class="text-xs"
-                :class="record.source === 'ai_generated' ? 'text-indigo-600 font-medium' : 'text-slate-400'"
+                :class="
+                  record.source === 'ai_generated'
+                    ? 'text-indigo-600 font-medium'
+                    : 'text-slate-400'
+                "
               >
                 {{ getSourceText(record.source) }}
               </span>
@@ -252,7 +289,9 @@
         class="p-2"
       >
         <div class="flex items-center gap-3 mb-6">
-          <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+          <div
+            class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl"
+          >
             <FileTextOutlined />
           </div>
           <div>
@@ -264,7 +303,7 @@
             </h3>
           </div>
         </div>
-         
+
         <div class="space-y-4">
           <div class="p-4 bg-slate-50 rounded-xl border border-slate-100">
             <div class="text-xs text-slate-400 font-medium mb-2">
@@ -274,7 +313,7 @@
               {{ selectedRule.description }}
             </div>
           </div>
-           
+
           <div class="grid grid-cols-2 gap-4">
             <div class="p-3 border border-slate-100 rounded-xl">
               <div class="text-xs text-slate-400 mb-1">
@@ -293,7 +332,7 @@
                 :class="{
                   'text-red-600': selectedRule.defect_level === 'critical',
                   'text-orange-500': selectedRule.defect_level === 'major',
-                  'text-green-600': selectedRule.defect_level === 'minor'
+                  'text-green-600': selectedRule.defect_level === 'minor',
                 }"
               >
                 {{ getDefectLevelText(selectedRule.defect_level) }}
@@ -320,7 +359,7 @@
           pageSize: 10,
           showSizeChanger: true,
           pageSizeOptions: ['10', '20', '33', '50'],
-          showTotal: (total: number) => `共 ${total} 条质控点`
+          showTotal: (total: number) => `共 ${total} 条质控点`,
         }"
         size="middle"
         row-key="rule_id"
@@ -354,8 +393,10 @@
                   v-if="record.check_points.match(/\d+\./)"
                   class="space-y-1"
                 >
-                  <div 
-                    v-for="(point, idx) in record.check_points.split(/(?=\d+\.)/).filter((p: string) => p.trim())" 
+                  <div
+                    v-for="(point, idx) in record.check_points
+                      .split(/(?=\d+\.)/)
+                      .filter((p: string) => p.trim())"
                     :key="idx"
                     class="flex gap-2"
                   >
@@ -403,6 +444,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import {
   BarChartOutlined,
   MessageOutlined,
@@ -412,13 +454,25 @@ import {
   HistoryOutlined,
   ExportOutlined,
   ThunderboltOutlined,
-  CheckSquareOutlined
+  CheckSquareOutlined,
 } from '@ant-design/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import BatchEvaluationModal from './components/BatchEvaluationModal.vue'
 import FeedbackModal from './components/FeedbackModal.vue'
 import BatchRuleTest from '@/components/BatchRuleTest.vue'
 import type { QCRule, FeedbackStats, EvaluationResult } from '@/types/demo'
+
+type DemoRuleRow = QCRule & {
+  source: string
+  _index: number
+}
+
+type RuleDocRow = {
+  rule_id: string
+  name: string
+  description: string
+  check_points: string
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -433,7 +487,7 @@ const stats = ref<FeedbackStats>({
   incorrect_feedbacks: 0,
   accuracy_rate: 0,
   best_rule: '',
-  worst_rule: ''
+  worst_rule: '',
 })
 
 // 评估和反馈
@@ -456,57 +510,57 @@ onMounted(() => {
 })
 
 // 表格列定义
-const columns = computed(() => [
+const columns = computed<TableColumnsType<DemoRuleRow>>(() => [
   {
-    title: h('span', { class: 'th-enlarge' }, '序号'),
+    title: () => h('span', { class: 'th-enlarge' }, '序号'),
     key: 'index',
     width: 60,
-    fixed: 'left'
+    fixed: 'left' as const,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '编号'),
+    title: () => h('span', { class: 'th-enlarge' }, '编号'),
     dataIndex: 'rule_id',
     key: 'rule_id',
     width: 85,
-    fixed: 'left'
+    fixed: 'left' as const,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '规则名称'),
+    title: () => h('span', { class: 'th-enlarge' }, '规则名称'),
     dataIndex: 'name',
     key: 'name',
     width: 250,
-    ellipsis: true
+    ellipsis: true,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '文书类别'),
+    title: () => h('span', { class: 'th-enlarge' }, '文书类别'),
     dataIndex: 'category',
     key: 'category',
-    width: 95
+    width: 95,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '复杂度'),
+    title: () => h('span', { class: 'th-enlarge' }, '复杂度'),
     dataIndex: 'complexity',
     key: 'complexity',
-    width: 90
+    width: 90,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '缺陷级别'),
+    title: () => h('span', { class: 'th-enlarge' }, '缺陷级别'),
     dataIndex: 'defect_level',
     key: 'defect_level',
-    width: 100
+    width: 100,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '来源'),
+    title: () => h('span', { class: 'th-enlarge' }, '来源'),
     dataIndex: 'source',
     key: 'source',
-    width: 110
+    width: 110,
   },
   {
-    title: h('span', { class: 'th-enlarge' }, '操作'),
+    title: () => h('span', { class: 'th-enlarge' }, '操作'),
     key: 'actions',
     width: 150,
-    fixed: 'right'
-  }
+    fixed: 'right' as const,
+  },
 ])
 
 const normalizeSource = (rule: QCRule | null | undefined): string => {
@@ -522,7 +576,7 @@ const normalizeSource = (rule: QCRule | null | undefined): string => {
   return 'other'
 }
 
-const displayRules = computed(() =>
+const displayRules = computed<DemoRuleRow[]>(() =>
   rules.value
     // 仅展示 LX- 开头的泸县33条规则，隐藏扩展规则（如 LXE-）
     .filter((rule) => {
@@ -532,8 +586,8 @@ const displayRules = computed(() =>
     .map((rule, index) => ({
       ...rule,
       source: normalizeSource(rule),
-      _index: index + 1
-    }))
+      _index: index + 1,
+    })),
 )
 
 // 从 custom_prompt 中提取【检查要点】段落
@@ -549,34 +603,34 @@ const extractCheckPoints = (prompt?: string): string => {
 }
 
 // 质控点说明表格数据
-const ruleDocColumns = [
+const ruleDocColumns: TableColumnsType<RuleDocRow> = [
   {
     title: '质控点编号',
     dataIndex: 'rule_id',
     key: 'rule_id',
     width: 110,
-    fixed: 'left'
+    fixed: 'left' as const,
   },
   {
     title: '质控点名称',
     dataIndex: 'name',
     key: 'name',
-    width: 260
+    width: 260,
   },
   {
     title: '质控点描述',
     dataIndex: 'description',
     key: 'description',
-    width: 360
+    width: 360,
   },
   {
     title: '检查要点',
     dataIndex: 'check_points',
-    key: 'check_points'
-  }
+    key: 'check_points',
+  },
 ]
 
-const ruleDocRows = computed(() =>
+const ruleDocRows = computed<RuleDocRow[]>(() =>
   rules.value
     .filter((rule) => {
       const id = (rule.rule_id || rule.rule_code || '').toUpperCase()
@@ -586,8 +640,8 @@ const ruleDocRows = computed(() =>
       rule_id: rule.rule_id || rule.rule_code,
       name: rule.name,
       description: rule.description,
-      check_points: extractCheckPoints((rule as any).custom_prompt)
-    }))
+      check_points: extractCheckPoints((rule as any).custom_prompt),
+    })),
 )
 
 // 加载规则列表
@@ -602,7 +656,7 @@ const loadRules = async () => {
       .filter((rule: QCRule) => !!(rule.rule_id || rule.rule_code))
       .map((rule: QCRule) => ({
         ...rule,
-        source: normalizeSource(rule)
+        source: normalizeSource(rule),
       }))
   } catch (error) {
     console.error('加载规则失败:', error)
@@ -630,8 +684,8 @@ const loadStats = async () => {
 }
 
 // 查看规则详情
-const viewRuleDetail = (rule: QCRule) => {
-  selectedRule.value = rule
+const viewRuleDetail = (rule: QCRule | Record<string, any>) => {
+  selectedRule.value = rule as QCRule
   detailModalVisible.value = true
 }
 
@@ -653,7 +707,7 @@ const handleFeedbackSubmit = async (feedbackData: any) => {
     const response = await fetch('/api/v1/demo/feedbacks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(feedbackData)
+      body: JSON.stringify(feedbackData),
     })
 
     const data = await response.json()
@@ -706,59 +760,59 @@ const exportFeedbacks = async () => {
 // 颜色辅助函数
 const getCategoryColor = (category: string) => {
   const colorMap: Record<string, string> = {
-    '入院记录': 'blue',
-    '病程记录': 'cyan',
-    '手术记录': 'purple',
-    '出院记录': 'green',
-    '会诊记录': 'orange'
+    入院记录: 'blue',
+    病程记录: 'cyan',
+    手术记录: 'purple',
+    出院记录: 'green',
+    会诊记录: 'orange',
   }
   return colorMap[category] || 'default'
 }
 
 const getComplexityColor = (complexity: string) => {
   const colorMap: Record<string, string> = {
-    '高复杂度': 'red',
-    '中复杂度': 'orange',
-    '低复杂度': 'green'
+    高复杂度: 'red',
+    中复杂度: 'orange',
+    低复杂度: 'green',
   }
   return colorMap[complexity] || 'default'
 }
 
 const getDefectLevelColor = (level: string) => {
   const colorMap: Record<string, string> = {
-    '严重缺陷': 'red',
-    'critical': 'red',
-    '一般缺陷': 'orange',
-    'major': 'orange',
-    '轻微缺陷': 'green',
-    'minor': 'green'
+    严重缺陷: 'red',
+    critical: 'red',
+    一般缺陷: 'orange',
+    major: 'orange',
+    轻微缺陷: 'green',
+    minor: 'green',
   }
   return colorMap[level] || 'default'
 }
 
 const getDefectLevelText = (level: string | undefined) => {
   const textMap: Record<string, string> = {
-    'critical': '严重缺陷',
-    'major': '一般缺陷',
-    'minor': '轻微缺陷'
+    critical: '严重缺陷',
+    major: '一般缺陷',
+    minor: '轻微缺陷',
   }
   return (level && textMap[level]) || level || ''
 }
 
 const getSourceColor = (source: string) => {
   const map: Record<string, string> = {
-    'ai_generated': 'purple',
-    'baseline': 'blue',
-    'other': 'default'
+    ai_generated: 'purple',
+    baseline: 'blue',
+    other: 'default',
   }
   return map[source] || 'default'
 }
 
 const getSourceText = (source: string | undefined) => {
   const map: Record<string, string> = {
-    'ai_generated': 'AI 生成',
-    'baseline': '系统规则',
-    'other': '其他'
+    ai_generated: 'AI 生成',
+    baseline: '系统规则',
+    other: '其他',
   }
   return (source && map[source]) || '系统规则'
 }

@@ -463,6 +463,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import {
   LeftOutlined,
   MessageOutlined,
@@ -476,10 +477,9 @@ import {
   FileTextOutlined,
   InfoCircleOutlined,
   ExclamationCircleOutlined,
-  FileSearchOutlined
+  FileSearchOutlined,
 } from '@ant-design/icons-vue'
 import type { FeedbackRecord, FeedbackStats, ErrorCategory } from '@/types/demo'
-import type { TablePaginationConfig } from 'ant-design-vue'
 
 const router = useRouter()
 
@@ -490,14 +490,14 @@ const stats = ref<FeedbackStats>({
   total_feedbacks: 0,
   correct_feedbacks: 0,
   incorrect_feedbacks: 0,
-  accuracy_rate: 0
+  accuracy_rate: 0,
 })
 
 // 筛选条件
 const filters = reactive({
   feedbackType: '',
   errorCategory: '',
-  ruleCode: ''
+  ruleCode: '',
 })
 
 // 分页配置
@@ -507,7 +507,7 @@ const pagination = ref<TablePaginationConfig>({
   total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total) => `共 ${total} 条记录`
+  showTotal: (total) => `共 ${total} 条记录`,
 })
 
 // 详情弹窗
@@ -521,68 +521,68 @@ const passwordLoading = ref(false)
 const pendingDeleteRecord = ref<FeedbackRecord | null>(null)
 
 // 表格列配置
-const columns = [
+const columns: TableColumnsType<FeedbackRecord> = [
   {
     title: '规则编号',
     dataIndex: 'rule_code',
     key: 'rule_code',
-    width: 120
+    width: 120,
   },
   {
     title: '规则名称',
     dataIndex: 'rule_name',
     key: 'rule_name',
     width: 200,
-    ellipsis: true
+    ellipsis: true,
   },
   {
     title: '文档名称',
     dataIndex: 'document_name',
     key: 'document_name',
     width: 150,
-    ellipsis: true
+    ellipsis: true,
   },
   {
     title: '评估结果',
     key: 'evaluation_result',
     width: 100,
-    align: 'center'
+    align: 'center' as const,
   },
   {
     title: '反馈类型',
     key: 'feedback_type',
     width: 100,
-    align: 'center'
+    align: 'center' as const,
   },
   {
     title: '错误类别',
     key: 'error_category',
     width: 120,
-    align: 'center'
+    align: 'center' as const,
   },
   {
     title: '错误详情',
     key: 'error_detail',
-    width: 250
+    width: 250,
   },
   {
     title: '反馈人',
     dataIndex: 'feedback_by',
     key: 'feedback_by',
-    width: 100
+    width: 100,
   },
   {
     title: '创建时间',
     key: 'created_at',
-    width: 150
+    width: 150,
   },
   {
     title: '操作',
     key: 'actions',
     width: 240,
-    align: 'center',
-    fixed: 'right'
-  }
+    align: 'center' as const,
+    fixed: 'right' as const,
+  },
 ]
 
 // 错误类别文本映射
@@ -593,7 +593,7 @@ const errorCategoryText = (category: ErrorCategory) => {
     wrong_reasoning: '推理错误',
     incomplete_check: '检查不完整',
     rule_ambiguity: '规则歧义',
-    other: '其他'
+    other: '其他',
   }
   return textMap[category] || category
 }
@@ -605,7 +605,7 @@ const formatDate = (dateStr: string) => {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   })
 }
 
@@ -618,7 +618,7 @@ const loadFeedbacks = async () => {
       page_size: pagination.value.pageSize?.toString() || '10',
       ...(filters.feedbackType && { feedback_type: filters.feedbackType }),
       ...(filters.errorCategory && { error_category: filters.errorCategory }),
-      ...(filters.ruleCode && { rule_code: filters.ruleCode })
+      ...(filters.ruleCode && { rule_code: filters.ruleCode }),
     })
 
     const response = await fetch(`/api/v1/demo/feedbacks?${params}`)
@@ -675,14 +675,14 @@ const handleTableChange = (pag: TablePaginationConfig) => {
 }
 
 // 查看详情
-const handleViewDetail = (record: FeedbackRecord) => {
-  currentFeedback.value = record
+const handleViewDetail = (record: FeedbackRecord | Record<string, any>) => {
+  currentFeedback.value = record as FeedbackRecord
   detailVisible.value = true
 }
 
 // 删除反馈记录
-const handleDelete = (record: FeedbackRecord) => {
-  pendingDeleteRecord.value = record
+const handleDelete = (record: FeedbackRecord | Record<string, any>) => {
+  pendingDeleteRecord.value = record as FeedbackRecord
   adminPassword.value = ''
   passwordVisible.value = true
 }
@@ -719,7 +719,7 @@ const confirmDelete = async () => {
   const record = pendingDeleteRecord.value
   try {
     const response = await fetch(`/api/v1/demo/feedbacks/${record.feedback_id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     })
 
     const data = await response.json()
