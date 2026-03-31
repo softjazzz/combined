@@ -305,8 +305,6 @@ import {
   rejectDefect,
   exportDefects,
 } from '@/api/defects'
-import { integratedQCEngine } from '@/services/integrated-qc-engine'
-import type { QCRuleResult, DocumentType } from '@/types/enhanced-qc-rule'
 
 interface QCIssue {
   id: string
@@ -337,6 +335,13 @@ const emit = defineEmits<{
   (e: 'issues-change', issues: QCIssue[]): void
   (e: 'locate-field', payload: { target: LocateTarget; issue: QCIssue }): void
   (e: 'jump-evidence', issue: QCIssue): void
+  (
+    e: 'persistence-finished',
+    payload: {
+      workflow: 'form' | 'coding' | 'cost'
+      persistence?: Record<string, any> | null
+    },
+  ): void
 }>()
 
 const internalTab = ref<'form' | 'coding' | 'cost'>('form')
@@ -345,6 +350,7 @@ const issues = ref<QCIssue[]>([])
 const exporting = ref(false)
 const codingQCLoading = ref(false)
 const formQCLoading = ref(false)
+const costQCLoading = ref(false)
 const formAnalyzed = ref(false)
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
@@ -377,8 +383,9 @@ const currentTabConfig = computed(() => qcTabs.find((t) => t.key === currentTab.
 
 const isTabLoading = computed(() => {
   const tab = currentTab.value
-  if (tab === 'form' || tab === 'cost') return formQCLoading.value
+  if (tab === 'form') return formQCLoading.value
   if (tab === 'coding') return codingQCLoading.value
+  if (tab === 'cost') return costQCLoading.value
   return false
 })
 
@@ -429,6 +436,58 @@ function severityLabel(sev: string) {
       info: '提示',
     }[sev] || '未知'
   )
+}
+
+function notifyPersistence(
+  workflow: 'form' | 'coding' | 'cost',
+  persistence?: Record<string, any> | null,
+) {
+  emit('persistence-finished', {
+    workflow,
+    persistence: persistence || null,
+  })
+}
+
+function buildPersistenceMessage(
+  workflow: 'form' | 'coding' | 'cost',
+  persistence?: Record<string, any> | null,
+) {
+  const defectsCreated = Number(persistence?.defects_created || 0)
+  const defectsUpdated = Number(persistence?.defects_updated || 0)
+  const defectsResolved = Number(persistence?.defects_resolved || 0)
+  const totalActive = defectsCreated + defectsUpdated
+
+  if (workflow === 'form') {
+    if (totalActive > 0) {
+      return `首页质控完成，发现 ${totalActive} 条问题并更新消息`
+    }
+    if (defectsResolved > 0) {
+      return '首页质控完成，未发现问题，已更新最新状态'
+    }
+    return '首页质控完成，结果已保存'
+  }
+  if (workflow === 'coding') {
+    if (totalActive > 0) {
+      return `编码质控完成，发现 ${totalActive} 条缺陷并更新消息`
+    }
+    if (defectsResolved > 0) {
+      return '编码质控完成，未发现问题，已更新最新状态'
+    }
+    return '编码质控完成，结果已保存'
+  }
+  if (totalActive > 0) {
+    return `控费监测完成，发现 ${totalActive} 条问题并更新消息`
+  }
+  if (defectsResolved > 0) {
+    return '控费监测完成，未发现问题，已更新最新状态'
+  }
+  return '控费监测完成，结果已保存'
+}
+
+function toIssueSeverity(severity: string): 'error' | 'warning' | 'info' {
+  if (severity === 'error' || severity === 'critical' || severity === 'major') return 'error'
+  if (severity === 'warning' || severity === 'minor') return 'warning'
+  return 'info'
 }
 
 function dismissIssue(issue: QCIssue) {
@@ -531,7 +590,7 @@ async function fetchCodingQCFromBackend() {
   const useVisitIdMode = !!props.visitId
   const fp = props.frontpage
 
-  if (!useVisitIdMode && !fp) return []
+  if (!useVisitIdMode && !fp) return { issues: [], persistence: null }
 
   let payload: any
   if (useVisitIdMode) {
@@ -578,7 +637,7 @@ async function fetchCodingQCFromBackend() {
   try {
     const resp = await apiClient.post('/api/v1/qc/coding-qc/check', payload, { timeout: 30000 })
     const data = resp.data?.data
-    if (!data) return []
+    if (!data) return { issues: [], persistence: null }
 
     const codingIssues: QCIssue[] = []
     let idx = 0
@@ -587,8 +646,7 @@ async function fetchCodingQCFromBackend() {
       codingIssues.push({
         id: `coding-rule-${(idx += 1)}`,
         category: 'coding',
-        severity:
-          issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+        severity: toIssueSeverity(issue.severity),
         group: issue.dimension === 'format' ? '编码格式校验' : '编码存在性验证',
         description: issue.description,
         suggestion: issue.suggestion,
@@ -608,8 +666,7 @@ async function fetchCodingQCFromBackend() {
       codingIssues.push({
         id: `coding-llm-${(idx += 1)}`,
         category: 'coding',
-        severity:
-          issue.severity === 'error' ? 'error' : issue.severity === 'warning' ? 'warning' : 'info',
+        severity: toIssueSeverity(issue.severity),
         group: dimensionLabels[issue.dimension] || 'LLM 语义审查',
         description: issue.description,
         suggestion: issue.suggestion,
@@ -618,11 +675,84 @@ async function fetchCodingQCFromBackend() {
       })
     }
 
-    return codingIssues
+    return {
+      issues: codingIssues,
+      persistence: data.persistence || null,
+    }
   } catch (err) {
     console.error('后端编码质控调用失败', err)
-    return []
+    return { issues: [], persistence: null }
   }
+}
+
+async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
+  const payload = {
+    patient_id: props.patientId || '',
+    visit_id: props.visitId || '',
+    frontpage,
+  }
+  const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: 30000 })
+  const data = resp.data?.data
+  if (!data) return { issues: [], persistence: null, passed: 0, total: 0 }
+
+  const issues: QCIssue[] = (data.results || []).map((item: any, index: number) => ({
+    id: `form-${index + 1}`,
+    category: 'form',
+    severity: toIssueSeverity(item.severity),
+    group: item.category || '首页质控',
+    description: item.message || '',
+    suggestion: item.message || '请根据规则提示修正相关字段',
+    evidence: item.field_name,
+    actionLabel: '定位字段',
+  }))
+
+  return {
+    issues,
+    persistence: data.persistence || null,
+    passed: Number(data.passed || 0),
+    total: Number(data.total_rules || 0),
+  }
+}
+
+async function fetchCostQCFromBackend() {
+  if (!props.visitId || !props.patientId) {
+    return { issues: [], persistence: null, passed: 0, total: 0 }
+  }
+
+  const urls = [
+    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/qc`,
+    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/generate/qc`,
+  ]
+
+  let lastError: unknown = null
+  for (const url of urls) {
+    try {
+      const resp = await apiClient.post(url, undefined, { timeout: 30000 })
+      const data = resp.data
+      const issues: QCIssue[] = (data.results || [])
+        .filter((item: any) => !item.passed)
+        .map((item: any, index: number) => ({
+          id: `cost-${index + 1}`,
+          category: 'cost',
+          severity: toIssueSeverity(item.severity),
+          group: item.category || '控费监测',
+          description: item.message || '',
+          suggestion: item.message || '请复核结算清单相关字段',
+          evidence: item.field_name,
+          actionLabel: '查看结算',
+        }))
+      return {
+        issues,
+        persistence: data.persistence || null,
+        passed: Number(data.summary?.passed || 0),
+        total: Number(data.summary?.total || 0),
+      }
+    } catch (err: any) {
+      lastError = err
+      if (err?.response?.status !== 404) break
+    }
+  }
+  throw lastError
 }
 
 async function loadFrontpageData(): Promise<Record<string, any> | null> {
@@ -645,57 +775,19 @@ async function runFormQC() {
 
   formQCLoading.value = true
   try {
-    const patientData = {
-      patientId:
-        fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
-      documents: [
-        {
-          id: `doc_${Date.now()}`,
-          type: 'admission_record' as DocumentType,
-          content: JSON.stringify(fpData),
-          timestamp: new Date().toISOString(),
-          status: 'draft',
-        },
-      ],
-    }
-    const engineResult = await integratedQCEngine.executeQualityControl(patientData)
-
-    const kept = issues.value.filter((i) => i.category === 'coding')
-    let issueId = 0
-    if (engineResult.ruleResults?.length > 0) {
-      engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
-        if (!ruleRes.isCompliant && ruleRes.findings?.length > 0) {
-          ruleRes.findings.forEach((finding) => {
-            let sev: 'error' | 'warning' | 'info' = 'info'
-            if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
-            else if (finding.severity === 'minor') sev = 'warning'
-
-            let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG'))
-              tabCat = 'cost'
-
-            kept.push({
-              id: `sys-${(issueId += 1)}`,
-              category: tabCat,
-              severity: sev,
-              group: ruleRes.ruleName || '未知规则',
-              description: finding.description,
-              suggestion: finding.recommendation,
-              evidence: finding.evidence,
-              actionLabel: '查看详情',
-            })
-          })
-        }
-      })
-    }
+    const result = await fetchFrontpageQCFromBackend(fpData)
+    const kept = issues.value.filter((i) => i.category !== 'form')
+    kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
+    message.success(buildPersistenceMessage('form', result.persistence))
+    notifyPersistence('form', result.persistence)
   } catch (err) {
     console.error('首页质控引擎异常', err)
+    message.error('首页质控执行失败')
   } finally {
     formQCLoading.value = false
     formAnalyzed.value = true
-    costAnalyzed.value = true
   }
 }
 
@@ -703,95 +795,91 @@ async function runCodingQC() {
   codingQCLoading.value = true
   try {
     const kept = issues.value.filter((i) => i.category !== 'coding')
-    const codingIssues = await fetchCodingQCFromBackend()
-    kept.push(...codingIssues)
+    const result = await fetchCodingQCFromBackend()
+    kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
+    message.success(buildPersistenceMessage('coding', result.persistence))
+    notifyPersistence('coding', result.persistence)
   } catch (err) {
     console.error('编码质控异常', err)
+    message.error('编码质控执行失败')
   } finally {
     codingQCLoading.value = false
     codingAnalyzed.value = true
   }
 }
 
-async function runAllQC() {
-  const fpData = await loadFrontpageData()
-  if (!fpData) {
-    issues.value = []
-    emit('issues-change', [])
-    return
-  }
-
-  formQCLoading.value = true
+async function runCostQC() {
+  costQCLoading.value = true
   try {
-    const patientData = {
-      patientId:
-        fpData.basic?.patient_id || fpData.case_id || fpData.patient_id || `PAT_${Date.now()}`,
-      documents: [
-        {
-          id: `doc_${Date.now()}`,
-          type: 'admission_record' as DocumentType,
-          content: JSON.stringify(fpData),
-          timestamp: new Date().toISOString(),
-          status: 'draft',
-        },
-      ],
-    }
+    const kept = issues.value.filter((i) => i.category !== 'cost')
+    const result = await fetchCostQCFromBackend()
+    kept.push(...result.issues)
+    issues.value = kept
+    emit('issues-change', kept.slice())
+    message.success(buildPersistenceMessage('cost', result.persistence))
+    notifyPersistence('cost', result.persistence)
+  } catch (err) {
+    console.error('控费监测异常', err)
+    message.error('控费监测执行失败')
+  } finally {
+    costQCLoading.value = false
+    costAnalyzed.value = true
+  }
+}
 
-    const [engineResult, codingIssues] = await Promise.all([
-      integratedQCEngine.executeQualityControl(patientData),
+async function runAllQC() {
+  formQCLoading.value = true
+  codingQCLoading.value = true
+  costQCLoading.value = true
+  try {
+    const fpData = await loadFrontpageData()
+    if (!fpData) {
+      issues.value = []
+      emit('issues-change', [])
+      return
+    }
+    const [formResult, codingResult, costResult] = await Promise.all([
+      fetchFrontpageQCFromBackend(fpData),
       fetchCodingQCFromBackend(),
+      fetchCostQCFromBackend(),
     ])
-
-    const newIssues: QCIssue[] = []
-    let issueId = 0
-    if (engineResult.ruleResults?.length > 0) {
-      engineResult.ruleResults.forEach((ruleRes: QCRuleResult) => {
-        if (!ruleRes.isCompliant && ruleRes.findings?.length > 0) {
-          ruleRes.findings.forEach((finding) => {
-            let sev: 'error' | 'warning' | 'info' = 'info'
-            if (finding.severity === 'critical' || finding.severity === 'major') sev = 'error'
-            else if (finding.severity === 'minor') sev = 'warning'
-
-            let tabCat: 'form' | 'coding' | 'cost' = 'form'
-            if (ruleRes.ruleName.includes('费用') || finding.description.includes('DRG'))
-              tabCat = 'cost'
-
-            newIssues.push({
-              id: `sys-${(issueId += 1)}`,
-              category: tabCat,
-              severity: sev,
-              group: ruleRes.ruleName || '未知规则',
-              description: finding.description,
-              suggestion: finding.recommendation,
-              evidence: finding.evidence,
-              actionLabel: '查看详情',
-            })
-          })
-        }
-      })
-    }
-    newIssues.push(...codingIssues)
+    const newIssues: QCIssue[] = [
+      ...formResult.issues,
+      ...codingResult.issues,
+      ...costResult.issues,
+    ]
     issues.value = newIssues
     emit('issues-change', newIssues.slice())
+    notifyPersistence('form', formResult.persistence)
+    notifyPersistence('coding', codingResult.persistence)
+    notifyPersistence('cost', costResult.persistence)
+    message.success('全部质控执行完成，结果已保存')
   } catch (error) {
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
+    message.error('全部质控执行失败')
   } finally {
     formQCLoading.value = false
+    codingQCLoading.value = false
+    costQCLoading.value = false
+    formAnalyzed.value = true
+    codingAnalyzed.value = true
+    costAnalyzed.value = true
   }
 }
 
 function startCurrentTab() {
   const tab = currentTab.value
-  if (tab === 'form' || tab === 'cost') runFormQC()
+  if (tab === 'form') runFormQC()
   else if (tab === 'coding') runCodingQC()
+  else if (tab === 'cost') runCostQC()
   else runAllQC()
 }
 
-defineExpose({ runFormQC, runCodingQC, runAllQC, startCurrentTab })
+defineExpose({ runFormQC, runCodingQC, runCostQC, runAllQC, startCurrentTab })
 
 watch(
   () => props.frontpage,
