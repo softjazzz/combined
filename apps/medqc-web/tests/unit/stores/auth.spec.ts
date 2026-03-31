@@ -449,8 +449,21 @@ describe('Auth Store', () => {
     it('should update the profile successfully', async () => {
       const store = useAuthStore()
 
-      // 璁剧疆鍒濆鐢ㄦ埛
-      store.user = mockUser
+      vi.mocked(ApiService.login).mockResolvedValue({
+        success: true,
+        data: {
+          access_token: 'mock-token',
+          refresh_token: 'mock-refresh-token',
+          user: mockUser,
+        },
+        message: '登录成功',
+      })
+      vi.mocked(ApiService.getCurrentUser).mockResolvedValue({
+        success: true,
+        data: mockUser,
+        message: '获取用户成功',
+      })
+      await store.signIn('test@example.com', 'password')
 
       const updates = {
         display_name: '鏇存柊鍚庣殑鐢ㄦ埛',

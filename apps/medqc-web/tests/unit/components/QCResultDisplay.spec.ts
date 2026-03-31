@@ -3,6 +3,12 @@ import { mount } from '@vue/test-utils'
 import QCResultDisplay from '@/components/qc/QCResultDisplay.vue'
 
 describe('QCResultDisplay', () => {
+  const antdStubs = {
+    'a-tag': { template: '<span><slot /></span>' },
+    'a-select': { template: '<select><slot /></select>' },
+    'a-select-option': { template: '<option><slot /></option>' },
+  }
+
   const mockIssues = [
     {
       id: '1',
@@ -97,6 +103,9 @@ describe('QCResultDisplay', () => {
       props: {
         result: mockResult,
       },
+      global: {
+        stubs: antdStubs,
+      },
     })
 
     expect(wrapper.text()).toContain('82')
@@ -113,6 +122,9 @@ describe('QCResultDisplay', () => {
       props: {
         result: mockResult,
       },
+      global: {
+        stubs: antdStubs,
+      },
     })
 
     expect(wrapper.text()).toContain('主诉完整性检查')
@@ -127,6 +139,9 @@ describe('QCResultDisplay', () => {
     const wrapper = mount(QCResultDisplay, {
       props: {
         result: mockResult,
+      },
+      global: {
+        stubs: antdStubs,
       },
     })
 

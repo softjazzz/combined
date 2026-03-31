@@ -14,7 +14,7 @@ vi.mock('ant-design-vue', () => ({
 
 describe('RecordList', () => {
   const antdStubs = {
-    'a-input-search': { template: '<input />' },
+    'a-input-search': { template: '<div />' },
     'a-select': { template: '<select><slot /></select>' },
     'a-select-option': { template: '<option><slot /></option>' },
     'a-button': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
