@@ -127,54 +127,15 @@
           :loading="loadingSuggestions"
           :pagination="{ pageSize: 5 }"
           row-key="suggestion_id"
-        >
-          <template #type="{ record }">
-            <a-tag>
-              {{
-                suggestionTypeMap[record.suggestion_type as keyof typeof suggestionTypeMap]
-              }}
-            </a-tag>
-          </template>
-          <template #severity="{ record }">
-            <StatusTag
-              type="severity"
-              :value="record.severity"
-            />
-          </template>
-          <template #action="{ record }">
-            <a-space v-if="record.status === 'pending'">
-              <a-button
-                type="link"
-                size="small"
-                @click="handleSuggestion(record.suggestion_id, 'accept')"
-              >
-                接受
-              </a-button>
-              <a-button
-                type="link"
-                danger
-                size="small"
-                @click="handleSuggestion(record.suggestion_id, 'reject')"
-              >
-                拒绝
-              </a-button>
-            </a-space>
-            <a-tag
-              v-else
-              :color="record.status === 'accepted' ? 'success' : 'default'"
-            >
-              {{ record.status === 'accepted' ? '已接受' : '已拒绝' }}
-            </a-tag>
-          </template>
-        </a-table>
+        />
       </a-card>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, reactive, onMounted, h } from 'vue'
+import { message, Button, Space, Tag } from 'ant-design-vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, BarChart } from 'echarts/charts'
@@ -198,6 +159,7 @@ import StatusTag from '@/components/drg/StatusTag.vue'
 import DRGAlertList from '@/components/drg/DRGAlertList.vue'
 import { suggestionTypeMap } from '@/utils/drg'
 import type { CodingSuggestionItem } from '@/types/drg'
+import type { TableColumnsType } from 'ant-design-vue'
 
 // 注册 ECharts 组件
 use([
@@ -272,12 +234,65 @@ const costChartOption = ref({
 const suggestions = ref<CodingSuggestionItem[]>([])
 const loadingSuggestions = ref(false)
 
-const suggestionColumns = [
-  { title: '建议类型', dataIndex: 'type', width: 120, slots: { customRender: 'type' } },
-  { title: '严重程度', dataIndex: 'severity', width: 100, slots: { customRender: 'severity' } },
+const suggestionColumns: TableColumnsType<CodingSuggestionItem> = [
+  {
+    title: '建议类型',
+    dataIndex: 'type',
+    width: 120,
+    customRender: ({ record }) =>
+      h(
+        Tag,
+        null,
+        () => suggestionTypeMap[record.suggestion_type as keyof typeof suggestionTypeMap],
+      ),
+  },
+  {
+    title: '严重程度',
+    dataIndex: 'severity',
+    width: 100,
+    customRender: ({ record }) => h(StatusTag, { type: 'severity', value: record.severity }),
+  },
   { title: '住院号', dataIndex: 'admission_id', width: 150 },
   { title: '建议消息', dataIndex: 'message' },
-  { title: '操作', key: 'action', width: 150, slots: { customRender: 'action' } },
+  {
+    title: '操作',
+    key: 'action',
+    width: 150,
+    customRender: ({ record }) =>
+      record.status === 'pending'
+        ? h(
+            Space,
+            { size: 'small' },
+            {
+              default: () => [
+                h(
+                  Button,
+                  {
+                    type: 'link',
+                    size: 'small',
+                    onClick: () => handleSuggestion(record.suggestion_id, 'accept'),
+                  },
+                  { default: () => '接受' },
+                ),
+                h(
+                  Button,
+                  {
+                    type: 'link',
+                    danger: true,
+                    size: 'small',
+                    onClick: () => handleSuggestion(record.suggestion_id, 'reject'),
+                  },
+                  { default: () => '拒绝' },
+                ),
+              ],
+            },
+          )
+        : h(
+            Tag,
+            { color: record.status === 'accepted' ? 'success' : 'default' },
+            { default: () => (record.status === 'accepted' ? '已接受' : '已拒绝') },
+          ),
+  },
 ]
 
 const updateAlertStats = (total: number, critical: number) => {

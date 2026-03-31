@@ -100,7 +100,10 @@
             </div>
             <div class="grid-item">
               <span class="label">科室:</span>
-              <span class="value">{{ store.currentDocument.metadata?.department || store.currentCase?.visitInfo.department }}</span>
+              <span class="value">{{
+                store.currentDocument.metadata?.department ||
+                  store.currentCase?.visitInfo.department
+              }}</span>
             </div>
             <div class="grid-item">
               <span class="label">住院号:</span>
@@ -118,7 +121,7 @@
           <div class="doc-body">
             <pre class="content-text">{{ store.currentDocument.content }}</pre>
           </div>
-          
+
           <!-- Doctor Signatures -->
           <div class="signatures">
             <div class="sig-item">
@@ -180,7 +183,7 @@
             </template>
             生成病案首页
           </a-button>
-          
+
           <a-button
             v-if="store.currentCase && store.currentCase.documents.length > 1"
             :loading="store.isWholeCaseQCAnalyzing"
@@ -197,6 +200,7 @@
 
 <script setup lang="ts">
 import { message, Empty } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useClinicalWorkstationStore } from '@/stores/clinicalWorkstation'
 import { QCRuleSetLabels } from '@/types/clinical-workstation'
 import type { QCRuleSet } from '@/types/clinical-workstation'
@@ -208,7 +212,7 @@ import {
   ThunderboltOutlined,
   FileAddOutlined,
   DownOutlined,
-  CheckOutlined
+  CheckOutlined,
 } from '@ant-design/icons-vue'
 
 // ========== Store ==========
@@ -232,8 +236,8 @@ async function handleGenerateFrontpage() {
   await store.generateFrontpage()
 }
 
-function handleRuleSetChange({ key }: { key: string }) {
-  store.switchRuleSet(key as QCRuleSet)
+function handleRuleSetChange(info: MenuInfo) {
+  store.switchRuleSet(String(info.key) as QCRuleSet)
 }
 
 async function handleWholeCaseQC() {
@@ -297,11 +301,22 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
         display: flex;
         align-items: center;
         font-size: 14px;
-        
-        .icon { color: #1890ff; margin-right: 8px; }
-        .current-doc { font-weight: 500; color: #262626; }
-        .divider { margin: 0 8px; color: #bfbfbf; }
-        .case-name { color: #8c8c8c; }
+
+        .icon {
+          color: #1890ff;
+          margin-right: 8px;
+        }
+        .current-doc {
+          font-weight: 500;
+          color: #262626;
+        }
+        .divider {
+          margin: 0 8px;
+          color: #bfbfbf;
+        }
+        .case-name {
+          color: #8c8c8c;
+        }
       }
     }
 
@@ -333,20 +348,20 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
         .doc-header {
           text-align: center;
           margin-bottom: 24px;
-          
+
           .hospital-name {
             font-size: 14px;
             color: #8c8c8c;
             margin-bottom: 8px;
           }
-          
+
           .doc-title {
             font-size: 24px;
             font-weight: bold;
             color: #262626;
             margin-bottom: 16px;
           }
-          
+
           .meta-row {
             font-size: 12px;
             color: #8c8c8c;
@@ -358,20 +373,27 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 8px 16px;
-          
+
           .grid-item {
-             display: flex;
-             font-size: 12px;
-             .label { color: #8c8c8c; width: 50px; }
-             .value { color: #262626; font-weight: 500; }
+            display: flex;
+            font-size: 12px;
+            .label {
+              color: #8c8c8c;
+              width: 50px;
+            }
+            .value {
+              color: #262626;
+              font-weight: 500;
+            }
           }
         }
 
         .doc-body {
           flex: 1;
-          
+
           .content-text {
-            font-family: 'SimSun', 'Songti SC', serif; // Use serif for more formal medical record look? Or YaHei.
+            font-family:
+              'SimSun', 'Songti SC', serif; // Use serif for more formal medical record look? Or YaHei.
             // Let's stick to sans-serif for screen readability but serif for "print" feel?
             // User screenshot had clean sans-serif.
             font-family: 'Microsoft YaHei', sans-serif;
@@ -382,20 +404,27 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
             word-wrap: break-word;
           }
         }
-        
+
         .signatures {
-           margin-top: 48px;
-           display: flex;
-           justify-content: flex-end;
-           gap: 32px;
-           
-           .sig-item {
-             display: flex;
-             gap: 8px;
-             font-size: 14px;
-             .label { color: #8c8c8c; }
-             .value { border-bottom: 1px solid #262626; padding: 0 8px; min-width: 80px; text-align: center; }
-           }
+          margin-top: 48px;
+          display: flex;
+          justify-content: flex-end;
+          gap: 32px;
+
+          .sig-item {
+            display: flex;
+            gap: 8px;
+            font-size: 14px;
+            .label {
+              color: #8c8c8c;
+            }
+            .value {
+              border-bottom: 1px solid #262626;
+              padding: 0 8px;
+              min-width: 80px;
+              text-align: center;
+            }
+          }
         }
       }
     }
@@ -415,9 +444,9 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
       .right-group {
         display: flex;
         gap: 12px;
-        
+
         .action-btn {
-           min-width: 90px;
+          min-width: 90px;
         }
       }
     }
@@ -425,9 +454,21 @@ function getRuleSetLabel(ruleSet: QCRuleSet): string {
 }
 
 @media print {
-  .toolbar, .action-bar { display: none; }
-  .document-viewer { background: white; }
-  .scroll-area { padding: 0; overflow: visible; }
-  .paper-sheet { box-shadow: none; width: 100%; min-height: auto; }
+  .toolbar,
+  .action-bar {
+    display: none;
+  }
+  .document-viewer {
+    background: white;
+  }
+  .scroll-area {
+    padding: 0;
+    overflow: visible;
+  }
+  .paper-sheet {
+    box-shadow: none;
+    width: 100%;
+    min-height: auto;
+  }
 }
 </style>

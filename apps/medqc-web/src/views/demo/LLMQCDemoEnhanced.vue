@@ -46,8 +46,6 @@
       </div>
     </div>
 
-
-
     <!-- 统计卡片 / 日志 / 性能监控 已移动到页面下方折叠区，默认收起，减少首屏干扰 -->
 
     <!-- 演示配置模态框 - 使用子组件 -->
@@ -187,7 +185,7 @@
             class="step-item"
             :class="{
               active: demoStore.currentStep === step.key,
-              completed: getStepIndex(demoStore.currentStep) > index
+              completed: getStepIndex(demoStore.currentStep) > index,
             }"
           >
             <div class="step-icon">
@@ -292,11 +290,11 @@
           />
           <div
             class="readiness-actions"
-            style="margin-top: 8px;"
+            style="margin-top: 8px"
           >
             <a-space>
               <a-button
-                v-if="!demoStore.testRecord || (demoStore.selectedDocumentList?.length||0)===0"
+                v-if="!demoStore.testRecord || (demoStore.selectedDocumentList?.length || 0) === 0"
                 size="small"
                 @click="demoStore.currentStep = 'target' as any"
               >
@@ -357,7 +355,7 @@
                 type="primary"
                 size="large"
                 block
-                @click="handleQuickStart"
+                @click="() => handleQuickStart()"
               >
                 <ThunderboltOutlined />
                 快速开始（加载预置示例）
@@ -384,7 +382,7 @@
               </a-button>
 
               <a-button
-                v-if="demoStore.testRecord && (demoStore.selectedDocumentList?.length||0) > 0"
+                v-if="demoStore.testRecord && (demoStore.selectedDocumentList?.length || 0) > 0"
                 type="primary"
                 size="large"
                 block
@@ -505,7 +503,6 @@
       </a-collapse>
     </div>
 
-
     <!-- 通知模态框 -->
     <QCNotificationModal
       v-model:visible="demoStore.showNotificationModal"
@@ -569,7 +566,6 @@
       </a-form>
     </a-modal>
 
-
     <!-- 病历与文书合并选择器 -->
     <RecordDocumentPicker
       v-model="showTargetPicker"
@@ -600,6 +596,8 @@
 <script setup lang="ts">
 import { ref, onMounted, h, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import type { AlertProps } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import {
   ExperimentOutlined,
   PlayCircleOutlined,
@@ -617,7 +615,7 @@ import {
   DeleteOutlined,
   LoadingOutlined,
   ThunderboltOutlined,
-  FileSearchOutlined
+  FileSearchOutlined,
 } from '@ant-design/icons-vue'
 
 import QCResultSummary from '@/components/demo/QCResultSummary.vue'
@@ -633,7 +631,13 @@ import MedicalRecordInfoCard from '@/components/demo/MedicalRecordInfoCard.vue'
 import EmptyResultState from '@/components/demo/EmptyResultState.vue'
 
 import { useQCDemoStore } from '@/stores/qcDemo'
-import type { QualityControlRule, Appeal, QCResult, QCIssue, QCNotification } from '@/types/quality-control'
+import type {
+  QualityControlRule,
+  Appeal,
+  QCResult,
+  QCIssue,
+  QCNotification,
+} from '@/types/quality-control'
 
 // 引入子组件
 import QCRulesDemoPanel from '@/components/demo/QCRulesDemoPanel.vue'
@@ -661,7 +665,7 @@ const demoConfig = ref({
   autoNotifications: true,
   notificationInterval: 3,
   persistState: true,
-  stateExpiryHours: 24
+  stateExpiryHours: 24,
 })
 
 // 配置表单数据（保留旧的，用于兼容）
@@ -669,36 +673,36 @@ const configForm = ref({
   autoAdvance: false,
   stepDelay: 3,
   showDetailedLogs: true,
-  enableSimulationDelay: true
+  enableSimulationDelay: true,
 })
 
 // 演示步骤配置
 const demoSteps = [
   { key: 'target', label: '测试对象', icon: FileTextOutlined },
   { key: 'rules', label: '规则配置', icon: FileTextOutlined },
-  { key: 'run', label: '运行与结果', icon: CheckCircleOutlined }
+  { key: 'run', label: '运行与结果', icon: CheckCircleOutlined },
 ]
 
 // 计算属性
 const getCurrentStepLabel = () => {
-  const step = demoSteps.find(s => s.key === demoStore.currentStep)
+  const step = demoSteps.find((s) => s.key === demoStore.currentStep)
   return step?.label || '运行与结果'
 }
 
 const getCurrentStepIcon = () => {
-  const step = demoSteps.find(s => s.key === demoStore.currentStep)
+  const step = demoSteps.find((s) => s.key === demoStore.currentStep)
   return step?.icon || CheckCircleOutlined
 }
 
 const getStepIndex = (stepKey: string) => {
-  return demoSteps.findIndex(s => s.key === stepKey)
+  return demoSteps.findIndex((s) => s.key === stepKey)
 }
 
 const getStepColor = (stepKey: string) => {
   const colors = {
     target: 'blue',
     rules: 'orange',
-    run: 'green'
+    run: 'green',
   }
   return colors[stepKey as keyof typeof colors] || 'default'
 }
@@ -711,23 +715,25 @@ const getProgressColor = () => {
 
 // 条件引导提示计算属性（加入文书选择）
 const readinessAlert = computed(() => {
+  type AlertType = NonNullable<AlertProps['type']>
+
   const hasRecord = !!demoStore.testRecord
   const hasDoc = (demoStore.selectedDocumentList?.length || 0) > 0
   const hasRules = demoStore.selectedRules.length > 0
 
   if (hasRecord && hasDoc && hasRules) {
-    return { type: 'success', message: '条件满足，点击“开始分析”进入运行与结果' }
+    return { type: 'success' as AlertType, message: '条件满足，点击“开始分析”进入运行与结果' }
   }
   if (!hasRecord) {
-    return { type: 'warning', message: '请先选择测试对象（病历+文书）' }
+    return { type: 'warning' as AlertType, message: '请先选择测试对象（病历+文书）' }
   }
   if (hasRecord && !hasDoc) {
-    return { type: 'warning', message: '已选择病历，请继续选择文书' }
+    return { type: 'warning' as AlertType, message: '已选择病历，请继续选择文书' }
   }
   if (!hasRules) {
-    return { type: 'warning', message: '请在右侧“质控规则管理”中选择要应用的规则' }
+    return { type: 'warning' as AlertType, message: '请在右侧“质控规则管理”中选择要应用的规则' }
   }
-  return { type: 'info', message: '请完善测试对象与规则' }
+  return { type: 'info' as AlertType, message: '请完善测试对象与规则' }
 })
 
 const qcSummaryResult = computed(() => {
@@ -740,28 +746,28 @@ const qcSummaryResult = computed(() => {
         compliant_rules: 0,
         compliance_rate: 0,
         overall_grade: 'C',
-        critical_violations: 0
+        critical_violations: 0,
       },
       performance_metrics: {
         processing_time: 0,
         token_usage: 0,
-        estimated_cost: 0
+        estimated_cost: 0,
       },
       optimization_metrics: {
         token_savings_rate: 0,
         estimated_original_tokens: 0,
         actual_tokens_saved: 0,
-        cost_savings: 0
+        cost_savings: 0,
       },
       evaluation_results: [],
       timestamp: new Date().toISOString(),
       status: 'pending',
-      mode: 'single_prompt'
+      mode: 'single_prompt',
     }
   }
 
   const totalRules = result.ruleResults?.length ?? 0
-  const compliantRules = result.ruleResults?.filter(item => item.passed).length ?? 0
+  const compliantRules = result.ruleResults?.filter((item) => item.passed).length ?? 0
   const complianceRate = totalRules > 0 ? (compliantRules / totalRules) * 100 : result.overallScore
 
   return {
@@ -771,23 +777,24 @@ const qcSummaryResult = computed(() => {
       compliant_rules: compliantRules,
       compliance_rate: Number(complianceRate.toFixed(1)),
       overall_grade: result.overallGrade || 'C',
-      critical_violations: result.issues?.filter(item => item.severity === 'critical').length ?? 0
+      critical_violations:
+        result.issues?.filter((item) => item.severity === 'critical').length ?? 0,
     },
     performance_metrics: {
       processing_time: (result.metadata?.processingTime ?? 0) / 1000,
       token_usage: result.metadata?.totalTokens ?? 0,
-      estimated_cost: 0
+      estimated_cost: 0,
     },
     optimization_metrics: {
       token_savings_rate: 0,
       estimated_original_tokens: 0,
       actual_tokens_saved: 0,
-      cost_savings: 0
+      cost_savings: 0,
     },
     evaluation_results: result.ruleResults || [],
     timestamp: result.analysisDate || new Date().toISOString(),
     status: 'completed',
-    mode: 'single_prompt'
+    mode: 'single_prompt',
   }
 })
 
@@ -806,11 +813,9 @@ const violationsForView = computed(() => {
     title: issue.ruleName || issue.category || '质控问题',
     severity: toViolationSeverity(issue.severity),
     description: issue.description || '检测到潜在问题',
-    suggestion: issue.suggestion || '请结合病历内容进行修正'
+    suggestion: issue.suggestion || '请结合病历内容进行修正',
   }))
 })
-
-
 
 // 事件处理
 const handleStartDemo = async () => {
@@ -823,7 +828,6 @@ const handleStartDemo = async () => {
   }
 }
 
-
 // 规则选择现在完全在右侧规则演示面板处理，通过 handleRulesUpdated 事件
 
 const handleRefreshData = async () => {
@@ -833,7 +837,7 @@ const handleRefreshData = async () => {
     console.log('[LLM质控演示] 刷新前状态:', {
       records: demoStore.availableRecords.length,
       rules: demoStore.availableRules.length,
-      connected: demoStore.isDatabaseConnected
+      connected: demoStore.isDatabaseConnected,
     })
 
     // 使用新的重置连接方法
@@ -844,24 +848,27 @@ const handleRefreshData = async () => {
     console.log('[LLM质控演示] 刷新后状态:', {
       records: demoStore.availableRecords.length,
       rules: demoStore.availableRules.length,
-      connected: demoStore.isDatabaseConnected
+      connected: demoStore.isDatabaseConnected,
     })
 
     // 根据连接状态显示不同的成功消息
     if (demoStore.isDatabaseConnected) {
-      message.success(`✅ 数据库重连成功！已加载 ${demoStore.availableRecords.length} 条记录和 ${demoStore.availableRules.length} 条规则`, 3)
+      message.success(
+        `✅ 数据库重连成功！已加载 ${demoStore.availableRecords.length} 条记录和 ${demoStore.availableRules.length} 条规则`,
+        3,
+      )
     } else {
-      message.warning(`⚠️ 数据库连接失败，已切换到模拟数据模式 (${demoStore.availableRecords.length} 条记录，${demoStore.availableRules.length} 条规则)`, 4)
+      message.warning(
+        `⚠️ 数据库连接失败，已切换到模拟数据模式 (${demoStore.availableRecords.length} 条记录，${demoStore.availableRules.length} 条规则)`,
+        4,
+      )
     }
-
   } catch (error) {
     console.error('[LLM质控演示] 刷新数据失败:', error)
     const errorMessage = error instanceof Error ? error.message : '未知错误'
     message.error(`❌ 数据刷新失败: ${errorMessage}`, 5)
   }
 }
-
-
 
 // 事件处理函数
 const handleRulesUpdated = (rules: QualityControlRule[]) => {
@@ -883,8 +890,6 @@ const handleRulesUpdated = (rules: QualityControlRule[]) => {
 const handleAnalysisComplete = () => {
   message.success('质控分析完成')
 }
-
-
 
 // 快速开始 - 加载预置示例（支持可选重置）
 const handleQuickStart = async (reset = false) => {
@@ -912,7 +917,6 @@ const handleQuickStart = async (reset = false) => {
         message.info('📋 已自动进入"规则配置"步骤，请选择质控规则', 3)
       }
     }, 300)
-
   } catch (error) {
     console.error('快速开始失败:', error)
     message.error('加载预置示例失败，请重试')
@@ -934,7 +938,7 @@ const onTargetPicked = async ({ record, document, documents }: any) => {
     }
 
     const count = documents?.length || (document ? 1 : 0)
-    const docLabel = count > 1 ? `已选${count}份文书` : (document?.title || '文书')
+    const docLabel = count > 1 ? `已选${count}份文书` : document?.title || '文书'
     const patientName = record?.patient_name || '病历'
     message.success(`✅ 已选择：${patientName} · ${docLabel}`)
 
@@ -950,13 +954,11 @@ const onTargetPicked = async ({ record, document, documents }: any) => {
         message.success('✨ 条件已满足，可以点击"开始分析"按钮', 3)
       }, 500)
     }
-
   } catch (error) {
     console.error('选择测试对象失败:', error)
     message.error('选择测试对象失败，请重试')
   }
 }
-
 
 // 性能监控导出处理
 const handlePerformanceExport = () => {
@@ -976,7 +978,6 @@ const handleNotificationModalAction = (action: string, notification?: QCNotifica
     case 'ignore':
       demoStore.handleNotificationAction('ignore', activeNotification)
       demoStore.showNotificationModal = false
-
 
       message.info('通知已忽略')
       break
@@ -1004,8 +1005,6 @@ const handleNotificationModalAction = (action: string, notification?: QCNotifica
   }
 }
 
-
-
 // 停止演示确认
 const handleStopDemo = () => {
   Modal.confirm({
@@ -1017,7 +1016,7 @@ const handleStopDemo = () => {
     onOk() {
       demoStore.stopDemo()
       message.success('演示已停止')
-    }
+    },
   })
 }
 
@@ -1028,10 +1027,6 @@ const handleAppealSubmitted = (appeal: unknown) => {
   demoStore.showAppealModal = false
   message.success('申诉已提交，等待审核')
 }
-
-
-
-
 
 // 处理重播演示
 const handleReplayDemo = async () => {
@@ -1060,13 +1055,14 @@ const getStepLabel = (step: string) => {
   const labels: Record<string, string> = {
     target: '测试对象',
     rules: '规则配置',
-    run: '运行与结果'
+    run: '运行与结果',
   }
   return labels[step] || step
 }
 
 // 处理菜单操作
-const handleMenuAction = async ({ key }: { key: string }) => {
+const handleMenuAction = async (info: MenuInfo) => {
+  const key = String(info.key)
   switch (key) {
     case 'export':
       try {
@@ -1120,10 +1116,13 @@ const handleFileImport = async (event: Event) => {
 // 保存配置
 const handleConfigSave = async () => {
   try {
-    await demoStore.initializeDemo({
-      autoAdvance: configForm.value.autoAdvance,
-      stepDelay: configForm.value.stepDelay * 1000 // 转换为毫秒
-    }, false) // 不恢复状态，只更新配置
+    await demoStore.initializeDemo(
+      {
+        autoAdvance: configForm.value.autoAdvance,
+        stepDelay: configForm.value.stepDelay * 1000, // 转换为毫秒
+      },
+      false,
+    ) // 不恢复状态，只更新配置
 
     message.success('配置已保存')
     showConfigModal.value = false
@@ -1205,7 +1204,6 @@ onMounted(async () => {
     }
 
     console.log('[LLM质控演示] 初始化完成 - 当前测试记录:', demoStore.testRecord?.id)
-
   } catch (error) {
     message.destroy()
     console.error('[LLM质控演示] 自动初始化失败:', error)
@@ -1244,7 +1242,7 @@ onMounted(async () => {
         attachments: [],
         submittedBy: '张医生',
         submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2天前
-        status: 'reviewing'
+        status: 'reviewing',
       }
       ;(sampleAppeal as any).notificationId = demoStore.notifications[0].id
       demoStore.createAppeal(sampleAppeal)
@@ -1426,10 +1424,9 @@ onMounted(async () => {
 
 /* Minimal active styles during refactor */
 .status-bar {
-  margin-top: 16px;   /* 增加与上方按钮区的间距 */
+  margin-top: 16px; /* 增加与上方按钮区的间距 */
   margin-bottom: 16px;
 }
-
 
 /* Tighten header typography and spacing */
 .llm-qc-demo-enhanced .demo-header {
@@ -1458,5 +1455,4 @@ onMounted(async () => {
 .llm-qc-demo-enhanced .progress-section .progress-steps {
   margin-top: 8px;
 }
-
 </style>

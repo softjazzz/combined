@@ -307,7 +307,7 @@
           <a-button
             type="link"
             size="small"
-            @click="handleExport"
+            @click="handleExportClick"
           >
             <DownloadOutlined /> 导出Excel
           </a-button>
@@ -318,23 +318,7 @@
           :loading="loading"
           :pagination="{ pageSize: 10, showSizeChanger: true }"
           row-key="id"
-        >
-          <template #profit="{ record }">
-            <span :style="{ color: record.profit >= 0 ? '#3f8600' : '#cf1322' }">
-              {{ formatCurrency(record.profit) }}
-            </span>
-          </template>
-          <template #costRate="{ record }">
-            <a-progress
-              :percent="Math.min(record.costRate * 100, 100)"
-              :format="() => (record.costRate * 100).toFixed(1) + '%'"
-              :status="
-                record.costRate > 1.2 ? 'exception' : record.costRate > 1.0 ? 'normal' : 'success'
-              "
-              size="small"
-            />
-          </template>
-        </a-table>
+        />
       </a-card>
     </div>
   </div>
@@ -342,9 +326,11 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'DrgAnalysisView' })
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Progress } from 'ant-design-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
+import type { TableColumnsType } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
   FileTextOutlined,
@@ -444,7 +430,7 @@ const tableTitle = computed(() => {
 })
 
 /** 动态表格列定义 */
-const dynamicColumns = computed(() => {
+const dynamicColumns = computed<TableColumnsType<AnalysisTableItem>>(() => {
   const nameTitleMap: Record<AnalysisDimension, string> = {
     hospital: '科室名称',
     department: '项目名称',
@@ -459,36 +445,48 @@ const dynamicColumns = computed(() => {
       title: '入组病例数',
       dataIndex: 'caseCount',
       width: 120,
-      sorter: (a: any, b: any) => a.caseCount - b.caseCount,
+      sorter: (a, b) => a.caseCount - b.caseCount,
     },
-    { title: 'CMI值', dataIndex: 'cmi', width: 100, sorter: (a: any, b: any) => a.cmi - b.cmi },
+    { title: 'CMI值', dataIndex: 'cmi', width: 100, sorter: (a, b) => (a.cmi ?? 0) - (b.cmi ?? 0) },
     {
       title: '总收入',
       dataIndex: 'totalRevenue',
       width: 150,
-      customRender: ({ text }: any) => formatCurrency(text),
-      sorter: (a: any, b: any) => a.totalRevenue - b.totalRevenue,
+      customRender: ({ record }) => formatCurrency(record.totalRevenue),
+      sorter: (a, b) => a.totalRevenue - b.totalRevenue,
     },
     {
       title: '总成本',
       dataIndex: 'totalCost',
       width: 150,
-      customRender: ({ text }: any) => formatCurrency(text),
-      sorter: (a: any, b: any) => a.totalCost - b.totalCost,
+      customRender: ({ record }) => formatCurrency(record.totalCost),
+      sorter: (a, b) => a.totalCost - b.totalCost,
     },
     {
       title: '盈亏金额',
       dataIndex: 'profit',
       width: 150,
-      slots: { customRender: 'profit' },
-      sorter: (a: any, b: any) => a.profit - b.profit,
+      customRender: ({ record }) =>
+        h(
+          'span',
+          { style: { color: record.profit >= 0 ? '#3f8600' : '#cf1322' } },
+          formatCurrency(record.profit),
+        ),
+      sorter: (a, b) => a.profit - b.profit,
     },
     {
       title: '费用消耗指数',
       dataIndex: 'costRate',
       width: 220,
-      slots: { customRender: 'costRate' },
-      sorter: (a: any, b: any) => a.costRate - b.costRate,
+      customRender: ({ record }) =>
+        h(Progress, {
+          percent: Math.min(record.costRate * 100, 100),
+          format: () => `${(record.costRate * 100).toFixed(1)}%`,
+          status:
+            record.costRate > 1.2 ? 'exception' : record.costRate > 1.0 ? 'normal' : 'success',
+          size: 'small',
+        }),
+      sorter: (a, b) => a.costRate - b.costRate,
     },
   ]
 })
@@ -507,9 +505,12 @@ const dimensionLabelMap: Record<string, string> = {
   doctor: '医生绩效',
 }
 
-const handleExportMenu = async (e: { key: string }) => {
-  const format = e.key as ExportFormat
-  await handleExport(format)
+const handleExportMenu = ({ key }: MenuInfo): void => {
+  void handleExport(key as ExportFormat)
+}
+
+const handleExportClick = (): void => {
+  void handleExport()
 }
 
 const handleExport = async (format: ExportFormat = 'excel') => {

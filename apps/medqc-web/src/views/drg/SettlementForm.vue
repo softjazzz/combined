@@ -682,9 +682,33 @@
                         index === 0 ? '主要诊断' : '其他诊断' + index
                       }}</span>
                     </template>
-                    <template v-else>
+                    <template v-else-if="column.dataIndex === 'westDiagnosis'">
                       <a-input
-                        v-model:value="record[column.dataIndex]"
+                        v-model:value="record.westDiagnosis"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'westCode'">
+                      <a-input
+                        v-model:value="record.westCode"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'admissionCondition'">
+                      <a-input
+                        v-model:value="record.admissionCondition"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'tcmDiagnosis'">
+                      <a-input
+                        v-model:value="record.tcmDiagnosis"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'tcmCode'">
+                      <a-input
+                        v-model:value="record.tcmCode"
                         size="small"
                       />
                     </template>
@@ -711,9 +735,39 @@
                         index === 0 ? '主要手术' : '其他手术' + index
                       }}</span>
                     </template>
-                    <template v-else>
+                    <template v-else-if="column.dataIndex === 'name'">
                       <a-input
-                        v-model:value="record[column.dataIndex]"
+                        v-model:value="record.name"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'code'">
+                      <a-input
+                        v-model:value="record.code"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'date'">
+                      <a-input
+                        v-model:value="record.date"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'anesthesia'">
+                      <a-input
+                        v-model:value="record.anesthesia"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'surgeonName'">
+                      <a-input
+                        v-model:value="record.surgeonName"
+                        size="small"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'surgeonCode'">
+                      <a-input
+                        v-model:value="record.surgeonCode"
                         size="small"
                       />
                     </template>
@@ -863,9 +917,45 @@
                     <template v-if="column.dataIndex === 'itemName'">
                       <span :class="{ 'font-bold': record.isCategory }">{{ record.itemName }}</span>
                     </template>
-                    <template v-else-if="!record.isCategory">
+                    <template v-else-if="column.dataIndex === 'amount' && !record.isCategory">
                       <a-input-number
-                        v-model:value="record[column.dataIndex]"
+                        v-model:value="record.amount"
+                        size="small"
+                        :min="0"
+                        :precision="2"
+                        class="w-full"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'classA' && !record.isCategory">
+                      <a-input-number
+                        v-model:value="record.classA"
+                        size="small"
+                        :min="0"
+                        :precision="2"
+                        class="w-full"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'classB' && !record.isCategory">
+                      <a-input-number
+                        v-model:value="record.classB"
+                        size="small"
+                        :min="0"
+                        :precision="2"
+                        class="w-full"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'selfPay' && !record.isCategory">
+                      <a-input-number
+                        v-model:value="record.selfPay"
+                        size="small"
+                        :min="0"
+                        :precision="2"
+                        class="w-full"
+                      />
+                    </template>
+                    <template v-else-if="column.dataIndex === 'other' && !record.isCategory">
+                      <a-input-number
+                        v-model:value="record.other"
                         size="small"
                         :min="0"
                         :precision="2"
@@ -1110,6 +1200,37 @@ import type { SettlementForm, SettlementQCReport, OutpatientDiagnosisRow } from 
 import { validateSettlementForm, type QCContext } from '@/utils/settlementQC'
 import { drgApi } from '@/api/drg'
 
+interface DiagnosisDetailRow {
+  id: number
+  westDiagnosis: string
+  westCode: string
+  admissionCondition: string
+  tcmDiagnosis: string
+  tcmCode: string
+}
+
+interface SurgeryDetailRow {
+  id: number
+  name: string
+  code: string
+  date: string
+  anesthesia: string
+  surgeonName: string
+  surgeonCode: string
+}
+
+interface FeeItemRow {
+  id: number
+  itemName: string
+  amount?: number | null
+  classA?: number | null
+  classB?: number | null
+  selfPay?: number | null
+  other?: number | null
+  isCategory?: boolean
+  isTotal?: boolean
+}
+
 // Form data
 const form = reactive<SettlementForm>({
   basicInfo: {
@@ -1204,7 +1325,7 @@ const feeData = reactive({
 })
 
 // Diagnosis Rows (Section 3)
-const diagnosisRows = ref(
+const diagnosisRows = ref<DiagnosisDetailRow[]>(
   Array.from({ length: 5 }, (_, i) => ({
     id: i + 1,
     westDiagnosis: '',
@@ -1216,7 +1337,7 @@ const diagnosisRows = ref(
 )
 
 // Surgery Rows (Section 3)
-const surgeryRows = ref(
+const surgeryRows = ref<SurgeryDetailRow[]>(
   Array.from({ length: 3 }, (_, i) => ({
     id: i + 1,
     name: '',
@@ -1229,7 +1350,7 @@ const surgeryRows = ref(
 )
 
 // Fee Items (Section 4)
-const feeItems = ref([
+const feeItems = ref<FeeItemRow[]>([
   { id: 1, itemName: '（一）综合医疗服务类', isCategory: true },
   {
     id: 2,

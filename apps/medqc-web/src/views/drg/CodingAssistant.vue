@@ -142,7 +142,9 @@
 
             <!-- 住院天数 -->
             <template v-else-if="column.dataIndex === 'total_hospital_days'">
-              <span class="days-text">{{ record.total_hospital_days ? `${record.total_hospital_days}天` : '-' }}</span>
+              <span class="days-text">{{
+                record.total_hospital_days ? `${record.total_hospital_days}天` : '-'
+              }}</span>
             </template>
 
             <!-- 编码状态 -->
@@ -204,57 +206,57 @@ import StatusTag from '@/components/drg/StatusTag.vue'
 import TableSkeleton from '@/components/common/TableSkeleton.vue'
 import { getGenderText } from '@/utils/drg'
 import type { CaseFrontPage } from '@/types/drg'
-import type { TableProps } from 'ant-design-vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
 
 const router = useRouter()
 
 /** 表格列定义 - Updated to remove deprecated slots */
-const columns = [
+const columns: TableColumnsType<CaseFrontPage> = [
   {
     title: '住院号',
     dataIndex: 'admission_id',
     width: 150,
-    fixed: 'left'
+    fixed: 'left' as const,
   },
   {
     title: '患者信息',
     dataIndex: 'patient',
-    width: 140
+    width: 140,
   },
   {
     title: '主诊断',
     dataIndex: 'diagnosis',
-    width: 280
+    width: 280,
   },
   {
     title: '住院天数',
     dataIndex: 'total_hospital_days',
     width: 90,
-    align: 'center'
+    align: 'center' as const,
   },
   {
     title: '编码状态',
     dataIndex: 'coding_status',
     width: 100,
-    align: 'center'
+    align: 'center' as const,
   },
   {
     title: '审核状态',
     dataIndex: 'review_status',
     width: 100,
-    align: 'center'
+    align: 'center' as const,
   },
   {
     title: '编码员',
     dataIndex: 'coder_id',
-    width: 100
+    width: 100,
   },
   {
     title: '操作',
     key: 'action',
     width: 140,
-    fixed: 'right'
-  }
+    fixed: 'right' as const,
+  },
 ]
 
 /** 筛选条件 */
@@ -262,7 +264,7 @@ const filters = reactive({
   codingStatus: '',
   reviewStatus: '',
   patientName: '',
-  admissionId: ''
+  admissionId: '',
 })
 
 /** 表格数据 */
@@ -275,7 +277,7 @@ const pagination = reactive({
   pageSize: 10,
   total: 0,
   showSizeChanger: true,
-  showTotal: (total: number) => `共 ${total} 条`
+  showTotal: (total: number) => `共 ${total} 条`,
 })
 
 /** 加载病案列表 */
@@ -288,20 +290,16 @@ const loadCaseFrontPages = async () => {
     let filteredData = response
 
     if (filters.codingStatus) {
-      filteredData = filteredData.filter(item => item.coding_status === filters.codingStatus)
+      filteredData = filteredData.filter((item) => item.coding_status === filters.codingStatus)
     }
     if (filters.reviewStatus) {
-      filteredData = filteredData.filter(item => item.review_status === filters.reviewStatus)
+      filteredData = filteredData.filter((item) => item.review_status === filters.reviewStatus)
     }
     if (filters.patientName) {
-      filteredData = filteredData.filter(item =>
-        item.patient_name.includes(filters.patientName)
-      )
+      filteredData = filteredData.filter((item) => item.patient_name.includes(filters.patientName))
     }
     if (filters.admissionId) {
-      filteredData = filteredData.filter(item =>
-        item.admission_id.includes(filters.admissionId)
-      )
+      filteredData = filteredData.filter((item) => item.admission_id.includes(filters.admissionId))
     }
 
     dataSource.value = filteredData
@@ -352,18 +350,18 @@ onMounted(() => {
   background: #fff;
   padding: 16px 32px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  
+
   :deep(.ant-page-header-heading-title) {
     font-weight: 700;
     font-size: 18px;
     color: #1e293b;
   }
-  
+
   :deep(.ant-page-header-heading-sub-title) {
     color: #64748b;
     font-size: 13px;
   }
-  
+
   .refresh-btn {
     border-radius: 6px;
     font-weight: 500;
@@ -381,24 +379,25 @@ onMounted(() => {
   margin-bottom: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   border: 1px solid #e2e8f0;
-  
+
   .filter-form {
     :deep(.ant-form-item) {
       margin-bottom: 0;
       margin-right: 24px;
     }
-    
+
     :deep(.ant-form-item-label > label) {
       color: #64748b;
       font-size: 13px;
     }
-    
+
     :deep(.ant-select-selector),
     :deep(.ant-input) {
       border-radius: 6px;
       border-color: #e2e8f0;
-      
-      &:hover, &:focus {
+
+      &:hover,
+      &:focus {
         border-color: #6366f1;
       }
     }
@@ -418,7 +417,7 @@ onMounted(() => {
   :deep(.ant-table) {
     font-size: 13px;
   }
-  
+
   :deep(.ant-table-thead > tr > th) {
     background: #f8fafc;
     font-weight: 600;
@@ -427,26 +426,26 @@ onMounted(() => {
     padding: 14px 16px;
     font-size: 13px;
   }
-  
+
   :deep(.ant-table-tbody > tr > td) {
     padding: 14px 16px;
     border-bottom: 1px solid #f1f5f9;
   }
-  
+
   :deep(.ant-table-tbody > tr:hover > td) {
     background: #f8fafc;
   }
-  
+
   :deep(.ant-table-tbody > tr:last-child > td) {
     border-bottom: none;
   }
-  
+
   // Fixed columns styling
   :deep(.ant-table-cell-fix-left),
   :deep(.ant-table-cell-fix-right) {
     background: #fff;
   }
-  
+
   :deep(.ant-table-tbody > tr:hover .ant-table-cell-fix-left),
   :deep(.ant-table-tbody > tr:hover .ant-table-cell-fix-right) {
     background: #f8fafc;
@@ -460,7 +459,7 @@ onMounted(() => {
     color: #0f172a;
     font-size: 14px;
   }
-  
+
   .patient-meta {
     color: #94a3b8;
     font-size: 12px;
@@ -474,7 +473,7 @@ onMounted(() => {
     border-radius: 4px;
     font-size: 12px;
   }
-  
+
   .diagnosis-name {
     margin-top: 4px;
     color: #475569;
@@ -497,11 +496,11 @@ onMounted(() => {
   font-weight: 500;
   font-size: 12px;
   padding: 0 4px;
-  
+
   &:hover {
     color: #4f46e5;
   }
-  
+
   :deep(.anticon) {
     margin-right: 4px;
   }
@@ -509,7 +508,7 @@ onMounted(() => {
 
 .review-link {
   color: #10b981;
-  
+
   &:hover {
     color: #059669;
   }

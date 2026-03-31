@@ -213,7 +213,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import type { FormInstance } from 'ant-design-vue'
+import type { FormInstance, FormProps } from 'ant-design-vue'
 import {
   MailOutlined,
   UserOutlined,
@@ -222,7 +222,7 @@ import {
   CrownOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
-  MedicineBoxOutlined
+  MedicineBoxOutlined,
 } from '@ant-design/icons-vue'
 
 interface Props {
@@ -237,7 +237,7 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  visible: false
+  visible: false,
 })
 
 const emit = defineEmits<Emits>()
@@ -249,47 +249,46 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 // 表单数据
-const formData = reactive({ email: '',
+const formData = reactive({
+  email: '',
   display_name: '',
   password: '',
   confirmPassword: '',
   department: '',
   hospital_name: '',
-  roles:  [],
+  roles: [],
   is_active: true,
-  notes: ''
+  notes: '',
 })
 
 // 表单规则
-const rules = {
+const rules: NonNullable<FormProps['rules']> = {
   email: [
     { required: true, message: '请输入邮箱地址', trigger: 'blur' },
-    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' }
+    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' },
   ],
   display_name: [
     { required: true, message: '请输入显示名称', trigger: 'blur' },
-    { min: 2, max: 20, message: '显示名称长度为2-20个字符', trigger: 'blur' }
+    { min: 2, max: 20, message: '显示名称长度为2-20个字符', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入登录密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6位字符', trigger: 'blur' }
+    { min: 6, message: '密码至少6位字符', trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     {
-      validator: (rule: unknown, value: string) => {
+      validator: (_rule: unknown, value: string) => {
         if (value && value !== formData.password) {
           return Promise.reject('两次输入的密码不一致')
         }
         return Promise.resolve()
       },
-      trigger: 'blur'
-    }
+      trigger: 'blur',
+    },
   ],
-  roles: [
-    { required: true, message: '请选择用户角色', trigger: 'change' }
-  ]
-}
+  roles: [{ required: true, message: '请选择用户角色', trigger: 'change' }],
+} satisfies NonNullable<FormProps['rules']>
 
 // 计算属性
 const isEdit = computed(() => !!props.user)
@@ -297,7 +296,8 @@ const isEdit = computed(() => !!props.user)
 // 监听用户数据变化
 watch(
   () => props.user,
-  (newUser) => { if (newUser) {
+  (newUser) => {
+    if (newUser) {
       // 编辑模式，填充表单数据
       Object.assign(formData, {
         email: newUser.email || '',
@@ -308,9 +308,10 @@ watch(
         hospital_name: newUser.hospital_name || '',
         roles: newUser.roles || [],
         is_active: newUser.is_active ?? true,
-        notes: newUser.notes || ''
+        notes: newUser.notes || '',
       })
-    } else { // 新增模式，重置表单
+    } else {
+      // 新增模式，重置表单
       Object.assign(formData, {
         email: '',
         display_name: '',
@@ -318,13 +319,13 @@ watch(
         confirmPassword: '',
         department: '',
         hospital_name: '',
-        roles:  [],
+        roles: [],
         is_active: true,
-        notes: ''
+        notes: '',
       })
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 // 监听visible变化
@@ -335,7 +336,7 @@ watch(
       // 关闭时重置表单
       formRef.value?.resetFields()
     }
-  }
+  },
 )
 
 // 方法
@@ -343,17 +344,17 @@ const handleSubmit = async () => {
   try {
     await formRef.value?.validate()
     loading.value = true
-    
+
     // 准备提交数据
     const submitData = { ...formData }
-    
+
     // 如果是编辑模式且没有输入密码，则不更新密码
     if (isEdit.value && !submitData.password) {
       const { password: _password, confirmPassword: _confirmPassword, ...rest } = submitData
       emit('submit', rest)
       return
     }
-    
+
     emit('submit', submitData)
   } catch (error) {
     message.warning('请检查表单输入')
@@ -375,4 +376,4 @@ const handleCancel = () => {
 :deep(.ant-checkbox-group .ant-checkbox-wrapper) {
   margin-bottom: 8px;
 }
-</style> 
+</style>
