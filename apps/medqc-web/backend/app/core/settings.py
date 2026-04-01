@@ -82,6 +82,8 @@ class Settings(BaseSettings):
             "SICHUAN_ALLOW_MOCK_WHEN_UNCONFIGURED",
         ),
     )
+    LLM_DEFAULT_PROVIDER: str = "ollama"
+    LLM_VISIBLE_PROVIDERS: List[str] = ["ollama"]
     SILICONFLOW_API_ENDPOINT: str = "https://api.siliconflow.cn/v1"
     OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"
     OLLAMA_API_KEY: Optional[str] = None
@@ -172,6 +174,15 @@ class Settings(BaseSettings):
                 except Exception:
                     pass
             return [o.strip() for o in txt.split(",") if o.strip()]
+        return v
+
+    @field_validator("LLM_VISIBLE_PROVIDERS", mode="before")
+    @classmethod
+    def split_visible_providers(cls, v):
+        if isinstance(v, str):
+            return [item.strip().lower() for item in v.split(",") if item.strip()]
+        if isinstance(v, list):
+            return [str(item).strip().lower() for item in v if str(item).strip()]
         return v
 
     class Config:

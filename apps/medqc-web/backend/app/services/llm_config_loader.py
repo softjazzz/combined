@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 SUPPORTED_PROVIDER_CODES = ("alibaba", "siliconflow", "ollama")
 
 
+def get_enabled_provider_codes() -> tuple[str, ...]:
+    """返回当前环境允许暴露和使用的 provider 列表。"""
+    settings = get_settings()
+    visible = tuple(
+        code for code in settings.LLM_VISIBLE_PROVIDERS if code in SUPPORTED_PROVIDER_CODES
+    )
+    return visible or ("ollama",)
+
+
+def get_default_provider_code() -> str:
+    """返回当前环境默认 provider。"""
+    settings = get_settings()
+    default_code = str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower()
+    enabled = get_enabled_provider_codes()
+    if default_code in enabled:
+        return default_code
+    return enabled[0]
+
+
 def build_provider_runtime_config(
     provider_code: str,
     model_code: Optional[str] = None,
@@ -21,8 +40,14 @@ def build_provider_runtime_config(
 ) -> Dict[str, Any]:
     """根据 provider/model 组合生成实际运行时配置。"""
     settings = get_settings()
-    code = (provider_code or "alibaba").strip().lower()
+    enabled = get_enabled_provider_codes()
+    code = (provider_code or get_default_provider_code()).strip().lower()
     params = custom_parameters or {}
+
+    if code not in enabled:
+        fallback = get_default_provider_code()
+        logger.warning("provider_code=%s 当前环境未启用，回退 %s", code, fallback)
+        code = fallback
 
     if code == "siliconflow":
         endpoint = str(settings.SILICONFLOW_API_ENDPOINT or "").strip()
@@ -153,8 +178,9 @@ class LLMConfigLoader:
 
             provider_code = str(provider.get("provider_code") or "alibaba").strip().lower()
             if provider_code not in SUPPORTED_PROVIDER_CODES:
-                logger.warning("配置中的 provider_code=%s 不在允许列表，回退 alibaba", provider_code)
-                provider_code = "alibaba"
+                fallback = get_default_provider_code()
+                logger.warning("配置中的 provider_code=%s 不受支持，回退 %s", provider_code, fallback)
+                provider_code = fallback
 
             runtime = build_provider_runtime_config(
                 provider_code=provider_code,
@@ -175,8 +201,8 @@ class LLMConfigLoader:
 
     @staticmethod
     def _load_from_env() -> Dict[str, Any]:
-        """从 .env 文件加载默认配置（阿里云）。"""
-        runtime = build_provider_runtime_config("alibaba")
+        """从 .env 文件加载默认配置。"""
+        runtime = build_provider_runtime_config(get_default_provider_code())
         runtime.update(
             {
                 "source": "env",

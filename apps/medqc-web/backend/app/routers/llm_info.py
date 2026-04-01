@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, Request
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
-from ..services.llm_config_loader import SUPPORTED_PROVIDER_CODES
+from ..services.llm_config_loader import SUPPORTED_PROVIDER_CODES, get_enabled_provider_codes
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
@@ -9,6 +9,7 @@ router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 @router.get("/providers")
 async def providers(request: Request):
     """获取 LLM 提供商列表"""
+    enabled_provider_codes = set(get_enabled_provider_codes())
     supabase = get_supabase()
     if supabase is not None:
         try:
@@ -16,6 +17,7 @@ async def providers(request: Request):
             rows = [
                 item for item in (resp.data or [])
                 if str(item.get("provider_code") or "").strip().lower() in SUPPORTED_PROVIDER_CODES
+                and str(item.get("provider_code") or "").strip().lower() in enabled_provider_codes
             ]
             return success_response(
                 data=rows,
@@ -27,9 +29,13 @@ async def providers(request: Request):
 
     # 静态回退
     fallback_providers = [
-        {"id": "alibaba", "name": "阿里云百炼", "provider_code": "alibaba"},
-        {"id": "siliconflow", "name": "SiliconFlow", "provider_code": "siliconflow"},
-        {"id": "ollama", "name": "内部 Ollama", "provider_code": "ollama"},
+        {"id": "alibaba", "provider_name": "阿里云百炼", "provider_code": "alibaba"},
+        {"id": "siliconflow", "provider_name": "SiliconFlow", "provider_code": "siliconflow"},
+        {"id": "ollama", "provider_name": "内部 Ollama", "provider_code": "ollama"},
+    ]
+    fallback_providers = [
+        item for item in fallback_providers
+        if str(item.get("provider_code") or "").strip().lower() in enabled_provider_codes
     ]
     return success_response(
         data=fallback_providers,
@@ -41,6 +47,7 @@ async def providers(request: Request):
 @router.get("/models")
 async def models(request: Request, provider_id: str | None = Query(default=None)):
     """获取 LLM 模型列表"""
+    enabled_provider_codes = set(get_enabled_provider_codes())
     supabase = get_supabase()
     if supabase is not None:
         try:
@@ -85,6 +92,10 @@ async def models(request: Request, provider_id: str | None = Query(default=None)
             "model_code": "qwen2.5:7b-instruct",
             "model_name": "qwen2.5:7b-instruct"
         },
+    ]
+    fallback_models = [
+        item for item in fallback_models
+        if str(item.get("provider") or "").strip().lower() in enabled_provider_codes
     ]
     return success_response(
         data=fallback_models,

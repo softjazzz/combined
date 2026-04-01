@@ -9,6 +9,8 @@ from ..core.response import success_response, paginated_response, get_trace_id, 
 from ..services.llm_config_loader import (
     SUPPORTED_PROVIDER_CODES,
     build_provider_runtime_config,
+    get_default_provider_code,
+    get_enabled_provider_codes,
 )
 from ..services.qc_llm_client import SichuanQCLLMClient
 
@@ -128,9 +130,11 @@ def _lookup_provider_and_model_ids(supabase, provider_code: str, model_code: str
 
 
 def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str]:
-    provider_code = str(payload.get("provider_code") or payload.get("provider_id") or "alibaba").strip().lower()
-    if provider_code not in SUPPORTED_PROVIDER_CODES:
-        provider_code = "alibaba"
+    default_provider_code = get_default_provider_code()
+    enabled_provider_codes = set(get_enabled_provider_codes())
+    provider_code = str(payload.get("provider_code") or payload.get("provider_id") or default_provider_code).strip().lower()
+    if provider_code not in SUPPORTED_PROVIDER_CODES or provider_code not in enabled_provider_codes:
+        provider_code = default_provider_code
     model_code = str(payload.get("model_code") or payload.get("model_id") or "").strip()
     return provider_code, model_code
 
@@ -332,7 +336,7 @@ async def test_config(request: Request, payload: Dict[str, Any]):
         ).strip()
         return success_response(
             data={
-                "provider_code": provider_code,
+                "provider_code": runtime.get("provider_code"),
                 "model": client.model,
                 "api_endpoint": client.api_endpoint,
                 "content_preview": content[:120],

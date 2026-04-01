@@ -22,7 +22,7 @@
               @click="handleProviderChange(provider)"
             >
               <div class="provider-card__title">
-                {{ provider.provider_name }}
+                {{ provider.provider_name || provider.provider_code }}
               </div>
               <div class="provider-card__desc">
                 {{ provider.description || provider.base_endpoint }}
@@ -194,11 +194,9 @@ const emit = defineEmits<{
   'close-modal': []
 }>()
 
-const ALLOWED_PROVIDER_CODES = ['alibaba', 'siliconflow', 'ollama']
-
 const providers = ref<LLMProvider[]>([])
 const models = ref<LLMModel[]>([])
-const selectedProviderCode = ref<string>('alibaba')
+const selectedProviderCode = ref<string>('')
 const selectedProviderId = ref<string>('')
 const selectedModelCode = ref<string>('')
 const loadingModels = ref(false)
@@ -229,7 +227,7 @@ const buildCustomParameters = () => ({
 
 async function loadProviders() {
   const rows = await llmConfigService.getProviders()
-  providers.value = rows.filter((item) => ALLOWED_PROVIDER_CODES.includes(item.provider_code))
+  providers.value = rows
 
   if (!providers.value.length) {
     throw new Error('未获取到可用的 LLM 厂商')
