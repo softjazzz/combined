@@ -76,6 +76,12 @@ export interface LLMConfigInput {
   is_active?: boolean
 }
 
+export interface LLMConnectionTestInput {
+  provider_code: string
+  model_code: string
+  custom_parameters?: Record<string, unknown>
+}
+
 class LLMConfigService {
   private readonly ENCRYPTION_KEY = 'medqc-llm-config-key-2024' // 在生产环境中应该使用环境变量
 
@@ -125,7 +131,7 @@ class LLMConfigService {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       })
 
       clearTimeout(timeoutId)
@@ -144,7 +150,9 @@ class LLMConfigService {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('请求超时，请检查网络连接')
       }
-      throw new Error(`获取LLM提供商失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(
+        `获取LLM提供商失败: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 
@@ -153,7 +161,9 @@ class LLMConfigService {
    */
   async getModelsByProvider(providerId: string): Promise<LLMModel[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/models?provider_id=${encodeURIComponent(providerId)}`)
+      const response = await fetch(
+        `${API_BASE_URL}${LLM_API_PREFIX}/models?provider_id=${encodeURIComponent(providerId)}`,
+      )
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -183,16 +193,23 @@ class LLMConfigService {
       }
 
       const result = await response.json()
-      const data = (result.data || []) as Array<UserLLMConfig & { api_key_encrypted?: string }>
+      const raw = result.data
+      const data = (Array.isArray(raw) ? raw : raw?.items || []) as Array<
+        UserLLMConfig & { api_key_encrypted?: string }
+      >
 
       // 解密API密钥
       return data.map((config) => ({
         ...config,
-        api_key_decrypted: config.api_key_encrypted ? this.decryptApiKey(config.api_key_encrypted) : null
+        api_key_decrypted: config.api_key_encrypted
+          ? this.decryptApiKey(config.api_key_encrypted)
+          : null,
       }))
     } catch (error) {
       console.error('获取用户LLM配置失败:', error)
-      throw new Error(`获取用户LLM配置失败: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(
+        `获取用户LLM配置失败: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 
@@ -206,7 +223,9 @@ class LLMConfigService {
         params.append('user_id', userId)
       }
 
-      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/configs/${encodeURIComponent(configName)}?${params}`)
+      const response = await fetch(
+        `${API_BASE_URL}${LLM_API_PREFIX}/configs/${encodeURIComponent(configName)}?${params}`,
+      )
       if (!response.ok) {
         if (response.status === 404) {
           return null
@@ -246,7 +265,7 @@ class LLMConfigService {
         custom_endpoint: config.custom_endpoint || null,
         custom_parameters: config.custom_parameters || {},
         is_active: config.is_active !== false,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       }
 
       // 由后端进行加密存储：直接发送明文 api_key（后端会写入 api_key_encrypted）
@@ -258,9 +277,9 @@ class LLMConfigService {
       const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/configs`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(configData)
+        body: JSON.stringify(configData),
       })
 
       if (!response.ok) {
@@ -272,7 +291,7 @@ class LLMConfigService {
 
       // 解密API密钥
       if (savedConfig && savedConfig.api_key_encrypted) {
-        (savedConfig as any).api_key_decrypted = this.decryptApiKey(savedConfig.api_key_encrypted)
+        ;(savedConfig as any).api_key_decrypted = this.decryptApiKey(savedConfig.api_key_encrypted)
       }
 
       return savedConfig
@@ -283,22 +302,52 @@ class LLMConfigService {
   }
 
   /**
+   * 使用后端 env 中的真实 endpoint/key 测试连接
+   */
+  async testConfig(input: LLMConnectionTestInput): Promise<{
+    provider_code: string
+    model: string
+    api_endpoint: string
+    content_preview: string
+    stats: Record<string, unknown>
+  }> {
+    const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/test`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    })
+
+    const result = await response.json()
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || result.message || `HTTP ${response.status}`)
+    }
+    return result.data
+  }
+
+  /**
    * 用户级：获取 LLM 解析优化偏好（指针模式/摘要长度）
    */
-  async getUserPointerPrefs(userId?: string): Promise<{ pointerMode: boolean; summaryMaxLength: number } | null> {
+  async getUserPointerPrefs(
+    userId?: string,
+  ): Promise<{ pointerMode: boolean; summaryMaxLength: number } | null> {
     const cfg = await this.getConfigByName('llm_pointer_prefs', userId)
     if (!cfg) return null
     const cp = cfg.custom_parameters || {}
     return {
       pointerMode: !!cp.pointer_mode,
-      summaryMaxLength: Number(cp.summary_max_len ?? 80) || 0
+      summaryMaxLength: Number(cp.summary_max_len ?? 80) || 0,
     }
   }
 
   /**
    * 用户级：保存 LLM 解析优化偏好（指针模式/摘要长度）
    */
-  async saveUserPointerPrefs(prefs: { pointerMode: boolean; summaryMaxLength: number }, userId?: string) {
+  async saveUserPointerPrefs(
+    prefs: { pointerMode: boolean; summaryMaxLength: number },
+    userId?: string,
+  ) {
     const existing = await this.getConfigByName('llm_pointer_prefs', userId)
     const payload: {
       user_id: string | null
@@ -317,10 +366,10 @@ class LLMConfigService {
       custom_parameters: {
         pointer_mode: !!prefs.pointerMode,
         summary_max_len: Number(prefs.summaryMaxLength) || 0,
-        version: 1
+        version: 1,
       },
       is_active: true,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     }
 
     if (existing) {
@@ -346,10 +395,7 @@ class LLMConfigService {
    * 删除LLM配置
    */
   async deleteConfig(configId: string): Promise<void> {
-    const { error } = await supabase
-      .from('user_llm_configs')
-      .delete()
-      .eq('id', configId)
+    const { error } = await supabase.from('user_llm_configs').delete().eq('id', configId)
 
     if (error) {
       console.error('删除LLM配置失败:', error)

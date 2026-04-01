@@ -154,7 +154,8 @@
                 LLM 配置
               </h2>
               <p class="ds-section-desc">
-                配置大语言模型的 API 服务商、密钥和运行参数。支持阿里通义千问、OpenAI 等多家服务商。
+                配置大语言模型的厂商、模型和运行参数。当前支持阿里云百炼、SiliconFlow 和内部
+                Ollama，敏感凭据统一由后端 env 托管。
               </p>
             </div>
             <div class="ds-split__main">

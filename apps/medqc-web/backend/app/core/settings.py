@@ -82,6 +82,10 @@ class Settings(BaseSettings):
             "SICHUAN_ALLOW_MOCK_WHEN_UNCONFIGURED",
         ),
     )
+    SILICONFLOW_API_ENDPOINT: str = "https://api.siliconflow.cn/v1"
+    OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"
+    OLLAMA_API_KEY: Optional[str] = None
+    OLLAMA_MODEL: str = "qwen2.5:7b-instruct"
 
     # Backward compatibility aliases (deprecated, use LLM_* instead)
     @property

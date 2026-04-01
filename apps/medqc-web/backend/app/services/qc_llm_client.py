@@ -75,7 +75,7 @@ class SichuanQCLLMClient:
         self.call_count += 1
         api_start = time.time()
 
-        if not (self.api_endpoint and self.api_key):
+        if not self.api_endpoint:
             if self.allow_mock_when_unconfigured:
                 api_time = time.time() - api_start
                 self.success_count += 1
@@ -88,14 +88,12 @@ class SichuanQCLLMClient:
 
             self.error_count += 1
             raise RuntimeError(
-                "LLM is not configured. Set LLM_API_ENDPOINT / LLM_API_KEY / LLM_MODEL. "
-                "Legacy SICHUAN_* variables are still supported via alias."
+                "LLM is not configured. Set endpoint/model in env or database config."
             )
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         max_tokens = self._resolve_max_tokens(prompt)
         payload = {
             "model": self.model,

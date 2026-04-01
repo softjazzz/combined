@@ -19,28 +19,6 @@ const LLM_PROVIDERS = [
     sort_order: 1,
   },
   {
-    provider_code: 'baidu',
-    provider_name: '百度文心一言',
-    base_endpoint: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop',
-    request_format: 'baidu',
-    requires_api_key: true,
-    description: '百度自研大模型，中文理解能力强',
-    features: ['中文优化', '企业级服务', '数据安全'],
-    is_active: true,
-    sort_order: 2,
-  },
-  {
-    provider_code: 'openai',
-    provider_name: 'OpenAI',
-    base_endpoint: 'https://api.openai.com/v1',
-    request_format: 'openai',
-    requires_api_key: true,
-    description: '业界领先的大语言模型服务',
-    features: ['全球领先', '多语言', '强大推理'],
-    is_active: true,
-    sort_order: 3,
-  },
-  {
     provider_code: 'siliconflow',
     provider_name: '硅基流动 SiliconFlow',
     base_endpoint: 'https://api.siliconflow.cn/v1',
@@ -49,18 +27,18 @@ const LLM_PROVIDERS = [
     description: '兼容 OpenAI 协议的 MaaS 平台，适合补充多种开源模型调用',
     features: ['OpenAI兼容', '开源模型', '推理模型', '中文支持'],
     is_active: true,
-    sort_order: 4,
+    sort_order: 2,
   },
   {
-    provider_code: 'mock',
-    provider_name: '模拟服务',
-    base_endpoint: 'http://localhost:8080/mock',
+    provider_code: 'ollama',
+    provider_name: '内部 Ollama',
+    base_endpoint: 'http://127.0.0.1:11434/v1',
     request_format: 'openai',
     requires_api_key: false,
-    description: '用于开发和测试的模拟服务',
-    features: ['开发测试', '无需API密钥'],
+    description: '内网 Ollama 服务，适合私有化模型接入',
+    features: ['内网部署', '无需外网', '模型可控'],
     is_active: true,
-    sort_order: 99,
+    sort_order: 3,
   },
 ]
 
@@ -92,34 +70,6 @@ const LLM_MODELS = [
     is_default: false, // 非默认
     is_active: true,
     sort_order: 2,
-  },
-  // 百度模型
-  {
-    provider_code: 'baidu',
-    model_code: 'ernie-4.0-8k',
-    model_name: 'ERNIE-4.0-8K (文心一言4.0)',
-    description: '百度最新一代大模型，中文能力突出',
-    context_length: 8192,
-    pricing_tier: 'high',
-    capabilities: ['中文优化', '知识问答', '创意写作'],
-    parameters: { temperature: 0.7, max_tokens: 4096 },
-    is_default: true, // 百度的默认模型
-    is_active: true,
-    sort_order: 1,
-  },
-  // OpenAI模型
-  {
-    provider_code: 'openai',
-    model_code: 'gpt-4o-mini',
-    model_name: 'GPT-4o Mini',
-    description: '轻量级高性能模型，成本更低',
-    context_length: 128000,
-    pricing_tier: 'medium',
-    capabilities: ['高性价比', '快速响应', '多用途'],
-    parameters: { temperature: 0.7, max_tokens: 16384 },
-    is_default: true, // OpenAI的默认模型
-    is_active: true,
-    sort_order: 1,
   },
   // SiliconFlow 模型
   {
@@ -161,17 +111,17 @@ const LLM_MODELS = [
     is_active: true,
     sort_order: 3,
   },
-  // 模拟模型
+  // Ollama 模型
   {
-    provider_code: 'mock',
-    model_code: 'mock-model',
-    model_name: 'Mock Model (模拟模型)',
-    description: '用于开发测试的模拟模型',
-    context_length: 4096,
+    provider_code: 'ollama',
+    model_code: 'qwen2.5:7b-instruct',
+    model_name: 'qwen2.5:7b-instruct',
+    description: '内部 Ollama 默认模型',
+    context_length: 32768,
     pricing_tier: 'low',
-    capabilities: ['测试专用'],
-    parameters: { temperature: 0.7, max_tokens: 2048 },
-    is_default: true, // 模拟的默认模型
+    capabilities: ['内网部署', '私有化', '基础推理'],
+    parameters: { temperature: 0.7, max_tokens: 4096 },
+    is_default: true,
     is_active: true,
     sort_order: 1,
   },

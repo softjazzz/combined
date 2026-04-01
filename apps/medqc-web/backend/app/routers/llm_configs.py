@@ -2,12 +2,15 @@ from typing import Dict, Any, List, Optional
 import logging
 from fastapi import APIRouter, HTTPException, Query, Request
 from datetime import datetime, timezone
-import base64
 
 from ..storage.memory import llm_configs
 from ..core.supabase_client import get_supabase, async_execute
-from ..core.settings import get_settings
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
+from ..services.llm_config_loader import (
+    SUPPORTED_PROVIDER_CODES,
+    build_provider_runtime_config,
+)
+from ..services.qc_llm_client import SichuanQCLLMClient
 
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
@@ -27,20 +30,20 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
             "base_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "request_format": "openai",
         }
-    if code in ("openai",):
-        return {
-            "id": "openai",
-            "provider_code": "openai",
-            "provider_name": "OpenAI",
-            "base_endpoint": "https://api.openai.com/v1",
-            "request_format": "openai",
-        }
     if code in ("siliconflow",):
         return {
             "id": "siliconflow",
             "provider_code": "siliconflow",
             "provider_name": "SiliconFlow",
             "base_endpoint": "https://api.siliconflow.cn/v1",
+            "request_format": "openai",
+        }
+    if code in ("ollama", "local"):
+        return {
+            "id": "ollama",
+            "provider_code": "ollama",
+            "provider_name": "内部 Ollama",
+            "base_endpoint": "http://127.0.0.1:11434/v1",
             "request_format": "openai",
         }
     # fallback custom
@@ -124,6 +127,14 @@ def _lookup_provider_and_model_ids(supabase, provider_code: str, model_code: str
     return {"provider_id": provider_id, "model_id": model_id}
 
 
+def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str]:
+    provider_code = str(payload.get("provider_code") or payload.get("provider_id") or "alibaba").strip().lower()
+    if provider_code not in SUPPORTED_PROVIDER_CODES:
+        provider_code = "alibaba"
+    model_code = str(payload.get("model_code") or payload.get("model_id") or "").strip()
+    return provider_code, model_code
+
+
 @router.get("/configs")
 async def list_configs(request: Request, user_id: Optional[str] = Query(default=None)):
     supabase = get_supabase()
@@ -188,15 +199,14 @@ async def get_config_by_name(request: Request, config_name: str, user_id: Option
 @router.post("/configs")
 async def save_config(request: Request, payload: Dict[str, Any]):
     supabase = get_supabase()
-    provider_code = payload.get("provider_code") or payload.get("provider_id") or "alibaba"
-    model_code = payload.get("model_code") or payload.get("model_id") or "qwen2.5-14b-instruct"
+    provider_code, model_code = _extract_provider_and_model_codes(payload)
+    if not model_code:
+        runtime = build_provider_runtime_config(provider_code)
+        model_code = str(runtime.get("model") or "").strip()
     cfg_name = payload.get("config_name") or "custom"
 
     provider = _resolve_provider(provider_code)
     model = _resolve_model(model_code)
-
-    api_key_plain = payload.get("api_key") or ""
-    api_key_encrypted = base64.b64encode(api_key_plain.encode("utf-8")).decode("utf-8") if api_key_plain else None
 
     now = _now_iso()
 
@@ -214,8 +224,8 @@ async def save_config(request: Request, payload: Dict[str, Any]):
             "model_code": model["model_code"],
             "provider": provider,
             "model": model,
-            "api_key_encrypted": api_key_encrypted,
-            "custom_endpoint": payload.get("custom_endpoint") or provider.get("base_endpoint", ""),
+            "api_key_encrypted": None,
+            "custom_endpoint": None,
             "custom_parameters": payload.get("custom_parameters") or {},
             "is_active": True if payload.get("is_active") is None else bool(payload.get("is_active")),
             "updated_at": now,
@@ -242,8 +252,8 @@ async def save_config(request: Request, payload: Dict[str, Any]):
         # Only include UUID foreign keys when resolved; leave None otherwise
         "provider_id": resolved_ids.get("provider_id"),
         "model_id": resolved_ids.get("model_id"),
-        "api_key_encrypted": api_key_encrypted,
-        "custom_endpoint": payload.get("custom_endpoint") or provider.get("base_endpoint", ""),
+        "api_key_encrypted": None,
+        "custom_endpoint": None,
         "custom_parameters": payload.get("custom_parameters") or {},
         "is_active": True if payload.get("is_active") is None else bool(payload.get("is_active")),
         "updated_at": now,
@@ -298,3 +308,41 @@ async def save_config(request: Request, payload: Dict[str, Any]):
     except Exception as exc:
         logging.getLogger(__name__).warning("Supabase save_config 失败，回退内存配置: %s", exc)
         return _save_in_memory()
+
+
+@router.post("/test")
+async def test_config(request: Request, payload: Dict[str, Any]):
+    provider_code, model_code = _extract_provider_and_model_codes(payload)
+    runtime = build_provider_runtime_config(
+        provider_code=provider_code,
+        model_code=model_code or None,
+        custom_parameters=payload.get("custom_parameters") or {},
+    )
+    client = SichuanQCLLMClient(
+        {
+            **runtime,
+            "source": "test",
+        }
+    )
+
+    try:
+        result = await client.generate("请只返回“pong”，不要输出其他内容。")
+        content = str(
+            ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        ).strip()
+        return success_response(
+            data={
+                "provider_code": provider_code,
+                "model": client.model,
+                "api_endpoint": client.api_endpoint,
+                "content_preview": content[:120],
+                "stats": client.stats(),
+            },
+            message="连接测试成功",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=StatusCode.INTERNAL_SERVER_ERROR,
+            detail=f"连接测试失败: {exc}",
+        )
