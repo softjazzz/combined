@@ -34,6 +34,8 @@ export interface RuleStatistics {
   }
 }
 
+const RULE_CODE_PATTERN = /^(?:\d+(?:\.\d+)*|(?:SC|LXE|LX)-\d+)$/i
+
 export class RulesService {
   /**
    * 获取所有规则
@@ -295,8 +297,8 @@ export class RulesService {
     const errors: string[] = []
 
     // 规则编码格式验证
-    if (rule.rule_code && !/^\d+(\.\d+)*$/.test(rule.rule_code)) {
-      errors.push('规则编码格式不正确，应为数字和点的组合，如: 1.1.1')
+    if (rule.rule_code && !RULE_CODE_PATTERN.test(rule.rule_code)) {
+      errors.push('规则编码格式不正确，应为数字编码或 SC-/LX-/LXE- 前缀编码')
     }
 
     // 名称长度验证

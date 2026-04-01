@@ -139,6 +139,13 @@
         <!-- 右侧：操作按钮 -->
         <div class="flex items-center gap-3">
           <a-button
+            class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
+            @click="openCustomQCExperience()"
+          >
+            自定义质控体验
+          </a-button>
+
+          <a-button
             type="primary"
             class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
             @click="handleBatchArchive"
@@ -277,6 +284,14 @@
                 </a-button>
                 <a-button
                   size="small"
+                  class="!h-7 !rounded-full !border-violet-200/90 !text-violet-700 !px-2.5 !text-xs"
+                  :disabled="!getRecordIdForJump(record)"
+                  @click="jumpToWorkstation(record, 'qc_coding')"
+                >
+                  编码质控
+                </a-button>
+                <a-button
+                  size="small"
                   class="!h-7 !rounded-full !border-emerald-200/90 !text-emerald-700 !px-2.5 !text-xs"
                   :disabled="!getRecordIdForJump(record)"
                   @click="jumpToWorkstation(record, 'qc_frontpage')"
@@ -290,6 +305,14 @@
                   @click="jumpToWorkstation(record, 'qc_settlement')"
                 >
                   结算质控
+                </a-button>
+                <a-button
+                  size="small"
+                  class="!h-7 !rounded-full !border-amber-200/90 !text-amber-700 !px-2.5 !text-xs"
+                  :disabled="!getRecordIdForJump(record)"
+                  @click="openCustomQCExperience(record)"
+                >
+                  自定义质控
                 </a-button>
               </div>
             </template>
@@ -694,11 +717,13 @@ const getRecordIdForJump = (record: any): string => {
 
 const resolveStageByAction = (action: WorkstationLaunchAction): WorkflowStageKey => {
   if (action === 'generate_frontpage') return 'frontpage_generate'
+  if (action === 'qc_coding') return 'coding_qc'
   if (action === 'qc_frontpage') return 'frontpage_qc'
   if (action === 'qc_settlement') return 'settlement_qc'
   const stageFromQuery = String(route.query.stage || '').trim()
   if (
     stageFromQuery === 'frontpage_generate' ||
+    stageFromQuery === 'coding_qc' ||
     stageFromQuery === 'frontpage_qc' ||
     stageFromQuery === 'settlement_qc'
   ) {
@@ -725,6 +750,26 @@ const jumpToWorkstation = (record: any, action: WorkstationLaunchAction) => {
   router.push({ path: '/workstation-v4', query })
 }
 
+const openCustomQCExperience = (record?: any) => {
+  const selectedRecords = record
+    ? [getRecordIdForJump(record)]
+    : records.value
+        .filter((item) => selectedRowKeys.value.includes(item.id))
+        .map((item) => item.record_id)
+        .filter(Boolean)
+
+  const query: Record<string, string> = { scene: 'final' }
+  if (selectedDepartment.value) query.department = selectedDepartment.value
+  if (dateRange.value?.[0] && dateRange.value?.[1]) {
+    query.start_date = dateRange.value[0].format('YYYY-MM-DD')
+    query.end_date = dateRange.value[1].format('YYYY-MM-DD')
+  }
+  if (selectedRecords.length > 0) {
+    query.record_ids = selectedRecords.join(',')
+  }
+  router.push({ path: '/workstation-v4/custom-qc-experience', query })
+}
+
 const handleQCReport = (record: AdminRecordItem) => {
   // TODO: 导航到质控报告页
   message.info(`查看质控报告: ${record.record_id}`)
@@ -744,6 +789,7 @@ const handleTableChange = (pag: any) => {
 const stageHint = computed(() => {
   const stage = String(route.query.stage || '').trim()
   if (stage === 'frontpage_generate') return '当前队列：待生成首页（结算视图）'
+  if (stage === 'coding_qc') return '当前队列：待编码质控（结算视图）'
   if (stage === 'frontpage_qc') return '当前队列：待首页质控（结算视图）'
   if (stage === 'settlement_qc') return '当前队列：待结算清单质控'
   return ''
@@ -751,6 +797,10 @@ const stageHint = computed(() => {
 
 const applyStagePreset = (stage: string) => {
   if (stage === 'frontpage_generate') {
+    selectedQCStatus.value = 'pending'
+    return
+  }
+  if (stage === 'coding_qc') {
     selectedQCStatus.value = 'pending'
     return
   }

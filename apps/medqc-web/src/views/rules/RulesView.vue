@@ -1154,6 +1154,8 @@ const formatRuleCode = (prefix: string, number: number) => {
   return `${normalizedPrefix}${String(number).padStart(3, '0')}`
 }
 
+const RULE_CODE_PATTERN = /^(?:\d+(?:\.\d+)*|(?:SC|LXE|LX)-\d+)$/i
+
 const extractCodeInfo = (code: string) => {
   const match = code.trim().match(/^([A-Za-z]+-?)(\d{1,})$/)
   if (match) {
@@ -1201,9 +1203,23 @@ const generateNextRuleCode = (category?: DocumentCategory | '') => {
   return formatRuleCode('SC-', 1)
 }
 
+const generateNextCustomRuleCode = () => {
+  let maxNumber = 0
+  ;[...rules.value, ...mockRules].forEach((rule) => {
+    const code = String(rule.rule_code || '')
+      .trim()
+      .toUpperCase()
+    const match = code.match(/^LXE-(\d{1,})$/)
+    if (match) {
+      maxNumber = Math.max(maxNumber, Number(match[1]))
+    }
+  })
+  return `LXE-${String(maxNumber + 1).padStart(4, '0')}`
+}
+
 const assignRuleCodeForCustomRule = () => {
   if (!isCustomRule.value) return
-  const nextCode = generateNextRuleCode(formData.primary_document_category)
+  const nextCode = generateNextCustomRuleCode()
   formData.rule_code = nextCode
 }
 
@@ -1226,7 +1242,10 @@ watch(rules, () => {
 const formRules = {
   rule_code: [
     { required: true, message: '请输入规则编码' },
-    { pattern: /^\d+(\.\d+)*$/, message: '规则编码格式不正确，如: 1.1.1' },
+    {
+      pattern: RULE_CODE_PATTERN,
+      message: '规则编码格式不正确，如 1.1.1、SC-001、LX-001、LXE-0001',
+    },
   ],
   name: [
     { required: true, message: '请输入规则名称' },

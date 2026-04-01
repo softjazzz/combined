@@ -121,11 +121,9 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'workstation/qc-overview',
-        name: 'QCOverview',
-        component: () => import('@/views/workstation/QCOverviewView.vue'),
+        redirect: '/workstation-v4/qc-overview',
         meta: {
-          title: '质控消息概览',
-          hidden: true,
+          title: '问题集中点',
           permission: ['admin', 'qc_manager'],
         },
       },
@@ -964,6 +962,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'custom-qc-experience',
+        name: 'WorkstationV4CustomQCExperience',
+        component: () => import('@/views/workstation-v2/CustomQCExperienceView.vue'),
+        meta: { title: '自定义质控点体验', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'icd',
         name: 'WorkstationV4ICD',
         component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
@@ -1029,6 +1033,12 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Rules',
         component: () => import('@/views/workstation-v2/WorkstationRulesView.vue'),
         meta: { title: '质控规则管理' },
+      },
+      {
+        path: 'qc-overview',
+        name: 'WorkstationV4QCOverview',
+        component: () => import('@/views/workstation/QCOverviewView.vue'),
+        meta: { title: '问题集中点', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'system-config',

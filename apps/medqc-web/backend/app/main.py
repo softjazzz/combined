@@ -56,6 +56,8 @@ from .routers import notifications as notifications_router
 from .routers import settlement as settlement_router
 from .routers import scoring_config as scoring_config_router
 from .routers import sync as sync_router
+from .routers import workstation as workstation_router
+from .routers import custom_qc as custom_qc_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -293,6 +295,10 @@ def create_app() -> FastAPI:
     app.include_router(scoring_config_router.router)
     # 数据同步（PG 存储过程 + MongoDB 增量同步）
     app.include_router(sync_router.router)
+    # Workstation V4 聚合工作台
+    app.include_router(workstation_router.router)
+    # 自定义质控点体验中心
+    app.include_router(custom_qc_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
