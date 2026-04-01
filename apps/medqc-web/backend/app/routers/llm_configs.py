@@ -35,6 +35,14 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
             "base_endpoint": "https://api.openai.com/v1",
             "request_format": "openai",
         }
+    if code in ("siliconflow",):
+        return {
+            "id": "siliconflow",
+            "provider_code": "siliconflow",
+            "provider_name": "SiliconFlow",
+            "base_endpoint": "https://api.siliconflow.cn/v1",
+            "request_format": "openai",
+        }
     # fallback custom
     return {
         "id": code or "custom",
@@ -53,6 +61,27 @@ def _resolve_model(model_code: str) -> Dict[str, Any]:
             "model_code": "qwen2.5-14b-instruct",
             "model_name": "Qwen2.5-14B-Instruct",
             "description": "14B参数指令优化模型",
+        }
+    if code in ("qwen/qwen3.5-27b",):
+        return {
+            "id": "Qwen/Qwen3.5-27B",
+            "model_code": "Qwen/Qwen3.5-27B",
+            "model_name": "Qwen/Qwen3.5-27B",
+            "description": "Qwen3.5 27B 模型",
+        }
+    if code in ("qwen/qwen3.5-9b",):
+        return {
+            "id": "Qwen/Qwen3.5-9B",
+            "model_code": "Qwen/Qwen3.5-9B",
+            "model_name": "Qwen/Qwen3.5-9B",
+            "description": "Qwen3.5 9B 模型",
+        }
+    if code in ("qwen/qwen3.5-4b",):
+        return {
+            "id": "Qwen/Qwen3.5-4B",
+            "model_code": "Qwen/Qwen3.5-4B",
+            "model_name": "Qwen/Qwen3.5-4B",
+            "description": "Qwen3.5 4B 模型",
         }
     return {
         "id": code or "unknown",

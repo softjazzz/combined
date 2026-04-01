@@ -24,6 +24,7 @@ async def providers(request: Request):
     fallback_providers = [
         {"id": "openai", "name": "OpenAI"},
         {"id": "alibaba", "name": "Aliyun DashScope", "provider_code": "alibaba"},
+        {"id": "siliconflow", "name": "SiliconFlow", "provider_code": "siliconflow"},
         {"id": "deepseek", "name": "DeepSeek"},
     ]
     return success_response(
@@ -64,6 +65,24 @@ async def models(request: Request, provider_id: str | None = Query(default=None)
             "id": "qwen3-30b-a3b-instruct-2507",
             "model_code": "qwen3-30b-a3b-instruct-2507",
             "model_name": "Qwen3-30B-A3B Instruct (2507)"
+        },
+        {
+            "provider": "siliconflow",
+            "id": "Qwen/Qwen3.5-27B",
+            "model_code": "Qwen/Qwen3.5-27B",
+            "model_name": "Qwen/Qwen3.5-27B"
+        },
+        {
+            "provider": "siliconflow",
+            "id": "Qwen/Qwen3.5-9B",
+            "model_code": "Qwen/Qwen3.5-9B",
+            "model_name": "Qwen/Qwen3.5-9B"
+        },
+        {
+            "provider": "siliconflow",
+            "id": "Qwen/Qwen3.5-4B",
+            "model_code": "Qwen/Qwen3.5-4B",
+            "model_name": "Qwen/Qwen3.5-4B"
         },
         {
             "provider": "openai",

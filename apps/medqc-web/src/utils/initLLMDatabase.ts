@@ -16,7 +16,7 @@ const LLM_PROVIDERS = [
     description: '阿里云大模型服务，企业级可靠性，兼容OpenAI格式',
     features: ['企业级', '高开发', '多模态', '中文优化'],
     is_active: true,
-    sort_order: 1
+    sort_order: 1,
   },
   {
     provider_code: 'baidu',
@@ -27,7 +27,7 @@ const LLM_PROVIDERS = [
     description: '百度自研大模型，中文理解能力强',
     features: ['中文优化', '企业级服务', '数据安全'],
     is_active: true,
-    sort_order: 2
+    sort_order: 2,
   },
   {
     provider_code: 'openai',
@@ -38,7 +38,18 @@ const LLM_PROVIDERS = [
     description: '业界领先的大语言模型服务',
     features: ['全球领先', '多语言', '强大推理'],
     is_active: true,
-    sort_order: 3
+    sort_order: 3,
+  },
+  {
+    provider_code: 'siliconflow',
+    provider_name: '硅基流动 SiliconFlow',
+    base_endpoint: 'https://api.siliconflow.cn/v1',
+    request_format: 'openai',
+    requires_api_key: true,
+    description: '兼容 OpenAI 协议的 MaaS 平台，适合补充多种开源模型调用',
+    features: ['OpenAI兼容', '开源模型', '推理模型', '中文支持'],
+    is_active: true,
+    sort_order: 4,
   },
   {
     provider_code: 'mock',
@@ -49,8 +60,8 @@ const LLM_PROVIDERS = [
     description: '用于开发和测试的模拟服务',
     features: ['开发测试', '无需API密钥'],
     is_active: true,
-    sort_order: 99
-  }
+    sort_order: 99,
+  },
 ]
 
 // LLM模型数据
@@ -67,7 +78,7 @@ const LLM_MODELS = [
     parameters: { temperature: 0.7, max_tokens: 8192 },
     is_default: true, // 阿里云的默认模型
     is_active: true,
-    sort_order: 1
+    sort_order: 1,
   },
   {
     provider_code: 'alibaba',
@@ -80,7 +91,7 @@ const LLM_MODELS = [
     parameters: { temperature: 0.7, max_tokens: 4096 },
     is_default: false, // 非默认
     is_active: true,
-    sort_order: 2
+    sort_order: 2,
   },
   // 百度模型
   {
@@ -94,7 +105,7 @@ const LLM_MODELS = [
     parameters: { temperature: 0.7, max_tokens: 4096 },
     is_default: true, // 百度的默认模型
     is_active: true,
-    sort_order: 1
+    sort_order: 1,
   },
   // OpenAI模型
   {
@@ -108,7 +119,47 @@ const LLM_MODELS = [
     parameters: { temperature: 0.7, max_tokens: 16384 },
     is_default: true, // OpenAI的默认模型
     is_active: true,
-    sort_order: 1
+    sort_order: 1,
+  },
+  // SiliconFlow 模型
+  {
+    provider_code: 'siliconflow',
+    model_code: 'Qwen/Qwen3.5-27B',
+    model_name: 'Qwen/Qwen3.5-27B',
+    description: 'Qwen3.5 27B 模型，适合更复杂的生成与推理任务',
+    context_length: 32768,
+    pricing_tier: 'medium',
+    capabilities: ['文本生成', '代码生成', '复杂推理', '中文优化'],
+    parameters: { temperature: 0.7, max_tokens: 8192 },
+    is_default: true,
+    is_active: true,
+    sort_order: 1,
+  },
+  {
+    provider_code: 'siliconflow',
+    model_code: 'Qwen/Qwen3.5-9B',
+    model_name: 'Qwen/Qwen3.5-9B',
+    description: 'Qwen3.5 9B 模型，平衡速度、成本与质量',
+    context_length: 32768,
+    pricing_tier: 'low',
+    capabilities: ['文本生成', '日常推理', '代码生成', '中文优化'],
+    parameters: { temperature: 0.7, max_tokens: 8192 },
+    is_default: false,
+    is_active: true,
+    sort_order: 2,
+  },
+  {
+    provider_code: 'siliconflow',
+    model_code: 'Qwen/Qwen3.5-4B',
+    model_name: 'Qwen/Qwen3.5-4B',
+    description: 'Qwen3.5 4B 轻量模型，适合低成本快速调用',
+    context_length: 32768,
+    pricing_tier: 'low',
+    capabilities: ['快速响应', '轻量生成', '基础代码生成', '中文支持'],
+    parameters: { temperature: 0.7, max_tokens: 4096 },
+    is_default: false,
+    is_active: true,
+    sort_order: 3,
   },
   // 模拟模型
   {
@@ -122,8 +173,8 @@ const LLM_MODELS = [
     parameters: { temperature: 0.7, max_tokens: 2048 },
     is_default: true, // 模拟的默认模型
     is_active: true,
-    sort_order: 1
-  }
+    sort_order: 1,
+  },
 ]
 
 /**
@@ -131,21 +182,19 @@ const LLM_MODELS = [
  */
 export async function initLLMProviders(): Promise<void> {
   console.log('开始初始化LLM提供商数据...')
-  
+
   for (const provider of LLM_PROVIDERS) {
-    const { error } = await supabase
-      .from('llm_api_providers')
-      .upsert(provider, {
-        onConflict: 'provider_code',
-        ignoreDuplicates: false
-      })
-    
+    const { error } = await supabase.from('llm_api_providers').upsert(provider, {
+      onConflict: 'provider_code',
+      ignoreDuplicates: false,
+    })
+
     if (error) {
       console.error(`插入提供商 ${provider.provider_code} 失败:`, error)
       throw error
     }
   }
-  
+
   console.log(`成功初始化 ${LLM_PROVIDERS.length} 个LLM提供商`)
 }
 
@@ -154,19 +203,19 @@ export async function initLLMProviders(): Promise<void> {
  */
 export async function initLLMModels(): Promise<void> {
   console.log('开始初始化LLM模型数据...')
-  
+
   // 首先获取所有提供商的ID映射
   const { data: providers, error: providerError } = await supabase
     .from('llm_api_providers')
     .select('id, provider_code')
-  
+
   if (providerError) {
     console.error('获取提供商数据失败:', providerError)
     throw providerError
   }
-  
-  const providerMap = new Map(providers?.map(p => [p.provider_code, p.id]) || [])
-  
+
+  const providerMap = new Map(providers?.map((p) => [p.provider_code, p.id]) || [])
+
   // 插入模型数据
   for (const model of LLM_MODELS) {
     const providerId = providerMap.get(model.provider_code)
@@ -194,7 +243,7 @@ export async function initLLMModels(): Promise<void> {
       parameters: model.parameters,
       is_default: model.is_default,
       is_active: model.is_active,
-      sort_order: model.sort_order
+      sort_order: model.sort_order,
     }
 
     let error
@@ -216,9 +265,7 @@ export async function initLLMModels(): Promise<void> {
       }
 
       // 插入新模型
-      const { error: insertError } = await supabase
-        .from('llm_models')
-        .insert(modelData)
+      const { error: insertError } = await supabase.from('llm_models').insert(modelData)
       error = insertError
     }
 
@@ -227,7 +274,7 @@ export async function initLLMModels(): Promise<void> {
       throw error
     }
   }
-  
+
   console.log(`成功初始化 ${LLM_MODELS.length} 个LLM模型`)
 }
 
@@ -236,7 +283,7 @@ export async function initLLMModels(): Promise<void> {
  */
 export async function createDefaultConfig(): Promise<void> {
   console.log('创建默认配置...')
-  
+
   // 获取阿里通义提供商与 qwen-plus 模型，作为系统默认
   const { data: provider } = await supabase
     .from('llm_api_providers')
@@ -262,24 +309,25 @@ export async function createDefaultConfig(): Promise<void> {
   }
 
   // 创建默认配置（全局）
-  const { error } = await supabase
-    .from('user_llm_configs')
-    .upsert({
+  const { error } = await supabase.from('user_llm_configs').upsert(
+    {
       user_id: null, // 全局配置
       config_name: 'default',
       provider_id: provider.id,
       model_id: model.id,
-      is_active: true
-    }, {
+      is_active: true,
+    },
+    {
       onConflict: 'user_id,config_name',
-      ignoreDuplicates: false
-    })
-  
+      ignoreDuplicates: false,
+    },
+  )
+
   if (error) {
     console.error('创建默认配置失败:', error)
     throw error
   }
-  
+
   console.log('成功创建默认配置')
 }
 
