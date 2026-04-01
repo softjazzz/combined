@@ -36,8 +36,9 @@
           mode="inline"
           theme="dark"
           class="border-none px-3 space-y-1 bg-slate-900"
-          :open-keys="['workstation-sub', 'drg-sub', 'qc-rules-sub']"
+          :open-keys="openKeys"
           @click="handleMenuSelect"
+          @open-change="handleMenuOpenChange"
         >
           <!-- 工作台 -->
           <a-sub-menu
@@ -451,6 +452,7 @@ const authStore = useAuthStore()
 // 响应式数据
 const collapsed = ref(false)
 const selectedKeys = ref<string[]>([])
+const openKeys = ref<string[]>([])
 
 // 当前页面标题
 const currentPageTitle = computed(() => {
@@ -524,6 +526,10 @@ const handleMenuSelect = async ({ key }: MenuInfo) => {
   } else {
     await navigateTo(keyStr)
   }
+}
+
+const handleMenuOpenChange = (keys: string[]) => {
+  openKeys.value = keys
 }
 
 function goStageMenu(stage: 'frontpage_generate' | 'frontpage_qc' | 'settlement_qc') {
