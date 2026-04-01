@@ -82,8 +82,8 @@ class Settings(BaseSettings):
             "SICHUAN_ALLOW_MOCK_WHEN_UNCONFIGURED",
         ),
     )
-    LLM_DEFAULT_PROVIDER: str = "ollama"
-    LLM_VISIBLE_PROVIDERS: List[str] = ["ollama"]
+    LLM_DEFAULT_PROVIDER: Optional[str] = None
+    LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
     SILICONFLOW_API_ENDPOINT: str = "https://api.siliconflow.cn/v1"
     OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"
     OLLAMA_API_KEY: Optional[str] = None

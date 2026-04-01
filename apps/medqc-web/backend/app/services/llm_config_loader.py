@@ -5,6 +5,7 @@ LLM 配置加载服务
 """
 from typing import Dict, Any, Optional
 import logging
+import os
 
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
@@ -17,19 +18,28 @@ SUPPORTED_PROVIDER_CODES = ("alibaba", "siliconflow", "ollama")
 def get_enabled_provider_codes() -> tuple[str, ...]:
     """返回当前环境允许暴露和使用的 provider 列表。"""
     settings = get_settings()
-    visible = tuple(
-        code for code in settings.LLM_VISIBLE_PROVIDERS if code in SUPPORTED_PROVIDER_CODES
-    )
-    return visible or ("ollama",)
+    visible = tuple(code for code in settings.LLM_VISIBLE_PROVIDERS if code in SUPPORTED_PROVIDER_CODES)
+    if visible:
+        return visible
+
+    env_name = str(settings.ENV or os.getenv("ENV") or "development").strip().lower()
+    if env_name == "production":
+        return ("ollama",)
+    return SUPPORTED_PROVIDER_CODES
 
 
 def get_default_provider_code() -> str:
     """返回当前环境默认 provider。"""
     settings = get_settings()
-    default_code = str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower()
     enabled = get_enabled_provider_codes()
+    default_code = str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower()
     if default_code in enabled:
         return default_code
+    env_name = str(settings.ENV or os.getenv("ENV") or "development").strip().lower()
+    if env_name == "production" and "ollama" in enabled:
+        return "ollama"
+    if "alibaba" in enabled:
+        return "alibaba"
     return enabled[0]
 
 
