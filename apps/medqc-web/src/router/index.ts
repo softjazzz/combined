@@ -1046,6 +1046,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '质控规则管理' },
       },
       {
+        path: 'rules/custom-workspace',
+        name: 'WorkstationV4CustomRuleWorkspace',
+        component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
+        meta: { title: '自定义规则工作台', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),

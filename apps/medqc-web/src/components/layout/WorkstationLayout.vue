@@ -56,17 +56,14 @@
               </template>
               <span>工作台首页</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/records/running">
+            <a-menu-item
+              v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+              key="/workstation-v4/qc-overview"
+            >
               <template #icon>
-                <FileSearchOutlined />
+                <AlertOutlined />
               </template>
-              <span>运行病历</span>
-            </a-menu-item>
-            <a-menu-item key="/workstation-v4/records/final">
-              <template #icon>
-                <SafetyCertificateOutlined />
-              </template>
-              <span>终末病历质控</span>
+              <span>问题集中点</span>
             </a-menu-item>
             <a-menu-item
               key="ws-stage-frontpage-generate"
@@ -75,7 +72,7 @@
               <template #icon>
                 <FileSearchOutlined />
               </template>
-              <span>待生成首页</span>
+              <span>生成首页</span>
             </a-menu-item>
             <a-menu-item
               key="ws-stage-frontpage-qc"
@@ -84,7 +81,7 @@
               <template #icon>
                 <SafetyCertificateOutlined />
               </template>
-              <span>待首页质控</span>
+              <span>首页质控</span>
             </a-menu-item>
             <a-menu-item
               key="ws-stage-settlement-qc"
@@ -93,7 +90,7 @@
               <template #icon>
                 <DollarOutlined />
               </template>
-              <span>待结算清单质控</span>
+              <span>结算清单质控</span>
             </a-menu-item>
           </a-sub-menu>
 
@@ -173,6 +170,12 @@
                 <AppstoreOutlined />
               </template>
               <span>泸县33条规则</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/rules/custom-workspace">
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
+              <span>自定义规则工作台</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/rules?tab=frontpage">
               <template #icon>
@@ -426,6 +429,7 @@ import {
   ClusterOutlined,
   FileSearchOutlined,
   DashboardOutlined,
+  AlertOutlined,
   DollarOutlined,
   BarChartOutlined,
   HomeOutlined,
@@ -453,6 +457,7 @@ const currentPageTitle = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
     '/workstation-v4': '工作台',
+    '/workstation-v4/qc-overview': '问题集中点',
     '/workstation-v4/icd': 'ICD 编码查询',
     '/workstation-v4/upload': '数据上传',
     '/workstation-v4/stats': '统计分析',
@@ -463,6 +468,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v4/grouper': '医保分组器',
     '/workstation-v4/data': '数据管理',
     '/workstation-v4/rules': '质控规则管理',
+    '/workstation-v4/rules/custom-workspace': '自定义规则工作台',
     '/workstation-v4/records/running': '运行病历',
     '/workstation-v4/records/final': '终末病历质控',
     '/workstation-v4/system-config': '系统配置',
