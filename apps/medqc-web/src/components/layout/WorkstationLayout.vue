@@ -203,28 +203,6 @@
             <span class="font-medium">数据上传</span>
           </a-menu-item>
 
-          <!-- 统计分析 -->
-          <a-menu-item
-            key="/workstation-v4/stats"
-            class="menu-item-base"
-          >
-            <template #icon>
-              <BarChartOutlined />
-            </template>
-            <span class="font-medium">统计分析</span>
-          </a-menu-item>
-
-          <!-- 数据管理 -->
-          <a-menu-item
-            key="/workstation-v4/data"
-            class="menu-item-base"
-          >
-            <template #icon>
-              <DatabaseOutlined />
-            </template>
-            <span class="font-medium">数据管理</span>
-          </a-menu-item>
-
           <!-- 系统配置 -->
           <a-menu-item
             key="/workstation-v4/system-config"
@@ -440,7 +418,6 @@ import {
   SettingOutlined,
   LogoutOutlined,
   MedicineBoxOutlined,
-  DatabaseOutlined,
   SafetyCertificateOutlined,
   ForkOutlined,
 } from '@ant-design/icons-vue'
