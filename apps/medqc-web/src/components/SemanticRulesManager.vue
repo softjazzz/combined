@@ -170,6 +170,13 @@
           <PlayCircleOutlined class="mr-1" />
           开始质控评估
         </button>
+        <button
+          class="modern-btn-primary-alt"
+          @click="openCustomWorkspace"
+        >
+          <AppstoreOutlined class="mr-1" />
+          自定义规则工作台
+        </button>
       </div>
     </section>
 
@@ -606,6 +613,7 @@
 <script setup lang="ts">
 import { ref, onMounted, h, computed, watch, reactive } from 'vue'
 import { message } from 'ant-design-vue'
+import { useRouter } from 'vue-router'
 import {
   ReloadOutlined,
   EyeOutlined,
@@ -626,6 +634,8 @@ import { getAccessToken } from '@/utils/auth-token'
 import type { User } from '@/types/auth'
 import { UserRole } from '@/types/auth'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
+
+const router = useRouter()
 
 // 接口定义
 interface SichuanQCRule {
@@ -923,6 +933,10 @@ const startQCWithRule = (rule: SichuanQCRule) => {
   switchExampleType('negative')
   showRuleTest.value = true
   testResult.value = null
+}
+
+const openCustomWorkspace = () => {
+  router.push('/dashboard/rules/custom-workspace')
 }
 
 const switchExampleType = (type: 'positive' | 'negative') => {
@@ -1523,6 +1537,25 @@ onMounted(async () => {
   background: linear-gradient(135deg, var(--accent-strong) 0%, #1f55c8 100%);
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(37, 99, 235, 0.34);
+}
+
+.modern-btn-primary-alt {
+  padding: 0.6rem 1.15rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #1f5de0 0%, #0f4ab8 100%);
+  color: white;
+  font-size: 0.86rem;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 8px 18px rgba(31, 93, 224, 0.28);
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+}
+
+.modern-btn-primary-alt:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(31, 93, 224, 0.34);
 }
 
 .table-shell {

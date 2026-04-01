@@ -12,6 +12,13 @@
       </div>
       <div class="flex items-center gap-3 mt-4 sm:mt-0">
         <button
+          class="group relative inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full shadow-lg hover:shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+          @click="openCustomWorkspace"
+        >
+          <AppstoreOutlined class="mr-2" />
+          自定义规则工作台
+        </button>
+        <button
           class="group relative inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-white transition-all duration-200 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full shadow-lg hover:shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
           @click="showAICreator = true"
         >
@@ -1851,6 +1858,10 @@ const reloadRulesSafely = async () => {
 // LLM 设置相关方法
 const showLLMSettings = () => {
   llmSettingsVisible.value = true
+}
+
+const openCustomWorkspace = () => {
+  router.push('/dashboard/rules/custom-workspace')
 }
 
 // 事件处理

@@ -230,6 +230,17 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'rules/custom-workspace',
+        name: 'CustomRuleWorkspace',
+        component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
+        meta: {
+          title: '自定义规则工作台',
+          icon: 'AppstoreOutlined',
+          permission: ['admin', 'qc_manager'],
+          hidden: true,
+        },
+      },
+      {
         path: 'rules/docs',
         name: 'RuleDocs',
         component: () => import('@/views/rules/RuleDocView.vue'),
