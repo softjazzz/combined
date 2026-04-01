@@ -1,5 +1,6 @@
-﻿from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, AliasChoices, Field, field_validator, model_validator
+from pydantic_settings.sources import DotEnvSettingsSource, EnvSettingsSource
 from typing import List, Optional
 import os
 import logging
@@ -7,6 +8,49 @@ import logging
 
 logger = logging.getLogger(__name__)
 _legacy_llm_env_warned = False
+
+
+LIST_LIKE_ENV_FIELDS = {
+    "CORS_ORIGINS",
+    "CORS_ALLOW_METHODS",
+    "CORS_ALLOW_HEADERS",
+    "LLM_VISIBLE_PROVIDERS",
+    "OUTBOUND_ALLOWLIST",
+}
+
+
+def _parse_list_like_env_value(value):
+    if isinstance(value, str):
+        txt = value.strip()
+        if not txt:
+            return []
+        if txt.startswith("[") and txt.endswith("]"):
+            try:
+                import json
+
+                arr = json.loads(txt)
+                if isinstance(arr, list):
+                    return [str(item).strip() for item in arr if str(item).strip()]
+            except Exception:
+                pass
+        return [item.strip() for item in txt.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return value
+
+
+class CsvFriendlyEnvSettingsSource(EnvSettingsSource):
+    def prepare_field_value(self, field_name, field, value, value_is_complex):
+        if field_name in LIST_LIKE_ENV_FIELDS and value is not None:
+            return _parse_list_like_env_value(value)
+        return super().prepare_field_value(field_name, field, value, value_is_complex)
+
+
+class CsvFriendlyDotEnvSettingsSource(DotEnvSettingsSource):
+    def prepare_field_value(self, field_name, field, value, value_is_complex):
+        if field_name in LIST_LIKE_ENV_FIELDS and value is not None:
+            return _parse_list_like_env_value(value)
+        return super().prepare_field_value(field_name, field, value, value_is_complex)
 
 
 class Settings(BaseSettings):
@@ -160,36 +204,56 @@ class Settings(BaseSettings):
             "allow_mock_when_unconfigured": self.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED,
         }
 
+    @classmethod
+    def _parse_list_like_env(cls, v):
+        return _parse_list_like_env_value(v)
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def split_origins(cls, v):
-        if isinstance(v, str):
-            txt = v.strip()
-            if txt.startswith("[") and txt.endswith("]"):
-                try:
-                    import json
-                    arr = json.loads(txt)
-                    if isinstance(arr, list):
-                        return [str(o).strip() for o in arr if str(o).strip()]
-                except Exception:
-                    pass
-            return [o.strip() for o in txt.split(",") if o.strip()]
-        return v
+        return cls._parse_list_like_env(v)
 
     @field_validator("LLM_VISIBLE_PROVIDERS", mode="before")
     @classmethod
     def split_visible_providers(cls, v):
-        if isinstance(v, str):
-            return [item.strip().lower() for item in v.split(",") if item.strip()]
-        if isinstance(v, list):
-            return [str(item).strip().lower() for item in v if str(item).strip()]
-        return v
+        parsed = cls._parse_list_like_env(v)
+        if isinstance(parsed, list):
+            return [item.lower() for item in parsed]
+        return parsed
+
+    @field_validator("OUTBOUND_ALLOWLIST", mode="before")
+    @classmethod
+    def split_outbound_allowlist(cls, v):
+        return cls._parse_list_like_env(v)
 
     class Config:
         # Only load backend-local .env to avoid picking up frontend Vite envs
         env_file = (".env",)
         env_file_encoding = "utf-8"
         extra = "ignore"
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            CsvFriendlyEnvSettingsSource(settings_cls),
+            CsvFriendlyDotEnvSettingsSource(
+                settings_cls,
+                env_file=dotenv_settings.env_file,
+                env_file_encoding=dotenv_settings.env_file_encoding,
+                case_sensitive=dotenv_settings.case_sensitive,
+                env_prefix=dotenv_settings.env_prefix,
+                env_nested_delimiter=dotenv_settings.env_nested_delimiter,
+            ),
+            file_secret_settings,
+        )
 
 
 def get_settings() -> Settings:
