@@ -6,6 +6,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
+from io import BytesIO, StringIO
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -31,6 +32,7 @@ from ..database.models.cdm import MedicalRecordFrontpage
 DEFAULT_DOCUMENT_TYPE = "病程记录"
 DEFAULT_COMPLEXITY = "中复杂度"
 DEFAULT_DEFECT_LEVEL = "一般缺陷"
+DEFAULT_BATCH_JOB_PAGE_SIZE = 10
 
 SEVERITY_TO_DEFECT_LEVEL = {
     "critical": "严重缺陷",
@@ -171,6 +173,46 @@ def _drafts_table() -> Table:
     return table
 
 
+@lru_cache(maxsize=1)
+def _batch_jobs_table() -> Table:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
+    metadata = MetaData()
+    schema = _draft_schema()
+    table = Table(
+        "custom_qc_batch_jobs",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("draft_id", sa.String(36), nullable=False, index=True),
+        sa.Column("rule_code", sa.String(32), nullable=False, index=True),
+        sa.Column("rule_name", sa.String(200), nullable=False),
+        sa.Column("scene", sa.String(20), nullable=False, default="final"),
+        sa.Column("scope", sa.String(20), nullable=False, default="final"),
+        sa.Column("status", sa.String(20), nullable=False, default="queued"),
+        sa.Column("filters_json", sa.Text, nullable=False, default="{}"),
+        sa.Column("record_ids_json", sa.Text, nullable=False, default="[]"),
+        sa.Column("summary_json", sa.Text),
+        sa.Column("items_json", sa.Text),
+        sa.Column("failed_records_json", sa.Text),
+        sa.Column("error_message", sa.Text),
+        sa.Column("created_by", sa.String(64), nullable=False, index=True),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+        sa.Column("started_at", sa.DateTime),
+        sa.Column("finished_at", sa.DateTime),
+        sa.Column("updated_at", sa.DateTime, nullable=False),
+        sa.Column("total_records", sa.Integer, nullable=False, default=0),
+        sa.Column("success_count", sa.Integer, nullable=False, default=0),
+        sa.Column("failed_count", sa.Integer, nullable=False, default=0),
+        sa.Column("issue_records", sa.Integer, nullable=False, default=0),
+        sa.Column("compliant_records", sa.Integer, nullable=False, default=0),
+        sa.Column("total_tokens", sa.Integer, nullable=False, default=0),
+        sa.Column("total_processing_time", sa.Float, nullable=False, default=0.0),
+        schema=schema,
+    )
+    metadata.create_all(bind=engine, checkfirst=True)
+    return table
+
+
 @lru_cache(maxsize=8)
 def _autoload_table(table_name: str, schemas: tuple[Optional[str], ...]) -> Table:
     if engine is None:
@@ -226,6 +268,41 @@ def _row_to_draft(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
+    filters = _safe_json_loads(row.get("filters_json"), {})
+    record_ids = _safe_json_loads(row.get("record_ids_json"), [])
+    summary = _safe_json_loads(row.get("summary_json"), None)
+    items = _safe_json_loads(row.get("items_json"), [])
+    failed_records = _safe_json_loads(row.get("failed_records_json"), [])
+    return {
+        "id": _safe_text(row.get("id")),
+        "draft_id": _safe_text(row.get("draft_id")),
+        "rule_code": _safe_text(row.get("rule_code")),
+        "rule_name": _safe_text(row.get("rule_name")),
+        "scene": _safe_text(row.get("scene"), "final"),
+        "scope": _safe_text(row.get("scope"), "final"),
+        "status": _safe_text(row.get("status"), "queued"),
+        "filters": filters if isinstance(filters, dict) else {},
+        "record_ids": record_ids if isinstance(record_ids, list) else [],
+        "summary": summary if isinstance(summary, dict) else None,
+        "items": items if isinstance(items, list) else [],
+        "failed_records": failed_records if isinstance(failed_records, list) else [],
+        "error_message": _safe_text(row.get("error_message")),
+        "created_by": _safe_text(row.get("created_by")),
+        "created_at": row.get("created_at"),
+        "started_at": row.get("started_at"),
+        "finished_at": row.get("finished_at"),
+        "updated_at": row.get("updated_at"),
+        "total_records": int(row.get("total_records") or 0),
+        "success_count": int(row.get("success_count") or 0),
+        "failed_count": int(row.get("failed_count") or 0),
+        "issue_records": int(row.get("issue_records") or 0),
+        "compliant_records": int(row.get("compliant_records") or 0),
+        "total_tokens": int(row.get("total_tokens") or 0),
+        "total_processing_time": float(row.get("total_processing_time") or 0.0),
+    }
+
+
 def _extract_rule_code_number(rule_code: str) -> int:
     match = re.match(r"^LXE-(\d{1,})$", rule_code.strip().upper())
     if not match:
@@ -250,11 +327,20 @@ class WorkspaceListResult:
     page_size: int
 
 
+@dataclass
+class WorkspaceBatchJobListResult:
+    items: List[Dict[str, Any]]
+    total: int
+    page: int
+    page_size: int
+
+
 class CustomQCWorkspaceService:
     def __init__(self) -> None:
         if engine is None:
             raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
         self._draft_table = _drafts_table()
+        self._batch_job_table = _batch_jobs_table()
 
     def _next_rule_code(self, session: Session) -> str:
         max_num = 0
@@ -270,6 +356,83 @@ class CustomQCWorkspaceService:
         except Exception:
             pass
         return f"LXE-{str(max_num + 1).zfill(4)}"
+
+    def _build_records_query(
+        self,
+        session: Session,
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        record_ids: Optional[Sequence[str]] = None,
+    ):
+        scope_value = _normalize_scope(scope)
+        date_field_value = _normalize_date_field(date_field)
+        start = _as_date(start_date)
+        end = _as_date(end_date)
+        dept_expr = func.coalesce(
+            MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
+        )
+        query = session.query(MedicalRecordFrontpage)
+
+        if scope_value == "final":
+            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
+        elif scope_value == "running":
+            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_(None))
+
+        if department:
+            query = query.filter(dept_expr == department)
+        if doctor:
+            query = query.filter(MedicalRecordFrontpage.attending_physician_sign == doctor)
+
+        if keyword:
+            kw = f"%{keyword.strip()}%"
+            query = query.filter(
+                or_(
+                    MedicalRecordFrontpage.visit_id.ilike(kw),
+                    MedicalRecordFrontpage.name.ilike(kw),
+                    MedicalRecordFrontpage.mr_no.ilike(kw),
+                    MedicalRecordFrontpage.inpat_no.ilike(kw),
+                )
+            )
+
+        if record_ids:
+            normalized_ids = [_safe_text(item) for item in record_ids if _safe_text(item)]
+            if normalized_ids:
+                query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
+
+        date_col = (
+            MedicalRecordFrontpage.admission_datetime
+            if date_field_value == "admission"
+            else MedicalRecordFrontpage.discharge_datetime
+        )
+        if start:
+            query = query.filter(func.date(date_col) >= start)
+        if end:
+            query = query.filter(func.date(date_col) <= end)
+        return query
+
+    def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
+        item_scope = "final" if row.discharge_datetime else "running"
+        item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
+        return {
+            "record_id": _safe_text(row.visit_id),
+            "visit_id": _safe_text(row.visit_id),
+            "patient_name": _safe_text(row.name),
+            "mr_no": _safe_text(row.mr_no),
+            "inpat_no": _safe_text(row.inpat_no),
+            "scope": item_scope,
+            "department": item_department,
+            "doctor": _safe_text(row.attending_physician_sign),
+            "admission_date": _to_iso_date(row.admission_datetime),
+            "discharge_date": _to_iso_date(row.discharge_datetime),
+            "status": "completed" if item_scope == "final" else "running",
+            "medical_text_length": len(_safe_text(row.record_content)),
+        }
 
     def list_drafts(
         self,
@@ -432,6 +595,83 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def _build_records_query(
+        self,
+        session: Session,
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        record_ids: Optional[Sequence[str]] = None,
+    ):
+        scope_value = _normalize_scope(scope)
+        date_field_value = _normalize_date_field(date_field)
+        start = _as_date(start_date)
+        end = _as_date(end_date)
+        dept_expr = func.coalesce(
+            MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
+        )
+        query = session.query(MedicalRecordFrontpage)
+
+        if scope_value == "final":
+            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
+        elif scope_value == "running":
+            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_(None))
+
+        if department:
+            query = query.filter(dept_expr == department)
+        if doctor:
+            query = query.filter(MedicalRecordFrontpage.attending_physician_sign == doctor)
+
+        if keyword:
+            kw = f"%{keyword.strip()}%"
+            query = query.filter(
+                or_(
+                    MedicalRecordFrontpage.visit_id.ilike(kw),
+                    MedicalRecordFrontpage.name.ilike(kw),
+                    MedicalRecordFrontpage.mr_no.ilike(kw),
+                    MedicalRecordFrontpage.inpat_no.ilike(kw),
+                )
+            )
+
+        if record_ids:
+            normalized_ids = [_safe_text(item) for item in record_ids if _safe_text(item)]
+            if normalized_ids:
+                query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
+
+        date_col = (
+            MedicalRecordFrontpage.admission_datetime
+            if date_field_value == "admission"
+            else MedicalRecordFrontpage.discharge_datetime
+        )
+        if start:
+            query = query.filter(func.date(date_col) >= start)
+        if end:
+            query = query.filter(func.date(date_col) <= end)
+        return query
+
+    def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
+        item_scope = "final" if row.discharge_datetime else "running"
+        item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
+        return {
+            "record_id": _safe_text(row.visit_id),
+            "visit_id": _safe_text(row.visit_id),
+            "patient_name": _safe_text(row.name),
+            "mr_no": _safe_text(row.mr_no),
+            "inpat_no": _safe_text(row.inpat_no),
+            "scope": item_scope,
+            "department": item_department,
+            "doctor": _safe_text(row.attending_physician_sign),
+            "admission_date": _to_iso_date(row.admission_datetime),
+            "discharge_date": _to_iso_date(row.discharge_datetime),
+            "status": "completed" if item_scope == "final" else "running",
+            "medical_text_length": len(_safe_text(row.record_content)),
+        }
+
     def list_records(
         self,
         *,
@@ -445,48 +685,18 @@ class CustomQCWorkspaceService:
         page: int,
         page_size: int,
     ) -> WorkspaceListResult:
-        scope_value = _normalize_scope(scope)
-        date_field_value = _normalize_date_field(date_field)
-        start = _as_date(start_date)
-        end = _as_date(end_date)
         session = _session()
         try:
-            dept_expr = func.coalesce(
-                MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
+            query = self._build_records_query(
+                session,
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
             )
-            query = session.query(MedicalRecordFrontpage)
-
-            if scope_value == "final":
-                query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
-            elif scope_value == "running":
-                query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_(None))
-
-            if department:
-                query = query.filter(dept_expr == department)
-            if doctor:
-                query = query.filter(MedicalRecordFrontpage.attending_physician_sign == doctor)
-
-            if keyword:
-                kw = f"%{keyword.strip()}%"
-                query = query.filter(
-                    or_(
-                        MedicalRecordFrontpage.visit_id.ilike(kw),
-                        MedicalRecordFrontpage.name.ilike(kw),
-                        MedicalRecordFrontpage.mr_no.ilike(kw),
-                        MedicalRecordFrontpage.inpat_no.ilike(kw),
-                    )
-                )
-
-            date_col = (
-                MedicalRecordFrontpage.admission_datetime
-                if date_field_value == "admission"
-                else MedicalRecordFrontpage.discharge_datetime
-            )
-            if start:
-                query = query.filter(func.date(date_col) >= start)
-            if end:
-                query = query.filter(func.date(date_col) <= end)
-
             total = int(query.count())
             rows = (
                 query.order_by(
@@ -497,27 +707,7 @@ class CustomQCWorkspaceService:
                 .limit(page_size)
                 .all()
             )
-
-            items = []
-            for row in rows:
-                item_scope = "final" if row.discharge_datetime else "running"
-                item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
-                items.append(
-                    {
-                        "record_id": _safe_text(row.visit_id),
-                        "visit_id": _safe_text(row.visit_id),
-                        "patient_name": _safe_text(row.name),
-                        "mr_no": _safe_text(row.mr_no),
-                        "inpat_no": _safe_text(row.inpat_no),
-                        "scope": item_scope,
-                        "department": item_department,
-                        "doctor": _safe_text(row.attending_physician_sign),
-                        "admission_date": _to_iso_date(row.admission_datetime),
-                        "discharge_date": _to_iso_date(row.discharge_datetime),
-                        "status": "completed" if item_scope == "final" else "running",
-                        "medical_text_length": len(_safe_text(row.record_content)),
-                    }
-                )
+            items = [self._serialize_record_row(row) for row in rows]
             return WorkspaceListResult(items=items, total=total, page=page, page_size=page_size)
         finally:
             session.close()
@@ -528,17 +718,21 @@ class CustomQCWorkspaceService:
         scope: str,
         department: Optional[str],
     ) -> Dict[str, Any]:
-        scope_value = _normalize_scope(scope)
         session = _session()
         try:
             dept_expr = func.coalesce(
                 MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
             )
-            base_query = session.query(MedicalRecordFrontpage)
-            if scope_value == "final":
-                base_query = base_query.filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
-            elif scope_value == "running":
-                base_query = base_query.filter(MedicalRecordFrontpage.discharge_datetime.is_(None))
+            base_query = self._build_records_query(
+                session,
+                scope=scope,
+                department=None,
+                doctor=None,
+                date_field="admission",
+                start_date=None,
+                end_date=None,
+                keyword=None,
+            )
 
             dept_query = base_query.with_entities(dept_expr.label("department")).filter(
                 dept_expr.is_not(None), dept_expr != ""
@@ -576,6 +770,39 @@ class CustomQCWorkspaceService:
                     },
                 },
             }
+        finally:
+            session.close()
+
+    def collect_records(
+        self,
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        record_ids: Optional[Sequence[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        session = _session()
+        try:
+            query = self._build_records_query(
+                session,
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                record_ids=record_ids,
+            )
+            rows = query.order_by(
+                desc(MedicalRecordFrontpage.discharge_datetime),
+                desc(MedicalRecordFrontpage.admission_datetime),
+            ).all()
+            return [self._serialize_record_row(row) for row in rows]
         finally:
             session.close()
 
@@ -650,6 +877,271 @@ class CustomQCWorkspaceService:
             session.commit()
         finally:
             session.close()
+
+    def create_batch_job(
+        self,
+        *,
+        draft: Dict[str, Any],
+        created_by: str,
+        scope: str,
+        filters: Dict[str, Any],
+        record_ids: Sequence[str],
+        total_records: int,
+    ) -> Dict[str, Any]:
+        session = _session()
+        try:
+            now = _now_utc()
+            job_id = str(uuid.uuid4())
+            row_payload = {
+                "id": job_id,
+                "draft_id": _safe_text(draft.get("id")),
+                "rule_code": _safe_text(draft.get("rule_code")),
+                "rule_name": _safe_text(draft.get("name"), "未命名规则"),
+                "scene": _safe_text(draft.get("scene"), "final"),
+                "scope": _normalize_scope(scope),
+                "status": "queued",
+                "filters_json": _safe_json_dumps(filters),
+                "record_ids_json": _safe_json_dumps(list(record_ids)),
+                "summary_json": None,
+                "items_json": None,
+                "failed_records_json": None,
+                "error_message": None,
+                "created_by": created_by,
+                "created_at": now,
+                "started_at": None,
+                "finished_at": None,
+                "updated_at": now,
+                "total_records": int(total_records or 0),
+                "success_count": 0,
+                "failed_count": 0,
+                "issue_records": 0,
+                "compliant_records": 0,
+                "total_tokens": 0,
+                "total_processing_time": 0.0,
+            }
+            session.execute(self._batch_job_table.insert().values(**row_payload))
+            session.commit()
+            return self.get_batch_job(job_id=job_id, created_by=created_by) or _row_to_batch_job(row_payload)
+        finally:
+            session.close()
+
+    def get_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(
+                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                )
+            ).mappings().first()
+            return _row_to_batch_job(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def get_batch_job_for_processing(self, *, job_id: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            ).mappings().first()
+            return _row_to_batch_job(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def list_batch_jobs(
+        self,
+        *,
+        created_by: str,
+        draft_id: Optional[str] = None,
+        page: int = 1,
+        page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
+    ) -> WorkspaceBatchJobListResult:
+        session = _session()
+        try:
+            clauses = [self._batch_job_table.c.created_by == created_by]
+            if draft_id:
+                clauses.append(self._batch_job_table.c.draft_id == draft_id)
+            where_clause = and_(*clauses)
+            total = int(session.execute(select(func.count()).select_from(self._batch_job_table).where(where_clause)).scalar() or 0)
+            rows = (
+                session.execute(
+                    select(self._batch_job_table)
+                    .where(where_clause)
+                    .order_by(desc(self._batch_job_table.c.created_at))
+                    .offset(max(page - 1, 0) * page_size)
+                    .limit(page_size)
+                )
+                .mappings()
+                .all()
+            )
+            items = [_row_to_batch_job(dict(row)) for row in rows]
+            return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
+        finally:
+            session.close()
+
+    def mark_batch_job_running(self, *, job_id: str) -> None:
+        session = _session()
+        try:
+            now = _now_utc()
+            session.execute(
+                update(self._batch_job_table)
+                .where(self._batch_job_table.c.id == job_id)
+                .values(status="running", started_at=now, updated_at=now, error_message=None)
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    def complete_batch_job(
+        self,
+        *,
+        job_id: str,
+        summary: Dict[str, Any],
+        items: List[Dict[str, Any]],
+        failed_records: List[Dict[str, Any]],
+    ) -> None:
+        session = _session()
+        try:
+            now = _now_utc()
+            session.execute(
+                update(self._batch_job_table)
+                .where(self._batch_job_table.c.id == job_id)
+                .values(
+                    status="completed",
+                    summary_json=_safe_json_dumps(summary),
+                    items_json=_safe_json_dumps(items),
+                    failed_records_json=_safe_json_dumps(failed_records),
+                    total_records=int(summary.get("total_records") or 0),
+                    success_count=int(summary.get("success_count") or 0),
+                    failed_count=int(summary.get("failed_count") or 0),
+                    issue_records=int(summary.get("issue_records") or 0),
+                    compliant_records=int(summary.get("compliant_records") or 0),
+                    total_tokens=int(summary.get("total_tokens") or 0),
+                    total_processing_time=float(summary.get("total_processing_time") or 0.0),
+                    finished_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
+        session = _session()
+        try:
+            now = _now_utc()
+            session.execute(
+                update(self._batch_job_table)
+                .where(self._batch_job_table.c.id == job_id)
+                .values(
+                    status="failed",
+                    error_message=_safe_text(error_message),
+                    finished_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+        finally:
+            session.close()
+
+    def export_batch_job_workbook(self, *, job: Dict[str, Any]) -> BytesIO:
+        from openpyxl import Workbook
+
+        output = BytesIO()
+        workbook = Workbook()
+        ws_summary = workbook.active
+        ws_summary.title = "汇总"
+        ws_summary.append(["任务ID", job.get("id")])
+        ws_summary.append(["规则编码", job.get("rule_code")])
+        ws_summary.append(["规则名称", job.get("rule_name")])
+        ws_summary.append(["场景", job.get("scene")])
+        ws_summary.append(["范围", job.get("scope")])
+        ws_summary.append(["状态", job.get("status")])
+        ws_summary.append(["创建时间", str(job.get("created_at") or "")])
+        ws_summary.append(["开始时间", str(job.get("started_at") or "")])
+        ws_summary.append(["结束时间", str(job.get("finished_at") or "")])
+        ws_summary.append(["筛选条件", _safe_json_dumps(job.get("filters") or {})])
+        summary = job.get("summary") or {}
+        for label, key in [
+            ("总病历数", "total_records"),
+            ("成功数", "success_count"),
+            ("失败数", "failed_count"),
+            ("命中数", "issue_records"),
+            ("合规数", "compliant_records"),
+            ("总 token", "total_tokens"),
+            ("总耗时", "total_processing_time"),
+        ]:
+            ws_summary.append([label, summary.get(key) or job.get(key) or 0])
+
+        ws_items = workbook.create_sheet("命中明细")
+        ws_items.append(["病历ID", "visit", "患者", "科室", "状态", "是否合规", "Findings", "Evidence", "Suggestion", "Confidence"])
+        for item in job.get("items") or []:
+            ws_items.append([
+                item.get("record_id") or "",
+                item.get("visit_id") or "",
+                item.get("patient_name") or "",
+                item.get("department") or "",
+                item.get("status") or "",
+                "是" if item.get("is_compliant") else "否",
+                item.get("findings") or "",
+                item.get("evidence") or "",
+                item.get("suggestion") or "",
+                item.get("confidence") or 0,
+            ])
+
+        ws_failed = workbook.create_sheet("失败明细")
+        ws_failed.append(["病历ID", "visit", "患者", "科室", "失败原因"])
+        for item in job.get("failed_records") or []:
+            ws_failed.append([
+                item.get("record_id") or "",
+                item.get("visit_id") or "",
+                item.get("patient_name") or "",
+                item.get("department") or "",
+                item.get("error") or "",
+            ])
+
+        workbook.save(output)
+        output.seek(0)
+        return output
+
+    def export_batch_job_csv(self, *, job: Dict[str, Any]) -> StringIO:
+        import csv
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["任务ID", job.get("id")])
+        writer.writerow(["规则编码", job.get("rule_code")])
+        writer.writerow(["规则名称", job.get("rule_name")])
+        writer.writerow(["场景", job.get("scene")])
+        writer.writerow(["范围", job.get("scope")])
+        writer.writerow([])
+        writer.writerow(["命中明细"])
+        writer.writerow(["病历ID", "visit", "患者", "科室", "状态", "是否合规", "Findings", "Evidence", "Suggestion", "Confidence"])
+        for item in job.get("items") or []:
+            writer.writerow([
+                item.get("record_id") or "",
+                item.get("visit_id") or "",
+                item.get("patient_name") or "",
+                item.get("department") or "",
+                item.get("status") or "",
+                "是" if item.get("is_compliant") else "否",
+                item.get("findings") or "",
+                item.get("evidence") or "",
+                item.get("suggestion") or "",
+                item.get("confidence") or 0,
+            ])
+        writer.writerow([])
+        writer.writerow(["失败明细"])
+        writer.writerow(["病历ID", "visit", "患者", "科室", "失败原因"])
+        for item in job.get("failed_records") or []:
+            writer.writerow([
+                item.get("record_id") or "",
+                item.get("visit_id") or "",
+                item.get("patient_name") or "",
+                item.get("department") or "",
+                item.get("error") or "",
+            ])
+        output.seek(0)
+        return output
 
     def publish_draft(self, *, draft_id: str, created_by: str) -> Dict[str, Any]:
         session = _session()

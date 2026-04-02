@@ -2,8 +2,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
@@ -126,6 +127,119 @@ class WorkspaceTestRequest(BaseModel):
     temperature: Optional[float] = None
     top_p: Optional[float] = None
     max_tokens: Optional[int] = None
+
+
+class WorkspaceBatchJobCreateRequest(BaseModel):
+    draft_id: str
+    scope: str = "final"
+    department: Optional[str] = None
+    doctor: Optional[str] = None
+    date_field: str = "discharge"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    keyword: Optional[str] = None
+    record_ids: List[str] = Field(default_factory=list)
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
+def _batch_job_payload_filters(payload: WorkspaceBatchJobCreateRequest) -> Dict[str, Any]:
+    return {
+        "department": payload.department,
+        "doctor": payload.doctor,
+        "date_field": payload.date_field,
+        "start_date": payload.start_date,
+        "end_date": payload.end_date,
+        "keyword": payload.keyword,
+        "temperature": payload.temperature,
+        "top_p": payload.top_p,
+        "max_tokens": payload.max_tokens,
+    }
+
+
+async def _run_workspace_batch_job(job_id: str) -> None:
+    workspace = get_workspace_service()
+    job = workspace.get_batch_job_for_processing(job_id=job_id)
+    if not job:
+        return
+
+    try:
+        workspace.mark_batch_job_running(job_id=job_id)
+        draft = workspace.get_draft(draft_id=job["draft_id"], created_by=job["created_by"])
+        if not draft:
+            raise ValueError("规则草稿不存在或无权限")
+
+        filters = job.get("filters") or {}
+        records = workspace.collect_records(
+            scope=job.get("scope") or "final",
+            department=filters.get("department"),
+            doctor=filters.get("doctor"),
+            date_field=filters.get("date_field") or "discharge",
+            start_date=filters.get("start_date"),
+            end_date=filters.get("end_date"),
+            keyword=filters.get("keyword"),
+            record_ids=job.get("record_ids") or None,
+        )
+        hydrated_records = workspace.hydrate_records_with_medical_text(records)
+        rule_payload = _workspace_rule_payload_from_draft(draft)
+        qc_service = await create_custom_qc_service()
+
+        items: List[Dict[str, Any]] = []
+        failed_records: List[Dict[str, Any]] = []
+        total_tokens = 0
+        total_processing_time = 0.0
+
+        for record in hydrated_records:
+            try:
+                ensure_record_medical_text([record])
+                result = await evaluate_inline_rule(
+                    qc_service=qc_service,
+                    rule=rule_payload,
+                    record=record,
+                    temperature=filters.get("temperature"),
+                    top_p=filters.get("top_p"),
+                    max_tokens=filters.get("max_tokens"),
+                )
+                total_tokens += int((result.get("performance") or {}).get("token_usage") or 0)
+                total_processing_time += float((result.get("performance") or {}).get("processing_time") or 0.0)
+                items.append(result)
+            except Exception as exc:
+                logger.warning("workspace batch job record failed: %s", exc)
+                failed_records.append(
+                    {
+                        "record_id": str(record.get("record_id") or ""),
+                        "visit_id": str(record.get("visit_id") or ""),
+                        "patient_name": str(record.get("patient_name") or ""),
+                        "department": str(record.get("department") or ""),
+                        "error": str(exc),
+                    }
+                )
+
+        summary = {
+            "total_records": len(hydrated_records),
+            "success_count": len(items),
+            "failed_count": len(failed_records),
+            "issue_records": sum(1 for item in items if item.get("status") == "non_compliant"),
+            "compliant_records": sum(1 for item in items if item.get("status") in {"compliant", "not_applicable"}),
+            "total_tokens": total_tokens,
+            "total_processing_time": total_processing_time,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        workspace.complete_batch_job(
+            job_id=job_id,
+            summary=summary,
+            items=items,
+            failed_records=failed_records,
+        )
+        workspace.save_last_test_summary(
+            draft_id=job["draft_id"],
+            created_by=job["created_by"],
+            summary=summary,
+        )
+    except Exception as exc:
+        logger.exception("workspace batch job failed: %s", exc)
+        workspace.fail_batch_job(job_id=job_id, error_message=str(exc))
 
 
 @router.post("/prompt/generate")
@@ -611,4 +725,122 @@ async def test_workspace_batch(
         data=response,
         message="批量病历测试完成",
         trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/batch-jobs")
+async def create_workspace_batch_job(
+    request: Request,
+    payload: WorkspaceBatchJobCreateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    created_by = _current_user_id(current_user)
+    draft = workspace.get_draft(draft_id=payload.draft_id, created_by=created_by)
+    if not draft:
+        raise HTTPException(status_code=404, detail="草稿不存在或无权限")
+
+    records = workspace.collect_records(
+        scope=payload.scope,
+        department=payload.department,
+        doctor=payload.doctor,
+        date_field=payload.date_field,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        keyword=payload.keyword,
+        record_ids=payload.record_ids or None,
+    )
+    if not records:
+        raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行的病历")
+
+    job = workspace.create_batch_job(
+        draft=draft,
+        created_by=created_by,
+        scope=payload.scope,
+        filters=_batch_job_payload_filters(payload),
+        record_ids=payload.record_ids or [],
+        total_records=len(records),
+    )
+    background_tasks.add_task(_run_workspace_batch_job, job["id"])
+    return success_response(
+        data=job,
+        message="批量任务已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs")
+async def list_workspace_batch_jobs(
+    request: Request,
+    draft_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    result = workspace.list_batch_jobs(
+        created_by=_current_user_id(current_user),
+        draft_id=draft_id,
+        page=page,
+        page_size=page_size,
+    )
+    return success_response(
+        data={
+            "items": result.items,
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
+        },
+        message="获取批量任务成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs/{job_id}")
+async def get_workspace_batch_job(
+    job_id: str,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    return success_response(
+        data=job,
+        message="获取批量任务详情成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs/{job_id}/export")
+async def export_workspace_batch_job(
+    job_id: str,
+    request: Request,
+    format: str = Query("xlsx", description="xlsx|csv"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_rule = (job.get("rule_code") or "workspace").replace("/", "_")
+    if format.lower() == "csv":
+        content = workspace.export_batch_job_csv(job=job)
+        filename = f"{safe_rule}_{timestamp}.csv"
+        return StreamingResponse(
+            iter([content.getvalue().encode("utf-8-sig")]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    workbook = workspace.export_batch_job_workbook(job=job)
+    filename = f"{safe_rule}_{timestamp}.xlsx"
+    return StreamingResponse(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

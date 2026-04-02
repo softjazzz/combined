@@ -4,6 +4,7 @@ export type WorkspaceSeverity = 'critical' | 'major' | 'minor'
 export type WorkspaceGenerationMode = 'llm' | 'fallback_template'
 export type CustomRuleEditorDrawerMode = 'create' | 'edit' | 'copy'
 export type CustomRuleTestResultPanelState = 'single' | 'batch' | 'empty'
+export type CustomRuleBatchJobStatus = 'queued' | 'running' | 'completed' | 'failed'
 
 export interface CustomRuleDraft {
   id: string
@@ -180,6 +181,61 @@ export interface CustomRulePublishResult {
   rule_code: string
   published_rule_id: string
   status: 'published'
+}
+
+export interface CustomRuleBatchJobSummary {
+  total_records: number
+  success_count: number
+  failed_count: number
+  issue_records: number
+  compliant_records: number
+  total_tokens: number
+  total_processing_time: number
+  updated_at?: string
+}
+
+export interface CustomRuleBatchJob {
+  id: string
+  draft_id: string
+  rule_code: string
+  rule_name: string
+  scene: 'running' | 'final'
+  scope: WorkspaceScope
+  status: CustomRuleBatchJobStatus
+  filters: Record<string, unknown>
+  record_ids: string[]
+  summary?: CustomRuleBatchJobSummary | null
+  items: CustomRuleBatchResult['items']
+  failed_records: CustomRuleBatchResult['failed_records']
+  error_message?: string
+  created_by: string
+  created_at: string
+  started_at?: string | null
+  finished_at?: string | null
+  updated_at: string
+  total_records: number
+  success_count: number
+  failed_count: number
+  issue_records: number
+  compliant_records: number
+  total_tokens: number
+  total_processing_time: number
+}
+
+export interface CustomRuleBatchJobQuery {
+  draft_id?: string
+  page?: number
+  page_size?: number
+}
+
+export interface CustomRuleBatchJobExport {
+  job_id: string
+  format?: 'xlsx' | 'csv'
+}
+
+export interface CustomRuleWorkspaceScopeSwitchState {
+  scope: WorkspaceScope
+  label: string
 }
 
 export interface CustomRuleWorkspaceSelectionState {

@@ -1,9 +1,12 @@
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type {
+  CustomRuleBatchJob,
+  CustomRuleBatchJobQuery,
   CustomRuleBatchResult,
   CustomRuleDraft,
   CustomRuleDraftPayload,
+  CustomRuleBatchJobExport,
   CustomRulePublishResult,
   CustomRuleSingleTestResult,
   CustomRuleWorkspaceFilters,
@@ -187,4 +190,74 @@ export async function runWorkspaceBatchTest(payload: {
     },
     '批量测试失败',
   )
+}
+
+export async function createWorkspaceBatchJob(payload: {
+  draft_id: string
+  scope: 'all' | 'running' | 'final'
+  department?: string
+  doctor?: string
+  date_field: 'admission' | 'discharge'
+  start_date?: string
+  end_date?: string
+  keyword?: string
+  record_ids?: string[]
+  temperature?: number
+  top_p?: number
+  max_tokens?: number
+}) {
+  return requestEnvelope<CustomRuleBatchJob>(
+    {
+      method: 'POST',
+      url: '/api/v1/custom-qc/workspace/batch-jobs',
+      data: payload,
+    },
+    '创建批量任务失败',
+  )
+}
+
+export async function listWorkspaceBatchJobs(params: CustomRuleBatchJobQuery) {
+  return requestEnvelope<{
+    items: CustomRuleBatchJob[]
+    total: number
+    page: number
+    page_size: number
+  }>(
+    {
+      method: 'GET',
+      url: '/api/v1/custom-qc/workspace/batch-jobs',
+      params,
+    },
+    '获取批量任务失败',
+  )
+}
+
+export async function getWorkspaceBatchJob(jobId: string) {
+  return requestEnvelope<CustomRuleBatchJob>(
+    {
+      method: 'GET',
+      url: `/api/v1/custom-qc/workspace/batch-jobs/${encodeURIComponent(jobId)}`,
+    },
+    '获取批量任务详情失败',
+  )
+}
+
+export async function exportWorkspaceBatchJob({
+  job_id,
+  format = 'xlsx',
+}: CustomRuleBatchJobExport) {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: `/api/v1/custom-qc/workspace/batch-jobs/${encodeURIComponent(job_id)}/export`,
+      params: { format },
+      responseType: 'blob',
+    })
+    return { success: true, data: response.data }
+  } catch (error) {
+    return {
+      success: false,
+      message: toErrorMessage(error, '导出批量任务失败'),
+    }
+  }
 }

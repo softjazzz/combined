@@ -115,18 +115,6 @@
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/dashboard/rules?tab=semantic">
-              <template #icon>
-                <BranchesOutlined />
-              </template>
-              <span>四川省质控规则</span>
-            </a-menu-item>
-            <a-menu-item key="/dashboard/rules?tab=custom">
-              <template #icon>
-                <SettingOutlined />
-              </template>
-              <span>泸县33条规则</span>
-            </a-menu-item>
             <a-menu-item key="/dashboard/rules?tab=frontpage">
               <template #icon>
                 <FileTextOutlined />
@@ -140,6 +128,17 @@
               <span>医保结算清单规则</span>
             </a-menu-item>
           </a-sub-menu>
+
+          <a-menu-item
+            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+            key="/workstation-v4/rules/custom-workspace"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
+            <span class="font-medium">自定义规则工作台</span>
+          </a-menu-item>
 
           <!-- 任务管理 -->
           <a-sub-menu
@@ -466,6 +465,7 @@ import {
   ProjectOutlined,
   TeamOutlined,
   DesktopOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()

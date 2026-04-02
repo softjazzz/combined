@@ -1,7 +1,5 @@
 <template>
-  <section
-    class="flex flex-col flex-1 min-h-0 bg-white rounded-xl border border-slate-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] overflow-hidden"
-  >
+  <div class="flex flex-col flex-1 min-h-0 bg-white">
     <!-- 列表主体 -->
     <div
       v-if="urgentTasks.length || normalTasks.length"
@@ -10,24 +8,23 @@
       <!-- 紧急组 - P0/P1 -->
       <div
         v-if="urgentTasks.length"
-        class="mb-6"
+        class="mb-4"
       >
+        <!-- 去掉夸张的红背景，使用极简的实线分割及左侧红杠标示 -->
         <div
-          class="sticky top-0 z-10 flex items-center justify-between border-b border-red-100 bg-red-50/40 backdrop-blur-md px-6 py-2.5"
+          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-3"
         >
           <div class="flex items-center gap-2">
-            <span class="relative flex h-2 w-2">
-              <span
-                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"
-              />
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-            </span>
             <span
-              class="text-[12px] font-black text-red-900 uppercase tracking-widest leading-none mt-0.5"
-            >
-              紧急
+              class="h-1.5 w-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+            />
+            <span class="text-[12.5px] font-extrabold text-slate-800 tracking-wide">
+              最高优先级 (P0/P1)
             </span>
           </div>
+          <span class="text-[11.5px] font-medium text-slate-400">
+            {{ urgentTasks.length }} 项
+          </span>
         </div>
         <div class="flex flex-col">
           <UnifiedTaskRow
@@ -45,16 +42,17 @@
       <!-- 常规组 -->
       <div v-if="normalTasks.length">
         <div
-          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/40 backdrop-blur-md px-6 py-2.5"
+          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-3"
         >
           <div class="flex items-center gap-2">
-            <span class="h-2 w-2 rounded-full bg-slate-300" />
-            <span
-              class="text-[12px] font-black text-slate-500 uppercase tracking-widest leading-none mt-0.5"
-            >
+            <span class="h-1.5 w-1.5 rounded-full bg-blue-400" />
+            <span class="text-[12.5px] font-extrabold text-slate-800 tracking-wide">
               常规待办
             </span>
           </div>
+          <span class="text-[11.5px] font-medium text-slate-400">
+            {{ normalTasks.length }} 项
+          </span>
         </div>
         <div class="flex flex-col">
           <UnifiedTaskRow
@@ -73,31 +71,57 @@
     <!-- 空态 -->
     <div
       v-else
-      class="flex-1 flex flex-col items-center justify-center py-20 bg-slate-50/30"
+      class="flex-1 flex flex-col items-center justify-center py-20 bg-white"
     >
       <div
-        class="h-20 w-20 rounded-full border border-dashed border-slate-200 bg-white flex items-center justify-center shadow-sm mb-5 relative group cursor-default"
+        class="h-16 w-16 mb-4 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm"
       >
-        <div
-          class="absolute inset-0 bg-blue-50/50 rounded-full scale-0 transition-transform duration-500 group-hover:scale-100"
-        />
-        <CoffeeOutlined
-          class="text-[28px] text-slate-300 relative z-10 transition-colors group-hover:text-blue-400"
-        />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="text-slate-300"
+        >
+          <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+          <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+          <line
+            x1="6"
+            y1="1"
+            x2="6"
+            y2="4"
+          />
+          <line
+            x1="10"
+            y1="1"
+            x2="10"
+            y2="4"
+          />
+          <line
+            x1="14"
+            y1="1"
+            x2="14"
+            y2="4"
+          />
+        </svg>
       </div>
-      <div class="text-[15px] font-extrabold text-slate-800 tracking-tight">
-        今天干得不错，特急待办已清空
+      <div class="text-[15px] font-semibold text-slate-800">
+        所有任务处理完毕
       </div>
-      <div class="text-[13px] text-slate-400 mt-2 font-medium">
-        您可以喝杯咖啡，或筛查一下其他日期的记录
+      <div class="text-[13px] text-slate-400 mt-1">
+        喝杯咖啡，休息一下吧
       </div>
     </div>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { CoffeeOutlined } from '@ant-design/icons-vue'
 import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
 import UnifiedTaskRow from './UnifiedTaskRow.vue'
 
@@ -116,14 +140,12 @@ function toggleExpand(id: string) {
   expandedId.value = expandedId.value === id ? '' : id
 }
 
-/** 紧急组：severity=critical/high 或 priority=critical/high */
 function isUrgent(task: UnifiedTaskItem): boolean {
   const s = (task.severity || '').toLowerCase()
   const p = (task.priority || '').toLowerCase()
   return s === 'critical' || s === 'high' || p === 'critical' || p === 'high'
 }
 
-/** 排序权重：超时优先 → 高风险优先 → 未读优先 → 缺陷多优先 → 最近触发优先 */
 function sortWeight(task: UnifiedTaskItem): number {
   let w = 0
   if (task.task_status === 'overdue') w += 100000
@@ -140,7 +162,6 @@ function sortedGroup(items: UnifiedTaskItem[]): UnifiedTaskItem[] {
   return [...items].sort((a, b) => {
     const diff = sortWeight(b) - sortWeight(a)
     if (diff !== 0) return diff
-    // 最近触发优先
     const ta = new Date(a.latest_created_at || a.due_at || '').getTime() || 0
     const tb = new Date(b.latest_created_at || b.due_at || '').getTime() || 0
     return tb - ta

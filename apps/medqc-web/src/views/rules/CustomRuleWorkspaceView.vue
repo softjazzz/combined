@@ -1,45 +1,45 @@
 <template>
-  <div class="min-h-full space-y-2 p-3 text-slate-700">
+  <div class="min-h-full space-y-3 p-4 text-slate-700">
     <section
-      class="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm"
+      class="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm"
     >
-      <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div class="max-w-3xl">
-          <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-blue-600">
+          <p class="mb-1 text-[12px] font-bold uppercase tracking-[0.16em] text-blue-500/75">
             Custom QC Workspace
           </p>
-          <h1 class="text-[28px] font-black text-slate-900">
+          <h1 class="text-[24px] font-black text-slate-800">
             自定义规则工作台
           </h1>
-          <p class="mt-1.5 text-sm leading-6 text-slate-500">
+          <p class="mt-1.5 text-[13px] leading-6 text-slate-500">
             上半部分维护规则，下半部分对终末病历做单条/批量测试。规则配置统一收进右侧抽屉，不再把创建区放在页面顶部。
           </p>
         </div>
 
-        <div class="flex min-w-[320px] flex-col gap-2">
+        <div class="flex min-w-[340px] flex-col gap-3">
           <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-              <div class="text-[11px] text-slate-400">
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <div class="text-[12px] text-slate-400">
                 规则总数
               </div>
-              <div class="mt-1 text-lg font-bold text-slate-900">
+              <div class="mt-1 text-[20px] font-black text-slate-900">
                 {{ draftPagination.total }}
               </div>
             </div>
-            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-              <div class="text-[11px] text-slate-400">
-                终末病历
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <div class="text-[12px] text-slate-400">
+                {{ currentScopeLabel }}
               </div>
-              <div class="mt-1 text-lg font-bold text-slate-900">
+              <div class="mt-1 text-[20px] font-black text-slate-900">
                 {{ recordPagination.total }}
               </div>
             </div>
-            <div class="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-              <div class="text-[11px] text-slate-400">
-                已选病历
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <div class="text-[12px] text-slate-400">
+                最近任务
               </div>
-              <div class="mt-1 text-lg font-bold text-slate-900">
-                {{ selectedRecordKeys.length }}
+              <div class="mt-1 text-[20px] font-black text-slate-900">
+                {{ recentBatchJobCount }}
               </div>
             </div>
           </div>
@@ -47,7 +47,7 @@
           <a-button
             type="primary"
             size="large"
-            class="!rounded-xl"
+            class="!h-11 !rounded-xl !border-0 !bg-blue-600 px-5 shadow-[0_10px_20px_-12px_rgba(37,99,235,0.8)] hover:!bg-blue-500"
             @click="openCreateDrawer"
           >
             <template #icon>
@@ -59,7 +59,7 @@
       </div>
     </section>
 
-    <section class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="mb-2 flex items-center justify-between gap-3">
         <div>
           <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
@@ -71,6 +71,7 @@
         </div>
         <a-button
           size="small"
+          class="!h-9 !rounded-lg !border-slate-200 !bg-white !text-slate-500 hover:!border-slate-300 hover:!text-slate-700"
           :loading="draftLoading"
           @click="loadDrafts"
         >
@@ -81,11 +82,12 @@
         </a-button>
       </div>
 
-      <div class="mb-2 grid gap-2 md:grid-cols-[1fr_140px]">
+      <div class="mb-3 grid gap-2 md:grid-cols-[1fr_140px]">
         <a-input
           v-model:value="draftQuery.keyword"
           allow-clear
           placeholder="搜索规则编码/名称"
+          class="!h-9 !rounded-lg !border-slate-200"
           @press-enter="searchDrafts"
         >
           <template #prefix>
@@ -97,6 +99,7 @@
           allow-clear
           placeholder="规则状态"
           :options="draftStatusOptions"
+          class="[&_.ant-select-selector]:!h-9 [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200"
           @change="searchDrafts"
         />
       </div>
@@ -194,41 +197,54 @@
           </template>
         </a-table>
       </template>
-      <div
+      <a-empty
         v-else
-        class="flex h-20 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400"
+        :image="Empty.PRESENTED_IMAGE_SIMPLE"
+        class="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 py-8"
       >
-        暂无自定义规则，点击右上角“自定义质控规则”开始创建
-      </div>
+        <template #image>
+          <div
+            class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-300 shadow-sm"
+          >
+            <FileSearchOutlined class="text-[28px]" />
+          </div>
+        </template>
+        <template #description>
+          <div class="text-sm text-slate-400">
+            暂无自定义规则，点击右上角“自定义质控规则”开始创建
+          </div>
+        </template>
+      </a-empty>
     </section>
 
-    <section class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Final Record Test Bench
+            Real Record QC Bench
           </p>
           <h2 class="text-lg font-black text-slate-900">
-            终末病历测试工作台
+            真实病历质控台
           </h2>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <a-button
-            :disabled="!batchResult"
-            @click="openBatchResultDrawer"
+            :disabled="!batchJobs.length"
+            :loading="batchJobLoading"
+            @click="openLatestBatchJobDrawer"
           >
             <template #icon>
               <FileSearchOutlined />
-            </template>查看批量结果
+            </template>查看任务结果
           </a-button>
           <a-button
-            :disabled="!selectedDraft || selectedRecordKeys.length === 0 || !hasPromptTemplate"
+            :disabled="!selectedDraft || !hasPromptTemplate"
             :loading="testingBatch"
-            @click="runBatchTest"
+            @click="triggerBatchQcJob"
           >
             <template #icon>
               <PlayCircleOutlined />
-            </template>批量测试
+            </template>发起批量质控
           </a-button>
           <a-button
             type="primary"
@@ -245,7 +261,7 @@
 
       <div
         v-if="selectedDraft"
-        class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2"
+        class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2"
       >
         <div>
           <span class="mr-2 text-xs font-bold text-blue-700">当前规则</span>
@@ -255,7 +271,23 @@
           <span class="ml-2 text-xs text-slate-500">{{ selectedDraft.document_type }} /
             {{ selectedDraft.scene === 'final' ? '终末病历' : '运行病历' }}</span>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex rounded-lg border border-slate-200 bg-white p-1">
+            <button
+              v-for="scopeOption in scopeOptions"
+              :key="scopeOption.value"
+              type="button"
+              class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+              :class="
+                recordFilters.scope === scopeOption.value
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+              "
+              @click="changeScope(scopeOption.value)"
+            >
+              {{ scopeOption.label }}
+            </button>
+          </div>
           <a-tag :color="selectedDraft.status === 'published' ? 'success' : 'processing'">
             {{ selectedDraft.status === 'published' ? '已发布' : '草稿' }}
           </a-tag>
@@ -271,7 +303,7 @@
       </div>
       <div
         v-else
-        class="mb-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        class="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
       >
         <span class="text-xs font-bold">!</span>
         <div>
@@ -279,19 +311,73 @@
             请先在上方选择一条自定义规则
           </div>
           <div class="text-xs text-amber-700">
-            未选中规则时仍可浏览终末病历，但测试按钮会禁用。
+            未选中规则时仍可浏览 {{ currentScopeLabel }}，但测试按钮会禁用。
           </div>
         </div>
       </div>
 
+      <div class="mb-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              Recent Batch Jobs
+            </div>
+            <div class="text-sm font-semibold text-slate-800">
+              最近批量任务
+            </div>
+          </div>
+          <span class="text-xs text-slate-400">共 {{ batchJobPagination.total }} 个</span>
+        </div>
+        <a-empty
+          v-if="!batchJobs.length && !batchJobLoading"
+          :image="Empty.PRESENTED_IMAGE_SIMPLE"
+          class="py-2"
+          description="暂无批量任务"
+        />
+        <div
+          v-else
+          class="space-y-2"
+        >
+          <button
+            v-for="job in batchJobs"
+            :key="job.id"
+            type="button"
+            class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition"
+            :class="
+              batchJobDetail?.id === job.id
+                ? 'border-blue-200 bg-blue-50'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            "
+            @click="openBatchJobDrawer(job)"
+          >
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-slate-800">{{
+                  job.rule_name || job.rule_code
+                }}</span>
+                <a-tag :color="getBatchJobStatusTagColor(job.status)">
+                  {{ getBatchJobStatusText(job.status) }}
+                </a-tag>
+                <a-tag>{{ scopeLabelMap[job.scope] }}</a-tag>
+              </div>
+              <div class="mt-1 text-xs text-slate-500">
+                {{ formatDateTime(job.created_at) }} · 成功 {{ job.success_count }} · 失败
+                {{ job.failed_count }} · 命中 {{ job.issue_records }}
+              </div>
+            </div>
+            <span class="text-xs text-slate-400">{{ job.record_ids?.length || job.total_records || 0 }} 条</span>
+          </button>
+        </div>
+      </div>
+
       <div
-        class="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2"
+        class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5"
       >
         <a-input
           v-model:value="recordFilters.keyword"
           allow-clear
           placeholder="搜索病历号 / visit / 患者姓名"
-          class="min-w-[220px] flex-1"
+          class="min-w-[240px] flex-1 !rounded-lg !border-slate-200"
           @press-enter="searchRecords"
         >
           <template #prefix>
@@ -304,7 +390,7 @@
           show-search
           :options="departmentOptions"
           placeholder="科室"
-          class="w-[110px]"
+          class="w-[112px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
           @change="handleDepartmentChange"
         />
         <a-select
@@ -313,26 +399,30 @@
           show-search
           :options="doctorOptions"
           placeholder="医生"
-          class="w-[110px]"
+          class="w-[112px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
         />
         <a-select
           v-model:value="recordFilters.date_field"
           :options="dateFieldOptions"
-          class="w-[120px]"
+          class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
         />
         <a-range-picker
           v-model:value="recordFilters.dateRange"
-          class="w-[240px]"
+          class="w-[240px] !rounded-lg !border-slate-200 !bg-white"
         />
-        <div class="ml-auto flex gap-2">
+        <div class="ml-auto flex gap-1">
           <a-button
+            type="text"
             size="small"
+            class="!text-slate-500 hover:!text-slate-700"
             @click="searchRecords"
           >
             查询病历
           </a-button>
           <a-button
+            type="text"
             size="small"
+            class="!text-slate-500 hover:!text-slate-700"
             :loading="recordLoading"
             @click="refreshRecords"
           >
@@ -385,16 +475,20 @@
       </a-collapse>
 
       <div class="mb-2 flex items-center justify-between text-xs text-slate-500">
-        <span>已选择 {{ selectedRecordKeys.length }} 条终末病历</span>
-        <div class="flex gap-2">
+        <span>已选择 {{ selectedRecordKeys.length }} 条{{ currentScopeLabel }}</span>
+        <div class="flex gap-1">
           <a-button
+            type="text"
             size="small"
+            class="!text-slate-500 hover:!text-slate-700"
             @click="selectCurrentPageRecords"
           >
             全选当前页
           </a-button>
           <a-button
+            type="text"
             size="small"
+            class="!text-slate-500 hover:!text-slate-700"
             @click="selectedRecordKeys = []"
           >
             清空
@@ -410,6 +504,7 @@
         :data-source="records"
         :pagination="recordPagination"
         :row-selection="recordRowSelection"
+        class="record-bench-table"
         :scroll="{ x: 1180, y: 420 }"
         @change="handleRecordTableChange"
       >
@@ -425,26 +520,42 @@
             </div>
           </template>
           <template v-else-if="column.key === 'patient_name'">
-            <div class="flex items-center gap-2">
-              <div
-                class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600"
-              >
-                {{ (record.patient_name || '病').charAt(0) }}
+            <div class="min-w-0">
+              <div class="truncate text-[13px] font-semibold text-slate-700">
+                {{ record.patient_name || '未知患者' }}
               </div>
-              <div>
-                <div class="font-semibold text-slate-900">
-                  {{ record.patient_name || '未知患者' }}
-                </div>
-                <div class="text-xs text-slate-400">
-                  {{ record.department || '-' }}
-                </div>
+              <div class="truncate text-[12px] text-slate-400">
+                {{ record.department || '-' }} / {{ record.doctor || '-' }}
+              </div>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'department'">
+            <div class="min-w-0">
+              <div class="truncate text-[13px] font-medium text-slate-600">
+                {{ record.department || '-' }}
+              </div>
+              <div class="truncate text-[12px] text-slate-400">
+                {{ record.doctor || '-' }}
+              </div>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'doctor'">
+            <div class="min-w-0">
+              <div class="truncate text-[13px] font-medium text-slate-600">
+                {{ record.doctor || '-' }}
+              </div>
+              <div class="truncate text-[12px] text-slate-400">
+                {{ record.discharge_date || '-' }}
               </div>
             </div>
           </template>
           <template v-else-if="column.key === 'latest_status'">
-            <a-tag :color="getRecordResultTagColor(record.record_id)">
+            <span
+              class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+              :class="getRecordResultTagClass(record.record_id)"
+            >
               {{ getRecordResultStatusText(record.record_id) }}
-            </a-tag>
+            </span>
           </template>
           <template v-else-if="column.key === 'latest_findings'">
             <span class="text-xs leading-6 text-slate-500">{{
@@ -452,22 +563,28 @@
             }}</span>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <div class="flex items-center gap-2">
+            <div class="record-action-cell flex items-center justify-end gap-2">
               <a-button
-                type="link"
                 size="small"
+                class="record-action-btn"
                 :disabled="!selectedDraft || !hasPromptTemplate"
                 :loading="testingSingleRecordId === record.record_id"
                 @click="runSingleTest(record as CustomRuleWorkspaceRecord)"
               >
+                <template #icon>
+                  <PlayCircleOutlined />
+                </template>
                 单条测试
               </a-button>
               <a-button
-                type="link"
                 size="small"
+                class="record-action-btn"
                 :disabled="!hasRecordResult(record.record_id)"
                 @click="openSingleResultDrawer(record as CustomRuleWorkspaceRecord)"
               >
+                <template #icon>
+                  <FileSearchOutlined />
+                </template>
                 查看结果
               </a-button>
             </div>
@@ -751,28 +868,72 @@
               Test Result
             </p>
             <h2 class="text-2xl font-black text-slate-900">
-              {{ resultDrawerMode === 'batch' ? '批量测试结果' : '单病历测试结果' }}
+              {{ resultDrawerMode === 'batch' ? '批量任务结果' : '单病历测试结果' }}
             </h2>
           </div>
-          <a-button
-            type="text"
-            @click="closeResultDrawer"
-          >
-            <template #icon>
-              <CloseOutlined />
-            </template>
-          </a-button>
+          <div class="flex items-center gap-2">
+            <a-button
+              v-if="
+                resultDrawerMode === 'batch' &&
+                  activeBatchJob &&
+                  activeBatchJob.status === 'completed'
+              "
+              :loading="batchJobDetailLoading"
+              @click="exportBatchJobReport('xlsx')"
+            >
+              <template #icon>
+                <DownloadOutlined />
+              </template>
+              导出报告
+            </a-button>
+            <a-button
+              type="text"
+              @click="closeResultDrawer"
+            >
+              <template #icon>
+                <CloseOutlined />
+              </template>
+            </a-button>
+          </div>
         </div>
 
         <div class="flex-1 space-y-4 overflow-auto p-6">
-          <template v-if="resultDrawerMode === 'batch' && batchResult">
+          <template v-if="resultDrawerMode === 'batch' && activeBatchSummary">
+            <div
+              v-if="activeBatchJob"
+              class="rounded-2xl border border-slate-200 bg-white p-4"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div class="text-xs font-semibold text-slate-500">
+                    {{ activeBatchJob.rule_name || activeBatchJob.rule_code }}
+                  </div>
+                  <div class="mt-1 text-sm text-slate-700">
+                    {{ scopeLabelMap[activeBatchJob.scope] }} ·
+                    {{ formatDateTime(activeBatchJob.created_at) }}
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <a-tag :color="getBatchJobStatusTagColor(activeBatchJob.status)">
+                    {{ getBatchJobStatusText(activeBatchJob.status) }}
+                  </a-tag>
+                  <span class="text-xs text-slate-400">发起人 {{ activeBatchJob.created_by || '-' }}</span>
+                </div>
+              </div>
+              <div
+                v-if="activeBatchJob.error_message"
+                class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+              >
+                {{ activeBatchJob.error_message }}
+              </div>
+            </div>
             <div class="grid gap-3 md:grid-cols-4">
               <div class="rounded-2xl border border-slate-200 bg-white p-3">
                 <div class="text-[11px] text-slate-400">
                   总病历
                 </div>
                 <div class="mt-1 text-lg font-bold text-slate-900">
-                  {{ batchResult.summary.total_records }}
+                  {{ activeBatchSummary.total_records }}
                 </div>
               </div>
               <div class="rounded-2xl border border-slate-200 bg-white p-3">
@@ -780,7 +941,7 @@
                   成功
                 </div>
                 <div class="mt-1 text-lg font-bold text-slate-900">
-                  {{ batchResult.summary.success_count }}
+                  {{ activeBatchSummary.success_count }}
                 </div>
               </div>
               <div class="rounded-2xl border border-slate-200 bg-white p-3">
@@ -788,7 +949,7 @@
                   失败
                 </div>
                 <div class="mt-1 text-lg font-bold text-slate-900">
-                  {{ batchResult.summary.failed_count }}
+                  {{ activeBatchSummary.failed_count }}
                 </div>
               </div>
               <div class="rounded-2xl border border-slate-200 bg-white p-3">
@@ -796,7 +957,7 @@
                   命中问题
                 </div>
                 <div class="mt-1 text-lg font-bold text-slate-900">
-                  {{ batchResult.summary.issue_records }}
+                  {{ activeBatchSummary.issue_records }}
                 </div>
               </div>
             </div>
@@ -806,7 +967,7 @@
                 命中病历
               </h3>
               <a-empty
-                v-if="batchResult.items.length === 0"
+                v-if="activeBatchItems.length === 0"
                 description="本次批量测试暂无命中病历"
               />
               <div
@@ -814,7 +975,7 @@
                 class="mt-3 space-y-2"
               >
                 <div
-                  v-for="item in batchResult.items"
+                  v-for="item in activeBatchItems"
                   :key="item.record_id"
                   class="rounded-2xl border border-slate-200 bg-slate-50 p-3"
                 >
@@ -828,6 +989,35 @@
                   </p>
                   <p class="mt-2 text-xs text-slate-400">
                     {{ item.record_id }} / {{ item.department || '-' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 class="text-lg font-black text-slate-900">
+                失败病历
+              </h3>
+              <a-empty
+                v-if="activeBatchFailedRecords.length === 0"
+                description="本次批量任务没有失败病历"
+              />
+              <div
+                v-else
+                class="mt-3 space-y-2"
+              >
+                <div
+                  v-for="item in activeBatchFailedRecords"
+                  :key="`${item.record_id}-${item.error}`"
+                  class="rounded-2xl border border-rose-100 bg-rose-50/60 p-3"
+                >
+                  <div class="font-semibold text-slate-800">
+                    {{ item.patient_name || item.record_id }}
+                  </div>
+                  <p class="mt-1 text-xs text-slate-500">
+                    {{ item.record_id }} / {{ item.visit_id || '-' }} / {{ item.department || '-' }}
+                  </p>
+                  <p class="mt-2 text-sm text-rose-700">
+                    {{ item.error }}
                   </p>
                 </div>
               </div>
@@ -892,14 +1082,15 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { Dayjs } from 'dayjs'
-import { message } from 'ant-design-vue'
+import { Empty, Modal, message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
   CloseOutlined,
   CopyOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EditOutlined,
   FileSearchOutlined,
   PlayCircleOutlined,
@@ -912,16 +1103,21 @@ import {
 import {
   createWorkspaceDraft,
   deleteWorkspaceDraft,
+  createWorkspaceBatchJob,
+  exportWorkspaceBatchJob,
   generateWorkspaceDraftPrompt,
+  getWorkspaceBatchJob,
   getWorkspaceRecordFilters,
   getWorkspaceRecords,
   listWorkspaceDrafts,
+  listWorkspaceBatchJobs,
   publishWorkspaceDraft,
   runWorkspaceBatchTest,
   runWorkspaceSingleTest,
   updateWorkspaceDraft,
 } from '@/services/custom-rule-workspace-service'
 import type {
+  CustomRuleBatchJob,
   CustomRuleBatchResult,
   CustomRuleDraft,
   CustomRuleDraftPayload,
@@ -929,6 +1125,7 @@ import type {
   CustomRuleSingleTestResult,
   CustomRuleTestResultPanelState,
   CustomRuleWorkspaceRecord,
+  WorkspaceScope,
   WorkspaceDraftStatus,
   WorkspaceSeverity,
 } from '@/types/custom-rule-workspace'
@@ -955,9 +1152,13 @@ const generatingPrompt = ref(false)
 const publishingDraft = ref(false)
 const testingBatch = ref(false)
 const testingSingleRecordId = ref('')
+const batchJobLoading = ref(false)
+const batchJobDetailLoading = ref(false)
 const drafts = ref<CustomRuleDraft[]>([])
 const selectedDraftId = ref('')
 const batchResult = ref<CustomRuleBatchResult | null>(null)
+const batchJobs = ref<CustomRuleBatchJob[]>([])
+const batchJobDetail = ref<CustomRuleBatchJob | null>(null)
 const singleResult = ref<CustomRuleSingleTestResult | null>(null)
 const recordResults = ref<Record<string, RecordTestResultItem>>({})
 const editorDrawerOpen = ref(false)
@@ -975,6 +1176,11 @@ const draftPagination = reactive({
   showSizeChanger: true,
   showQuickJumper: true,
   showTotal: (total: number) => `共 ${total} 条`,
+})
+const batchJobPagination = reactive({
+  current: 1,
+  pageSize: 5,
+  total: 0,
 })
 
 const makeDraftDefaults = () => ({
@@ -1011,6 +1217,11 @@ const sceneOptions = [
   { label: '运行病历', value: 'running' },
   { label: '终末病历', value: 'final' },
 ]
+const scopeOptions = [
+  { label: '终末病历', value: 'final' },
+  { label: '运行病历', value: 'running' },
+  { label: '全量病历', value: 'all' },
+]
 const severityOptions = [
   { label: '严重', value: 'critical' },
   { label: '一般', value: 'major' },
@@ -1033,6 +1244,27 @@ const dateFieldOptions = [
 
 const selectedDraft = computed(
   () => drafts.value.find((item) => item.id === selectedDraftId.value) || null,
+)
+const scopeLabelMap: Record<WorkspaceScope, string> = {
+  final: '终末病历',
+  running: '运行病历',
+  all: '全量病历',
+}
+const currentScopeLabel = computed(() => scopeLabelMap[recordFilters.scope] || '终末病历')
+const recentBatchJobCount = computed(() => batchJobPagination.total)
+const selectedBatchJob = computed(() => {
+  if (batchJobDetail.value && batchJobDetail.value.id) return batchJobDetail.value
+  return batchJobs.value.find((item) => item.id === (batchJobDetail.value?.id || '')) || null
+})
+const activeBatchJob = computed(() => batchJobDetail.value)
+const activeBatchSummary = computed(
+  () => activeBatchJob.value?.summary || batchResult.value?.summary || null,
+)
+const activeBatchItems = computed(
+  () => activeBatchJob.value?.items || batchResult.value?.items || [],
+)
+const activeBatchFailedRecords = computed(
+  () => activeBatchJob.value?.failed_records || batchResult.value?.failed_records || [],
 )
 const hasPromptTemplate = computed(
   () => !!String(selectedDraft.value?.prompt_template || '').trim(),
@@ -1067,7 +1299,7 @@ const draftColumns: TableColumnsType<CustomRuleDraft> = [
 ]
 
 const recordFilters = reactive({
-  scope: 'final' as const,
+  scope: 'final' as WorkspaceScope,
   department: undefined as string | undefined,
   doctor: undefined as string | undefined,
   date_field: 'discharge' as 'admission' | 'discharge',
@@ -1104,6 +1336,7 @@ const recordRowSelection = computed<TableProps['rowSelection']>(() => ({
   },
 }))
 const advancedParams = reactive({ temperature: 0.2, top_p: 0.9, max_tokens: 4096 })
+let batchJobPollTimer: number | null = null
 
 function formatDateTime(value?: string) {
   return value ? String(value).replace('T', ' ').slice(0, 16) : '-'
@@ -1565,6 +1798,13 @@ function getRecordResultStatusText(recordId: string) {
   const result = getRecordResult(recordId)
   return !result ? '未测试' : result.is_compliant ? '合规/不适用' : '命中问题'
 }
+function getRecordResultTagClass(recordId: string) {
+  const result = getRecordResult(recordId)
+  if (!result) return 'border-slate-200 bg-slate-50 text-slate-500'
+  return result.is_compliant
+    ? 'border-emerald-200 bg-emerald-50/70 text-emerald-700'
+    : 'border-amber-200 bg-amber-50/70 text-amber-700'
+}
 function getRecordFindingPreview(recordId: string) {
   return getRecordResult(recordId)?.findings || '尚未执行该规则测试'
 }
@@ -1605,5 +1845,36 @@ onMounted(async () => {
 }
 :deep(.ant-table-tbody > tr:hover > td) {
   background: #f8fafc !important;
+}
+:deep(.record-bench-table .ant-table-tbody > tr:hover > td) {
+  background: #f1f5f9 !important;
+}
+:deep(.record-bench-table .ant-table-tbody > tr > td) {
+  vertical-align: middle;
+}
+:deep(.record-action-cell) {
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  pointer-events: none;
+}
+:deep(.record-bench-table .ant-table-tbody > tr:hover .record-action-cell) {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+:deep(.record-action-btn) {
+  border-radius: 8px !important;
+  border: 1px solid #dbe2ea !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  box-shadow: none !important;
+}
+:deep(.record-action-btn:hover) {
+  border-color: #93c5fd !important;
+  background: #eff6ff !important;
+  color: #2563eb !important;
 }
 </style>

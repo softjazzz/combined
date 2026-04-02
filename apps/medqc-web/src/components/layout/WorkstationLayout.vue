@@ -163,18 +163,6 @@
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=custom">
-              <template #icon>
-                <AppstoreOutlined />
-              </template>
-              <span>泸县33条规则</span>
-            </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules/custom-workspace">
-              <template #icon>
-                <ThunderboltOutlined />
-              </template>
-              <span>自定义规则工作台</span>
-            </a-menu-item>
             <a-menu-item key="/workstation-v4/rules?tab=frontpage">
               <template #icon>
                 <FileSearchOutlined />
@@ -188,6 +176,16 @@
               <span>医保结算清单规则</span>
             </a-menu-item>
           </a-sub-menu>
+
+          <a-menu-item
+            key="/workstation-v4/rules/custom-workspace"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
+            <span class="font-medium">自定义规则工作台</span>
+          </a-menu-item>
 
           <!-- 数据上传 -->
           <a-menu-item
@@ -398,7 +396,6 @@ import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
   ThunderboltOutlined,
-  AppstoreOutlined,
   DesktopOutlined,
   SearchOutlined,
   CloudUploadOutlined,

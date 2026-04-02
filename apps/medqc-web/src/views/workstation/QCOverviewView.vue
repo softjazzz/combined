@@ -1,31 +1,44 @@
 <template>
-  <div class="mx-auto max-w-[1680px] px-6 py-4 min-h-[calc(100vh-64px)] flex flex-col gap-3">
-    <!-- 工具栏 -->
-    <HomeHeroBar
-      v-model:keyword="keyword"
-      v-model:selected-date="selectedDate"
-      v-model:department-filter="departmentFilter"
-      v-model:workflow-filter="workflowFilter"
-      :department-options="departmentOptions"
-      :loading="loading"
-      :disabled-future-date="disabledFutureDate"
-      @refresh="fetchHome()"
-    />
+  <!-- 整个页面采用纯正的 SaaS 灰色画板底色 -->
+  <div class="min-h-[calc(100vh-64px)] bg-[#F4F5F7] flex flex-col font-sans antialiased">
+    <!-- 顶部紧凑控制栏 (Control Bar) -->
+    <div
+      class="bg-white border-b border-slate-200 px-6 py-3 shrink-0 shadow-sm z-10 flex flex-wrap gap-4 items-center justify-between"
+    >
+      <HomeHeroBar
+        v-model:keyword="keyword"
+        v-model:selected-date="selectedDate"
+        v-model:department-filter="departmentFilter"
+        v-model:workflow-filter="workflowFilter"
+        :department-options="departmentOptions"
+        :loading="loading"
+        :disabled-future-date="disabledFutureDate"
+        @refresh="fetchHome()"
+      />
+    </div>
 
-    <!-- 状态概览条 -->
-    <StatusBar
-      :kpis="homeData.kpis"
-      :active-key="activeStatusKey"
-      :date-label="selectedDate.format('YYYY-MM-DD')"
-      @select="handleStatusSelect"
-    />
+    <!-- 主工作区：居中单卡片设计 (A4 Island) -->
+    <div class="flex-1 px-6 py-6 overflow-y-auto">
+      <div class="mx-auto max-w-[1400px] flex flex-col gap-4">
+        <!-- 状态过滤器 (Status Tabs) -->
+        <StatusBar
+          :kpis="homeData.kpis"
+          :active-key="activeStatusKey"
+          @select="handleStatusSelect"
+        />
 
-    <!-- 统一任务列表（主工作区） -->
-    <UnifiedTaskList
-      :tasks="unifiedTasks"
-      :format-date-time="formatDateTime"
-      @open="handleOpenTask"
-    />
+        <!-- 任务列表画板 -->
+        <div
+          class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden min-h-[400px] flex flex-col"
+        >
+          <UnifiedTaskList
+            :tasks="unifiedTasks"
+            :format-date-time="formatDateTime"
+            @open="handleOpenTask"
+          />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -44,7 +57,6 @@ import UnifiedTaskList from './components/UnifiedTaskList.vue'
 const router = useRouter()
 const route = useRoute()
 
-// ── 筛选状态 ──
 const loading = ref(false)
 const selectedDate = ref<Dayjs>(dayjs())
 const departmentFilter = ref('all')
@@ -53,7 +65,6 @@ const keyword = ref('')
 const activeStatusKey = ref('')
 const syncingFromRoute = ref(false)
 
-// ── 首页数据 ──
 const homeData = ref<WorkstationHomePayload>({
   date: dayjs().format('YYYY-MM-DD'),
   kpis: {
@@ -74,15 +85,10 @@ const homeData = ref<WorkstationHomePayload>({
   my_todo_items: [],
   batch_summaries: [],
   department_options: [],
-  team_summary: {
-    department_risk_distribution: [],
-    workflow_status_distribution: [],
-  },
 })
 
 const departmentOptions = computed(() => homeData.value.department_options || [])
 
-// ── 统一任务列表：合并 hotspots + my_todo_items ──
 const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
   const hotspotItems: UnifiedTaskItem[] = (homeData.value.hotspots || []).map((h) => ({
     id: `hotspot-${h.id}`,
@@ -132,7 +138,6 @@ const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
     launch_stage: t.launch_stage,
   }))
 
-  // 去重：同 record_id + workflow_type 优先保留 hotspot
   const seen = new Set<string>()
   const result: UnifiedTaskItem[] = []
   for (const item of [...hotspotItems, ...todoItems]) {
@@ -142,7 +147,6 @@ const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
     result.push(item)
   }
 
-  // 按状态条筛选
   if (activeStatusKey.value === 'high_risk_total') {
     return result.filter((t) => {
       const s = (t.severity || '').toLowerCase()
@@ -159,7 +163,6 @@ const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
   return result
 })
 
-// ── 工具函数 ──
 function disabledFutureDate(current: Dayjs) {
   return current.isAfter(dayjs(), 'day')
 }
@@ -171,12 +174,10 @@ function formatDateTime(value?: string | null) {
   return parsed.format('MM-DD HH:mm')
 }
 
-// ── 状态条交互 ──
 function handleStatusSelect(key: string) {
   activeStatusKey.value = activeStatusKey.value === key ? '' : key
 }
 
-// ── 穿透到病历流程 ──
 function launchIntoWorklist(recordId: string, action?: string, fromStage?: string) {
   if (!recordId) {
     message.info('当前项未绑定具体病历')
@@ -197,7 +198,6 @@ function handleOpenTask(task: UnifiedTaskItem) {
   launchIntoWorklist(task.record_id, task.launch_action, task.launch_stage)
 }
 
-// ── 路由同步 ──
 function applyRouteFilters() {
   const queryDate =
     typeof route.query.date === 'string' ? route.query.date : dayjs().format('YYYY-MM-DD')
@@ -225,7 +225,6 @@ async function syncFiltersToQuery() {
   await router.replace({ path: route.path, query: nextQuery })
 }
 
-// ── 数据加载 ──
 async function fetchHome() {
   loading.value = true
   try {
@@ -243,25 +242,12 @@ async function fetchHome() {
     }
     homeData.value = res.data
   } catch (error) {
-    console.error('加载工作台首页失败:', error)
     message.error('加载工作台首页失败')
-    homeData.value = {
-      ...homeData.value,
-      hotspots: [],
-      my_todo_items: [],
-      batch_summaries: [],
-      department_options: [],
-      team_summary: {
-        department_risk_distribution: [],
-        workflow_status_distribution: [],
-      },
-    }
   } finally {
     loading.value = false
   }
 }
 
-// ── Watchers ──
 watch(
   () => route.fullPath,
   () => {
