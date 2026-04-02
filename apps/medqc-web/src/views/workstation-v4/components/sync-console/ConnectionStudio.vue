@@ -101,6 +101,27 @@
           </div>
         </div>
 
+        <div>
+          <label class="text-[12px] text-slate-600 block mb-1">Schema</label>
+          <input
+            v-model="state.pgConnectionForm.remote_schema"
+            type="text"
+            :disabled="isReadonly"
+            class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+          >
+        </div>
+
+        <div>
+          <label class="text-[12px] text-slate-600 block mb-1">同步模式</label>
+          <a-select
+            v-model:value="state.pgConnectionForm.sync_mode"
+            :disabled="isReadonly"
+            class="w-full"
+            size="small"
+            :options="syncModeOptions"
+          />
+        </div>
+
         <div class="pt-2">
           <button
             class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
@@ -115,6 +136,92 @@
             <span v-if="state.isSavingPgConnection">保存中...</span>
             <span v-else>保存配置</span>
           </button>
+        </div>
+
+        <div class="pt-4 border-t border-slate-100">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <div class="text-[13px] font-semibold text-slate-800">
+                PG 表同步配置
+              </div>
+              <div class="text-[11px] text-slate-500">
+                已启用 {{ enabledTableCount }}/{{ state.pgSyncTables.length }} 张表
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                class="text-[11px] text-slate-500 hover:text-slate-700 transition-colors"
+                :disabled="state.isLoadingPgTables"
+                @click="handleReloadPgTables"
+              >
+                刷新
+              </button>
+              <button
+                class="text-[11px] font-medium text-blue-600 hover:text-blue-700 transition-colors disabled:text-slate-300"
+                :disabled="isReadonly || state.isSavingPgTables"
+                @click="handleSavePgTables"
+              >
+                {{ state.isSavingPgTables ? '保存中...' : '保存表配置' }}
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="state.isLoadingPgTables"
+            class="text-[12px] text-slate-500 py-3"
+          >
+            正在加载表配置...
+          </div>
+          <div
+            v-else-if="state.pgSyncTables.length === 0"
+            class="text-[12px] text-slate-500 py-3"
+          >
+            未读取到 PG 表配置。
+          </div>
+          <div
+            v-else
+            class="space-y-2 max-h-[360px] overflow-y-auto custom-scrollbar pr-1"
+          >
+            <div
+              v-for="item in state.pgSyncTables"
+              :key="item.name"
+              class="rounded-lg border border-slate-200/80 bg-slate-50/70 p-2.5"
+            >
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="text-[12px] font-semibold text-slate-800 font-mono truncate">
+                  {{ item.name }}
+                </div>
+                <a-switch
+                  v-model:checked="item.enabled"
+                  size="small"
+                  :disabled="isReadonly"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <input
+                  v-model="item.source_table"
+                  type="text"
+                  :disabled="isReadonly"
+                  placeholder="source_table"
+                  class="w-full px-2.5 py-1.5 text-[12px] font-mono bg-white border border-slate-200/80 rounded-[6px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                <input
+                  v-model="item.date_field"
+                  type="text"
+                  :disabled="isReadonly"
+                  placeholder="date_field"
+                  class="w-full px-2.5 py-1.5 text-[12px] font-mono bg-white border border-slate-200/80 rounded-[6px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                <input
+                  v-model="item.fallback_date_field"
+                  type="text"
+                  :disabled="isReadonly"
+                  placeholder="fallback_date_field (可选)"
+                  class="w-full px-2.5 py-1.5 text-[12px] font-mono bg-white border border-slate-200/80 rounded-[6px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -142,11 +249,25 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useDataSync } from '../../composables/useDataSync'
 
-const { state, isReadonly, testActiveConnection, savePgConnection } = useDataSync()
+const {
+  state,
+  isReadonly,
+  testActiveConnection,
+  savePgConnection,
+  loadPgSyncTables,
+  savePgSyncTables,
+} = useDataSync()
+
+const syncModeOptions = [
+  { label: '表直连（table）', value: 'table' },
+  { label: '存储过程（procedure）', value: 'procedure' },
+]
+
+const enabledTableCount = computed(() => state.pgSyncTables.filter((item) => item.enabled).length)
 
 onMounted(() => {
   state.activeTab = 'pg_remote'
@@ -182,6 +303,24 @@ const handleSavePg = async () => {
     }
   } catch {
     message.error('PG 配置保存失败')
+  }
+}
+
+const handleReloadPgTables = async () => {
+  try {
+    await loadPgSyncTables()
+    message.success('PG 表配置已刷新')
+  } catch {
+    message.error('刷新 PG 表配置失败')
+  }
+}
+
+const handleSavePgTables = async () => {
+  try {
+    await savePgSyncTables()
+    message.success('PG 表同步配置已保存')
+  } catch {
+    message.error('保存 PG 表同步配置失败')
   }
 }
 </script>

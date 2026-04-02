@@ -81,6 +81,14 @@
           {{ state.preflightResult.risk_level }}
         </a-tag>
       </div>
+      <div class="text-[11px] text-slate-500 mt-1">
+        模式：{{ state.preflightResult.mode || '-' }} · Schema：{{
+          state.preflightResult.remote_schema || '-'
+        }}
+        · 矩阵范围：全量({{ state.preflightResult.matrix_scope?.full || 'all' }}) / 执行集({{
+          state.preflightResult.matrix_scope?.execution || 'enabled'
+        }})
+      </div>
       <div
         v-if="state.preflightResult.blockers?.length"
         class="text-[11px] text-red-500 mt-1"
@@ -92,6 +100,54 @@
         class="text-[11px] text-amber-600 mt-1"
       >
         告警：{{ state.preflightResult.warnings.join('；') }}
+      </div>
+      <div
+        v-if="state.preflightResult.table_validations?.length"
+        class="mt-2 text-[11px] text-slate-600"
+      >
+        全量矩阵：{{ passCount(state.preflightResult.table_validations) }}/{{
+          state.preflightResult.table_validations.length
+        }}
+        可执行
+      </div>
+      <div
+        v-if="state.preflightResult.execution_table_validations?.length"
+        class="mt-1 text-[11px] text-slate-600"
+      >
+        执行集矩阵：{{ passCount(state.preflightResult.execution_table_validations) }}/{{
+          state.preflightResult.execution_table_validations.length
+        }}
+        可执行
+      </div>
+      <div
+        v-if="failedFullValidations.length"
+        class="mt-2 rounded border border-amber-200 bg-amber-50/60 px-2 py-1.5"
+      >
+        <div class="text-[11px] font-semibold text-amber-700 mb-1">
+          全量矩阵失败项（{{ failedFullValidations.length }}）
+        </div>
+        <div
+          v-for="item in failedFullValidations"
+          :key="`full-${item.table}`"
+          class="text-[11px] text-amber-700 leading-5"
+        >
+          {{ item.table }}：{{ item.blockers.join('；') || '不可执行' }}
+        </div>
+      </div>
+      <div
+        v-if="failedExecutionValidations.length"
+        class="mt-2 rounded border border-red-200 bg-red-50/60 px-2 py-1.5"
+      >
+        <div class="text-[11px] font-semibold text-red-700 mb-1">
+          执行集失败项（{{ failedExecutionValidations.length }}）
+        </div>
+        <div
+          v-for="item in failedExecutionValidations"
+          :key="`execution-${item.table}`"
+          class="text-[11px] text-red-700 leading-5"
+        >
+          {{ item.table }}：{{ item.blockers.join('；') || '不可执行' }}
+        </div>
       </div>
     </div>
 
@@ -202,8 +258,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import type { SyncTableValidationItem } from '@/api/sync'
 import { useDataSync } from '../../composables/useDataSync'
 
 const { state, clearLogs, loadRunHistory } = useDataSync()
@@ -221,6 +278,25 @@ const tierOptions = [
   { label: 'Tier2', value: 'tier2' },
   { label: 'Tier3', value: 'tier3' },
 ]
+
+const failedFullValidations = computed(() => {
+  const items = state.preflightResult?.table_validations || []
+  return items.filter((item) => !item.executable)
+})
+
+const failedExecutionValidations = computed(() => {
+  const preferred = state.preflightResult?.execution_table_validations
+  const fallback = state.preflightResult?.table_validations
+  const items = (preferred && preferred.length > 0 ? preferred : fallback) || []
+  return items.filter((item) => !item.executable)
+})
+
+function passCount(items?: SyncTableValidationItem[]): number {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 0
+  }
+  return items.filter((item) => item.executable).length
+}
 
 async function handleRefreshHistory() {
   try {

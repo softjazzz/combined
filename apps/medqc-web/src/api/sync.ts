@@ -208,6 +208,8 @@ export const syncApi = {
     remote_port: number
     remote_database: string
     remote_username: string
+    remote_schema?: string
+    sync_mode?: 'table' | 'procedure'
     remote_password?: string
   }): Promise<{ config: PgConnectionConfig; connection: Record<string, any> }> {
     const response = await http.put('/api/v1/sync/config/pg', payload)
