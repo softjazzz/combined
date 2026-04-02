@@ -1,27 +1,35 @@
 <template>
   <section
-    class="flex flex-col flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden"
+    class="flex flex-col flex-1 min-h-0 bg-white rounded-xl border border-slate-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] overflow-hidden"
   >
     <!-- 列表主体 -->
     <div
       v-if="urgentTasks.length || normalTasks.length"
       class="flex-1 overflow-y-auto custom-scrollbar"
     >
-      <!-- 紧急组 -->
-      <div v-if="urgentTasks.length">
+      <!-- 紧急组 - P0/P1 -->
+      <div
+        v-if="urgentTasks.length"
+        class="mb-6"
+      >
         <div
-          class="sticky top-0 z-10 flex items-center gap-2 border-b border-red-100 bg-red-50/80 px-5 py-2 backdrop-blur-sm"
+          class="sticky top-0 z-10 flex items-center justify-between border-b border-red-100 bg-red-50/40 backdrop-blur-md px-6 py-2.5"
         >
-          <span class="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-          <span class="text-[12px] font-bold text-red-700 uppercase tracking-wider">
-            P0 / P1 紧急
-          </span>
-          <span
-            class="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-extrabold text-red-600 font-mono"
-            style="font-variant-numeric: tabular-nums"
-          >{{ urgentTasks.length }}</span>
+          <div class="flex items-center gap-2">
+            <span class="relative flex h-2 w-2">
+              <span
+                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"
+              />
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+            </span>
+            <span
+              class="text-[12px] font-black text-red-900 uppercase tracking-widest leading-none mt-0.5"
+            >
+              紧急
+            </span>
+          </div>
         </div>
-        <div class="divide-y divide-slate-100">
+        <div class="flex flex-col">
           <UnifiedTaskRow
             v-for="task in urgentTasks"
             :key="task.id"
@@ -37,18 +45,18 @@
       <!-- 常规组 -->
       <div v-if="normalTasks.length">
         <div
-          class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-5 py-2 backdrop-blur-sm"
+          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/40 backdrop-blur-md px-6 py-2.5"
         >
-          <span class="h-2 w-2 rounded-full bg-blue-400" />
-          <span class="text-[12px] font-bold text-slate-600 uppercase tracking-wider">
-            常规待办
-          </span>
-          <span
-            class="ml-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-600 font-mono"
-            style="font-variant-numeric: tabular-nums"
-          >{{ normalTasks.length }}</span>
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full bg-slate-300" />
+            <span
+              class="text-[12px] font-black text-slate-500 uppercase tracking-widest leading-none mt-0.5"
+            >
+              常规待办
+            </span>
+          </div>
         </div>
-        <div class="divide-y divide-slate-100">
+        <div class="flex flex-col">
           <UnifiedTaskRow
             v-for="task in normalTasks"
             :key="task.id"
@@ -65,18 +73,23 @@
     <!-- 空态 -->
     <div
       v-else
-      class="flex-1 flex flex-col items-center justify-center py-20"
+      class="flex-1 flex flex-col items-center justify-center py-20 bg-slate-50/30"
     >
       <div
-        class="h-14 w-14 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 mb-4"
+        class="h-20 w-20 rounded-full border border-dashed border-slate-200 bg-white flex items-center justify-center shadow-sm mb-5 relative group cursor-default"
       >
-        <CheckOutlined class="text-[24px]" />
+        <div
+          class="absolute inset-0 bg-blue-50/50 rounded-full scale-0 transition-transform duration-500 group-hover:scale-100"
+        />
+        <CoffeeOutlined
+          class="text-[28px] text-slate-300 relative z-10 transition-colors group-hover:text-blue-400"
+        />
       </div>
-      <div class="text-[15px] font-semibold text-slate-600">
-        当前没有需要处理的任务
+      <div class="text-[15px] font-extrabold text-slate-800 tracking-tight">
+        今天干得不错，特急待办已清空
       </div>
-      <div class="text-[13px] text-slate-400 mt-1.5">
-        可以切换日期或调整筛选条件查看更多
+      <div class="text-[13px] text-slate-400 mt-2 font-medium">
+        您可以喝杯咖啡，或筛查一下其他日期的记录
       </div>
     </div>
   </section>
@@ -84,7 +97,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { CheckOutlined } from '@ant-design/icons-vue'
+import { CoffeeOutlined } from '@ant-design/icons-vue'
 import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
 import UnifiedTaskRow from './UnifiedTaskRow.vue'
 

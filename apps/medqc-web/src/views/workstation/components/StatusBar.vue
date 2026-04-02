@@ -1,42 +1,43 @@
 <template>
-  <div
-    class="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
-  >
+  <div class="flex items-center gap-3">
     <button
       v-for="item in indicators"
       :key="item.key"
       type="button"
-      class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] transition-colors duration-150"
+      class="group relative flex items-center gap-2 rounded-md border px-3 py-1.5 transition-all duration-200 outline-none select-none"
       :class="
         activeKey === item.key
-          ? 'bg-blue-50 text-blue-700 font-bold'
-          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          ? [item.activeBgColor, item.activeBorderColor, 'shadow-[0_1px_2px_rgba(0,0,0,0.03)]']
+          : 'bg-white border-transparent hover:bg-slate-100/60 hover:border-slate-200'
       "
       @click="emit('select', item.key)"
     >
+      <div class="flex items-center gap-1.5">
+        <span
+          class="text-[12px] font-bold"
+          :class="activeKey === item.key ? item.activeTextColor : 'text-slate-500'"
+        >
+          <span class="mr-1 opacity-80">{{ item.dotEmoji }}</span>
+          {{ item.label }}
+        </span>
+      </div>
       <span
-        class="h-2 w-2 rounded-full shrink-0"
-        :class="item.dotColor"
-      />
-      <span class="font-medium">{{ item.label }}</span>
-      <span
-        class="font-mono font-extrabold"
+        class="ml-2 rounded-sm px-1.5 py-0.5 text-[11px] font-black font-mono leading-none transition-colors"
+        :class="
+          activeKey === item.key
+            ? item.numActiveBgColor + ' ' + item.activeTextColor
+            : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200/60'
+        "
         style="font-variant-numeric: tabular-nums"
-      >{{
-        item.value
-      }}</span>
+      >
+        {{ item.value }}
+      </span>
     </button>
-
-    <div class="ml-auto flex items-center text-[12px] text-slate-400">
-      <CalendarOutlined class="mr-1 text-[11px]" />
-      {{ dateLabel }}
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CalendarOutlined } from '@ant-design/icons-vue'
 import type { HomeKpis } from '@/views/workstation-v2/types'
 
 const props = defineProps<{
@@ -53,26 +54,42 @@ const indicators = computed(() => [
   {
     key: 'my_pending_total',
     label: '待处理',
+    dotEmoji: '🟡',
     value: props.kpis.my_pending_total,
-    dotColor: 'bg-amber-500',
+    activeBgColor: 'bg-amber-50',
+    activeBorderColor: 'border-amber-200',
+    activeTextColor: 'text-amber-800',
+    numActiveBgColor: 'bg-amber-100',
   },
   {
     key: 'high_risk_total',
     label: '高风险',
+    dotEmoji: '🔴',
     value: props.kpis.high_risk_total,
-    dotColor: 'bg-red-500',
+    activeBgColor: 'bg-red-50',
+    activeBorderColor: 'border-red-200',
+    activeTextColor: 'text-red-700',
+    numActiveBgColor: 'bg-red-100',
   },
   {
     key: 'my_overdue_total',
     label: '已超时',
+    dotEmoji: '🟠',
     value: props.kpis.my_overdue_total,
-    dotColor: 'bg-orange-500',
+    activeBgColor: 'bg-orange-50',
+    activeBorderColor: 'border-orange-200',
+    activeTextColor: 'text-orange-800',
+    numActiveBgColor: 'bg-orange-100',
   },
   {
     key: 'my_in_progress_total',
     label: '进行中',
+    dotEmoji: '🔵',
     value: props.kpis.my_in_progress_total,
-    dotColor: 'bg-blue-500',
+    activeBgColor: 'bg-blue-50',
+    activeBorderColor: 'border-blue-200',
+    activeTextColor: 'text-blue-700',
+    numActiveBgColor: 'bg-blue-100',
   },
 ])
 </script>

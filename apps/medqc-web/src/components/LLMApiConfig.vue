@@ -134,7 +134,7 @@
                   </div>
                 </div>
                 <div class="custom-model-panel">
-                  <a-space.Compact style="width: 100%">
+                  <a-space-compact style="width: 100%">
                     <a-input
                       v-model:value="newModelCode"
                       class="ds-input"
@@ -149,7 +149,7 @@
                     >
                       添加
                     </a-button>
-                  </a-space.Compact>
+                  </a-space-compact>
 
                   <div
                     v-if="customModels.length"

@@ -1,147 +1,167 @@
 <template>
   <div
-    class="group relative transition-colors duration-150"
-    :class="isExpanded ? 'bg-blue-50/30' : 'hover:bg-slate-50/80'"
+    class="group relative flex flex-col transition-colors duration-200 border-b last:border-b-0 border-slate-100/60"
+    :class="isExpanded ? 'bg-slate-50/60' : 'bg-white hover:bg-[#f8fafc]'"
   >
-    <!-- 左侧优先级色线 -->
+    <!-- 左侧优先级超细边线 (P0/P1可见) -->
     <div
-      class="absolute left-0 top-0 bottom-0 w-1 transition-all"
-      :class="stripeClass"
+      v-if="isUrgent"
+      class="absolute left-0 top-0 bottom-0 w-[3px]"
+      :class="urgencyLineColor"
     />
 
-    <!-- 主行 -->
+    <!-- 卡片主体区 -->
     <div
-      class="flex items-center gap-4 px-5 py-3 cursor-pointer"
+      class="flex items-stretch px-6 py-4 cursor-pointer"
       @click="emit('toggleExpand', task.id)"
     >
-      <!-- 来源标签 -->
-      <span
-        class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold leading-none"
-        :class="
-          task.source_type === 'hotspot'
-            ? 'bg-orange-50 text-orange-600 ring-1 ring-inset ring-orange-200'
-            : 'bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-200'
-        "
+      <!-- 中间信息区 (两行结构) -->
+      <div
+        class="flex-1 flex flex-col justify-center min-w-0 pr-6 pl-1 border-r border-transparent group-hover:border-slate-100 transition-colors"
       >
-        {{ task.source_type === 'hotspot' ? '问题' : '待办' }}
-      </span>
+        <!-- 第一行：身份与场景 -->
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="text-[14px] font-bold text-[#1e293b] truncate">
+            {{ task.patient_name || '--' }}
+          </span>
+          <span class="text-[12px] text-[#64748b] font-mono truncate mx-1">
+            {{ task.visit_id || '--' }}
+          </span>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <!-- 科室次级标签 (Ghost) -->
+            <span
+              class="text-[11px] font-medium text-slate-500 bg-slate-100/50 px-1.5 py-0.5 rounded border border-slate-200/50"
+            >
+              {{ task.department || '未分科室' }}
+            </span>
+            <!-- 流程类型标签 (Ghost) -->
+            <span
+              class="text-[11px] font-medium text-blue-600 bg-blue-50/50 px-1.5 py-0.5 rounded border border-blue-100/50"
+            >
+              {{ workflowLabel(task.workflow_type) }}
+            </span>
+            <!-- 来源 Mini Tag (彻底虚化) -->
+            <span class="text-[10px] font-bold text-slate-400 bg-transparent px-1">
+              {{ task.source_type === 'hotspot' ? '#问题' : '#待办' }}
+            </span>
+          </div>
+        </div>
 
-      <!-- 患者 + 住院号 -->
-      <div class="flex items-center gap-2 min-w-[140px] shrink-0">
+        <!-- 第二行：问题与摘要 -->
+        <div class="flex items-center gap-3">
+          <!-- 红色缺陷 Badge 排前以引起注意 -->
+          <span
+            v-if="task.active_defect_count > 0"
+            class="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 text-[10.5px] font-bold text-red-600 border border-red-100/80 shrink-0"
+          >
+            <WarningFilled class="text-[10px]" />
+            {{ task.active_defect_count }} 活跃缺陷
+          </span>
+          <!-- 摘要文本 -->
+          <span class="text-[13px] text-[#475569] truncate flex-1 min-w-0 font-medium">
+            {{ task.title || task.summary || '暂无详细摘要' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- 右侧时间与行动区 -->
+      <div class="w-[140px] shrink-0 flex flex-col items-end justify-center pl-4">
         <span
-          v-if="task.unread_count > 0"
-          class="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0"
-        />
-        <span class="text-[14px] font-bold text-slate-900 truncate">
-          {{ task.patient_name || '--' }}
+          class="text-[11.5px] text-[#94a3b8] font-mono transition-opacity duration-200"
+          :class="isExpanded ? 'opacity-0' : 'group-hover:opacity-0'"
+        >
+          {{ formatDateTime(task.latest_created_at || task.due_at) }}
         </span>
-        <span class="text-[12px] text-slate-400 font-mono truncate">
-          {{ task.visit_id || '--' }}
-        </span>
+
+        <!-- Hover 行动按钮 (Ghost) -->
+        <div
+          class="absolute right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          :class="{ 'opacity-100': isExpanded }"
+        >
+          <button
+            type="button"
+            class="flex items-center justify-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-bold transition-all border outline-none"
+            :class="
+              isExpanded
+                ? 'bg-blue-600 border-blue-600 text-white shadow-sm hover:bg-blue-700 hover:border-blue-700'
+                : 'bg-white border-blue-200 text-blue-600 shadow-sm hover:bg-blue-50 hover:border-blue-300'
+            "
+            @click.stop="handleClickAction"
+          >
+            <span
+              v-if="isLoading"
+              class="animate-spin"
+            ><LoadingOutlined /></span>
+            <span v-else>立即处理</span>
+            <ArrowRightOutlined
+              v-if="!isLoading"
+              class="text-[10px]"
+            />
+          </button>
+        </div>
       </div>
-
-      <!-- 科室 -->
-      <span class="text-[12px] text-slate-500 truncate min-w-[60px] shrink-0">
-        {{ task.department || '未分科室' }}
-      </span>
-
-      <!-- 流程类型 -->
-      <span
-        class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
-      >
-        {{ workflowLabel(task.workflow_type) }}
-      </span>
-
-      <!-- 问题摘要（弹性填充） -->
-      <div class="flex-1 min-w-0">
-        <span class="text-[13px] text-slate-700 truncate block">
-          {{ task.title || task.summary || '暂无摘要' }}
-        </span>
-      </div>
-
-      <!-- 缺陷数 -->
-      <span
-        v-if="task.active_defect_count > 0"
-        class="shrink-0 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-600 ring-1 ring-inset ring-red-500/20"
-      >
-        <CloseCircleFilled class="mr-0.5 text-[9px]" />
-        {{ task.active_defect_count }}
-      </span>
-
-      <!-- 时间 -->
-      <span
-        class="shrink-0 text-[11px] text-slate-400 font-mono w-[80px] text-right"
-        style="font-variant-numeric: tabular-nums"
-      >
-        {{ formatDateTime(task.latest_created_at || task.due_at) }}
-      </span>
-
-      <!-- 操作按钮 -->
-      <button
-        type="button"
-        class="shrink-0 rounded-lg bg-blue-600 px-3 py-1 text-[12px] font-bold text-white shadow-sm transition-all hover:bg-blue-500 hover:shadow active:scale-95"
-        @click.stop="emit('open', task)"
-      >
-        立即处理
-      </button>
     </div>
 
-    <!-- 行内展开详情 -->
+    <!-- 行内展开上下文 (Inline Expansion) -->
     <div
       v-if="isExpanded"
-      class="border-t border-slate-100 bg-slate-50/50 px-5 py-3 ml-5"
+      class="bg-[#f8fafc] border-t border-slate-200/60 px-6 py-4 shadow-inner"
     >
-      <div class="flex flex-wrap gap-x-6 gap-y-2 text-[12px]">
-        <div>
-          <span class="text-slate-400">风险级别</span>
-          <span
-            class="ml-1.5 font-bold"
-            :class="severityTextClass"
-          >{{
-            severityLabel(task.severity)
-          }}</span>
+      <div class="flex gap-12 text-[12px]">
+        <!-- 左侧 Key-Value 数据 -->
+        <div class="flex flex-col gap-3 min-w-[200px]">
+          <div
+            class="flex justify-between items-center border-b border-dashed border-slate-200 pb-1"
+          >
+            <span class="text-slate-400">风险评估</span>
+            <span
+              class="font-bold"
+              :class="severityTextClass"
+            >{{
+              severityLabel(task.severity)
+            }}</span>
+          </div>
+          <div
+            class="flex justify-between items-center border-b border-dashed border-slate-200 pb-1"
+          >
+            <span class="text-slate-400">任务状态</span>
+            <span class="font-bold text-slate-700">{{ taskStatusLabel(task.task_status) }}</span>
+          </div>
+          <div
+            class="flex justify-between items-center border-b border-dashed border-slate-200 pb-1"
+          >
+            <span class="text-slate-400">未读消息</span>
+            <span class="font-bold font-mono text-slate-700">{{ task.unread_count || 0 }}</span>
+          </div>
         </div>
-        <div v-if="task.task_status">
-          <span class="text-slate-400">任务状态</span>
-          <span class="ml-1.5 font-bold text-slate-700">{{
-            taskStatusLabel(task.task_status)
-          }}</span>
+
+        <!-- 右侧文本块 -->
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">质控上下文概括</span>
+            <span
+              v-if="task.latest_qc_grade"
+              class="rounded bg-slate-200 px-1 py-0.5 text-[10px] font-bold text-slate-700 font-mono leading-none"
+            >{{ task.latest_qc_grade }} / {{ task.latest_qc_score ?? '-' }}分</span>
+          </div>
+          <p
+            class="text-[13px] leading-relaxed text-slate-600 bg-white p-3 rounded border border-slate-100 shadow-sm m-0"
+          >
+            {{
+              task.summary ||
+                task.title ||
+                '无进一步上下文。由于当前质控记录已被标记为缺陷，请点击「立即处理」穿透至病历原件进行详细核对与修正。'
+            }}
+          </p>
         </div>
-        <div v-if="task.latest_qc_grade">
-          <span class="text-slate-400">质控等级</span>
-          <span class="ml-1.5 font-bold text-slate-700">{{ task.latest_qc_grade }}</span>
-          <span
-            v-if="task.latest_qc_score != null"
-            class="ml-1 rounded bg-slate-200 px-1 text-[10px] font-bold text-slate-600 font-mono"
-          >{{ task.latest_qc_score }}</span>
-        </div>
-        <div>
-          <span class="text-slate-400">活跃缺陷</span>
-          <span
-            class="ml-1.5 font-bold font-mono"
-            :class="task.active_defect_count > 0 ? 'text-red-600' : 'text-slate-500'"
-          >{{ task.active_defect_count || 0 }}</span>
-        </div>
-        <div>
-          <span class="text-slate-400">未读消息</span>
-          <span class="ml-1.5 font-bold text-slate-700 font-mono">{{
-            task.unread_count || 0
-          }}</span>
-        </div>
-      </div>
-      <div
-        v-if="task.summary"
-        class="mt-2 text-[12px] leading-relaxed text-slate-500 line-clamp-2"
-      >
-        {{ task.summary }}
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { CloseCircleFilled } from '@ant-design/icons-vue'
+import { ref, computed } from 'vue'
+import { WarningFilled, ArrowRightOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
 
 const props = defineProps<{
@@ -156,14 +176,29 @@ const emit = defineEmits<{
 }>()
 
 const isExpanded = computed(() => props.expandedId === props.task.id)
+const isLoading = ref(false)
 
-const stripeClass = computed(() => {
+function handleClickAction() {
+  isLoading.value = true
+  // 短暂 loading 后触发，增强即时响应感
+  setTimeout(() => {
+    emit('open', props.task)
+    isLoading.value = false
+  }, 150)
+}
+
+const isUrgent = computed(() => {
   const s = (props.task.severity || '').toLowerCase()
   const p = (props.task.priority || '').toLowerCase()
-  if (s === 'critical' || p === 'critical') return 'bg-red-500'
-  if (s === 'high' || p === 'high') return 'bg-orange-400'
-  if (s === 'warning' || s === 'medium' || p === 'medium') return 'bg-amber-300'
-  return 'bg-blue-300'
+  return s === 'critical' || s === 'high' || p === 'critical' || p === 'high'
+})
+
+const urgencyLineColor = computed(() => {
+  const s = (props.task.severity || '').toLowerCase()
+  const p = (props.task.priority || '').toLowerCase()
+  if (s === 'critical' || p === 'critical')
+    return 'bg-red-500 shadow-[2px_0_6px_rgba(239,68,68,0.3)]'
+  return 'bg-orange-400 shadow-[2px_0_6px_rgba(251,146,60,0.3)]'
 })
 
 const severityTextClass = computed(() => {

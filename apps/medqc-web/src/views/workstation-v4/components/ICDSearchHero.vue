@@ -62,10 +62,7 @@
             v-for="v in versionTabs"
             :key="v.value"
             :class="['seg-btn', localVersion === v.value ? 'seg-btn-active' : '']"
-            @click="
-              localVersion = v.value
-              $emit('update:codeVersion', v.value)
-            "
+            @click="selectVersion(v.value)"
           >
             {{ v.label }}
           </button>
@@ -76,10 +73,7 @@
             v-for="t in codeTypeTabs"
             :key="t.value"
             :class="['seg-btn', localType === t.value ? 'seg-btn-active' : '']"
-            @click="
-              localType = t.value
-              $emit('update:codeType', t.value)
-            "
+            @click="selectCodeType(t.value)"
           >
             {{ t.label }}
           </button>
@@ -170,6 +164,16 @@ function onQueryChange() {
       emit('search', localQuery.value)
     }
   }, 280)
+}
+
+function selectVersion(value: string) {
+  localVersion.value = value
+  emit('update:codeVersion', value)
+}
+
+function selectCodeType(value: string) {
+  localType.value = value
+  emit('update:codeType', value)
 }
 </script>
 
