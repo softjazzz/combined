@@ -6,9 +6,7 @@
       >
         <div class="batch-table-panel__toolbar-meta min-w-0">
           <div class="flex flex-wrap items-center gap-2.5">
-            <div class="batch-table-panel__title">
-              批量工作台
-            </div>
+            <div class="batch-table-panel__title">批量工作台</div>
             <span class="batch-table-panel__summary-pill">当前 {{ rows.length }} 条</span>
             <span class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected">
               已选 {{ selectedRowKeys.length }} 条
@@ -18,15 +16,17 @@
 
         <div class="batch-table-panel__actions flex flex-wrap items-center gap-2">
           <a-button
+            v-if="showPrimaryAction"
             size="small"
             type="primary"
             class="batch-table-panel__action batch-table-panel__action--primary"
             :disabled="selectedRowKeys.length === 0 || readonly"
             @click="emit('batch-extract', selectedRowKeys)"
           >
-            批量进入抽取
+            {{ primaryActionLabel }}
           </a-button>
           <a-button
+            v-if="showDeferAction"
             size="small"
             class="batch-table-panel__action batch-table-panel__action--secondary"
             :disabled="selectedRowKeys.length === 0 || readonly"
@@ -35,6 +35,7 @@
             标记稍后
           </a-button>
           <a-button
+            v-if="showAssignAction"
             size="small"
             class="batch-table-panel__action batch-table-panel__action--secondary"
             :disabled="selectedRowKeys.length === 0 || readonly"
@@ -107,7 +108,7 @@
             class="batch-table-panel__detail-button"
             @click="emit('open-record', record.id)"
           >
-            查看详情
+            {{ rowActionLabel }}
           </a-button>
         </template>
       </template>
@@ -135,6 +136,11 @@ const props = defineProps<{
   summaryText: string
   loading?: boolean
   readonly?: boolean
+  primaryActionLabel?: string
+  rowActionLabel?: string
+  showPrimaryAction?: boolean
+  showDeferAction?: boolean
+  showAssignAction?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -154,6 +160,12 @@ const rowSelection = computed(() => ({
       keys.map((k) => String(k)),
     ),
 }))
+
+const primaryActionLabel = computed(() => props.primaryActionLabel || '批量处理')
+const rowActionLabel = computed(() => props.rowActionLabel || '查看详情')
+const showPrimaryAction = computed(() => props.showPrimaryAction !== false)
+const showDeferAction = computed(() => props.showDeferAction === true)
+const showAssignAction = computed(() => props.showAssignAction === true)
 
 const tableLocale = {
   emptyText: '当前筛选条件下暂无候选病历',

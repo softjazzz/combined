@@ -57,14 +57,11 @@
               </template>
               <span>工作台首页</span>
             </a-menu-item>
-            <a-menu-item
-              v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
-              key="/workstation-v4/qc-overview"
-            >
+            <a-menu-item key="/workstation-v4/worklist">
               <template #icon>
                 <AlertOutlined />
               </template>
-              <span>问题集中点</span>
+              <span>病历池</span>
             </a-menu-item>
             <a-menu-item
               key="ws-stage-frontpage-generate"
@@ -436,7 +433,8 @@ const currentPageTitle = computed(() => {
   const path = route.path
   const titleMap: Record<string, string> = {
     '/workstation-v4': '工作台',
-    '/workstation-v4/qc-overview': '问题集中点',
+    '/workstation-v4/qc-overview': '工作台',
+    '/workstation-v4/worklist': '病历池',
     '/workstation-v4/icd': 'ICD 编码查询',
     '/workstation-v4/upload': '数据上传',
     '/workstation-v4/stats': '统计分析',
@@ -510,7 +508,7 @@ const handleMenuOpenChange = (keys: string[]) => {
 }
 
 function goStageMenu(stage: 'frontpage_generate' | 'frontpage_qc' | 'settlement_qc') {
-  navigateTo('/workstation-v4', { stage })
+  navigateTo('/workstation-v4/worklist', { stage })
 }
 
 const handleLogout = async () => {
@@ -526,17 +524,26 @@ const handleLogout = async () => {
 watch(
   () => route.fullPath,
   () => {
-    const base = route.path
+    const base = route.path === '/workstation-v4/qc-overview' ? '/workstation-v4' : route.path
     const stage = String(route.query.stage || '').trim()
-    if (base === '/workstation-v4' && stage === 'frontpage_generate') {
+    if (
+      (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
+      stage === 'frontpage_generate'
+    ) {
       selectedKeys.value = ['ws-stage-frontpage-generate']
       return
     }
-    if (base === '/workstation-v4' && stage === 'frontpage_qc') {
+    if (
+      (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
+      stage === 'frontpage_qc'
+    ) {
       selectedKeys.value = ['ws-stage-frontpage-qc']
       return
     }
-    if (base === '/workstation-v4' && stage === 'settlement_qc') {
+    if (
+      (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
+      stage === 'settlement_qc'
+    ) {
       selectedKeys.value = ['ws-stage-settlement-qc']
       return
     }

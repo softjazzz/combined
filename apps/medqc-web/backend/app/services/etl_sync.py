@@ -177,10 +177,10 @@ _CONFIG_DIR = Path(__file__).parent.parent.parent / "data"
 _CONFIG_FILE = _CONFIG_DIR / "db_config.json"
 
 _DEFAULT_CONFIG = {
-    "remote_host": "192.168.140.4",
-    "remote_port": "5432",
+    "remote_host": "192.168.140.160",
+    "remote_port": "16016",
     "remote_database": "dhc-app",
-    "remote_username": "Baidu",
+    "remote_username": "postgres",
     "remote_password_ref": "env:REMOTE_DB_PASSWORD",
 }
 

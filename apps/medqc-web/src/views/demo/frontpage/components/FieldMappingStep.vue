@@ -24,8 +24,8 @@
           class="flex items-center gap-2"
         >
           <span class="text-xs text-slate-500">AI 置信度</span>
-          <a-progress 
-            :percent="Math.round(confidence * 100)" 
+          <a-progress
+            :percent="Math.round(confidence * 100)"
             :size="[120, 6]"
             :stroke-color="confidence > 0.8 ? '#52c41a' : confidence > 0.5 ? '#faad14' : '#f5222d'"
           />
@@ -61,7 +61,7 @@
       <!-- 数据预览 -->
       <div class="preview-section">
         <h3 class="section-title">
-          <FileExcelOutlined class="text-green-500" /> 
+          <FileExcelOutlined class="text-green-500" />
           数据预览
           <a-tag>{{ fileName }}</a-tag>
           <a-tag color="blue">
@@ -102,7 +102,7 @@
       <!-- 字段映射表格 -->
       <div class="mapping-section">
         <h3 class="section-title">
-          <SwapOutlined class="text-blue-500" /> 
+          <SwapOutlined class="text-blue-500" />
           字段映射
           <span class="mapped-count">
             {{ mappedCount }} / {{ Object.keys(localMappings).length }} 已映射
@@ -110,14 +110,14 @@
         </h3>
 
         <div class="mapping-grid">
-          <div 
-            v-for="col in columns" 
-            :key="col" 
+          <div
+            v-for="col in columns"
+            :key="col"
             class="mapping-row"
             :class="{
               'mapping-row-mapped': localMappings[col],
               'mapping-row-unmapped': !localMappings[col],
-              'mapping-row-required-missing': isRequiredFieldMissing(col)
+              'mapping-row-required-missing': isRequiredFieldMissing(col),
             }"
           >
             <!-- 源列名 -->
@@ -154,9 +154,9 @@
                 style="width: 100%"
                 size="small"
               >
-                <a-select-option 
-                  v-for="(field, key) in standardFields" 
-                  :key="key" 
+                <a-select-option
+                  v-for="(field, key) in standardFields"
+                  :key="key"
                   :value="key"
                   :disabled="isFieldUsed(key, col)"
                 >
@@ -188,7 +188,9 @@
           type="warning"
           show-icon
           :message="`缺少 ${missingRequired.length} 个必填字段`"
-          :description="'缺失: ' + missingRequired.map(k => standardFields[k]?.name || k).join('、')"
+          :description="
+            '缺失: ' + missingRequired.map((k) => standardFields[k]?.name || k).join('、')
+          "
         />
       </div>
 
@@ -206,8 +208,8 @@
           </template>
           重置映射
         </a-button>
-        <a-button 
-          type="primary" 
+        <a-button
+          type="primary"
           :loading="confirming"
           :disabled="mappedCount === 0"
           @click="confirmMapping"
@@ -225,6 +227,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { getAccessToken } from '@/utils/auth-token'
 import {
   ArrowLeftOutlined,
   FileExcelOutlined,
@@ -255,18 +258,26 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   (e: 'back'): void
-  (e: 'confirmed', data: { 
-    fileId: string
-    mappings: Record<string, string>
-    analysisResults: any
-    charts: any
-    aiInsights: string[]
-  }): void
+  (
+    e: 'confirmed',
+    data: {
+      fileId: string
+      mappings: Record<string, string>
+      analysisResults: any
+      charts: any
+      aiInsights: string[]
+    },
+  ): void
 }>()
 
 // API base URL
 const apiBaseUrl = ((import.meta as any)?.env?.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
 const API_BASE = apiBaseUrl ? `${apiBaseUrl}/api/v1/drg` : '/api/v1/drg'
+
+function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const token = getAccessToken()
+  return token ? { Authorization: `Bearer ${token}`, ...extraHeaders } : extraHeaders
+}
 
 // 状态
 const loading = ref(true)
@@ -278,7 +289,7 @@ const fallback = ref(false)
 
 // 计算属性
 const mappedCount = computed(() => {
-  return Object.values(localMappings.value).filter(v => !!v).length
+  return Object.values(localMappings.value).filter((v) => !!v).length
 })
 
 const missingRequired = computed(() => {
@@ -298,7 +309,7 @@ const filterOption = (input: string, option: any) => {
 
 const isFieldUsed = (fieldKey: string, currentCol: string) => {
   return Object.entries(localMappings.value).some(
-    ([col, key]) => key === fieldKey && col !== currentCol
+    ([col, key]) => key === fieldKey && col !== currentCol,
   )
 }
 
@@ -316,11 +327,11 @@ const fetchMappingSuggestion = async () => {
   try {
     const response = await fetch(`${API_BASE}/mapping/suggest`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id: props.fileId })
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ file_id: props.fileId }),
     })
     const data = await response.json()
-    
+
     if (data.suggested_mappings) {
       localMappings.value = { ...data.suggested_mappings }
     }
@@ -339,7 +350,9 @@ const fetchMappingSuggestion = async () => {
 const pollMappingStatus = async () => {
   // 先尝试轮询后台映射是否已完成
   try {
-    const response = await fetch(`${API_BASE}/mapping-status/${props.fileId}`)
+    const response = await fetch(`${API_BASE}/mapping-status/${props.fileId}`, {
+      headers: getAuthHeaders(),
+    })
     const data = await response.json()
     if (data.ready) {
       // 直接使用缓存结果
@@ -348,7 +361,9 @@ const pollMappingStatus = async () => {
         confidence.value = data.confidence || 0
       }
       // 仍然需要获取标准字段列表
-      const fieldsRes = await fetch(`${API_BASE}/mapping/fields`)
+      const fieldsRes = await fetch(`${API_BASE}/mapping/fields`, {
+        headers: getAuthHeaders(),
+      })
       const fieldsData = await fieldsRes.json()
       if (fieldsData.fields) {
         standardFields.value = fieldsData.fields
@@ -367,7 +382,7 @@ const confirmMapping = async () => {
   for (const [col, key] of Object.entries(localMappings.value)) {
     if (key) validMappings[col] = key
   }
-  
+
   if (Object.keys(validMappings).length === 0) {
     message.warning('请至少映射一个字段')
     return
@@ -377,13 +392,13 @@ const confirmMapping = async () => {
   try {
     const response = await fetch(`${API_BASE}/mapping/confirm`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         file_id: props.fileId,
-        mappings: validMappings
-      })
+        mappings: validMappings,
+      }),
     })
-    
+
     let data
     try {
       data = await response.json()

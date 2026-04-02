@@ -123,7 +123,10 @@
             <span class="tab-name">{{ table.name }}</span>
             <a-badge
               :count="table.column_count"
-              :number-style="{ backgroundColor: selectedTable === table.name ? '#2563eb' : '#94a3b8', fontSize: '11px' }"
+              :number-style="{
+                backgroundColor: selectedTable === table.name ? '#2563eb' : '#94a3b8',
+                fontSize: '11px',
+              }"
             />
           </div>
         </div>
@@ -207,7 +210,9 @@
                       <span
                         class="cell-value"
                         :title="String(row[col] ?? '')"
-                      >{{ formatCell(row[col]) }}</span>
+                      >{{
+                        formatCell(row[col])
+                      }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -416,7 +421,9 @@
                       <span
                         class="cell-value"
                         :title="String(row[col] ?? '')"
-                      >{{ formatCell(row[col]) }}</span>
+                      >{{
+                        formatCell(row[col])
+                      }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -431,6 +438,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { getAccessToken } from '@/utils/auth-token'
 import {
   FileTextOutlined,
   MedicineBoxOutlined,
@@ -445,6 +453,15 @@ import {
 } from '@ant-design/icons-vue'
 
 const API_BASE = '/api/medical-records'
+
+function getAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = getAccessToken()
+  const headers: Record<string, string> = { ...extra }
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return headers
+}
 
 // ===== State =====
 const stats = ref<any>({})
@@ -525,7 +542,9 @@ function switchToDataView() {
 async function loadTableData(tableName: string) {
   tableDataLoading.value = true
   try {
-    const resp = await fetch(`${API_BASE}/table-data/${tableName}`)
+    const resp = await fetch(`${API_BASE}/table-data/${tableName}`, {
+      headers: getAuthHeaders(),
+    })
     tableData.value = await resp.json()
   } catch (e) {
     console.error('加载表数据失败', e)
@@ -537,7 +556,12 @@ async function loadTableData(tableName: string) {
 async function selectPatient(pt: any) {
   selectedPatient.value = pt
   try {
-    const resp = await fetch(`${API_BASE}/frontpage/${pt.institute_id}/${pt.patient_id}/${pt.visit_id}`)
+    const resp = await fetch(
+      `${API_BASE}/frontpage/${pt.institute_id}/${pt.patient_id}/${pt.visit_id}`,
+      {
+        headers: getAuthHeaders(),
+      },
+    )
     selectedDetail.value = await resp.json()
   } catch (e) {
     console.error('加载病案详情失败', e)
@@ -568,7 +592,9 @@ async function openRecordModal(pt: any) {
     // 并发请求所有表
     const results = await Promise.all(
       tablesToQuery.map(async (t) => {
-        const resp = await fetch(`${API_BASE}/table-data/${t.name}`)
+        const resp = await fetch(`${API_BASE}/table-data/${t.name}`, {
+          headers: getAuthHeaders(),
+        })
         const data = await resp.json()
         // 过滤出这个患者的数据
         const patientItems = data.items.filter((item: any) => {
@@ -589,7 +615,7 @@ async function openRecordModal(pt: any) {
           items: patientItems,
           count: patientItems.length,
         }
-      })
+      }),
     )
     recordTabs.value = results
     // 自动选中第一个有数据的 tab
@@ -605,10 +631,10 @@ async function openRecordModal(pt: any) {
 async function loadData() {
   try {
     const [statsResp, schemaResp, listResp, deptsResp] = await Promise.all([
-      fetch(`${API_BASE}/stats`),
-      fetch(`${API_BASE}/schema`),
-      fetch(`${API_BASE}/list`),
-      fetch(`${API_BASE}/departments`),
+      fetch(`${API_BASE}/stats`, { headers: getAuthHeaders() }),
+      fetch(`${API_BASE}/schema`, { headers: getAuthHeaders() }),
+      fetch(`${API_BASE}/list`, { headers: getAuthHeaders() }),
+      fetch(`${API_BASE}/departments`, { headers: getAuthHeaders() }),
     ])
     stats.value = await statsResp.json()
     schema.value = await schemaResp.json()
@@ -648,38 +674,96 @@ onMounted(loadData)
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 .stat-icon {
-  width: 48px; height: 48px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
 }
-.stat-records .stat-icon { background: #eff6ff; color: #2563eb; }
-.stat-diag .stat-icon { background: #fef2f2; color: #dc2626; }
-.stat-surgery .stat-icon { background: #f5f3ff; color: #7c3aed; }
-.stat-dept .stat-icon { background: #ecfdf5; color: #059669; }
-.stat-tables .stat-icon { background: #fff7ed; color: #ea580c; }
-.stat-value { font-size: 28px; font-weight: 800; color: #0f172a; line-height: 1.2; }
-.stat-label { font-size: 13px; color: #64748b; margin-top: 2px; }
+.stat-records .stat-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.stat-diag .stat-icon {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.stat-surgery .stat-icon {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+.stat-dept .stat-icon {
+  background: #ecfdf5;
+  color: #059669;
+}
+.stat-tables .stat-icon {
+  background: #fff7ed;
+  color: #ea580c;
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 2px;
+}
 
 /* ===== 数据源 ===== */
 .datasource-bar {
-  background: white; border-radius: 12px; padding: 12px 20px;
-  margin-bottom: 16px; display: flex; justify-content: space-between;
-  align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  background: white;
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
-.ds-left { display: flex; align-items: center; gap: 8px; }
-.ds-dot { width: 8px; height: 8px; border-radius: 50%; }
-.ds-active { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
-.ds-text { font-size: 14px; color: #475569; }
-.ds-right { display: flex; align-items: center; gap: 8px; }
-.ds-path { font-size: 12px; color: #94a3b8; font-family: 'Cascadia Code', monospace; }
+.ds-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ds-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.ds-active {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.ds-text {
+  font-size: 14px;
+  color: #475569;
+}
+.ds-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ds-path {
+  font-size: 12px;
+  color: #94a3b8;
+  font-family: 'Cascadia Code', monospace;
+}
 
 /* ===== 主体 ===== */
 .main-content {
@@ -691,14 +775,22 @@ onMounted(loadData)
 
 /* ===== 左侧面板 ===== */
 .schema-panel {
-  background: white; border-radius: 16px; overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  display: flex; flex-direction: column;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
 }
 .panel-header {
-  padding: 16px 20px; border-bottom: 1px solid #e2e8f0;
-  font-size: 15px; font-weight: 700; color: #0f172a;
-  display: flex; align-items: center; gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 结构/数据 切换按钮 */
@@ -722,159 +814,379 @@ onMounted(loadData)
   gap: 4px;
   transition: all 0.2s;
 }
-.toggle-btn:hover { color: #0f172a; }
+.toggle-btn:hover {
+  color: #0f172a;
+}
 .toggle-btn.active {
   background: white;
   color: #2563eb;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .table-tabs {
-  padding: 12px; border-bottom: 1px solid #f1f5f9;
-  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .table-tab {
-  padding: 6px 12px; border-radius: 8px; font-size: 12px;
-  cursor: pointer; background: #f8fafc; border: 1px solid #e2e8f0;
-  display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
 }
-.table-tab:hover { background: #eff6ff; border-color: #93c5fd; }
-.table-tab.active { background: #2563eb; color: white; border-color: #2563eb; }
-.tab-label { font-weight: 600; }
-.tab-name { color: #94a3b8; font-family: monospace; font-size: 11px; }
-.table-tab.active .tab-name { color: rgba(255,255,255,0.7); }
+.table-tab:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+.table-tab.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+.tab-label {
+  font-weight: 600;
+}
+.tab-name {
+  color: #94a3b8;
+  font-family: monospace;
+  font-size: 11px;
+}
+.table-tab.active .tab-name {
+  color: rgba(255, 255, 255, 0.7);
+}
 
 /* 结构视图 */
-.columns-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
+.columns-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
 .col-header-row {
-  display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 8px;
-  padding: 8px 12px; font-size: 11px; font-weight: 700;
-  color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   border-bottom: 1px solid #f1f5f9;
 }
 .col-row {
-  display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 8px;
-  padding: 7px 12px; font-size: 13px; border-radius: 6px; transition: background 0.15s;
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  transition: background 0.15s;
 }
-.col-row:hover { background: #f8fafc; }
-.col-pk { background: #eff6ff; }
-.col-name { font-family: 'Cascadia Code', monospace; color: #0f172a; font-weight: 500; display: flex; align-items: center; gap: 6px; }
-.col-type { color: #7c3aed; font-family: monospace; font-size: 12px; }
-.col-comment { color: #64748b; font-size: 12px; }
+.col-row:hover {
+  background: #f8fafc;
+}
+.col-pk {
+  background: #eff6ff;
+}
+.col-name {
+  font-family: 'Cascadia Code', monospace;
+  color: #0f172a;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.col-type {
+  color: #7c3aed;
+  font-family: monospace;
+  font-size: 12px;
+}
+.col-comment {
+  color: #64748b;
+  font-size: 12px;
+}
 .pk-badge {
-  background: #2563eb; color: white; font-size: 9px;
-  padding: 1px 5px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px;
+  background: #2563eb;
+  color: white;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 /* ===== 数据视图（表格）===== */
-.table-data-view { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-.data-loading, .data-empty {
-  padding: 40px; text-align: center; color: #94a3b8; font-size: 14px;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
+.table-data-view {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.data-loading,
+.data-empty {
+  padding: 40px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 .data-table-info {
-  padding: 8px 16px; font-size: 12px; color: #64748b;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #64748b;
   border-bottom: 1px solid #f1f5f9;
 }
 .data-table-scroll {
-  flex: 1; overflow: auto;
+  flex: 1;
+  overflow: auto;
 }
 .modal-table-scroll {
   max-height: 50vh;
 }
 .data-table {
-  width: 100%; border-collapse: collapse; font-size: 12px;
-  table-layout: auto; white-space: nowrap;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: auto;
+  white-space: nowrap;
 }
 .data-th {
-  position: sticky; top: 0; z-index: 1;
-  background: #f8fafc; padding: 8px 12px; text-align: left;
-  font-weight: 700; color: #475569; border-bottom: 2px solid #e2e8f0;
-  font-family: 'Cascadia Code', monospace; font-size: 11px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 11px;
 }
-.data-tr:hover { background: #f8fafc; }
-.data-tr:nth-child(even) { background: #fafbfc; }
+.data-tr:hover {
+  background: #f8fafc;
+}
+.data-tr:nth-child(even) {
+  background: #fafbfc;
+}
 .data-td {
-  padding: 6px 12px; border-bottom: 1px solid #f1f5f9;
-  max-width: 300px; overflow: hidden; text-overflow: ellipsis;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.cell-value { color: #334155; }
-.data-table-wrap { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.cell-value {
+  color: #334155;
+}
+.data-table-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
 
 /* ===== 右侧 ===== */
 .data-panel {
-  background: white; border-radius: 16px; overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  display: flex; flex-direction: column;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
 }
 .patient-cards {
-  padding: 12px; display: flex; gap: 8px;
-  overflow-x: auto; border-bottom: 1px solid #f1f5f9;
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid #f1f5f9;
 }
 .patient-card {
-  min-width: 220px; padding: 12px 16px; border-radius: 12px;
-  border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+  min-width: 220px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
-.patient-card:hover { border-color: #93c5fd; background: #f8fafc; }
-.patient-card.active { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
-.pt-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.pt-name { font-weight: 700; font-size: 15px; color: #0f172a; }
-.pt-age { font-size: 12px; color: #94a3b8; }
-.pt-info { font-size: 12px; color: #64748b; margin-bottom: 4px; }
-.pt-dept { font-weight: 600; }
-.pt-divider { color: #cbd5e1; margin: 0 4px; }
-.pt-mr { font-family: monospace; }
+.patient-card:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+.patient-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+.pt-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.pt-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+}
+.pt-age {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.pt-info {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.pt-dept {
+  font-weight: 600;
+}
+.pt-divider {
+  color: #cbd5e1;
+  margin: 0 4px;
+}
+.pt-mr {
+  font-family: monospace;
+}
 .pt-bottom {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
-.pt-dates { font-size: 11px; color: #94a3b8; }
-.pt-days { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; }
+.pt-dates {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.pt-days {
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-left: 6px;
+}
 .pt-view-btn {
-  font-size: 11px !important; padding: 0 4px !important;
-  color: #2563eb !important; font-weight: 600;
+  font-size: 11px !important;
+  padding: 0 4px !important;
+  color: #2563eb !important;
+  font-weight: 600;
 }
-.pt-view-btn:hover { color: #1d4ed8 !important; }
+.pt-view-btn:hover {
+  color: #1d4ed8 !important;
+}
 
 /* 详情 */
-.detail-panel { flex: 1; overflow-y: auto; padding: 16px 20px; }
-.detail-header h3 { font-size: 16px; font-weight: 700; color: #0f172a; margin: 0 0 16px 0; }
-.detail-section { margin-bottom: 20px; }
+.detail-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.detail-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+}
+.detail-section {
+  margin-bottom: 20px;
+}
 .section-title {
-  font-size: 14px; font-weight: 700; color: #334155;
-  margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.diag-list { display: flex; flex-direction: column; gap: 8px; }
+.diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .diag-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; background: #f8fafc; border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 8px;
 }
-.diag-name { flex: 1; font-size: 14px; color: #0f172a; font-weight: 500; }
+.diag-name {
+  flex: 1;
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 500;
+}
 .diag-code {
-  font-family: 'Cascadia Code', monospace; font-size: 13px;
-  color: #2563eb; background: #eff6ff; padding: 2px 8px; border-radius: 4px;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 13px;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
-.cost-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cost-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
 .cost-total {
   grid-column: span 3;
   background: linear-gradient(135deg, #2563eb, #7c3aed);
-  color: white; padding: 16px; border-radius: 12px;
-  display: flex; justify-content: space-between; align-items: center; font-size: 14px;
+  color: white;
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
 }
-.cost-total strong { font-size: 24px; font-weight: 800; }
+.cost-total strong {
+  font-size: 24px;
+  font-weight: 800;
+}
 .cost-item {
-  background: #f8fafc; padding: 10px 12px; border-radius: 8px;
-  display: flex; justify-content: space-between; font-size: 13px; color: #475569;
+  background: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #475569;
 }
 
 /* 弹窗 */
 .modal-loading {
-  padding: 60px; text-align: center; color: #64748b; font-size: 15px;
-  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 60px;
+  text-align: center;
+  color: #64748b;
+  font-size: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
 /* 响应式 */
 @media (max-width: 1200px) {
-  .stats-row { grid-template-columns: repeat(3, 1fr); }
-  .main-content { grid-template-columns: 1fr; }
+  .stats-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .main-content {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

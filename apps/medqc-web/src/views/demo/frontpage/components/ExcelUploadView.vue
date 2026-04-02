@@ -32,9 +32,9 @@
           <div
             :class="[
               'flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer',
-              isDragging 
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              isDragging
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800',
             ]"
             @dragover.prevent="isDragging = true"
             @dragleave="isDragging = false"
@@ -48,12 +48,14 @@
               class="hidden"
               @change="handleFileSelect"
             >
-            
+
             <div
               v-if="!selectedFile && !uploading"
               class="text-center p-8"
             >
-              <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <div
+                class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
+              >
                 <CloudUploadOutlined class="text-4xl text-blue-500" />
               </div>
               <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
@@ -66,13 +68,15 @@
                 ✨ 无需固定模板，AI 自动识别字段
               </p>
             </div>
-            
+
             <!-- Selected File Preview -->
             <div
               v-else-if="selectedFile && !uploading"
               class="text-center p-8"
             >
-              <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <div
+                class="w-20 h-20 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"
+              >
                 <FileExcelOutlined class="text-4xl text-green-500" />
               </div>
               <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
@@ -97,13 +101,15 @@
                 </button>
               </div>
             </div>
-            
+
             <!-- Uploading State -->
             <div
               v-else
               class="text-center p-8"
             >
-              <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <div
+                class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
+              >
                 <LoadingOutlined class="text-4xl text-blue-500 animate-spin" />
               </div>
               <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
@@ -115,10 +121,14 @@
             </div>
           </div>
         </div>
-        
+
         <!-- Batch History -->
-        <div class="w-80 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
-          <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div
+          class="w-80 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden"
+        >
+          <div
+            class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between"
+          >
             <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
               历史批次
             </h3>
@@ -129,7 +139,7 @@
               <SyncOutlined :class="{ 'animate-spin': loadingBatches }" />
             </button>
           </div>
-          
+
           <div class="flex-1 overflow-y-auto">
             <div
               v-if="batches.length === 0"
@@ -143,14 +153,16 @@
               :key="batch.batch_id"
               :class="[
                 'p-4 border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors',
-                selectedBatchId === batch.batch_id 
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' 
-                  : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                selectedBatchId === batch.batch_id
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-700/30',
               ]"
               @click="selectBatch(batch)"
             >
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-slate-700 dark:text-white">{{ batch.batch_id.substring(6, 21) }}</span>
+                <span class="text-sm font-medium text-slate-700 dark:text-white">{{
+                  batch.batch_id.substring(6, 21)
+                }}</span>
                 <span class="text-xs text-blue-500">{{ batch.count }} 条</span>
               </div>
               <div class="text-xs text-slate-500">
@@ -219,6 +231,7 @@ import {
   SyncOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons-vue'
+import { getAccessToken } from '@/utils/auth-token'
 import FieldMappingStep from './FieldMappingStep.vue'
 
 interface BatchInfo {
@@ -232,11 +245,14 @@ const emit = defineEmits<{
   (e: 'back'): void
   (e: 'goAnalysis', sessionId: string, batchId: string): void
   (e: 'go-analysis', sessionId: string, batchId: string): void
-  (e: 'analysisReady', data: {
-    charts: any
-    aiInsights: string[]
-    analysisResults: any
-  }): void
+  (
+    e: 'analysisReady',
+    data: {
+      charts: any
+      aiInsights: string[]
+      analysisResults: any
+    },
+  ): void
 }>()
 
 // 步骤控制
@@ -302,34 +318,36 @@ const clearFile = () => {
 
 const smartUploadFile = async () => {
   if (!selectedFile.value) return
-  
+
   uploading.value = true
-  
+
   try {
+    const token = getAccessToken()
     const formData = new FormData()
     formData.append('file', selectedFile.value)
-    
+
     const response = await fetch(`${API_BASE}/smart-upload`, {
       method: 'POST',
-      body: formData
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
     })
-    
+
     let data
     try {
       data = await response.json()
     } catch {
       throw new Error(`服务器响应异常: ${response.status} ${response.statusText}`)
     }
-    
+
     if (response.ok && data.success) {
       uploadedFileId.value = data.file_id
       uploadedFileName.value = data.filename
       uploadedRowCount.value = data.row_count
       uploadedColumns.value = data.columns || []
       uploadedSampleData.value = data.sample_data || []
-      
+
       message.success(`文件上传成功！共 ${data.row_count} 行数据，${data.file_count} 个文件`)
-      
+
       // 跳转到字段映射步骤
       currentStep.value = 'mapping'
     } else {
@@ -356,14 +374,14 @@ const handleMappingConfirmed = (data: {
     analysisResults: data.analysisResults,
     row_count: data.analysisResults?.overview?.total_cases || 0,
   }
-  
+
   // 通知父组件分析结果已就绪
   emit('analysisReady', {
     charts: data.charts,
     aiInsights: data.aiInsights,
     analysisResults: data.analysisResults,
   })
-  
+
   currentStep.value = 'complete'
 }
 
@@ -388,7 +406,10 @@ const loadBatches = async (sessionId?: string) => {
   }
   loadingBatches.value = true
   try {
-    const response = await fetch(`${API_BASE}/batches?session_id=${sid}`)
+    const token = getAccessToken()
+    const response = await fetch(`${API_BASE}/batches?session_id=${sid}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
     const data = await response.json()
     if (data.success) {
       batches.value = data.data
@@ -420,11 +441,11 @@ const formatNumber = (num: number): string => {
 const formatDate = (dateStr: string): string => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
-  return d.toLocaleString('zh-CN', { 
-    month: '2-digit', 
-    day: '2-digit', 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  return d.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 

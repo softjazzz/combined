@@ -1,4 +1,5 @@
-import type { NotificationVM, PatientRecord, QCIssueLike } from './types'
+import type { NotificationVM, PatientRecord, QCIssueLike, WorkstationWorklistItem } from './types'
+import type { QueueStatusCode, QueueStatusSource } from '@/types/workflow'
 
 type LooseRecord = Record<string, unknown>
 
@@ -27,6 +28,25 @@ function pickString(raw: LooseRecord, keys: string[]): string {
     if (value) return value
   }
   return ''
+}
+
+function normalizeQueueStatusCode(rawStatus: string): QueueStatusCode {
+  const status = rawStatus.toLowerCase()
+  if (
+    status === 'running' ||
+    status === 'failed' ||
+    status === 'succeeded' ||
+    status === 'unknown'
+  ) {
+    return status
+  }
+  return 'pending'
+}
+
+function normalizeQueueStatusSource(rawSource: string): QueueStatusSource {
+  const source = rawSource.toLowerCase()
+  if (source === 'runtime') return 'runtime'
+  return 'backfill'
 }
 
 function normalizeRecordStatus(rawStatus: string): PatientRecord['status'] {
@@ -104,6 +124,14 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     hasSettlementOfficialByFlag !== undefined && hasSettlementOfficialByFlag !== null
       ? asBoolean(hasSettlementOfficialByFlag)
       : Boolean(settlementHint)
+  const frontpageGenerateQueueStatusRaw = pickString(source, [
+    'frontpageGenerateQueueStatus',
+    'frontpage_generate_queue_status',
+  ])
+  const frontpageGenerateQueueStatusSourceRaw = pickString(source, [
+    'frontpageGenerateQueueStatusSource',
+    'frontpage_generate_queue_status_source',
+  ])
 
   return {
     id,
@@ -134,6 +162,12 @@ export function normalizeRecord(raw: unknown): PatientRecord {
       ]) || undefined,
     hasFrontpageOfficial,
     hasSettlementOfficial,
+    frontpageGenerateQueueStatus: frontpageGenerateQueueStatusRaw
+      ? normalizeQueueStatusCode(frontpageGenerateQueueStatusRaw)
+      : undefined,
+    frontpageGenerateQueueStatusSource: frontpageGenerateQueueStatusSourceRaw
+      ? normalizeQueueStatusSource(frontpageGenerateQueueStatusSourceRaw)
+      : undefined,
     isDemoRecord: asBoolean(source.isDemoRecord ?? source.is_demo_record),
     diagnosis: pickString(source, [
       'diagnosis',
@@ -190,5 +224,52 @@ export function normalizeNotification(raw: unknown, index: number): Notification
     is_read: Boolean(source.is_read ?? source.isRead),
     level: pickString(source, ['level', 'severity']) || undefined,
     type: pickString(source, ['type', 'category']) || undefined,
+  }
+}
+
+export function normalizeWorklistItem(raw: unknown): WorkstationWorklistItem {
+  const source = (raw || {}) as LooseRecord
+  const visitId =
+    pickString(source, ['visitId', 'visit_id', 'id', 'record_id']) || `visit-${Date.now()}`
+  const notificationStatus = pickString(source, ['notificationStatus', 'notification_status'])
+  const queueStatus = normalizeQueueStatusCode(
+    pickString(source, ['queueStatus', 'queue_status']) || 'pending',
+  )
+  const queueStatusSource = normalizeQueueStatusSource(
+    pickString(source, ['queueStatusSource', 'queue_status_source']) || 'backfill',
+  )
+  const latestQcScoreRaw = source.latestQcScore ?? source.latest_qc_score
+
+  return {
+    visitId,
+    patientId: pickString(source, ['patientId', 'patient_id']) || undefined,
+    instituteId: pickString(source, ['instituteId', 'institute_id']) || undefined,
+    patientName: pickString(source, ['patientName', 'patient_name', 'name']) || '未知患者',
+    department: pickString(source, ['department', 'dept_name', 'deptName']) || '未分科室',
+    admissionDate: pickString(source, ['admissionDate', 'admission_date']) || undefined,
+    dischargeDate: pickString(source, ['dischargeDate', 'discharge_date']) || undefined,
+    workflowType:
+      (pickString(source, [
+        'workflowType',
+        'workflow_type',
+      ]) as WorkstationWorklistItem['workflowType']) || 'frontpage',
+    queueStatus,
+    queueStatusSource,
+    latestQcResultId: pickString(source, ['latestQcResultId', 'latest_qc_result_id']) || undefined,
+    latestQcScore:
+      latestQcScoreRaw === undefined || latestQcScoreRaw === null || latestQcScoreRaw === ''
+        ? null
+        : asNumber(latestQcScoreRaw),
+    latestQcGrade: pickString(source, ['latestQcGrade', 'latest_qc_grade']) || undefined,
+    latestQcTime: pickString(source, ['latestQcTime', 'latest_qc_time']) || undefined,
+    activeDefectCount: asNumber(source.activeDefectCount ?? source.active_defect_count),
+    topSeverity: pickString(source, ['topSeverity', 'top_severity']) || undefined,
+    riskReason: pickString(source, ['riskReason', 'risk_reason']),
+    notificationStatus:
+      notificationStatus === 'read' || notificationStatus === 'unread'
+        ? (notificationStatus as 'read' | 'unread')
+        : 'none',
+    notificationUpdatedAt:
+      pickString(source, ['notificationUpdatedAt', 'notification_updated_at']) || undefined,
   }
 }

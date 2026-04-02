@@ -1,5 +1,5 @@
 /** 分析维度 - 五级层级 */
-export type AnalysisDimension = 'hospital' | 'department' | 'ward' | 'doctor' | 'drg'
+export type AnalysisDimension = 'hospital' | 'department' | 'ward' | 'person' | 'drg'
 export type AnalysisRequiredLevel =
   | 'hospital'
   | 'department'

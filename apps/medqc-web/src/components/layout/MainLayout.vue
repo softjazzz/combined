@@ -61,6 +61,17 @@
             <span class="font-medium">智能质控工作站</span>
           </a-menu-item>
 
+          <a-menu-item
+            v-if="authStore.hasRole('admin') || authStore.hasRole('qc_manager')"
+            key="/workstation-v4"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <AlertOutlined />
+            </template>
+            <span class="font-medium">工作台首页</span>
+          </a-menu-item>
+
           <!-- 病案质控 -->
           <a-sub-menu
             key="/dashboard/records"
@@ -442,6 +453,7 @@ import {
   ToolOutlined,
   HomeOutlined,
   BellOutlined,
+  AlertOutlined,
   UserOutlined,
   DownOutlined,
   LogoutOutlined,

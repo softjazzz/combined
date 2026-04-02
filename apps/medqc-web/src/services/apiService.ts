@@ -88,7 +88,8 @@ function shouldSuppressExpected404(url: string | undefined, status: number | und
   if (status !== 404 || !url) return false
   return (
     url.includes('/api/medical-records/frontpage-sheet/') ||
-    url.includes('/api/medical-records/settlement/')
+    url.includes('/api/medical-records/settlement/') ||
+    url.includes('/api/medical-records/ai-frontpage-draft/')
   )
 }
 

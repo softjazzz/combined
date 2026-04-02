@@ -36,8 +36,8 @@
                 <a-radio-button value="drg">
                   DRG组分析
                 </a-radio-button>
-                <a-radio-button value="doctor">
-                  医生绩效
+                <a-radio-button value="person">
+                  个人绩效
                 </a-radio-button>
               </a-radio-group>
             </a-space>
@@ -262,7 +262,7 @@
 
       <!-- 医生绩效对比 (仅在医生维度显示) -->
       <a-row
-        v-if="dimension === 'doctor'"
+        v-if="dimension === 'person'"
         :gutter="16"
         style="margin-bottom: 16px"
       >
@@ -424,7 +424,7 @@ const tableTitle = computed(() => {
     department: '科室明细数据',
     ward: '病区明细数据',
     drg: 'DRG组详细数据',
-    doctor: '医生绩效排名',
+    person: '个人绩效排名',
   }
   return map[dimension.value]
 })
@@ -436,7 +436,7 @@ const dynamicColumns = computed<TableColumnsType<AnalysisTableItem>>(() => {
     department: '项目名称',
     ward: '病区名称',
     drg: 'DRG组名称',
-    doctor: '医生姓名',
+    person: '个人姓名',
   }
 
   return [
@@ -502,7 +502,7 @@ const dimensionLabelMap: Record<string, string> = {
   department: '科室分析',
   ward: '病区分析',
   drg: 'DRG组分析',
-  doctor: '医生绩效',
+  person: '个人绩效',
 }
 
 const handleExportMenu = ({ key }: MenuInfo): void => {
@@ -797,7 +797,7 @@ const loadAnalysisData = async () => {
     conclusions.value = res.conclusions || []
 
     // 如果是医生维度，更新医生对比图表
-    if (dimension.value === 'doctor' && res.tableData.length > 0) {
+    if (dimension.value === 'person' && res.tableData.length > 0) {
       updateDoctorRadarChart(res.tableData)
       updateDoctorBenchmarkChart(res.tableData)
     }

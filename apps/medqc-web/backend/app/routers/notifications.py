@@ -11,7 +11,8 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Any, Dict
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
 
@@ -83,6 +84,38 @@ def _severity_weight(level: str) -> int:
         "info": 1,
     }
     return mapping.get(str(level).lower(), 1)
+
+
+def _stable_notification_id(*parts: object) -> str:
+    normalized = "|".join(str(part or "") for part in parts)
+    return str(uuid5(NAMESPACE_URL, normalized))
+
+
+def _workflow_batch_label(workflow_type: str) -> str:
+    labels = {
+        "frontpage_generate": "首页生成",
+        "frontpage_qc": "首页质控",
+        "coding_qc": "编码质控",
+        "settlement_qc": "结算清单质控",
+    }
+    return labels.get(str(workflow_type or "").strip(), "批量质控")
+
+
+def _workflow_batch_summary_type(workflow_type: str) -> str:
+    labels = {
+        "frontpage_generate": "frontpage_batch_summary",
+        "frontpage_qc": "frontpage_qc_batch_summary",
+        "coding_qc": "coding_qc_batch_summary",
+        "settlement_qc": "settlement_qc_batch_summary",
+    }
+    return labels.get(str(workflow_type or "").strip(), "general_batch_summary")
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
 
 
 # ==================== 通知 API ====================
@@ -238,6 +271,100 @@ async def list_notification_overview(
     except Exception as e:
         logger.error(f"查询通知概览失败: {e}")
         raise HTTPException(status_code=500, detail=f"查询通知概览失败: {str(e)}")
+
+
+@router.post("/qc-batch-summary")
+async def upsert_qc_batch_summary(
+    request: Request,
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
+):
+    """为当天批量执行生成或更新一条 workflow 级汇总消息。"""
+    sb = _ensure_db()
+    try:
+        user_id = str(current_user.get("id") or current_user.get("user_id") or "")
+        workflow_type = _pick_text(payload, ["workflow_type"]) or "general"
+        target_date_raw = _pick_text(payload, ["date"])
+        if target_date_raw:
+            try:
+                target_date = datetime.strptime(target_date_raw, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="date 格式必须为 YYYY-MM-DD")
+        else:
+            target_date = datetime.now()
+        summary_date = target_date.strftime("%Y-%m-%d")
+        total_count = _safe_int(payload.get("total_count"))
+        success_count = _safe_int(payload.get("success_count"))
+        failed_count = _safe_int(payload.get("failed_count"))
+        high_risk_count = _safe_int(payload.get("high_risk_count"))
+        if total_count <= 0:
+            raise HTTPException(status_code=422, detail="total_count 必须大于 0")
+
+        workflow_label = _workflow_batch_label(workflow_type)
+        severity = "warning" if failed_count > 0 or high_risk_count > 0 else "info"
+        title = f"{summary_date} {workflow_label}批量汇总"
+        content = (
+            f"当日{workflow_label}批量执行共 {total_count} 条，"
+            f"成功 {success_count} 条，失败 {failed_count} 条，"
+            f"高风险 {high_risk_count} 条。"
+        )
+        notification_id = _stable_notification_id("qc_batch_summary", user_id or "anonymous", workflow_type, summary_date)
+        record_id = f"batch_summary::{workflow_type}::{summary_date}"
+        notif_type = _workflow_batch_summary_type(workflow_type)
+
+        existing_resp = await async_execute(
+            sb.table("notifications").select("id, created_at").eq("id", notification_id).limit(1)
+        )
+        existing_rows = list(getattr(existing_resp, "data", None) or [])
+        created_at = None
+        if existing_rows:
+            created_at = existing_rows[0].get("created_at")
+
+        payload_row = {
+            "id": notification_id,
+            "type": notif_type,
+            "title": title,
+            "content": content,
+            "record_id": record_id,
+            "severity": severity,
+            "sender_id": user_id or None,
+            "recipient_id": user_id or None,
+            "related_type": "batch_summary",
+            "related_id": None,
+            "is_read": False,
+            "read_at": None,
+            "created_at": created_at or datetime.now().isoformat(),
+        }
+
+        if existing_rows:
+            await async_execute(
+                sb.table("notifications")
+                .update({key: value for key, value in payload_row.items() if key != "id"})
+                .eq("id", notification_id)
+            )
+            created = False
+            updated = True
+        else:
+            await async_execute(sb.table("notifications").insert(payload_row))
+            created = True
+            updated = False
+
+        return success_response(
+            data={
+                "id": notification_id,
+                "created": created,
+                "updated": updated,
+                "workflow_type": workflow_type,
+                "date": summary_date,
+            },
+            message="批量汇总消息已保存",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存批量汇总消息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存批量汇总消息失败: {str(e)}")
 
 
 @router.put("/{notification_id}/read")

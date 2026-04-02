@@ -1,13 +1,15 @@
 from typing import Dict, Any, List, Optional
 import logging
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from datetime import datetime, timezone
 
 from ..storage.memory import llm_configs
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
+from ..core.security import get_optional_user, require_admin
 from ..services.llm_config_loader import (
     SUPPORTED_PROVIDER_CODES,
+    LLMConfigLoader,
     build_provider_runtime_config,
     get_default_provider_code,
     get_enabled_provider_codes,
@@ -96,39 +98,6 @@ def _resolve_model(model_code: str) -> Dict[str, Any]:
     }
 
 
-def _lookup_provider_and_model_ids(supabase, provider_code: str, model_code: str) -> Dict[str, Any]:
-    """Resolve provider_id and model_id UUIDs from codes using Supabase tables.
-
-    Falls back to None if not found so that insert/update will still succeed where columns are nullable.
-    """
-    provider_id = None
-    model_id = None
-    try:
-        # llm_api_providers(id) by provider_code
-        r = supabase.table("llm_api_providers").select("id").eq("provider_code", provider_code).limit(1).execute()
-        if r and getattr(r, "data", None):
-            provider_id = r.data[0].get("id")
-            # llm_models(id) by model_code and provider_id
-            try:
-                rm = (
-                    supabase
-                    .table("llm_models")
-                    .select("id")
-                    .eq("model_code", model_code)
-                    .eq("provider_id", provider_id)
-                    .limit(1)
-                    .execute()
-                )
-                if rm and getattr(rm, "data", None):
-                    model_id = rm.data[0].get("id")
-            except Exception:
-                model_id = None
-    except Exception:
-        provider_id = None
-        model_id = None
-    return {"provider_id": provider_id, "model_id": model_id}
-
-
 def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str]:
     default_provider_code = get_default_provider_code()
     enabled_provider_codes = set(get_enabled_provider_codes())
@@ -139,69 +108,29 @@ def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str
     return provider_code, model_code
 
 
-@router.get("/configs")
-async def list_configs(request: Request, user_id: Optional[str] = Query(default=None)):
-    supabase = get_supabase()
-
-    def _fallback() -> Dict[str, Any]:
-        items: List[Dict[str, Any]] = list(llm_configs.values())
-        if user_id is not None:
-            items = [c for c in items if c.get("user_id") == user_id]
-        return success_response(
-            data={"items": items, "total": len(items)},
-            trace_id=get_trace_id(request)
-        )
-
-    if supabase is None:
-        return _fallback()
-
-    try:
-        q = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("is_active", True)
-        if user_id:
-            q = q.eq("user_id", user_id)
-        else:
-            q = q.is_("user_id", None)  # type: ignore[attr-defined]
-        resp = await async_execute(q)
-        data = resp.data or []
-        return success_response(
-            data={"items": data, "total": len(data)},
-            trace_id=get_trace_id(request)
-        )
-    except Exception as exc:
-        logging.getLogger(__name__).warning("Supabase list_configs 失败，回退内存配置: %s", exc)
-        return _fallback()
+def _extract_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not current_user:
+        return set()
+    roles = current_user.get("roles")
+    if isinstance(roles, list):
+        return {str(role).strip().lower() for role in roles if str(role).strip()}
+    role = current_user.get("role")
+    if role:
+        return {str(role).strip().lower()}
+    return set()
 
 
-@router.get("/configs/{config_name}")
-async def get_config_by_name(request: Request, config_name: str, user_id: Optional[str] = Query(default=None)):
-    supabase = get_supabase()
-
-    def _fallback() -> Dict[str, Any]:
-        for cfg in llm_configs.values():
-            if cfg.get("config_name") == config_name and (user_id is None or cfg.get("user_id") == user_id):
-                return success_response(data=cfg, trace_id=get_trace_id(request))
-        return success_response(data=None, trace_id=get_trace_id(request))
-
-    if supabase is None:
-        return _fallback()
-
-    try:
-        q = supabase.table("user_llm_configs").select("*, provider:llm_api_providers(*), model:llm_models(*)").eq("config_name", config_name).eq("is_active", True)
-        if user_id:
-            q = q.eq("user_id", user_id)
-        else:
-            q = q.is_("user_id", None)  # type: ignore[attr-defined]
-        resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
-        if resp.data:
-            return success_response(data=resp.data[0], trace_id=get_trace_id(request))
-        return success_response(data=None, trace_id=get_trace_id(request))
-    except Exception as exc:
-        logging.getLogger(__name__).warning("Supabase get_config_by_name 失败，回退内存配置: %s", exc)
-        return _fallback()
+def _normalize_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    provider_code = str(row.get("provider_code") or row.get("provider_id") or "").strip().lower()
+    model_code = str(row.get("model_code") or row.get("model_id") or "").strip()
+    row["provider"] = _resolve_provider(provider_code)
+    row["model"] = _resolve_model(model_code)
+    row["provider_code"] = row["provider"]["provider_code"]
+    row["model_code"] = row["model"]["model_code"]
+    return row
 
 
-@router.post("/configs")
-async def save_config(request: Request, payload: Dict[str, Any]):
+async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
     supabase = get_supabase()
     provider_code, model_code = _extract_provider_and_model_codes(payload)
     if not model_code:
@@ -211,7 +140,6 @@ async def save_config(request: Request, payload: Dict[str, Any]):
 
     provider = _resolve_provider(provider_code)
     model = _resolve_model(model_code)
-
     now = _now_iso()
 
     def _save_in_memory() -> Dict[str, Any]:
@@ -239,23 +167,16 @@ async def save_config(request: Request, payload: Dict[str, Any]):
         else:
             data["created_at"] = llm_configs[existing_id].get("created_at", now)
         llm_configs[data["id"]] = data
-        return success_response(data=data, trace_id=get_trace_id(request))
+        return data
 
     if supabase is None:
         return _save_in_memory()
 
-    # Supabase 分支：按 config_name + user_id upsert
-    # Resolve UUID foreign keys when Supabase is available
-    resolved_ids = {"provider_id": None, "model_id": None}
-    if supabase is not None:
-        resolved_ids = _lookup_provider_and_model_ids(supabase, provider["provider_code"], model["model_code"])  # type: ignore[index]
-
     row = {
         "user_id": payload.get("user_id"),
         "config_name": cfg_name,
-        # Only include UUID foreign keys when resolved; leave None otherwise
-        "provider_id": resolved_ids.get("provider_id"),
-        "model_id": resolved_ids.get("model_id"),
+        "provider_code": provider["provider_code"],
+        "model_code": model["model_code"],
         "api_key_encrypted": None,
         "custom_endpoint": None,
         "custom_parameters": payload.get("custom_parameters") or {},
@@ -263,7 +184,6 @@ async def save_config(request: Request, payload: Dict[str, Any]):
         "updated_at": now,
     }
 
-    # 尝试查找现有
     try:
         q = supabase.table("user_llm_configs").select("id").eq("config_name", cfg_name)
         if row["user_id"]:
@@ -271,13 +191,11 @@ async def save_config(request: Request, payload: Dict[str, Any]):
         else:
             q = q.is_("user_id", None)  # type: ignore[attr-defined]
 
-        # 查询现有配置（404 不抛出异常）
         existing_data = None
         try:
             existing = await async_execute(q.limit(1))
             existing_data = existing.data if existing.data else None
         except Exception as e:
-            # 404 是正常的，表示配置不存在
             if "404" not in str(e):
                 raise
             existing_data = None
@@ -289,47 +207,186 @@ async def save_config(request: Request, payload: Dict[str, Any]):
             row["created_at"] = now
             await async_execute(supabase.table("user_llm_configs").insert(row))
 
-        # 读取完整行返回（不使用关联查询，避免 400 错误）
         q2 = supabase.table("user_llm_configs").select("*").eq("config_name", cfg_name)
         if row["user_id"]:
             q2 = q2.eq("user_id", row["user_id"])
         else:
             q2 = q2.is_("user_id", None)  # type: ignore[attr-defined]
         full = await async_execute(q2.order("updated_at", desc=True).limit(1))
-
-        # 构建返回数据（包含 provider 和 model 信息）
         result_data = full.data[0] if full.data else None
         if result_data:
             result_data["provider"] = provider
             result_data["model"] = model
             result_data["provider_code"] = provider["provider_code"]
             result_data["model_code"] = model["model_code"]
+        return result_data or _save_in_memory()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("save_config internal failed, fallback memory: %s", exc)
+        return _save_in_memory()
 
+
+@router.get("/configs")
+async def list_configs(request: Request, user_id: Optional[str] = Query(default=None)):
+    supabase = get_supabase()
+
+    def _fallback() -> Dict[str, Any]:
+        items: List[Dict[str, Any]] = list(llm_configs.values())
+        if user_id is not None:
+            items = [c for c in items if c.get("user_id") == user_id]
         return success_response(
-            data=result_data,
+            data={"items": items, "total": len(items)},
+            trace_id=get_trace_id(request)
+        )
+
+    if supabase is None:
+        return _fallback()
+
+    try:
+        q = supabase.table("user_llm_configs").select("*").eq("is_active", True)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+        resp = await async_execute(q)
+        data = []
+        for item in (resp.data or []):
+            data.append(_normalize_config_row(dict(item)))
+        return success_response(
+            data={"items": data, "total": len(data)},
             trace_id=get_trace_id(request)
         )
     except Exception as exc:
-        logging.getLogger(__name__).warning("Supabase save_config 失败，回退内存配置: %s", exc)
-        return _save_in_memory()
+        logging.getLogger(__name__).warning("Supabase list_configs 失败，回退内存配置: %s", exc)
+        return _fallback()
+
+
+@router.get("/configs/{config_name}")
+async def get_config_by_name(request: Request, config_name: str, user_id: Optional[str] = Query(default=None)):
+    supabase = get_supabase()
+
+    def _fallback() -> Dict[str, Any]:
+        for cfg in llm_configs.values():
+            if cfg.get("config_name") == config_name and (user_id is None or cfg.get("user_id") == user_id):
+                return success_response(data=cfg, trace_id=get_trace_id(request))
+        return success_response(data=None, trace_id=get_trace_id(request))
+
+    if supabase is None:
+        return _fallback()
+
+    try:
+        q = supabase.table("user_llm_configs").select("*").eq("config_name", config_name).eq("is_active", True)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+        resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
+        if resp.data:
+            row = _normalize_config_row(dict(resp.data[0]))
+            return success_response(data=row, trace_id=get_trace_id(request))
+        return success_response(data=None, trace_id=get_trace_id(request))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Supabase get_config_by_name 失败，回退内存配置: %s", exc)
+        return _fallback()
+
+
+@router.post("/configs")
+async def save_config(
+    request: Request,
+    payload: Dict[str, Any],
+    admin_user: dict = Depends(require_admin),
+):
+    del admin_user
+    result = await _save_config_internal(payload, request)
+    return success_response(data=result, trace_id=get_trace_id(request))
+
+
+@router.get("/configs/default/summary")
+async def get_default_summary(
+    request: Request,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+):
+    runtime = await LLMConfigLoader.load_config(config_name="default", user_id=None)
+    runtime = runtime or {}
+    custom_params = runtime.get("custom_parameters") or {}
+    source = str(runtime.get("source") or "env")
+    readonly = "admin" not in _extract_roles(current_user)
+    return success_response(
+        data={
+            "provider_code": str(runtime.get("provider_code") or get_default_provider_code()),
+            "model_code": str(runtime.get("model") or ""),
+            "custom_parameters": {
+                "temperature": float(custom_params.get("temperature", 0.2)),
+                "top_p": float(custom_params.get("top_p", 0.9)),
+                "max_tokens": int(custom_params.get("max_tokens", 4000)),
+            },
+            "source": source,
+            "readonly": readonly,
+        },
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/configs/default/reset")
+async def reset_default_config(
+    request: Request,
+    admin_user: dict = Depends(require_admin),
+):
+    del admin_user
+    default_provider = get_default_provider_code()
+    runtime = build_provider_runtime_config(default_provider)
+    payload = {
+        "config_name": "default",
+        "user_id": None,
+        "provider_code": default_provider,
+        "model_code": str(runtime.get("model") or ""),
+        "custom_parameters": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "max_tokens": 4000,
+        },
+        "is_active": True,
+    }
+    await _save_config_internal(payload, request)
+    return success_response(
+        data={
+            "provider_code": payload["provider_code"],
+            "model_code": payload["model_code"],
+            "custom_parameters": payload["custom_parameters"],
+            "source": "database+env",
+            "readonly": False,
+        },
+        message="已恢复默认配置",
+        trace_id=get_trace_id(request),
+    )
 
 
 @router.post("/test")
 async def test_config(request: Request, payload: Dict[str, Any]):
-    provider_code, model_code = _extract_provider_and_model_codes(payload)
-    runtime = build_provider_runtime_config(
-        provider_code=provider_code,
-        model_code=model_code or None,
-        custom_parameters=payload.get("custom_parameters") or {},
-    )
-    client = SichuanQCLLMClient(
-        {
-            **runtime,
-            "source": "test",
-        }
-    )
-
     try:
+        provider_code, model_code = _extract_provider_and_model_codes(payload)
+        runtime = build_provider_runtime_config(
+            provider_code=provider_code,
+            model_code=model_code or None,
+            custom_parameters=payload.get("custom_parameters") or {},
+        )
+        client = SichuanQCLLMClient(
+            {
+                **runtime,
+                "source": "test",
+            }
+        )
+
+        if not client.api_endpoint:
+            raise HTTPException(
+                status_code=StatusCode.BAD_REQUEST,
+                detail=f"连接测试失败: provider={provider_code} 未配置 API_ENDPOINT（请检查 backend/.env）",
+            )
+        if provider_code in ("alibaba", "siliconflow") and not client.api_key:
+            raise HTTPException(
+                status_code=StatusCode.BAD_REQUEST,
+                detail=f"连接测试失败: provider={provider_code} 未配置 API_KEY（请检查 backend/.env）",
+            )
+
         result = await client.generate("请只返回“pong”，不要输出其他内容。")
         content = str(
             ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
@@ -345,8 +402,22 @@ async def test_config(request: Request, payload: Dict[str, Any]):
             message="连接测试成功",
             trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as exc:
+        logging.getLogger(__name__).exception(
+            "LLM 连接测试失败: provider=%s model=%s endpoint=%s",
+            locals().get("provider_code", "unknown"),
+            getattr(locals().get("client"), "model", "unknown"),
+            getattr(locals().get("client"), "api_endpoint", "unknown"),
+        )
         raise HTTPException(
-            status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"连接测试失败: {exc}",
+            status_code=StatusCode.BAD_GATEWAY,
+            detail=(
+                "连接测试失败: "
+                f"provider={locals().get('provider_code', 'unknown')}, "
+                f"model={getattr(locals().get('client'), 'model', 'unknown')}, "
+                f"endpoint={getattr(locals().get('client'), 'api_endpoint', 'unknown')}, "
+                f"reason={exc}"
+            ),
         )

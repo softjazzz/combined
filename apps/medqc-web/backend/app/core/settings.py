@@ -129,6 +129,7 @@ class Settings(BaseSettings):
     LLM_DEFAULT_PROVIDER: Optional[str] = None
     LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
     SILICONFLOW_API_ENDPOINT: str = "https://api.siliconflow.cn/v1"
+    SILICONFLOW_API_KEY: Optional[str] = None
     OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"
     OLLAMA_API_KEY: Optional[str] = None
     OLLAMA_MODEL: str = "qwen2.5:7b-instruct"

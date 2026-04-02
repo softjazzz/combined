@@ -154,39 +154,11 @@ class LLMConfigLoader:
                 return None
 
             db_config = resp.data[0]
-
-            provider = {}
-            model = {}
-
-            if db_config.get("provider_id"):
-                try:
-                    provider_resp = (
-                        supabase.table("llm_api_providers")
-                        .select("*")
-                        .eq("id", db_config["provider_id"])
-                        .limit(1)
-                        .execute()
-                    )
-                    if provider_resp.data:
-                        provider = provider_resp.data[0]
-                except Exception as e:
-                    logger.warning("查询 provider 失败: %s", e)
-
-            if db_config.get("model_id"):
-                try:
-                    model_resp = (
-                        supabase.table("llm_models")
-                        .select("*")
-                        .eq("id", db_config["model_id"])
-                        .limit(1)
-                        .execute()
-                    )
-                    if model_resp.data:
-                        model = model_resp.data[0]
-                except Exception as e:
-                    logger.warning("查询 model 失败: %s", e)
-
-            provider_code = str(provider.get("provider_code") or "alibaba").strip().lower()
+            provider_code = str(
+                db_config.get("provider_code")
+                or db_config.get("provider_id")
+                or "alibaba"
+            ).strip().lower()
             if provider_code not in SUPPORTED_PROVIDER_CODES:
                 fallback = get_default_provider_code()
                 logger.warning("配置中的 provider_code=%s 不受支持，回退 %s", provider_code, fallback)
@@ -194,7 +166,11 @@ class LLMConfigLoader:
 
             runtime = build_provider_runtime_config(
                 provider_code=provider_code,
-                model_code=str(model.get("model_code") or "").strip() or None,
+                model_code=str(
+                    db_config.get("model_code")
+                    or db_config.get("model_id")
+                    or ""
+                ).strip() or None,
                 custom_parameters=db_config.get("custom_parameters", {}) or {},
             )
             runtime.update(

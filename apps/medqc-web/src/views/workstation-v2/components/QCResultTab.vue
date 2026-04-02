@@ -1,9 +1,6 @@
 <template>
   <div class="qc-result-tab">
-    <div
-      v-if="!props.activeTab"
-      class="qc-result-tab__tabs"
-    >
+    <div v-if="!props.activeTab" class="qc-result-tab__tabs">
       <button
         v-for="tab in qcTabs"
         :key="tab.key"
@@ -11,15 +8,9 @@
         :class="['qc-result-tab__tab', { 'qc-result-tab__tab--active': currentTab === tab.key }]"
         @click="internalTab = tab.key"
       >
-        <component
-          :is="tab.icon"
-          class="qc-result-tab__tab-icon"
-        />
+        <component :is="tab.icon" class="qc-result-tab__tab-icon" />
         <span>{{ tab.label }}</span>
-        <span
-          v-if="getTabCount(tab.key) > 0"
-          class="qc-result-tab__tab-badge"
-        >{{
+        <span v-if="getTabCount(tab.key) > 0" class="qc-result-tab__tab-badge">{{
           getTabCount(tab.key)
         }}</span>
       </button>
@@ -28,9 +19,7 @@
     <div class="qc-result-tab__body custom-scrollbar">
       <div class="qc-overview">
         <div>
-          <div class="qc-overview__eyebrow">
-            当前质控
-          </div>
+          <div class="qc-overview__eyebrow">当前质控</div>
           <div class="qc-overview__title">
             {{ currentTabConfig.label }}
           </div>
@@ -38,10 +27,7 @@
             {{ currentTabConfig.desc }}
           </div>
         </div>
-        <div
-          v-if="!isTabEmpty || totalIssueCount > 0"
-          class="qc-overview__status"
-        >
+        <div v-if="!isTabEmpty || totalIssueCount > 0" class="qc-overview__status">
           <span class="qc-overview__status-label">{{
             currentIssues.length > 0 ? '当前问题' : '当前状态'
           }}</span>
@@ -52,15 +38,9 @@
       </div>
 
       <template v-if="isTabEmpty">
-        <div
-          v-if="!isTabLoading"
-          class="qc-start"
-        >
+        <div v-if="!isTabLoading" class="qc-start">
           <div class="qc-start__icon-wrap">
-            <component
-              :is="currentTabConfig.icon"
-              class="qc-start__icon"
-            />
+            <component :is="currentTabConfig.icon" class="qc-start__icon" />
           </div>
           <div class="qc-start__title">
             {{ currentTabConfig.label }}
@@ -68,29 +48,16 @@
           <div class="qc-start__desc">
             {{ currentTabConfig.desc }}
           </div>
-          <a-button
-            type="primary"
-            size="small"
-            class="qc-start__btn"
-            @click="startCurrentTab"
-          >
+          <a-button type="primary" size="small" class="qc-start__btn" @click="startCurrentTab">
             <template #icon>
               <ThunderboltOutlined />
             </template>
             开始分析
           </a-button>
         </div>
-        <div
-          v-else
-          class="qc-start"
-        >
+        <div v-else class="qc-start">
           <a-spin />
-          <div
-            class="qc-start__title"
-            style="margin-top: 16px"
-          >
-            正在分析...
-          </div>
+          <div class="qc-start__title" style="margin-top: 16px">正在分析...</div>
           <div class="qc-start__desc">
             {{ currentTabConfig.loadingHint }}
           </div>
@@ -98,16 +65,9 @@
       </template>
 
       <template v-else-if="currentIssues.length > 0">
-        <section
-          v-for="(group, gIdx) in groupedIssues"
-          :key="gIdx"
-          class="qc-group"
-        >
+        <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="qc-group">
           <header class="qc-group__header">
-            <span
-              class="qc-group__dot"
-              :style="{ background: severityColor(group.severity) }"
-            />
+            <span class="qc-group__dot" :style="{ background: severityColor(group.severity) }" />
             <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
           </header>
 
@@ -120,19 +80,12 @@
               <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{
                 severityLabel(issue.severity)
               }}</span>
-              <p
-                class="qc-issue__desc"
-                title="定位到相关字段"
-                @click="locateIssue(issue)"
-              >
+              <p class="qc-issue__desc" title="定位到相关字段" @click="locateIssue(issue)">
                 {{ issue.description }}
               </p>
             </div>
 
-            <div
-              v-if="issue.suggestion"
-              class="qc-issue__ai-suggestion"
-            >
+            <div v-if="issue.suggestion" class="qc-issue__ai-suggestion">
               <div class="qc-issue__ai-label">
                 <ThunderboltOutlined class="qc-issue__ai-icon" />
                 <span>AI 修正建议</span>
@@ -144,11 +97,7 @@
 
             <div class="qc-issue__action-bar">
               <div class="qc-issue__action-group">
-                <button
-                  type="button"
-                  class="qc-issue__ghost-btn"
-                  @click="locateIssue(issue)"
-                >
+                <button type="button" class="qc-issue__ghost-btn" @click="locateIssue(issue)">
                   <svg
                     class="qc-issue__btn-icon"
                     fill="none"
@@ -190,24 +139,12 @@
                   </svg>
                   文书依据
                 </button>
-                <a-dropdown
-                  v-if="issue.id"
-                  :trigger="['click']"
-                >
-                  <button
-                    type="button"
-                    class="qc-issue__ghost-btn"
-                  >
-                    操作 <DownOutlined />
-                  </button>
+                <a-dropdown v-if="issue.id" :trigger="['click']">
+                  <button type="button" class="qc-issue__ghost-btn">操作 <DownOutlined /></button>
                   <template #overlay>
                     <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                      <a-menu-item key="urge">
-                        <SendOutlined /> 催办
-                      </a-menu-item>
-                      <a-menu-item key="mark_remediated">
-                        <EditOutlined /> 标记已整改
-                      </a-menu-item>
+                      <a-menu-item key="urge"> <SendOutlined /> 催办 </a-menu-item>
+                      <a-menu-item key="mark_remediated"> <EditOutlined /> 标记已整改 </a-menu-item>
                       <a-menu-divider />
                       <a-menu-item key="approve">
                         <CheckOutlined style="color: #52c41a" /> 审核通过
@@ -231,48 +168,24 @@
         </section>
       </template>
 
-      <div
-        v-else
-        class="qc-empty"
-      >
-        <CheckCircleOutlined
-          class="qc-empty__icon"
-          style="color: #52c41a"
-        />
-        <div class="qc-empty__title">
-          未发现质控问题
-        </div>
-        <a-button
-          type="link"
-          size="small"
-          style="margin-top: 8px"
-          @click="startCurrentTab"
-        >
+      <div v-else class="qc-empty">
+        <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a" />
+        <div class="qc-empty__title">未发现质控问题</div>
+        <a-button type="link" size="small" style="margin-top: 8px" @click="startCurrentTab">
           <ReloadOutlined /> 重新分析
         </a-button>
       </div>
     </div>
 
-    <footer
-      v-if="totalIssueCount > 0"
-      class="qc-result-tab__footer"
-    >
-      <span>共 <strong>{{ totalIssueCount }}</strong> 个问题</span>
+    <footer v-if="totalIssueCount > 0" class="qc-result-tab__footer">
+      <span
+        >共 <strong>{{ totalIssueCount }}</strong> 个问题</span
+      >
       <div class="qc-result-tab__footer-actions">
-        <a-button
-          type="link"
-          size="small"
-          :loading="isTabLoading"
-          @click="startCurrentTab"
-        >
+        <a-button type="link" size="small" :loading="isTabLoading" @click="startCurrentTab">
           <ReloadOutlined /> 刷新
         </a-button>
-        <a-button
-          type="link"
-          size="small"
-          :loading="exporting"
-          @click="handleExportDefects"
-        >
+        <a-button type="link" size="small" :loading="exporting" @click="handleExportDefects">
           <DownloadOutlined /> 导出
         </a-button>
       </div>
@@ -305,6 +218,7 @@ import {
   rejectDefect,
   exportDefects,
 } from '@/api/defects'
+import type { WorkstationSnapshotState } from '../types'
 
 interface QCIssue {
   id: string
@@ -327,6 +241,7 @@ const props = defineProps<{
   activeTab?: 'form' | 'coding' | 'cost'
   visitId?: string | null
   patientId?: string | null
+  snapshotState?: Partial<Record<'form' | 'coding' | 'cost', WorkstationSnapshotState>>
 }>()
 
 const emit = defineEmits<{
@@ -484,6 +399,38 @@ function buildPersistenceMessage(
   return '控费监测完成，结果已保存'
 }
 
+function hydrateIssuesFromSnapshot(
+  snapshotState?: Partial<Record<'form' | 'coding' | 'cost', WorkstationSnapshotState>>,
+) {
+  if (!snapshotState) return
+
+  const nextIssues: QCIssue[] = []
+  const tabs: Array<'form' | 'coding' | 'cost'> = ['form', 'coding', 'cost']
+  for (const tab of tabs) {
+    const snapshot = snapshotState[tab]
+    if (snapshot?.analyzed) {
+      if (tab === 'form') formAnalyzed.value = true
+      if (tab === 'coding') codingAnalyzed.value = true
+      if (tab === 'cost') costAnalyzed.value = true
+    }
+    for (const [index, issue] of (snapshot?.issues || []).entries()) {
+      nextIssues.push({
+        id: issue.id || `${tab}-snapshot-${index + 1}`,
+        category: tab,
+        severity: toIssueSeverity(String(issue.severity || 'info')),
+        group: String(issue.category || currentTabConfig.value.label || '质控结果'),
+        description: String(issue.description || issue.rule_name || '未命名问题'),
+        suggestion: issue.suggestion,
+        evidence:
+          typeof issue.evidence === 'string' ? issue.evidence : String(issue.location || ''),
+      })
+    }
+  }
+
+  issues.value = nextIssues
+  emit('issues-change', nextIssues.slice())
+}
+
 function toIssueSeverity(severity: string): 'error' | 'warning' | 'info' {
   if (severity === 'error' || severity === 'critical' || severity === 'major') return 'error'
   if (severity === 'warning' || severity === 'minor') return 'warning'
@@ -634,10 +581,10 @@ async function fetchCodingQCFromBackend() {
     }
   }
 
-  try {
-    const resp = await apiClient.post('/api/v1/qc/coding-qc/check', payload, { timeout: 30000 })
+  const executeRequest = async (requestPayload: Record<string, any>, timeout = 30000) => {
+    const resp = await apiClient.post('/api/v1/qc/coding-qc/check', requestPayload, { timeout })
     const data = resp.data?.data
-    if (!data) return { issues: [], persistence: null }
+    if (!data) return { issues: [], persistence: null, degraded: false }
 
     const codingIssues: QCIssue[] = []
     let idx = 0
@@ -678,10 +625,30 @@ async function fetchCodingQCFromBackend() {
     return {
       issues: codingIssues,
       persistence: data.persistence || null,
+      degraded: Boolean(requestPayload.skip_llm),
     }
-  } catch (err) {
+  }
+
+  try {
+    return await executeRequest(payload)
+  } catch (err: any) {
+    const maybeTimeout =
+      err?.code === 'ECONNABORTED' ||
+      String(err?.message || '')
+        .toLowerCase()
+        .includes('timeout')
+    if (maybeTimeout) {
+      try {
+        const degradedResult = await executeRequest({ ...payload, skip_llm: true }, 20000)
+        message.info('编码质控已降级为规则层执行，结果仍会保存并更新消息')
+        return degradedResult
+      } catch (retryErr) {
+        console.error('后端编码质控降级调用失败', retryErr)
+        return { issues: [], persistence: null, degraded: false }
+      }
+    }
     console.error('后端编码质控调用失败', err)
-    return { issues: [], persistence: null }
+    return { issues: [], persistence: null, degraded: false }
   }
 }
 
@@ -762,8 +729,10 @@ async function loadFrontpageData(): Promise<Record<string, any> | null> {
         `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
       )
       if (resp.data) return resp.data
-    } catch (err) {
-      console.warn('从 PG 读取首页数据失败，回退到 LLM 草稿:', err)
+    } catch (err: any) {
+      if (err?.response?.status !== 404) {
+        console.warn('从 PG 读取首页数据失败，回退到 LLM 草稿:', err)
+      }
     }
   }
   return props.frontpage || null
@@ -904,6 +873,15 @@ watch(
     issues.value = []
     emit('issues-change', [])
   },
+)
+
+watch(
+  () => props.snapshotState,
+  (snapshotState) => {
+    if (!snapshotState) return
+    hydrateIssuesFromSnapshot(snapshotState)
+  },
+  { deep: true, immediate: true },
 )
 
 watch(

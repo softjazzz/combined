@@ -18,12 +18,162 @@ from ..core.permissions import (
     PermissionAction,
     UserRole,
 )
+from ..services.qc_persistence_service import default_qc_persistence_service
+from ..services.workflow_queue_state_service import default_workflow_queue_state_service
 
 router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
 
 import logging as _logging
 logger = _logging.getLogger(__name__)
+
+def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not current_user:
+        return None
+    value = current_user.get("id") or current_user.get("user_id")
+    return str(value) if value else None
+
+
+def _extract_frontpage_value(frontpage: Dict[str, Any], *paths: tuple[str, ...] | str) -> str:
+    for path in paths:
+        keys = (path,) if isinstance(path, str) else path
+        current: Any = frontpage
+        for key in keys:
+            if not isinstance(current, dict):
+                current = None
+                break
+            current = current.get(key)
+        if current not in (None, ""):
+            return str(current)
+    return ""
+
+
+def _grade_from_score(score: float) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    return "D"
+
+
+def _coding_issue_to_persistence_issue(issue: Dict[str, Any], fallback_category: str) -> Dict[str, Any]:
+    return {
+        "rule_code": str(issue.get("rule_id") or issue.get("code") or issue.get("dimension") or "coding_rule"),
+        "rule_name": str(issue.get("rule_name") or issue.get("dimension") or "编码质控规则"),
+        "description": str(issue.get("description") or ""),
+        "severity": str(issue.get("severity") or "warning"),
+        "category": str(issue.get("dimension") or fallback_category or "coding"),
+        "location": str(issue.get("location") or issue.get("field_name") or "病案首页编码区"),
+        "suggestion": str(issue.get("suggestion") or issue.get("recommendation") or "请复核相关编码"),
+        "evidence": issue.get("evidence"),
+    }
+
+
+def _build_formal_qc_persistence_result(
+    frontpage: Dict[str, Any],
+    report: Any,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    patient_id = (
+        str(payload.get("patient_id") or "")
+        or _extract_frontpage_value(frontpage, ("basic_info", "patient_id"), ("basic", "patient_id"), "patient_id")
+    )
+    visit_id = (
+        str(payload.get("visit_id") or "")
+        or _extract_frontpage_value(frontpage, ("hospitalization", "visit_id"), "visit_id", "case_id")
+    )
+    department = _extract_frontpage_value(
+        frontpage,
+        ("hospitalization", "admission_dept"),
+        ("hospitalization", "discharge_dept"),
+        ("admission", "dept_name"),
+        "department",
+    )
+    score = round(report.passed / report.total_rules * 100, 1) if report.total_rules else 0.0
+    issues = [
+        {
+            "rule_code": r.rule_id,
+            "rule_name": r.rule_name,
+            "description": r.message,
+            "severity": r.severity.value,
+            "category": r.category.value,
+            "location": r.field_name or "病案首页",
+            "suggestion": r.message,
+            "evidence": r.field_name,
+        }
+        for r in report.results
+        if not r.passed
+    ]
+    metadata = {
+        "workflow_type": "frontpage",
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "department": department,
+        "data_source": "frontpage_formal_qc",
+        "trigger_source": "workstation_v4",
+        "categories": payload.get("categories") or [],
+        "severities": payload.get("severities") or [],
+    }
+    return {
+        "record_id": f"frontpage::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
+        "workflow_type": "frontpage",
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "overall_score": score,
+        "overall_grade": _grade_from_score(score),
+        "defect_count": len(issues),
+        "issues": issues,
+        "metadata": metadata,
+        "analysis_engine": "frontpage-formal-qc",
+        "analysis_date": datetime.utcnow().isoformat() + "Z",
+        "raw_report": {
+            "total_rules": report.total_rules,
+            "passed": report.passed,
+            "failed": report.failed,
+        },
+    }
+
+
+def _build_coding_qc_persistence_result(payload: Dict[str, Any], report: Dict[str, Any]) -> Dict[str, Any]:
+    patient_id = str(payload.get("patient_id") or "")
+    visit_id = str(payload.get("visit_id") or "")
+    frontpage = payload.get("frontpage") if isinstance(payload.get("frontpage"), dict) else {}
+    if not patient_id:
+        patient_id = _extract_frontpage_value(frontpage, ("basic_info", "patient_id"), "patient_id")
+    total_issues = int(report.get("total_issues") or 0)
+    issues = [
+        _coding_issue_to_persistence_issue(item, "coding_rule")
+        for item in (report.get("rule_issues") or [])
+        if isinstance(item, dict)
+    ]
+    issues.extend(
+        _coding_issue_to_persistence_issue(item, "coding_llm")
+        for item in (report.get("llm_issues") or [])
+        if isinstance(item, dict)
+    )
+    overall_score = max(0.0, 100.0 - min(total_issues, 20) * 5.0)
+    return {
+        "record_id": f"coding::{visit_id or patient_id or uuid.uuid4().hex[:8]}",
+        "workflow_type": "coding",
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "overall_score": overall_score,
+        "overall_grade": _grade_from_score(overall_score),
+        "defect_count": len(issues),
+        "issues": issues,
+        "metadata": {
+            "workflow_type": "coding",
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+            "department": "",
+            "data_source": "coding_qc",
+            "trigger_source": "workstation_v4",
+        },
+        "analysis_engine": "coding-qc",
+        "analysis_date": datetime.utcnow().isoformat() + "Z",
+    }
 
 
 def _parse_json_field(value: Any) -> Any:
@@ -118,33 +268,27 @@ def _row_to_qc_result(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _save_qc_result(record_id: str, result: Dict[str, Any]) -> None:
-    """将质控分析结果写入 PG qc_results 表。失败时记录日志但不阻塞主流程。"""
-    sb = get_supabase()
-    if sb is None:
-        logger.warning(f"[qc] 数据库不可用，qc_results 未持久化: record_id={record_id}")
-        return
+async def _save_qc_result(record_id: str, result: Dict[str, Any], actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """将分析结果持久化到 qc_results/qc_defects/notifications。"""
     try:
-        issues = result.get("issues") if isinstance(result.get("issues"), list) else []
-        raw_output = json.dumps(result, ensure_ascii=False)
-        metadata = result.get("metadata")
-        payload = {
-            "record_id": record_id,
-            "overall_score": result.get("overall_score") or result.get("score"),
-            "grade": result.get("overall_grade") or result.get("grade"),
-            "status": result.get("status", "completed"),
-            "analysis_date": result.get("analysis_date"),
-            "analysis_engine": (metadata or {}).get("engine") if isinstance(metadata, dict) else "demo-qc-engine",
-            "issues": issues,
-            "defect_count": len(issues),
-            "metadata": metadata if isinstance(metadata, dict) else {},
-            "raw_output": raw_output,
-        }
-        # 移除 None 值
-        payload = {k: v for k, v in payload.items() if v is not None}
-        await async_execute(sb.table("qc_results").insert(payload))
+        normalized = dict(result)
+        metadata = normalized.get("metadata") if isinstance(normalized.get("metadata"), dict) else {}
+        metadata.setdefault("workflow_type", normalized.get("workflow_type") or "analysis")
+        metadata.setdefault("trigger_source", "workstation_v4")
+        normalized["metadata"] = metadata
+        normalized["record_id"] = record_id
+        return await default_qc_persistence_service.persist_analysis(normalized, actor=actor)
     except Exception as e:
-        logger.warning(f"[qc] 写入 qc_results 失败（非阻塞）: {e}")
+        logger.warning(f"[qc] 写入质控持久化结果失败（非阻塞）: {e}")
+        return {
+            "qc_result_id": None,
+            "defects_created": 0,
+            "defects_updated": 0,
+            "defects_resolved": 0,
+            "notification_created": False,
+            "notification_updated": False,
+            "notification_id": None,
+        }
 
 
 @router.post("/analyze/batch")
@@ -165,14 +309,14 @@ async def analyze_batch(
             entry_payload = dict(entry)
             entry_payload["record_id"] = rid
             res = await service.evaluate(entry_payload)
-            await _save_qc_result(rid, res)
-            started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
+            persistence = await _save_qc_result(rid, res, actor=current_user)
+            started.append({"record_id": rid, "status": "completed", "analysis_id": persistence.get("qc_result_id") or res.get("id"), "persistence": persistence})
     else:
         record_ids: List[str] = payload.get("record_ids", [])
         for rid in record_ids:
             res = await service.evaluate({"record_id": rid})
-            await _save_qc_result(rid, res)
-            started.append({"record_id": rid, "status": "completed", "analysis_id": res.get("id")})
+            persistence = await _save_qc_result(rid, res, actor=current_user)
+            started.append({"record_id": rid, "status": "completed", "analysis_id": persistence.get("qc_result_id") or res.get("id"), "persistence": persistence})
 
     return success_response(
         data={
@@ -196,14 +340,15 @@ async def analyze_record(
     request_payload = dict(payload or {})
     request_payload["record_id"] = record_id
     result = await service.evaluate(request_payload)
-    await _save_qc_result(record_id, result)
-    analysis_id = result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
+    persistence = await _save_qc_result(record_id, result, actor=current_user)
+    analysis_id = persistence.get("qc_result_id") or result.get("id") or f"analysis-{uuid.uuid4().hex[:8]}"
 
     return success_response(
         data={
             "analysis_id": analysis_id,
             "status": "completed",
             "record_id": record_id,
+            "persistence": persistence,
         },
         message="质控分析完成",
         trace_id=get_trace_id(request)
@@ -493,6 +638,7 @@ _formal_qc_engine = FrontpageFormalQC()
 async def validate_frontpage_formal(
     request: Request,
     payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
 ):
     """
     对病案首页执行形式质控校验。
@@ -507,37 +653,78 @@ async def validate_frontpage_formal(
     frontpage = payload.get("frontpage") or payload
     categories = None
     severities = None
+    user_id = _current_user_id(current_user)
+    run_id: Optional[str] = None
 
     if "categories" in payload and payload["categories"]:
         categories = [FQCategory(c) for c in payload["categories"]]
     if "severities" in payload and payload["severities"]:
         severities = [FQSeverity(s) for s in payload["severities"]]
 
-    report = _formal_qc_engine.validate(frontpage, categories=categories, severities=severities)
+    visit_id_for_state = str(
+        payload.get("visit_id")
+        or (frontpage.get("hospitalization") or {}).get("visit_id")
+        or frontpage.get("visit_id")
+        or ""
+    ).strip()
 
-    return success_response(
-        data={
-            "total_rules": report.total_rules,
-            "passed": report.passed,
-            "failed": report.failed,
-            "pass_rate": round(report.passed / report.total_rules * 100, 1) if report.total_rules else 0,
-            "results": [
-                {
-                    "rule_id": r.rule_id,
-                    "field_name": r.field_name,
-                    "rule_name": r.rule_name,
-                    "passed": r.passed,
-                    "message": r.message,
-                    "severity": r.severity.value,
-                    "category": r.category.value,
-                }
-                for r in report.results
-                if not r.passed  # 只返回失败项
-            ],
-        },
-        message=f"形式质控完成：{report.passed}/{report.total_rules} 通过",
-        trace_id=get_trace_id(request),
-    )
+    try:
+        if visit_id_for_state:
+            run_id = default_workflow_queue_state_service.start_run(
+                workflow_type="frontpage_qc",
+                visit_id=visit_id_for_state,
+                user_id=user_id,
+            )
+
+        report = _formal_qc_engine.validate(frontpage, categories=categories, severities=severities)
+        persistence_result = _build_formal_qc_persistence_result(frontpage, report, payload)
+        persistence = await default_qc_persistence_service.persist_analysis(
+            persistence_result,
+            actor=current_user,
+        )
+
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_success(
+                workflow_type="frontpage_qc",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                user_id=user_id,
+            )
+
+        return success_response(
+            data={
+                "total_rules": report.total_rules,
+                "passed": report.passed,
+                "failed": report.failed,
+                "pass_rate": round(report.passed / report.total_rules * 100, 1) if report.total_rules else 0,
+                "results": [
+                    {
+                        "rule_id": r.rule_id,
+                        "field_name": r.field_name,
+                        "rule_name": r.rule_name,
+                        "passed": r.passed,
+                        "message": r.message,
+                        "severity": r.severity.value,
+                        "category": r.category.value,
+                    }
+                    for r in report.results
+                    if not r.passed  # 只返回失败项
+                ],
+                "persistence": persistence,
+            },
+            message=f"形式质控完成：{report.passed}/{report.total_rules} 通过",
+            trace_id=get_trace_id(request),
+        )
+    except Exception:
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_failed(
+                workflow_type="frontpage_qc",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                error_message="formal_qc_validate_failed",
+                user_id=user_id,
+            )
+        raise
 
 
 @router.get("/formal-qc/stats")
@@ -647,9 +834,6 @@ async def list_coding_rules(
 
 from ..services.coding_qc_service import CodingQCEngine
 
-import logging as _logging
-logger = _logging.getLogger(__name__)
-
 # 编码质控引擎（LLM 客户端延迟初始化）
 _coding_qc_engine: Optional[CodingQCEngine] = None
 
@@ -673,6 +857,7 @@ def _get_coding_qc_engine() -> CodingQCEngine:
 async def check_coding_qc(
     request: Request,
     payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
 ):
     """
     对病案首页执行编码规范质控。
@@ -686,34 +871,80 @@ async def check_coding_qc(
     visit_id = payload.get("visit_id")
     patient_id = payload.get("patient_id")
     skip_llm = payload.get("skip_llm", False)
+    user_id = _current_user_id(current_user)
+    run_id: Optional[str] = None
 
-    if visit_id:
-        # === 从 PG 直接读取诊断和手术数据 ===
-        frontpage = _load_frontpage_from_pg(patient_id, visit_id)
-        if not frontpage:
-            return success_response(
-                data={"total_issues": 0, "errors": 0, "warnings": 0, "infos": 0,
-                      "rule_issues": [], "llm_issues": [], "overall_assessment": "通过"},
-                message="编码质控完成：该患者无诊断/手术编码数据",
-                trace_id=get_trace_id(request),
+    visit_id_for_state = str(visit_id or "").strip()
+    if visit_id_for_state:
+        run_id = default_workflow_queue_state_service.start_run(
+            workflow_type="coding_qc",
+            visit_id=visit_id_for_state,
+            patient_id=str(patient_id or "") or None,
+            user_id=user_id,
+        )
+
+    try:
+        if visit_id:
+            # === 从 PG 直接读取诊断和手术数据 ===
+            frontpage = _load_frontpage_from_pg(patient_id, visit_id)
+            if not frontpage:
+                if run_id and visit_id_for_state:
+                    default_workflow_queue_state_service.finish_success(
+                        workflow_type="coding_qc",
+                        visit_id=visit_id_for_state,
+                        run_id=run_id,
+                        user_id=user_id,
+                    )
+                return success_response(
+                    data={"total_issues": 0, "errors": 0, "warnings": 0, "infos": 0,
+                          "rule_issues": [], "llm_issues": [], "overall_assessment": "通过"},
+                    message="编码质控完成：该患者无诊断/手术编码数据",
+                    trace_id=get_trace_id(request),
+                )
+        else:
+            # === 兼容旧版：从请求体读取 ===
+            frontpage = payload.get("frontpage") or payload
+
+        engine = _get_coding_qc_engine()
+
+        if skip_llm:
+            temp_engine = CodingQCEngine(llm_client=None)
+            report = await temp_engine.run_all(frontpage)
+        else:
+            report = await engine.run_all(frontpage)
+        report_dict = report.to_dict()
+        persistence_result = _build_coding_qc_persistence_result(payload, report_dict)
+        persistence = await default_qc_persistence_service.persist_analysis(
+            persistence_result,
+            actor=current_user,
+        )
+
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_success(
+                workflow_type="coding_qc",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                user_id=user_id,
             )
-    else:
-        # === 兼容旧版：从请求体读取 ===
-        frontpage = payload.get("frontpage") or payload
 
-    engine = _get_coding_qc_engine()
-
-    if skip_llm:
-        temp_engine = CodingQCEngine(llm_client=None)
-        report = await temp_engine.run_all(frontpage)
-    else:
-        report = await engine.run_all(frontpage)
-
-    return success_response(
-        data=report.to_dict(),
-        message=f"编码质控完成：{report.overall_assessment}（{report.total_issues} 个问题）",
-        trace_id=get_trace_id(request),
-    )
+        return success_response(
+            data={
+                **report_dict,
+                "persistence": persistence,
+            },
+            message=f"编码质控完成：{report.overall_assessment}（{report.total_issues} 个问题）",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as exc:
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_failed(
+                workflow_type="coding_qc",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                error_message=str(exc),
+                user_id=user_id,
+            )
+        raise
 
 
 def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optional[Dict[str, Any]]:
@@ -826,3 +1057,9 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
     except Exception as e:
         logger.warning(f"从 PG 读取编码质控数据失败: {e}")
         return None
+
+
+
+
+
+

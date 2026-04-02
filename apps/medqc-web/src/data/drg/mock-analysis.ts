@@ -223,7 +223,7 @@ const TABLE_BY_DIMENSION: Record<AnalysisDimension, AnalysisTableItem[]> = {
       costRate: 1.6,
     },
   ],
-  doctor: [
+  person: [
     {
       id: 'P1',
       name: 'Li Min',

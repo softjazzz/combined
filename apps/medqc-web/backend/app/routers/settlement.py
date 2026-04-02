@@ -4,19 +4,96 @@
 挂载到 /api/medical-records 前缀下，与现有病案数据路由保持一致。
 """
 
-from typing import Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
 from ..services.settlement_service import get_settlement_service
-from ..core.security import require_roles
+from ..core.security import get_current_user, require_roles
 from ..core.pagination import page_param, page_size_param
+from ..services.qc_persistence_service import default_qc_persistence_service
+from ..services.workflow_queue_state_service import default_workflow_queue_state_service
+
+def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not current_user:
+        return None
+    value = current_user.get("id") or current_user.get("user_id")
+    return str(value) if value else None
+
 
 router = APIRouter(
     prefix="/api/medical-records",
     tags=["结算清单"],
     dependencies=[Depends(require_roles("admin", "qc_manager", "doctor", "reviewer"))],
 )
+
+
+def _grade_from_score(score: float) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    return "D"
+
+
+def _build_settlement_persistence_result(
+    *,
+    patient_id: str,
+    visit_id: str,
+    settlement: Dict[str, Any],
+    summary: Dict[str, Any],
+    results: List[Dict[str, Any]],
+    source: str,
+) -> Dict[str, Any]:
+    issues = [
+        {
+            "rule_code": str(item.get("rule_id") or "settlement_rule"),
+            "rule_name": str(item.get("rule_name") or "控费监测规则"),
+            "description": str(item.get("message") or ""),
+            "severity": str(item.get("severity") or "warning"),
+            "category": str(item.get("category") or "settlement"),
+            "location": str(item.get("field_name") or "结算清单"),
+            "suggestion": str(item.get("message") or "请复核结算清单相关字段"),
+            "evidence": item.get("field_name"),
+        }
+        for item in results
+        if not bool(item.get("passed"))
+    ]
+    pass_rate_raw = summary.get("pass_rate")
+    try:
+        overall_score = float(str(pass_rate_raw).replace("%", "")) if pass_rate_raw is not None else 0.0
+    except ValueError:
+        overall_score = 0.0
+    department = str(
+        settlement.get("discharge_dept")
+        or settlement.get("admission_dept")
+        or settlement.get("discharge_dept_name")
+        or settlement.get("admission_dept_name")
+        or ""
+    )
+    return {
+        "record_id": f"settlement::{visit_id}",
+        "workflow_type": "settlement",
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "overall_score": overall_score,
+        "overall_grade": _grade_from_score(overall_score),
+        "defect_count": len(issues),
+        "issues": issues,
+        "metadata": {
+            "workflow_type": "settlement",
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+            "department": department,
+            "data_source": source,
+            "trigger_source": "workstation_v4",
+        },
+        "analysis_engine": "settlement-formal-qc",
+        "analysis_date": datetime.utcnow().isoformat() + "Z",
+    }
 
 
 @router.get("/settlement/list")
@@ -79,13 +156,50 @@ async def run_settlement_qc(
     patient_id: str,
     visit_id: str,
     institute_id: Optional[str] = Query(None, description="机构号（可选）"),
+    current_user: dict = Depends(get_current_user),
 ):
     """对单条结算清单执行形式质控（136条规则）"""
-    svc = get_settlement_service()
-    result = svc.run_qc(patient_id, visit_id, institute_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="结算清单未找到，无法执行质控")
-    return result
+    user_id = _current_user_id(current_user)
+    run_id = default_workflow_queue_state_service.start_run(
+        workflow_type="settlement_qc",
+        visit_id=visit_id,
+        patient_id=patient_id,
+        institute_id=institute_id,
+        user_id=user_id,
+    )
+    try:
+        svc = get_settlement_service()
+        result = svc.run_qc(patient_id, visit_id, institute_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="结算清单未找到，无法执行质控")
+        persistence = await default_qc_persistence_service.persist_analysis(
+            _build_settlement_persistence_result(
+                patient_id=patient_id,
+                visit_id=visit_id,
+                settlement=result.get("settlement") or {},
+                summary=result.get("summary") or {},
+                results=result.get("results") or [],
+                source="settlement_qc",
+            ),
+            actor=current_user,
+        )
+        default_workflow_queue_state_service.finish_success(
+            workflow_type="settlement_qc",
+            visit_id=visit_id,
+            run_id=run_id,
+            user_id=user_id,
+        )
+        result["persistence"] = persistence
+        return result
+    except Exception as exc:
+        default_workflow_queue_state_service.finish_failed(
+            workflow_type="settlement_qc",
+            visit_id=visit_id,
+            run_id=run_id,
+            error_message=str(exc),
+            user_id=user_id,
+        )
+        raise
 
 
 # ============================================================
@@ -146,6 +260,7 @@ async def generate_settlement_from_frontpage(
 async def run_generated_settlement_qc(
     patient_id: str,
     visit_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
     """
     对 AI 生成的结算清单草稿运行形式质控（136 条规则）。
@@ -154,39 +269,81 @@ async def run_generated_settlement_qc(
     """
     from ..services.settlement_formal_qc import SettlementFormalQCEngine
 
-    # 使用与 /generate 完全相同的数据源
-    draft = _generate_draft(patient_id, visit_id)
-
-    # 运行质控
-    qc_engine = SettlementFormalQCEngine()
-    report = qc_engine.check(draft)
-
-    # 计算通过率，与旧接口 settlement_service.run_qc 保持一致
-    pass_rate = (
-        f"{report.passed / report.total_rules * 100:.1f}%"
-        if report.total_rules > 0
-        else "0%"
+    user_id = _current_user_id(current_user)
+    run_id = default_workflow_queue_state_service.start_run(
+        workflow_type="settlement_qc",
+        visit_id=visit_id,
+        patient_id=patient_id,
+        user_id=user_id,
     )
 
-    return {
-        "summary": {
-            "total": report.total_rules,
-            "passed": report.passed,
-            "failed": report.failed,
-            "pass_rate": pass_rate,
-        },
-        "results": [
-            {
-                "rule_id": r.rule_id,
-                "field_name": r.field_name,
-                "rule_name": r.rule_name,
-                "passed": r.passed,
-                "message": r.message,
-                "severity": r.severity,
-                "category": r.category,
-                "affects_grouping": r.affects_grouping,
-            }
-            for r in report.results
-        ],
-        "settlement": draft,
-    }
+    try:
+        # 使用与 /generate 完全相同的数据源
+        draft = _generate_draft(patient_id, visit_id)
+
+        # 运行质控
+        qc_engine = SettlementFormalQCEngine()
+        report = qc_engine.check(draft)
+
+        # 计算通过率，与旧接口 settlement_service.run_qc 保持一致
+        pass_rate = (
+            f"{report.passed / report.total_rules * 100:.1f}%"
+            if report.total_rules > 0
+            else "0%"
+        )
+
+        result = {
+            "summary": {
+                "total": report.total_rules,
+                "passed": report.passed,
+                "failed": report.failed,
+                "pass_rate": pass_rate,
+            },
+            "results": [
+                {
+                    "rule_id": r.rule_id,
+                    "field_name": r.field_name,
+                    "rule_name": r.rule_name,
+                    "passed": r.passed,
+                    "message": r.message,
+                    "severity": r.severity,
+                    "category": r.category,
+                    "affects_grouping": r.affects_grouping,
+                }
+                for r in report.results
+            ],
+            "settlement": draft,
+        }
+        persistence = await default_qc_persistence_service.persist_analysis(
+            _build_settlement_persistence_result(
+                patient_id=patient_id,
+                visit_id=visit_id,
+                settlement=draft,
+                summary=result["summary"],
+                results=result["results"],
+                source="settlement_generate_qc",
+            ),
+            actor=current_user,
+        )
+        default_workflow_queue_state_service.finish_success(
+            workflow_type="settlement_qc",
+            visit_id=visit_id,
+            run_id=run_id,
+            user_id=user_id,
+        )
+        result["persistence"] = persistence
+        return result
+    except Exception as exc:
+        default_workflow_queue_state_service.finish_failed(
+            workflow_type="settlement_qc",
+            visit_id=visit_id,
+            run_id=run_id,
+            error_message=str(exc),
+            user_id=user_id,
+        )
+        raise
+
+
+
+
+

@@ -2,6 +2,8 @@ export type WorkspaceScope = 'all' | 'running' | 'final'
 export type WorkspaceDraftStatus = 'draft' | 'published'
 export type WorkspaceSeverity = 'critical' | 'major' | 'minor'
 export type WorkspaceGenerationMode = 'llm' | 'fallback_template'
+export type CustomRuleEditorDrawerMode = 'create' | 'edit' | 'copy'
+export type CustomRuleTestResultPanelState = 'single' | 'batch' | 'empty'
 
 export interface CustomRuleDraft {
   id: string
@@ -178,4 +180,10 @@ export interface CustomRulePublishResult {
   rule_code: string
   published_rule_id: string
   status: 'published'
+}
+
+export interface CustomRuleWorkspaceSelectionState {
+  selectedDraftId: string | null
+  selectedRecordKeys: string[]
+  resultState: CustomRuleTestResultPanelState
 }

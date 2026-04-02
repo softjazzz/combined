@@ -5,7 +5,7 @@
  */
 
 import CryptoJS from 'crypto-js'
-import { supabase } from '@/lib/supabase'
+import { apiClient } from '@/services/apiService'
 
 // API基础URL配置：优先用环境变量；若未设置则使用相对路径，交由 Vite 代理转发
 // 使用 nullish 合并，允许将环境变量显式设置为空字符串以启用相对路径
@@ -30,19 +30,21 @@ export interface LLMProvider {
 
 export interface LLMModel {
   id: string
-  provider_id: string
+  provider_id?: string
+  provider?: string
   model_code: string
   model_name: string
-  description: string
-  context_length: number
-  pricing_tier: string
-  capabilities: string[]
-  parameters: Record<string, unknown>
-  is_default: boolean
-  is_active: boolean
-  sort_order: number
-  created_at: string
-  updated_at: string
+  description?: string
+  context_length?: number
+  pricing_tier?: string
+  capabilities?: string[]
+  parameters?: Record<string, unknown>
+  is_default?: boolean
+  is_active?: boolean
+  sort_order?: number
+  created_at?: string
+  updated_at?: string
+  is_custom?: boolean
 }
 
 export interface UserLLMConfig {
@@ -80,6 +82,18 @@ export interface LLMConnectionTestInput {
   provider_code: string
   model_code: string
   custom_parameters?: Record<string, unknown>
+}
+
+export interface LLMConfigSummary {
+  provider_code: string
+  model_code: string
+  custom_parameters: {
+    temperature: number
+    top_p: number
+    max_tokens: number
+  }
+  source: string
+  readonly: boolean
 }
 
 class LLMConfigService {
@@ -127,22 +141,14 @@ class LLMConfigService {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 15000) // 15秒超时
 
-      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/providers`, {
+      const response = await apiClient.get(`${LLM_API_PREFIX}/providers`, {
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-        },
       })
 
       clearTimeout(timeoutId)
 
       console.log('📡 响应状态:', response.status, response.statusText)
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const result = response.data
       console.log('✅ 获取提供商成功:', result.data?.length || 0, '个')
       return result.data || []
     } catch (error) {
@@ -161,18 +167,43 @@ class LLMConfigService {
    */
   async getModelsByProvider(providerId: string): Promise<LLMModel[]> {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}${LLM_API_PREFIX}/models?provider_id=${encodeURIComponent(providerId)}`,
-      )
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      const result = await response.json()
+      const response = await apiClient.get(`${LLM_API_PREFIX}/models`, {
+        params: { provider_id: providerId },
+      })
+      const result = response.data
       return result.data || []
     } catch (error) {
       console.error('获取LLM模型失败:', error)
       throw new Error(`获取LLM模型失败: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  async getDefaultSummary(): Promise<LLMConfigSummary> {
+    const response = await apiClient.get(`${LLM_API_PREFIX}/configs/default/summary`)
+    return response.data?.data as LLMConfigSummary
+  }
+
+  async resetDefaultSummary(): Promise<LLMConfigSummary> {
+    const response = await apiClient.post(`${LLM_API_PREFIX}/configs/default/reset`)
+    return response.data?.data as LLMConfigSummary
+  }
+
+  async addCustomModel(providerCode: string, modelCode: string, modelName?: string): Promise<void> {
+    const payload = {
+      provider_code: providerCode,
+      model_code: modelCode,
+      model_name: modelName || modelCode,
+    }
+    await apiClient.post(`${LLM_API_PREFIX}/models/custom`, payload)
+  }
+
+  async deleteCustomModel(providerCode: string, modelCode: string): Promise<void> {
+    await apiClient.delete(`${LLM_API_PREFIX}/models/custom`, {
+      params: {
+        provider_code: providerCode,
+        model_code: modelCode,
+      },
+    })
   }
 
   /**
@@ -185,14 +216,10 @@ class LLMConfigService {
         params.append('user_id', userId)
       }
 
-      const url = `${API_BASE_URL}${LLM_API_PREFIX}/configs${params.toString() ? '?' + params.toString() : ''}`
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const response = await apiClient.get(`${LLM_API_PREFIX}/configs`, {
+        params: params.toString() ? Object.fromEntries(params.entries()) : undefined,
+      })
+      const result = response.data
       const raw = result.data
       const data = (Array.isArray(raw) ? raw : raw?.items || []) as Array<
         UserLLMConfig & { api_key_encrypted?: string }
@@ -223,17 +250,18 @@ class LLMConfigService {
         params.append('user_id', userId)
       }
 
-      const response = await fetch(
-        `${API_BASE_URL}${LLM_API_PREFIX}/configs/${encodeURIComponent(configName)}?${params}`,
+      const response = await apiClient.get(
+        `${LLM_API_PREFIX}/configs/${encodeURIComponent(configName)}`,
+        {
+          params: Object.fromEntries(params.entries()),
+          validateStatus: (status) => status === 404 || (status >= 200 && status < 300),
+        },
       )
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null
-        }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      if (response.status === 404) {
+        return null
       }
 
-      const result = await response.json()
+      const result = response.data
       const data = result.data as (UserLLMConfig & { api_key_encrypted?: string }) | null
 
       // 解密API密钥
@@ -274,19 +302,8 @@ class LLMConfigService {
       }
 
       // 通过后端API保存配置
-      const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/configs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(configData),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const response = await apiClient.post(`${LLM_API_PREFIX}/configs`, configData)
+      const result = response.data
       const savedConfig = result.data
 
       // 解密API密钥
@@ -311,19 +328,22 @@ class LLMConfigService {
     content_preview: string
     stats: Record<string, unknown>
   }> {
-    const response = await fetch(`${API_BASE_URL}${LLM_API_PREFIX}/test`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(input),
-    })
-
-    const result = await response.json()
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || result.message || `HTTP ${response.status}`)
+    try {
+      const response = await apiClient.post(`${LLM_API_PREFIX}/test`, input)
+      const result = response.data
+      if (!result.success) {
+        throw new Error(result.error || result.message || `HTTP ${response.status}`)
+      }
+      return result.data
+    } catch (error: any) {
+      const detail =
+        error?.response?.data?.detail ||
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        '连接测试失败'
+      throw new Error(String(detail))
     }
-    return result.data
   }
 
   /**
@@ -348,7 +368,6 @@ class LLMConfigService {
     prefs: { pointerMode: boolean; summaryMaxLength: number },
     userId?: string,
   ) {
-    const existing = await this.getConfigByName('llm_pointer_prefs', userId)
     const payload: {
       user_id: string | null
       config_name: string
@@ -371,64 +390,27 @@ class LLMConfigService {
       is_active: true,
       updated_at: new Date().toISOString(),
     }
-
-    if (existing) {
-      const { error } = await supabase
-        .from('user_llm_configs')
-        .update(payload)
-        .eq('id', existing.id)
-      if (error) throw new Error(`保存用户偏好失败: ${error.message}`)
-      return existing.id
-    } else {
-      payload.created_at = new Date().toISOString()
-      const { data, error } = await supabase
-        .from('user_llm_configs')
-        .insert(payload)
-        .select('id')
-        .single()
-      if (error) throw new Error(`保存用户偏好失败: ${error.message}`)
-      return data?.id
+    const response = await apiClient.post(`${LLM_API_PREFIX}/configs`, payload)
+    const result = response.data
+    if (!result?.success) {
+      throw new Error(result?.error || result?.message || '保存用户偏好失败')
     }
+    return result?.data?.id || null
   }
 
   /**
    * 删除LLM配置
    */
   async deleteConfig(configId: string): Promise<void> {
-    const { error } = await supabase.from('user_llm_configs').delete().eq('id', configId)
-
-    if (error) {
-      console.error('删除LLM配置失败:', error)
-      throw new Error(`删除LLM配置失败: ${error.message}`)
-    }
+    throw new Error(`删除LLM配置失败: 当前版本未开放删除接口（configId=${configId}）`)
   }
 
   /**
    * 设置默认配置
    */
   async setDefaultConfig(configId: string, userId?: string): Promise<void> {
-    // 首先将所有配置设为非默认
-    const { error: updateError } = await supabase
-      .from('user_llm_configs')
-      .update({ config_name: 'custom' })
-      .eq('config_name', 'default')
-      .eq('user_id', userId || null)
-
-    if (updateError) {
-      console.error('更新默认配置失败:', updateError)
-      throw new Error(`更新默认配置失败: ${updateError.message}`)
-    }
-
-    // 设置新的默认配置
-    const { error } = await supabase
-      .from('user_llm_configs')
-      .update({ config_name: 'default' })
-      .eq('id', configId)
-
-    if (error) {
-      console.error('设置默认配置失败:', error)
-      throw new Error(`设置默认配置失败: ${error.message}`)
-    }
+    void userId
+    throw new Error(`设置默认配置失败: 当前版本未开放该接口（configId=${configId}）`)
   }
 
   /**

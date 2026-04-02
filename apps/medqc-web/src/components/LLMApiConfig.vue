@@ -1,188 +1,345 @@
 <template>
-  <div class="llm-api-config">
-    <a-row
-      :gutter="24"
-      class="layout"
-    >
-      <a-col
-        :xs="24"
-        :lg="7"
-      >
-        <div class="provider-panel">
-          <div class="panel-title">
-            MaaS 厂商
+  <div class="ds-root">
+    <div class="ds-split">
+      <div class="ds-split__aside">
+        <div class="ds-aside-card">
+          <div class="ds-aside-eyebrow">
+            MODEL GOVERNANCE
           </div>
-          <div class="provider-list">
-            <button
-              v-for="provider in providers"
-              :key="provider.id"
-              type="button"
-              class="provider-card"
-              :class="{ 'provider-card--active': provider.provider_code === selectedProviderCode }"
-              @click="handleProviderChange(provider)"
-            >
-              <div class="provider-card__title">
-                {{ provider.provider_name || provider.provider_code }}
-              </div>
-              <div class="provider-card__desc">
-                {{ provider.description || provider.base_endpoint }}
-              </div>
-            </button>
+          <h2 class="ds-section-title">
+            模型配置治理
+          </h2>
+          <p class="ds-section-desc">
+            统一管理 MaaS 厂商、模型与高级参数。API 地址与密钥固定来自后端
+            env，前端仅维护模型选择与运行参数。
+          </p>
+
+          <div class="ds-meta-list">
+            <div class="ds-meta-card">
+              <span class="ds-meta__label">当前来源</span>
+              <a-tag color="blue">
+                {{ source }}
+              </a-tag>
+            </div>
+            <div class="ds-meta-card">
+              <span class="ds-meta__label">配置状态</span>
+              <a-tag :color="dirty ? 'orange' : 'green'">
+                {{ dirty ? '草稿未保存' : '已同步' }}
+              </a-tag>
+            </div>
+          </div>
+
+          <div class="ds-aside-note">
+            推荐流程：先选厂商与模型，再调高级参数，最后做连接验证并统一保存。
           </div>
         </div>
-      </a-col>
+      </div>
 
-      <a-col
-        :xs="24"
-        :lg="17"
-      >
-        <div class="detail-panel">
-          <div class="panel-title">
-            模型配置
+      <div class="ds-split__main">
+        <a-alert
+          v-if="isReadonly"
+          type="info"
+          show-icon
+          message="当前为只读模式（qc_manager）"
+          description="仅 admin 可修改并保存模型配置。"
+          class="mb-3"
+        />
+
+        <div class="ds-hero">
+          <div class="ds-hero__content">
+            <div class="ds-hero__label">
+              当前草稿
+            </div>
+            <div class="ds-hero__title">
+              {{ draft.provider_code || '未选择厂商' }} / {{ draft.model_code || '未选择模型' }}
+            </div>
+            <div class="ds-hero__desc">
+              高级参数：Temperature {{ draft.temperature.toFixed(1) }}，Top P
+              {{ draft.top_p.toFixed(1) }}，Max Tokens {{ draft.max_tokens }}
+            </div>
           </div>
+          <div class="ds-hero__state">
+            <a-tag :color="dirty ? 'orange' : 'green'">
+              {{ dirty ? '待保存' : '已同步' }}
+            </a-tag>
+          </div>
+        </div>
 
-          <a-alert
-            class="managed-alert"
-            type="info"
-            show-icon
-            message="API 端点和密钥由后端 env 统一托管"
-            description="前端仅选择厂商、模型和高级参数。测试连接会走后端真实运行链路。"
-          />
+        <div class="ds-card">
+          <div class="ds-card__body ds-divide">
+            <div class="ds-group">
+              <div class="ds-group__title">
+                厂商与模型
+              </div>
 
-          <div class="form-item">
-            <label class="form-label">选择模型</label>
-            <a-select
-              v-model:value="selectedModelCode"
-              size="large"
-              style="width: 100%"
-              :loading="loadingModels"
-              :disabled="loadingModels || !models.length"
-              placeholder="请选择模型"
-            >
-              <a-select-option
-                v-for="model in models"
-                :key="model.model_code"
-                :value="model.model_code"
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    MaaS 厂商
+                  </div>
+                  <div class="ds-row__hint">
+                    选择使用的模型厂商，接口地址与密钥继续由后端统一托管。
+                  </div>
+                </div>
+                <a-select
+                  v-model:value="draft.provider_code"
+                  class="ds-select"
+                  style="width: 260px"
+                  :disabled="isReadonly || loading"
+                  :options="providerOptions"
+                  @change="handleProviderChange"
+                />
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    模型
+                  </div>
+                  <div class="ds-row__hint">
+                    内置模型不可删除，自定义模型支持增删。
+                  </div>
+                </div>
+                <a-select
+                  v-model:value="draft.model_code"
+                  class="ds-select"
+                  style="width: 360px"
+                  :loading="loadingModels"
+                  :disabled="isReadonly || loadingModels || !models.length"
+                >
+                  <a-select-option
+                    v-for="item in models"
+                    :key="item.model_code"
+                    :value="item.model_code"
+                  >
+                    {{ item.model_name }}
+                    <a-tag
+                      v-if="item.is_custom"
+                      color="purple"
+                      class="ml-1"
+                    >
+                      自定义
+                    </a-tag>
+                  </a-select-option>
+                </a-select>
+              </div>
+
+              <div class="ds-row ds-row--top">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    自定义模型
+                  </div>
+                  <div class="ds-row__hint">
+                    仅新增/删除模型名称，不变更 endpoint 与 key。
+                  </div>
+                </div>
+                <div class="custom-model-panel">
+                  <a-space.Compact style="width: 100%">
+                    <a-input
+                      v-model:value="newModelCode"
+                      class="ds-input"
+                      :disabled="isReadonly || loading"
+                      placeholder="输入模型名，如 Qwen/Qwen3.5-14B"
+                      @press-enter="addCustomModel"
+                    />
+                    <a-button
+                      :disabled="isReadonly || loading || !newModelCode.trim()"
+                      :loading="addingModel"
+                      @click="addCustomModel"
+                    >
+                      添加
+                    </a-button>
+                  </a-space.Compact>
+
+                  <div
+                    v-if="customModels.length"
+                    class="custom-model-list"
+                  >
+                    <div
+                      v-for="item in customModels"
+                      :key="`custom-${item.model_code}`"
+                      class="custom-model-item"
+                    >
+                      <span>{{ item.model_name }}</span>
+                      <a-button
+                        type="link"
+                        size="small"
+                        danger
+                        :disabled="isReadonly || loading"
+                        :loading="deletingModelCode === item.model_code"
+                        @click="removeCustomModel(item)"
+                      >
+                        删除
+                      </a-button>
+                    </div>
+                  </div>
+                  <div
+                    v-else
+                    class="custom-model-empty"
+                  >
+                    当前厂商暂无自定义模型
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ds-group">
+              <div class="ds-group__title">
+                高级参数
+              </div>
+
+              <div class="ds-row ds-row--top">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    Temperature
+                  </div>
+                  <div class="ds-row__hint">
+                    控制输出随机性，值越高越发散。
+                  </div>
+                </div>
+                <div class="slider-wrap">
+                  <div class="slider-value">
+                    {{ draft.temperature.toFixed(1) }}
+                  </div>
+                  <a-slider
+                    v-model:value="draft.temperature"
+                    :disabled="isReadonly || loading"
+                    :min="0"
+                    :max="2"
+                    :step="0.1"
+                    :marks="{ 0: '0', 0.2: '0.2', 1: '1', 2: '2' }"
+                  />
+                </div>
+              </div>
+
+              <div class="ds-row ds-row--top">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    Top P
+                  </div>
+                  <div class="ds-row__hint">
+                    核采样阈值，控制候选词覆盖范围。
+                  </div>
+                </div>
+                <div class="slider-wrap">
+                  <div class="slider-value">
+                    {{ draft.top_p.toFixed(1) }}
+                  </div>
+                  <a-slider
+                    v-model:value="draft.top_p"
+                    :disabled="isReadonly || loading"
+                    :min="0"
+                    :max="1"
+                    :step="0.1"
+                    :marks="{ 0: '0', 0.5: '0.5', 0.9: '0.9', 1: '1' }"
+                  />
+                </div>
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    Max Tokens
+                  </div>
+                  <div class="ds-row__hint">
+                    单次请求最大输出 token 数。
+                  </div>
+                </div>
+                <a-input-number
+                  v-model:value="draft.max_tokens"
+                  class="ds-input-number"
+                  :disabled="isReadonly || loading"
+                  :min="1000"
+                  :max="32768"
+                  :step="1000"
+                  style="width: 220px"
+                />
+              </div>
+            </div>
+
+            <div class="ds-group">
+              <div class="ds-group__title">
+                连接验证
+              </div>
+
+              <div class="ds-row">
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    测试连接
+                  </div>
+                  <div class="ds-row__hint">
+                    测试草稿配置，不依赖是否已保存。
+                  </div>
+                </div>
+                <a-button
+                  class="ds-test-btn"
+                  :loading="testing"
+                  :disabled="!canTest"
+                  @click="testConnection"
+                >
+                  测试连接
+                </a-button>
+              </div>
+
+              <div
+                v-if="testResult"
+                class="ds-row ds-row--result"
               >
-                {{ model.model_name }}
-              </a-select-option>
-            </a-select>
-          </div>
-
-          <div
-            v-if="currentModel"
-            class="model-summary"
-          >
-            <div class="model-summary__title">
-              {{ currentModel.model_name }}
-            </div>
-            <div class="model-summary__desc">
-              {{ currentModel.description || '当前模型已准备就绪。' }}
-            </div>
-          </div>
-
-          <div class="advanced-card">
-            <div class="advanced-card__title">
-              高级参数
-            </div>
-
-            <div class="param-block">
-              <div class="param-header">
-                <span>Temperature</span>
-                <span class="param-value">{{ form.temperature }}</span>
+                <div class="ds-row__left">
+                  <div class="ds-row__label">
+                    最近一次结果
+                  </div>
+                  <div class="ds-row__hint">
+                    {{ testResult.description }}
+                  </div>
+                </div>
+                <a-tag :color="testResult.success ? 'green' : 'red'">
+                  {{ testResult.success ? '成功' : '失败' }}
+                </a-tag>
               </div>
-              <a-slider
-                v-model:value="form.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                :marks="{ 0: '0', 0.2: '0.2', 1: '1', 2: '2' }"
-              />
-            </div>
-
-            <div class="param-block">
-              <div class="param-header">
-                <span>Top P</span>
-                <span class="param-value">{{ form.top_p }}</span>
-              </div>
-              <a-slider
-                v-model:value="form.top_p"
-                :min="0"
-                :max="1"
-                :step="0.1"
-                :marks="{ 0: '0', 0.5: '0.5', 0.9: '0.9', 1: '1' }"
-              />
-            </div>
-
-            <div class="param-block">
-              <div class="param-header">
-                <span>Max Tokens</span>
-                <span class="param-value">{{ form.max_tokens }}</span>
-              </div>
-              <a-input-number
-                v-model:value="form.max_tokens"
-                :min="1000"
-                :max="32768"
-                :step="1000"
-                style="width: 100%"
-              />
             </div>
           </div>
 
-          <div class="status-row">
-            <a-tag color="blue">
-              {{ selectedProviderName || '未选择厂商' }}
-            </a-tag>
-            <a-tag
-              v-if="selectedModelCode"
-              color="green"
-            >
-              {{ selectedModelCode }}
-            </a-tag>
-          </div>
-
-          <div class="actions">
-            <a-space>
+          <div class="ds-card__footer">
+            <span class="ds-footer-meta">来源：{{ source }}</span>
+            <div class="ds-actions">
               <a-button
-                class="elevated-action"
-                :loading="testing"
-                :disabled="!canSubmit"
-                @click="testConnection"
+                :disabled="loading"
+                @click="reloadAll"
               >
-                测试连接
+                刷新
+              </a-button>
+              <a-button
+                :disabled="isReadonly || loading"
+                @click="resetDefault"
+              >
+                恢复默认
               </a-button>
               <a-button
                 type="primary"
-                class="elevated-action"
                 :loading="saving"
-                :disabled="!canSubmit"
-                @click="saveConfig"
+                :disabled="isReadonly || loading || !dirty"
+                @click="saveDraft"
               >
                 保存配置
               </a-button>
-            </a-space>
+            </div>
           </div>
-
-          <a-alert
-            v-if="testResult"
-            class="result-alert"
-            :type="testResult.success ? 'success' : 'error'"
-            :message="testResult.message"
-            :description="testResult.description"
-            show-icon
-          />
         </div>
-      </a-col>
-    </a-row>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
+
+import { useAuthStore } from '@/stores/auth'
 import {
   llmConfigService,
   type LLMConfigInput,
+  type LLMConfigSummary,
   type LLMModel,
   type LLMProvider,
 } from '@/services/llmConfigService'
@@ -194,102 +351,161 @@ const emit = defineEmits<{
   'close-modal': []
 }>()
 
-const providers = ref<LLMProvider[]>([])
-const models = ref<LLMModel[]>([])
-const selectedProviderCode = ref<string>('')
-const selectedProviderId = ref<string>('')
-const selectedModelCode = ref<string>('')
+const authStore = useAuthStore()
+const loading = ref(false)
 const loadingModels = ref(false)
 const saving = ref(false)
 const testing = ref(false)
+const addingModel = ref(false)
+const deletingModelCode = ref('')
+const newModelCode = ref('')
+const source = ref('unknown')
+
+const providers = ref<LLMProvider[]>([])
+const models = ref<LLMModel[]>([])
+const serverSnapshot = ref<LLMConfigSummary | null>(null)
+const backendReadonly = ref(false)
 const testResult = ref<{ success: boolean; message: string; description: string } | null>(null)
 
-const form = reactive({
+const draft = reactive({
+  provider_code: '',
+  model_code: '',
   temperature: 0.2,
   top_p: 0.9,
   max_tokens: 4000,
 })
 
-const selectedProvider = computed(
-  () => providers.value.find((item) => item.provider_code === selectedProviderCode.value) || null,
+const isAdmin = computed(() => authStore.userRoles.includes('admin'))
+const isReadonly = computed(() => backendReadonly.value || !isAdmin.value)
+const providerOptions = computed(() =>
+  providers.value.map((item) => ({
+    label: item.provider_name || item.provider_code,
+    value: item.provider_code,
+  })),
 )
-const selectedProviderName = computed(() => selectedProvider.value?.provider_name || '')
-const currentModel = computed(
-  () => models.value.find((item) => item.model_code === selectedModelCode.value) || null,
-)
-const canSubmit = computed(() => Boolean(selectedProviderCode.value && selectedModelCode.value))
-
-const buildCustomParameters = () => ({
-  temperature: form.temperature,
-  top_p: form.top_p,
-  max_tokens: form.max_tokens,
+const customModels = computed(() => models.value.filter((item) => item.is_custom))
+const canTest = computed(() => Boolean(draft.provider_code && draft.model_code))
+const dirty = computed(() => {
+  const snap = serverSnapshot.value
+  if (!snap) return false
+  return (
+    draft.provider_code !== snap.provider_code ||
+    draft.model_code !== snap.model_code ||
+    Number(draft.temperature) !== Number(snap.custom_parameters?.temperature ?? 0.2) ||
+    Number(draft.top_p) !== Number(snap.custom_parameters?.top_p ?? 0.9) ||
+    Number(draft.max_tokens) !== Number(snap.custom_parameters?.max_tokens ?? 4000)
+  )
 })
 
-async function loadProviders() {
-  const rows = await llmConfigService.getProviders()
-  providers.value = rows
-
-  if (!providers.value.length) {
-    throw new Error('未获取到可用的 LLM 厂商')
-  }
-
-  const matched =
-    providers.value.find((item) => item.provider_code === selectedProviderCode.value) ||
-    providers.value[0]
-  selectedProviderCode.value = matched.provider_code
-  selectedProviderId.value = matched.id
+function patchDraftFromSummary(summary: LLMConfigSummary) {
+  draft.provider_code = summary.provider_code
+  draft.model_code = summary.model_code
+  draft.temperature = Number(summary.custom_parameters?.temperature ?? 0.2)
+  draft.top_p = Number(summary.custom_parameters?.top_p ?? 0.9)
+  draft.max_tokens = Number(summary.custom_parameters?.max_tokens ?? 4000)
 }
 
-async function loadModels(provider: LLMProvider, preferredModelCode?: string) {
+function buildCustomParameters() {
+  return {
+    temperature: Number(draft.temperature),
+    top_p: Number(draft.top_p),
+    max_tokens: Number(draft.max_tokens),
+  }
+}
+
+async function loadProviders() {
+  providers.value = await llmConfigService.getProviders()
+}
+
+async function loadModelsByProvider(providerCode: string, preferredModelCode?: string) {
   loadingModels.value = true
   try {
-    selectedProviderCode.value = provider.provider_code
-    selectedProviderId.value = provider.id
-    const rows = await llmConfigService.getModelsByProvider(provider.id)
-    models.value = rows
-    const matched = rows.find((item) => item.model_code === preferredModelCode) || rows[0] || null
-    selectedModelCode.value = matched?.model_code || ''
+    models.value = await llmConfigService.getModelsByProvider(providerCode)
+    if (!models.value.length) {
+      draft.model_code = ''
+      return
+    }
+    const next =
+      models.value.find((item) => item.model_code === preferredModelCode)?.model_code ||
+      models.value.find((item) => item.model_code === draft.model_code)?.model_code ||
+      models.value[0].model_code
+    draft.model_code = String(next || '')
   } finally {
     loadingModels.value = false
   }
 }
 
-async function handleProviderChange(provider: LLMProvider) {
-  testResult.value = null
-  await loadModels(provider)
+async function reloadAll() {
+  loading.value = true
+  try {
+    const summary = await llmConfigService.getDefaultSummary()
+    source.value = summary.source || 'unknown'
+    backendReadonly.value = Boolean(summary.readonly)
+    serverSnapshot.value = summary
+    patchDraftFromSummary(summary)
+
+    await loadProviders()
+    if (!draft.provider_code && providers.value.length) {
+      draft.provider_code = providers.value[0].provider_code
+    }
+    await loadModelsByProvider(draft.provider_code, draft.model_code)
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error)
+    message.error(`加载模型配置失败：${text}`)
+  } finally {
+    loading.value = false
+  }
 }
 
-async function loadSavedConfig() {
-  const config = await llmConfigService.getConfigByName('default')
-  if (!config?.provider?.provider_code) {
-    const fallback = providers.value[0]
-    if (fallback) {
-      await loadModels(fallback)
-    }
-    return
+async function handleProviderChange(value: string) {
+  draft.provider_code = value
+  await loadModelsByProvider(value)
+}
+
+async function addCustomModel() {
+  const providerCode = draft.provider_code
+  const modelCode = newModelCode.value.trim()
+  if (!providerCode || !modelCode) return
+  addingModel.value = true
+  try {
+    await llmConfigService.addCustomModel(providerCode, modelCode, modelCode)
+    await loadModelsByProvider(providerCode, modelCode)
+    newModelCode.value = ''
+    message.success('自定义模型添加成功')
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error)
+    message.error(`添加模型失败：${text}`)
+  } finally {
+    addingModel.value = false
   }
+}
 
-  const provider =
-    providers.value.find((item) => item.provider_code === config.provider?.provider_code) ||
-    providers.value[0]
-  if (!provider) return
-
-  const customParams = (config.custom_parameters || {}) as Record<string, unknown>
-  form.temperature = typeof customParams.temperature === 'number' ? customParams.temperature : 0.2
-  form.top_p = typeof customParams.top_p === 'number' ? customParams.top_p : 0.9
-  form.max_tokens = typeof customParams.max_tokens === 'number' ? customParams.max_tokens : 4000
-
-  await loadModels(provider, config.model?.model_code || '')
+async function removeCustomModel(model: LLMModel) {
+  const providerCode = draft.provider_code
+  const modelCode = String(model.model_code || '').trim()
+  if (!providerCode || !modelCode) return
+  deletingModelCode.value = modelCode
+  try {
+    await llmConfigService.deleteCustomModel(providerCode, modelCode)
+    const preferred = draft.model_code === modelCode ? '' : draft.model_code
+    await loadModelsByProvider(providerCode, preferred)
+    message.success('自定义模型已删除')
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error)
+    message.error(`删除模型失败：${text}`)
+  } finally {
+    deletingModelCode.value = ''
+  }
 }
 
 async function testConnection() {
-  if (!canSubmit.value) return
+  if (!canTest.value) return
   testing.value = true
   testResult.value = null
   try {
     const result = await llmConfigService.testConfig({
-      provider_code: selectedProviderCode.value,
-      model_code: selectedModelCode.value,
+      provider_code: draft.provider_code,
+      model_code: draft.model_code,
       custom_parameters: buildCustomParameters(),
     })
     testResult.value = {
@@ -311,15 +527,14 @@ async function testConnection() {
   }
 }
 
-async function saveConfig() {
-  if (!canSubmit.value) return
+async function saveDraft() {
+  if (!dirty.value) return
   saving.value = true
   try {
     const payload: LLMConfigInput = {
       config_name: 'default',
-      provider_id: selectedProviderId.value,
-      provider_code: selectedProviderCode.value,
-      model_code: selectedModelCode.value,
+      provider_code: draft.provider_code,
+      model_code: draft.model_code,
       custom_parameters: buildCustomParameters(),
       is_active: true,
     }
@@ -333,20 +548,16 @@ async function saveConfig() {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
 
+    await reloadAll()
     const eventPayload = {
-      selectedProviderCode: selectedProviderCode.value,
-      selectedModelCode: selectedModelCode.value,
+      selectedProviderCode: draft.provider_code,
+      selectedModelCode: draft.model_code,
       custom_parameters: buildCustomParameters(),
       timestamp: Date.now(),
     }
     window.dispatchEvent(new CustomEvent('llm-config-updated', { detail: eventPayload }))
     emit('config-updated', saved || eventPayload)
     message.success('LLM 配置保存成功')
-
-    setTimeout(() => {
-      emit('close-drawer')
-      emit('close-modal')
-    }, 600)
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error)
     message.error(`保存配置失败：${text}`)
@@ -355,175 +566,315 @@ async function saveConfig() {
   }
 }
 
-onMounted(async () => {
+async function resetDefault() {
+  saving.value = true
   try {
-    await loadProviders()
-    await loadSavedConfig()
+    const summary = await llmConfigService.resetDefaultSummary()
+    source.value = summary.source || 'database+env'
+    backendReadonly.value = Boolean(summary.readonly)
+    serverSnapshot.value = summary
+    patchDraftFromSummary(summary)
+    await loadModelsByProvider(draft.provider_code, draft.model_code)
+
+    const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    if (!reloadResponse.ok) {
+      throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
+    }
+    message.success('已恢复默认配置')
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error)
-    message.error(`加载 LLM 配置失败：${text}`)
+    message.error(`恢复默认失败：${text}`)
+  } finally {
+    saving.value = false
   }
+}
+
+onMounted(() => {
+  void reloadAll()
 })
 </script>
 
 <style scoped>
-.llm-api-config {
-  width: 100%;
+.ds-root {
+  max-width: 1100px;
+  padding: 4px 2px 16px;
 }
 
-.layout {
-  min-height: 520px;
+.ds-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
 }
 
-.panel-title {
-  margin-bottom: 16px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary, #262626);
+@media (min-width: 960px) {
+  .ds-split {
+    grid-template-columns: 280px 1fr;
+    gap: 18px;
+  }
 }
 
-.provider-panel {
-  padding-right: 8px;
+.ds-aside-card {
+  position: sticky;
+  top: 12px;
+  padding: 16px 14px;
+  border: 1px solid #d8e3f2;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 36%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
 }
 
-.provider-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.provider-card {
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid rgba(11, 100, 212, 0.12);
-  border-radius: 14px;
-  background: #fff;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.provider-card:hover,
-.provider-card--active {
-  border-color: #1677ff;
-  background: rgba(22, 119, 255, 0.05);
-  box-shadow: 0 8px 20px rgba(22, 119, 255, 0.08);
-}
-
-.provider-card__title {
-  margin-bottom: 6px;
-  font-weight: 600;
-  color: #262626;
-}
-
-.provider-card__desc {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #8c8c8c;
-}
-
-.detail-panel {
-  padding-left: 8px;
-}
-
-.managed-alert {
-  margin-bottom: 20px;
-}
-
-.form-item {
-  margin-bottom: 20px;
-}
-
-.form-label {
-  display: block;
+.ds-aside-eyebrow {
   margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #262626;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #2563eb;
 }
 
-.model-summary {
-  margin-bottom: 20px;
-  padding: 12px 14px;
-  border: 1px solid #d9f7be;
-  border-radius: 12px;
-  background: #f6ffed;
+.ds-section-title {
+  font-size: 21px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+  margin: 0 0 8px;
 }
 
-.model-summary__title {
-  margin-bottom: 4px;
-  font-weight: 600;
-  color: #262626;
-}
-
-.model-summary__desc {
+.ds-section-desc {
+  margin: 0;
+  color: #475569;
   font-size: 12px;
-  color: #595959;
+  line-height: 1.65;
 }
 
-.advanced-card {
-  margin-bottom: 20px;
-  padding: 16px;
-  border: 1px solid rgba(11, 100, 212, 0.12);
-  border-radius: 14px;
-  background: #fafcff;
+.ds-meta-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
 }
 
-.advanced-card__title {
-  margin-bottom: 18px;
-  font-weight: 600;
-  color: #262626;
-}
-
-.param-block {
-  margin-bottom: 22px;
-}
-
-.param-block:last-child {
-  margin-bottom: 0;
-}
-
-.param-header {
+.ds-meta-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: #262626;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
 }
 
-.param-value {
+.ds-meta__label {
+  color: #64748b;
+  font-size: 12px;
   font-weight: 600;
-  color: #1677ff;
 }
 
-.status-row {
-  margin-bottom: 20px;
+.ds-aside-note {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #64748b;
 }
 
-.actions {
-  margin-bottom: 20px;
+.ds-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  border: 1px solid #dbe7f5;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95), rgba(248, 250, 252, 0.98)), #fff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
 }
 
-.result-alert {
-  margin-top: 8px;
+.ds-hero__label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #2563eb;
 }
 
-.elevated-action {
-  border-radius: 20px !important;
-  padding: 0 18px !important;
-  height: 36px;
-  font-weight: 500;
+.ds-hero__title {
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-@media (max-width: 991px) {
-  .provider-panel {
-    padding-right: 0;
-    margin-bottom: 20px;
+.ds-hero__desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.ds-card {
+  background: #fff;
+  border: 1px solid #dbe7f5;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
+}
+
+.ds-divide > * {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ds-divide > *:last-child {
+  border-bottom: none;
+}
+
+.ds-group {
+  padding: 2px 0;
+}
+
+.ds-group__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 12px 16px 6px;
+}
+
+.ds-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 16px;
+}
+
+.ds-row--top {
+  align-items: flex-start;
+}
+
+.ds-row--result {
+  background: #fbfdff;
+}
+
+.ds-row__left {
+  min-width: 0;
+  flex: 1;
+}
+
+.ds-row__label {
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.ds-row__hint {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
+.slider-wrap {
+  width: 360px;
+  padding: 8px 12px 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+}
+
+.slider-value {
+  text-align: right;
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.custom-model-panel {
+  width: 360px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+}
+
+.custom-model-list {
+  margin-top: 6px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: #fff;
+}
+
+.custom-model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+}
+
+.custom-model-empty {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.ds-select :deep(.ant-select-selector),
+.ds-input :deep(.ant-input),
+.ds-input-number :deep(.ant-input-number) {
+  border-radius: 12px !important;
+}
+
+.ds-test-btn {
+  border-radius: 12px;
+}
+
+.ds-card__footer {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, #fcfdff 0%, #f8fafc 100%);
+  border-top: 1px solid #e2e8f0;
+}
+
+.ds-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ds-footer-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.ml-1 {
+  margin-left: 6px;
+}
+
+@media (max-width: 959px) {
+  .ds-aside-card {
+    position: static;
   }
 
-  .detail-panel {
-    padding-left: 0;
+  .ds-hero,
+  .ds-row,
+  .ds-card__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .slider-wrap,
+  .custom-model-panel {
+    width: 100%;
   }
 }
 </style>

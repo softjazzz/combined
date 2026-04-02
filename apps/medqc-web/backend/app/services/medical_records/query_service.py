@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ...database.connection import engine
 from ...database.repository import get_repository
 from ...database.models.cdm import AdmissionRecord, MedicalRecordFrontpage, QCResult
+from ...services.workflow_queue_state_service import default_workflow_queue_state_service
 from ...services.frontpage_settings import (
     load_frontpage_settings,
     should_include_demo_records,
@@ -55,7 +56,12 @@ def get_departments() -> list[str]:
     return repo.list_departments()
 
 
-def _serialize_real_workstation_record(record, bed_map: dict[tuple[str, str], str], status_map: dict[str, dict]) -> dict[str, Any]:
+def _serialize_real_workstation_record(
+    record,
+    bed_map: dict[tuple[str, str], str],
+    status_map: dict[str, dict],
+    frontpage_generate_state_map: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     key = (record.patient_id, record.visit_id)
     qc_info = status_map.get(record.visit_id)
     if qc_info is None:
@@ -74,6 +80,13 @@ def _serialize_real_workstation_record(record, bed_map: dict[tuple[str, str], st
         record.discharge_dept_name,
         record.record_content,
     ])
+    frontpage_generate_state = frontpage_generate_state_map.get(record.visit_id) or {}
+    queue_status = str(frontpage_generate_state.get("queue_status") or "pending").strip().lower()
+    if queue_status not in {"unknown", "pending", "running", "succeeded", "failed"}:
+        queue_status = "pending"
+    queue_status_source = str(frontpage_generate_state.get("queue_status_source") or "backfill").strip().lower()
+    if queue_status_source not in {"backfill", "runtime"}:
+        queue_status_source = "backfill"
 
     return {
         "id": record.visit_id,
@@ -91,7 +104,29 @@ def _serialize_real_workstation_record(record, bed_map: dict[tuple[str, str], st
         "doctor": record.attending_physician_sign or "",
         "status": record_status,
         "cdmFrontpageEmpty": cdm_frontpage_empty,
+        "frontpageGenerateQueueStatus": queue_status,
+        "frontpageGenerateQueueStatusSource": queue_status_source,
     }
+
+
+def _apply_frontpage_generate_state(
+    record: dict[str, Any],
+    frontpage_generate_state_map: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    visit_id = str(record.get("visitId") or record.get("id") or "").strip()
+    if not visit_id:
+        return record
+
+    next_record = dict(record)
+    state = frontpage_generate_state_map.get(visit_id) or {}
+    queue_status = str(state.get("queue_status") or next_record.get("frontpageGenerateQueueStatus") or "").strip().lower()
+    queue_status_source = str(state.get("queue_status_source") or next_record.get("frontpageGenerateQueueStatusSource") or "").strip().lower()
+
+    if queue_status in {"unknown", "pending", "running", "succeeded", "failed"}:
+        next_record["frontpageGenerateQueueStatus"] = queue_status
+    if queue_status_source in {"backfill", "runtime"}:
+        next_record["frontpageGenerateQueueStatusSource"] = queue_status_source
+    return next_record
 
 
 def get_workstation_data(
@@ -171,15 +206,17 @@ def get_workstation_data(
             func.count().label("total"),
         ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
 
-        visit_ids = [r.visit_id for r in records]
+        real_visit_ids = [r.visit_id for r in records]
+        demo_visit_ids = [str(item.get("visitId") or item.get("id") or "").strip() for item in visible_demos]
+        visit_ids = [visit_id for visit_id in [*real_visit_ids, *demo_visit_ids] if visit_id]
         status_map: dict[str, dict] = {}
-        if visit_ids:
+        if real_visit_ids:
             qc_results = session.query(
                 QCResult.visit_id,
                 QCResult.severity,
                 QCResult.status,
             ).filter(
-                QCResult.visit_id.in_(visit_ids)
+                QCResult.visit_id.in_(real_visit_ids)
             ).all()
             for r in qc_results:
                 vid = r.visit_id
@@ -187,6 +224,22 @@ def get_workstation_data(
                     status_map[vid] = {"has_error": False, "has_any": True}
                 if r.status == "open" and r.severity == "error":
                     status_map[vid]["has_error"] = True
+
+        frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
+        if visit_ids:
+            frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
+                workflow_type="frontpage_generate",
+                visit_ids=visit_ids,
+            )
+            if not frontpage_generate_state_map:
+                try:
+                    default_workflow_queue_state_service.backfill_frontpage_generate(visit_ids=visit_ids)
+                    frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
+                        workflow_type="frontpage_generate",
+                        visit_ids=visit_ids,
+                    )
+                except Exception:
+                    frontpage_generate_state_map = {}
 
         departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
         dept_warning_counts: dict[str, int] = {}
@@ -197,7 +250,12 @@ def get_workstation_data(
 
         real_items = []
         for record in records:
-            item = _serialize_real_workstation_record(record, bed_map, status_map)
+            item = _serialize_real_workstation_record(
+                record,
+                bed_map,
+                status_map,
+                frontpage_generate_state_map,
+            )
             dept_name = item["department"]
             if item["status"] == "has_defects":
                 dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
@@ -225,7 +283,11 @@ def get_workstation_data(
 
         total_count = total_real_filtered + demo_count
         departments[0]["total"] = total_count
-        items = demo_page + real_items
+        demo_items = [
+            _apply_frontpage_generate_state(item, frontpage_generate_state_map)
+            for item in demo_page
+        ]
+        items = demo_items + real_items
 
     return {
         "departments": departments,

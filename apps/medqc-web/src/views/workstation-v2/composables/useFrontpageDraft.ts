@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import ApiService, { apiClient } from '@/services/apiService'
 import type { FrontpageFocusTarget, IcdApplyTarget, PatientRecord } from '../types'
@@ -265,6 +265,61 @@ export function useFrontpageDraft(
     frontpageGenerating.value = false
     frontpageFocusTarget.value = ''
     completedModules.value = []
+  }
+
+  function rebuildCompletedModulesFromDraft(draft: any): CompletedModule[] {
+    if (!draft) return []
+    const moduleOrder = [
+      'basic_info',
+      'hospitalization',
+      'diagnoses',
+      'procedures',
+      'other_medical_info',
+      'staff',
+      'costs',
+      'confidence',
+    ]
+
+    return moduleOrder
+      .map((moduleName, index) => {
+        const preview = getModulePreview(moduleName, draft)
+        if (!preview.length) return null
+        return {
+          name: moduleName,
+          label: MODULE_LABELS[moduleName] || moduleName,
+          preview,
+          timestamp: index + 1,
+        } satisfies CompletedModule
+      })
+      .filter((item): item is CompletedModule => Boolean(item))
+  }
+
+  async function loadSavedFrontpageDraft(visitId: string | null) {
+    const normalizedVisitId = String(visitId || '').trim()
+    if (!normalizedVisitId) {
+      setDraftEmpty()
+      return
+    }
+    try {
+      const { data } = await apiClient.get(
+        `/api/medical-records/ai-frontpage-draft/${normalizedVisitId}`,
+      )
+      const draft = data?.draft || data?.data?.draft || null
+      if (!draft) {
+        setDraftEmpty()
+        return
+      }
+      frontpageDraft.value = draft
+      frontpageModule.value = ''
+      frontpageFocusTarget.value = ''
+      completedModules.value = rebuildCompletedModulesFromDraft(draft)
+      onDraftChanged?.()
+    } catch (err: any) {
+      if (err?.response?.status !== 404) {
+        console.error('读取 AI 首页草稿失败:', err)
+      }
+      setDraftEmpty()
+    }
   }
 
   async function generateFrontpage() {
@@ -588,6 +643,15 @@ export function useFrontpageDraft(
 
     onDraftChanged?.()
   }
+
+  watch(
+    selectedId,
+    (visitId) => {
+      if (frontpageGenerating.value) return
+      void loadSavedFrontpageDraft(visitId)
+    },
+    { immediate: true },
+  )
 
   return {
     frontpageGenerating,

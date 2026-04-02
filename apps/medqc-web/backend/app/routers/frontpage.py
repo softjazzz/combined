@@ -10,17 +10,51 @@ from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from ..core.response import success_response, error_response, get_trace_id
+from ..core.security import get_optional_user
+from ..database.connection import engine
+from ..database.models.cdm import MedicalRecordFrontpage
 from ..schemas.frontpage import FrontPageDraft
 from ..services.frontpage_extraction_service import (
     FrontPageExtractionService,
     default_frontpage_service,
 )
+from ..services.medical_records.maintenance_service import save_ai_frontpage_draft
 from ..services.frontpage_settings import load_frontpage_settings, resolve_force_llm
+from ..services.workflow_queue_state_service import default_workflow_queue_state_service
 
 router = APIRouter(prefix="/api/v1/frontpage", tags=["frontpage"])
 logger = logging.getLogger(__name__)
+
+
+def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not current_user:
+        return None
+    value = current_user.get("id") or current_user.get("user_id")
+    return str(value) if value else None
+
+
+def _resolve_visit_identity(visit_id: str) -> Dict[str, Optional[str]]:
+    normalized_visit_id = str(visit_id or "").strip()
+    if not normalized_visit_id:
+        return {"visit_id": None, "patient_id": None, "institute_id": None}
+
+    with Session(engine) as session:
+        record = (
+            session.query(MedicalRecordFrontpage)
+            .filter_by(visit_id=normalized_visit_id)
+            .first()
+        )
+        if not record:
+            return {"visit_id": normalized_visit_id, "patient_id": None, "institute_id": None}
+        return {
+            "visit_id": normalized_visit_id,
+            "patient_id": record.patient_id,
+            "institute_id": record.institute_id,
+        }
+
 
 
 def _extract_discharge_diagnoses_from_text(medical_text: str) -> List[str]:
@@ -157,6 +191,7 @@ async def auto_generate_frontpage_draft(
     request: Request,
     payload: AutoGenerateFrontPageRequest,
     service: FrontPageExtractionService = Depends(get_frontpage_service),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
 ):
     """
     自动生成病案首页草稿（不含 ICD 编码）
@@ -169,6 +204,9 @@ async def auto_generate_frontpage_draft(
       - 构造 FrontPageDraft 返回。
     """
     trace_id = get_trace_id(request)
+    visit_id_for_state = (payload.visit_id or "").strip()
+    user_id = _current_user_id(current_user)
+    run_id: Optional[str] = None
     try:
         payload.ensure_valid()
     except ValueError as ve:
@@ -180,6 +218,13 @@ async def auto_generate_frontpage_draft(
         )
 
     try:
+        if visit_id_for_state:
+            run_id = default_workflow_queue_state_service.start_run(
+                workflow_type="frontpage_generate",
+                visit_id=visit_id_for_state,
+                user_id=user_id,
+            )
+
         if payload.medical_text:
             # 直接从传入的病历文本提取
             draft: FrontPageDraft = await service.extract_from_text(payload.medical_text)
@@ -195,14 +240,52 @@ async def auto_generate_frontpage_draft(
         if payload.medical_text:
             frontpage = _postprocess_frontpage_diagnoses(frontpage, payload.medical_text)
 
+        if visit_id_for_state:
+            identity = _resolve_visit_identity(visit_id_for_state)
+            patient_id = str(identity.get("patient_id") or "").strip()
+            if not patient_id:
+                raise RuntimeError(f"未找到 visit_id={visit_id_for_state} 对应的 patient_id，无法保存首页草稿")
+            save_ai_frontpage_draft(
+                {
+                    "institute_id": identity.get("institute_id"),
+                    "patient_id": patient_id,
+                    "visit_id": visit_id_for_state,
+                    "draft_json": frontpage,
+                }
+            )
+
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_success(
+                workflow_type="frontpage_generate",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                user_id=user_id,
+            )
+
         return success_response(
             data={"frontpage": frontpage},
             message="自动生成病案首页草稿成功",
             trace_id=trace_id,
         )
     except HTTPException:
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_failed(
+                workflow_type="frontpage_generate",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                error_message="HTTPException",
+                user_id=user_id,
+            )
         raise
     except Exception as exc:
+        if run_id and visit_id_for_state:
+            default_workflow_queue_state_service.finish_failed(
+                workflow_type="frontpage_generate",
+                visit_id=visit_id_for_state,
+                run_id=run_id,
+                error_message=str(exc),
+                user_id=user_id,
+            )
         # 返回统一错误格式，便于前端 debug
         return error_response(
             error=f"自动生成病案首页草稿失败: {exc}",
@@ -444,4 +527,8 @@ async def get_export_formats(request: Request):
         message=f"支持 {len(formats)} 种导出格式",
         trace_id=get_trace_id(request),
     )
+
+
+
+
 

@@ -384,38 +384,17 @@ async def test_pg_local(request: Request, _: dict = Depends(require_sync_write_a
 
 @router.post("/test-connection/all")
 async def test_all_connections(request: Request, _: dict = Depends(require_sync_write_access)):
-    """测试全连接（Mongo + 远端 PG + 本地 PG）"""
+    """测试全连接（远端 PG + 本地 PG）"""
     from ..services.etl_sync import test_local_connection, test_remote_connection
-
-    from ..services.etl_config import load_mongo_config
-    from ..services.mongo_sync import MongoConnector
-
-    mongo_config = load_mongo_config()
-    if not mongo_config.mongo_uri:
-        mongo = {"connected": False, "error": "mongo_uri 未配置"}
-    else:
-        connector = MongoConnector(
-            uri=mongo_config.mongo_uri,
-            database=mongo_config.mongo_database,
-            read_preference=mongo_config.read_preference,
-            max_pool_size=1,
-            socket_timeout_ms=mongo_config.query_timeout_s * 1000,
-            connect_timeout_ms=mongo_config.connect_timeout_ms,
-        )
-        try:
-            mongo = connector.test_connection()
-        finally:
-            connector.close()
 
     pg_remote = test_remote_connection()
     pg_local = test_local_connection()
-    all_connected = bool(mongo.get("connected")) and bool(pg_remote.get("connected")) and bool(pg_local.get("connected"))
-    connected_count = int(bool(mongo.get("connected"))) + int(bool(pg_remote.get("connected"))) + int(bool(pg_local.get("connected")))
+    all_connected = bool(pg_remote.get("connected")) and bool(pg_local.get("connected"))
+    connected_count = int(bool(pg_remote.get("connected"))) + int(bool(pg_local.get("connected")))
     return _ok(request, {
         "all_connected": all_connected,
         "connected_count": connected_count,
-        "total_sources": 3,
-        "mongo": mongo,
+        "total_sources": 2,
         "pg_remote": pg_remote,
         "pg_local": pg_local,
     })

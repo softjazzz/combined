@@ -12,9 +12,9 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple, Coroutine
 import json
+import re
 import logging
 import asyncio
-import re
 
 from pydantic import ValidationError
 
@@ -29,24 +29,40 @@ class FrontPageLLMClient:
     """病案首页抽取专用 LLM 客户端"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        self.api_endpoint: Optional[str] = None
+        self.api_key: Optional[str] = None
+        self.model: str = "qwen-max"
+        self.timeout_seconds: int = 60
+        self.temperature: float = 0.1
+        self.max_tokens: int = 4000
+        self.provider_code: str = "alibaba"
+
         if config:
-            self.api_endpoint: Optional[str] = config.get("api_endpoint")
-            self.api_key: Optional[str] = config.get("api_key")
-            self.model: str = config.get("model", "qwen-max")
-            self.timeout_seconds: int = config.get("timeout_seconds", 60)
-            custom_params = config.get("custom_parameters", {})
-            self.temperature: float = custom_params.get("temperature", 0.1)
-            self.max_tokens: int = custom_params.get("max_tokens", 4000)
+            self.apply_runtime_config(config)
         else:
-            s = get_settings()
-            self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
-            self.api_key = s.LLM_API_KEY
-            self.model = s.LLM_MODEL
-            self.timeout_seconds = 60
-            self.temperature = 0.1
-            self.max_tokens = 4000
+            self.apply_settings_fallback()
 
         logger.info(f"FrontPageLLMClient 初始化: model={self.model}")
+
+    def apply_runtime_config(self, config: Dict[str, Any]) -> None:
+        custom_params = config.get("custom_parameters", {}) or {}
+        self.api_endpoint = config.get("api_endpoint")
+        self.api_key = config.get("api_key")
+        self.model = str(config.get("model") or self.model or "qwen-max")
+        self.provider_code = str(config.get("provider_code") or self.provider_code or "alibaba")
+        self.timeout_seconds = int(config.get("timeout_seconds") or self.timeout_seconds or 60)
+        self.temperature = float(custom_params.get("temperature", 0.1))
+        self.max_tokens = int(custom_params.get("max_tokens", 4000))
+
+    def apply_settings_fallback(self) -> None:
+        s = get_settings()
+        self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
+        self.api_key = s.LLM_API_KEY
+        self.model = s.LLM_MODEL
+        self.provider_code = "alibaba"
+        self.timeout_seconds = 60
+        self.temperature = 0.1
+        self.max_tokens = 4000
 
     async def generate(
         self, system_prompt: str, user_prompt: str, max_tokens: Optional[int] = None
@@ -696,8 +712,29 @@ class FrontPageExtractionService:
         self.base_dir = base_dir
         self.demo_data_path = self.base_dir / "data" / "frontpage_demo_case.json"
         self.llm_client = FrontPageLLMClient(llm_config)
+        self._sync_with_default_llm_config = llm_config is None
         self._use_llm = bool(self.llm_client.api_endpoint and self.llm_client.api_key)
         logger.info(f"FrontPageExtractionService 初始化: use_llm={self._use_llm}")
+
+    async def _refresh_llm_runtime_from_default(self) -> None:
+        """与质控统一：首页抽取每次执行前从 default 配置源刷新模型参数。"""
+        if not self._sync_with_default_llm_config:
+            self._use_llm = bool(self.llm_client.api_endpoint and self.llm_client.api_key)
+            return
+
+        try:
+            from .llm_config_loader import LLMConfigLoader
+
+            config = await LLMConfigLoader.load_config(config_name="default", user_id=None)
+            if config:
+                self.llm_client.apply_runtime_config(config)
+            else:
+                self.llm_client.apply_settings_fallback()
+        except Exception as exc:
+            logger.warning("首页抽取刷新默认 LLM 配置失败，回退 env: %s", exc)
+            self.llm_client.apply_settings_fallback()
+
+        self._use_llm = bool(self.llm_client.api_endpoint and self.llm_client.api_key)
 
     async def generate_draft_from_visit(self, visit_id: str) -> FrontPageDraft:
         """
@@ -706,6 +743,7 @@ class FrontPageExtractionService:
         - 如果 LLM 已配置，调用 LLM 抽取
         - 否则回退到 demo 数据
         """
+        await self._refresh_llm_runtime_from_default()
         # 获取病历文本（当前为 demo，后续接入真实 EMR）
         medical_text = await self._get_medical_text(visit_id)
         
@@ -722,6 +760,7 @@ class FrontPageExtractionService:
         self, documents: List[Dict[str, Any]]
     ) -> FrontPageDraft:
         """根据传入的文书列表生成首页草稿"""
+        await self._refresh_llm_runtime_from_default()
         # 合并文书内容
         medical_text = "\n\n".join(
             f"【{doc.get('type', '未知文书')}】\n{doc.get('content', '')}"
@@ -749,6 +788,7 @@ class FrontPageExtractionService:
         Returns:
             FrontPageDraft: 提取的首页草稿
         """
+        await self._refresh_llm_runtime_from_default()
         if not medical_text or not medical_text.strip():
             logger.warning("传入的病历文本为空，回退到 demo 数据")
             return await self._load_demo_frontpage()
@@ -784,6 +824,7 @@ class FrontPageExtractionService:
         Yields:
             (event_name, payload) where payload contains partial `frontpage`.
         """
+        await self._refresh_llm_runtime_from_default()
 
         def default_frontpage() -> Dict[str, Any]:
             return {
@@ -2173,6 +2214,8 @@ class FrontPageExtractionService:
         except Exception:
             logger.exception("build llm evidence failed")
         
+        other_medical = self._apply_ventilation_hours_quality_rules(medical_text, other_medical, validation_info)
+
         # 组装 FrontPageDraft
         frontpage_data = {
             "basic_info": basic_info,
@@ -4202,6 +4245,115 @@ class FrontPageExtractionService:
             }
 
         return out
+
+    @staticmethod
+    def _coerce_optional_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return float(int(value))
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _append_validation_warning(validation_info: Dict[str, Any], message: str) -> None:
+        warnings = validation_info.get("warnings")
+        if not isinstance(warnings, list):
+            warnings = []
+        if message not in warnings:
+            warnings.append(message)
+        validation_info["warnings"] = warnings
+
+    @staticmethod
+    def _infer_ventilation_hours_from_text(medical_text: str) -> Tuple[Optional[float], bool]:
+        text = str(medical_text or "")
+        if not text.strip():
+            return None, False
+
+        keyword_patterns = [
+            r"呼吸机",
+            r"机械通气",
+            r"辅助通气",
+            r"无创通气",
+            r"有创机械通气",
+        ]
+        has_evidence = any(re.search(pattern, text, re.IGNORECASE) for pattern in keyword_patterns)
+
+        explicit_patterns = [
+            r"呼吸机(?:辅助通气|通气|使用时间)?[：: ]*([0-9]+(?:\.[0-9]+)?)\s*(?:小时|h|H)",
+            r"机械通气(?:时间|共|约)?[：: ]*([0-9]+(?:\.[0-9]+)?)\s*(?:小时|h|H)",
+            r"(?:无创|有创)?(?:呼吸机)?辅助通气[：: ]*([0-9]+(?:\.[0-9]+)?)\s*(?:小时|h|H)",
+            r"(?:无创|有创)?机械通气[：: ]*([0-9]+(?:\.[0-9]+)?)\s*(?:小时|h|H)",
+            r"呼吸机使用时间[：: ]*([0-9]+(?:\.[0-9]+)?)\s*(?:小时|h|H)",
+        ]
+        for pattern in explicit_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    return float(match.group(1)), True
+                except Exception:
+                    pass
+
+        day_hour_patterns = [
+            r"(?:呼吸机|机械通气|辅助通气)[^。；，\n]{0,20}?([0-9]+)天([0-9]+)小时",
+            r"([0-9]+)天([0-9]+)小时[^。；，\n]{0,20}?(?:呼吸机|机械通气|辅助通气)",
+        ]
+        for pattern in day_hour_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    days = float(match.group(1))
+                    hours = float(match.group(2))
+                    return days * 24 + hours, True
+                except Exception:
+                    pass
+
+        return None, has_evidence
+
+    def _apply_ventilation_hours_quality_rules(
+        self,
+        medical_text: str,
+        other_medical: Optional[Dict[str, Any]],
+        validation_info: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized = self._normalize_other_medical_info_structure(other_medical)
+        current_hours = self._coerce_optional_float(normalized.get("ventilation_hours"))
+        inferred_hours, has_evidence = self._infer_ventilation_hours_from_text(medical_text)
+
+        if current_hours is not None:
+            normalized["ventilation_hours"] = current_hours
+            validation_info["ventilation_hours_status"] = "provided"
+            return normalized
+
+        raw_value = normalized.get("ventilation_hours")
+        if raw_value not in (None, "", []):
+            self._append_validation_warning(validation_info, "呼吸机使用时间格式异常，已进入人工复核")
+            validation_info["ventilation_hours_status"] = "invalid"
+            validation_info["ventilation_hours_manual_review"] = True
+            normalized["ventilation_hours"] = None
+            return normalized
+
+        if inferred_hours is not None:
+            normalized["ventilation_hours"] = inferred_hours
+            validation_info["ventilation_hours_status"] = "inferred"
+            validation_info["ventilation_hours_inferred"] = inferred_hours
+            return normalized
+
+        if has_evidence:
+            self._append_validation_warning(validation_info, "病历存在机械通气/呼吸机辅助通气证据，但未抽取出呼吸机使用时间")
+            validation_info["ventilation_hours_status"] = "missing_with_evidence"
+            validation_info["ventilation_hours_manual_review"] = True
+        else:
+            validation_info.setdefault("ventilation_hours_status", "not_applicable")
+
+        return normalized
 
     def _normalize_procedures_structure(self, procedures: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """

@@ -34,7 +34,7 @@
         <a-radio-button value="chief_group">
           主诊医师组
         </a-radio-button>
-        <a-radio-button value="doctor">
+        <a-radio-button value="person">
           个人
         </a-radio-button>
       </a-radio-group>
@@ -357,7 +357,7 @@ const drgScatterRef = ref<HTMLElement | null>(null)
 
 const dateRange = ref<any>(null)
 const analysisType = ref('quality')
-const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'chief_group' | 'doctor'>(
+const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'chief_group' | 'person'>(
   'hospital',
 )
 const drgMockEnabled = ref(isDrgMockModeEnabled())
@@ -375,7 +375,7 @@ const dimensionLabelMap: Record<string, string> = {
   department: '科室分析',
   ward: '病区分析',
   chief_group: '主诊医师组',
-  doctor: '个人',
+  person: '个人',
 }
 
 // 计算属性：当前维度名称
@@ -388,7 +388,7 @@ const chartTitles = computed(() => {
     department: { trend: '科室质量趋势', comparison: '科室内病区对比' },
     ward: { trend: '病区质量趋势', comparison: '病区绩效排名' },
     chief_group: { trend: '主诊医师组趋势', comparison: '主诊医师组对比' },
-    doctor: { trend: '个人绩效趋势', comparison: '个人CMI对比' },
+    person: { trend: '个人绩效趋势', comparison: '个人CMI对比' },
   }
   return titles[analysisDimension.value]
 })
@@ -566,7 +566,7 @@ const updateMockDataForDimension = () => {
       avg_length_of_stay: 6.4,
       avg_inpatient_cost: 4007,
     },
-    doctor: {
+    person: {
       total_records: 4695,
       drg_count: 147,
       grouping_success_rate: 0.998,
@@ -755,7 +755,7 @@ const updateMockDataForDimension = () => {
         cost_rate: 1.13,
       },
     ],
-    doctor: [
+    person: [
       {
         dept_name: '李敏',
         total_profit: -1205897,
@@ -827,7 +827,7 @@ const updateMockDataForDimension = () => {
       ...realisticSelectedSummary,
     },
     department_stats: selectedRows,
-    doctor_stats: realisticDataByDimension.doctor,
+    doctor_stats: realisticDataByDimension.person,
     mdc_distribution: [
       { mdc: '正常病例', count: 23564 },
       { mdc: '偏低病例', count: 7626 },
@@ -1079,7 +1079,7 @@ const updateMockDataForDimension = () => {
       },
     ],
     // 医生绩效 - 主治医师数据
-    doctor: [
+    person: [
       {
         dept_name: '张明华 主任医师',
         total_profit: 158000,
@@ -1221,7 +1221,7 @@ const updateMockDataForDimension = () => {
       avg_length_of_stay: 7.2,
       avg_inpatient_cost: 17600,
     },
-    doctor: {
+    person: {
       total_records: 534,
       drg_count: 28,
       grouping_success_rate: 0.958,
@@ -1307,7 +1307,7 @@ const updateMockDataForDimension = () => {
         { mdc: 'MDC 11', count: 46 },
       ],
       drg_distribution: [],
-      doctor_stats: mockDataByDimension.doctor || [],
+      doctor_stats: mockDataByDimension.person || [],
       daily_trends: [
         { date: '1月', count: 48, avg_cmi: 1.32 },
         { date: '2月', count: 52, avg_cmi: 1.38 },
@@ -1319,14 +1319,14 @@ const updateMockDataForDimension = () => {
         '建议围绕组内路径、编码和耗材选择进一步压缩时间消耗指数。',
       ],
     },
-    doctor: {
+    person: {
       mdc_distribution: [
         { mdc: 'MDC 05', count: 44 },
         { mdc: 'MDC 08', count: 39 },
         { mdc: 'MDC 11', count: 35 },
       ],
       drg_distribution: [],
-      doctor_stats: mockDataByDimension.doctor || [],
+      doctor_stats: mockDataByDimension.person || [],
       daily_trends: [
         { date: '1月', count: 42, avg_cmi: 1.02 },
         { date: '2月', count: 45, avg_cmi: 1.05 },

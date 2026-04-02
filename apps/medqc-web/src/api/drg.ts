@@ -41,6 +41,10 @@ import { mockAnalysisData } from '../data/drg/mock-analysis'
 // 配置：是否使用 Mock 数据
 const USE_MOCK_DATA = (import.meta as any).env?.VITE_USE_DRG_MOCK !== 'false' // 默认使用 Mock；设置为 "false" 可切到真实 API
 
+function toApiAnalysisDimension(dimension: AnalysisDimension): string {
+  return dimension === 'person' ? 'doctor' : dimension
+}
+
 const API_V1_PREFIX = '/api/v1'
 
 type GrouperConfigPayload = {
@@ -93,9 +97,7 @@ const mockGrouperStore: {
   versions: [],
 }
 
-async function requestApi<T>(
-  config: Parameters<typeof ApiService.requestRaw>[0],
-): Promise<T> {
+async function requestApi<T>(config: Parameters<typeof ApiService.requestRaw>[0]): Promise<T> {
   const response = await ApiService.requestRaw<T>(config)
   return unwrapApiEnvelope<T>(response.data)
 }
@@ -505,6 +507,7 @@ export async function getAnalysisData(params: {
   sessionId?: string
   batchId?: string
   department?: string
+  person?: string
   doctor?: string
 }): Promise<AnalysisDataResponse> {
   if (USE_MOCK_DATA) {
@@ -512,7 +515,7 @@ export async function getAnalysisData(params: {
   }
 
   const qs = new URLSearchParams({
-    dimension: params.dimension,
+    dimension: toApiAnalysisDimension(params.dimension),
     start_date: params.startDate,
     end_date: params.endDate,
   })
@@ -520,7 +523,8 @@ export async function getAnalysisData(params: {
   if (params.sessionId) qs.set('session_id', params.sessionId)
   if (params.batchId) qs.set('batch_id', params.batchId)
   if (params.department) qs.set('department', params.department)
-  if (params.doctor) qs.set('doctor', params.doctor)
+  const personFilter = params.person || params.doctor
+  if (personFilter) qs.set('doctor', personFilter)
 
   const data = await requestApi<any>({
     method: 'GET',
@@ -539,6 +543,7 @@ export async function exportAnalysisData(params: {
   sessionId?: string
   batchId?: string
   department?: string
+  person?: string
   doctor?: string
   versionId?: string
 }): Promise<{ blob: Blob; fileName: string }> {
@@ -551,7 +556,7 @@ export async function exportAnalysisData(params: {
   }
 
   const qs = new URLSearchParams({
-    dimension: params.dimension,
+    dimension: toApiAnalysisDimension(params.dimension),
     start_date: params.startDate,
     end_date: params.endDate,
   })
@@ -559,7 +564,8 @@ export async function exportAnalysisData(params: {
   if (params.sessionId) qs.set('session_id', params.sessionId)
   if (params.batchId) qs.set('batch_id', params.batchId)
   if (params.department) qs.set('department', params.department)
-  if (params.doctor) qs.set('doctor', params.doctor)
+  const personFilter = params.person || params.doctor
+  if (personFilter) qs.set('doctor', personFilter)
   if (params.versionId) qs.set('version_id', params.versionId)
 
   const response = await ApiService.getRaw<Blob>(

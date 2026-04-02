@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="fp-sheet-wrap">
     <div
       v-if="diagnosisGenerationPending"
@@ -579,244 +579,23 @@
         </button>
       </div>
     </section>
-
-    <teleport to="body">
-      <div
-        v-if="evidencePanel.visible"
-        class="evidence-overlay"
-        @click.self="closeDiagnosisEvidence"
-      >
-        <div class="evidence-card">
-          <div class="evidence-title">
-            主诊断 LLM 证据
-          </div>
-          <template v-if="mainDiagnosisLlmEvidence || codingAuditLlmEvidence">
-            <div
-              class="evidence-hero"
-              :class="formatSeverityClass(topAlert?.severity)"
-            >
-              <div class="evidence-hero__left">
-                <span class="evidence-hero__badge">{{
-                  formatFindingSeverityLabel(topAlert?.severity)
-                }}</span>
-                <strong class="evidence-hero__title">{{
-                  formatFindingTypeLabel(topAlert?.type)
-                }}</strong>
-              </div>
-              <div class="evidence-hero__summary">
-                {{
-                  topAlert?.summary ||
-                    codingAuditLlmEvidence?.summary ||
-                    '当前未识别到高风险审核项。'
-                }}
-              </div>
-              <div class="evidence-hero__meta">
-                <span>置信度 {{ llmConfidenceText }}</span>
-                <span>问题 {{ totalRiskCount }} 项</span>
-              </div>
-            </div>
-
-            <template v-if="!isDiagnosisInappropriateOnlyHero">
-              <section class="evidence-block">
-                <div class="evidence-block-title">
-                  主诊断决策
-                </div>
-                <div class="evidence-decision-grid">
-                  <div class="evidence-decision-col">
-                    <div class="evidence-meta">
-                      医生填写主诊断
-                    </div>
-                    <div class="evidence-decision-main">
-                      {{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
-                    </div>
-                  </div>
-                  <div class="evidence-decision-col">
-                    <div class="evidence-meta">
-                      系统推荐主诊断
-                    </div>
-                    <div class="evidence-decision-main">
-                      {{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}
-                      <span
-                        v-if="llmDiffersFromClinician"
-                        class="evidence-recommend-label"
-                      >
-                        {{ mainRecommendationLabel }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div class="evidence-logic">
-                  {{ mainDiagnosisLlmEvidence?.conclusion || 'LLM已完成主诊断语义裁决。' }}
-                </div>
-                <div
-                  v-if="mainRecommendationSummary"
-                  class="evidence-logic"
-                >
-                  {{ mainRecommendationSummary }}
-                </div>
-                <button
-                  v-if="mainDiagnosisLlmEvidence?.reasoning_summary"
-                  type="button"
-                  class="evidence-toggle-btn"
-                  @click="toggleReasoningSummary"
-                >
-                  {{ reasoningSummaryExpanded ? '收起推理摘要' : '查看推理摘要' }}
-                </button>
-                <div
-                  v-if="reasoningSummaryExpanded"
-                  class="evidence-collapsed-snippet"
-                >
-                  {{ mainDiagnosisLlmEvidence?.reasoning_summary || 'LLM推理摘要暂不可用。' }}
-                </div>
-              </section>
-
-              <section class="evidence-block">
-                <div class="evidence-block-title">
-                  审核风险（Top3）
-                </div>
-                <div
-                  v-if="riskTimelineItems.length === 0"
-                  class="evidence-logic"
-                >
-                  {{ codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
-                </div>
-                <template v-else>
-                  <div
-                    v-for="(risk, idx) in riskTimelineItems"
-                    :key="`risk-timeline-${idx}`"
-                    class="evidence-risk-card"
-                  >
-                    <div class="evidence-risk-head">
-                      <span class="evidence-risk-type">{{ formatFindingTypeLabel(risk.type) }}（{{
-                        formatFindingSeverityLabel(risk.severity)
-                      }}）</span>
-                      <span
-                        class="evidence-risk-severity"
-                        :class="formatSeverityClass(risk.severity)"
-                      >
-                        {{ risk.count }} 项
-                      </span>
-                    </div>
-                    <div class="evidence-key-reason">
-                      建议：{{ risk.llm_recommendation || '建议人工复核。' }}
-                    </div>
-                    <div
-                      v-if="!isRiskDetailExpanded(idx)"
-                      class="evidence-collapsed-snippet"
-                    >
-                      {{ risk.shortSummary }}
-                    </div>
-                    <button
-                      type="button"
-                      class="evidence-toggle-btn"
-                      @click="toggleRiskDetail(idx)"
-                    >
-                      {{ isRiskDetailExpanded(idx) ? '收起详情' : '展开详情' }}
-                    </button>
-                    <template v-if="isRiskDetailExpanded(idx)">
-                      <div class="evidence-key-meta">
-                        原填写：{{ risk.clinician_text || '-' }}
-                      </div>
-                      <div class="evidence-key-meta">
-                        理由：{{ risk.reason || '-' }}
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </section>
-
-              <section class="evidence-block">
-                <div class="evidence-block-title">
-                  关键证据
-                </div>
-                <div class="evidence-logic">
-                  {{ codingAuditLlmEvidence?.summary || 'LLM审核暂不可用' }}
-                </div>
-                <div
-                  v-if="keyEvidenceGroups.length === 0"
-                  class="evidence-logic"
-                >
-                  暂无可展示的关键证据。
-                </div>
-                <template v-else>
-                  <div
-                    v-for="(group, idx) in keyEvidenceGroups"
-                    :key="`key-group-${idx}`"
-                    class="evidence-key-card"
-                  >
-                    <div class="evidence-risk-head">
-                      <span class="evidence-risk-type">{{ formatFindingTypeLabel(group.type) }}</span>
-                      <span class="evidence-key-meta">{{
-                        group.llm_recommendation || '建议人工复核'
-                      }}</span>
-                    </div>
-                    <div class="evidence-key-meta">
-                      证据条数：{{ group.evidence.length }}
-                    </div>
-                    <div
-                      v-if="!isEvidenceGroupExpanded(idx)"
-                      class="evidence-collapsed-snippet"
-                    >
-                      {{ buildEvidenceGroupCollapsedText(group.evidence) }}
-                    </div>
-                    <button
-                      type="button"
-                      class="evidence-toggle-btn"
-                      @click="toggleEvidenceGroup(idx)"
-                    >
-                      {{ isEvidenceGroupExpanded(idx) ? '收起证据详情' : '查看更多证据' }}
-                    </button>
-                    <template v-if="isEvidenceGroupExpanded(idx)">
-                      <div
-                        v-for="(line, evIdx) in group.evidence"
-                        :key="`group-${idx}-ev-${evIdx}`"
-                        class="evidence-audit-quote"
-                      >
-                        <div class="evidence-quote">
-                          {{ line.quote || '-' }}
-                        </div>
-                        <div class="evidence-key-meta">
-                          来源：{{ line.source || '病历原文' }}
-                        </div>
-                        <div class="evidence-key-reason">
-                          支持理由：{{ line.why_it_supports || '-' }}
-                        </div>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </section>
-            </template>
-          </template>
-          <div
-            v-else
-            class="evidence-block"
-          >
-            <div class="evidence-block-title">
-              LLM主诊断解释
-            </div>
-            <div class="evidence-logic">
-              LLM解释暂不可用
-            </div>
-          </div>
-
-          <div class="evidence-actions">
-            <button
-              type="button"
-              class="evidence-close-btn"
-              @click="closeDiagnosisEvidence"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      </div>
-    </teleport>
+    <MainDiagnosisEvidenceModal
+      :visible="evidencePanel.visible"
+      :main-diagnosis-llm-evidence="mainDiagnosisLlmEvidence"
+      :coding-audit-llm-evidence="codingAuditLlmEvidence"
+      :top-alert="topAlert"
+      :risk-timeline-items="riskTimelineItems"
+      :key-evidence-groups="keyEvidenceGroups"
+      :total-risk-count="totalRiskCount"
+      :llm-confidence-text="llmConfidenceText"
+      @close="closeDiagnosisEvidence"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
+import MainDiagnosisEvidenceModal from './frontpage/MainDiagnosisEvidenceModal.vue'
 
 interface DiagnosisItem {
   diagnosis_type?: string
@@ -1324,10 +1103,6 @@ const topAlert = computed(() => {
         .length || 1,
   }
 })
-
-const isDiagnosisInappropriateOnlyHero = computed(
-  () => String(topAlert.value?.type || '').toLowerCase() === 'diagnosis_inappropriate',
-)
 
 const totalRiskCount = computed(() => {
   const counts = codingAuditLlmEvidence.value?.counts

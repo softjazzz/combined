@@ -102,7 +102,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'workstation',
         name: 'Workstation',
-        component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV4View.vue'),
         meta: {
           title: '智能质控工作站',
           icon: 'DesktopOutlined',
@@ -933,7 +933,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/workstation-v4/login',
     name: 'WorkstationV4Login',
-    component: () => import('@/views/workstation-v2/WorkstationLoginView.vue'),
+    component: () => import('@/views/workstation-v4/WorkstationLoginView.vue'),
     meta: {
       requiresAuth: false,
       title: '工作台登录',
@@ -951,8 +951,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: '',
         name: 'WorkstationV4Index',
-        component: () => import('@/views/workstation-v2/WorkstationV4View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV4HomeEntry.vue'),
         meta: { title: '工作台', permission: ['admin', 'qc_manager', 'doctor'] },
+      },
+      {
+        path: 'worklist',
+        name: 'WorkstationV4Worklist',
+        component: () => import('@/views/workstation-v4/WorkstationV4View.vue'),
+        meta: { title: '病历池', permission: ['admin', 'qc_manager', 'doctor'] },
       },
       {
         path: 'records/outpatient-emergency',
@@ -975,55 +981,55 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'custom-qc-experience',
         name: 'WorkstationV4CustomQCExperience',
-        component: () => import('@/views/workstation-v2/CustomQCExperienceView.vue'),
+        component: () => import('@/views/workstation-v4/CustomQCExperienceView.vue'),
         meta: { title: '自定义质控点体验', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'icd',
         name: 'WorkstationV4ICD',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'icd-search' },
         meta: { title: 'ICD 编码查询' },
       },
       {
         path: 'upload',
         name: 'WorkstationV4Upload',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'upload' },
         meta: { title: '数据上传' },
       },
       {
         path: 'stats',
         name: 'WorkstationV4Stats',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'workbench' },
         meta: { title: '统计分析' },
       },
       {
         path: 'drg/pre',
         name: 'WorkstationV4DRGPre',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'pre-analysis' },
         meta: { title: '事前分析' },
       },
       {
         path: 'drg/mid',
         name: 'WorkstationV4DRGMid',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'mid-analysis' },
         meta: { title: '事中监控' },
       },
       {
         path: 'drg/payment',
         name: 'WorkstationV4DRGPayment',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'payment' },
         meta: { title: '付费监测' },
       },
       {
         path: 'drg/post',
         name: 'WorkstationV4DRGPost',
-        component: () => import('@/views/workstation-v2/WorkstationV2View.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'post-analysis' },
         meta: { title: '事后分析' },
       },
@@ -1036,13 +1042,13 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'data',
         name: 'WorkstationV4Data',
-        component: () => import('@/views/workstation-v2/CDMDataView.vue'),
+        component: () => import('@/views/workstation-v4/CDMDataView.vue'),
         meta: { title: '数据管理' },
       },
       {
         path: 'rules',
         name: 'WorkstationV4Rules',
-        component: () => import('@/views/workstation-v2/WorkstationRulesView.vue'),
+        component: () => import('@/views/workstation-v4/WorkstationRulesView.vue'),
         meta: { title: '质控规则管理' },
       },
       {
@@ -1060,7 +1066,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-config',
         name: 'WorkstationV4SystemConfig',
-        component: () => import('@/views/workstation-v2/DataSyncConfigPage.vue'),
+        component: () => import('@/views/workstation-v4/DataSyncConfigPage.vue'),
         meta: { title: '系统配置', permission: ['admin', 'qc_manager'] },
       },
     ],

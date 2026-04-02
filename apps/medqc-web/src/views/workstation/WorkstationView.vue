@@ -52,7 +52,7 @@
         </a-select>
       </div>
       <div class="toolbar-right">
-        <a-button @click="router.push('/dashboard/workstation/qc-overview')">
+        <a-button @click="router.push('/workstation-v4/qc-overview')">
           <AlertOutlined />
           质控概览
         </a-button>

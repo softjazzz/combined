@@ -12,15 +12,39 @@ interface NotificationListResponse {
 }
 
 interface NotificationOverviewResponse {
-  data?: {
-    items?: unknown[]
-    date?: string
-  }
+  items?: unknown[]
+  date?: string
 }
 
 function isAuthError(err: unknown): boolean {
   const status = (err as { response?: { status?: number } })?.response?.status
   return status === 401 || status === 403
+}
+
+function isBatchSummaryType(type: string | undefined): boolean {
+  return String(type || '')
+    .trim()
+    .toLowerCase()
+    .endsWith('_batch_summary')
+}
+
+function extractListPayload(
+  payload: NotificationListResponse | NotificationListResponse['data'] | undefined,
+) {
+  if (payload && typeof payload === 'object' && 'items' in payload) {
+    const direct = payload as NotificationListResponse['data']
+    return direct
+  }
+  return payload?.data
+}
+
+function extractOverviewPayload(
+  payload: NotificationOverviewResponse | { data?: NotificationOverviewResponse } | undefined,
+) {
+  if (payload && typeof payload === 'object' && 'items' in payload) {
+    return payload as NotificationOverviewResponse
+  }
+  return payload?.data
 }
 
 export function useNotifications(
@@ -107,6 +131,7 @@ export function useNotifications(
   function buildLocalOverview(items: NotificationVM[]): NotificationOverviewItem[] {
     const groups = new Map<string, NotificationOverviewItem>()
     for (const notif of items) {
+      if (isBatchSummaryType(notif.type)) continue
       const type = notif.type || 'general'
       const severity = notif.level || 'info'
       const department = '未分科室'
@@ -165,10 +190,11 @@ export function useNotifications(
         notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
         return
       }
-      const items = Array.isArray(res.data?.data?.items) ? res.data?.data?.items : []
-      notificationOverviewItems.value = items.map((item, index) =>
-        normalizeOverviewItem(item, index),
-      )
+      const payload = extractOverviewPayload(res.data)
+      const items = Array.isArray(payload?.items) ? payload.items : []
+      notificationOverviewItems.value = items
+        .map((item, index) => normalizeOverviewItem(item, index))
+        .filter((item) => !isBatchSummaryType(item.type))
     } catch (err) {
       if (!isAuthError(err)) {
         console.error('加载当天问题概览失败:', err)
@@ -197,10 +223,14 @@ export function useNotifications(
         return
       }
 
-      const payload = res.data?.data
+      const payload = extractListPayload(res.data)
       const items = Array.isArray(payload?.items) ? payload.items : []
-      assistNotifications.value = items.map((item, index) => normalizeNotification(item, index))
-      notificationUnreadCount.value = Number(payload?.unread_count || 0)
+      assistNotifications.value = items
+        .map((item, index) => normalizeNotification(item, index))
+        .filter((item) => !isBatchSummaryType(item.type))
+      notificationUnreadCount.value = assistNotifications.value.filter(
+        (item) => !item.is_read,
+      ).length
       await fetchAssistNotificationOverview()
     } catch (err) {
       if (!isAuthError(err)) {
