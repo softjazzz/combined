@@ -28,8 +28,34 @@ export interface PgConnectionConfig {
   remote_port?: string
   remote_database?: string
   remote_username?: string
+  remote_schema?: string
+  sync_mode?: 'table' | 'procedure' | string
   remote_password_set?: boolean
   remote_password_display?: string
+}
+
+export interface SyncTableValidationItem {
+  table: string
+  source_table?: string
+  source?: string
+  enabled?: boolean
+  mode?: 'table' | 'procedure' | string
+  date_field?: string | null
+  fallback_date_field?: string | null
+  resolved_date_field?: string | null
+  local_primary_keys?: string[]
+  executable: boolean
+  blockers: string[]
+}
+
+export interface PgSyncTableConfigItem {
+  name: string
+  label?: string
+  source_table?: string
+  date_field?: string | null
+  fallback_date_field?: string | null
+  enabled?: boolean
+  procedure?: string
 }
 
 export interface SyncStatusResponse {
@@ -64,11 +90,21 @@ export interface SyncConnectionStatus {
 export interface SyncPreflightResult {
   source: SyncSource
   tier: SyncTier | 'all'
+  mode?: 'table' | 'procedure' | string
+  remote_schema?: string
   executable: boolean
   blockers: string[]
   warnings: string[]
   estimated_impact: number
   risk_level: 'low' | 'medium' | 'high' | string
+  matrix_scope?: {
+    execution?: 'enabled' | 'all' | string
+    full?: 'enabled' | 'all' | string
+  }
+  table_validations?: SyncTableValidationItem[]
+  target_tables?: string[]
+  execution_table_validations?: SyncTableValidationItem[]
+  execution_target_tables?: string[]
   connections?: Record<string, any>
   state?: Record<string, any>
   statistics?: SyncStatistics
@@ -178,6 +214,24 @@ export const syncApi = {
     return unwrapSyncResponse<{ config: PgConnectionConfig; connection: Record<string, any> }>(
       response.data,
     )
+  },
+
+  async getPgSyncTables(): Promise<{ items: PgSyncTableConfigItem[]; total: number }> {
+    const response = await http.get('/api/v1/sync/config/pg/tables')
+    return unwrapSyncResponse<{ items: PgSyncTableConfigItem[]; total: number }>(response.data)
+  },
+
+  async updatePgSyncTables(payload: {
+    items: Array<{
+      name: string
+      source_table?: string
+      date_field?: string
+      fallback_date_field?: string
+      enabled?: boolean
+    }>
+  }): Promise<{ items: PgSyncTableConfigItem[]; total: number }> {
+    const response = await http.put('/api/v1/sync/config/pg/tables', payload)
+    return unwrapSyncResponse<{ items: PgSyncTableConfigItem[]; total: number }>(response.data)
   },
 
   async testMongoConnection(): Promise<Record<string, any>> {

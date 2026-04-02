@@ -95,6 +95,8 @@ def _mask_pg_config(raw: dict) -> dict:
     data["remote_password_set"] = bool(password)
     data["remote_password_display"] = "***" if password else ""
     data["remote_password_ref"] = str(data.get("remote_password_ref") or "")
+    data["remote_schema"] = str(data.get("remote_schema") or "public")
+    data["sync_mode"] = str(data.get("sync_mode") or "table")
     return data
 
 
@@ -138,12 +140,26 @@ class PgConfigUpdate(BaseModel):
     remote_username: Optional[str] = Field(default=None, min_length=1, max_length=128)
     remote_password_ref: Optional[str] = Field(default=None, max_length=128)
     remote_password: Optional[str] = Field(default=None, max_length=256)
+    remote_schema: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    sync_mode: Optional[Literal["table", "procedure"]] = None
 
 
 class PreflightRequest(BaseModel):
     source: Literal["mongo", "pg"] = "mongo"
     tier: Literal["tier1", "tier2", "tier3", "all"] = "all"
     tables: Optional[list[str]] = None
+
+
+class PgSyncTableConfigItem(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    source_table: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    date_field: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    fallback_date_field: Optional[str] = Field(default=None, max_length=128)
+    enabled: Optional[bool] = None
+
+
+class PgSyncTablesUpdate(BaseModel):
+    items: list[PgSyncTableConfigItem] = Field(default_factory=list)
 
 
 class SyncTemplateApplyRequest(BaseModel):
@@ -340,6 +356,44 @@ async def update_pg_config(
     )
 
 
+@router.get("/config/pg/tables")
+async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_read_access)):
+    """获取 PG 表直连同步配置（分阶段启用）"""
+    from ..services.etl_sync import list_sync_tables
+
+    items = list_sync_tables()
+    return _ok(request, {"items": items, "total": len(items)})
+
+
+@router.put("/config/pg/tables")
+async def update_pg_sync_tables(
+    request: Request,
+    payload: PgSyncTablesUpdate,
+    current_user: dict = Depends(require_sync_write_access),
+):
+    """更新 PG 表直连同步配置（仅 admin）"""
+    from ..services.etl_sync import save_sync_tables_config
+
+    updates = [item.model_dump(exclude_none=True) for item in payload.items]
+    try:
+        items = save_sync_tables_config(updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    audit_event(
+        request,
+        action="sync.config.pg.tables.update",
+        resource="/api/v1/sync/config/pg/tables",
+        outcome="success",
+        current_user=current_user,
+        details={
+            "changed_count": len(updates),
+            "changed_tables": sorted([str(item.get("name")) for item in updates if item.get("name")])[:50],
+        },
+    )
+    return _ok(request, {"items": items, "total": len(items)})
+
+
 # ==================== 连接测试 ====================
 
 @router.post("/test-connection/mongo")
@@ -450,7 +504,12 @@ async def run_preflight(
     试运行预检（不落库、不触发实际同步）
     """
     if req.source == "pg":
-        from ..services.etl_sync import get_sync_state, test_local_connection, test_remote_connection
+        from ..services.etl_sync import (
+            get_sync_state,
+            test_local_connection,
+            test_remote_connection,
+            validate_pg_sync_plan,
+        )
 
         local_result = test_local_connection()
         remote_result = test_remote_connection()
@@ -465,16 +524,33 @@ async def run_preflight(
         if req.tables and len(req.tables) > 10:
             warnings.append("本次指定同步表数量较多，建议分批执行。")
 
+        execution_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=False)
+        full_matrix_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=True)
+        blockers.extend([str(item) for item in execution_plan.get("blockers", [])])
+        warnings.extend([str(item) for item in execution_plan.get("warnings", [])])
+        warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
+        warnings = list(dict.fromkeys([w for w in warnings if str(w).strip()]))
+
         sync_state = get_sync_state()
         estimated_impact = int(sync_state.get("total_records_synced") or 0)
         return _ok(request, {
             "source": "pg",
             "tier": "all",
+            "mode": execution_plan.get("mode"),
+            "remote_schema": execution_plan.get("remote_schema"),
             "executable": len(blockers) == 0,
             "blockers": blockers,
             "warnings": warnings,
             "estimated_impact": estimated_impact,
             "risk_level": "low" if len(blockers) == 0 else "high",
+            "matrix_scope": {
+                "execution": execution_plan.get("matrix_scope", "enabled"),
+                "full": full_matrix_plan.get("matrix_scope", "all"),
+            },
+            "table_validations": full_matrix_plan.get("table_validations", []),
+            "target_tables": full_matrix_plan.get("target_tables", []),
+            "execution_table_validations": execution_plan.get("table_validations", []),
+            "execution_target_tables": execution_plan.get("target_tables", []),
             "connections": {
                 "pg_remote": remote_result,
                 "pg_local": local_result,

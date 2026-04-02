@@ -203,12 +203,21 @@ async def get_sync_status(request: Request):
 @router.get("/sync/tables")
 async def get_sync_tables(request: Request):
     """获取可同步的表列表"""
-    from ..services.etl_sync import SYNC_TABLES
+    from ..services.etl_sync import list_sync_tables
+    tables = list_sync_tables()
     return success_response(
         data={
             "tables": [
-                {"name": t["name"], "label": t["label"], "procedure": t["procedure"]}
-                for t in SYNC_TABLES
+                {
+                    "name": t["name"],
+                    "label": t["label"],
+                    "procedure": t.get("procedure"),
+                    "source_table": t.get("source_table"),
+                    "date_field": t.get("date_field"),
+                    "fallback_date_field": t.get("fallback_date_field"),
+                    "enabled": bool(t.get("enabled")),
+                }
+                for t in tables
             ]
         },
         message="获取同步表配置成功",
