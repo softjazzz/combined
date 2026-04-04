@@ -41,6 +41,12 @@
       <span class="ml-auto text-xs text-slate-400">当前: {{ dimensionLabel }}</span>
     </div>
 
+    <!-- 数据集管理面板 -->
+    <DatasetUploadPanel
+      class="mb-4"
+      @data-changed="handleDatasetChanged"
+    />
+
     <!-- Time Range Selector -->
     <div class="flex items-center gap-4 mb-6">
       <div
@@ -341,6 +347,7 @@ import { isDrgMockModeEnabled, onDrgMockModeChange } from '@/utils/drgMockMode'
 import { exportDrgMockReport, type DrgExportFormat } from '@/utils/drgMockExport'
 import { useDrgDatasetStore } from '@/stores/drgDataset'
 import { buildPostEventDatasetStats, type PostEventDimension } from '@/utils/drg-aggregation'
+import DatasetUploadPanel from '@/components/drg/DatasetUploadPanel.vue'
 
 const props = defineProps<{
   sessionId?: string // 新增：session_id
@@ -499,6 +506,15 @@ const updateDatasetDataForDimension = () => {
     ),
   } as any
   void updateCharts()
+}
+
+/** 数据集变更（上传/清除）后刷新 */
+const handleDatasetChanged = () => {
+  if (hasUploadedDataset.value) {
+    updateDatasetDataForDimension()
+  } else {
+    initMockCharts()
+  }
 }
 
 // 处理维度切换

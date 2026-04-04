@@ -33,8 +33,14 @@
       </a-dropdown>
     </div>
 
+    <!-- 数据集管理面板 -->
+    <DatasetUploadPanel
+      class="mb-4"
+      @data-changed="handleDatasetChanged"
+    />
+
     <div
-      v-if="!drgMockEnabled"
+      v-if="!drgMockEnabled && !hasUploadedData"
       class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"
     >
       当前处于真实优先模式。`payment` 页仍保留 Mock 数据兜底，便于演示。
@@ -161,7 +167,7 @@
           size="small"
         >
           <a-select-option
-            v-for="option in paymentMonitoringDeptOptions"
+            v-for="option in activeDeptOptions"
             :key="option.value"
             :value="option.value"
           >
@@ -445,9 +451,37 @@ import {
   resolveGroupType,
   type PaymentGroupType,
   type PaymentMonitoringRow,
+  type PaymentMonitoringOption,
 } from '@/data/drg/mock-payment-monitoring'
 import { isDrgMockModeEnabled, onDrgMockModeChange } from '@/utils/drgMockMode'
 import { exportDrgMockReport, type DrgExportFormat } from '@/utils/drgMockExport'
+import { useDrgDatasetStore } from '@/stores/drgDataset'
+import { mapCaseRecordsToPaymentMonitoringRows } from '@/utils/drg-aggregation'
+import DatasetUploadPanel from '@/components/drg/DatasetUploadPanel.vue'
+
+const drgDatasetStore = useDrgDatasetStore()
+const hasUploadedData = computed(() => drgDatasetStore.hasUploadedData)
+
+// 数据源：优先从上传数据 Store 映射，无上传数据时回退到原始 Mock
+const activeRows = computed<PaymentMonitoringRow[]>(() => {
+  if (hasUploadedData.value) {
+    return mapCaseRecordsToPaymentMonitoringRows(drgDatasetStore.records)
+  }
+  return paymentMonitoringRows
+})
+
+// 动态科室选项（上传数据时从实际数据生成）
+const activeDeptOptions = computed<PaymentMonitoringOption[]>(() => {
+  if (!hasUploadedData.value) return paymentMonitoringDeptOptions
+  const depts = [...new Set(activeRows.value.map((r) => r.deptKey))]
+  return [
+    { label: '全部科室', value: 'all' },
+    ...depts.map((d) => {
+      const row = activeRows.value.find((r) => r.deptKey === d)
+      return { label: row?.deptName || d, value: d }
+    }),
+  ]
+})
 
 const paymentTrendRef = ref<HTMLElement | null>(null)
 const drgDistributionRef = ref<HTMLElement | null>(null)
@@ -460,13 +494,13 @@ let paymentChart: echarts.ECharts | null = null
 let distributionChart: echarts.ECharts | null = null
 let unsubscribeDrgMockMode: (() => void) | null = null
 
-const overview = computed(() => getPaymentMonitoringOverview(paymentMonitoringRows))
+const overview = computed(() => getPaymentMonitoringOverview(activeRows.value))
 const selectedDeptRows = computed(() =>
-  filterPaymentMonitoringRows(paymentMonitoringRows, { deptKey: deptFilter.value }),
+  filterPaymentMonitoringRows(activeRows.value, { deptKey: deptFilter.value }),
 )
 const selectedDeptOverview = computed(() => getPaymentMonitoringOverview(selectedDeptRows.value))
 const filteredRows = computed(() =>
-  filterPaymentMonitoringRows(paymentMonitoringRows, {
+  filterPaymentMonitoringRows(activeRows.value, {
     deptKey: deptFilter.value,
     groupType: groupFilter.value,
     status: statusFilter.value,
@@ -711,6 +745,14 @@ onMounted(() => {
   renderPaymentTrendChart()
   renderDistributionChart()
 })
+
+/** 数据集变更（上传/清除）后刷新图表 */
+function handleDatasetChanged() {
+  deptFilter.value = 'all'
+  groupFilter.value = 'all'
+  statusFilter.value = 'all'
+  renderDistributionChart()
+}
 
 onUnmounted(() => {
   unsubscribeDrgMockMode?.()

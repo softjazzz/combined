@@ -15,6 +15,7 @@ import type {
   DistributionItem,
 } from '@/types/drg-analysis'
 import type { FeeMonitoringRow, GroupingStatus } from '@/types/drg-fee'
+import type { PaymentMonitoringRow } from '@/data/drg/mock-payment-monitoring'
 
 /** PostEventAnalysisView 的维度定义 */
 export type PostEventDimension = 'hospital' | 'department' | 'ward' | 'chief_group' | 'person'
@@ -428,6 +429,57 @@ export function mapCaseRecordsToFeeMonitoringRows(records: CaseRecord[]): FeeMon
       fixSuggestion: hasGroup ? '' : '建议核对主要诊断/主要手术，完善并发症标记后重试入组。',
     } as FeeMonitoringRow
   })
+}
+
+// ==================== PaymentMonitoring 映射 ====================
+
+/**
+ * 将 CaseRecord[] 映射为 PaymentMonitoringRow[]
+ *
+ * 用于 workstation-v4 的付费监测页面（PaymentMonitoringView.vue）。
+ * 这个组件使用独立的 PaymentMonitoringRow 类型，与 FeeMonitoringRow 不同。
+ */
+export function mapCaseRecordsToPaymentMonitoringRows(
+  records: CaseRecord[],
+): PaymentMonitoringRow[] {
+  // 科室 key 映射
+  const deptKeyMap: Record<string, string> = {
+    '心内科': 'cardiology',
+    '心血管内科': 'cardiology',
+    '心血管内科专业': 'cardiology',
+    '呼吸内科': 'respiratory',
+    '呼吸内科专业': 'respiratory',
+    '神经内科': 'neurology',
+    '神经内科专业': 'neurology',
+    '骨科': 'orthopedics',
+    '骨科专业': 'orthopedics',
+    '普外科': 'general-surgery',
+    '普通外科专业': 'general-surgery',
+    '儿科': 'pediatrics',
+  }
+
+  return records
+    .filter((r) => r.baseline_payment && r.baseline_payment > 0)
+    .map((r, idx) => {
+      const deptKey = deptKeyMap[r.department] || r.department.toLowerCase()
+      const baselinePayment = r.baseline_payment ?? r.total_cost
+      // payment = 模拟医保支付（基准支付 * 支付比例，默认 58%）
+      const payment = Math.round(baselinePayment * 0.58)
+      const drg = r.drg_code || r.dip_code || '未入组'
+
+      return {
+        id: idx + 1,
+        caseNo: `#${r.admission_id}`,
+        deptKey,
+        deptName: r.department,
+        drg,
+        actualCost: r.total_cost,
+        payment,
+        baselinePayment,
+        ruleHint: r.drg_name || r.dip_name || r.primary_diagnosis_name || '',
+        controlTip: '',
+      } as PaymentMonitoringRow
+    })
 }
 
 // ==================== PostEvent 映射 ====================
