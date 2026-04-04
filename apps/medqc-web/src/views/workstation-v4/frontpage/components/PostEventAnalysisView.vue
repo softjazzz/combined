@@ -44,14 +44,14 @@
     <!-- Time Range Selector -->
     <div class="flex items-center gap-4 mb-6">
       <div
-        v-if="useDemoData"
+        v-if="useDemoData || hasUploadedDataset"
         class="text-orange-500 text-sm flex items-center gap-2"
       >
         <WarningOutlined />
         <span>{{ drgModeHintText }}</span>
       </div>
       <a-range-picker
-        v-if="!useDemoData && batchId"
+        v-if="!useDemoData && !hasUploadedDataset && batchId"
         v-model:value="dateRange"
         class="w-80"
       />
@@ -220,8 +220,8 @@
     <!-- 超费原因分析 (新增) -->
     <div class="grid grid-cols-2 gap-4 mb-6">
       <OverCostAnalysisCard
-        :batch-id="useDemoData ? undefined : batchId"
-        :session-id="useDemoData ? undefined : sessionId"
+        :batch-id="useDemoData || hasUploadedDataset ? undefined : batchId"
+        :session-id="useDemoData || hasUploadedDataset ? undefined : sessionId"
         :dimension="analysisDimension"
         :dimension-label="dimensionLabel"
       />
@@ -314,8 +314,8 @@
     :title="drillTitle"
     :dimension="drillDimension"
     :value="drillValue"
-    :session-id="useDemoData ? undefined : sessionId"
-    :batch-id="useDemoData ? undefined : batchId"
+    :session-id="useDemoData || hasUploadedDataset ? undefined : sessionId"
+    :batch-id="useDemoData || hasUploadedDataset ? undefined : batchId"
   />
 </template>
 
@@ -339,6 +339,8 @@ import {
 import { message } from 'ant-design-vue'
 import { isDrgMockModeEnabled, onDrgMockModeChange } from '@/utils/drgMockMode'
 import { exportDrgMockReport, type DrgExportFormat } from '@/utils/drgMockExport'
+import { useDrgDatasetStore } from '@/stores/drgDataset'
+import { buildPostEventDatasetStats, type PostEventDimension } from '@/utils/drg-aggregation'
 
 const props = defineProps<{
   sessionId?: string // 新增：session_id
@@ -361,11 +363,15 @@ const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'chief_group'
   'hospital',
 )
 const drgMockEnabled = ref(isDrgMockModeEnabled())
+const drgDatasetStore = useDrgDatasetStore()
+const hasUploadedDataset = computed(() => drgDatasetStore.hasUploadedData)
 const useDemoData = computed(() => drgMockEnabled.value || !props.sessionId)
 const drgModeHintText = computed(() =>
-  drgMockEnabled.value
-    ? '当前已开启 Mock 演示模式，展示前端演示数据'
-    : '当前缺少 session_id，自动展示演示数据',
+  hasUploadedDataset.value
+    ? `当前使用模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length} 例）`
+    : drgMockEnabled.value
+      ? '当前已开启 Mock 演示模式，展示前端演示数据'
+      : '当前缺少 session_id，自动展示演示数据',
 )
 let unsubscribeDrgMockMode: (() => void) | null = null
 
@@ -483,9 +489,25 @@ const kpiCards = computed(() => {
   ]
 })
 
+const updateDatasetDataForDimension = () => {
+  if (!hasUploadedDataset.value) return
+  stats.value = {
+    ...stats.value,
+    ...buildPostEventDatasetStats(
+      drgDatasetStore.records,
+      analysisDimension.value as PostEventDimension,
+    ),
+  } as any
+  void updateCharts()
+}
+
 // 处理维度切换
 const handleDimensionChange = () => {
   message.info(`切换到【${dimensionLabel.value}】维度，正在加载数据...`)
+  if (hasUploadedDataset.value) {
+    updateDatasetDataForDimension()
+    return
+  }
   // 重新加载数据（如果有 batchId）
   if (!useDemoData.value && props.batchId) {
     fetchStatistics()
@@ -1598,6 +1620,10 @@ onMounted(() => {
   drgMockEnabled.value = isDrgMockModeEnabled()
   unsubscribeDrgMockMode = onDrgMockModeChange((enabled) => {
     drgMockEnabled.value = enabled
+    if (hasUploadedDataset.value) {
+      initMockCharts()
+      return
+    }
     if (!useDemoData.value && props.sessionId) {
       fetchStatistics()
       return
@@ -1605,7 +1631,11 @@ onMounted(() => {
     initMockCharts()
   })
 
-  // Initial Fetch if sessionId exists
+  // Initial load
+  if (hasUploadedDataset.value) {
+    initMockCharts()
+    return
+  }
   if (!useDemoData.value && props.sessionId) {
     fetchStatistics()
   } else {
@@ -1616,6 +1646,10 @@ onMounted(() => {
 watch(
   () => props.sessionId,
   (newVal) => {
+    if (hasUploadedDataset.value) {
+      initMockCharts()
+      return
+    }
     if (newVal && !useDemoData.value) {
       fetchStatistics()
     } else {
@@ -1625,8 +1659,27 @@ watch(
 )
 
 const initMockCharts = () => {
+  if (hasUploadedDataset.value) {
+    updateDatasetDataForDimension()
+    return
+  }
   updateMockDataForDimension()
 }
+
+watch(
+  () => drgDatasetStore.meta?.uploadedAt,
+  () => {
+    if (hasUploadedDataset.value) {
+      initMockCharts()
+      return
+    }
+    if (!useDemoData.value && props.sessionId) {
+      fetchStatistics()
+    } else {
+      initMockCharts()
+    }
+  },
+)
 
 const buildMockExportPayload = () => {
   const selectedRows = (stats.value.department_stats || []).map((item: any) => [
@@ -1642,7 +1695,14 @@ const buildMockExportPayload = () => {
     meta: [
       ['当前维度', dimensionLabel.value],
       ['导出时间', new Date().toLocaleString('zh-CN')],
-      ['数据模式', drgMockEnabled.value ? 'Mock 演示模式' : '无 session_id 的演示导出'],
+      [
+        '数据模式',
+        hasUploadedDataset.value
+          ? `模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length}例）`
+          : drgMockEnabled.value
+            ? 'Mock 演示模式'
+            : '无 session_id 的演示导出',
+      ],
     ] as Array<[string, string]>,
     kpis: kpiCards.value.map(
       (card) => [card.label, `${card.value} (${card.hint})`] as [string, string],
@@ -1679,9 +1739,13 @@ const handleExport = async ({ key }: MenuInfo) => {
   const format = formatMap[keyStr]
   if (!format) return
 
-  if (useDemoData.value || !props.sessionId) {
+  if (hasUploadedDataset.value || useDemoData.value || !props.sessionId) {
     exportDrgMockReport(keyStr as DrgExportFormat, buildMockExportPayload())
-    message.warning(`当前缺少 session_id，已导出 ${format.name} 演示报告`)
+    if (hasUploadedDataset.value) {
+      message.success(`已导出 ${format.name} 模板数据报告`)
+    } else {
+      message.warning(`当前缺少 session_id，已导出 ${format.name} 演示报告`)
+    }
     return
   }
 

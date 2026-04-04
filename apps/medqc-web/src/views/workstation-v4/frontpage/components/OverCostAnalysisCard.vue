@@ -12,7 +12,11 @@
           {{ dimensionLabel }} 视图
         </span>
       </h3>
-      <a-button size="small" type="link" @click="handleExportReport">
+      <a-button
+        size="small"
+        type="link"
+        @click="handleExportReport"
+      >
         <DownloadOutlined /> 导出分析报告
       </a-button>
     </div>
@@ -29,23 +33,33 @@
         <div class="text-2xl font-bold text-red-600">
           {{ lossCount }}
         </div>
-        <div class="text-xs text-red-500">超费病例</div>
+        <div class="text-xs text-red-500">
+          超费病例
+        </div>
       </div>
       <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 text-center">
         <div class="text-2xl font-bold text-orange-600">
           ¥{{ totalLossAmount.toLocaleString() }}
         </div>
-        <div class="text-xs text-orange-500">超费金额</div>
+        <div class="text-xs text-orange-500">
+          超费金额
+        </div>
       </div>
       <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 text-center">
-        <div class="text-2xl font-bold text-yellow-600">{{ avgLossRate.toFixed(1) }}%</div>
-        <div class="text-xs text-yellow-500">平均超费率</div>
+        <div class="text-2xl font-bold text-yellow-600">
+          {{ avgLossRate.toFixed(1) }}%
+        </div>
+        <div class="text-xs text-yellow-500">
+          平均超费率
+        </div>
       </div>
     </div>
 
     <!-- Reason Distribution -->
     <div class="mb-4">
-      <div class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">超费原因分布</div>
+      <div class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+        超费原因分布
+      </div>
       <div class="space-y-2">
         <div
           v-for="reason in reasonDistribution"
@@ -61,14 +75,18 @@
               :style="{ width: `${reason.percentage}%` }"
             />
           </div>
-          <div class="w-12 text-xs text-slate-500 text-right">{{ reason.count }}例</div>
+          <div class="w-12 text-xs text-slate-500 text-right">
+            {{ reason.count }}例
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Top Loss Cases -->
     <div>
-      <div class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">亏损TOP5病例</div>
+      <div class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+        亏损TOP5病例
+      </div>
       <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
         <div
           v-for="item in topLossCases"
@@ -93,9 +111,16 @@
     <div
       class="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800"
     >
-      <div class="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">瓶颈报告</div>
+      <div class="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
+        瓶颈报告
+      </div>
       <ul class="text-xs text-blue-600/80 dark:text-blue-400/80 space-y-1">
-        <li v-for="item in recommendations" :key="item">• {{ item }}</li>
+        <li
+          v-for="item in recommendations"
+          :key="item"
+        >
+          • {{ item }}
+        </li>
       </ul>
     </div>
   </div>
@@ -106,7 +131,7 @@ import { computed } from 'vue'
 import { ExclamationCircleOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 
-type DimensionKey = 'hospital' | 'department' | 'ward' | 'chief_group' | 'doctor'
+type DimensionKey = 'hospital' | 'department' | 'ward' | 'chief_group' | 'person'
 
 const props = defineProps<{
   batchId?: string
@@ -226,7 +251,7 @@ const reportLibrary: Record<DimensionKey, ReportScenario> = {
       '把耗材与耗时的差异同步纳入组内对标。',
     ],
   },
-  doctor: {
+  person: {
     summary: { lossCount: 9, totalLossAmount: 82000, avgLossRate: 7.6 },
     reasonDistribution: [
       { type: 'coding', label: '个人编码问题', count: 4, percentage: 44, color: 'bg-red-500' },
@@ -259,7 +284,7 @@ const dimensionLabel = computed(
       department: '科室分析',
       ward: '病区分析',
       chief_group: '主诊医师组',
-      doctor: '个人',
+      person: '个人',
     }[currentDimension.value],
 )
 
