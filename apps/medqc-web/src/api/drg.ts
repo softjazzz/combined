@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 /**
  * DRG 模块 API 服务
  * 支持 Mock 模式和真实 API 模式切换
@@ -37,6 +37,8 @@ import {
 import { suggestICDCodes, searchICD10Codes, searchICD9Procedures } from '../data/drg/mock-icd-codes'
 
 import { mockAnalysisData } from '../data/drg/mock-analysis'
+
+import { useDrgDatasetStore } from '@/stores/drgDataset'
 
 // 配置：是否使用 Mock 数据
 const USE_MOCK_DATA = (import.meta as any).env?.VITE_USE_DRG_MOCK !== 'false' // 默认使用 Mock；设置为 "false" 可切到真实 API
@@ -511,6 +513,12 @@ export async function getAnalysisData(params: {
   doctor?: string
 }): Promise<AnalysisDataResponse> {
   if (USE_MOCK_DATA) {
+    // 优先使用上传的模板数据进行实时聚合
+    const datasetStore = useDrgDatasetStore()
+    if (datasetStore.hasUploadedData) {
+      return Promise.resolve(datasetStore.getAnalysisResponse(params.dimension))
+    }
+    // 无上传数据 → 回退到原始 Mock
     return Promise.resolve(mockAnalysisData(params.dimension))
   }
 

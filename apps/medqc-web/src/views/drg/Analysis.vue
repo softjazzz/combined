@@ -7,6 +7,9 @@
     />
 
     <div class="content-wrapper">
+      <!-- 数据集管理面板 -->
+      <DatasetUploadPanel @data-changed="loadAnalysisData" />
+
       <!-- 维度与时间筛选 -->
       <a-card
         :bordered="false"
@@ -365,6 +368,7 @@ import type { EChartsOption } from 'echarts'
 import { formatCurrency, getChartColor } from '@/utils/drg'
 import { drgApi } from '@/api/drg'
 import type { AnalysisDimension, AnalysisTableItem } from '@/types/drg-analysis'
+import DatasetUploadPanel from '@/components/drg/DatasetUploadPanel.vue'
 
 // Register ECharts components
 use([
