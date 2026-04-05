@@ -189,10 +189,11 @@ function mapRowToRecord(raw: Record<string, any>): CaseRecord {
     bed_fee: toNum(get('床位费') ?? raw['bed_fee']),
     nursing_fee: toNum(get('护理费') ?? raw['nursing_fee']),
     other_fee: toNum(get('其他费用') ?? raw['other_fee']),
-    drg_code: toStr(get('DRG编码') ?? raw['drg_code']) || undefined,
-    drg_name: toStr(get('DRG名称') ?? raw['drg_name']) || undefined,
     dip_code: toStr(get('DIP编码') ?? raw['dip_code']) || undefined,
     dip_name: toStr(get('DIP名称') ?? raw['dip_name']) || undefined,
+    dip_score: toNum(get('DIP分值') ?? raw['dip_score']),
+    drg_code: toStr(get('DRG编码') ?? raw['drg_code']) || undefined,
+    drg_name: toStr(get('DRG名称') ?? raw['drg_name']) || undefined,
     weight: toNum(get('权重') ?? raw['weight']),
     baseline_payment: toNum(get('基准支付额') ?? raw['baseline_payment']),
     insurance_payment: toNum(get('医保实际支付') ?? raw['insurance_payment']),
@@ -236,5 +237,5 @@ export async function exportDatasetTemplate(sampleData: CaseRecord[]) {
   XLSX.utils.book_append_sheet(wb, ws, '病案明细')
 
   // 下载
-  XLSX.writeFile(wb, `DRG分析数据模板_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  XLSX.writeFile(wb, `DIP分析数据模板_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

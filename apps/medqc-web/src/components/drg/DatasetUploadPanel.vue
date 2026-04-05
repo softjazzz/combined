@@ -16,7 +16,7 @@
           已加载 <strong>{{ store.meta?.name }}</strong> —
           {{ store.meta?.validCount }} 条有效病案，
           {{ store.meta?.departments.length }} 个科室，
-          {{ store.meta?.drgGroupCount }} 个 DRG 组
+          {{ store.meta?.drgGroupCount }} 个病种组
         </span>
       </template>
     </a-alert>

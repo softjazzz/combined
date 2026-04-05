@@ -1,9 +1,10 @@
 /**
- * DRG 模板样例数据（约 50 条仿真病案明细）
+ * DIP 模板样例数据（约 45 条仿真病案明细）
  *
- * 基于泸县人民医院实际科室结构和 DRG 编码分布设计：
+ * 基于泸县人民医院实际科室结构和 DIP 分组设计：
  * - 6 个科室：呼吸内科、心血管内科、普通外科、骨科、儿科、神经内科
  * - 每科 2 个病区、2 个主诊组、3-5 名医师
+ * - DIP编码采用"主诊断ICD+主手术操作"组合格式
  * - 费用分布参考 2025 年 1-12 月实际数据平均水平
  * - 包含正/负盈亏、已入组/未入组、低风险标志等场景
  */
@@ -11,7 +12,7 @@
 import type { CaseRecord } from '@/types/drg-dataset'
 
 export const templateCases: CaseRecord[] = [
-  // ========== 呼吸内科（10例）==========
+  // ========== 呼吸内科（8例）==========
   {
     admission_id: '202512-0001', patient_name: '王建国', gender: 'M', age: 67,
     department: '呼吸内科专业', ward: '呼吸一病区', attending_group: '慢阻肺组', attending_doctor: '李敏',
@@ -19,7 +20,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'J44.0', primary_diagnosis_name: '慢性阻塞性肺疾病伴急性下呼吸道感染',
     main_procedure_code: '', main_procedure_name: '',
     total_cost: 6350, drug_fee: 2100, material_fee: 380, exam_fee: 1200, treatment_fee: 1800, other_fee: 870,
-    drg_code: 'ER23', drg_name: '慢性阻塞性肺疾病，伴MCC', weight: 0.74, baseline_payment: 5200,
+    dip_code: 'J44.0+综合-治疗性操作', dip_name: '慢阻肺伴急性下呼吸道感染-保守治疗',
+    dip_score: 58, weight: 0.74, baseline_payment: 5200,
     insurance_payment: 4020, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -28,7 +30,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-12-03', discharge_date: '2025-12-09', los: 6, standard_los: 7,
     primary_diagnosis_code: 'J15.9', primary_diagnosis_name: '细菌性肺炎',
     total_cost: 4100, drug_fee: 1500, material_fee: 200, exam_fee: 900, treatment_fee: 1100, other_fee: 400,
-    drg_code: 'ER25', drg_name: '肺炎，不伴MCC', weight: 0.52, baseline_payment: 3600,
+    dip_code: 'J15.9+综合-治疗性操作', dip_name: '细菌性肺炎-保守治疗',
+    dip_score: 42, weight: 0.52, baseline_payment: 3600,
     insurance_payment: 2530, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -37,7 +40,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-12-05', discharge_date: '2025-12-10', los: 5, standard_los: 5,
     primary_diagnosis_code: 'J18.0', primary_diagnosis_name: '支气管肺炎',
     total_cost: 2180, drug_fee: 750, material_fee: 80, exam_fee: 520, treatment_fee: 600, other_fee: 230,
-    drg_code: 'ER27', drg_name: '肺炎（儿童）', weight: 0.38, baseline_payment: 2600,
+    dip_code: 'J18.0+综合-治疗性操作', dip_name: '支气管肺炎-保守治疗',
+    dip_score: 30, weight: 0.38, baseline_payment: 2600,
     insurance_payment: 1230, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -46,7 +50,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-28', discharge_date: '2025-12-06', los: 8, standard_los: 9,
     primary_diagnosis_code: 'J44.1', primary_diagnosis_name: '慢性阻塞性肺疾病伴急性加重',
     total_cost: 7200, drug_fee: 2500, material_fee: 450, exam_fee: 1400, treatment_fee: 2000, other_fee: 850,
-    drg_code: 'ER23', drg_name: '慢性阻塞性肺疾病，伴MCC', weight: 0.74, baseline_payment: 5200,
+    dip_code: 'J44.1+综合-治疗性操作', dip_name: '慢阻肺伴急性加重-保守治疗',
+    dip_score: 58, weight: 0.74, baseline_payment: 5200,
     insurance_payment: 3900, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -55,7 +60,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-20', discharge_date: '2025-11-27', los: 7, standard_los: 9,
     primary_diagnosis_code: 'J44.0', primary_diagnosis_name: '慢性阻塞性肺疾病伴急性下呼吸道感染',
     total_cost: 5800, drug_fee: 1900, material_fee: 320, exam_fee: 1100, treatment_fee: 1700, other_fee: 780,
-    drg_code: 'ER23', drg_name: '慢性阻塞性肺疾病，伴MCC', weight: 0.74, baseline_payment: 5200,
+    dip_code: 'J44.0+综合-治疗性操作', dip_name: '慢阻肺伴急性下呼吸道感染-保守治疗',
+    dip_score: 58, weight: 0.74, baseline_payment: 5200,
     insurance_payment: 3800, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -64,7 +70,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-15', discharge_date: '2025-11-20', los: 5, standard_los: 7,
     primary_diagnosis_code: 'J15.9', primary_diagnosis_name: '细菌性肺炎',
     total_cost: 3800, drug_fee: 1300, material_fee: 180, exam_fee: 850, treatment_fee: 1050, other_fee: 420,
-    drg_code: 'ER25', drg_name: '肺炎，不伴MCC', weight: 0.52, baseline_payment: 3600,
+    dip_code: 'J15.9+综合-治疗性操作', dip_name: '细菌性肺炎-保守治疗',
+    dip_score: 42, weight: 0.52, baseline_payment: 3600,
     insurance_payment: 2400, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -73,7 +80,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-18', discharge_date: '2025-10-28', los: 10, standard_los: 9,
     primary_diagnosis_code: 'J44.0', primary_diagnosis_name: '慢性阻塞性肺疾病伴急性下呼吸道感染',
     total_cost: 8100, drug_fee: 2800, material_fee: 500, exam_fee: 1500, treatment_fee: 2200, other_fee: 1100,
-    drg_code: 'ER23', drg_name: '慢性阻塞性肺疾病，伴MCC', weight: 0.74, baseline_payment: 5200,
+    dip_code: 'J44.0+综合-治疗性操作', dip_name: '慢阻肺伴急性下呼吸道感染-保守治疗',
+    dip_score: 58, weight: 0.74, baseline_payment: 5200,
     insurance_payment: 4000, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -82,10 +90,11 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-10', discharge_date: '2025-10-14', los: 4, standard_los: 7,
     primary_diagnosis_code: 'J18.0', primary_diagnosis_name: '支气管肺炎',
     total_cost: 2800, drug_fee: 900, material_fee: 100, exam_fee: 680, treatment_fee: 780, other_fee: 340,
-    drg_code: 'ER27', drg_name: '肺炎（成人轻症）', weight: 0.38, baseline_payment: 2600,
+    dip_code: 'J18.0+综合-治疗性操作', dip_name: '支气管肺炎-保守治疗',
+    dip_score: 30, weight: 0.38, baseline_payment: 2600,
     insurance_payment: 1600, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
-  // ========== 心血管内科（8例）==========
+  // ========== 心血管内科（6例）==========
   {
     admission_id: '202512-0009', patient_name: '马志强', gender: 'M', age: 62,
     department: '心血管内科专业', ward: '心内一病区', attending_group: '冠心病组', attending_doctor: '冯婉琳',
@@ -93,7 +102,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'I25.1', primary_diagnosis_name: '冠状动脉粥样硬化性心脏病',
     main_procedure_code: '88.5500', main_procedure_name: '冠状动脉造影术',
     total_cost: 8120, drug_fee: 2200, material_fee: 2800, exam_fee: 1200, treatment_fee: 1400, other_fee: 520,
-    drg_code: 'FM15', drg_name: '经皮冠脉诊断性操作', weight: 1.12, baseline_payment: 6800,
+    dip_code: 'I25.1+88.5500', dip_name: '冠心病-冠状动脉造影术',
+    dip_score: 95, weight: 1.12, baseline_payment: 6800,
     insurance_payment: 4510, low_risk_case_flag: 0,
   },
   {
@@ -103,7 +113,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'I25.1', primary_diagnosis_name: '冠状动脉粥样硬化性心脏病',
     main_procedure_code: '88.5500', main_procedure_name: '冠状动脉造影术',
     total_cost: 7320, drug_fee: 1900, material_fee: 2600, exam_fee: 1100, treatment_fee: 1300, other_fee: 420,
-    drg_code: 'FM15', drg_name: '经皮冠脉诊断性操作', weight: 1.12, baseline_payment: 6200,
+    dip_code: 'I25.1+88.5500', dip_name: '冠心病-冠状动脉造影术',
+    dip_score: 95, weight: 1.12, baseline_payment: 6200,
     insurance_payment: 4290, low_risk_case_flag: 0,
   },
   {
@@ -112,7 +123,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-25', discharge_date: '2025-12-03', los: 8, standard_los: 10,
     primary_diagnosis_code: 'I50.0', primary_diagnosis_name: '充血性心力衰竭',
     total_cost: 9500, drug_fee: 3200, material_fee: 1500, exam_fee: 1800, treatment_fee: 2100, other_fee: 900,
-    drg_code: 'FM19', drg_name: '心力衰竭，伴MCC', weight: 1.25, baseline_payment: 8500,
+    dip_code: 'I50.0+综合-治疗性操作', dip_name: '充血性心力衰竭-保守治疗',
+    dip_score: 105, weight: 1.25, baseline_payment: 8500,
     insurance_payment: 5800, low_risk_case_flag: 0,
   },
   {
@@ -121,7 +133,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-10', discharge_date: '2025-11-18', los: 8, standard_los: 10,
     primary_diagnosis_code: 'I50.9', primary_diagnosis_name: '心力衰竭',
     total_cost: 7800, drug_fee: 2600, material_fee: 1200, exam_fee: 1500, treatment_fee: 1800, other_fee: 700,
-    drg_code: 'FM21', drg_name: '心力衰竭，不伴MCC', weight: 0.85, baseline_payment: 6000,
+    dip_code: 'I50.9+综合-治疗性操作', dip_name: '心力衰竭-保守治疗',
+    dip_score: 72, weight: 0.85, baseline_payment: 6000,
     insurance_payment: 4200, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -130,7 +143,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-20', discharge_date: '2025-10-26', los: 6, standard_los: 7,
     primary_diagnosis_code: 'G45.0', primary_diagnosis_name: '短暂性脑缺血发作',
     total_cost: 3350, drug_fee: 1100, material_fee: 300, exam_fee: 800, treatment_fee: 750, other_fee: 400,
-    drg_code: 'BQ11', drg_name: '短暂性脑缺血发作', weight: 0.48, baseline_payment: 3150,
+    dip_code: 'G45.0+综合-治疗性操作', dip_name: '短暂性脑缺血发作-保守治疗',
+    dip_score: 40, weight: 0.48, baseline_payment: 3150,
     insurance_payment: 1940, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -140,10 +154,11 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'I25.1', primary_diagnosis_name: '冠状动脉粥样硬化性心脏病',
     main_procedure_code: '36.0700x001', main_procedure_name: '经皮冠状动脉支架置入术',
     total_cost: 35800, drug_fee: 5200, material_fee: 22000, exam_fee: 3200, treatment_fee: 3500, other_fee: 1900,
-    drg_code: 'FM13', drg_name: '经皮冠脉介入治疗', weight: 2.85, baseline_payment: 28000,
+    dip_code: 'I25.1+36.0700x001', dip_name: '冠心病-经皮冠状动脉支架置入术',
+    dip_score: 240, weight: 2.85, baseline_payment: 28000,
     insurance_payment: 18500, low_risk_case_flag: 0,
   },
-  // ========== 普通外科（8例）==========
+  // ========== 普通外科（5例）==========
   {
     admission_id: '202512-0015', patient_name: '徐明辉', gender: 'M', age: 52,
     department: '普通外科专业', ward: '普外一病区', attending_group: '肿瘤组', attending_doctor: '张华',
@@ -151,7 +166,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'Z51.1', primary_diagnosis_name: '恶性肿瘤化学治疗疗程',
     main_procedure_code: '99.2503', main_procedure_name: '化学药物治疗',
     total_cost: 4850, drug_fee: 2200, material_fee: 600, exam_fee: 800, treatment_fee: 900, other_fee: 350,
-    drg_code: 'QR11', drg_name: '化疗', weight: 0.68, baseline_payment: 4100,
+    dip_code: 'Z51.1+99.2503', dip_name: '恶性肿瘤化疗-化学药物治疗',
+    dip_score: 56, weight: 0.68, baseline_payment: 4100,
     insurance_payment: 3020, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -161,7 +177,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'K80.1', primary_diagnosis_name: '胆囊结石伴胆囊炎',
     main_procedure_code: '51.2300x005', main_procedure_name: '腹腔镜下胆囊切除术',
     total_cost: 12500, drug_fee: 2800, material_fee: 3500, exam_fee: 2200, treatment_fee: 2800, other_fee: 1200,
-    drg_code: 'HC15', drg_name: '胆囊切除术', weight: 1.35, baseline_payment: 9800,
+    dip_code: 'K80.1+51.2300x005', dip_name: '胆囊结石伴胆囊炎-腹腔镜胆囊切除',
+    dip_score: 112, weight: 1.35, baseline_payment: 9800,
     insurance_payment: 7200, low_risk_case_flag: 0,
   },
   {
@@ -171,7 +188,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'Z51.1', primary_diagnosis_name: '恶性肿瘤化学治疗疗程',
     main_procedure_code: '99.2503', main_procedure_name: '化学药物治疗',
     total_cost: 5200, drug_fee: 2500, material_fee: 650, exam_fee: 850, treatment_fee: 850, other_fee: 350,
-    drg_code: 'QR11', drg_name: '化疗', weight: 0.68, baseline_payment: 4100,
+    dip_code: 'Z51.1+99.2503', dip_name: '恶性肿瘤化疗-化学药物治疗',
+    dip_score: 56, weight: 0.68, baseline_payment: 4100,
     insurance_payment: 3100, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -181,7 +199,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'K80.2', primary_diagnosis_name: '胆囊结石不伴胆囊炎',
     main_procedure_code: '51.2300x005', main_procedure_name: '腹腔镜下胆囊切除术',
     total_cost: 11800, drug_fee: 2600, material_fee: 3200, exam_fee: 2100, treatment_fee: 2700, other_fee: 1200,
-    drg_code: 'HC15', drg_name: '胆囊切除术', weight: 1.35, baseline_payment: 9800,
+    dip_code: 'K80.2+51.2300x005', dip_name: '胆囊结石-腹腔镜胆囊切除',
+    dip_score: 112, weight: 1.35, baseline_payment: 9800,
     insurance_payment: 7000, low_risk_case_flag: 0,
   },
   {
@@ -190,10 +209,11 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-09-20', discharge_date: '2025-09-27', los: 7, standard_los: 8,
     primary_diagnosis_code: 'Z51.5', primary_diagnosis_name: '肿瘤支持治疗',
     total_cost: 5280, drug_fee: 2300, material_fee: 700, exam_fee: 900, treatment_fee: 950, other_fee: 430,
-    drg_code: 'QR15', drg_name: '肿瘤支持治疗', weight: 0.62, baseline_payment: 4380,
+    dip_code: 'Z51.5+综合-治疗性操作', dip_name: '肿瘤姑息/支持治疗',
+    dip_score: 52, weight: 0.62, baseline_payment: 4380,
     insurance_payment: 3210, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
-  // ========== 骨科（8例）==========
+  // ========== 骨科（6例）==========
   {
     admission_id: '202512-0020', patient_name: '韩振国', gender: 'M', age: 58,
     department: '骨科专业', ward: '骨科一病区', attending_group: '脊柱组', attending_doctor: '赵鹏',
@@ -201,7 +221,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'M51.1', primary_diagnosis_name: '腰椎间盘突出症',
     main_procedure_code: '80.5100x011', main_procedure_name: '椎间盘切除术',
     total_cost: 18500, drug_fee: 3200, material_fee: 6500, exam_fee: 3000, treatment_fee: 4000, other_fee: 1800,
-    drg_code: 'IC15', drg_name: '脊柱手术，不伴MCC', weight: 2.1, baseline_payment: 15000,
+    dip_code: 'M51.1+80.5100x011', dip_name: '腰椎间盘突出-椎间盘切除术',
+    dip_score: 175, weight: 2.1, baseline_payment: 15000,
     insurance_payment: 10500, low_risk_case_flag: 0,
   },
   {
@@ -211,7 +232,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'S72.0', primary_diagnosis_name: '股骨颈骨折',
     main_procedure_code: '81.5200', main_procedure_name: '人工髋关节置换术',
     total_cost: 32000, drug_fee: 4500, material_fee: 16000, exam_fee: 3800, treatment_fee: 5200, other_fee: 2500,
-    drg_code: 'IE11', drg_name: '髋/膝关节置换', weight: 3.2, baseline_payment: 25000,
+    dip_code: 'S72.0+81.5200', dip_name: '股骨颈骨折-髋关节置换术',
+    dip_score: 268, weight: 3.2, baseline_payment: 25000,
     insurance_payment: 18000, low_risk_case_flag: 0,
   },
   {
@@ -220,7 +242,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-20', discharge_date: '2025-10-28', los: 8, standard_los: 10,
     primary_diagnosis_code: 'M51.1', primary_diagnosis_name: '腰椎间盘突出症',
     total_cost: 3920, drug_fee: 1200, material_fee: 500, exam_fee: 800, treatment_fee: 1000, other_fee: 420,
-    drg_code: 'IC17', drg_name: '腰椎间盘疾病保守治疗', weight: 0.55, baseline_payment: 3700,
+    dip_code: 'M51.1+综合-治疗性操作', dip_name: '腰椎间盘突出-保守治疗',
+    dip_score: 46, weight: 0.55, baseline_payment: 3700,
     insurance_payment: 2470, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -230,7 +253,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'S72.0', primary_diagnosis_name: '股骨颈骨折',
     main_procedure_code: '79.3501', main_procedure_name: '股骨骨折切开复位内固定术',
     total_cost: 22000, drug_fee: 3500, material_fee: 9000, exam_fee: 3200, treatment_fee: 4500, other_fee: 1800,
-    drg_code: 'IE13', drg_name: '股骨骨折手术', weight: 2.5, baseline_payment: 18000,
+    dip_code: 'S72.0+79.3501', dip_name: '股骨颈骨折-切开复位内固定',
+    dip_score: 210, weight: 2.5, baseline_payment: 18000,
     insurance_payment: 12500, low_risk_case_flag: 0,
   },
   {
@@ -239,17 +263,30 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-09-15', discharge_date: '2025-09-22', los: 7, standard_los: 10,
     primary_diagnosis_code: 'T84.0', primary_diagnosis_name: '骨内固定装置感染',
     total_cost: 6710, drug_fee: 2200, material_fee: 1500, exam_fee: 1200, treatment_fee: 1200, other_fee: 610,
-    drg_code: 'IE19', drg_name: '骨内固定并发症', weight: 0.82, baseline_payment: 5600,
+    dip_code: 'T84.0+综合-治疗性操作', dip_name: '骨内固定装置并发症-保守治疗',
+    dip_score: 68, weight: 0.82, baseline_payment: 5600,
     insurance_payment: 3890, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
-  // ========== 儿科（8例）==========
+  {
+    admission_id: '202501-0044', patient_name: '龚秀兰', gender: 'F', age: 75,
+    department: '骨科专业', ward: '骨科二病区', attending_group: '创伤组', attending_doctor: '赵鹏',
+    admission_date: '2025-01-10', discharge_date: '2025-01-22', los: 12, standard_los: 14,
+    primary_diagnosis_code: 'S72.0', primary_diagnosis_name: '股骨颈骨折',
+    main_procedure_code: '81.5200', main_procedure_name: '人工髋关节置换术',
+    total_cost: 33500, drug_fee: 4800, material_fee: 16500, exam_fee: 4000, treatment_fee: 5500, other_fee: 2700,
+    dip_code: 'S72.0+81.5200', dip_name: '股骨颈骨折-髋关节置换术',
+    dip_score: 268, weight: 3.2, baseline_payment: 25000,
+    insurance_payment: 17500, low_risk_case_flag: 0,
+  },
+  // ========== 儿科（5例）==========
   {
     admission_id: '202512-0025', patient_name: '小雨', gender: 'F', age: 3,
     department: '儿科', ward: '儿科一病区', attending_group: '呼吸感染组', attending_doctor: '陈静',
     admission_date: '2025-12-01', discharge_date: '2025-12-05', los: 4, standard_los: 5,
     primary_diagnosis_code: 'J20.9', primary_diagnosis_name: '急性支气管炎',
     total_cost: 1720, drug_fee: 580, material_fee: 60, exam_fee: 400, treatment_fee: 480, other_fee: 200,
-    drg_code: 'ER31', drg_name: '儿科呼吸感染', weight: 0.28, baseline_payment: 2100,
+    dip_code: 'J20.9+综合-治疗性操作', dip_name: '急性支气管炎-保守治疗',
+    dip_score: 22, weight: 0.28, baseline_payment: 2100,
     insurance_payment: 860, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -258,7 +295,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-20', discharge_date: '2025-11-25', los: 5, standard_los: 5,
     primary_diagnosis_code: 'J18.0', primary_diagnosis_name: '支气管肺炎',
     total_cost: 2140, drug_fee: 720, material_fee: 80, exam_fee: 510, treatment_fee: 580, other_fee: 250,
-    drg_code: 'ER33', drg_name: '儿科肺炎', weight: 0.35, baseline_payment: 2550,
+    dip_code: 'J18.0+综合-治疗性操作', dip_name: '支气管肺炎-保守治疗（儿童）',
+    dip_score: 30, weight: 0.35, baseline_payment: 2550,
     insurance_payment: 1090, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -267,7 +305,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-18', discharge_date: '2025-11-22', los: 4, standard_los: 4,
     primary_diagnosis_code: 'A09.9', primary_diagnosis_name: '感染性腹泻',
     total_cost: 1380, drug_fee: 450, material_fee: 50, exam_fee: 320, treatment_fee: 380, other_fee: 180,
-    drg_code: 'GR15', drg_name: '儿科消化感染', weight: 0.25, baseline_payment: 1850,
+    dip_code: 'A09.9+综合-治疗性操作', dip_name: '感染性腹泻-保守治疗',
+    dip_score: 20, weight: 0.25, baseline_payment: 1850,
     insurance_payment: 720, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -276,7 +315,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-12', discharge_date: '2025-10-16', los: 4, standard_los: 5,
     primary_diagnosis_code: 'J20.9', primary_diagnosis_name: '急性支气管炎',
     total_cost: 1650, drug_fee: 550, material_fee: 55, exam_fee: 380, treatment_fee: 460, other_fee: 205,
-    drg_code: 'ER31', drg_name: '儿科呼吸感染', weight: 0.28, baseline_payment: 2100,
+    dip_code: 'J20.9+综合-治疗性操作', dip_name: '急性支气管炎-保守治疗',
+    dip_score: 22, weight: 0.28, baseline_payment: 2100,
     insurance_payment: 850, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -285,17 +325,19 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-05', discharge_date: '2025-10-08', los: 3, standard_los: 4,
     primary_diagnosis_code: 'A09.9', primary_diagnosis_name: '感染性腹泻',
     total_cost: 1200, drug_fee: 400, material_fee: 40, exam_fee: 280, treatment_fee: 320, other_fee: 160,
-    drg_code: 'GR15', drg_name: '儿科消化感染', weight: 0.25, baseline_payment: 1850,
+    dip_code: 'A09.9+综合-治疗性操作', dip_name: '感染性腹泻-保守治疗',
+    dip_score: 20, weight: 0.25, baseline_payment: 1850,
     insurance_payment: 650, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
-  // ========== 神经内科（8例）==========
+  // ========== 神经内科（4例）==========
   {
     admission_id: '202512-0030', patient_name: '范建平', gender: 'M', age: 68,
     department: '神经内科专业', ward: '神内一病区', attending_group: '脑血管组', attending_doctor: '吴明',
     admission_date: '2025-12-01', discharge_date: '2025-12-08', los: 7, standard_los: 10,
     primary_diagnosis_code: 'I63.9', primary_diagnosis_name: '脑梗死',
     total_cost: 6240, drug_fee: 2100, material_fee: 600, exam_fee: 1300, treatment_fee: 1500, other_fee: 740,
-    drg_code: 'BR11', drg_name: '脑梗死，不伴MCC', weight: 0.82, baseline_payment: 5200,
+    dip_code: 'I63.9+综合-治疗性操作', dip_name: '脑梗死-保守治疗',
+    dip_score: 68, weight: 0.82, baseline_payment: 5200,
     insurance_payment: 3690, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -304,7 +346,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-15', discharge_date: '2025-11-22', los: 7, standard_los: 8,
     primary_diagnosis_code: 'G45.0', primary_diagnosis_name: '短暂性脑缺血发作',
     total_cost: 3510, drug_fee: 1150, material_fee: 280, exam_fee: 850, treatment_fee: 800, other_fee: 430,
-    drg_code: 'BQ11', drg_name: '短暂性脑缺血发作', weight: 0.48, baseline_payment: 3250,
+    dip_code: 'G45.0+综合-治疗性操作', dip_name: '短暂性脑缺血发作-保守治疗',
+    dip_score: 40, weight: 0.48, baseline_payment: 3250,
     insurance_payment: 2100, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -313,7 +356,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-05', discharge_date: '2025-11-10', los: 5, standard_los: 7,
     primary_diagnosis_code: 'G40.9', primary_diagnosis_name: '癫痫',
     total_cost: 2860, drug_fee: 1000, material_fee: 200, exam_fee: 650, treatment_fee: 680, other_fee: 330,
-    drg_code: 'BS11', drg_name: '癫痫', weight: 0.42, baseline_payment: 2680,
+    dip_code: 'G40.9+综合-治疗性操作', dip_name: '癫痫-保守治疗',
+    dip_score: 35, weight: 0.42, baseline_payment: 2680,
     insurance_payment: 1710, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -322,17 +366,18 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-10-20', discharge_date: '2025-10-30', los: 10, standard_los: 10,
     primary_diagnosis_code: 'I63.9', primary_diagnosis_name: '脑梗死',
     total_cost: 8500, drug_fee: 2800, material_fee: 800, exam_fee: 1800, treatment_fee: 2000, other_fee: 1100,
-    drg_code: 'BR09', drg_name: '脑梗死，伴MCC', weight: 1.15, baseline_payment: 7200,
+    dip_code: 'I63.9+综合-治疗性操作', dip_name: '脑梗死-保守治疗（重症）',
+    dip_score: 96, weight: 1.15, baseline_payment: 7200,
     insurance_payment: 5100, low_risk_case_flag: 0,
   },
-  // ========== 未入组病例（2例，用于展示未入组场景）==========
+  // ========== 未入组病例（2例）==========
   {
     admission_id: '202512-0034', patient_name: '许强', gender: 'M', age: 50,
     department: '普通外科专业', ward: '普外一病区', attending_group: '肝胆组', attending_doctor: '王刚',
     admission_date: '2025-12-05', discharge_date: '2025-12-08', los: 3,
     primary_diagnosis_code: 'R10.4', primary_diagnosis_name: '其他和未特指的腹痛',
     total_cost: 2800, drug_fee: 800, material_fee: 150, exam_fee: 900, treatment_fee: 650, other_fee: 300,
-    // 未入组：主诊断编码不满足分组条件
+    // 未入组：主诊断为症状体征编码，无法入组
     ungrouped_reason: '主诊断为症状体征编码，无法入组',
   },
   {
@@ -341,17 +386,18 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-11-28', discharge_date: '2025-12-01', los: 3,
     primary_diagnosis_code: 'J06.9', primary_diagnosis_name: '急性上呼吸道感染',
     total_cost: 980, drug_fee: 350, material_fee: 30, exam_fee: 200, treatment_fee: 280, other_fee: 120,
-    // 未入组：成人在儿科住院，DRG分组异常
+    // 未入组：成人在儿科住院，DIP分组异常
     ungrouped_reason: '诊断-年龄-科室不匹配',
   },
-  // ========== 补充病例覆盖更多月份（12例）==========
+  // ========== 补充病例覆盖更多月份（9例）==========
   {
     admission_id: '202509-0036', patient_name: '曹建', gender: 'M', age: 60,
     department: '呼吸内科专业', ward: '呼吸一病区', attending_group: '慢阻肺组', attending_doctor: '李敏',
     admission_date: '2025-09-01', discharge_date: '2025-09-08', los: 7, standard_los: 9,
     primary_diagnosis_code: 'J44.0', primary_diagnosis_name: '慢性阻塞性肺疾病伴急性下呼吸道感染',
     total_cost: 6100, drug_fee: 2000, material_fee: 360, exam_fee: 1150, treatment_fee: 1750, other_fee: 840,
-    drg_code: 'ER23', drg_name: '慢性阻塞性肺疾病，伴MCC', weight: 0.74, baseline_payment: 5200,
+    dip_code: 'J44.0+综合-治疗性操作', dip_name: '慢阻肺伴急性下呼吸道感染-保守治疗',
+    dip_score: 58, weight: 0.74, baseline_payment: 5200,
     insurance_payment: 3900, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -360,7 +406,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-08-10', discharge_date: '2025-08-18', los: 8, standard_los: 10,
     primary_diagnosis_code: 'I50.0', primary_diagnosis_name: '充血性心力衰竭',
     total_cost: 9200, drug_fee: 3100, material_fee: 1400, exam_fee: 1700, treatment_fee: 2050, other_fee: 950,
-    drg_code: 'FM19', drg_name: '心力衰竭，伴MCC', weight: 1.25, baseline_payment: 8500,
+    dip_code: 'I50.0+综合-治疗性操作', dip_name: '充血性心力衰竭-保守治疗',
+    dip_score: 105, weight: 1.25, baseline_payment: 8500,
     insurance_payment: 5600, low_risk_case_flag: 0,
   },
   {
@@ -369,7 +416,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-07-05', discharge_date: '2025-07-12', los: 7, standard_los: 10,
     primary_diagnosis_code: 'M51.1', primary_diagnosis_name: '腰椎间盘突出症',
     total_cost: 3650, drug_fee: 1100, material_fee: 450, exam_fee: 750, treatment_fee: 950, other_fee: 400,
-    drg_code: 'IC17', drg_name: '腰椎间盘疾病保守治疗', weight: 0.55, baseline_payment: 3700,
+    dip_code: 'M51.1+综合-治疗性操作', dip_name: '腰椎间盘突出-保守治疗',
+    dip_score: 46, weight: 0.55, baseline_payment: 3700,
     insurance_payment: 2300, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -378,7 +426,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-06-15', discharge_date: '2025-06-24', los: 9, standard_los: 10,
     primary_diagnosis_code: 'I63.9', primary_diagnosis_name: '脑梗死',
     total_cost: 7100, drug_fee: 2400, material_fee: 700, exam_fee: 1500, treatment_fee: 1700, other_fee: 800,
-    drg_code: 'BR11', drg_name: '脑梗死，不伴MCC', weight: 0.82, baseline_payment: 5200,
+    dip_code: 'I63.9+综合-治疗性操作', dip_name: '脑梗死-保守治疗',
+    dip_score: 68, weight: 0.82, baseline_payment: 5200,
     insurance_payment: 3600, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -388,7 +437,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'Z51.1', primary_diagnosis_name: '恶性肿瘤化学治疗疗程',
     main_procedure_code: '99.2503', main_procedure_name: '化学药物治疗',
     total_cost: 4900, drug_fee: 2300, material_fee: 580, exam_fee: 820, treatment_fee: 860, other_fee: 340,
-    drg_code: 'QR11', drg_name: '化疗', weight: 0.68, baseline_payment: 4100,
+    dip_code: 'Z51.1+99.2503', dip_name: '恶性肿瘤化疗-化学药物治疗',
+    dip_score: 56, weight: 0.68, baseline_payment: 4100,
     insurance_payment: 2900, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -397,7 +447,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-04-08', discharge_date: '2025-04-12', los: 4, standard_los: 4,
     primary_diagnosis_code: 'A09.9', primary_diagnosis_name: '感染性腹泻',
     total_cost: 1450, drug_fee: 480, material_fee: 55, exam_fee: 340, treatment_fee: 390, other_fee: 185,
-    drg_code: 'GR15', drg_name: '儿科消化感染', weight: 0.25, baseline_payment: 1850,
+    dip_code: 'A09.9+综合-治疗性操作', dip_name: '感染性腹泻-保守治疗',
+    dip_score: 20, weight: 0.25, baseline_payment: 1850,
     insurance_payment: 750, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
   {
@@ -407,7 +458,8 @@ export const templateCases: CaseRecord[] = [
     primary_diagnosis_code: 'I25.1', primary_diagnosis_name: '冠状动脉粥样硬化性心脏病',
     main_procedure_code: '88.5500', main_procedure_name: '冠状动脉造影术',
     total_cost: 7800, drug_fee: 2000, material_fee: 2500, exam_fee: 1100, treatment_fee: 1350, other_fee: 850,
-    drg_code: 'FM15', drg_name: '经皮冠脉诊断性操作', weight: 1.12, baseline_payment: 6200,
+    dip_code: 'I25.1+88.5500', dip_name: '冠心病-冠状动脉造影术',
+    dip_score: 95, weight: 1.12, baseline_payment: 6200,
     insurance_payment: 4100, low_risk_case_flag: 0,
   },
   {
@@ -416,18 +468,9 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-02-05', discharge_date: '2025-02-10', los: 5, standard_los: 7,
     primary_diagnosis_code: 'J15.9', primary_diagnosis_name: '细菌性肺炎',
     total_cost: 3950, drug_fee: 1400, material_fee: 190, exam_fee: 880, treatment_fee: 1080, other_fee: 400,
-    drg_code: 'ER25', drg_name: '肺炎，不伴MCC', weight: 0.52, baseline_payment: 3600,
+    dip_code: 'J15.9+综合-治疗性操作', dip_name: '细菌性肺炎-保守治疗',
+    dip_score: 42, weight: 0.52, baseline_payment: 3600,
     insurance_payment: 2450, low_risk_case_flag: 1, low_risk_death_flag: 0,
-  },
-  {
-    admission_id: '202501-0044', patient_name: '龚秀兰', gender: 'F', age: 75,
-    department: '骨科专业', ward: '骨科二病区', attending_group: '创伤组', attending_doctor: '赵鹏',
-    admission_date: '2025-01-10', discharge_date: '2025-01-22', los: 12, standard_los: 14,
-    primary_diagnosis_code: 'S72.0', primary_diagnosis_name: '股骨颈骨折',
-    main_procedure_code: '81.5200', main_procedure_name: '人工髋关节置换术',
-    total_cost: 33500, drug_fee: 4800, material_fee: 16500, exam_fee: 4000, treatment_fee: 5500, other_fee: 2700,
-    drg_code: 'IE11', drg_name: '髋/膝关节置换', weight: 3.2, baseline_payment: 25000,
-    insurance_payment: 17500, low_risk_case_flag: 0,
   },
   {
     admission_id: '202501-0045', patient_name: '童志刚', gender: 'M', age: 58,
@@ -435,7 +478,8 @@ export const templateCases: CaseRecord[] = [
     admission_date: '2025-01-15', discharge_date: '2025-01-21', los: 6, standard_los: 7,
     primary_diagnosis_code: 'G40.9', primary_diagnosis_name: '癫痫',
     total_cost: 3100, drug_fee: 1100, material_fee: 220, exam_fee: 700, treatment_fee: 720, other_fee: 360,
-    drg_code: 'BS11', drg_name: '癫痫', weight: 0.42, baseline_payment: 2680,
+    dip_code: 'G40.9+综合-治疗性操作', dip_name: '癫痫-保守治疗',
+    dip_score: 35, weight: 0.42, baseline_payment: 2680,
     insurance_payment: 1800, low_risk_case_flag: 1, low_risk_death_flag: 0,
   },
 ]

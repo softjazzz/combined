@@ -84,6 +84,8 @@ export interface CaseRecord {
   baseline_payment?: number
   /** 医保实际支付 */
   insurance_payment?: number
+  /** DIP 分值（地区特有，等价于 DRG 的 RW 权重） */
+  dip_score?: number
 
   // === 质量标志 ===
   /** 低风险组标志（0=否, 1=是）；需要模板显式提供 */
@@ -176,10 +178,11 @@ export const TEMPLATE_COLUMNS: TemplateColumn[] = [
   { key: 'bed_fee', header: '床位费', required: false },
   { key: 'nursing_fee', header: '护理费', required: false },
   { key: 'other_fee', header: '其他费用', required: false },
-  { key: 'drg_code', header: 'DRG编码', required: false },
-  { key: 'drg_name', header: 'DRG名称', required: false },
   { key: 'dip_code', header: 'DIP编码', required: false },
   { key: 'dip_name', header: 'DIP名称', required: false },
+  { key: 'dip_score', header: 'DIP分值', required: false },
+  { key: 'drg_code', header: 'DRG编码', required: false },
+  { key: 'drg_name', header: 'DRG名称', required: false },
   { key: 'weight', header: '权重', required: false },
   { key: 'baseline_payment', header: '基准支付额', required: false },
   { key: 'insurance_payment', header: '医保实际支付', required: false },
