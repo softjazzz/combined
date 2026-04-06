@@ -41,26 +41,26 @@
     </transition>
     <!-- 1. 顶部 Pro 风格信息头 -->
     <div
-      class="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-900 to-slate-800 p-6 shadow-xl shadow-slate-900/20"
+      class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-blue-50 to-slate-50 p-6 shadow-sm"
     >
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div
-            class="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-blue-100"
+            class="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-medium text-blue-700"
           >
             <ThunderboltOutlined />
             运行病历 · Pro 控台
           </div>
-          <h2 class="text-2xl font-bold tracking-tight text-white">
+          <h2 class="text-2xl font-bold tracking-tight text-slate-800">
             运行病历质控中心
           </h2>
-          <p class="mt-1 text-sm text-blue-100/90">
+          <p class="mt-1 text-sm text-slate-600">
             统一管理质控任务、缺陷处理与整改闭环
           </p>
         </div>
         <div class="flex items-center gap-2">
           <a-button
-            class="!h-9 !rounded-xl !border-white/40 !bg-white/10 !text-white hover:!border-white hover:!bg-white/20"
+            class="!h-9 !rounded-xl !border-slate-200 !bg-white !text-slate-700 hover:!border-slate-300 hover:!bg-slate-50"
             @click="handleRefresh"
           >
             <ReloadOutlined :spin="loading" />
@@ -78,51 +78,51 @@
       </div>
 
       <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div class="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
-          <div class="text-xs text-blue-100/80">
+        <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div class="text-xs text-slate-500">
             今日待审核
           </div>
           <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-white">
+            <div class="text-2xl font-bold text-slate-800">
               {{ overviewStats.pending_count || 0 }}
             </div>
-            <ClockCircleOutlined class="text-base text-blue-200" />
+            <ClockCircleOutlined class="text-base text-blue-500" />
           </div>
         </div>
         <button
-          class="rounded-xl border border-rose-200/30 bg-rose-500/15 p-3 text-left backdrop-blur-sm transition hover:bg-rose-500/20"
+          class="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-left transition hover:bg-rose-50"
           @click="handleQuickFilter('critical')"
         >
-          <div class="text-xs text-rose-100/90">
+          <div class="text-xs text-rose-500">
             高风险病历
           </div>
           <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-rose-50">
+            <div class="text-2xl font-bold text-rose-600">
               {{ overviewStats.defects_by_severity?.critical || 0 }}
             </div>
-            <AlertOutlined class="text-base text-rose-100" />
+            <AlertOutlined class="text-base text-rose-500" />
           </div>
         </button>
-        <div class="rounded-xl border border-emerald-200/30 bg-emerald-500/15 p-3 backdrop-blur-sm">
-          <div class="text-xs text-emerald-100/90">
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-sm">
+          <div class="text-xs text-emerald-600">
             审核通过率
           </div>
           <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-emerald-50">
+            <div class="text-2xl font-bold text-emerald-600">
               {{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%
             </div>
-            <CheckCircleOutlined class="text-base text-emerald-100" />
+            <CheckCircleOutlined class="text-base text-emerald-500" />
           </div>
         </div>
-        <div class="rounded-xl border border-indigo-200/30 bg-indigo-500/15 p-3 backdrop-blur-sm">
-          <div class="text-xs text-indigo-100/90">
+        <div class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 shadow-sm">
+          <div class="text-xs text-indigo-600">
             总缺陷数
           </div>
           <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-indigo-50">
+            <div class="text-2xl font-bold text-indigo-600">
               {{ overviewStats.total_defects || 0 }}
             </div>
-            <ThunderboltOutlined class="text-base text-indigo-100" />
+            <ThunderboltOutlined class="text-base text-indigo-500" />
           </div>
         </div>
       </div>
