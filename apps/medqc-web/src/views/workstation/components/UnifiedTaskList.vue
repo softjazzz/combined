@@ -2,14 +2,11 @@
   <div class="flex flex-col flex-1 min-h-0 bg-white">
     <!-- 列表主体 -->
     <div
-      v-if="urgentTasks.length || normalTasks.length"
+      v-if="urgentTasks.length"
       class="flex-1 overflow-y-auto custom-scrollbar"
     >
       <!-- 紧急组 - P0/P1 -->
-      <div
-        v-if="urgentTasks.length"
-        class="mb-4"
-      >
+      <div class="mb-4">
         <!-- 去掉夸张的红背景，使用极简的实线分割及左侧红杠标示 -->
         <div
           class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-3"
@@ -29,34 +26,6 @@
         <div class="flex flex-col">
           <UnifiedTaskRow
             v-for="task in urgentTasks"
-            :key="task.id"
-            :task="task"
-            :expanded-id="expandedId"
-            :format-date-time="formatDateTime"
-            @open="emit('open', $event)"
-            @toggle-expand="toggleExpand"
-          />
-        </div>
-      </div>
-
-      <!-- 常规组 -->
-      <div v-if="normalTasks.length">
-        <div
-          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-3"
-        >
-          <div class="flex items-center gap-2">
-            <span class="h-1.5 w-1.5 rounded-full bg-blue-400" />
-            <span class="text-[12.5px] font-extrabold text-slate-800 tracking-wide">
-              常规待办
-            </span>
-          </div>
-          <span class="text-[11.5px] font-medium text-slate-400">
-            {{ normalTasks.length }} 项
-          </span>
-        </div>
-        <div class="flex flex-col">
-          <UnifiedTaskRow
-            v-for="task in normalTasks"
             :key="task.id"
             :task="task"
             :expanded-id="expandedId"
@@ -111,10 +80,10 @@
         </svg>
       </div>
       <div class="text-[15px] font-semibold text-slate-800">
-        所有任务处理完毕
+        当前无最高优先级任务
       </div>
       <div class="text-[13px] text-slate-400 mt-1">
-        喝杯咖啡，休息一下吧
+        仅展示 P0/P1 常规待办已隐藏
       </div>
     </div>
   </div>
@@ -169,5 +138,4 @@ function sortedGroup(items: UnifiedTaskItem[]): UnifiedTaskItem[] {
 }
 
 const urgentTasks = computed(() => sortedGroup(props.tasks.filter(isUrgent)))
-const normalTasks = computed(() => sortedGroup(props.tasks.filter((t) => !isUrgent(t))))
 </script>
