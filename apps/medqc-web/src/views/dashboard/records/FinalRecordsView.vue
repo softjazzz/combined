@@ -79,12 +79,8 @@
     <div
       class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
     >
-      <!-- 工具栏 Header -->
-      <div
-        class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-      >
-        <!-- 左侧：搜索与筛选 -->
-        <div class="flex items-center gap-3 flex-1">
+      <ProQueryBar>
+        <template #filters>
           <div class="relative">
             <a-input
               v-model:value="searchKeyword"
@@ -134,53 +130,54 @@
             class="!rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400"
             :bordered="false"
           />
-        </div>
+        </template>
 
-        <!-- 右侧：操作按钮 -->
-        <div class="flex items-center gap-3">
-          <a-button
-            class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
-            @click="openCustomQCExperience()"
-          >
-            自定义质控体验
-          </a-button>
-
-          <a-button
-            type="primary"
-            class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
-            @click="handleBatchArchive"
-          >
-            <FolderOutlined /> 批量归档
-          </a-button>
-
-          <a-button
-            class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1"
-            @click="handleExport"
-          >
-            <DownloadOutlined /> 导出
-          </a-button>
-
-          <a-tooltip title="刷新数据">
+        <template #actions>
+          <ProTableToolbar>
             <a-button
-              class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
-              @click="handleRefresh"
+              class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
+              @click="openCustomQCExperience()"
             >
-              <ReloadOutlined :spin="loading" />
+              自定义质控体验
             </a-button>
-          </a-tooltip>
-        </div>
-      </div>
 
-      <div
-        v-if="stageHint"
-        class="px-6 py-2 text-xs text-blue-700 bg-blue-50/70 border-b border-blue-100"
-      >
-        {{ stageHint }}
-      </div>
+            <a-button
+              type="primary"
+              class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
+              @click="handleBatchArchive"
+            >
+              <FolderOutlined /> 批量归档
+            </a-button>
+
+            <a-button
+              class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1"
+              @click="handleExport"
+            >
+              <DownloadOutlined /> 导出
+            </a-button>
+
+            <a-tooltip title="刷新数据">
+              <a-button
+                class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
+                @click="handleRefresh"
+              >
+                <ReloadOutlined :spin="loading" />
+              </a-button>
+            </a-tooltip>
+          </ProTableToolbar>
+        </template>
+
+        <template
+          v-if="stageHint"
+          #hint
+        >
+          {{ stageHint }}
+        </template>
+      </ProQueryBar>
 
       <!-- 表格区域 -->
       <div class="flex-1 overflow-hidden px-6 py-2">
-        <a-table
+        <ProStandardTable
           :columns="columns"
           :data-source="records"
           :loading="loading"
@@ -349,7 +346,7 @@
               </div>
             </template>
           </template>
-        </a-table>
+        </ProStandardTable>
       </div>
 
       <!-- 底部批量操作栏 (有选中时显示) -->
@@ -420,6 +417,9 @@ import {
   type AdminOverviewStats,
 } from '@/api/qcAdmin'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
+import ProQueryBar from '@/components/pro/ProQueryBar.vue'
+import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
+import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 
 const route = useRoute()
 const router = useRouter()

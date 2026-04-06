@@ -119,12 +119,8 @@
     <div
       class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
     >
-      <!-- 工具栏 Header -->
-      <div
-        class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-      >
-        <!-- 左侧：搜索与筛选 -->
-        <div class="flex items-center gap-3 flex-1">
+      <ProQueryBar>
+        <template #filters>
           <div class="relative">
             <a-input
               v-model:value="queryConditions.searchValue"
@@ -178,85 +174,86 @@
           >
             <FilterOutlined /> 筛选
           </a-button>
-        </div>
+        </template>
 
-        <!-- 右侧：操作按钮 -->
-        <div class="flex items-center gap-3">
-          <div class="flex bg-slate-100 p-1 rounded-lg">
-            <button
-              class="px-3 py-1 rounded-md text-xs font-medium transition-all"
-              :class="
-                currentView === 'records'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              "
-              @click="currentView = 'records'"
-            >
-              <FileTextOutlined class="mr-1" />列表
-            </button>
-            <button
-              class="px-3 py-1 rounded-md text-xs font-medium transition-all"
-              :class="
-                currentView === 'defects'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              "
-              @click="currentView = 'defects'"
-            >
-              <ExclamationCircleOutlined class="mr-1" />缺陷
-            </button>
-            <button
-              class="px-3 py-1 rounded-md text-xs font-medium transition-all"
-              :class="
-                currentView === 'remediation'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              "
-              @click="currentView = 'remediation'"
-            >
-              <CheckCircleOutlined class="mr-1" />整改
-            </button>
-          </div>
+        <template #actions>
+          <ProTableToolbar>
+            <div class="flex bg-slate-100 p-1 rounded-lg">
+              <button
+                class="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                :class="
+                  currentView === 'records'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                "
+                @click="currentView = 'records'"
+              >
+                <FileTextOutlined class="mr-1" />列表
+              </button>
+              <button
+                class="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                :class="
+                  currentView === 'defects'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                "
+                @click="currentView = 'defects'"
+              >
+                <ExclamationCircleOutlined class="mr-1" />缺陷
+              </button>
+              <button
+                class="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                :class="
+                  currentView === 'remediation'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                "
+                @click="currentView = 'remediation'"
+              >
+                <CheckCircleOutlined class="mr-1" />整改
+              </button>
+            </div>
 
-          <a-button
-            class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
-            @click="openCustomQCExperience()"
-          >
-            自定义质控体验
-          </a-button>
-
-          <a-button
-            type="primary"
-            class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
-            @click="showCreateTaskModal = true"
-          >
-            <PlusOutlined /> 新建任务
-          </a-button>
-
-          <a-tooltip title="刷新数据">
             <a-button
-              class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
-              @click="handleRefresh"
+              class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
+              @click="openCustomQCExperience()"
             >
-              <ReloadOutlined :spin="loading" />
+              自定义质控体验
             </a-button>
-          </a-tooltip>
-        </div>
-      </div>
 
-      <div
-        v-if="stageHint"
-        class="px-6 py-2 text-xs text-blue-700 bg-blue-50/70 border-b border-blue-100"
-      >
-        {{ stageHint }}
-      </div>
+            <a-button
+              type="primary"
+              class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
+              @click="showCreateTaskModal = true"
+            >
+              <PlusOutlined /> 新建任务
+            </a-button>
+
+            <a-tooltip title="刷新数据">
+              <a-button
+                class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
+                @click="handleRefresh"
+              >
+                <ReloadOutlined :spin="loading" />
+              </a-button>
+            </a-tooltip>
+          </ProTableToolbar>
+        </template>
+
+        <template
+          v-if="stageHint"
+          #hint
+        >
+          {{ stageHint }}
+        </template>
+      </ProQueryBar>
 
       <!-- 表格区域（仅在病历/缺陷视图时显示） -->
       <div
         v-if="currentView !== 'remediation'"
         class="flex-1 overflow-hidden px-6 py-2"
       >
-        <a-table
+        <ProStandardTable
           :columns="currentColumns"
           :data-source="tableDataSource"
           :loading="loading"
@@ -451,7 +448,7 @@
               </div>
             </template>
           </template>
-        </a-table>
+        </ProStandardTable>
       </div>
 
       <!-- 整改闭环视图 -->
@@ -566,6 +563,9 @@ import {
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import CreateTaskModal from '@/components/qc/CreateTaskModal.vue'
 import RemediationPanel from '@/components/qc/RemediationPanel.vue'
+import ProQueryBar from '@/components/pro/ProQueryBar.vue'
+import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
+import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 import {
   fetchTaskProgress,
   batchCreateRemediation,

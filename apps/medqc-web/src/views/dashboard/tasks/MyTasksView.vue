@@ -120,47 +120,50 @@
     </div>
 
     <!-- 筛选区域 -->
-    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <a-select
-          v-model:value="selectedStatus"
-          placeholder="选择状态"
-          allow-clear
-          class="rounded-lg"
-          :options="statusOptions"
-        />
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 mb-8">
+      <ProQueryBar>
+        <template #filters>
+          <a-select
+            v-model:value="selectedStatus"
+            placeholder="选择状态"
+            allow-clear
+            class="rounded-lg min-w-36"
+            :options="statusOptions"
+          />
 
-        <a-input-search
-          v-model:value="searchKeyword"
-          placeholder="搜索任务名称"
-          allow-clear
-          class="rounded-lg"
-          @search="handleFilter"
-        />
+          <a-input-search
+            v-model:value="searchKeyword"
+            placeholder="搜索任务名称"
+            allow-clear
+            class="rounded-lg min-w-60"
+            @search="handleFilter"
+          />
 
-        <a-range-picker
-          v-model:value="dateRange"
-          class="rounded-lg"
-        />
-
-        <div class="flex space-x-2">
-          <a-button
-            type="primary"
+          <a-range-picker
+            v-model:value="dateRange"
             class="rounded-lg"
-            @click="handleFilter"
-          >
-            <FilterOutlined />
-            筛选
-          </a-button>
-          <a-button
-            class="rounded-lg"
-            @click="handleResetFilter"
-          >
-            <ReloadOutlined />
-            重置
-          </a-button>
-        </div>
-      </div>
+          />
+        </template>
+        <template #actions>
+          <ProTableToolbar>
+            <a-button
+              type="primary"
+              class="rounded-lg"
+              @click="handleFilter"
+            >
+              <FilterOutlined />
+              筛选
+            </a-button>
+            <a-button
+              class="rounded-lg"
+              @click="handleResetFilter"
+            >
+              <ReloadOutlined />
+              重置
+            </a-button>
+          </ProTableToolbar>
+        </template>
+      </ProQueryBar>
     </div>
 
     <!-- 任务列表 -->
@@ -180,7 +183,7 @@
         </a-button>
       </div>
 
-      <a-table
+      <ProStandardTable
         :columns="columns"
         :data-source="tasks"
         :loading="loading"
@@ -236,7 +239,7 @@
             </div>
           </template>
         </template>
-      </a-table>
+      </ProStandardTable>
     </div>
 
     <!-- 任务详情抽屉 -->
@@ -354,6 +357,9 @@ import {
   EditOutlined,
   EyeOutlined,
 } from '@ant-design/icons-vue'
+import ProQueryBar from '@/components/pro/ProQueryBar.vue'
+import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
+import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 
 const router = useRouter()
 
