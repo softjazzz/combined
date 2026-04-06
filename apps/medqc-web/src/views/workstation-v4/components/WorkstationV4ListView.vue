@@ -2,6 +2,58 @@
   <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
       <div class="mx-auto w-full max-w-[1440px]">
+        <div class="workstation-surface-enter mb-4">
+          <section class="wv4-analysis-overview">
+            <div class="wv4-analysis-overview__header">
+              <div>
+                <div class="wv4-analysis-overview__eyebrow">
+                  Workstation / Analysis
+                </div>
+                <h3 class="wv4-analysis-overview__title">
+                  质控工作台总览
+                </h3>
+                <p class="wv4-analysis-overview__subtitle">
+                  以分析视图汇总当前筛选结果，快速定位高风险与处理优先级
+                </p>
+              </div>
+              <div class="wv4-analysis-overview__actions">
+                <a-button
+                  size="small"
+                  class="wv4-analysis-overview__action"
+                  @click="emit('clear-filters')"
+                >
+                  重置
+                </a-button>
+                <a-button
+                  size="small"
+                  class="wv4-analysis-overview__action"
+                  @click="emit('page-change', currentPage)"
+                >
+                  刷新
+                </a-button>
+              </div>
+            </div>
+
+            <div class="wv4-analysis-kpis">
+              <article
+                v-for="card in kpiCards"
+                :key="card.key"
+                class="wv4-analysis-kpi-card"
+              >
+                <div class="wv4-analysis-kpi-card__label">
+                  {{ card.label }}
+                </div>
+                <div class="wv4-analysis-kpi-card__value">
+                  {{ card.value }}
+                </div>
+                <div class="wv4-analysis-kpi-card__desc">
+                  {{ card.desc }}
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
         <div class="workstation-surface-enter">
           <PriorityLane
             :active-group="activePriorityGroup"
@@ -39,6 +91,30 @@
                       <SearchOutlined class="text-slate-400" />
                     </template>
                   </a-input>
+                  <div class="wv4-filter-actions">
+                    <a-button
+                      type="primary"
+                      size="small"
+                      class="wv4-filter-actions__button"
+                      @click="emit('page-change', 1)"
+                    >
+                      查询
+                    </a-button>
+                    <a-button
+                      size="small"
+                      class="wv4-filter-actions__button"
+                      @click="emit('clear-filters')"
+                    >
+                      重置
+                    </a-button>
+                    <a-button
+                      size="small"
+                      class="wv4-filter-actions__button"
+                      @click="emit('page-change', currentPage)"
+                    >
+                      刷新
+                    </a-button>
+                  </div>
                 </div>
 
                 <div class="workbench-dept-row">
@@ -103,6 +179,113 @@
           </div>
         </div>
 
+        <div class="workstation-surface-enter workstation-surface-enter--delay-2 mb-4">
+          <div class="wv4-analysis-split">
+            <a-card
+              size="small"
+              :bordered="false"
+              class="wv4-analysis-split__left"
+            >
+              <template #title>
+                <span class="wv4-analysis-card__title">趋势与分布</span>
+              </template>
+              <a-tabs
+                v-model:active-key="analysisTab"
+                size="small"
+                class="wv4-analysis-tabs"
+              >
+                <a-tab-pane
+                  key="stage"
+                  tab="阶段分布"
+                >
+                  <div class="space-y-3">
+                    <div
+                      v-for="item in stageDistribution"
+                      :key="`stage-${item.label}`"
+                    >
+                      <div class="mb-1.5 flex items-center justify-between text-xs">
+                        <span class="font-medium text-slate-600">{{ item.label }}</span>
+                        <span class="font-semibold text-slate-700">{{ item.count }}</span>
+                      </div>
+                      <a-progress
+                        :percent="item.percent"
+                        :show-info="false"
+                        :stroke-color="item.color"
+                        size="small"
+                      />
+                    </div>
+                  </div>
+                </a-tab-pane>
+                <a-tab-pane
+                  key="workflow"
+                  tab="工作流负载"
+                >
+                  <div class="space-y-3">
+                    <div
+                      v-for="item in workflowLoad"
+                      :key="`workflow-${item.label}`"
+                    >
+                      <div class="mb-1.5 flex items-center justify-between text-xs">
+                        <span class="font-medium text-slate-600">{{ item.label }}</span>
+                        <span class="font-semibold text-slate-700">{{ item.count }}</span>
+                      </div>
+                      <a-progress
+                        :percent="item.percent"
+                        :show-info="false"
+                        stroke-color="#2563eb"
+                        size="small"
+                      />
+                    </div>
+                  </div>
+                </a-tab-pane>
+              </a-tabs>
+            </a-card>
+
+            <a-card
+              size="small"
+              :bordered="false"
+              class="wv4-analysis-split__right"
+            >
+              <template #title>
+                <span class="wv4-analysis-card__title">排行洞察</span>
+              </template>
+              <div class="space-y-4">
+                <div>
+                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    科室风险排行
+                  </div>
+                  <ol class="space-y-2">
+                    <li
+                      v-for="(item, index) in departmentRanking"
+                      :key="`dept-rank-${item.label}`"
+                      class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
+                    >
+                      <span class="truncate text-sm text-slate-700">{{ index + 1 }}. {{ item.label }}</span>
+                      <span class="text-sm font-bold text-slate-800">{{ item.count }}</span>
+                    </li>
+                  </ol>
+                </div>
+
+                <div>
+                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    优先池分组
+                  </div>
+                  <ol class="space-y-2">
+                    <li
+                      v-for="item in priorityGroupRanking"
+                      :key="`group-rank-${item.label}`"
+                      class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
+                    >
+                      <span class="truncate text-sm text-slate-700">{{ item.label }}</span>
+                      <span class="text-sm font-bold text-blue-700">{{ item.count }}</span>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </a-card>
+          </div>
+        </div>
+
         <div class="workstation-surface-enter workstation-surface-enter--delay-2">
           <BatchTablePanel
             :rows="workbenchRows"
@@ -154,9 +337,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { DownOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
 
-import PriorityLane from './workbench/PriorityLane.vue'
+import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import type { DeptInfo } from '../types'
 
@@ -165,20 +349,10 @@ interface StageMetaLike {
   singleActionText: string
 }
 
-interface PriorityGroupLike {
-  key: string
-  label: string
-  count?: number
-}
-
-interface PriorityCardLike {
-  id: string
-}
-
-defineProps<{
+const props = defineProps<{
   activePriorityGroup: string
-  priorityGroups: PriorityGroupLike[]
-  priorityCardsFiltered: PriorityCardLike[]
+  priorityGroups: PriorityGroup[]
+  priorityCardsFiltered: PriorityCard[]
   isStageQueueMode: boolean
   searchText: string
   visibleDepartments: DeptInfo[]
@@ -210,4 +384,125 @@ const emit = defineEmits<{
   'clear-filters': []
   'page-change': [page: number]
 }>()
+
+const analysisTab = ref<'stage' | 'workflow'>('stage')
+
+const totalRows = computed(() =>
+  props.displayServerTotal > 0 ? props.displayServerTotal : props.workbenchRows.length,
+)
+
+const highRiskCount = computed(
+  () =>
+    props.workbenchRows.filter((row) => /(高风险|严重|缺失|超时|失败|异常)/.test(row.riskReason))
+      .length,
+)
+
+const inProgressCount = computed(
+  () =>
+    props.workbenchRows.filter((row) =>
+      /(处理中|进行中|待处理|待审核|待复核|抽取)/.test(row.stageStatus),
+    ).length,
+)
+
+const completedCount = computed(
+  () => props.workbenchRows.filter((row) => /(完成|已完成|终末|通过)/.test(row.stageStatus)).length,
+)
+
+const completionRate = computed(() => {
+  if (totalRows.value <= 0) return 0
+  return Math.round((completedCount.value / totalRows.value) * 100)
+})
+
+const kpiCards = computed(() => [
+  {
+    key: 'total',
+    label: '当前任务总量',
+    value: totalRows.value,
+    desc: '当前筛选范围内病历总数',
+  },
+  {
+    key: 'risk',
+    label: '高风险任务',
+    value: highRiskCount.value,
+    desc: '优先建议立即处理',
+  },
+  {
+    key: 'progress',
+    label: '处理中',
+    value: inProgressCount.value,
+    desc: '正在执行中的任务',
+  },
+  {
+    key: 'rate',
+    label: '完成率',
+    value: `${completionRate.value}%`,
+    desc: '按阶段状态估算闭环率',
+  },
+])
+
+const stageDistribution = computed(() => {
+  const palette = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e']
+  const total = Math.max(props.workbenchRows.length, 1)
+  const map = new Map<string, number>()
+
+  for (const row of props.workbenchRows) {
+    const key = row.stageStatus || '未标注'
+    map.set(key, (map.get(key) || 0) + 1)
+  }
+
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count], index) => ({
+      label,
+      count,
+      percent: Math.round((count / total) * 100),
+      color: palette[index % palette.length],
+    }))
+})
+
+const workflowLoad = computed(() => {
+  const total = Math.max(props.workbenchRows.length, 1)
+  const map = new Map<string, number>()
+
+  const detectWorkflow = (row: WorkbenchRow) => {
+    const text = `${row.riskReason} ${row.stageStatus}`
+    if (/(编码|icd|drg)/i.test(text)) return '编码质控'
+    if (/(首页|frontpage)/i.test(text)) return '首页质控'
+    if (/(结算|费用|settlement)/i.test(text)) return '结算质控'
+    return '综合质控'
+  }
+
+  for (const row of props.workbenchRows) {
+    const key = detectWorkflow(row)
+    map.set(key, (map.get(key) || 0) + 1)
+  }
+
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => ({
+      label,
+      count,
+      percent: Math.round((count / total) * 100),
+    }))
+})
+
+const departmentRanking = computed(() => {
+  const map = new Map<string, number>()
+  for (const row of props.workbenchRows) {
+    const key = row.department || '未分科室'
+    map.set(key, (map.get(key) || 0) + 1)
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count]) => ({ label, count }))
+})
+
+const priorityGroupRanking = computed(() =>
+  [...props.priorityGroups]
+    .map((group) => ({ label: group.label, count: Number(group.count || 0) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5),
+)
 </script>

@@ -47,9 +47,7 @@
         :key="dept"
         :value="dept"
       >
-        {{
-          dept
-        }}
+        {{ dept }}
       </a-select-option>
     </a-select>
 
@@ -73,25 +71,27 @@
       </a-select-option>
     </a-select>
 
-    <div class="h-4 w-px bg-slate-200 mx-1" />
+    <template v-if="showRefresh !== false">
+      <div class="h-4 w-px bg-slate-200 mx-1" />
 
-    <!-- 刷新按钮 -->
-    <button
-      type="button"
-      class="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
-      :disabled="loading"
-      title="刷新数据"
-      @click="emit('refresh')"
-    >
-      <LoadingOutlined
-        v-if="loading"
-        class="text-[13px]"
-      />
-      <ReloadOutlined
-        v-else
-        class="text-[13px]"
-      />
-    </button>
+      <!-- 刷新按钮 -->
+      <button
+        type="button"
+        class="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
+        :disabled="loading"
+        title="刷新数据"
+        @click="emit('refresh')"
+      >
+        <LoadingOutlined
+          v-if="loading"
+          class="text-[13px]"
+        />
+        <ReloadOutlined
+          v-else
+          class="text-[13px]"
+        />
+      </button>
+    </template>
   </div>
 </template>
 
@@ -107,6 +107,7 @@ defineProps<{
   departmentOptions: string[]
   loading: boolean
   disabledFutureDate: (current: Dayjs) => boolean
+  showRefresh?: boolean
 }>()
 
 const emit = defineEmits([

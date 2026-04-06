@@ -45,8 +45,7 @@
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-slate-200 text-slate-500',
                   ]"
-                  >{{ dept.total }}</span
-                >
+                >{{ dept.total }}</span>
               </button>
 
               <a-dropdown
@@ -75,8 +74,7 @@
                         <span class="truncate font-medium text-slate-700">{{ dept.name }}</span>
                         <span
                           class="rounded bg-slate-100 px-1.5 text-[11px] font-bold text-slate-500 font-mono"
-                          >{{ dept.total }}</span
-                        >
+                        >{{ dept.total }}</span>
                       </div>
                     </a-menu-item>
                   </a-menu>
@@ -130,7 +128,10 @@
           </div>
         </div>
 
-        <div v-if="displayServerTotalPages > 1" class="mt-4 flex justify-center py-4">
+        <div
+          v-if="displayServerTotalPages > 1"
+          class="mt-4 flex justify-center py-4"
+        >
           <a-pagination
             :current="currentPage"
             :total="displayServerTotal"
@@ -149,7 +150,7 @@
 <script setup lang="ts">
 import { DownOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
 
-import PriorityLane from './workbench/PriorityLane.vue'
+import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import type { DeptInfo } from '../types'
 
@@ -158,20 +159,10 @@ interface StageMetaLike {
   singleActionText: string
 }
 
-interface PriorityGroupLike {
-  key: string
-  label: string
-  count?: number
-}
-
-interface PriorityCardLike {
-  id: string
-}
-
 defineProps<{
   activePriorityGroup: string
-  priorityGroups: PriorityGroupLike[]
-  priorityCardsFiltered: PriorityCardLike[]
+  priorityGroups: PriorityGroup[]
+  priorityCardsFiltered: PriorityCard[]
   isStageQueueMode: boolean
   searchText: string
   visibleDepartments: DeptInfo[]
