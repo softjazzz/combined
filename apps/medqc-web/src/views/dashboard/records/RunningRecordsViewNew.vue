@@ -39,78 +39,91 @@
         </div>
       </div>
     </transition>
-    <!-- 1. 顶部 KPI 概览卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
+    <!-- 1. 顶部 Pro 风格信息头 -->
+    <div
+      class="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-900 to-slate-800 p-6 shadow-xl shadow-slate-900/20"
+    >
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
+          <div
+            class="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-blue-100"
+          >
+            <ThunderboltOutlined />
+            运行病历 · Pro 控台
+          </div>
+          <h2 class="text-2xl font-bold tracking-tight text-white">
+            运行病历质控中心
+          </h2>
+          <p class="mt-1 text-sm text-blue-100/90">
+            统一管理质控任务、缺陷处理与整改闭环
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a-button
+            class="!h-9 !rounded-xl !border-white/40 !bg-white/10 !text-white hover:!border-white hover:!bg-white/20"
+            @click="handleRefresh"
+          >
+            <ReloadOutlined :spin="loading" />
+            刷新
+          </a-button>
+          <a-button
+            type="primary"
+            class="!h-9 !rounded-xl !border-0 !bg-emerald-500 !text-white hover:!bg-emerald-400"
+            @click="showCreateTaskModal = true"
+          >
+            <PlusOutlined />
+            新建任务
+          </a-button>
+        </div>
+      </div>
+
+      <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div class="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
+          <div class="text-xs text-blue-100/80">
             今日待审核
           </div>
-          <div class="text-2xl font-bold text-slate-800 font-mono">
-            {{ overviewStats.pending_count || 0 }}
+          <div class="mt-1 flex items-end justify-between">
+            <div class="text-2xl font-bold text-white">
+              {{ overviewStats.pending_count || 0 }}
+            </div>
+            <ClockCircleOutlined class="text-base text-blue-200" />
           </div>
         </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform"
+        <button
+          class="rounded-xl border border-rose-200/30 bg-rose-500/15 p-3 text-left backdrop-blur-sm transition hover:bg-rose-500/20"
+          @click="handleQuickFilter('critical')"
         >
-          <ClockCircleOutlined class="text-lg" />
-        </div>
-      </div>
-
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all cursor-pointer"
-        @click="handleQuickFilter('critical')"
-      >
-        <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
+          <div class="text-xs text-rose-100/90">
             高风险病历
           </div>
-          <div class="text-2xl font-bold text-rose-600 font-mono">
-            {{ overviewStats.defects_by_severity?.critical || 0 }}
+          <div class="mt-1 flex items-end justify-between">
+            <div class="text-2xl font-bold text-rose-50">
+              {{ overviewStats.defects_by_severity?.critical || 0 }}
+            </div>
+            <AlertOutlined class="text-base text-rose-100" />
           </div>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <AlertOutlined class="text-lg" />
-        </div>
-      </div>
-
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
-        <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
+        </button>
+        <div class="rounded-xl border border-emerald-200/30 bg-emerald-500/15 p-3 backdrop-blur-sm">
+          <div class="text-xs text-emerald-100/90">
             审核通过率
           </div>
-          <div class="text-2xl font-bold text-emerald-600 font-mono">
-            {{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%
+          <div class="mt-1 flex items-end justify-between">
+            <div class="text-2xl font-bold text-emerald-50">
+              {{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%
+            </div>
+            <CheckCircleOutlined class="text-base text-emerald-100" />
           </div>
         </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <CheckCircleOutlined class="text-lg" />
-        </div>
-      </div>
-
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
-        <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
+        <div class="rounded-xl border border-indigo-200/30 bg-indigo-500/15 p-3 backdrop-blur-sm">
+          <div class="text-xs text-indigo-100/90">
             总缺陷数
           </div>
-          <div class="text-2xl font-bold text-indigo-600 font-mono">
-            {{ overviewStats.total_defects || 0 }}
+          <div class="mt-1 flex items-end justify-between">
+            <div class="text-2xl font-bold text-indigo-50">
+              {{ overviewStats.total_defects || 0 }}
+            </div>
+            <ThunderboltOutlined class="text-base text-indigo-100" />
           </div>
-        </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <ThunderboltOutlined class="text-lg" />
         </div>
       </div>
     </div>
@@ -178,6 +191,20 @@
 
         <template #actions>
           <ProTableToolbar>
+            <a-button
+              type="primary"
+              class="!h-9 !rounded-xl"
+              @click="handleQuery"
+            >
+              查询
+            </a-button>
+            <a-button
+              class="!h-9 !rounded-xl !border-slate-200"
+              @click="handleResetQuery"
+            >
+              重置
+            </a-button>
+
             <div class="flex bg-slate-100 p-1 rounded-lg">
               <button
                 class="px-3 py-1 rounded-md text-xs font-medium transition-all"
@@ -220,23 +247,6 @@
             >
               自定义质控体验
             </a-button>
-
-            <a-button
-              type="primary"
-              class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
-              @click="showCreateTaskModal = true"
-            >
-              <PlusOutlined /> 新建任务
-            </a-button>
-
-            <a-tooltip title="刷新数据">
-              <a-button
-                class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
-                @click="handleRefresh"
-              >
-                <ReloadOutlined :spin="loading" />
-              </a-button>
-            </a-tooltip>
           </ProTableToolbar>
         </template>
 
@@ -247,6 +257,50 @@
           {{ stageHint }}
         </template>
       </ProQueryBar>
+
+      <div
+        v-if="currentView !== 'remediation'"
+        class="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-6 py-2.5"
+      >
+        <div class="text-xs text-slate-500">
+          共 <span class="font-semibold text-slate-700">{{ pagination.total }}</span> 条记录
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            class="rounded-full border px-3 py-1 text-xs transition"
+            :class="
+              activeStatusFilter === 'all'
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+            "
+            @click="applyStatusFilter('all')"
+          >
+            全部状态
+          </button>
+          <button
+            class="rounded-full border px-3 py-1 text-xs transition"
+            :class="
+              activeStatusFilter === 'pending'
+                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+            "
+            @click="applyStatusFilter('pending')"
+          >
+            待处理
+          </button>
+          <button
+            class="rounded-full border px-3 py-1 text-xs transition"
+            :class="
+              activeStatusFilter === 'reviewing'
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+            "
+            @click="applyStatusFilter('reviewing')"
+          >
+            审核中
+          </button>
+        </div>
+      </div>
 
       <!-- 表格区域（仅在病历/缺陷视图时显示） -->
       <div
@@ -663,6 +717,8 @@ const rowSelection = computed(() => ({
   },
 }))
 
+const activeStatusFilter = computed(() => queryConditions.status || 'all')
+
 // ============= 数据加载 =============
 
 /** 加载 KPI 概览 */
@@ -834,9 +890,24 @@ const handleQuery = () => {
   fetchRecords()
 }
 
+const handleResetQuery = () => {
+  queryConditions.searchValue = ''
+  queryConditions.timeRange = 'recent7'
+  queryConditions.status = 'all'
+  queryConditions.severity = undefined
+  pagination.current = 1
+  fetchRecords()
+}
+
 const handleRefresh = () => {
   fetchRecords()
   loadOverview()
+}
+
+const applyStatusFilter = (status: 'all' | 'pending' | 'reviewing') => {
+  queryConditions.status = status
+  pagination.current = 1
+  fetchRecords()
 }
 
 /** P2: KPI 卡片快速筛选 */
