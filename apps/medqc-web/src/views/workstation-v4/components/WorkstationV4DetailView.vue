@@ -24,36 +24,11 @@
         :documents-loading="documentsLoading"
         :active-doc-type="activeDocType"
         @preview-doc="emit('preview-doc', $event)"
+        @show-concat="emit('show-concat')"
       />
 
-      <a-drawer
-        :open="docDrawerVisible"
-        :title="docDrawerTitle"
-        placement="right"
-        :width="560"
-        :header-style="{
-          borderBottom: '1px solid rgba(148,163,184,0.14)',
-          background:
-            'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)',
-          padding: '16px 18px',
-        }"
-        :body-style="{
-          padding: '16px',
-          background: 'linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%)',
-        }"
-        @update:open="emit('update:docDrawerVisible', $event)"
-      >
-        <div
-          class="rounded-[20px] border border-slate-200/70 bg-white/92 p-4 shadow-[0_8px_18px_rgba(15,23,42,0.045)]"
-        >
-          <pre class="m-0 whitespace-pre-wrap font-sans text-[13px] leading-7 text-slate-700">{{
-            docDrawerContent
-          }}</pre>
-        </div>
-      </a-drawer>
-
       <main
-        class="relative flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] dark:bg-slate-950"
+        class="relative flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)]"
       >
         <div
           class="sticky top-0 z-10 border-b border-slate-200/55 bg-white/40 px-3 pb-1 pt-1 backdrop-blur-xl lg:px-4"
@@ -125,9 +100,6 @@ const props = defineProps<{
   documentsList: DocItem[]
   documentsLoading: boolean
   activeDocType?: string
-  docDrawerVisible: boolean
-  docDrawerTitle: string
-  docDrawerContent: string
   detailMainTab: 'records' | 'frontpage' | 'settlement'
   settlementQcFailed: number
 }>()
@@ -139,7 +111,7 @@ const emit = defineEmits<{
   'open-icd': []
   'generate-frontpage': []
   'preview-doc': [doc: DocItem]
-  'update:docDrawerVisible': [open: boolean]
+  'show-concat': []
   'update:detailMainTab': [tab: 'records' | 'frontpage' | 'settlement']
 }>()
 
@@ -147,8 +119,8 @@ function tabClass(tab: 'records' | 'frontpage' | 'settlement') {
   return [
     'rounded-full border px-4 py-1.5 text-[13px] transition-all cursor-pointer',
     props.detailMainTab === tab
-      ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]'
-      : 'font-medium text-slate-500 border-transparent hover:bg-white/70 hover:text-slate-800',
+      ? 'font-bold text-blue-900 bg-blue-50 border-blue-200 shadow-[0_6px_14px_rgba(37,99,235,0.12)]'
+      : 'font-medium text-slate-500 border-transparent hover:bg-white/75 hover:text-slate-800',
   ]
 }
 </script>

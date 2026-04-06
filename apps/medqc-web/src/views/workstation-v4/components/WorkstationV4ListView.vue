@@ -7,14 +7,21 @@
             <div class="wv4-analysis-overview__header">
               <div>
                 <div class="wv4-analysis-overview__eyebrow">
-                  Workstation / Analysis
+                  {{ overviewEyebrow }}
                 </div>
                 <h3 class="wv4-analysis-overview__title">
-                  质控工作台总览
+                  {{ overviewTitle }}
                 </h3>
                 <p class="wv4-analysis-overview__subtitle">
-                  以分析视图汇总当前筛选结果，快速定位高风险与处理优先级
+                  {{ overviewSubtitle }}
                 </p>
+                <div
+                  v-if="isFrontpageGenerateStage"
+                  class="wv4-stage-context mt-2 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  当前阶段：参考首页生成
+                </div>
               </div>
               <div class="wv4-analysis-overview__actions">
                 <a-button
@@ -54,7 +61,25 @@
           </section>
         </div>
 
-        <div class="workstation-surface-enter">
+        <div
+          v-if="isFrontpageGenerateStage"
+          class="workstation-surface-enter mb-4"
+        >
+          <section class="wv4-stage-notice">
+            <div class="wv4-stage-notice__title">
+              生成指引
+            </div>
+            <div class="wv4-stage-notice__items">
+              <span>优先处理“待生成 / 生成失败”病历，降低阻塞积压。</span>
+              <span>批量生成后可在详情页复核草稿内容，不写入正式首页表。</span>
+            </div>
+          </section>
+        </div>
+
+        <div
+          v-if="!isFrontpageGenerateStage"
+          class="workstation-surface-enter"
+        >
           <PriorityLane
             :active-group="activePriorityGroup"
             class="mb-4"
@@ -82,7 +107,7 @@
                   <a-input
                     :value="searchText"
                     class="workbench-controls__search-input"
-                    placeholder="搜索病案号、姓名、住院号"
+                    :placeholder="searchPlaceholder"
                     size="large"
                     allow-clear
                     @update:value="emit('update:searchText', $event)"
@@ -218,7 +243,7 @@
                 </a-tab-pane>
                 <a-tab-pane
                   key="workflow"
-                  tab="工作流负载"
+                  :tab="analysisSecondaryTabLabel"
                 >
                   <div class="space-y-3">
                     <div
@@ -252,7 +277,7 @@
               <div class="space-y-4">
                 <div>
                   <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    科室风险排行
+                    {{ departmentRankingTitle }}
                   </div>
                   <ol class="space-y-2">
                     <li
@@ -268,12 +293,12 @@
 
                 <div>
                   <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    优先池分组
+                    {{ secondaryRankingTitle }}
                   </div>
                   <ol class="space-y-2">
                     <li
-                      v-for="item in priorityGroupRanking"
-                      :key="`group-rank-${item.label}`"
+                      v-for="item in secondaryRankingData"
+                      :key="`secondary-rank-${item.label}`"
                       class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
                     >
                       <span class="truncate text-sm text-slate-700">{{ item.label }}</span>
@@ -343,8 +368,12 @@ import { DownOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons-v
 import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import type { DeptInfo } from '../types'
+import type { WorkflowStageKey } from '@/types/workflow'
 
 interface StageMetaLike {
+  pageTitle?: string
+  pageDesc?: string
+  tableTitle?: string
   batchActionText: string
   singleActionText: string
 }
@@ -363,6 +392,7 @@ const props = defineProps<{
   tableSummaryText: string
   displayLoading: boolean
   stageMeta: StageMetaLike
+  currentStageFilter?: WorkflowStageKey | ''
   listRecords: unknown[]
   stageEmptyText: string
   displayServerTotalPages: number
@@ -387,9 +417,59 @@ const emit = defineEmits<{
 
 const analysisTab = ref<'stage' | 'workflow'>('stage')
 
+const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
+
+const overviewEyebrow = computed(() =>
+  isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Analysis',
+)
+
+const overviewTitle = computed(() =>
+  isFrontpageGenerateStage.value
+    ? props.stageMeta.pageTitle || '参考首页生成队列'
+    : '质控工作台总览',
+)
+
+const overviewSubtitle = computed(() =>
+  isFrontpageGenerateStage.value
+    ? props.stageMeta.pageDesc || '对待生成病历进行批量生成和阻塞清理，不影响正式首页数据。'
+    : '以分析视图汇总当前筛选结果，快速定位高风险与处理优先级',
+)
+
+const searchPlaceholder = computed(() =>
+  isFrontpageGenerateStage.value
+    ? '搜索病案号、姓名、住院号、生成状态'
+    : '搜索病案号、姓名、住院号',
+)
+
 const totalRows = computed(() =>
   props.displayServerTotal > 0 ? props.displayServerTotal : props.workbenchRows.length,
 )
+
+const pendingGenerateCount = computed(
+  () =>
+    props.workbenchRows.filter((row) => /(待生成|待处理|pending)/i.test(row.stageStatus)).length,
+)
+
+const generatingCount = computed(
+  () =>
+    props.workbenchRows.filter((row) => /(生成中|处理中|running)/i.test(row.stageStatus)).length,
+)
+
+const generatedCount = computed(
+  () =>
+    props.workbenchRows.filter((row) => /(已生成|完成|成功|succeeded)/i.test(row.stageStatus))
+      .length,
+)
+
+const failedGenerateCount = computed(
+  () =>
+    props.workbenchRows.filter((row) => /(失败|异常|错误|failed)/i.test(row.stageStatus)).length,
+)
+
+const failedRate = computed(() => {
+  if (totalRows.value <= 0) return 0
+  return Math.round((failedGenerateCount.value / totalRows.value) * 100)
+})
 
 const highRiskCount = computed(
   () =>
@@ -413,32 +493,61 @@ const completionRate = computed(() => {
   return Math.round((completedCount.value / totalRows.value) * 100)
 })
 
-const kpiCards = computed(() => [
-  {
-    key: 'total',
-    label: '当前任务总量',
-    value: totalRows.value,
-    desc: '当前筛选范围内病历总数',
-  },
-  {
-    key: 'risk',
-    label: '高风险任务',
-    value: highRiskCount.value,
-    desc: '优先建议立即处理',
-  },
-  {
-    key: 'progress',
-    label: '处理中',
-    value: inProgressCount.value,
-    desc: '正在执行中的任务',
-  },
-  {
-    key: 'rate',
-    label: '完成率',
-    value: `${completionRate.value}%`,
-    desc: '按阶段状态估算闭环率',
-  },
-])
+const kpiCards = computed(() =>
+  isFrontpageGenerateStage.value
+    ? [
+        {
+          key: 'total',
+          label: '待生成总量',
+          value: totalRows.value,
+          desc: '当前筛选范围内病历总数',
+        },
+        {
+          key: 'pending',
+          label: '待生成',
+          value: pendingGenerateCount.value,
+          desc: '尚未启动生成任务',
+        },
+        {
+          key: 'running',
+          label: '生成中',
+          value: generatingCount.value,
+          desc: '后台任务执行中',
+        },
+        {
+          key: 'failed-rate',
+          label: '失败占比',
+          value: `${failedRate.value}%`,
+          desc: '需优先排查失败病历',
+        },
+      ]
+    : [
+        {
+          key: 'total',
+          label: '当前任务总量',
+          value: totalRows.value,
+          desc: '当前筛选范围内病历总数',
+        },
+        {
+          key: 'risk',
+          label: '高风险任务',
+          value: highRiskCount.value,
+          desc: '优先建议立即处理',
+        },
+        {
+          key: 'progress',
+          label: '处理中',
+          value: inProgressCount.value,
+          desc: '正在执行中的任务',
+        },
+        {
+          key: 'rate',
+          label: '完成率',
+          value: `${completionRate.value}%`,
+          desc: '按阶段状态估算闭环率',
+        },
+      ],
+)
 
 const stageDistribution = computed(() => {
   const palette = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e']
@@ -464,6 +573,22 @@ const stageDistribution = computed(() => {
 const workflowLoad = computed(() => {
   const total = Math.max(props.workbenchRows.length, 1)
   const map = new Map<string, number>()
+
+  if (isFrontpageGenerateStage.value) {
+    const statusGroups = [
+      { label: '待生成', count: pendingGenerateCount.value },
+      { label: '生成中', count: generatingCount.value },
+      { label: '已生成', count: generatedCount.value },
+      { label: '生成失败', count: failedGenerateCount.value },
+    ]
+    return statusGroups
+      .filter((item) => item.count > 0)
+      .map((item) => ({
+        label: item.label,
+        count: item.count,
+        percent: Math.round((item.count / total) * 100),
+      }))
+  }
 
   const detectWorkflow = (row: WorkbenchRow) => {
     const text = `${row.riskReason} ${row.stageStatus}`
@@ -499,10 +624,38 @@ const departmentRanking = computed(() => {
     .map(([label, count]) => ({ label, count }))
 })
 
+const frontpageRiskRanking = computed(() => {
+  const map = new Map<string, number>()
+  for (const row of props.workbenchRows) {
+    const key = row.riskReason || '其他生成阻塞'
+    map.set(key, (map.get(key) || 0) + 1)
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count]) => ({ label, count }))
+})
+
 const priorityGroupRanking = computed(() =>
   [...props.priorityGroups]
     .map((group) => ({ label: group.label, count: Number(group.count || 0) }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 5),
+)
+
+const analysisSecondaryTabLabel = computed(() =>
+  isFrontpageGenerateStage.value ? '生成状态占比' : '工作流负载',
+)
+
+const departmentRankingTitle = computed(() =>
+  isFrontpageGenerateStage.value ? '待生成科室排行' : '科室风险排行',
+)
+
+const secondaryRankingTitle = computed(() =>
+  isFrontpageGenerateStage.value ? '生成阻塞原因 TopN' : '优先池分组',
+)
+
+const secondaryRankingData = computed(() =>
+  isFrontpageGenerateStage.value ? frontpageRiskRanking.value : priorityGroupRanking.value,
 )
 </script>

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="workstation-shell relative h-full flex overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_48%,#edf2f7_100%)] dark:bg-slate-950"
+    class="workstation-shell relative h-full flex overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_48%,#edf2f7_100%)]"
   >
     <!-- ====== 列表模式 ====== -->
     <template v-if="viewMode === 'list'">
@@ -18,6 +18,7 @@
         :table-summary-text="tableSummaryText"
         :display-loading="displayLoading"
         :stage-meta="stageMeta"
+        :current-stage-filter="currentStageFilter"
         :list-records="listRecords"
         :stage-empty-text="stageEmptyText"
         :display-server-total-pages="displayServerTotalPages"
@@ -51,9 +52,6 @@
           :documents-list="documentsList"
           :documents-loading="documentsLoading"
           :active-doc-type="activeDocType"
-          :doc-drawer-visible="docDrawerVisible"
-          :doc-drawer-title="docDrawerTitle"
-          :doc-drawer-content="docDrawerContent"
           :detail-main-tab="detailMainTab"
           :settlement-qc-failed="settlementQcFailed"
           @back="goBackToList"
@@ -62,7 +60,7 @@
           @open-icd="icdDrawerVisible = true"
           @generate-frontpage="handleGenerateFrontpage"
           @preview-doc="openDocPreview"
-          @update:doc-drawer-visible="docDrawerVisible = $event"
+          @show-concat="showConcatRecord"
           @update:detail-main-tab="detailMainTab = $event"
         >
           <template #records>
@@ -75,6 +73,9 @@
               :concat-total-chars="concatTotalChars"
               :all-concat-sections-expanded="allConcatSectionsExpanded"
               :is-section-expanded="isConcatSectionExpanded"
+              :doc-preview-active="!!activeDocType"
+              :doc-preview-title="docPreviewTitle"
+              :doc-preview-content="docPreviewContent"
               @emr-loaded="handleEmrLoaded"
               @emr-error="handleEmrError"
               @emr-defect-click="handleEmrDefectClick"
@@ -277,6 +278,7 @@ import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
 import { normalizeWorklistItem } from './normalize'
+import { parseDocSortTime, resolveDocDisplayTitle } from './utils/documentDisplay'
 import type {
   PatientRecord,
   DeptInfo,
@@ -582,8 +584,7 @@ async function handleStageRecordAction(record: PatientRecord) {
   openRecord(record)
   await nextTick()
   if (action === 'generate_frontpage') {
-    detailMainTab.value = 'frontpage'
-    handleGenerateFrontpage()
+    detailMainTab.value = 'records'
     return
   }
   if (action === 'qc_coding') {
@@ -890,10 +891,9 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
 // ========== 鐥呭巻鏂囦功棰勮 ==========
 const documentsList = ref<DocItem[]>([])
 const documentsLoading = ref(false)
-const docDrawerVisible = ref(false)
-const docDrawerTitle = ref('')
-const docDrawerContent = ref('')
 const activeDocType = ref<string>('')
+const docPreviewTitle = ref('')
+const docPreviewContent = ref('')
 
 // ========== 璇︽儏涓?Tab ==========
 const detailMainTab = ref<'records' | 'frontpage' | 'settlement'>('records')
@@ -903,6 +903,24 @@ const emrRenderState = ref<'idle' | 'loading' | 'ready' | 'fallback'>('idle')
 // ========== 鐥呭巻璇︽儏锛堟嫾鎺ユ枃涔︼級 ==========
 const concatText = ref('')
 const concatLoading = ref(false)
+
+function buildConcatTextFromDocuments(docs: DocItem[]): string {
+  const available = (docs || []).filter((doc) => doc.has_content && doc.content)
+  if (!available.length) return ''
+  const sorted = [...available].sort((a, b) => {
+    const ta = parseDocSortTime(a.sort_time)
+    const tb = parseDocSortTime(b.sort_time)
+    if (ta !== tb) return ta - tb
+    const ida = String(a.document_id || '')
+    const idb = String(b.document_id || '')
+    return ida.localeCompare(idb, 'zh-CN')
+  })
+  const sep = '='.repeat(40)
+  return sorted
+    .map((doc) => `${sep}\n${resolveDocDisplayTitle(doc, true)}\n${sep}\n\n${doc.content || ''}`)
+    .join('\n\n\n')
+}
+
 const concatSections = computed(() => {
   if (!concatText.value) return []
   const sections: { title: string; content: string }[] = []
@@ -1000,11 +1018,11 @@ function handleGenerateFrontpage() {
     Modal.confirm({
       title: '该患者已有病案首页数据',
       content: '重新生成将覆盖已有的首页数据，是否继续？',
-      okText: '閲嶆柊鐢熸垚',
-      cancelText: '鍙栨秷',
+      okText: '重新生成',
+      cancelText: '取消',
       onOk: () => {
         detailMainTab.value = 'frontpage'
-        generateFrontpage()
+        generateFrontpage({ forceRegenerate: true })
       },
     })
   } else {
@@ -1019,12 +1037,12 @@ const hasExistingSettlement = computed(
 const canGenerateSettlement = computed(() => isDischarged.value && !hasExistingSettlement.value)
 
 const costColumns = [
-  { title: '鏀惰垂绫诲埆', dataIndex: 'type', width: 120 },
-  { title: '绛夌骇', dataIndex: 'level', width: 80 },
-  { title: '瀹炴敹閲戦', dataIndex: 'charge', width: 100 },
-  { title: '鐢茬被', dataIndex: 'class_a_amount', width: 80 },
-  { title: '涔欑被', dataIndex: 'class_b_amount', width: 80 },
-  { title: '鑷垂', dataIndex: 'own_pay_amount', width: 80 },
+  { title: '收费类别', dataIndex: 'type', width: 120 },
+  { title: '等级', dataIndex: 'level', width: 80 },
+  { title: '实收金额', dataIndex: 'charge', width: 100 },
+  { title: '甲类', dataIndex: 'class_a_amount', width: 80 },
+  { title: '乙类', dataIndex: 'class_b_amount', width: 80 },
+  { title: '自费', dataIndex: 'own_pay_amount', width: 80 },
 ]
 
 const settlementBasicFields = computed(() => {
@@ -1032,9 +1050,9 @@ const settlementBasicFields = computed(() => {
   if (!d) return []
   return [
     { label: '患者姓名', value: d.patient_name },
-    { label: '鎬у埆', value: d.patient_sex },
-    { label: '骞撮緞', value: d.patient_age },
-    { label: '鍖讳繚绫诲瀷', value: d.patient_insurance_type || d.insurance_type },
+    { label: '性别', value: d.patient_sex },
+    { label: '年龄', value: d.patient_age },
+    { label: '医保类型', value: d.patient_insurance_type || d.insurance_type },
     { label: '病案号', value: d.mr_no },
     { label: '住院号', value: d.inpat_no },
   ]
@@ -1047,9 +1065,9 @@ const settlementHospFields = computed(() => {
     { label: '入院科室', value: d.admission_dept_name },
     { label: '出院科室', value: d.discharge_dept_name },
     { label: '入院时间', value: d.admission_datetime },
-    { label: '鍑洪櫌鏃堕棿', value: d.discharge_datetime },
+    { label: '出院时间', value: d.discharge_datetime },
     { label: '入院途径', value: d.admission_route },
-    { label: '绂婚櫌鏂瑰紡', value: d.leaving_hospital_way },
+    { label: '离院方式', value: d.leaving_hospital_way },
   ]
 })
 
@@ -1058,28 +1076,13 @@ const settlementInsurFields = computed(() => {
   if (!d) return []
   return [
     { label: '参保地', value: d.insured_place },
-    { label: '涓汉鑷粯', value: d.out_of_pocket_advance },
-    { label: '涓汉鑷垂', value: d.out_of_pocket_amount },
-    { label: '涓汉鐜伴噾鏀粯', value: d.cash_payment_amount },
-    { label: '鍖讳繚鏀粯鏂瑰紡', value: d.insurance_type },
+    { label: '个人自付', value: d.out_of_pocket_advance },
+    { label: '个人自费', value: d.out_of_pocket_amount },
+    { label: '个人现金支付', value: d.cash_payment_amount },
+    { label: '医保支付方式', value: d.insurance_type },
     { label: '结算状态', value: d.settlement_status },
   ]
 })
-
-async function loadConcatText(visitId: string) {
-  concatLoading.value = true
-  concatText.value = ''
-  try {
-    const { data } = await apiClient.get(`/api/medical-records/documents/${visitId}`, {
-      params: { mode: 'concat' },
-    })
-    concatText.value = data.text || ''
-  } catch (err) {
-    console.error('加载病历详情失败:', err)
-  } finally {
-    concatLoading.value = false
-  }
-}
 
 const settlementDataVisitKey = ref('')
 
@@ -1152,11 +1155,11 @@ async function runSettlementQc() {
     const activeDefects =
       Number(persistence.defects_created || 0) + Number(persistence.defects_updated || 0)
     if (activeDefects > 0) {
-      message.success(`鎺ц垂鐩戞祴瀹屾垚锛屽彂鐜?${activeDefects} 鏉￠棶棰樺苟鏇存柊娑堟伅`)
+      message.success(`控费监测完成，发现 ${activeDefects} 条问题并更新消息`)
     } else if (Number(persistence.defects_resolved || 0) > 0) {
       message.success('控费监测完成，未发现问题，已更新最新状态')
     } else {
-      message.success(`鎺ц垂鐩戞祴瀹屾垚: ${data.summary.passed}/${data.summary.total} 閫氳繃`)
+      message.success(`控费监测完成: ${data.summary.passed}/${data.summary.total} 通过`)
     }
   } catch (err) {
     message.error('结算清单质控执行失败')
@@ -1185,25 +1188,38 @@ function openAiProfilePanel() {
 
 async function loadDocuments(visitId: string) {
   documentsLoading.value = true
+  concatLoading.value = true
   documentsList.value = []
+  concatText.value = ''
   try {
     const { data } = await apiClient.get(`/api/medical-records/documents/${visitId}`)
-    // 鍙樉绀烘湁鍐呭鐨勪笌鍓?3 涓牳蹇冩枃涔︾被鍨嬶紙鍗充娇鏃犲唴瀹逛篃灞曠ず锛?
-    const coreTypes = ['admission_record', 'discharge_record', 'surgery_record']
     const docs: DocItem[] = data.documents || []
-    documentsList.value = docs.filter((d: DocItem) => d.has_content || coreTypes.includes(d.type))
+    documentsList.value = docs
+    concatText.value = buildConcatTextFromDocuments(docs)
   } catch (err) {
     console.error('加载病历文书失败:', err)
   } finally {
     documentsLoading.value = false
+    concatLoading.value = false
   }
 }
 
+function docIdentityKey(doc: DocItem) {
+  return `${doc.type || ''}::${doc.document_id || doc.label || ''}`
+}
+
 function openDocPreview(doc: DocItem) {
-  activeDocType.value = doc.type || ''
-  docDrawerTitle.value = doc.label
-  docDrawerContent.value = doc.content || '暂无内容'
-  docDrawerVisible.value = true
+  activeDocType.value = docIdentityKey(doc)
+  docPreviewTitle.value = resolveDocDisplayTitle(doc, true)
+  docPreviewContent.value = doc.content || '暂无内容'
+  detailMainTab.value = 'records'
+}
+
+function showConcatRecord() {
+  activeDocType.value = ''
+  docPreviewTitle.value = ''
+  docPreviewContent.value = ''
+  detailMainTab.value = 'records'
 }
 
 const combinedMedicalText = computed(() =>
@@ -1372,8 +1388,9 @@ watch(selectedId, (newId) => {
   resetPerRecordTransient()
   assistIssues.value = []
   suggestionDrawerVisible.value = false
-  docDrawerVisible.value = false
   activeDocType.value = ''
+  docPreviewTitle.value = ''
+  docPreviewContent.value = ''
   expandedConcatSectionIndexes.value = new Set()
   settlementQcReport.value = null
   detailMainTab.value = pendingDetailMainTab.value || 'records'
@@ -1381,7 +1398,6 @@ watch(selectedId, (newId) => {
   emrRenderState.value = newId ? 'loading' : 'idle'
   if (newId) {
     loadDocuments(newId)
-    loadConcatText(newId)
     void refreshSelectedSnapshots()
     const record = selectedRecord.value || allRecords.value.find((r) => r.id === newId)
     if (record?.patientId) {
@@ -1648,10 +1664,10 @@ function handleJumpEvidenceFromQC(issue: QCIssueLike) {
     message.warning('暂无可跳转的文书依据')
     return
   }
-  activeDocType.value = doc.type || ''
-  docDrawerTitle.value = `依据文书：${doc.label}`
-  docDrawerContent.value = findEvidenceSnippet(issue, doc.content) || doc.content || '暂无内容'
-  docDrawerVisible.value = true
+  activeDocType.value = docIdentityKey(doc)
+  docPreviewTitle.value = `依据文书：${doc.label}`
+  docPreviewContent.value = findEvidenceSnippet(issue, doc.content) || doc.content || '暂无内容'
+  detailMainTab.value = 'records'
 }
 
 function handleEmrLoaded(payload: { content?: string }) {

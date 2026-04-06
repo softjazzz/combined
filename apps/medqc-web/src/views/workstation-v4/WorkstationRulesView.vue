@@ -1,10 +1,25 @@
 <template>
   <div
-    class="rules-shell min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] p-6 md:p-8 font-sans flex flex-col items-center"
+    class="rules-shell min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 pb-6 pt-4 font-sans xl:px-5"
   >
-    <div class="w-full max-w-7xl space-y-6">
+    <div class="mx-auto w-full max-w-[1440px]">
+      <section class="wv4-analysis-overview mb-4">
+        <div class="wv4-analysis-overview__header">
+          <div>
+            <div class="wv4-analysis-overview__eyebrow">
+              Workstation / Rules
+            </div>
+            <h2 class="wv4-analysis-overview__title">
+              规则工作台
+            </h2>
+            <p class="wv4-analysis-overview__subtitle">
+              统一维护编码、首页与结算规则，保持规则库质量和执行一致性。
+            </p>
+          </div>
+        </div>
+      </section>
       <div
-        class="rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]"
+        class="rounded-3xl border border-slate-200/85 bg-white p-4 shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
       >
         <CodingRulesTab v-if="activeTab === 'coding'" />
         <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
@@ -50,8 +65,10 @@ watch(
 <style scoped>
 .rules-shell :deep(.ant-card),
 .rules-shell :deep(.rule-card) {
-  border-radius: 22px;
+  border-radius: 24px;
   border-color: rgba(226, 232, 240, 0.85);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 </style>
+
+<style src="./styles/workstation-v4-view.css"></style>
