@@ -1,278 +1,487 @@
 <template>
-  <div class="min-h-full space-y-3 p-4 text-slate-700">
-    <section
-      class="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm"
-    >
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div class="max-w-3xl">
-          <p class="mb-1 text-[12px] font-bold uppercase tracking-[0.16em] text-blue-500/75">
-            Custom QC Workspace
-          </p>
-          <h1 class="text-[24px] font-black text-slate-800">
-            自定义规则工作台
-          </h1>
-          <p class="mt-1.5 text-[13px] leading-6 text-slate-500">
-            上半部分维护规则，下半部分对终末病历做单条/批量测试。规则配置统一收进右侧抽屉，不再把创建区放在页面顶部。
-          </p>
-        </div>
-
-        <div class="flex min-w-[340px] flex-col gap-3">
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div class="text-[12px] text-slate-400">
-                规则总数
-              </div>
-              <div class="mt-1 text-[20px] font-black text-slate-900">
-                {{ draftPagination.total }}
-              </div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div class="text-[12px] text-slate-400">
-                {{ currentScopeLabel }}
-              </div>
-              <div class="mt-1 text-[20px] font-black text-slate-900">
-                {{ recordPagination.total }}
-              </div>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div class="text-[12px] text-slate-400">
-                最近任务
-              </div>
-              <div class="mt-1 text-[20px] font-black text-slate-900">
-                {{ recentBatchJobCount }}
-              </div>
-            </div>
+  <div
+    class="custom-workspace-page custom-scrollbar min-h-[calc(100vh-64px)] overflow-y-auto px-4 pb-5 pt-4 text-slate-700 xl:px-5"
+  >
+    <div class="mx-auto w-full max-w-[1440px] space-y-4">
+      <section
+        class="cw-analysis-overview workstation-surface-enter rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm"
+      >
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="max-w-3xl">
+            <p
+              class="cw-analysis-overview__eyebrow mb-1 text-[12px] font-bold uppercase tracking-[0.16em] text-blue-500/75"
+            >
+              Custom QC Workspace
+            </p>
+            <h1 class="cw-analysis-overview__title text-[24px] font-black text-slate-800">
+              自定义规则工作台
+            </h1>
+            <p class="cw-analysis-overview__subtitle mt-1.5 text-[13px] leading-6 text-slate-500">
+              上半部分维护规则，下半部分对终末病历做单条/批量测试。规则配置统一收进右侧抽屉，不再把创建区放在页面顶部。
+            </p>
           </div>
 
+          <div class="flex min-w-[340px] flex-col gap-3 xl:max-w-[430px]">
+            <div class="grid grid-cols-3 gap-2">
+              <div class="cw-kpi-card rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div class="text-[12px] text-slate-400">
+                  规则总数
+                </div>
+                <div class="mt-1 text-[20px] font-black text-slate-900">
+                  {{ draftPagination.total }}
+                </div>
+              </div>
+              <div class="cw-kpi-card rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div class="text-[12px] text-slate-400">
+                  {{ currentScopeLabel }}
+                </div>
+                <div class="mt-1 text-[20px] font-black text-slate-900">
+                  {{ recordPagination.total }}
+                </div>
+              </div>
+              <div class="cw-kpi-card rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div class="text-[12px] text-slate-400">
+                  最近任务
+                </div>
+                <div class="mt-1 text-[20px] font-black text-slate-900">
+                  {{ recentBatchJobCount }}
+                </div>
+              </div>
+            </div>
+
+            <a-button
+              type="primary"
+              size="large"
+              class="cw-primary-action !h-11 !rounded-xl !border-0 !bg-blue-600 px-5 shadow-[0_10px_20px_-12px_rgba(37,99,235,0.8)] hover:!bg-blue-500"
+              @click="openCreateDrawer"
+            >
+              <template #icon>
+                <PlusOutlined />
+              </template>
+              自定义质控规则
+            </a-button>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="cw-panel workstation-surface-enter workstation-surface-enter--delay-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      >
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              Rule Catalog
+            </p>
+            <h2 class="text-lg font-black text-slate-900">
+              自定义规则列表
+            </h2>
+          </div>
           <a-button
-            type="primary"
-            size="large"
-            class="!h-11 !rounded-xl !border-0 !bg-blue-600 px-5 shadow-[0_10px_20px_-12px_rgba(37,99,235,0.8)] hover:!bg-blue-500"
-            @click="openCreateDrawer"
+            size="small"
+            class="!h-9 !rounded-lg !border-slate-200 !bg-white !text-slate-500 hover:!border-slate-300 hover:!text-slate-700"
+            :loading="draftLoading"
+            @click="loadDrafts"
           >
             <template #icon>
-              <PlusOutlined />
+              <ReloadOutlined />
             </template>
-            自定义质控规则
+            刷新
           </a-button>
         </div>
-      </div>
-    </section>
 
-    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="mb-2 flex items-center justify-between gap-3">
-        <div>
-          <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Rule Catalog
-          </p>
-          <h2 class="text-lg font-black text-slate-900">
-            自定义规则列表
-          </h2>
+        <div class="mb-3 flex flex-wrap items-center gap-2 md:flex-nowrap">
+          <a-input
+            v-model:value="draftQuery.keyword"
+            allow-clear
+            placeholder="搜索规则编码/名称"
+            class="min-w-[260px] flex-1 !h-9 !rounded-lg !border-slate-200"
+            @press-enter="searchDrafts"
+          >
+            <template #prefix>
+              <SearchOutlined />
+            </template>
+          </a-input>
+          <a-select
+            v-model:value="draftQuery.status"
+            allow-clear
+            placeholder="规则状态"
+            :options="draftStatusOptions"
+            class="w-[148px] [&_.ant-select-selector]:!h-9 [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200"
+            @change="searchDrafts"
+          />
         </div>
-        <a-button
-          size="small"
-          class="!h-9 !rounded-lg !border-slate-200 !bg-white !text-slate-500 hover:!border-slate-300 hover:!text-slate-700"
-          :loading="draftLoading"
-          @click="loadDrafts"
-        >
-          <template #icon>
-            <ReloadOutlined />
-          </template>
-          刷新
-        </a-button>
-      </div>
 
-      <div class="mb-3 grid gap-2 md:grid-cols-[1fr_140px]">
-        <a-input
-          v-model:value="draftQuery.keyword"
-          allow-clear
-          placeholder="搜索规则编码/名称"
-          class="!h-9 !rounded-lg !border-slate-200"
-          @press-enter="searchDrafts"
-        >
-          <template #prefix>
-            <SearchOutlined />
-          </template>
-        </a-input>
-        <a-select
-          v-model:value="draftQuery.status"
-          allow-clear
-          placeholder="规则状态"
-          :options="draftStatusOptions"
-          class="[&_.ant-select-selector]:!h-9 [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200"
-          @change="searchDrafts"
-        />
-      </div>
-
-      <template v-if="drafts.length > 0 || draftLoading">
-        <a-table
-          row-key="id"
-          size="small"
-          :loading="draftLoading"
-          :columns="draftColumns"
-          :data-source="drafts"
-          :pagination="draftPagination"
-          :row-class-name="draftRowClassName"
-          :custom-row="draftCustomRow"
-          :scroll="{ y: 180 }"
-          @change="handleDraftTableChange"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'rule_code'">
-              <span class="font-mono font-bold text-slate-700">{{ record.rule_code }}</span>
-            </template>
-            <template v-else-if="column.key === 'name'">
-              <div class="font-semibold text-slate-900">
-                {{ record.name || '未命名规则' }}
-              </div>
-              <div class="truncate text-xs text-slate-400">
-                {{ record.description || record.source_requirement || '-' }}
-              </div>
-            </template>
-            <template v-else-if="column.key === 'scene'">
-              <a-tag :color="record.scene === 'final' ? 'blue' : 'gold'">
-                {{ record.scene === 'final' ? '终末病历' : '运行病历' }}
-              </a-tag>
-            </template>
-            <template v-else-if="column.key === 'status'">
-              <a-tag :color="record.status === 'published' ? 'success' : 'processing'">
-                {{ record.status === 'published' ? '已发布' : '草稿' }}
-              </a-tag>
-            </template>
-            <template v-else-if="column.key === 'last_test_summary'">
-              <div class="text-xs leading-5 text-slate-500">
-                <div>成功 {{ getSummarySuccessCount(record as CustomRuleDraft) }}</div>
-                <div>命中 {{ getSummaryIssueCount(record as CustomRuleDraft) }}</div>
-              </div>
-            </template>
-            <template v-else-if="column.key === 'updated_at'">
-              <span class="text-xs text-slate-500">{{ formatDateTime(record.updated_at) }}</span>
-            </template>
-            <template v-else-if="column.key === 'actions'">
-              <div class="flex items-center justify-end gap-1">
-                <a-button
-                  type="text"
-                  size="small"
-                  @click.stop="openEditDrawer(record as CustomRuleDraft)"
-                >
-                  <template #icon>
-                    <EditOutlined />
-                  </template>
-                </a-button>
-                <a-button
-                  type="text"
-                  size="small"
-                  @click.stop="copyDraft(record as CustomRuleDraft)"
-                >
-                  <template #icon>
-                    <CopyOutlined />
-                  </template>
-                </a-button>
-                <a-popconfirm
-                  title="确认删除该规则草稿？"
-                  @confirm="deleteDraft(record as CustomRuleDraft)"
-                >
+        <template v-if="drafts.length > 0 || draftLoading">
+          <a-table
+            row-key="id"
+            size="small"
+            :loading="draftLoading"
+            :columns="draftColumns"
+            :data-source="drafts"
+            :pagination="draftPagination"
+            :row-class-name="draftRowClassName"
+            :custom-row="draftCustomRow"
+            :scroll="{ y: 180 }"
+            @change="handleDraftTableChange"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'rule_code'">
+                <span class="font-mono font-bold text-slate-700">{{ record.rule_code }}</span>
+              </template>
+              <template v-else-if="column.key === 'name'">
+                <div class="font-semibold text-slate-900">
+                  {{ record.name || '未命名规则' }}
+                </div>
+                <div class="truncate text-xs text-slate-400">
+                  {{ record.source_requirement || record.description || '-' }}
+                </div>
+              </template>
+              <template v-else-if="column.key === 'scene'">
+                <a-tag :color="record.scene === 'final' ? 'blue' : 'gold'">
+                  {{ record.scene === 'final' ? '终末病历' : '运行病历' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <a-tag :color="record.status === 'published' ? 'success' : 'processing'">
+                  {{ record.status === 'published' ? '已发布' : '草稿' }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.key === 'last_test_summary'">
+                <div class="text-xs leading-5 text-slate-500">
+                  <div>成功 {{ getSummarySuccessCount(record as CustomRuleDraft) }}</div>
+                  <div>命中 {{ getSummaryIssueCount(record as CustomRuleDraft) }}</div>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'updated_at'">
+                <span class="text-xs text-slate-500">{{ formatDateTime(record.updated_at) }}</span>
+              </template>
+              <template v-else-if="column.key === 'actions'">
+                <div class="flex items-center justify-end gap-1">
                   <a-button
                     type="text"
-                    danger
                     size="small"
-                    @click.stop
+                    @click.stop="openEditDrawer(record as CustomRuleDraft)"
                   >
                     <template #icon>
-                      <DeleteOutlined />
+                      <EditOutlined />
                     </template>
                   </a-button>
-                </a-popconfirm>
-                <a-button
-                  v-if="record.status === 'draft'"
-                  type="link"
-                  size="small"
-                  :disabled="!canPublishRecord(record as CustomRuleDraft)"
-                  @click.stop="publishDraftById(record.id)"
-                >
-                  发布
-                </a-button>
-              </div>
+                  <a-button
+                    type="text"
+                    size="small"
+                    @click.stop="copyDraft(record as CustomRuleDraft)"
+                  >
+                    <template #icon>
+                      <CopyOutlined />
+                    </template>
+                  </a-button>
+                  <a-popconfirm
+                    title="确认删除该规则草稿？"
+                    @confirm="deleteDraft(record as CustomRuleDraft)"
+                  >
+                    <a-button
+                      type="text"
+                      danger
+                      size="small"
+                      @click.stop
+                    >
+                      <template #icon>
+                        <DeleteOutlined />
+                      </template>
+                    </a-button>
+                  </a-popconfirm>
+                  <a-button
+                    v-if="record.status === 'draft'"
+                    type="link"
+                    size="small"
+                    :disabled="!canPublishRules || !canPublishRecord(record as CustomRuleDraft)"
+                    @click.stop="publishDraftById(record.id)"
+                  >
+                    {{ canPublishRules ? '发布' : '待审核' }}
+                  </a-button>
+                </div>
+              </template>
             </template>
+          </a-table>
+        </template>
+        <a-empty
+          v-else
+          :image="Empty.PRESENTED_IMAGE_SIMPLE"
+          class="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 py-8"
+        >
+          <template #image>
+            <div
+              class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-300 shadow-sm"
+            >
+              <FileSearchOutlined class="text-[28px]" />
+            </div>
           </template>
-        </a-table>
-      </template>
-      <a-empty
-        v-else
-        :image="Empty.PRESENTED_IMAGE_SIMPLE"
-        class="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 py-8"
+          <template #description>
+            <div class="text-sm text-slate-400">
+              暂无自定义规则，点击右上角“自定义质控规则”开始创建
+            </div>
+          </template>
+        </a-empty>
+      </section>
+
+      <section
+        class="cw-panel workstation-surface-enter workstation-surface-enter--delay-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
       >
-        <template #image>
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              Real Record QC Bench
+            </p>
+            <h2 class="text-lg font-black text-slate-900">
+              真实病历质控台
+            </h2>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <a-button
+              :disabled="!batchJobs.length"
+              :loading="batchJobLoading"
+              @click="openLatestBatchJobDrawer"
+            >
+              <template #icon>
+                <FileSearchOutlined />
+              </template>查看任务结果
+            </a-button>
+            <a-button
+              :disabled="!selectedDraft || !hasPromptTemplate"
+              :loading="testingBatch"
+              @click="triggerBatchQcJob"
+            >
+              <template #icon>
+                <PlayCircleOutlined />
+              </template>发起批量质控
+            </a-button>
+            <a-button
+              type="primary"
+              :disabled="!selectedDraft || !canPublishRules || !canPublishSelectedDraft"
+              :loading="publishingDraft"
+              @click="publishSelectedDraft"
+            >
+              <template #icon>
+                <RocketOutlined />
+              </template>{{ publishActionLabel }}
+            </a-button>
+          </div>
+        </div>
+
+        <div
+          v-if="selectedDraft"
+          class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2"
+        >
+          <div>
+            <span class="mr-2 text-xs font-bold text-blue-700">当前规则</span>
+            <strong class="text-slate-900">{{
+              selectedDraft.name || selectedDraft.rule_code
+            }}</strong>
+            <span class="ml-2 text-xs text-slate-500">{{ selectedDraft.document_type }} /
+              {{ selectedDraft.scene === 'final' ? '终末病历' : '运行病历' }}</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <a-tag :color="selectedDraft.status === 'published' ? 'success' : 'processing'">
+              {{ selectedDraft.status === 'published' ? '已发布' : '草稿' }}
+            </a-tag>
+            <a-button
+              size="small"
+              @click="openEditDrawer(selectedDraft)"
+            >
+              <template #icon>
+                <EditOutlined />
+              </template>编辑规则
+            </a-button>
+          </div>
+        </div>
+        <div
+          v-else
+          class="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          <span class="text-xs font-bold">!</span>
+          <div>
+            <div class="font-semibold">
+              请先在上方选择一条自定义规则
+            </div>
+            <div class="text-xs text-amber-700">
+              未选中规则时仍可浏览 {{ currentScopeLabel }}，但测试按钮会禁用。
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                Recent Batch Jobs
+              </div>
+              <div class="text-sm font-semibold text-slate-800">
+                最近批量任务
+              </div>
+            </div>
+            <span class="text-xs text-slate-400">共 {{ batchJobPagination.total }} 个</span>
+          </div>
+          <div class="mb-2 flex flex-wrap items-center gap-2">
+            <div
+              v-if="canViewProjectBatchJobs"
+              class="flex rounded-lg border border-slate-200 bg-white p-1"
+            >
+              <button
+                type="button"
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                :class="
+                  batchJobQuery.mineOnly
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                "
+                @click="changeBatchJobOwnership(true)"
+              >
+                我的任务
+              </button>
+              <button
+                type="button"
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                :class="
+                  !batchJobQuery.mineOnly
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                "
+                @click="changeBatchJobOwnership(false)"
+              >
+                全部项目
+              </button>
+            </div>
+            <div class="flex rounded-lg border border-slate-200 bg-white p-1">
+              <button
+                type="button"
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                :class="
+                  batchJobQuery.onlyCurrentRule
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                "
+                @click="changeBatchJobRuleScope(true)"
+              >
+                当前规则
+              </button>
+              <button
+                type="button"
+                class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                :class="
+                  !batchJobQuery.onlyCurrentRule
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                "
+                @click="changeBatchJobRuleScope(false)"
+              >
+                全部历史
+              </button>
+            </div>
+            <a-input
+              v-model:value="batchJobQuery.keyword"
+              allow-clear
+              placeholder="搜索规则名称/编码/任务ID"
+              class="min-w-[220px] flex-1 !rounded-lg !border-slate-200 !bg-white"
+              @press-enter="searchBatchJobs"
+            >
+              <template #prefix>
+                <SearchOutlined />
+              </template>
+            </a-input>
+            <a-select
+              v-model:value="batchJobQuery.status"
+              allow-clear
+              placeholder="任务状态"
+              :options="batchJobStatusOptions"
+              class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
+              @change="searchBatchJobs"
+            />
+            <a-select
+              v-model:value="batchJobQuery.scope"
+              allow-clear
+              placeholder="病历范围"
+              :options="batchJobScopeOptions"
+              class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
+              @change="searchBatchJobs"
+            />
+            <a-range-picker
+              v-model:value="batchJobQuery.dateRange"
+              class="w-[260px]"
+              @change="searchBatchJobs"
+            />
+            <a-button
+              class="!rounded-lg !border-slate-200 !bg-white !text-slate-500 hover:!border-slate-300 hover:!text-slate-700"
+              :loading="batchJobLoading"
+              @click="searchBatchJobs"
+            >
+              <template #icon>
+                <ReloadOutlined />
+              </template>
+              刷新
+            </a-button>
+          </div>
+          <a-empty
+            v-if="!batchJobs.length && !batchJobLoading"
+            :image="Empty.PRESENTED_IMAGE_SIMPLE"
+            class="py-2"
+            description="暂无批量任务"
+          />
           <div
-            class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-300 shadow-sm"
+            v-else
+            class="space-y-2"
           >
-            <FileSearchOutlined class="text-[28px]" />
+            <button
+              v-for="job in batchJobs"
+              :key="job.id"
+              type="button"
+              class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition"
+              :class="
+                batchJobDetail?.id === job.id
+                  ? 'border-blue-200 bg-blue-50'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+              "
+              @click="openBatchJobDrawer(job)"
+            >
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-slate-800">{{
+                    job.rule_name || job.rule_code
+                  }}</span>
+                  <a-tag :color="getBatchJobStatusTagColor(job.status)">
+                    {{ getBatchJobStatusText(job.status) }}
+                  </a-tag>
+                  <a-tag>{{ scopeLabelMap[job.scope] }}</a-tag>
+                </div>
+                <div class="mt-1 text-xs text-slate-500">
+                  {{ formatDateTime(job.created_at) }} · 成功 {{ job.success_count }} · 失败
+                  {{ job.failed_count }} · 命中 {{ job.issue_records }}
+                </div>
+                <div
+                  v-if="!batchJobQuery.mineOnly"
+                  class="mt-1 text-[11px] text-slate-400"
+                >
+                  发起人 {{ job.created_by || '-' }}
+                </div>
+              </div>
+              <span class="text-xs text-slate-400">{{ job.record_ids?.length || job.total_records || 0 }} 条</span>
+            </button>
+            <div class="flex items-center justify-end">
+              <a-pagination
+                size="small"
+                :current="batchJobPagination.current"
+                :page-size="batchJobPagination.pageSize"
+                :total="batchJobPagination.total"
+                :show-size-changer="false"
+                @change="(page, pageSize) => handleBatchJobTableChange({ current: page, pageSize })"
+              />
+            </div>
           </div>
-        </template>
-        <template #description>
-          <div class="text-sm text-slate-400">
-            暂无自定义规则，点击右上角“自定义质控规则”开始创建
-          </div>
-        </template>
-      </a-empty>
-    </section>
+        </div>
 
-    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            Real Record QC Bench
-          </p>
-          <h2 class="text-lg font-black text-slate-900">
-            真实病历质控台
-          </h2>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <a-button
-            :disabled="!batchJobs.length"
-            :loading="batchJobLoading"
-            @click="openLatestBatchJobDrawer"
-          >
-            <template #icon>
-              <FileSearchOutlined />
-            </template>查看任务结果
-          </a-button>
-          <a-button
-            :disabled="!selectedDraft || !hasPromptTemplate"
-            :loading="testingBatch"
-            @click="triggerBatchQcJob"
-          >
-            <template #icon>
-              <PlayCircleOutlined />
-            </template>发起批量质控
-          </a-button>
-          <a-button
-            type="primary"
-            :disabled="!selectedDraft || !canPublishSelectedDraft"
-            :loading="publishingDraft"
-            @click="publishSelectedDraft"
-          >
-            <template #icon>
-              <RocketOutlined />
-            </template>发布规则
-          </a-button>
-        </div>
-      </div>
-
-      <div
-        v-if="selectedDraft"
-        class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2"
-      >
-        <div>
-          <span class="mr-2 text-xs font-bold text-blue-700">当前规则</span>
-          <strong class="text-slate-900">{{
-            selectedDraft.name || selectedDraft.rule_code
-          }}</strong>
-          <span class="ml-2 text-xs text-slate-500">{{ selectedDraft.document_type }} /
-            {{ selectedDraft.scene === 'final' ? '终末病历' : '运行病历' }}</span>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="flex rounded-lg border border-slate-200 bg-white p-1">
+        <div
+          class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5"
+        >
+          <div class="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
             <button
               v-for="scopeOption in scopeOptions"
               :key="scopeOption.value"
@@ -281,317 +490,233 @@
               :class="
                 recordFilters.scope === scopeOption.value
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                  : 'text-slate-500 hover:bg-white hover:text-slate-700'
               "
               @click="changeScope(scopeOption.value)"
             >
               {{ scopeOption.label }}
             </button>
           </div>
-          <a-tag :color="selectedDraft.status === 'published' ? 'success' : 'processing'">
-            {{ selectedDraft.status === 'published' ? '已发布' : '草稿' }}
-          </a-tag>
-          <a-button
-            size="small"
-            @click="openEditDrawer(selectedDraft)"
+          <a-input
+            v-model:value="recordFilters.keyword"
+            allow-clear
+            placeholder="搜索病历号 / visit / 患者姓名"
+            class="min-w-[240px] flex-1 !rounded-lg !border-slate-200"
+            @press-enter="searchRecords"
           >
-            <template #icon>
-              <EditOutlined />
-            </template>编辑规则
-          </a-button>
-        </div>
-      </div>
-      <div
-        v-else
-        class="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
-      >
-        <span class="text-xs font-bold">!</span>
-        <div>
-          <div class="font-semibold">
-            请先在上方选择一条自定义规则
-          </div>
-          <div class="text-xs text-amber-700">
-            未选中规则时仍可浏览 {{ currentScopeLabel }}，但测试按钮会禁用。
-          </div>
-        </div>
-      </div>
-
-      <div class="mb-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-        <div class="mb-2 flex items-center justify-between gap-2">
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Recent Batch Jobs
-            </div>
-            <div class="text-sm font-semibold text-slate-800">
-              最近批量任务
-            </div>
-          </div>
-          <span class="text-xs text-slate-400">共 {{ batchJobPagination.total }} 个</span>
-        </div>
-        <a-empty
-          v-if="!batchJobs.length && !batchJobLoading"
-          :image="Empty.PRESENTED_IMAGE_SIMPLE"
-          class="py-2"
-          description="暂无批量任务"
-        />
-        <div
-          v-else
-          class="space-y-2"
-        >
-          <button
-            v-for="job in batchJobs"
-            :key="job.id"
-            type="button"
-            class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition"
-            :class="
-              batchJobDetail?.id === job.id
-                ? 'border-blue-200 bg-blue-50'
-                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-            "
-            @click="openBatchJobDrawer(job)"
-          >
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-slate-800">{{
-                  job.rule_name || job.rule_code
-                }}</span>
-                <a-tag :color="getBatchJobStatusTagColor(job.status)">
-                  {{ getBatchJobStatusText(job.status) }}
-                </a-tag>
-                <a-tag>{{ scopeLabelMap[job.scope] }}</a-tag>
-              </div>
-              <div class="mt-1 text-xs text-slate-500">
-                {{ formatDateTime(job.created_at) }} · 成功 {{ job.success_count }} · 失败
-                {{ job.failed_count }} · 命中 {{ job.issue_records }}
-              </div>
-            </div>
-            <span class="text-xs text-slate-400">{{ job.record_ids?.length || job.total_records || 0 }} 条</span>
-          </button>
-        </div>
-      </div>
-
-      <div
-        class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5"
-      >
-        <a-input
-          v-model:value="recordFilters.keyword"
-          allow-clear
-          placeholder="搜索病历号 / visit / 患者姓名"
-          class="min-w-[240px] flex-1 !rounded-lg !border-slate-200"
-          @press-enter="searchRecords"
-        >
-          <template #prefix>
-            <SearchOutlined />
-          </template>
-        </a-input>
-        <a-select
-          v-model:value="recordFilters.department"
-          allow-clear
-          show-search
-          :options="departmentOptions"
-          placeholder="科室"
-          class="w-[112px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
-          @change="handleDepartmentChange"
-        />
-        <a-select
-          v-model:value="recordFilters.doctor"
-          allow-clear
-          show-search
-          :options="doctorOptions"
-          placeholder="医生"
-          class="w-[112px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
-        />
-        <a-select
-          v-model:value="recordFilters.date_field"
-          :options="dateFieldOptions"
-          class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
-        />
-        <a-range-picker
-          v-model:value="recordFilters.dateRange"
-          class="w-[240px] !rounded-lg !border-slate-200 !bg-white"
-        />
-        <div class="ml-auto flex gap-1">
-          <a-button
-            type="text"
-            size="small"
-            class="!text-slate-500 hover:!text-slate-700"
-            @click="searchRecords"
-          >
-            查询病历
-          </a-button>
-          <a-button
-            type="text"
-            size="small"
-            class="!text-slate-500 hover:!text-slate-700"
-            :loading="recordLoading"
-            @click="refreshRecords"
-          >
-            <template #icon>
-              <ReloadOutlined />
-            </template>刷新
-          </a-button>
-        </div>
-      </div>
-
-      <a-collapse
-        v-model:active-key="testSettingsActiveKeys"
-        ghost
-        class="mb-2"
-      >
-        <a-collapse-panel
-          key="testing"
-          header="测试设置"
-        >
-          <div class="grid gap-3 md:grid-cols-3">
-            <a-form-item label="temperature">
-              <a-input-number
-                v-model:value="advancedParams.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                class="w-full"
-              />
-            </a-form-item>
-            <a-form-item label="top_p">
-              <a-input-number
-                v-model:value="advancedParams.top_p"
-                :min="0"
-                :max="1"
-                :step="0.05"
-                class="w-full"
-              />
-            </a-form-item>
-            <a-form-item label="max_tokens">
-              <a-input-number
-                v-model:value="advancedParams.max_tokens"
-                :min="256"
-                :max="16000"
-                :step="256"
-                class="w-full"
-              />
-            </a-form-item>
-          </div>
-        </a-collapse-panel>
-      </a-collapse>
-
-      <div class="mb-2 flex items-center justify-between text-xs text-slate-500">
-        <span>已选择 {{ selectedRecordKeys.length }} 条{{ currentScopeLabel }}</span>
-        <div class="flex gap-1">
-          <a-button
-            type="text"
-            size="small"
-            class="!text-slate-500 hover:!text-slate-700"
-            @click="selectCurrentPageRecords"
-          >
-            全选当前页
-          </a-button>
-          <a-button
-            type="text"
-            size="small"
-            class="!text-slate-500 hover:!text-slate-700"
-            @click="selectedRecordKeys = []"
-          >
-            清空
-          </a-button>
-        </div>
-      </div>
-
-      <a-table
-        row-key="record_id"
-        size="small"
-        :loading="recordLoading"
-        :columns="recordColumns"
-        :data-source="records"
-        :pagination="recordPagination"
-        :row-selection="recordRowSelection"
-        class="record-bench-table"
-        :scroll="{ x: 1180, y: 420 }"
-        @change="handleRecordTableChange"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'record_info'">
-            <div>
-              <div class="font-mono font-bold text-slate-800">
-                {{ record.record_id || '-' }}
-              </div>
-              <div class="text-xs text-slate-400">
-                {{ record.visit_id || '-' }}
-              </div>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'patient_name'">
-            <div class="min-w-0">
-              <div class="truncate text-[13px] font-semibold text-slate-700">
-                {{ record.patient_name || '未知患者' }}
-              </div>
-              <div class="truncate text-[12px] text-slate-400">
-                {{ record.department || '-' }} / {{ record.doctor || '-' }}
-              </div>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'department'">
-            <div class="min-w-0">
-              <div class="truncate text-[13px] font-medium text-slate-600">
-                {{ record.department || '-' }}
-              </div>
-              <div class="truncate text-[12px] text-slate-400">
-                {{ record.doctor || '-' }}
-              </div>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'doctor'">
-            <div class="min-w-0">
-              <div class="truncate text-[13px] font-medium text-slate-600">
-                {{ record.doctor || '-' }}
-              </div>
-              <div class="truncate text-[12px] text-slate-400">
-                {{ record.discharge_date || '-' }}
-              </div>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'latest_status'">
-            <span
-              class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
-              :class="getRecordResultTagClass(record.record_id)"
+            <template #prefix>
+              <SearchOutlined />
+            </template>
+          </a-input>
+          <a-select
+            v-model:value="recordFilters.department"
+            allow-clear
+            show-search
+            :options="departmentOptions"
+            placeholder="科室"
+            class="w-[112px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
+            @change="handleDepartmentChange"
+          />
+          <a-select
+            v-model:value="recordFilters.doctor"
+            allow-clear
+            show-search
+            :options="doctorOptions"
+            placeholder="医生"
+            class="w-[112px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
+          />
+          <a-select
+            v-model:value="recordFilters.date_field"
+            :options="dateFieldOptions"
+            class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
+          />
+          <a-range-picker
+            v-model:value="recordFilters.dateRange"
+            class="w-[240px] !rounded-lg !border-slate-200 !bg-white"
+          />
+          <div class="ml-auto flex gap-1">
+            <a-button
+              type="text"
+              size="small"
+              class="!text-slate-500 hover:!text-slate-700"
+              @click="searchRecords"
             >
-              {{ getRecordResultStatusText(record.record_id) }}
-            </span>
-          </template>
-          <template v-else-if="column.key === 'latest_findings'">
-            <span class="text-xs leading-6 text-slate-500">{{
-              getRecordFindingPreview(record.record_id)
-            }}</span>
-          </template>
-          <template v-else-if="column.key === 'actions'">
-            <div class="record-action-cell flex items-center justify-end gap-2">
-              <a-button
-                size="small"
-                class="record-action-btn"
-                :disabled="!selectedDraft || !hasPromptTemplate"
-                :loading="testingSingleRecordId === record.record_id"
-                @click="runSingleTest(record as CustomRuleWorkspaceRecord)"
-              >
-                <template #icon>
-                  <PlayCircleOutlined />
-                </template>
-                单条测试
-              </a-button>
-              <a-button
-                size="small"
-                class="record-action-btn"
-                :disabled="!hasRecordResult(record.record_id)"
-                @click="openSingleResultDrawer(record as CustomRuleWorkspaceRecord)"
-              >
-                <template #icon>
-                  <FileSearchOutlined />
-                </template>
-                查看结果
-              </a-button>
+              查询病历
+            </a-button>
+            <a-button
+              type="text"
+              size="small"
+              class="!text-slate-500 hover:!text-slate-700"
+              :loading="recordLoading"
+              @click="refreshRecords"
+            >
+              <template #icon>
+                <ReloadOutlined />
+              </template>刷新
+            </a-button>
+          </div>
+        </div>
+
+        <a-collapse
+          v-model:active-key="testSettingsActiveKeys"
+          ghost
+          class="mb-2"
+        >
+          <a-collapse-panel
+            key="testing"
+            header="测试设置"
+          >
+            <div class="grid gap-3 md:grid-cols-3">
+              <a-form-item label="temperature">
+                <a-input-number
+                  v-model:value="advancedParams.temperature"
+                  :min="0"
+                  :max="2"
+                  :step="0.1"
+                  class="w-full"
+                />
+              </a-form-item>
+              <a-form-item label="top_p">
+                <a-input-number
+                  v-model:value="advancedParams.top_p"
+                  :min="0"
+                  :max="1"
+                  :step="0.05"
+                  class="w-full"
+                />
+              </a-form-item>
+              <a-form-item label="max_tokens">
+                <a-input-number
+                  v-model:value="advancedParams.max_tokens"
+                  :min="256"
+                  :max="16000"
+                  :step="256"
+                  class="w-full"
+                />
+              </a-form-item>
             </div>
+          </a-collapse-panel>
+        </a-collapse>
+
+        <div class="mb-2 flex items-center justify-between text-xs text-slate-500">
+          <span>已选择 {{ selectedRecordKeys.length }} 条{{ currentScopeLabel }}</span>
+          <div class="flex gap-1">
+            <a-button
+              type="text"
+              size="small"
+              class="!text-slate-500 hover:!text-slate-700"
+              @click="selectCurrentPageRecords"
+            >
+              全选当前页
+            </a-button>
+            <a-button
+              type="text"
+              size="small"
+              class="!text-slate-500 hover:!text-slate-700"
+              @click="selectedRecordKeys = []"
+            >
+              清空
+            </a-button>
+          </div>
+        </div>
+
+        <a-table
+          row-key="record_id"
+          size="small"
+          :loading="recordLoading"
+          :columns="recordColumns"
+          :data-source="records"
+          :pagination="recordPagination"
+          :row-selection="recordRowSelection"
+          class="record-bench-table"
+          :scroll="{ x: 1180, y: 420 }"
+          @change="handleRecordTableChange"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'record_info'">
+              <div>
+                <div class="font-mono font-bold text-slate-800">
+                  {{ record.record_id || '-' }}
+                </div>
+                <div class="text-xs text-slate-400">
+                  {{ record.visit_id || '-' }}
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'patient_name'">
+              <div class="min-w-0">
+                <div class="truncate text-[13px] font-semibold text-slate-700">
+                  {{ record.patient_name || '未知患者' }}
+                </div>
+                <div class="truncate text-[12px] text-slate-400">
+                  {{ record.department || '-' }} / {{ record.doctor || '-' }}
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'department'">
+              <div class="min-w-0">
+                <div class="truncate text-[13px] font-medium text-slate-600">
+                  {{ record.department || '-' }}
+                </div>
+                <div class="truncate text-[12px] text-slate-400">
+                  {{ record.doctor || '-' }}
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'doctor'">
+              <div class="min-w-0">
+                <div class="truncate text-[13px] font-medium text-slate-600">
+                  {{ record.doctor || '-' }}
+                </div>
+                <div class="truncate text-[12px] text-slate-400">
+                  {{ record.discharge_date || '-' }}
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'latest_status'">
+              <span
+                class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                :class="getRecordResultTagClass(record.record_id)"
+              >
+                {{ getRecordResultStatusText(record.record_id) }}
+              </span>
+            </template>
+            <template v-else-if="column.key === 'latest_findings'">
+              <span class="text-xs leading-6 text-slate-500">{{
+                getRecordFindingPreview(record.record_id)
+              }}</span>
+            </template>
+            <template v-else-if="column.key === 'actions'">
+              <div class="record-action-cell flex items-center justify-end gap-2">
+                <a-button
+                  size="small"
+                  class="record-action-btn"
+                  :disabled="!selectedDraft || !hasPromptTemplate"
+                  :loading="testingSingleRecordId === record.record_id"
+                  @click="runSingleTest(record as CustomRuleWorkspaceRecord)"
+                >
+                  <template #icon>
+                    <PlayCircleOutlined />
+                  </template>
+                  单条测试
+                </a-button>
+                <a-button
+                  size="small"
+                  class="record-action-btn"
+                  :disabled="!hasRecordResult(record.record_id)"
+                  @click="openSingleResultDrawer(record as CustomRuleWorkspaceRecord)"
+                >
+                  <template #icon>
+                    <FileSearchOutlined />
+                  </template>
+                  查看结果
+                </a-button>
+              </div>
+            </template>
           </template>
-        </template>
-      </a-table>
-    </section>
+        </a-table>
+      </section>
+    </div>
 
     <a-drawer
       :open="editorDrawerOpen"
@@ -637,6 +762,7 @@
                   <a-input
                     v-model:value="draftForm.name"
                     placeholder="例如：出院记录缺少出院带药明细"
+                    class="drawer-meta-control-input"
                   />
                 </a-form-item>
                 <a-form-item
@@ -646,6 +772,7 @@
                   <a-select
                     v-model:value="draftForm.document_type"
                     :options="documentTypeOptions"
+                    class="drawer-meta-control-select"
                   />
                 </a-form-item>
               </div>
@@ -688,68 +815,17 @@
                   show-count
                 />
               </a-form-item>
-              <a-form-item label="规则描述">
-                <a-textarea
-                  v-model:value="draftForm.description"
-                  :rows="3"
-                />
-              </a-form-item>
-            </a-form>
-          </div>
-
-          <div class="rounded-2xl border border-slate-200 bg-white p-4">
-            <div class="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                  Prompt Builder
-                </p>
-                <h3 class="text-lg font-black text-slate-900">
-                  Prompt 生成与编辑
-                </h3>
+              <div class="mt-[-6px] flex justify-center">
+                <a-button
+                  type="primary"
+                  :loading="drawerGenerateLoading"
+                  @click="saveAndGeneratePromptFromDrawer"
+                >
+                  <template #icon>
+                    <RobotOutlined />
+                  </template>AI生成质控规则
+                </a-button>
               </div>
-              <a-button
-                :loading="generatingPrompt"
-                @click="generatePromptForDrawer"
-              >
-                <template #icon>
-                  <RobotOutlined />
-                </template>AI 生成 Prompt
-              </a-button>
-            </div>
-            <a-alert
-              :type="drawerGenerationMode === 'llm' ? 'success' : 'warning'"
-              show-icon
-              :message="
-                drawerGenerationMode === 'llm'
-                  ? '当前 Prompt 来自 AI 生成'
-                  : '当前 Prompt 为模板或待生成状态'
-              "
-              :description="drawerPromptSummary"
-            />
-            <div
-              v-if="draftForm.check_points.length > 0"
-              class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 text-slate-500"
-            >
-              <div class="mb-1 font-semibold text-slate-700">
-                生成检查要点
-              </div>
-              <div
-                v-for="(item, index) in draftForm.check_points"
-                :key="`${index}-${item}`"
-              >
-                {{ index + 1 }}. {{ item }}
-              </div>
-            </div>
-            <a-form
-              layout="vertical"
-              class="mt-3"
-            >
-              <a-form-item label="Prompt 模板">
-                <a-textarea
-                  v-model:value="draftForm.prompt_template"
-                  :rows="10"
-                />
-              </a-form-item>
             </a-form>
           </div>
 
@@ -773,6 +849,66 @@
                   :rows="4"
                 />
               </a-form-item>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              Test Input
+            </p>
+            <h3 class="text-lg font-black text-slate-900">
+              抽屉内测试输入
+            </h3>
+            <div class="mt-3">
+              <a-radio-group
+                v-model:value="drawerTestInput.mode"
+                size="small"
+              >
+                <a-radio-button value="selected_record">
+                  选择内置病历
+                </a-radio-button>
+                <a-radio-button value="manual_text">
+                  粘贴病历文本
+                </a-radio-button>
+              </a-radio-group>
+            </div>
+            <div
+              v-if="drawerTestInput.mode === 'selected_record'"
+              class="mt-3"
+            >
+              <a-select
+                v-model:value="drawerTestInput.selected_record_id"
+                show-search
+                allow-clear
+                placeholder="请选择测试病历（来自下方病历列表）"
+                :options="drawerTestRecordOptions"
+                class="w-full"
+                :filter-option="
+                  (input, option) =>
+                    String(option?.label || '')
+                      .toLowerCase()
+                      .includes(String(input || '').toLowerCase())
+                "
+              />
+              <p class="mt-2 text-xs text-slate-400">
+                如不在此选择，也可以在下方病历列表勾选后测试。
+              </p>
+            </div>
+            <div
+              v-else
+              class="mt-3 space-y-2"
+            >
+              <a-input
+                v-model:value="drawerTestInput.manual_patient_name"
+                placeholder="文本来源标识（可选）"
+              />
+              <a-textarea
+                v-model:value="drawerTestInput.manual_text"
+                :rows="6"
+                :maxlength="20000"
+                show-count
+                placeholder="粘贴一段病历文本后，可直接触发规则测试"
+              />
             </div>
           </div>
 
@@ -830,6 +966,9 @@
         <div
           class="flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4"
         >
+          <span class="mr-auto text-xs text-slate-400">
+            {{ drawerTestTargetHint }}
+          </span>
           <a-button @click="closeEditorDrawer">
             取消
           </a-button>
@@ -841,11 +980,20 @@
           </a-button>
           <a-button
             type="primary"
-            :disabled="!selectedDraft || !canPublishSelectedDraft"
+            ghost
+            :loading="drawerTestActionLoading"
+            :disabled="!drawerCanRunTest"
+            @click="saveAndRunTestFromDrawer"
+          >
+            保存并测试
+          </a-button>
+          <a-button
+            type="primary"
+            :disabled="!selectedDraft || !canPublishRules || !canPublishSelectedDraft"
             :loading="publishingDraft"
             @click="publishSelectedDraft"
           >
-            发布规则
+            {{ publishActionLabel }}
           </a-button>
         </div>
       </div>
@@ -990,6 +1138,24 @@
                   <p class="mt-2 text-xs text-slate-400">
                     {{ item.record_id }} / {{ item.department || '-' }}
                   </p>
+                  <div class="mt-3 flex justify-end">
+                    <a-button
+                      size="small"
+                      class="mr-2"
+                      @click="openBatchItemEvidence(item)"
+                    >
+                      <template #icon>
+                        <EyeOutlined />
+                      </template>
+                      查看规则证据
+                    </a-button>
+                    <a-button
+                      size="small"
+                      @click="openRecordInWorkstation(item.record_id, activeBatchJob)"
+                    >
+                      进入流程处理
+                    </a-button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1019,6 +1185,14 @@
                   <p class="mt-2 text-sm text-rose-700">
                     {{ item.error }}
                   </p>
+                  <div class="mt-3 flex justify-end">
+                    <a-button
+                      size="small"
+                      @click="openRecordInWorkstation(item.record_id, activeBatchJob)"
+                    >
+                      进入流程处理
+                    </a-button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1079,11 +1253,85 @@
         </div>
       </div>
     </a-drawer>
+
+    <a-drawer
+      :open="evidenceDrawerOpen"
+      placement="right"
+      :width="560"
+      @close="closeEvidenceDrawer"
+    >
+      <template #title>
+        规则证据
+      </template>
+      <template v-if="evidenceDrawerRecord">
+        <div class="space-y-4">
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="flex items-center justify-between gap-2">
+              <strong>{{
+                evidenceDrawerRecord.patient_name || evidenceDrawerRecord.record_id
+              }}</strong>
+              <a-tag :color="evidenceDrawerRecord.is_compliant ? 'success' : 'error'">
+                {{ evidenceDrawerRecord.is_compliant ? '合规/不适用' : '命中问题' }}
+              </a-tag>
+            </div>
+            <p class="mt-2 text-xs text-slate-400">
+              {{ evidenceDrawerRecord.record_id }} / {{ evidenceDrawerRecord.visit_id || '-' }} /
+              {{ evidenceDrawerRecord.department || '-' }}
+            </p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 class="text-lg font-black text-slate-900">
+              Findings
+            </h3>
+            <p class="mt-2 text-sm leading-7 text-slate-500">
+              {{ evidenceDrawerRecord.findings || '无附加结论' }}
+            </p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 class="text-lg font-black text-slate-900">
+              Evidence
+            </h3>
+            <p class="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-500">
+              {{ evidenceDrawerRecord.evidence || '无' }}
+            </p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 class="text-lg font-black text-slate-900">
+              Suggestion
+            </h3>
+            <p class="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-500">
+              {{ evidenceDrawerRecord.suggestion || '无' }}
+            </p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <h3 class="text-lg font-black text-slate-900">
+              Confidence
+            </h3>
+            <p class="mt-2 text-sm leading-7 text-slate-500">
+              {{ formatConfidence(evidenceDrawerRecord.confidence) }}
+            </p>
+          </div>
+          <div class="flex justify-end">
+            <a-button
+              type="primary"
+              @click="openRecordInWorkstation(evidenceDrawerRecord.record_id, activeBatchJob)"
+            >
+              进入流程处理
+            </a-button>
+          </div>
+        </div>
+      </template>
+      <a-empty
+        v-else
+        description="暂无规则证据"
+      />
+    </a-drawer>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { Dayjs } from 'dayjs'
+import { useRouter } from 'vue-router'
 import { Empty, Modal, message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
@@ -1092,6 +1340,7 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
+  EyeOutlined,
   FileSearchOutlined,
   PlayCircleOutlined,
   PlusOutlined,
@@ -1116,8 +1365,10 @@ import {
   runWorkspaceSingleTest,
   updateWorkspaceDraft,
 } from '@/services/custom-rule-workspace-service'
+import { useAuthStore } from '@/stores/auth'
 import type {
   CustomRuleBatchJob,
+  CustomRuleBatchJobStatus,
   CustomRuleBatchResult,
   CustomRuleDraft,
   CustomRuleDraftPayload,
@@ -1145,6 +1396,9 @@ interface RecordTestResultItem {
   confidence: number
 }
 
+const router = useRouter()
+const authStore = useAuthStore()
+
 const draftLoading = ref(false)
 const creatingDraft = ref(false)
 const savingDraft = ref(false)
@@ -1166,6 +1420,8 @@ const editorDrawerMode = ref<CustomRuleEditorDrawerMode>('create')
 const resultDrawerOpen = ref(false)
 const resultDrawerMode = ref<CustomRuleTestResultPanelState>('empty')
 const resultDrawerRecord = ref<RecordTestResultItem | null>(null)
+const evidenceDrawerOpen = ref(false)
+const evidenceDrawerRecord = ref<RecordTestResultItem | null>(null)
 const testSettingsActiveKeys = ref<string[]>([])
 
 const draftQuery = reactive({ keyword: '', status: undefined as WorkspaceDraftStatus | undefined })
@@ -1181,6 +1437,14 @@ const batchJobPagination = reactive({
   current: 1,
   pageSize: 5,
   total: 0,
+})
+const batchJobQuery = reactive({
+  keyword: '',
+  status: undefined as CustomRuleBatchJobStatus | undefined,
+  scope: undefined as WorkspaceScope | undefined,
+  dateRange: null as DateRangeValue,
+  mineOnly: true,
+  onlyCurrentRule: true,
 })
 
 const makeDraftDefaults = () => ({
@@ -1201,6 +1465,12 @@ const makeDraftDefaults = () => ({
   check_points: [] as string[],
 })
 const draftForm = reactive(makeDraftDefaults())
+const drawerTestInput = reactive({
+  mode: 'selected_record' as 'selected_record' | 'manual_text',
+  selected_record_id: '',
+  manual_patient_name: '',
+  manual_text: '',
+})
 
 const draftStatusOptions = [
   { label: '草稿', value: 'draft' },
@@ -1241,6 +1511,17 @@ const dateFieldOptions = [
   { label: '按入院日期', value: 'admission' },
   { label: '按出院日期', value: 'discharge' },
 ]
+const batchJobStatusOptions = [
+  { label: '排队中', value: 'queued' },
+  { label: '执行中', value: 'running' },
+  { label: '已完成', value: 'completed' },
+  { label: '已失败', value: 'failed' },
+]
+const batchJobScopeOptions = [
+  { label: '终末病历', value: 'final' },
+  { label: '运行病历', value: 'running' },
+  { label: '全量病历', value: 'all' },
+]
 
 const selectedDraft = computed(
   () => drafts.value.find((item) => item.id === selectedDraftId.value) || null,
@@ -1252,10 +1533,6 @@ const scopeLabelMap: Record<WorkspaceScope, string> = {
 }
 const currentScopeLabel = computed(() => scopeLabelMap[recordFilters.scope] || '终末病历')
 const recentBatchJobCount = computed(() => batchJobPagination.total)
-const selectedBatchJob = computed(() => {
-  if (batchJobDetail.value && batchJobDetail.value.id) return batchJobDetail.value
-  return batchJobs.value.find((item) => item.id === (batchJobDetail.value?.id || '')) || null
-})
 const activeBatchJob = computed(() => batchJobDetail.value)
 const activeBatchSummary = computed(
   () => activeBatchJob.value?.summary || batchResult.value?.summary || null,
@@ -1272,13 +1549,50 @@ const hasPromptTemplate = computed(
 const canPublishSelectedDraft = computed(
   () => !!selectedDraft.value && canPublishRecord(selectedDraft.value),
 )
+const canPublishRules = computed(
+  () => authStore.hasRole('admin') || authStore.hasRole('qc_manager'),
+)
+const canViewProjectBatchJobs = computed(
+  () => authStore.hasRole('admin') || authStore.hasRole('qc_manager'),
+)
+const publishActionLabel = computed(() => (canPublishRules.value ? '发布规则' : '提交发布申请'))
 const drawerPrimaryLoading = computed(() =>
   editorDrawerMode.value === 'create' ? creatingDraft.value : savingDraft.value,
 )
-const drawerGenerationMode = computed(() => draftForm.generation_mode || 'fallback_template')
-const drawerPromptSummary = computed(
-  () => draftForm.prompt_summary || '请先生成或手工填写 Prompt，再执行病历测试。',
+const drawerGenerateLoading = computed(() => drawerPrimaryLoading.value || generatingPrompt.value)
+const drawerTestActionLoading = computed(
+  () => drawerPrimaryLoading.value || testingBatch.value || !!testingSingleRecordId.value,
 )
+const drawerMetaReady = computed(() => {
+  const name = draftForm.name.trim()
+  const requirement = draftForm.source_requirement.trim() || draftForm.description.trim()
+  return !!name && !!requirement
+})
+const drawerPromptReady = computed(() => !!draftForm.prompt_template.trim())
+const drawerTestReady = computed(() => drawerMetaReady.value && drawerPromptReady.value)
+const drawerHasSelectedRecords = computed(() => selectedRecordKeys.value.length > 0)
+const drawerTestRecordOptions = computed(() =>
+  records.value.map((item) => ({
+    value: item.record_id,
+    label: `${item.record_id} · ${item.patient_name || '-'} · ${item.department || '-'}`,
+  })),
+)
+const drawerHasInlineTarget = computed(() => {
+  if (drawerTestInput.mode === 'manual_text') return !!drawerTestInput.manual_text.trim()
+  return !!drawerTestInput.selected_record_id.trim()
+})
+const drawerCanRunTest = computed(
+  () => drawerTestReady.value && (drawerHasInlineTarget.value || drawerHasSelectedRecords.value),
+)
+const drawerTestTargetHint = computed(() => {
+  if (drawerTestInput.mode === 'manual_text' && drawerTestInput.manual_text.trim()) {
+    return `抽屉文本 ${drawerTestInput.manual_text.trim().length} 字`
+  }
+  if (drawerTestInput.mode === 'selected_record' && drawerTestInput.selected_record_id.trim()) {
+    return `抽屉病历 ${drawerTestInput.selected_record_id.trim()}`
+  }
+  return `已选病历 ${selectedRecordKeys.value.length} 条`
+})
 const editorDrawerTitle = computed(() =>
   editorDrawerMode.value === 'create'
     ? '自定义质控规则'
@@ -1329,6 +1643,126 @@ const recordColumns: TableColumnsType<CustomRuleWorkspaceRecord> = [
   { title: '最近命中结果摘要', key: 'latest_findings' },
   { title: '操作', key: 'actions', width: 150, fixed: 'right' as const },
 ]
+function getBatchJobStatusText(status?: string) {
+  switch (status) {
+    case 'queued':
+      return '排队中'
+    case 'running':
+      return '执行中'
+    case 'completed':
+      return '已完成'
+    case 'failed':
+      return '已失败'
+    default:
+      return '未知'
+  }
+}
+function getBatchJobStatusTagColor(status?: string) {
+  switch (status) {
+    case 'queued':
+      return 'default'
+    case 'running':
+      return 'processing'
+    case 'completed':
+      return 'success'
+    case 'failed':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
+function resolveLaunchContext(params: {
+  ruleName?: string
+  scene?: 'running' | 'final' | string
+  scope?: WorkspaceScope | string
+  documentType?: string
+}) {
+  const text = [String(params.ruleName || ''), String(params.documentType || '')]
+    .join(' ')
+    .toLowerCase()
+  if (/(医保|结算|清单|费用|控费)/.test(text)) {
+    return {
+      action: 'qc_settlement',
+      from_stage: 'settlement_qc',
+      stage: 'settlement_qc',
+      detail_tab: 'settlement',
+      assist_tab: 'cost',
+    }
+  }
+  if (/(编码|icd|drg|dip)/.test(text)) {
+    return {
+      action: 'qc_coding',
+      from_stage: 'coding_qc',
+      stage: 'coding_qc',
+      detail_tab: 'frontpage',
+      assist_tab: 'coding',
+    }
+  }
+  if (/(首页|病案首页|表单)/.test(text)) {
+    return {
+      action: 'qc_frontpage',
+      from_stage: 'frontpage_qc',
+      stage: 'frontpage_qc',
+      detail_tab: 'frontpage',
+      assist_tab: 'form',
+    }
+  }
+  if (params.scene === 'running') {
+    return {
+      action: 'qc_coding',
+      from_stage: 'coding_qc',
+      stage: 'coding_qc',
+      detail_tab: 'frontpage',
+      assist_tab: 'coding',
+    }
+  }
+  if (params.scope === 'all' || params.scope === 'final') {
+    return {
+      action: 'qc_frontpage',
+      from_stage: 'frontpage_qc',
+      stage: 'frontpage_qc',
+      detail_tab: 'frontpage',
+      assist_tab: 'form',
+    }
+  }
+  return {
+    action: 'qc_coding',
+    from_stage: 'coding_qc',
+    stage: 'coding_qc',
+    detail_tab: 'frontpage',
+    assist_tab: 'coding',
+  }
+}
+function openRecordInWorkstation(recordId?: string, job?: CustomRuleBatchJob | null) {
+  const targetRecordId = String(recordId || '').trim()
+  if (!targetRecordId) {
+    message.info('缺少病历标识，暂时无法打开')
+    return
+  }
+  const draftContext = job?.draft_id
+    ? drafts.value.find((item) => item.id === job.draft_id) || selectedDraft.value
+    : selectedDraft.value
+  const launchContext = resolveLaunchContext({
+    ruleName: job?.rule_name || draftContext?.name,
+    scene: job?.scene || draftContext?.scene,
+    scope: job?.scope || recordFilters.scope,
+    documentType: draftContext?.document_type,
+  })
+  router.push({
+    path: '/workstation-v4/worklist',
+    query: {
+      source: 'dashboard',
+      record_id: targetRecordId,
+      action: launchContext.action,
+      from_stage: launchContext.from_stage,
+      stage: launchContext.stage,
+      detail_tab: launchContext.detail_tab,
+      assist_tab: launchContext.assist_tab,
+      task_id: job?.id || undefined,
+      launch_from: 'custom_workspace_batch_job',
+    },
+  })
+}
 const recordRowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRecordKeys.value,
   onChange: (keys: Array<string | number>) => {
@@ -1369,9 +1803,11 @@ function getExamplesFromDraft(draft: CustomRuleDraft) {
 function hydrateDraftForm(draft: CustomRuleDraft) {
   const examples = getExamplesFromDraft(draft)
   const logic = (draft.check_logic || {}) as Record<string, unknown>
+  const requirement = (draft.source_requirement || draft.description || '').trim()
   draftForm.name = draft.name || ''
-  draftForm.description = draft.description || ''
-  draftForm.source_requirement = draft.source_requirement || ''
+  draftForm.source_requirement = requirement
+  // Backward-compatible mirror field; UI now edits source_requirement only.
+  draftForm.description = requirement
   draftForm.prompt_template = draft.prompt_template || ''
   draftForm.document_type = draft.document_type || '出院记录'
   draftForm.scene = draft.scene || 'final'
@@ -1397,16 +1833,16 @@ function buildExamples() {
 }
 function validateDraftFormBase() {
   const name = draftForm.name.trim()
-  const requirement = draftForm.source_requirement.trim() || draftForm.description.trim()
+  const requirement = draftForm.source_requirement.trim()
   if (!name) return (message.warning('请先填写规则名称'), false)
   if (!requirement) return (message.warning('请先填写需求描述'), false)
   return true
 }
 function buildDraftPayload(): CustomRuleDraftPayload {
-  const requirement = draftForm.source_requirement.trim() || draftForm.description.trim()
+  const requirement = draftForm.source_requirement.trim()
   return {
     name: draftForm.name.trim(),
-    description: draftForm.description.trim() || requirement,
+    description: requirement,
     source_requirement: requirement,
     prompt_template: draftForm.prompt_template.trim() || undefined,
     document_type: draftForm.document_type,
@@ -1528,7 +1964,7 @@ async function persistDraftFromDrawer(
 async function saveDraftFromDrawer() {
   await persistDraftFromDrawer()
 }
-async function generatePromptForDrawer() {
+async function generatePromptForDrawer(options: { successMessage?: string } = {}) {
   const draft = await persistDraftFromDrawer({ silentSuccess: true })
   if (!draft) return
   generatingPrompt.value = true
@@ -1541,21 +1977,124 @@ async function generatePromptForDrawer() {
     hydrateDraftForm(nextDraft)
     draftForm.prompt_summary = promptResult.summary || ''
     draftForm.check_points = promptResult.check_points || []
-    message.success(
-      promptResult.generation_mode === 'llm' ? 'Prompt 生成成功' : '已回退为模板 Prompt',
-    )
+    if (options.successMessage) {
+      message.success(options.successMessage)
+    } else {
+      message.success(
+        promptResult.generation_mode === 'llm' ? 'Prompt 生成成功' : '已回退为模板 Prompt',
+      )
+    }
   } catch (error: any) {
     message.error(error?.message || '生成 Prompt 失败')
   } finally {
     generatingPrompt.value = false
   }
 }
+async function saveAndGeneratePromptFromDrawer() {
+  await generatePromptForDrawer({ successMessage: '草稿已保存并生成 Prompt，可继续手工调整后测试' })
+}
+function resolveDrawerInlineTestRecord(): {
+  record_id: string
+  visit_id?: string
+  patient_name?: string
+  department?: string
+  doctor?: string
+  medical_text?: string
+} | null {
+  if (drawerTestInput.mode === 'manual_text') {
+    const text = drawerTestInput.manual_text.trim()
+    if (!text) return null
+    const marker = `${Date.now()}`.slice(-6)
+    return {
+      record_id: `MANUAL-${marker}`,
+      visit_id: `MANUAL-${marker}`,
+      patient_name: drawerTestInput.manual_patient_name.trim() || '手工文本',
+      medical_text: text,
+    }
+  }
+  const recordId = drawerTestInput.selected_record_id.trim()
+  if (!recordId) return null
+  const target = records.value.find((item) => item.record_id === recordId)
+  if (!target) return null
+  return {
+    record_id: target.record_id,
+    visit_id: target.visit_id,
+    patient_name: target.patient_name,
+    department: target.department,
+    doctor: target.doctor,
+  }
+}
+async function runSingleTestByPayload(
+  record: {
+    record_id: string
+    visit_id?: string
+    patient_name?: string
+    department?: string
+    doctor?: string
+    medical_text?: string
+  },
+  options: { successMessage?: string } = {},
+) {
+  if (!selectedDraft.value) return message.warning('请先选择规则')
+  if (!hasPromptTemplate.value) return message.warning('请先为当前规则生成或填写 Prompt')
+  testingSingleRecordId.value = record.record_id
+  try {
+    const response = await runWorkspaceSingleTest({
+      draft_id: selectedDraft.value.id,
+      records: [record],
+      temperature: advancedParams.temperature,
+      top_p: advancedParams.top_p,
+      max_tokens: advancedParams.max_tokens,
+    })
+    if (!response.success || !response.data) throw new Error(response.message || '单病历测试失败')
+    singleResult.value = response.data
+    batchResult.value = null
+    syncDraftSummary(response.data.summary || {})
+    const normalized = normalizeRecordResult({
+      record_id: response.data.result.record_id,
+      visit_id: response.data.result.visit_id,
+      patient_name: response.data.record.patient_name,
+      department: response.data.record.department,
+      status: response.data.result.status,
+      is_compliant: response.data.result.is_compliant,
+      findings: response.data.result.findings,
+      evidence: response.data.result.evidence,
+      suggestion: response.data.result.suggestion,
+      confidence: response.data.result.confidence,
+    })
+    recordResults.value = { ...recordResults.value, [normalized.record_id]: normalized }
+    resultDrawerMode.value = 'single'
+    resultDrawerRecord.value = normalized
+    resultDrawerOpen.value = true
+    message.success(options.successMessage || '单病历测试完成')
+  } catch (error: any) {
+    message.error(error?.message || '单病历测试失败')
+  } finally {
+    testingSingleRecordId.value = ''
+  }
+}
+async function saveAndRunTestFromDrawer() {
+  const saved = await persistDraftFromDrawer({ silentSuccess: true })
+  if (!saved) return
+  if (!drawerPromptReady.value) return message.warning('请先生成或填写 Prompt 再测试')
+  if (!drawerCanRunTest.value)
+    return message.warning('请在抽屉选择测试病历或粘贴病历文本，或在列表中勾选病历')
+  editorDrawerOpen.value = false
+  await nextTick()
+  const inlineRecord = resolveDrawerInlineTestRecord()
+  if (inlineRecord) {
+    await runSingleTestByPayload(inlineRecord, { successMessage: '规则测试完成' })
+    return
+  }
+  await runBatchTest()
+}
 async function copyDraft(record: CustomRuleDraft) {
   try {
+    const requirement = (record.source_requirement || record.description || '').trim()
     const response = await createWorkspaceDraft({
       name: `${record.name}-副本`,
-      description: record.description,
-      source_requirement: record.source_requirement,
+      description: requirement,
+      source_requirement: requirement,
       prompt_template: record.prompt_template,
       document_type: record.document_type,
       severity: record.severity,
@@ -1605,6 +2144,8 @@ async function publishDraftById(draftId: string) {
 }
 async function publishSelectedDraft() {
   if (!selectedDraft.value) return message.warning('请先选择规则')
+  if (!canPublishRules.value)
+    return message.warning('当前账号无正式发布权限，请联系项目管理员审核发布')
   if (!canPublishSelectedDraft.value) return message.warning('请先完成至少一次成功测试')
   if (editorDrawerOpen.value) {
     const saved = await persistDraftFromDrawer({ silentSuccess: true })
@@ -1635,7 +2176,7 @@ function syncDraftSummary(summary: Record<string, unknown>) {
 }
 async function loadRecordFilters() {
   const response = await getWorkspaceRecordFilters({
-    scope: 'final',
+    scope: recordFilters.scope,
     department: recordFilters.department,
   })
   if (!response.success || !response.data) throw new Error(response.message || '获取筛选项失败')
@@ -1649,7 +2190,7 @@ async function loadRecords() {
   recordLoading.value = true
   try {
     const response = await getWorkspaceRecords({
-      scope: 'final',
+      scope: recordFilters.scope,
       department: recordFilters.department,
       doctor: recordFilters.doctor,
       date_field: recordFilters.date_field,
@@ -1667,6 +2208,114 @@ async function loadRecords() {
   } finally {
     recordLoading.value = false
   }
+}
+async function loadBatchJobs() {
+  if (batchJobQuery.onlyCurrentRule && !selectedDraftId.value) {
+    batchJobs.value = []
+    batchJobPagination.total = 0
+    return
+  }
+  batchJobLoading.value = true
+  try {
+    const response = await listWorkspaceBatchJobs({
+      draft_id: batchJobQuery.onlyCurrentRule ? selectedDraftId.value : undefined,
+      mine_only: batchJobQuery.mineOnly,
+      status: batchJobQuery.status,
+      scope: batchJobQuery.scope,
+      q: batchJobQuery.keyword || undefined,
+      created_start_date: batchJobQuery.dateRange?.[0]?.format('YYYY-MM-DD'),
+      created_end_date: batchJobQuery.dateRange?.[1]?.format('YYYY-MM-DD'),
+      page: batchJobPagination.current,
+      page_size: batchJobPagination.pageSize,
+    })
+    if (!response.success || !response.data) throw new Error(response.message || '获取批量任务失败')
+    batchJobs.value = response.data.items
+    batchJobPagination.total = response.data.total
+    if (batchJobDetail.value) {
+      const latest = response.data.items.find((item) => item.id === batchJobDetail.value?.id)
+      if (latest) batchJobDetail.value = latest
+    }
+  } catch (error: any) {
+    message.error(error?.message || '获取批量任务失败')
+  } finally {
+    batchJobLoading.value = false
+  }
+}
+function handleBatchJobTableChange(pagination: { current?: number; pageSize?: number }) {
+  batchJobPagination.current = pagination.current || 1
+  batchJobPagination.pageSize = pagination.pageSize || 5
+  void loadBatchJobs()
+}
+function searchBatchJobs() {
+  batchJobPagination.current = 1
+  void loadBatchJobs()
+}
+function changeBatchJobRuleScope(onlyCurrentRule: boolean) {
+  if (batchJobQuery.onlyCurrentRule === onlyCurrentRule) return
+  batchJobQuery.onlyCurrentRule = onlyCurrentRule
+  searchBatchJobs()
+}
+function changeBatchJobOwnership(mineOnly: boolean) {
+  if (batchJobQuery.mineOnly === mineOnly) return
+  batchJobQuery.mineOnly = mineOnly
+  searchBatchJobs()
+}
+function stopBatchJobPolling() {
+  if (batchJobPollTimer !== null) {
+    window.clearInterval(batchJobPollTimer)
+    batchJobPollTimer = null
+  }
+}
+function startBatchJobPolling(jobId: string) {
+  stopBatchJobPolling()
+  batchJobPollTimer = window.setInterval(async () => {
+    const current = await fetchBatchJobDetail(jobId, false)
+    await loadBatchJobs()
+    if (!current || !['queued', 'running'].includes(current.status)) {
+      stopBatchJobPolling()
+    }
+  }, 3000)
+}
+async function fetchBatchJobDetail(jobId: string, openDrawer = false) {
+  batchJobDetailLoading.value = true
+  try {
+    const response = await getWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) throw new Error(response.message || '获取任务详情失败')
+    batchJobDetail.value = response.data
+    if (openDrawer) {
+      resultDrawerMode.value = 'batch'
+      resultDrawerOpen.value = true
+    }
+    if (['queued', 'running'].includes(response.data.status)) startBatchJobPolling(response.data.id)
+    else stopBatchJobPolling()
+    return response.data
+  } catch (error: any) {
+    message.error(error?.message || '获取任务详情失败')
+    return null
+  } finally {
+    batchJobDetailLoading.value = false
+  }
+}
+function openBatchJobDrawer(job: CustomRuleBatchJob) {
+  fetchBatchJobDetail(job.id, true)
+}
+function openLatestBatchJobDrawer() {
+  if (batchJobDetail.value?.id) {
+    openBatchJobDrawer(batchJobDetail.value)
+    return
+  }
+  if (!batchJobs.value.length) return message.info('当前暂无批量任务')
+  openBatchJobDrawer(batchJobs.value[0])
+}
+async function changeScope(scope: WorkspaceScope) {
+  if (recordFilters.scope === scope) return
+  recordFilters.scope = scope
+  recordFilters.department = undefined
+  recordFilters.doctor = undefined
+  recordFilters.date_field = scope === 'running' ? 'admission' : 'discharge'
+  recordFilters.dateRange = null
+  selectedRecordKeys.value = []
+  await searchRecords()
 }
 async function searchRecords() {
   recordPagination.current = 1
@@ -1702,51 +2351,13 @@ function selectedTestRecords() {
     }))
 }
 async function runSingleTest(record: CustomRuleWorkspaceRecord) {
-  if (!selectedDraft.value) return message.warning('请先选择规则')
-  if (!hasPromptTemplate.value) return message.warning('请先为当前规则生成或填写 Prompt')
-  testingSingleRecordId.value = record.record_id
-  try {
-    const response = await runWorkspaceSingleTest({
-      draft_id: selectedDraft.value.id,
-      records: [
-        {
-          record_id: record.record_id,
-          visit_id: record.visit_id,
-          patient_name: record.patient_name,
-          department: record.department,
-          doctor: record.doctor,
-        },
-      ],
-      temperature: advancedParams.temperature,
-      top_p: advancedParams.top_p,
-      max_tokens: advancedParams.max_tokens,
-    })
-    if (!response.success || !response.data) throw new Error(response.message || '单病历测试失败')
-    singleResult.value = response.data
-    batchResult.value = null
-    syncDraftSummary(response.data.summary || {})
-    const normalized = normalizeRecordResult({
-      record_id: response.data.result.record_id,
-      visit_id: response.data.result.visit_id,
-      patient_name: response.data.record.patient_name,
-      department: response.data.record.department,
-      status: response.data.result.status,
-      is_compliant: response.data.result.is_compliant,
-      findings: response.data.result.findings,
-      evidence: response.data.result.evidence,
-      suggestion: response.data.result.suggestion,
-      confidence: response.data.result.confidence,
-    })
-    recordResults.value = { ...recordResults.value, [normalized.record_id]: normalized }
-    resultDrawerMode.value = 'single'
-    resultDrawerRecord.value = normalized
-    resultDrawerOpen.value = true
-    message.success('单病历测试完成')
-  } catch (error: any) {
-    message.error(error?.message || '单病历测试失败')
-  } finally {
-    testingSingleRecordId.value = ''
-  }
+  await runSingleTestByPayload({
+    record_id: record.record_id,
+    visit_id: record.visit_id,
+    patient_name: record.patient_name,
+    department: record.department,
+    doctor: record.doctor,
+  })
 }
 async function runBatchTest() {
   if (!selectedDraft.value) return message.warning('请先选择规则')
@@ -1784,6 +2395,78 @@ async function runBatchTest() {
     testingBatch.value = false
   }
 }
+async function createBatchJobInternal() {
+  if (!selectedDraft.value) return
+  testingBatch.value = true
+  try {
+    const recordIds =
+      selectedRecordKeys.value.length > 0 ? [...selectedRecordKeys.value] : undefined
+    const response = await createWorkspaceBatchJob({
+      draft_id: selectedDraft.value.id,
+      scope: recordFilters.scope,
+      department: recordFilters.department,
+      doctor: recordFilters.doctor,
+      date_field: recordFilters.date_field,
+      start_date: recordFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
+      end_date: recordFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
+      keyword: recordFilters.keyword || undefined,
+      record_ids: recordIds,
+      temperature: advancedParams.temperature,
+      top_p: advancedParams.top_p,
+      max_tokens: advancedParams.max_tokens,
+    })
+    if (!response.success || !response.data) throw new Error(response.message || '创建批量任务失败')
+    batchResult.value = null
+    singleResult.value = null
+    batchJobDetail.value = response.data
+    resultDrawerMode.value = 'batch'
+    resultDrawerOpen.value = true
+    await loadBatchJobs()
+    startBatchJobPolling(response.data.id)
+    message.success(
+      recordIds?.length
+        ? `批量任务已创建，将处理 ${recordIds.length} 条${currentScopeLabel.value}`
+        : `批量任务已创建，将按当前筛选处理${currentScopeLabel.value}`,
+    )
+  } catch (error: any) {
+    message.error(error?.message || '创建批量任务失败')
+  } finally {
+    testingBatch.value = false
+  }
+}
+async function triggerBatchQcJob() {
+  if (!selectedDraft.value) return message.warning('请先选择规则')
+  if (!hasPromptTemplate.value) return message.warning('请先为当前规则生成或填写 Prompt')
+  if (recordFilters.scope === 'all' && selectedRecordKeys.value.length === 0) {
+    Modal.confirm({
+      title: '确认对全量病历发起批量质控？',
+      content: '当前未手动选择病历，将按当前筛选条件对全量病历创建异步任务。建议确认范围后再执行。',
+      okText: '确认发起',
+      cancelText: '取消',
+      onOk: () => createBatchJobInternal(),
+    })
+    return
+  }
+  await createBatchJobInternal()
+}
+async function exportBatchJobReport(format: 'xlsx' | 'csv' = 'xlsx') {
+  if (!activeBatchJob.value) return message.info('请先选择一个批量任务')
+  const response = await exportWorkspaceBatchJob({ job_id: activeBatchJob.value.id, format })
+  if (!response.success || !response.data) {
+    message.error(response.message || '导出任务报告失败')
+    return
+  }
+  const blob = response.data
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `${activeBatchJob.value.rule_code || 'custom-qc'}-${activeBatchJob.value.id}.${format}`
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.URL.revokeObjectURL(url)
+  message.success('任务报告已开始下载')
+}
 function hasRecordResult(recordId: string) {
   return !!recordResults.value[recordId]
 }
@@ -1815,6 +2498,10 @@ function openSingleResultDrawer(record: CustomRuleWorkspaceRecord) {
   resultDrawerRecord.value = result
   resultDrawerOpen.value = true
 }
+function openBatchItemEvidence(item: RecordTestResultItem) {
+  evidenceDrawerRecord.value = item
+  evidenceDrawerOpen.value = true
+}
 function openBatchResultDrawer() {
   if (!batchResult.value) return message.info('当前暂无批量测试结果')
   resultDrawerMode.value = 'batch'
@@ -1824,13 +2511,129 @@ function closeResultDrawer() {
   resultDrawerOpen.value = false
   resultDrawerRecord.value = null
 }
+function closeEvidenceDrawer() {
+  evidenceDrawerOpen.value = false
+  evidenceDrawerRecord.value = null
+}
+
+watch(selectedDraftId, async (next, prev) => {
+  if (next === prev) return
+  batchJobPagination.current = 1
+  batchJobDetail.value = null
+  stopBatchJobPolling()
+  if (next) await loadBatchJobs()
+})
 
 onMounted(async () => {
   await Promise.all([loadDrafts(), searchRecords()])
+  await loadBatchJobs()
+})
+
+onUnmounted(() => {
+  stopBatchJobPolling()
 })
 </script>
 
 <style scoped>
+.custom-workspace-page {
+  --cw-bg-page: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 48%, #edf2f7 100%);
+  --cw-text-primary: #0f172a;
+  --cw-text-secondary: #475569;
+  --cw-text-muted: #64748b;
+  --cw-border-soft: rgba(226, 232, 240, 0.9);
+  --cw-brand-600: #1e5ae0;
+  --cw-brand-500: #2f6fed;
+  --cw-brand-100: rgba(239, 246, 255, 0.96);
+  --cw-brand-border: rgba(191, 219, 254, 0.92);
+  --cw-panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 14px 34px rgba(148, 163, 184, 0.12);
+  background: var(--cw-bg-page);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.42);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.6);
+}
+
+.cw-analysis-overview {
+  border-radius: 24px;
+  border: 1px solid var(--cw-brand-border);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95), rgba(255, 255, 255, 0.98));
+  box-shadow: var(--cw-panel-shadow);
+}
+
+.cw-analysis-overview__eyebrow {
+  color: var(--cw-text-muted);
+}
+
+.cw-analysis-overview__title {
+  color: var(--cw-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.cw-analysis-overview__subtitle {
+  color: var(--cw-text-secondary);
+}
+
+.cw-kpi-card {
+  border-color: var(--cw-border-soft);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 8px 20px rgba(148, 163, 184, 0.1);
+}
+
+.cw-primary-action {
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, var(--cw-brand-500), var(--cw-brand-600)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 14px 26px rgba(47, 111, 237, 0.3) !important;
+}
+
+.cw-panel {
+  border-radius: 24px;
+  border: 1px solid var(--cw-border-soft);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--cw-panel-shadow);
+}
+
+.workstation-surface-enter {
+  animation: workstationSurfaceEnter 420ms ease-out both;
+}
+
+.workstation-surface-enter--delay-1 {
+  animation-delay: 90ms;
+}
+
+.workstation-surface-enter--delay-2 {
+  animation-delay: 160ms;
+}
+
+@keyframes workstationSurfaceEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 :deep(.draft-row-active > td) {
   background: #eef5ff !important;
 }
@@ -1876,5 +2679,43 @@ onMounted(async () => {
   border-color: #93c5fd !important;
   background: #eff6ff !important;
   color: #2563eb !important;
+}
+:deep(.drawer-meta-control-input.ant-input) {
+  height: 40px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 16px !important;
+  line-height: 40px !important;
+}
+:deep(.drawer-meta-control-select.ant-select .ant-select-selector) {
+  height: 40px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+:deep(.drawer-meta-control-select.ant-select .ant-select-selection-item) {
+  font-size: 16px !important;
+  line-height: 40px !important;
+}
+:deep(.drawer-meta-control-select.ant-select .ant-select-selection-placeholder) {
+  font-size: 16px !important;
+  line-height: 40px !important;
+}
+
+@media (max-width: 1279px) {
+  .cw-analysis-overview {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .custom-workspace-page {
+    padding-top: 12px;
+  }
+
+  .cw-analysis-overview__title {
+    font-size: 22px !important;
+  }
 }
 </style>
