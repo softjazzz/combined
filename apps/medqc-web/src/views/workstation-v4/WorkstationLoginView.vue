@@ -30,6 +30,16 @@ const demoAccounts = [
   },
 ]
 
+const navigateAfterLogin = async () => {
+  const target = redirectTarget.value
+  try {
+    await router.replace(target)
+  } catch (error) {
+    console.warn('[WorkstationLoginV4] router.replace 失败，回退到 location.assign', error)
+    window.location.assign(target)
+  }
+}
+
 const handleLogin = async (loginData: LoginRequest) => {
   try {
     loading.value = true
@@ -51,7 +61,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     }
 
     message.success('登录成功')
-    await router.replace(redirectTarget.value)
+    await navigateAfterLogin()
   } catch (error) {
     console.error('workstation 登录失败:', error)
     message.error('登录失败，请稍后重试')
