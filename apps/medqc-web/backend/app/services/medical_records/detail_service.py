@@ -15,8 +15,43 @@ from ...database.models.cdm import (
     MrSurgery,
     MrCost,
 )
+from ..document_assembly import assemble_document, build_document_select_columns
 from .errors import MedicalRecordsNotFoundError, MedicalRecordsStorageError
-from .shared import DOC_TYPES, build_concat_text, normalize_content
+from .shared import DOC_TYPES, build_concat_text
+
+TIME_COLUMNS = (
+    "record_datetime",
+    "record_time",
+    "round_datetime",
+    "submit_datetime",
+    "submit_time",
+    "last_modified_time",
+    "last_modified_datetime",
+    "update_time",
+)
+
+
+def _get_table_columns(session: Session, table_name: str) -> set[str]:
+    try:
+        rows = session.execute(
+            sql_text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = :table_name
+                  AND table_schema NOT IN ('information_schema', 'pg_catalog')
+                """
+            ),
+            {"table_name": table_name},
+        ).mappings().all()
+    except Exception:
+        return {"record_content"}
+    columns = {str(row.get("column_name")) for row in rows if row.get("column_name")}
+    return columns or {"record_content"}
+
+
+def _pick_time_columns(columns: set[str]) -> list[str]:
+    return [column for column in TIME_COLUMNS if column in columns]
 
 
 def _session_factory() -> Session:
@@ -63,14 +98,33 @@ def get_record_content(
 
 
 def _document_entry(table_name: str, label: str, row: dict, total_rows: int, index: int = 0) -> dict[str, Any]:
-    content = normalize_content(row.get("record_content"))
-    doc_label = label if total_rows == 1 else f"{label} ({index + 1})"
+    assembled = assemble_document(table_name, row)
+    content = assembled.assembled_text
+    raw_title = assembled.document_title
+    if raw_title:
+        doc_label = raw_title
+    elif total_rows <= 1:
+        doc_label = label
+    else:
+        doc_label = f"{label} ({index + 1})"
+
     return {
         "type": table_name,
         "label": doc_label,
         "has_content": bool(content),
         "content": content if content else None,
         "length": len(content),
+        "document_id": assembled.document_id or row.get("document_id"),
+        "document_title": raw_title or None,
+        "sort_time": assembled.display_time,
+        "source_table": table_name,
+        "record_time": assembled.record_time,
+        "submit_time": assembled.submit_time,
+        "last_modified_time": assembled.last_modified_time,
+        "sections": [section.to_dict() for section in assembled.sections],
+        "source_fields": [field.to_dict() for field in assembled.source_fields],
+        "assembly_status": assembled.assembly_status,
+        "data_quality_flags": list(assembled.data_quality_flags),
     }
 
 
@@ -85,13 +139,35 @@ def get_documents(
         with session_factory() as session:
             for table_name, label in DOC_TYPES:
                 try:
+                    columns = _get_table_columns(session, table_name)
+                    if not columns:
+                        documents.append(_document_entry(table_name, label, {}, 0))
+                        continue
+
+                    select_fields = build_document_select_columns(table_name, columns)
+                    time_columns = _pick_time_columns(columns)
+
+                    order_by = ""
+                    if time_columns and "document_id" in columns:
+                        order_by = f" ORDER BY COALESCE({', '.join(time_columns)}) NULLS LAST, document_id NULLS LAST"
+                    elif time_columns:
+                        order_by = f" ORDER BY COALESCE({', '.join(time_columns)}) NULLS LAST"
+                    elif "document_id" in columns:
+                        order_by = " ORDER BY document_id NULLS LAST"
+
                     rows = session.execute(
-                        sql_text(f"SELECT record_content FROM {table_name} WHERE visit_id = :vid"),
+                        sql_text(
+                            f"SELECT {', '.join(select_fields)} FROM {table_name} "
+                            "WHERE visit_id = :vid"
+                            f"{order_by}"
+                        ),
                         {"vid": visit_id},
                     ).mappings().all()
                     if rows:
                         for idx, row in enumerate(rows):
-                            documents.append(_document_entry(table_name, label, row, len(rows), idx))
+                            # SQLAlchemy 2.x 的 mappings() 返回 RowMapping；
+                            # 在 Cython 严格类型场景下需显式转为 dict，避免类型检查失败后被误判为空文书。
+                            documents.append(_document_entry(table_name, label, dict(row), len(rows), idx))
                     else:
                         documents.append(_document_entry(table_name, label, {}, 0))
                 except Exception:

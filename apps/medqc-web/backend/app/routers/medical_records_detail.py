@@ -1,13 +1,16 @@
 """病案数据 - 详情子域。"""
 
+from functools import lru_cache
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from ..services.medical_records import detail_service as medical_records_detail_service
 from ..services.medical_records.detail_service import (
     get_cost,
     get_diagnoses,
-    get_documents,
     get_frontpage,
     get_frontpage_by_mr_no,
     get_record_content,
@@ -16,6 +19,29 @@ from ..services.medical_records.detail_service import (
 from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-详情"])
+
+
+@lru_cache(maxsize=1)
+def _load_detail_service_py_module():
+    module_path = Path(__file__).resolve().parents[1] / "services" / "medical_records" / "detail_service.py"
+    spec = spec_from_file_location(
+        "backend.app.services.medical_records.detail_service_py_runtime",
+        str(module_path),
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"无法加载 detail_service.py: {module_path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _get_documents_runtime_callable():
+    # 生产环境可能优先加载 Cython .pyd；当前版本在 RowMapping 入参上存在严格类型问题，
+    # 路由层优先切换到 .py 实现，确保文书列表可正常返回。
+    module_file = str(getattr(medical_records_detail_service, "__file__", "")).lower()
+    if module_file.endswith(".pyd"):
+        return _load_detail_service_py_module().get_documents
+    return medical_records_detail_service.get_documents
 
 
 @router.get("/frontpage/{institute_id}/{patient_id}/{visit_id}")
@@ -92,6 +118,7 @@ async def get_documents_api(
     mode: Optional[str] = Query(None, description="返回模式: 默认返回列表, concat=拼接全文"),
 ):
     try:
-        return get_documents(visit_id, mode=mode)
+        get_documents_impl = _get_documents_runtime_callable()
+        return get_documents_impl(visit_id, mode=mode)
     except Exception as exc:
         raise_medical_records_http_error(exc)
