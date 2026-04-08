@@ -24,8 +24,9 @@ router = APIRouter(tags=["病案数据-详情"])
 @lru_cache(maxsize=1)
 def _load_detail_service_py_module():
     module_path = Path(__file__).resolve().parents[1] / "services" / "medical_records" / "detail_service.py"
+    package_root = __name__.split(".", 1)[0] or "app"
     spec = spec_from_file_location(
-        "backend.app.services.medical_records.detail_service_py_runtime",
+        f"{package_root}.services.medical_records.detail_service_py_runtime",
         str(module_path),
     )
     if spec is None or spec.loader is None:
