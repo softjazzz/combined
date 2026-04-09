@@ -138,12 +138,24 @@
                 </div>
               </template>
               <template v-else-if="column.key === 'scene'">
-                <a-tag :color="record.scene === 'final' ? 'blue' : 'gold'">
+                <a-tag
+                  class="cw-scene-tag"
+                  :class="
+                    record.scene === 'final' ? 'cw-scene-tag--final' : 'cw-scene-tag--running'
+                  "
+                >
                   {{ record.scene === 'final' ? '终末病历' : '运行病历' }}
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'status'">
-                <a-tag :color="record.status === 'published' ? 'success' : 'processing'">
+                <a-tag
+                  class="cw-status-tag"
+                  :class="
+                    record.status === 'published'
+                      ? 'cw-status-tag--published'
+                      : 'cw-status-tag--draft'
+                  "
+                >
                   {{ record.status === 'published' ? '已发布' : '草稿' }}
                 </a-tag>
               </template>
@@ -157,10 +169,11 @@
                 <span class="text-xs text-slate-500">{{ formatDateTime(record.updated_at) }}</span>
               </template>
               <template v-else-if="column.key === 'actions'">
-                <div class="flex items-center justify-end gap-1">
+                <div class="cw-draft-actions">
                   <a-button
                     type="text"
                     size="small"
+                    class="cw-draft-action-btn cw-draft-action-btn--edit"
                     @click.stop="openEditDrawer(record as CustomRuleDraft)"
                   >
                     <template #icon>
@@ -170,6 +183,7 @@
                   <a-button
                     type="text"
                     size="small"
+                    class="cw-draft-action-btn cw-draft-action-btn--copy"
                     @click.stop="copyDraft(record as CustomRuleDraft)"
                   >
                     <template #icon>
@@ -184,6 +198,7 @@
                       type="text"
                       danger
                       size="small"
+                      class="cw-draft-action-btn cw-draft-action-btn--delete"
                       @click.stop
                     >
                       <template #icon>
@@ -193,8 +208,9 @@
                   </a-popconfirm>
                   <a-button
                     v-if="record.status === 'draft'"
-                    type="link"
+                    type="text"
                     size="small"
+                    class="cw-draft-publish-btn"
                     :disabled="!canPublishRules || !canPublishRecord(record as CustomRuleDraft)"
                     @click.stop="publishDraftById(record.id)"
                   >
@@ -457,7 +473,7 @@
                   <span class="text-sm font-semibold text-slate-800">{{
                     job.rule_name || job.rule_code
                   }}</span>
-                  <a-tag :color="getBatchJobStatusTagColor(job.status)">
+                  <a-tag :class="getBatchJobStatusTagClass(job.status)">
                     {{ getBatchJobStatusText(job.status) }}
                   </a-tag>
                   <a-tag>{{ scopeLabelMap[job.scope] }}</a-tag>
@@ -843,7 +859,7 @@
                       <span class="font-medium text-slate-700">{{
                         item.patient_name || item.record_id
                       }}</span>
-                      <a-tag :color="item.is_compliant ? 'success' : 'error'">
+                      <a-tag :class="getQcOutcomeTagClass(item.is_compliant)">
                         {{ item.is_compliant ? '合规/不适用' : '命中问题' }}
                       </a-tag>
                     </div>
@@ -885,7 +901,7 @@
                 <strong>{{
                   resultDrawerRecord.patient_name || resultDrawerRecord.record_id
                 }}</strong>
-                <a-tag :color="resultDrawerRecord.is_compliant ? 'success' : 'error'">
+                <a-tag :class="getQcOutcomeTagClass(resultDrawerRecord.is_compliant)">
                   {{ resultDrawerRecord.is_compliant ? '合规/不适用' : '命中问题' }}
                 </a-tag>
               </div>
@@ -1401,7 +1417,7 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-2">
-                  <a-tag :color="getBatchJobStatusTagColor(activeBatchJob.status)">
+                  <a-tag :class="getBatchJobStatusTagClass(activeBatchJob.status)">
                     {{ getBatchJobStatusText(activeBatchJob.status) }}
                   </a-tag>
                   <span class="text-xs text-slate-400">发起人 {{ activeBatchJob.created_by || '-' }}</span>
@@ -1467,7 +1483,7 @@
                   class="rounded-2xl border border-slate-200 bg-slate-50 p-3"
                 >
                   <div class="flex items-center justify-between gap-2">
-                    <strong>{{ item.patient_name || item.record_id }}</strong><a-tag :color="item.is_compliant ? 'success' : 'error'">
+                    <strong>{{ item.patient_name || item.record_id }}</strong><a-tag :class="getQcOutcomeTagClass(item.is_compliant)">
                       {{ item.is_compliant ? '合规/不适用' : '命中问题' }}
                     </a-tag>
                   </div>
@@ -1542,7 +1558,7 @@
               <div class="flex items-center justify-between gap-2">
                 <strong>{{
                   resultDrawerRecord.patient_name || resultDrawerRecord.record_id
-                }}</strong><a-tag :color="resultDrawerRecord.is_compliant ? 'success' : 'error'">
+                }}</strong><a-tag :class="getQcOutcomeTagClass(resultDrawerRecord.is_compliant)">
                   {{ resultDrawerRecord.is_compliant ? '合规/不适用' : '命中问题' }}
                 </a-tag>
               </div>
@@ -1657,7 +1673,7 @@
               <strong>{{
                 evidenceDrawerRecord.patient_name || evidenceDrawerRecord.record_id
               }}</strong>
-              <a-tag :color="evidenceDrawerRecord.is_compliant ? 'success' : 'error'">
+              <a-tag :class="getQcOutcomeTagClass(evidenceDrawerRecord.is_compliant)">
                 {{ evidenceDrawerRecord.is_compliant ? '合规/不适用' : '命中问题' }}
               </a-tag>
             </div>
@@ -2155,21 +2171,24 @@ function getBatchJobStatusText(status?: string) {
       return '未知'
   }
 }
-function getBatchJobStatusTagColor(status?: string) {
+function getBatchJobStatusTagClass(status?: string) {
   switch (status) {
     case 'queued':
-      return 'default'
+      return 'cw-qc-tag cw-qc-tag--queued'
     case 'running':
-      return 'processing'
+      return 'cw-qc-tag cw-qc-tag--running'
     case 'completed':
-      return 'success'
+      return 'cw-qc-tag cw-qc-tag--completed'
     case 'failed':
-      return 'error'
+      return 'cw-qc-tag cw-qc-tag--failed'
     case 'canceled':
-      return 'warning'
+      return 'cw-qc-tag cw-qc-tag--canceled'
     default:
-      return 'default'
+      return 'cw-qc-tag cw-qc-tag--queued'
   }
+}
+function getQcOutcomeTagClass(isCompliant: boolean) {
+  return isCompliant ? 'cw-qc-tag cw-qc-tag--compliant' : 'cw-qc-tag cw-qc-tag--issue'
 }
 function resolveLaunchContext(params: {
   ruleName?: string
@@ -3737,6 +3756,155 @@ onUnmounted(() => {
   font-size: 11px !important;
   line-height: 16px !important;
   padding: 0 5px !important;
+}
+
+:deep(.cw-scene-tag.ant-tag),
+:deep(.cw-status-tag.ant-tag) {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 24px !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 22px !important;
+  margin-inline-end: 0 !important;
+}
+
+:deep(.cw-scene-tag--final.ant-tag) {
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+  border-color: #bfdbfe !important;
+}
+
+:deep(.cw-scene-tag--running.ant-tag) {
+  color: #7c3aed !important;
+  background: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+}
+
+:deep(.cw-status-tag--published.ant-tag) {
+  color: #15803d !important;
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+:deep(.cw-status-tag--draft.ant-tag) {
+  color: #1d4ed8 !important;
+  background: #dbeafe !important;
+  border-color: #93c5fd !important;
+}
+
+:deep(.cw-qc-tag.ant-tag) {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 24px !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  margin-inline-end: 0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 22px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+}
+
+:deep(.cw-qc-tag--queued.ant-tag) {
+  color: #334155 !important;
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+:deep(.cw-qc-tag--running.ant-tag) {
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+  border-color: #bfdbfe !important;
+}
+
+:deep(.cw-qc-tag--completed.ant-tag),
+:deep(.cw-qc-tag--compliant.ant-tag) {
+  color: #14532d !important;
+  background: linear-gradient(180deg, #ecfdf3 0%, #dcfce8 100%) !important;
+  border-color: #86efac !important;
+}
+
+:deep(.cw-qc-tag--failed.ant-tag),
+:deep(.cw-qc-tag--issue.ant-tag) {
+  color: #b91c1c !important;
+  background: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+}
+
+:deep(.cw-qc-tag--canceled.ant-tag) {
+  color: #92400e !important;
+  background: #fffbeb !important;
+  border-color: #fcd34d !important;
+}
+
+.cw-draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+:deep(.cw-draft-action-btn.ant-btn) {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  border: 1px solid #dbe2ea !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.cw-draft-action-btn.ant-btn .anticon) {
+  font-size: 14px !important;
+}
+
+:deep(.cw-draft-action-btn.ant-btn:hover) {
+  border-color: #93c5fd !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+:deep(.cw-draft-action-btn--delete.ant-btn) {
+  border-color: #fecaca !important;
+  color: #ef4444 !important;
+}
+
+:deep(.cw-draft-action-btn--delete.ant-btn:hover) {
+  border-color: #fca5a5 !important;
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+}
+
+:deep(.cw-draft-publish-btn.ant-btn) {
+  height: 24px !important;
+  min-width: 48px !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
+  border: 1px solid #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 22px !important;
+}
+
+:deep(.cw-draft-publish-btn.ant-btn:hover) {
+  border-color: #93c5fd !important;
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+:deep(.cw-draft-publish-btn.ant-btn[disabled]) {
+  color: #94a3b8 !important;
+  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
 }
 
 :deep(.custom-workspace-page .ant-empty-description) {
