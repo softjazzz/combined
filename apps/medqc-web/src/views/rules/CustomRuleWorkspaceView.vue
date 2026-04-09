@@ -665,8 +665,15 @@
                 <div class="font-mono font-bold text-slate-800">
                   {{ record.record_id || '-' }}
                 </div>
-                <div class="text-xs text-slate-400">
-                  {{ record.visit_id || '-' }}
+                <div
+                  v-if="
+                    record.visit_id &&
+                      String(record.visit_id).trim() &&
+                      String(record.visit_id) !== String(record.record_id || '')
+                  "
+                  class="text-xs text-slate-400"
+                >
+                  {{ record.visit_id }}
                 </div>
               </div>
             </template>
