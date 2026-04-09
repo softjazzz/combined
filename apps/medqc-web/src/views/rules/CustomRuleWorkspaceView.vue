@@ -293,7 +293,14 @@
             <span class="ml-2 text-xs text-blue-600">已勾选执行 {{ selectedDraftIds.length }} 条</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <a-tag :color="selectedDraft.status === 'published' ? 'success' : 'processing'">
+            <a-tag
+              class="cw-status-tag"
+              :class="
+                selectedDraft.status === 'published'
+                  ? 'cw-status-tag--published'
+                  : 'cw-status-tag--draft'
+              "
+            >
               {{ selectedDraft.status === 'published' ? '已发布' : '草稿' }}
             </a-tag>
             <a-button
@@ -3798,9 +3805,9 @@ onUnmounted(() => {
 }
 
 :deep(.cw-status-tag--published.ant-tag) {
-  color: #15803d !important;
-  background: #f0fdf4 !important;
-  border-color: #bbf7d0 !important;
+  color: #1d4ed8 !important;
+  background: #eaf2ff !important;
+  border-color: #bfdbfe !important;
 }
 
 :deep(.cw-status-tag--draft.ant-tag) {
